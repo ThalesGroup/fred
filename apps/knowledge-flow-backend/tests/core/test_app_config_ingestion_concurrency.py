@@ -1,3 +1,19 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import pytest
+
 from knowledge_flow_backend.common.structures import Configuration
 
 
@@ -70,3 +86,14 @@ def test_configuration_normalizes_profile_retry_policy(app_context) -> None:
     assert medium.retry_initial_interval_seconds == 20
     assert medium.retry_maximum_interval_seconds == 300
     assert medium.retry_maximum_attempts == 8
+
+
+@pytest.mark.parametrize("field", ["push_metadata_activity_timeout", "pull_metadata_activity_timeout", "output_activity_timeout"])
+@pytest.mark.parametrize("value", [0, -1, "0s", "invalid"])
+def test_data_stage_timeout_rejects_invalid_values(app_context, field, value):
+    from pydantic import ValidationError
+
+    payload = app_context.configuration.model_dump()
+    payload["processing"]["profiles"]["medium"][field] = value
+    with pytest.raises(ValidationError):
+        type(app_context.configuration).model_validate(payload)

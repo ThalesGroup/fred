@@ -49,8 +49,9 @@
 - [x] 3.1 `test_deep_hitl_filesystem_tool_name_overlap_does_not_collide` stays as an implementation
       regression test proving the Fred HITL argument rewrite composes with a filesystem-named tool.
 - [x] 3.2 Replace the all-or-nothing filesystem enablement flag with exact model-visible tool names.
-      Keep a `ToolCallLimitMiddleware` guard and matching prompt warning for every missing Deep
-      built-in; prove that binding a partial surface without `execute` does not expose `execute`.
+      Treat the standard runtime-provided conversation backend as the binding for the six safe
+      filesystem operations even without an optional capability. Keep a `ToolCallLimitMiddleware`
+      guard and matching prompt warning for `execute`; prove that no partial surface exposes it.
 
 ## 4. Cleanup
 

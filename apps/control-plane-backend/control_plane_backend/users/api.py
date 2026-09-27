@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 import uuid as _uuid_mod
 from typing import Annotated
@@ -61,14 +75,15 @@ from control_plane_backend.users.schemas import (
     UserSummary,
 )
 from control_plane_backend.users.service import (
+    _get_keycloak_admin_for_user_operations,
+    find_user_details_by_id,
+    update_gcu_validation,
+)
+from control_plane_backend.users.service import (
     create_user as create_user_from_service,
 )
 from control_plane_backend.users.service import (
     delete_user as delete_user_from_service,
-)
-from control_plane_backend.users.service import (
-    find_user_details_by_id,
-    update_gcu_validation,
 )
 from control_plane_backend.users.service import (
     get_users_by_ids as get_users_by_ids_from_service,
@@ -348,7 +363,7 @@ async def create_user(
 @router.delete(
     "/users/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Temporary bootstrap endpoint to delete a user.",
+    summary="Delete a user and revoke their access.",
 )
 async def delete_user(
     user_id: Annotated[str, Path(min_length=1)],
@@ -369,21 +384,16 @@ async def delete_user(
     # population with no in-product recovery.
     if user_id == await bootstrap_store.get_completed_by():
         raise PlatformRoleRootProtectedError()
-    """
-    Delete a Keycloak user for temporary bootstrap and testing flows.
-
-    Why this endpoint exists:
-    - control-plane still needs one temporary cleanup surface for bootstrap
-      users created during local and migration flows
-
-    How to use it:
-    - call as an authenticated admin user with the Keycloak user id
-    - expect HTTP 404 when the target user does not exist
-
-    Example:
-    - `DELETE /control-plane/v1/users/user-123`
-    """
-    await delete_user_from_service(user, user_id, deps)
+    # "*" is the wildcard subject and "#" marks a userset: neither names a person.
+    if user_id == "*" or "#" in user_id:
+        raise UserNotFoundError(user_id)
+    admin = _get_keycloak_admin_for_user_operations(deps)
+    # The ban alone ends access, so the person's other relations stay. It comes before
+    # the identity-provider account: a failure after it leaves the person refused, and
+    # a retry rewrites the same ban.
+    if rebac.enforces_standing:
+        await rebac.remove_user_standing(user_id)
+    await delete_user_from_service(admin, user_id)
 
 
 class UserDetails(BaseModel):

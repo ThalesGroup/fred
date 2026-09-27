@@ -25,11 +25,15 @@ import { Link } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { CapabilityConfigWidgetProps } from "../types";
+import { PptTemplateDownloadButton } from "./PptTemplateDownloadButton";
 import { usePptTemplateAnalysis } from "./usePptTemplateAnalysis";
 import styles from "./PptFillerConfigForm.module.css";
 
 export function PptFillerConfigForm({
   disabled,
+  teamId,
+  agentInstanceId,
+  agentDisplayName,
   configValues,
   assetFiles,
   onAssetFileChange,
@@ -99,6 +103,13 @@ export function PptFillerConfigForm({
         {!stagedFile && hasPersistedTemplate && (
           <span className={styles.fileName}>{t("capability.ppt_filler.form.currentTemplate")}</span>
         )}
+        <PptTemplateDownloadButton
+          teamId={teamId}
+          agentInstanceId={agentInstanceId}
+          agentDisplayName={agentDisplayName}
+          hasPersistedTemplate={hasPersistedTemplate}
+          disabled={disabled}
+        />
       </div>
 
       <Link className={styles.learnMoreLink} to="/ppt-filler-help" target="_blank" rel="noopener noreferrer">

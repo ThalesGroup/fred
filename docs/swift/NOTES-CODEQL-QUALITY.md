@@ -104,10 +104,11 @@ snapshot and not re-checked.**
       class as the Alembic constants.
   - **[x] Actioned 2026-08-09**, so this doesn't just recur: the 3 named-global sites above got an inline
     `# codeql[py/unused-global-variable]` suppression comment (CodeQL 2.12.0+, engine-level — works
-    regardless of GitHub Default vs. Advanced setup). The 5 `script.py.mako` scaffold templates
+    regardless of GitHub Default vs. Advanced setup). The `script.py.mako` scaffold templates
     (`apps/control-plane-backend/alembic/`, `apps/knowledge-flow-backend/alembic/`,
-    `libs/fred-runtime/alembic/`, `libs/fred-runtime/.../demo_migrations/`,
-    `libs/fred-capability-writable-document/.../writable_document_migrations/`) got the same comment on
+    `libs/fred-runtime/alembic/`,
+    `libs/capabilities/fred-capability-writable-document/.../writable_document_migrations/`;
+    the retired demo capability's tree was a fifth) got the same comment on
     all 4 scaffolded globals, so every future `alembic revision` is immune — the 52 existing migration
     files predate the template fix and were bulk-dismissed on GitHub directly instead of retrofitted
     (one-time backlog, not a recurring source, so a comment retrofit wasn't worth the file churn).

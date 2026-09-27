@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Where a ReAct V2 checkpoint actually lands, and which namespaces the resume
 gate probes for it.
@@ -16,6 +30,7 @@ from fred_runtime.app.agent_app import _resume_checkpoint_namespaces
 from fred_runtime.react.react_message_codec import to_runnable_config
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
+from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.execution import RuntimeExecuteRequest
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import ExecutionConfig
@@ -139,6 +154,7 @@ def test_react_resume_probes_the_unnamespaced_checkpoint_first() -> None:
 
     request = RuntimeExecuteRequest(
         agent_instance_id="instance-123",
+        runtime_context=RuntimeContext(team_id="synthetic-team"),
         session_id="session-1",
         interrupt_id="interrupt-a",
         resume_payload={"choice_id": "proceed"},
@@ -157,6 +173,7 @@ def test_graph_resume_probes_only_the_agent_namespace() -> None:
 
     request = RuntimeExecuteRequest(
         agent_instance_id="instance-123",
+        runtime_context=RuntimeContext(team_id="synthetic-team"),
         session_id="session-1",
         checkpoint_id="stored-checkpoint-id",
         resume_payload={"choice_id": "proceed"},

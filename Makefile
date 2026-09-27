@@ -1,5 +1,5 @@
-CODE_QUALITY_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
-TEST_DIRS := libs/fred-core libs/fred-sdk libs/fred-runtime libs/fred-capability-writable-document libs/fred-capability-ppt-filler libs/fred-capability-platform-ops libs/fred-capability-html-artifact libs/fred-capability-team-wiki libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
+TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-platform-ops libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/frontend apps/fred-agents apps/control-plane-backend apps/knowledge-flow-backend apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/control-plane-backend apps/frontend
 RUN_DIRS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend apps/frontend
 ENV_APPS := apps/control-plane-backend apps/fred-agents apps/knowledge-flow-backend
@@ -20,7 +20,7 @@ update-uv-locks: ## Update uv lock state in subprojects except frontend
 	done
 
 .PHONY: code-quality
-code-quality: ## Run code quality checks in all submodules
+code-quality: migration-tests ## Run code quality checks in all submodules
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality in $$dir ************"; \
@@ -74,6 +74,10 @@ validation-report: ## Run the live cross-app validation suite (requires infra + 
 	$(MAKE) -C validation validation-report
 
 ##@ Setup
+
+.PHONY: delegation
+delegation: ## Prepare local delegation after docker-up, without editing tracked YAML (ARGS=--dry-run or --reset)
+	uv run scripts/populate_local_delegation.py $(ARGS)
 
 .PHONY: setup-env
 setup-env: ## Create each backend's .env from its .env.template (idempotent), fill in local-dev secrets that docker-compose already fixes to the same value everywhere, prompt once for a model provider API key
@@ -184,6 +188,9 @@ set-version: ## Update project version everywhere (usage: make set-version VERSI
 	@echo "--- Helm chart ---"
 	sed -i 's/^version: .*/version: $(VERSION)/' deploy/charts/fred/Chart.yaml
 	sed -i 's/^appVersion: .*/appVersion: $(VERSION)/' deploy/charts/fred/Chart.yaml
+	@echo "--- libs/fred-pod ---"
+	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-pod/pyproject.toml
+	cd libs/fred-pod && uv lock
 	@echo "--- libs/fred-core ---"
 	sed -i 's/^version = .*/version = "$(PY_VERSION)"/' libs/fred-core/pyproject.toml
 	cd libs/fred-core && uv lock
@@ -222,7 +229,7 @@ SQLITE_COMBINED_DB   := /tmp/fred_combined_migrations.db
 CP_DIR               := apps/control-plane-backend
 KF_DIR               := apps/knowledge-flow-backend
 RT_DIR               := libs/fred-runtime
-WD_DIR               := libs/fred-capability-writable-document
+WD_DIR               := libs/capabilities/fred-capability-writable-document
 CP_UV                := $(CP_DIR)/.venv/bin/uv
 KF_UV                := $(KF_DIR)/.venv/bin/uv
 RT_UV                := $(RT_DIR)/.venv/bin/uv
@@ -407,3 +414,23 @@ k3d-logs-kf: ## Tail logs for knowledge-flow-backend
 .PHONY: k3d-logs-frontend
 k3d-logs-frontend: ## Tail logs for frontend
 	kubectl logs -n $(K3D_NAMESPACE) -l app=frontend -f --tail=100
+
+##@ Migration notes and release preparation
+
+MIGRATION_BASE ?= origin/swift
+MIGRATION_GUIDES = uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py
+
+.PHONY: migration-check release-plan release-guide migration-tests
+migration-check: ## Check this PR's migration note, including uncommitted edits
+	@$(MIGRATION_GUIDES) check-pr --base "$(MIGRATION_BASE)" --worktree
+
+release-plan: ## Report release impact, minimum version and missing migration notes
+	@$(MIGRATION_GUIDES) plan
+
+release-guide: ## Generate and validate the DevOps guide: make release-guide RELEASE_VERSION=X.Y.Z
+	@test -n "$(RELEASE_VERSION)" || { echo "Usage: make release-guide RELEASE_VERSION=X.Y.Z"; exit 1; }
+	@$(MIGRATION_GUIDES) generate --worktree --version "$(RELEASE_VERSION)"
+	@$(MIGRATION_GUIDES) verify --worktree --version "$(RELEASE_VERSION)"
+
+migration-tests: ## Validate release migration tooling offline with synthetic Git histories
+	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v

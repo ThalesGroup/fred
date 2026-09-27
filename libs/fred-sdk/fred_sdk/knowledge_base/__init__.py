@@ -50,9 +50,12 @@ deployment time, `run` serves runs. Configuration is declared with the same
 from fred_sdk.knowledge_base.configuration import MissingPodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.documents import (
+    DocumentHandle,
+    DocumentOutcome,
     DocumentPublisher,
     DocumentPublishError,
     DocumentRetractError,
+    DocumentWaitTimeout,
 )
 from fred_sdk.knowledge_base.entrypoints import (
     knowledge_base_main,
@@ -82,9 +85,12 @@ __all__ = [
     "MAX_ISSUE_MESSAGE_CHARS",
     "MAX_ISSUE_SUBJECT_CHARS",
     "MAX_SUMMARY_CHARS",
+    "DocumentHandle",
+    "DocumentOutcome",
     "DocumentPublishError",
     "DocumentPublisher",
     "DocumentRetractError",
+    "DocumentWaitTimeout",
     "KnowledgeBase",
     "KnowledgeBaseDeclaration",
     "KnowledgeBaseDeclarationError",

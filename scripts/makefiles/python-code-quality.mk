@@ -49,9 +49,14 @@ sast: dev ## Run bandit
 
 .PHONY: detect-secret
 detect-secret: dev ## Run a secret detection tool
-	cd .. && git ls-files -z ${CURDIR} | xargs -0 ${VENV}/bin/detect-secrets-hook \
-		--baseline ${DETECT_SECRET_BASELINE_FILE} \
-		--exclude-files '${DETECT_SECRET_EXCLUDE_FILES}'
+	@# Keep parent-relative paths compatible with the existing baselines.
+	@# Materialize the file list so a Git failure cannot become a successful empty scan.
+	@cd .. && files=$$(mktemp) && trap 'rm -f "$$files"' EXIT && \
+		git ls-files -z "${CURDIR}" > "$$files" && \
+		xargs -0 "${VENV}/bin/detect-secrets-hook" \
+		--no-verify --json \
+		--baseline "${DETECT_SECRET_BASELINE_FILE}" \
+		--exclude-files '${DETECT_SECRET_EXCLUDE_FILES}' < "$$files"
 
 .PHONY: type-check
 type-check: dev ## Run type checker (basedpyright)

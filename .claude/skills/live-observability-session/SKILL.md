@@ -121,19 +121,21 @@ session if it's been a while — it's the target spec, not always the current di
 3. **KPIs / metrics** — operational KPIs only, never prompt/response content. This stack has no
    standalone Prometheus (see Preconditions), so read them by curling each backend's own metrics
    endpoint directly. **The metrics port is not always the API port — check each app's own
-   `configuration_prod.yaml` (`logging.prometheus.port`), never assume it equals the API port:**
+   `configuration_prod.yaml` (`observability.kpi.prometheus.port`), never assume it equals the API
+   port. An app that declares no `kpi:` block still exports: `KpiPrometheusSinkConfig` defaults to
+   `enabled=True, port=9000`, so absence of config means port 9000, not "no metrics".**
 
    | App | API port | Metrics port | Source |
    |---|---|---|---|
-   | control-plane-backend | 8222 | **9222** | `configuration_prod.yaml` → `logging.prometheus.port` |
+   | control-plane-backend | 8222 | **9222** | `configuration_prod.yaml` → `observability.kpi.prometheus.port` |
    | knowledge-flow-backend | 8111 | **9111** | same |
-   | fred-agents | 8000 | none | no `logging`/`prometheus` block at all in `configuration_prod.yaml` — this app does not expose metrics in this stack, not merely "disabled" |
-   | fred-evaluation-backend | 8336 | none | `logging.prometheus.enabled: false` (see above) |
+   | fred-agents | 8000 | **9000** | no `kpi:` block, so it inherits the schema default — confirm with the startup line `[fred-runtime] Prometheus metrics exporter ready at 127.0.0.1:9000` |
+   | fred-evaluation-backend | 8336 | none | `observability.kpi.prometheus.enabled: false` (see above) |
 
    e.g. `curl localhost:9222/metrics` (control-plane), `curl localhost:9111/metrics`
-   (knowledge-flow) — grep the raw Prometheus-exposition text output for the metric name you care
-   about. Don't curl `fred-agents` or `fred-evaluation-backend` for metrics — neither exposes a
-   `/metrics` route in this stack, for two different reasons (see table). If the developer's
+   (knowledge-flow), `curl localhost:9000/metrics` (fred-agents) — grep the raw Prometheus-exposition
+   text output for the metric name you care about. Only `fred-evaluation-backend` has no `/metrics`
+   route, because its config disables the sink outright. If the developer's
    session *does* have a real Prometheus reachable (a different, non-default setup), `curl
    localhost:9090/api/v1/query?query=...` works the same way — don't assume either way, check the
    port first. Every label actually reaching the KPI store is filtered through
@@ -165,8 +167,8 @@ polling a GitHub PR for new comments:
       sleep 5
     done
 
-Run one such loop per app that actually exposes `/metrics` (control-plane, knowledge-flow in this
-stack — not fred-agents or fred-evaluation-backend). Use it to confirm, in near-real time as the
+Run one such loop per app that actually exposes `/metrics` (control-plane, knowledge-flow and
+fred-agents in this stack — not fred-evaluation-backend). Use it to confirm, in near-real time as the
 developer drives the UI: a new metric family appears the first time an action fires it
 (completeness — did this action actually emit a KPI at all), a counter/histogram that should
 increment on a given action actually does (correctness), and no label value shows up that isn't in
@@ -209,7 +211,7 @@ Backends left running by an earlier session (this one or another Claude Code win
 ports and make `make run` fail with `OSError: [Errno 98] Address already in use` on the metrics
 port, or a similar bind failure on the API port. Before launching, check:
 
-    ss -ltnp | grep -E ':8222|:9222|:8111|:9111|:8000|:5173'
+    ss -ltnp | grep -E ':8222|:9222|:8111|:9111|:8000|:9000|:5173'
 
 If a port is already held, find the owning PID (`lsof -i :<port>` or the `ss` output's
 `users:((...,pid=...))`) and check whether its parent is a **still-running** Claude Code process

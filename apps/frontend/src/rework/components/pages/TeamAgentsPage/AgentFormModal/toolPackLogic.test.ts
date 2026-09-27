@@ -21,10 +21,13 @@ import {
 } from "./toolPackLogic";
 import {
   CAP_DOCUMENT_ACCESS,
+  CAP_DOCUMENT_EXTRACT,
   CAP_DOCUMENT_SIMILARITY,
   CAP_DOCUMENT_SUMMARIZE,
+  CAP_DOCUMENT_VERBATIM,
   CAP_PPT_FILLER,
   CAP_TABULAR,
+  CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
   DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
   DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL,
@@ -46,16 +49,29 @@ const WORD = packById("word_document");
 const PPT = packById("powerpoint_document");
 const REASONING = packById("reasoning");
 
-const DOCUMENT_READING = packById("document_reading");
+// Every shipped plain pack now holds a single capability, so the multi-member
+// branch of `derivePackChecked` has no real pack left to exercise it. This
+// fixture keeps that branch covered — see the partial-availability suite.
+const MULTI_MEMBER_PACK: ToolPack = {
+  id: "test_multi_member",
+  kind: "capabilities",
+  icon: "science",
+  titleKey: "test.multiMember.title",
+  descriptionKey: "test.multiMember.description",
+  includes: [],
+  enablesCapabilityIds: [CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER],
+};
 
 const ALL_IDS: ReadonlySet<string> = new Set([
   CAP_DOCUMENT_ACCESS,
   CAP_DOCUMENT_SUMMARIZE,
   CAP_DOCUMENT_SIMILARITY,
+  CAP_DOCUMENT_VERBATIM,
+  CAP_DOCUMENT_EXTRACT,
   CAP_TABULAR,
+  CAP_TEAM_WIKI,
   CAP_WRITABLE_DOCUMENT,
   CAP_PPT_FILLER,
-  ...DOCUMENT_READING.enablesCapabilityIds,
 ]);
 
 function empty(): CapabilitySelectionState {
@@ -132,6 +148,71 @@ describe("resource packs — shared summarize + mode transitions", () => {
   });
 });
 
+describe("document reading pair — shared by both resource packs", () => {
+  const READING = [CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT];
+
+  it("comes with the team-resources pack", () => {
+    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
+
+    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
+  });
+
+  it("comes with the attachments pack, on its own", () => {
+    const s = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
+
+    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
+  });
+
+  it("stays while either pack remains on", () => {
+    let s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
+    s = applyPackToggle(ATTACHMENTS, true, s, ALL_IDS);
+
+    s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS);
+    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
+
+    s = applyPackToggle(ATTACHMENTS, true, applyPackToggle(TEAM_RESOURCES, true, s, ALL_IDS), ALL_IDS);
+    s = applyPackToggle(ATTACHMENTS, false, s, ALL_IDS);
+    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
+  });
+
+  it("clearing one of them in Advanced does not turn the pack off", () => {
+    // The pack's state comes from document_access alone: clearing a shared
+    // member leaves the switch on, and the member reads inactive, not missing.
+    const on = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
+
+    const cleared = {
+      ...on,
+      selectedCapabilityIds: on.selectedCapabilityIds.filter((id) => id !== CAP_DOCUMENT_VERBATIM),
+    };
+
+    expect(derivePackChecked(TEAM_RESOURCES, cleared, ALL_IDS)).toBe(true);
+    expect(includedCapabilityStatus(CAP_DOCUMENT_VERBATIM, ALL_IDS, new Set(cleared.selectedCapabilityIds))).toBe(
+      "inactive",
+    );
+  });
+
+  it("is withdrawn when the last pack goes off", () => {
+    const on = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
+
+    const off = applyPackToggle(ATTACHMENTS, false, on, ALL_IDS);
+
+    expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_VERBATIM);
+    expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_EXTRACT);
+  });
+
+  it("is skipped when the admin has not enabled it, without blocking the pack", () => {
+    const noExtract: ReadonlySet<string> = new Set([...ALL_IDS].filter((id) => id !== CAP_DOCUMENT_EXTRACT));
+
+    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), noExtract);
+
+    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_VERBATIM);
+    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_EXTRACT);
+    // A document-access pack reads its state from document_access alone, never
+    // from its members' availability — so this asserts the intent, not a guard.
+    expect(derivePackChecked(TEAM_RESOURCES, s, noExtract)).toBe(true);
+  });
+});
+
 describe("admin availability — activate available, ignore the rest", () => {
   const NO_TABULAR: ReadonlySet<string> = new Set([...ALL_IDS].filter((id) => id !== CAP_TABULAR));
 
@@ -179,6 +260,18 @@ describe("plain packs (word / ppt) and reasoning", () => {
     expect(off.reasoningEnabled).toBe(false);
   });
 
+  it("toggling a resource pack preserves a capability enabled outside it", () => {
+    // Stands in for the Advanced view: an id no resource pack owns must survive
+    // the resource-state recomputation.
+    const seeded: CapabilitySelectionState = { ...empty(), selectedCapabilityIds: [CAP_TEAM_WIKI] };
+
+    let s = applyPackToggle(TEAM_RESOURCES, true, seeded, ALL_IDS);
+    expect(s.selectedCapabilityIds).toContain(CAP_TEAM_WIKI);
+
+    s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS);
+    expect(s.selectedCapabilityIds).toContain(CAP_TEAM_WIKI);
+  });
+
   it("toggling a resource pack preserves unrelated selections (word/ppt/reasoning)", () => {
     let s = applyPackToggle(WORD, true, empty(), ALL_IDS);
     s = applyPackToggle(REASONING, true, s, ALL_IDS);
@@ -198,26 +291,26 @@ describe("plain packs — partial admin availability", () => {
     // The upgrade case: a new capability joins an existing pack and no team has
     // it enabled yet. Before availability was part of the derivation, the switch
     // flipped on, failed to add the unavailable member, and read back as off.
-    const partial: ReadonlySet<string> = new Set(DOCUMENT_READING.enablesCapabilityIds.slice(0, -1));
+    const partial: ReadonlySet<string> = new Set(MULTI_MEMBER_PACK.enablesCapabilityIds.slice(0, -1));
 
-    const s = applyPackToggle(DOCUMENT_READING, true, empty(), partial);
+    const s = applyPackToggle(MULTI_MEMBER_PACK, true, empty(), partial);
 
-    expect(derivePackChecked(DOCUMENT_READING, s, partial)).toBe(true);
+    expect(derivePackChecked(MULTI_MEMBER_PACK, s, partial)).toBe(true);
     expect(s.selectedCapabilityIds).toEqual([...partial]);
   });
 
   it("is off when nothing in the pack is admin-enabled", () => {
     const none: ReadonlySet<string> = new Set<string>();
 
-    const s = applyPackToggle(DOCUMENT_READING, true, empty(), none);
+    const s = applyPackToggle(MULTI_MEMBER_PACK, true, empty(), none);
 
-    expect(derivePackChecked(DOCUMENT_READING, s, none)).toBe(false);
+    expect(derivePackChecked(MULTI_MEMBER_PACK, s, none)).toBe(false);
   });
 
   it("turning it off still clears every member, available or not", () => {
-    const on = applyPackToggle(DOCUMENT_READING, true, empty(), ALL_IDS);
+    const on = applyPackToggle(MULTI_MEMBER_PACK, true, empty(), ALL_IDS);
 
-    const off = applyPackToggle(DOCUMENT_READING, false, on, ALL_IDS);
+    const off = applyPackToggle(MULTI_MEMBER_PACK, false, on, ALL_IDS);
 
     expect(off.selectedCapabilityIds).toEqual([]);
   });
@@ -248,11 +341,5 @@ describe("document_similarity — corpus-scoped resource capability", () => {
     const off = applyPackToggle(TEAM_RESOURCES, false, on, ALL_IDS);
 
     expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
-  });
-
-  it("is not pulled in by the document-reading pack", () => {
-    const s = applyPackToggle(DOCUMENT_READING, true, empty(), ALL_IDS);
-
-    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
   });
 });

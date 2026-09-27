@@ -43,26 +43,17 @@ Semantics preserved from `ContextAwareTool` (do not drift from these):
   node — and therefore this middleware — ever runs, so a refusal never
   produces a `"started"` event (a proposal is not an action, see
   `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`)
-- never log tool arguments, tool results, or any raw content here — only
-  identifiers and bounded outcome/error fields
+- application and audit logs contain only bounded event, outcome and reason
+  fields; identifiers remain confined to the existing KPI contract
 
-Known gap NOT closed by this middleware (flagged, not fixed, here — see
-#2011 follow-up discussion): `ContextAwareTool._run`/`_arun` deliberately
-catches exceptions raised by the underlying MCP tool call and returns a
-formatted error STRING instead of raising (see its "CRITICAL: Return error
-as text to preserve chat history integrity" comment). LangChain's `BaseTool`
-machinery only sets `ToolMessage.status="error"` when a `ToolException` (or
-another exception `handle_tool_errors` catches) actually propagates out of
-`_run`/`_arun` — since `ContextAwareTool` never raises, `awrap_tool_call`
-here sees a normal, successful `handler(request)` return for these
-already-caught MCP-adapter failures, and reports them as `"succeeded"`. This
-narrow case regressed relative to `ContextAwareTool`'s own previous internal
-instrumentation (which wrapped the raw underlying call directly and could
-see the exception before it was swallowed). Fixing it would require either
-raising `ToolException` from `ContextAwareTool` (a behavior change to the
-"never orphan a tool call" design) or a structured error signal in the
-returned content/artifact — out of scope for this change; see the
-implementation report for #2011.
+MCP failures preserve the same no-orphan guarantee: `ContextAwareTool._run` /
+`_arun` returns formatted text for the model instead of re-raising, paired with
+an `is_error=True` artifact; only a run stop is re-raised, since it ends the
+run. The artifact is the structured signal this middleware, the runtime trace
+and KPI/audit use; raw provider text still cannot become generic user-facing
+error content. The one curated exception is Knowledge Flow `read_query` HTTP
+400: its already redacted engine detail crosses in a Fred artifact so the SQL
+trace can explain the failed query without exposing HTTP transport details.
 
 How to use:
 - always part of the frame, positioned next to `TracingKpiMiddleware` (see
@@ -80,16 +71,23 @@ from typing import Any, Optional
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
-from fred_core.security.models import Resource
+from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
 from fred_sdk.contracts.context import BoundRuntimeContext
+from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages.tool import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_context import get_runtime_context
+from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
+from fred_runtime.runtime_support.run_scope import RunScope
+
+from ..react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
+from ..react_tracing import RUNTIME_TOOL_SPAN_NAME, tool_span
 
 logger = logging.getLogger(__name__)
 
@@ -115,10 +113,12 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         *,
         kpi: BaseKPIWriter | None,
         binding: BoundRuntimeContext,
+        tracer: TracerPort | None = None,
     ) -> None:
         super().__init__()
         self._kpi = kpi
         self._binding = binding
+        self._tracer = tracer
 
     def _base_dims(self, *, tool_name: str, source: str) -> dict[str, Optional[str]]:
         """
@@ -197,24 +197,70 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             return
         if rebac is None or not rebac.enabled:
             return  # dev/local (identity-only) or Noop engine — mirrors turn start
-        if not team_id or is_personal_team_id(team_id):
-            # Personal spaces aren't injected as a team_id into tool calls
-            # (`ContextAwareTool._inject_context_if_needed`); nothing to recheck.
+        if not user_id or is_service_agent:
             return
-        if not user_id:
-            return
-        if is_service_agent:
-            return
-        await rebac.check_permission_or_raise(
-            RebacReference(Resource.USER, user_id),
-            TeamPermission.CAN_USE_TEAM_AGENTS,
-            RebacReference(Resource.TEAM, team_id),
-        )
+        try:
+            if not team_id or is_personal_team_id(team_id):
+                scope = RunScope.current()
+                if scope is not None and scope.delegated_credentials:
+                    await rebac.require_user_standing(user_id)
+                return
+            await rebac.check_permission_or_raise(
+                RebacReference(Resource.USER, user_id),
+                TeamPermission.CAN_USE_TEAM_AGENTS,
+                RebacReference(Resource.TEAM, team_id),
+            )
+        except AuthorizationError:
+            scope = RunScope.current()
+            if scope is not None and scope.delegated_credentials:
+                raise AuthorityLostError() from None
+            raise
+
+    def _span_tracer(self, request: ToolCallRequest) -> TracerPort | None:
+        """Skip binder-owned spans; middleware tools need their own span."""
+
+        metadata = getattr(request.tool, "metadata", None) or {}
+        if metadata.get(SELF_TRACED_TOOL_METADATA_KEY):
+            return None
+        return self._tracer
 
     async def awrap_tool_call(
         self,
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
+        tracer = self._span_tracer(request)
+        tool_call = request.tool_call
+        async with tool_span(
+            tracer,
+            name=RUNTIME_TOOL_SPAN_NAME,
+            context=self._binding.portable_context,
+            attributes={"tool_name": self._tool_name(request)},
+            input_payload=tool_call.get("args")
+            if isinstance(tool_call, dict)
+            else None,
+        ) as span:
+            result = await self._observe_tool_call(request, handler, span=span)
+            if span is not None and tracer is not None and tracer.captures_content:
+                output = getattr(result, "content", None)
+                if isinstance(result, Command) and isinstance(result.update, dict):
+                    messages = result.update.get("messages", [])
+                    if isinstance(messages, (list, tuple)):
+                        output = [
+                            message.content
+                            for message in messages
+                            if isinstance(message, ToolMessage)
+                            and message.tool_call_id == tool_call.get("id")
+                        ]
+                span.set_io(output=output)
+            return result
+
+    async def _observe_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+        *,
+        span: SpanPort | None,
     ) -> ToolMessage | Command[Any]:
         tool_name = self._tool_name(request)
         # `ContextAwareTool` wraps every MCP-catalog tool (`mcp_toolkit.py`);
@@ -250,7 +296,21 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             else nullcontext()
         )
 
-        emit_audit_log("agent.tool.invocation.started", **base_dims)
+        # A run that has already lost its authority makes no further outbound
+        # call, including the sibling calls of a round already in flight.
+        run_scope = RunScope.current()
+        if run_scope is not None:
+            run_scope.raise_if_stopped()
+
+        confined = delegation_enabled()
+        if confined:
+            emit_audit_log(
+                "agent.tool.invocation.started",
+                outcome="started",
+                reason="tool_invocation",
+            )
+        else:
+            emit_audit_log("agent.tool.invocation.started", **base_dims)
         with timer_ctx as kpi_dims:
             try:
                 await self._reverify_team_authorization(
@@ -267,9 +327,18 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 # outcome (distinct from "failed", see
                 # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §5) and
                 # re-raise so asyncio's cancellation semantics stay intact.
-                emit_audit_log(
-                    "agent.tool.invocation.completed", outcome="cancelled", **base_dims
-                )
+                if confined:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="cancelled",
+                        reason="cancelled",
+                    )
+                else:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="cancelled",
+                        **base_dims,
+                    )
                 raise
             except Exception as e:
                 if kpi_dims is not None:
@@ -287,16 +356,38 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                         },
                         actor=KPIActor(type="system"),
                     )
-                logger.exception(
-                    "[TOOL][%s] Tool execution failed (captured)", tool_name
-                )
-                emit_audit_log(
-                    "agent.tool.invocation.completed",
-                    outcome="failed",
-                    error_code=type(e).__name__,
-                    exception_type=type(e).__name__,
-                    **base_dims,
-                )
+                if isinstance(e, RunStopError):
+                    # Reason only: `logger.exception` would print the traceback
+                    # and the chained upstream error with it, which is how a
+                    # receiver's response body ends up in the pod's logs.
+                    logger.warning(
+                        "[TOOL] event=tool_call outcome=stopped reason=%s", e.reason
+                    )
+                    reason = e.reason
+                elif confined:
+                    reason = type(e).__name__
+                    logger.error(
+                        "[TOOL] event=tool_call outcome=failed reason=%s", reason
+                    )
+                else:
+                    reason = type(e).__name__
+                    logger.exception(
+                        "[TOOL][%s] Tool execution failed (captured)", tool_name
+                    )
+                if confined:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="failed",
+                        reason=reason,
+                    )
+                else:
+                    emit_audit_log(
+                        "agent.tool.invocation.completed",
+                        outcome="failed",
+                        error_code=type(e).__name__,
+                        exception_type=type(e).__name__,
+                        **base_dims,
+                    )
                 raise
             else:
                 # A `Command` has no `.status` — LangGraph already ran the
@@ -341,6 +432,9 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                         if status_is_error
                         else "tool_error_artifact"
                     )
+                    if span is not None:
+                        span.set_attribute("status", "error")
+                        span.set_attribute("error_type", error_code)
                     if kpi_dims is not None:
                         # `status` only — see the timer comment above.
                         kpi_dims["status"] = "error"
@@ -362,19 +456,33 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                             },
                             actor=KPIActor(type="system"),
                         )
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="failed",
-                        error_code=error_code,
-                        exception_type="none",
-                        **base_dims,
-                    )
+                    if confined:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="failed",
+                            reason=error_code,
+                        )
+                    else:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="failed",
+                            error_code=error_code,
+                            exception_type="none",
+                            **base_dims,
+                        )
                 else:
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="succeeded",
-                        **base_dims,
-                    )
+                    if confined:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="succeeded",
+                            reason="tool_completed",
+                        )
+                    else:
+                        emit_audit_log(
+                            "agent.tool.invocation.completed",
+                            outcome="succeeded",
+                            **base_dims,
+                        )
                 return result
 
 

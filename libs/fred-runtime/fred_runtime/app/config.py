@@ -63,8 +63,9 @@ Example `config/configuration.yaml`:
 
 from __future__ import annotations
 
+import os
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 
 if TYPE_CHECKING:
     from fred_runtime.runtime_context import McpConfigurationLike
@@ -74,11 +75,12 @@ from fred_core.common import (
     OpenSearchStoreConfig,
     PostgresStoreConfig,
     TemporalSchedulerConfig,
+    default_postgres_store_config,
 )
 from fred_core.logs.log_structures import LogStorageConfig
 from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
 
@@ -89,23 +91,36 @@ from ..runtime_context import RuntimeTimeouts
 
 class PodAppConfig(BaseModel):
     """
-    Basic HTTP server and local observability settings for an agent pod.
+    Identity and HTTP server settings for an agent pod.
 
     Why this exists:
-    - every pod needs the same HTTP binding knobs plus the small Prometheus/KPI
-      settings already used by the other Fred backends
+    - every pod needs the same identity and HTTP binding knobs, in the same
+      place, whoever built it
     - keeping these fields in `app` preserves the familiar startup contract for
       local benches and scrape-based debugging
 
     How to use it:
-    - keep the defaults for simple local development
-    - set `metrics_port` / `metrics_address` when `observability.metrics` is
-      `prometheus`
+    - declare `runtime_id`; every other field defaults sanely for local work
+    - the metrics exporter is configured under `observability.kpi.prometheus`,
+      not here
 
     Example:
-    - `PodAppConfig(base_url="/pod/v1", port=8000, metrics_port=9115)`
+    - `PodAppConfig(runtime_id="my-agents", base_url="/pod/v1", port=8000)`
     """
 
+    runtime_id: str = Field(
+        ...,
+        pattern=r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
+        description=(
+            "Slug identifying this pod across every telemetry stream: the KPI "
+            "`service` dimension, the `runtime_id` KPI dimension, and the "
+            "`service` field of every log record. MUST equal the id the "
+            "control-plane registers this pod under in "
+            "`runtime_catalog_sources[].runtime_id` — that equality is what "
+            "lets a log line be joined to its own KPI. Lowercase slug only, so "
+            "no display prose can reach a Prometheus label."
+        ),
+    )
     name: str = "Fred Agent Pod"
     base_url: str = "/api/v1"
     host: str = "127.0.0.1"
@@ -283,6 +298,59 @@ class PodObservabilityConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class LocalRuntimeFilesystemConfig(BaseModel):
+    """Local-development object storage for Fred Runtime files."""
+
+    type: Literal["local"] = "local"
+    root: str = "~/.fred/pod/filesystem"
+
+
+class MinioRuntimeFilesystemConfig(BaseModel):
+    """MinIO or S3-compatible object storage for Fred Runtime files."""
+
+    type: Literal["minio"] = "minio"
+    endpoint: str
+    access_key: str
+    secret_key: str = Field(default=None)  # type: ignore[assignment]
+    bucket_name: str = "fred-runtime"
+    secure: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secret(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            values = {**values}
+            values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+            if not values["secret_key"]:
+                raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+
+class GcsRuntimeFilesystemConfig(BaseModel):
+    """GCS object storage using Application Default Credentials."""
+
+    type: Literal["gcs"] = "gcs"
+    bucket_name: str = "fred-runtime"
+    project_id: str | None = None
+
+
+class ConversationFilesystemQuotaConfig(BaseModel):
+    """Independent soft limits for runtime-owned conversation namespaces."""
+
+    scratchpad_max_bytes: int = Field(default=100 * 1024 * 1024, ge=1)
+    scratchpad_max_files: int = Field(default=1_000, ge=1)
+    deep_max_bytes: int = Field(default=1024 * 1024 * 1024, ge=1)
+    deep_max_files: int = Field(default=10_000, ge=1)
+
+
+RuntimeFilesystemConfig = Annotated[
+    LocalRuntimeFilesystemConfig
+    | MinioRuntimeFilesystemConfig
+    | GcsRuntimeFilesystemConfig,
+    Field(discriminator="type"),
+]
+
+
 class PodStorageConfig(BaseModel):
     """
     Persistence backend settings for an agent pod.
@@ -296,15 +364,25 @@ class PodStorageConfig(BaseModel):
       local dev via sqlite_path, PostgreSQL in production via host/port/database)
     - `opensearch`: optional, for log forwarding in production
     - `log_store`: optional, for structured log persistence
+    - `object_store`: one bucket/root for all runtime-owned files
     """
 
-    postgres: PostgresStoreConfig = Field(
-        default_factory=lambda: PostgresStoreConfig(
-            sqlite_path="~/.fred/pod/pod.sqlite3"
-        )
-    )
+    postgres: PostgresStoreConfig = Field(default_factory=default_postgres_store_config)
     opensearch: Optional[OpenSearchStoreConfig] = None
     log_store: Optional[LogStorageConfig] = None
+    object_store: RuntimeFilesystemConfig = Field(
+        default_factory=LocalRuntimeFilesystemConfig
+    )
+    conversation_filesystem: ConversationFilesystemQuotaConfig = Field(
+        default_factory=ConversationFilesystemQuotaConfig
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_filesystem_config(cls, values: Any) -> Any:
+        if isinstance(values, dict) and "filesystem" in values:
+            raise ValueError("storage.filesystem was renamed to storage.object_store")
+        return values
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +447,9 @@ class AgentPodConfig(BaseModel):
     _mcp_configuration: McpConfigurationLike | None = PrivateAttr(default=None)
     _platform_prompt_file: Any | None = PrivateAttr(default=None)
 
-    app: PodAppConfig = Field(default_factory=PodAppConfig)
+    # Required, unlike every other section: `app.runtime_id` has no default, so
+    # an omitted `app:` block would leave the pod unable to name itself.
+    app: PodAppConfig
     security: SecurityConfiguration
     ai: PodAIConfig = Field(default_factory=PodAIConfig)
     observability: PodObservabilityConfig = Field(

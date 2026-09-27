@@ -1,30 +1,36 @@
 ---
 title: Overview
 order: 0
-description: The map of the platform's features.
+description: How the pieces fit together, and who is allowed to change them.
 icon: widgets
 ---
 
 # Features
 
-This section covers each feature in detail. Pick a topic:
+Everything starts with a **team**. It holds three things you feed, and a
+conversation makes them work together:
 
-- [Chat](/help/en/features/chat) — talk with an agent, attachments, sources,
-  and produced documents.
-- [Agents](/help/en/features/agents) — create, configure, and manage your AI
-  assistants.
-- [Prompt library](/help/en/features/prompts) — categories, creating and
-  reusing prompts.
-- [Document resources](/help/en/features/resources) — upload, organize, and
-  the documents your agents draw on.
-- [Agent capabilities](/help/en/features/capabilities) — the extra functions
-  you enable per team.
-- [Administering your team](/help/en/features/teams) — members, settings,
-  routing, retention, evaluations.
-- [Roles & permissions](/help/en/features/roles) — who can do what, within a
-  team and across the platform.
-- [Usage tracking](/help/en/features/usage) — consumption and statistics.
-- [Admin console](/help/en/features/admin) — surfaces reserved for platform
-  administrators.
+> **Team** → (agents · prompts · resources) → **conversation** → **answer
+> grounded in your documents**
 
-> New here? Start with [Getting started](/help/en/getting-started) instead.
+- **[Agents](/help/en/features/agents)** — the assistants you talk to. Each
+  starts from a template the platform provides, then gets its instructions, its
+  documents and its extra functions.
+- **[Capabilities](/help/en/features/capabilities)** — the detail of what an
+  agent can do beyond answering, with each capability's limits.
+- **[Conversations](/help/en/features/chat)** — where you question them, attach a
+  file, collect a produced document.
+- **[Resources](/help/en/features/resources)** — the team's documents, and how an
+  agent reads them.
+- **[Prompts](/help/en/features/prompts)** — recurring requests, saved once.
+
+Two pages are about permissions rather than tools:
+
+- **[Teams and permissions](/help/en/features/teams-and-permissions)** — who may
+  do what in a team, how you become a member, and who creates teams.
+- **[Platform administration](/help/en/features/administration)** — what reaches
+  beyond a single team, and is therefore not open to everyone.
+
+> Every permission is checked server-side, on every action. A visible button
+> grants no right, and a missing button reflects your role rather than a
+> malfunction.

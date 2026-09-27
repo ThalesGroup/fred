@@ -56,7 +56,7 @@ Each tool family ships as a **native capability package** (`tools()` lane of
 
 One **optional pip package for the whole family** (working name
 `fred-capability-platform-ops`), following the out-of-tree precedent
-(`libs/fred-capability-ppt-filler/`): own `pyproject.toml`; installing the wheel in
+(`libs/capabilities/fred-capability-ppt-filler/`): own `pyproject.toml`; installing the wheel in
 the `fred-agents` pod is the registration. The packaging unit and the grant unit
 deliberately differ: the package declares **one
 `[project.entry-points."fred.capabilities"]` entry per concern**, so each concern
@@ -266,7 +266,7 @@ fix is frontend-only).
    clients) or retire? If they stay, #2308's gating must land regardless.
 4. **Package location.** ~~In-tree `libs/fred-capability-*` (like ppt-filler /
    writable-document) vs a separate repo. Leaning in-tree.~~ **Resolved
-   2026-08-27:** in-tree, `libs/fred-capability-platform-ops/` (PLATFORM-POSTGRES
+   2026-08-27:** in-tree, `libs/capabilities/fred-capability-platform-ops/` (PLATFORM-POSTGRES
    §2) — proven precedent, no new CI/release infrastructure during consolidation.
 5. **Generic connectors vs Fred-scoped introspection.** Should a capability like
    Postgres be Fred-scoped (operator-provisioned read-only DSN via env, per §3.4)

@@ -72,6 +72,7 @@ export const taskSlice = createSlice({
       const vm = state.byId[event.task_id];
       if (!vm) return;
       if (event.seq <= vm.lastSeq) return; // sequential dedup
+      if (vm.kind === "ingestion" && TERMINAL_STATES.has(vm.state)) return;
       vm.state = event.state;
       // Preserve last-known progress/step when a sparse event omits them (same
       // rule as target/owner below): a running event with no progress means

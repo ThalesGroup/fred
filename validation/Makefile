@@ -20,6 +20,7 @@ PYTHON_BIN      ?= python3
 # Shared Fred libraries now live as repo-sibling directories (validation/ moved
 # into the `fred` monorepo itself - no more cross-repo env-var indirection needed
 # to locate them).
+FRED_POD_SRC     ?= ../libs/fred-pod
 FRED_CORE_SRC    ?= ../libs/fred-core
 FRED_SDK_SRC     ?= ../libs/fred-sdk
 FRED_RUNTIME_SRC ?= ../libs/fred-runtime
@@ -41,7 +42,7 @@ validation-report: ## Run the full live validation suite (no -x) and write a sho
 	  $(VALIDATION_VENV)/bin/pip install -q --upgrade pip; \
 	}
 	@echo "▶ installing deps (shared Fred libs editable + this validation package)"
-	@$(VALIDATION_VENV)/bin/pip install -q -e $(FRED_CORE_SRC) -e $(FRED_SDK_SRC) -e $(FRED_RUNTIME_SRC) -e .
+	@$(VALIDATION_VENV)/bin/pip install -q -e $(FRED_POD_SRC) -e $(FRED_CORE_SRC) -e $(FRED_SDK_SRC) -e $(FRED_RUNTIME_SRC) -e .
 	@echo "▶ running the full suite (no -x, so one failure doesn't hide the rest)"
 	@set +e; \
 	  FRED_CONTROL_PLANE_URL="$(FRED_CONTROL_PLANE_URL)" \
@@ -62,6 +63,6 @@ validation-unit-tests: ## Offline unit tests for the validation harness itself (
 	  $(VALIDATION_VENV)/bin/pip install -q --upgrade pip; \
 	}
 	@echo "▶ installing deps (shared Fred libs editable + this validation package)"
-	@$(VALIDATION_VENV)/bin/pip install -q -e $(FRED_CORE_SRC) -e $(FRED_SDK_SRC) -e $(FRED_RUNTIME_SRC) -e .
+	@$(VALIDATION_VENV)/bin/pip install -q -e $(FRED_POD_SRC) -e $(FRED_CORE_SRC) -e $(FRED_SDK_SRC) -e $(FRED_RUNTIME_SRC) -e .
 	@echo "▶ running offline unit tests (no live stack)"
 	$(VALIDATION_VENV)/bin/pytest tests -q

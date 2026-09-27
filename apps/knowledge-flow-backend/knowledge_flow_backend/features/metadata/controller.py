@@ -17,7 +17,8 @@ from threading import Lock
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fred_core import KeycloakUser, get_current_user
+from fred_core import DocumentSortField, KeycloakUser, SortOrder, get_current_user
+from fred_core.documents.document_store import DEFAULT_SORT_FIELD, DEFAULT_SORT_ORDER
 from fred_core.documents.document_structures import DocumentMetadata
 from pydantic import BaseModel, Field
 
@@ -48,6 +49,21 @@ class BrowseDocumentsByTagRequest(BaseModel):
     tag_id: str = Field(..., description="Library tag identifier")
     offset: int = Field(0, ge=0)
     limit: int = Field(50, gt=0, le=500)
+    sort_by: DocumentSortField = Field(
+        DEFAULT_SORT_FIELD,
+        description=(
+            "Field the whole tag is ordered by before the page is cut: `name` "
+            "(the document's displayed file name, case-insensitive), `created` "
+            "(date added) or `size` (file size). The order is applied store-side "
+            "on purpose — only one page is returned, so a client reordering what "
+            "it received would sort a page rather than the folder. Ties are "
+            "broken by document uid, so paging never shows one document twice."
+        ),
+    )
+    sort_order: SortOrder = Field(
+        DEFAULT_SORT_ORDER,
+        description="Ascending or descending. Missing values sort last ascending, first descending.",
+    )
 
 
 class TagSizesRequest(BaseModel):
@@ -256,15 +272,17 @@ class MetadataController:
             tags=["Documents"],
             summary="Paginated documents by library tag",
             response_model=BrowseDocumentsResponse,
-            description="Returns documents for a library tag with pagination support.",
+            description="Returns documents for a library tag with pagination and store-side ordering.",
         )
         async def browse_documents_by_tag(req: BrowseDocumentsByTagRequest, user: KeycloakUser = Depends(get_current_user)):
-            docs, total = await self.service.browse_documents_in_tag(user, tag_id=req.tag_id, offset=req.offset, limit=req.limit)
+            docs, total = await self.service.browse_documents_in_tag(user, tag_id=req.tag_id, offset=req.offset, limit=req.limit, sort_by=req.sort_by, sort_order=req.sort_order)
             logger.info(
-                "[PAGINATION] browse_documents_by_tag tag=%s offset=%s limit=%s returned=%s total=%s",
+                "[PAGINATION] browse_documents_by_tag tag=%s offset=%s limit=%s sort=%s/%s returned=%s total=%s",
                 req.tag_id,
                 req.offset,
                 req.limit,
+                req.sort_by,
+                req.sort_order,
                 len(docs),
                 total,
             )

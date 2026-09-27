@@ -27,6 +27,7 @@ from importlib.metadata import EntryPoint
 from typing import Any, Literal
 
 import pytest
+from _tracer_capability import TracerEchoCapability, install_tracer_entry_point
 from fred_runtime.capabilities import (
     CapabilityRegistrationError,
     CapabilityRegistry,
@@ -37,7 +38,6 @@ from fred_runtime.capabilities import (
     MissingRequiredEnvError,
     boot_capability_registry,
 )
-from fred_runtime.capabilities.demo import DemoEchoCapability
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -87,13 +87,13 @@ def _capability(
     return _Cap()
 
 
-class _DemoCardPart(BaseModel):
-    type: Literal["demo_card"] = "demo_card"
+class _TracerCardPart(BaseModel):
+    type: Literal["tracer_card"] = "tracer_card"
     payload: str = ""
 
 
-class _OtherDemoCardPart(BaseModel):
-    type: Literal["demo_card"] = "demo_card"
+class _OtherTracerCardPart(BaseModel):
+    type: Literal["tracer_card"] = "tracer_card"
     body: str = ""
 
 
@@ -127,9 +127,9 @@ def test_duplicate_capability_id_fails_boot() -> None:
 
 def test_duplicate_chat_part_kind_across_capabilities_fails_boot() -> None:
     registry = CapabilityRegistry()
-    registry.register(_capability("cap_a", chat_parts=[_DemoCardPart]))
-    registry.register(_capability("cap_b", chat_parts=[_OtherDemoCardPart]))
-    with pytest.raises(DuplicateChatPartKindError, match="demo_card"):
+    registry.register(_capability("cap_a", chat_parts=[_TracerCardPart]))
+    registry.register(_capability("cap_b", chat_parts=[_OtherTracerCardPart]))
+    with pytest.raises(DuplicateChatPartKindError, match="tracer_card"):
         registry.validate(env={})
 
 
@@ -287,23 +287,23 @@ def test_mcp_capability_is_exempt_from_execution_models_declaration() -> None:
 
 def test_entry_point_discovery_registers_capability_with_zero_code_edits() -> None:
     entry = EntryPoint(
-        name="demo_echo",
-        value="fred_runtime.capabilities.demo:DemoEchoCapability",
+        name="tracer_echo",
+        value="_tracer_capability:TracerEchoCapability",
         group="fred.capabilities",
     )
     registry = CapabilityRegistry()
     registered = registry.discover(entry_points=[entry])
 
-    assert registered == ["demo_echo"]
-    assert "demo_echo" in registry
-    assert isinstance(registry.capability("demo_echo"), DemoEchoCapability)
+    assert registered == ["tracer_echo"]
+    assert "tracer_echo" in registry
+    assert isinstance(registry.capability("tracer_echo"), TracerEchoCapability)
     registry.validate(env={})
 
 
 def test_entry_point_rejects_non_capability_target() -> None:
     entry = EntryPoint(
         name="bogus",
-        value="fred_runtime.capabilities.demo:DemoEchoConfig",
+        value="_tracer_capability:TracerEchoConfig",
         group="fred.capabilities",
     )
     registry = CapabilityRegistry()
@@ -311,12 +311,25 @@ def test_entry_point_rejects_non_capability_target() -> None:
         registry.discover(entry_points=[entry])
 
 
-def test_boot_registry_discovers_installed_demo_capability() -> None:
-    # fred-runtime itself declares the demo capability's `fred.capabilities`
-    # entry point (#1977): installing the package IS the registration, so a
-    # bare boot discovers exactly the in-tree tracer.
+def test_boot_registry_discovers_installed_capabilities(monkeypatch) -> None:
+    # Installing a package that declares a `fred.capabilities` entry point IS
+    # the registration. fred-runtime declares none of its own — it ships the
+    # framework — so the test supplies one the way an installed package would.
+    install_tracer_entry_point(monkeypatch)
+
     registry = boot_capability_registry(env={})
-    assert "demo_echo" in registry
+
+    assert "tracer_echo" in registry
+
+
+def test_boot_registry_is_empty_without_installed_capabilities(monkeypatch) -> None:
+    # A bare fred-runtime venv discovers nothing, and that must boot cleanly
+    # rather than raise: a pod with no capability package installed is valid.
+    from fred_runtime.capabilities import registry as registry_module
+
+    monkeypatch.setattr(registry_module, "_installed_entry_points", lambda group: [])
+
+    assert boot_capability_registry(env={}).ids() == ()
 
 
 # ---------------------------------------------------------------------------

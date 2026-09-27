@@ -1,63 +1,67 @@
 ---
-title: Les ressources documentaires
-order: 40
-description: Déposer et organiser les documents que vos agents pourront exploiter.
+title: Les ressources
+order: 30
+description: Déposer les documents de l'équipe, les organiser, comprendre comment un agent les lit.
 icon: folder
 ---
 
-# Les ressources documentaires
+# Les ressources
 
-Les **ressources**, ce sont les documents de votre équipe. Une fois déposés,
-vos agents peuvent s'appuyer dessus pour répondre à vos questions et **vous
-montrer les passages** sur lesquels ils se basent. C'est ce qui leur permet de
-parler de _vos_ contenus plutôt que de généralités.
+Les **ressources** sont les documents de votre équipe. C'est ce qui permet à un
+agent de parler de _vos_ contenus et de vous montrer les passages sur lesquels
+il s'appuie.
+
+> Déposer, renommer ou supprimer un document demande le rôle **Éditeur**. Tout
+> membre peut en revanche les consulter et interroger un agent qui les utilise.
 
 ## Le corpus d'équipe
 
 La page **Ressources** présente le **corpus d'équipe** : la base documentaire
-partagée entre les membres de l'équipe, sur laquelle vos agents vont
-travailler.
+partagée entre ses membres.
 
-## Ranger ses documents dans des bibliothèques
+Les documents se rangent dans des **bibliothèques**, comme des dossiers. Créez
+d'abord une bibliothèque, puis déposez vos documents dedans.
 
-Les documents se rangent dans des **bibliothèques**, un peu comme des dossiers.
-Commencez par créer une bibliothèque, puis ajoutez vos documents à l'intérieur.
+> **Un document déposé hors d'une bibliothèque ne sera jamais utilisé par un
+> agent.** C'est le premier point à vérifier lorsqu'un document semble ignoré.
 
-> Un document déposé en dehors d'une bibliothèque ne pourra pas être exploité
-> par vos agents : pensez toujours à le placer dans une bibliothèque.
+Les formats courants passent : PDF, texte, Word, OpenDocument, PowerPoint,
+Excel, CSV, Markdown, images et fichiers audio. Un format inhabituel peut être
+refusé ; convertissez-le dans un format courant.
 
-Les formats habituels sont acceptés : PDF, documents texte, fichiers Word et
-OpenDocument, présentations (PowerPoint), tableurs (Excel, CSV), Markdown. Les
-images et les fichiers audio sont également pris en charge.
+## Après le dépôt
 
-## Ce qui se passe après le dépôt
-
-Quand vous ajoutez un document, il a besoin d'un court moment de **préparation**
-avant d'être utilisable. Pendant ce temps, une étiquette **Traitement**
-s'affiche à côté de son nom ; elle **disparaît d'elle-même** dès que le document
-est prêt — vous n'avez rien à faire.
-
-Chaque document indique aussi d'où il vient : **Déposé** (ajouté par un membre
-de l'équipe), **Généré** (produit par un agent) ou **Partagé**.
-
-![TODO: capture — le corpus d'équipe avec l'étiquette Traitement](assets/resources-corpus.png)
+Un document a besoin d'un court moment de **préparation** avant d'être
+utilisable. Une étiquette **Traitement** s'affiche à côté de son nom et
+disparaît d'elle-même : vous n'avez rien à faire. Chaque document indique aussi
+son origine — **Déposé**, **Généré** par un agent, ou **Partagé**.
 
 ## Gérer ses documents
 
-Depuis le corpus, vous pouvez :
+Depuis le corpus : **renommer**, **prévisualiser**, **supprimer**, ou **exclure
+de la recherche** — l'agent cesse alors d'en tenir compte sans que le document
+disparaisse, et vous pouvez l'inclure à nouveau.
 
-- **Renommer** un document ou une bibliothèque.
-- **Prévisualiser** un document sans quitter la page.
-- **Exclure de la recherche** pour que vos agents cessent d'en tenir compte,
-  sans le supprimer — vous pouvez l'**inclure** à nouveau à tout moment.
-- **Supprimer** un document ou une bibliothèque complète.
+Chaque équipe dispose d'un **espace de stockage**, dont la page montre la
+consommation. En approchant de la limite, un dépôt peut être refusé : faites du
+ménage, ou demandez un ajustement à un administrateur de l'équipe.
 
-## L'espace de stockage
+## Comment un agent lit vos documents
 
-Chaque équipe dispose d'un **espace de stockage** pour ses documents. La page
-vous montre ce qui est utilisé. Si vous approchez de la limite, faites un peu de
-ménage (doublons, versions dépassées) ou demandez de l'aide à un administrateur
-de votre équipe.
+Ce fonctionnement explique la forme des réponses. Le choix ne vous appartient
+pas : l'agent décide selon votre demande.
 
-Un document déposé mais que l'agent ne semble jamais utiliser ? Jetez un œil à
-[Problèmes de documents](/help/fr/troubleshooting/documents-issues).
+- **Recherche** — trouve les passages les plus pertinents et répond à partir
+  d'eux. Rapide, et le bon réflexe pour « que sait-on sur X ? ». Elle ne remonte
+  que ce qu'elle juge pertinent, donc **elle peut manquer des éléments**.
+- **Lecture mot à mot** — lit le texte exact, dans l'ordre, quand vous voulez le
+  libellé précis d'un passage.
+- **Extraction** — parcourt le document entier et liste tout ce qui correspond,
+  sans rien omettre. La plus lente, la plus exhaustive.
+- **Résumé** — un aperçu court, volontairement non exhaustif.
+
+> **Si rien ne doit être oublié, dites-le** : « liste _toutes_ les échéances ».
+> L'agent passe alors par l'extraction plutôt que par la recherche.
+
+Un document jamais utilisé ? Voir
+[Problèmes courants](/help/fr/troubleshooting/common-problems).

@@ -45,17 +45,18 @@ describe("searchHelp against the real corpus", () => {
     expect(searchHelp("fr", "   ")).toEqual([]);
   });
 
-  it("finds the concepts page by a body term and marks the snippet", () => {
-    const results = searchHelp("fr", "vocabulaire");
-    const concepts = results.find((r) => r.meta.sectionId === "getting-started" && r.meta.id === "concepts");
-    expect(concepts).toBeTruthy();
-    expect(concepts!.snippet).toContain("<mark>");
+  it("finds a page by a body term and marks the snippet", () => {
+    const results = searchHelp("fr", "marketplace");
+    const page = results.find((r) => r.meta.sectionId === "getting-started" && r.meta.id === "first-steps");
+    expect(page).toBeTruthy();
+    expect(page!.snippet).toContain("<mark>");
   });
 
   it("ranks a title match above a body-only match", () => {
-    // "concepts" is in the concepts page title; make sure it ranks first.
-    const results = searchHelp("fr", "concepts");
-    expect(results[0]?.meta.id).toBe("concepts");
+    // "prompts" is the prompts page's own title; it must outrank the pages
+    // that merely mention prompts in their body.
+    const results = searchHelp("fr", "prompts");
+    expect(results[0]?.meta.id).toBe("prompts");
   });
 
   it("returns a heading + anchor when the query hits a heading", () => {
@@ -65,10 +66,10 @@ describe("searchHelp against the real corpus", () => {
   });
 
   it("requires every term to match (AND semantics)", () => {
-    expect(searchHelp("fr", "vocabulaire zzzznope")).toEqual([]);
+    expect(searchHelp("fr", "marketplace zzzznope")).toEqual([]);
   });
 
   it("is case-insensitive", () => {
-    expect(searchHelp("en", "CONCEPTS").length).toBeGreaterThan(0);
+    expect(searchHelp("en", "MARKETPLACE").length).toBeGreaterThan(0);
   });
 });

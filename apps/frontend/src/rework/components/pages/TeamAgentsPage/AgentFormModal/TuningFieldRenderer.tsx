@@ -286,7 +286,7 @@ export function TuningFieldRenderer({
 
   return (
     <TextInput
-      label={label}
+      label={fieldTitle}
       value={String(fieldValue)}
       type={inputType}
       autoComplete={field.type === "secret" ? "new-password" : undefined}

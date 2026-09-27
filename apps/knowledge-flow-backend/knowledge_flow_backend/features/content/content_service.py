@@ -23,7 +23,13 @@ from pathlib import Path
 from typing import BinaryIO, NamedTuple, Tuple
 
 import pandas as pd
-from fred_core import AuthorizationError, DocumentPermission, KeycloakUser, convert_office_file_to_pdf
+from fred_core import (
+    AuthorizationError,
+    DocumentPermission,
+    KeycloakUser,
+    StandingAuthorizationError,
+    convert_office_file_to_pdf,
+)
 from fred_core.documents.document_structures import DocumentMetadata, FileType, ProcessingStage, ProcessingStatus
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from tabulate import tabulate
@@ -291,6 +297,8 @@ class ContentService:
         """
         try:
             document_metadata = await self.get_document_metadata(user, document_uid)
+        except StandingAuthorizationError:
+            raise
         except (FileNotFoundError, AuthorizationError):
             # No corpus record the caller may read: either a session attachment
             # (no metadata, no ReBAC tuple, so the check fails closed) or a uid

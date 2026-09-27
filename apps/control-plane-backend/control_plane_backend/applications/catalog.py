@@ -233,7 +233,11 @@ class ApplicationSourceConfig(BaseModel):
 
         return CapabilityCatalogEntry(
             id=self.catalog_id,
+            # An application is its own deployed unit — it ships its own
+            # containers, so no pod serves it and `runtime_id` stays unset.
+            source_id=self.app_id,
             version=self.version,
+            public_version=self.version,
             name=self.display_name["en"],
             description=self.description["en"],
             icon=self.icon,

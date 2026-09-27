@@ -35,6 +35,7 @@ import fred_core.users.user_models  # noqa: F401 — registers users with CoreBa
 # cleanup could make lazy, leaving a claimed table out of the metadata and
 # turning it into an autogenerate DROP proposal.
 import control_plane_backend.models.agent_instance_models  # noqa: F401
+import control_plane_backend.models.announcement_models  # noqa: F401 — registers platform_announcement with Base
 import control_plane_backend.models.bootstrap_models  # noqa: F401 — registers platformbootstrap with Base
 import control_plane_backend.models.capability_settings_models  # noqa: F401
 import control_plane_backend.models.knowledge_base_models  # noqa: F401

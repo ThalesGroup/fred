@@ -38,7 +38,7 @@ Create (or verify) the clients below:
 > Secrets to store:
 >
 > - `agentic` → `KEYCLOAK_AGENTIC_CLIENT_SECRET`
-> - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (only required when Knowledge Flow calls other services)
+> - `knowledge-flow` → `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` (required when `security.user.enabled` is on: Knowledge Flow refuses to start without it)
 
 When directory enumeration is needed (e.g. listing known users for admin jobs):
 grant the `knowledge-flow` and `agentic` service account:
@@ -73,6 +73,54 @@ Create **client roles on `app`** (not realm roles) so Knowledge Flow receives th
 ### 1.5 Audience (strict mode)
 
 - When enforcing audience checks, add an **Audience** mapper so tokens destined for Knowledge Flow include `knowledge-flow` in `aud`.
+
+### 1.6 Delegation caller role
+
+`security.delegation` has one switch per direction. `act_for_people`, read where
+agents run, makes their calls during a person's run present the backend's workload
+token and name the person, run and agent; `accept_delegated_calls` makes a backend believe the person
+a calling workload names, only when that workload's token carries the delegation
+caller role. Receivers list no callers. A backend that accepts delegated calls and
+runs agents must also act for people.
+
+- Create a client `fred-delegation` with every login flow and the service account
+  disabled, and give it the client role `delegation_caller`.
+- Grant that role to the service account of each workload allowed to delegate
+  (the agent runtime, and each first-party application's service client).
+  A client granted the role takes no service-identity shortcut, whatever the
+  delegation switches: keep it off service identities that act as themselves,
+  such as the evaluation worker or a knowledge-base pod.
+- Keep the `roles` client scope on those workload clients, and the role within
+  their scope (full scope allowed, or the role added to the client's dedicated
+  scope): Keycloak then writes the role under
+  `resource_access.fred-delegation.roles` and adds `fred-delegation` to `aud`,
+  which is where receivers expect both.
+- Never grant the role to people. Receivers refuse a token issued to
+  `security.user.client_id` or to a client in `security.delegation.user_clients`.
+  Where `security.user.client_id` names the receiver's own audience client (a
+  per-agent pod client, a first-party application's `KEYCLOAK_USER_AUDIENCE`),
+  list the login client there: `user_clients: [app]`, or
+  `"user_clients": ["app"]` in `FRED_DELEGATION`.
+- To refuse a person's token whichever client issued it, set
+  `security.delegation.service_accounts_only: true` on every receiver. Receivers
+  then trust only a token Keycloak issued to a client's own service account: its
+  `preferred_username` is `service-account-<client>` and it carries the `client_id`
+  claim (`clientId` before Keycloak 21.1) that only client-credentials tokens get.
+  Keep the `profile` scope and the Client ID mapper on the workload clients
+  (Keycloak 26.1 and later keep that mapper in the `service_account` scope, earlier
+  versions in the client's dedicated scope). Where a local `configuration_prod.yaml`
+  sets the option, `scripts/populate_local_delegation.py` reports a minted token
+  that lacks either marker.
+
+With another provider, set `security.delegation.caller_roles_claim` to the nested
+claim names that hold the roles (for example `[roles]`; the default is
+`[resource_access, <audience>, roles]`), and `audience` and `caller_role` if its
+names differ. An access token that names its client in `client_id` instead of
+`azp`, or carries no `typ` claim, is accepted; token verification still reads the
+signing keys from Keycloak's `<realm_url>/protocol/openid-connect/certs`. For local
+runs, `make delegation` checks a freshly minted workload token and writes ignored
+overlays that switch delegation on for `make run` and `make run-worker`, leaving the
+tracked YAML unchanged; see `scripts/README-local-delegation.md`.
 
 ---
 

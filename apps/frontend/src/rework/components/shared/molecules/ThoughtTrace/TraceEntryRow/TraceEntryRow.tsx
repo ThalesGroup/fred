@@ -41,7 +41,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
   const status = statusForEntry(entry, pendingToolCallIds);
-  const label = entryLabel(entry);
+  const label = entryLabel(entry, (key) => t(key));
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const isPending = status === "pending";
@@ -56,7 +56,7 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
   // tool are distinguishable — "Reading query" ×2 was byte-identical (#2172).
   const discriminator = toolDiscriminator(entry);
   const discriminatorText = discriminator
-    ? t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })
+    ? `${t(`rework.chatTrace.${discriminator.kind}`, { count: discriminator.count })}${discriminator.partial ? ` · ${t("rework.chatTrace.tabular.partialResult")}` : ""}`
     : "";
 
   return (

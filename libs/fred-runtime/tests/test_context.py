@@ -54,6 +54,19 @@ def test_pod_context_get_kpi_writer_succeeds_after_initialize(minimal_config) ->
     assert writer is not None
 
 
+def test_pod_context_kpi_writer_labels_events_with_this_pod(minimal_config) -> None:
+    """The KPI `service` dim must be this pod's slug, never a library constant.
+
+    A literal here collapses every pod built on fred-runtime into one
+    Prometheus series and one `kpi-index` bucket.
+    """
+    container = PodApplicationContext(minimal_config)
+    container.initialize_kpi_writer()
+
+    static_dims = container.get_kpi_writer().defaults.static_dims  # type: ignore[attr-defined]
+    assert static_dims["service"] == minimal_config.app.runtime_id == "test-pod"
+
+
 def test_pod_context_control_plane_client_raises_before_initialize(
     minimal_config,
 ) -> None:

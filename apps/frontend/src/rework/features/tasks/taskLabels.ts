@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import type { TFunction } from "i18next";
-import type { TaskState } from "./taskTypes";
+import type { TaskState, TaskViewModel } from "./taskTypes";
 
 /**
  * Single source of truth for the task feature's presentation strings.
@@ -34,6 +34,27 @@ export const STATE_COLOR: Record<TaskState, string> = {
 
 /** Localized task-state label (e.g. "Pending" / "En attente"). */
 export const stateLabel = (state: TaskState, t: TFunction): string => t(`rework.tasks.state.${state}`);
+
+/** Keep backend stage keys in the payload, translate only their presentation. */
+export function stepLabel(task: Pick<TaskViewModel, "kind" | "step">, t: TFunction): string {
+  const step = task.step ?? "";
+  if (task.kind === "ingestion" && ["uploading", "processing", "indexing", "done"].includes(step)) {
+    return t(`rework.tasks.ingestionStep.${step}`);
+  }
+  return step;
+}
+
+export function taskSupportDetails(task: TaskViewModel, t: TFunction): string {
+  return [
+    task.target?.label,
+    t("rework.tasks.popover.supportReference", { id: task.taskId }),
+    task.target?.id ? `Document: ${task.target.id}` : null,
+    stepLabel(task, t),
+    task.error,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 /** Localized "time ago" string shared by the card, popover and tray. */
 export function relativeTime(ms: number, t: TFunction, now = Date.now()): string {

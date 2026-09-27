@@ -28,6 +28,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
+from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
 from fred_runtime.runtime_support.trace_payloads import (
     final_assistant_message,
@@ -248,20 +249,30 @@ class TracingKpiMiddleware(AgentMiddleware):
             return
         tool_calls = getattr(ai_message, "tool_calls", None) or []
         if tool_calls:
-            logger.info(
-                "[LLM][RESPONSE] tool_calls=%s",
-                [
-                    {
-                        "name": tc.get("name")
-                        if isinstance(tc, dict)
-                        else getattr(tc, "name", "?"),
-                        "arg_keys": list(
-                            (tc.get("args") or {}) if isinstance(tc, dict) else {}
-                        ),
-                    }
-                    for tc in tool_calls
-                ],
-            )
+            if delegation_enabled():
+                logger.info(
+                    "[LLM][RESPONSE] tool_calls=%d total_args=%d",
+                    len(tool_calls),
+                    sum(
+                        len((tc.get("args") or {})) if isinstance(tc, dict) else 0
+                        for tc in tool_calls
+                    ),
+                )
+            else:
+                logger.info(
+                    "[LLM][RESPONSE] tool_calls=%s",
+                    [
+                        {
+                            "name": tc.get("name")
+                            if isinstance(tc, dict)
+                            else getattr(tc, "name", "?"),
+                            "arg_keys": list(
+                                (tc.get("args") or {}) if isinstance(tc, dict) else {}
+                            ),
+                        }
+                        for tc in tool_calls
+                    ],
+                )
         else:
             text = (
                 ai_message.content

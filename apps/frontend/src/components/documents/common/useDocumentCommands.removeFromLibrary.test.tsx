@@ -47,14 +47,11 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess, showError, showInfo }),
 }));
 vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation: () => [updateTagMutation],
+  useUpdateTagMutation: () => [updateTagMutation],
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation: () => [vi.fn()],
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [vi.fn()],
   useMutateDocumentLabelsMutation: () => [vi.fn()],
-}));
-vi.mock("../../../slices/knowledgeFlow/knowledgeFlowApi.blob", () => ({
-  useLazyDownloadRawContentBlobQuery: () => [vi.fn()],
 }));
 
 import { useDocumentCommands } from "./useDocumentCommands";

@@ -44,7 +44,7 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
   }),
 }));
-vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: (selector: () => unknown) => selector() }));
 
 const task = (taskId: string, documentUid: string, state: string, label: string) => ({
   taskId,
@@ -130,11 +130,15 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The team's terminal ingestion history (#2384) — what survives a page
   // reload. ONE unfiltered call: a team-scoped query already returns every
   // state, so the args are asserted rather than used to filter.
-  useListTasksKnowledgeFlowV1TasksGetQuery: (arg: Record<string, unknown>) => {
+  useListTasksKnowledgeFlowV1TasksGetQuery: (arg: Record<string, unknown>, options?: { skip?: boolean }) => {
+    if (options?.skip) return {};
     taskHistoryArgs = arg;
-    return { data: { tasks: taskHistory } };
+    const tasks = taskHistory.filter((task) =>
+      arg.state ? task.state === arg.state : arg.scope !== "user" || !["failed", "succeeded"].includes(task.state),
+    );
+    return { data: { tasks } };
   },
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({ data: TAGS, isLoading: false, refetch: () => {} }),
+  useListTagsQuery: () => ({ data: TAGS, isLoading: false, refetch: () => {} }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     (arg: { browseDocumentsByTagRequest: { tag_id: string } }) => ({
       unwrap: async () =>
@@ -147,8 +151,8 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     () => ({ unwrap: async () => ({ sizes: {} }) }),
   ],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
-  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  useCreateTagMutation: () => [vi.fn()],
+  useDeleteTagMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     vi.fn(() => ({ unwrap: async () => ({}) })),
@@ -210,12 +214,12 @@ function folderRow(name: string): HTMLElement {
   return row as HTMLElement;
 }
 
-async function renderWorkspace(): Promise<void> {
+async function renderWorkspace(isPersonalTeam = false): Promise<void> {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
-    root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
+    root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={isPersonalTeam} />);
   });
 }
 
@@ -540,5 +544,22 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
     for (const name of ["Live", "Nested", "Broken", "Done"]) {
       expect(folderRow(name).textContent).not.toContain("rework.resources.status");
     }
+  });
+});
+
+describe("personal ingestion history after reload", () => {
+  it("restores a failed document from terminal history", async () => {
+    taskHistory = [historyEntry("doc-broken", "failed", "Broken.pdf", "2026-08-17T10:00:00Z")];
+    await renderWorkspace(true);
+    expect(folderRow("Broken").textContent).toContain(FAILED_COUNT);
+  });
+
+  it("does not resurrect an old failure after a successful retry", async () => {
+    taskHistory = [
+      historyEntry("doc-broken", "failed", "Broken.pdf", "2026-08-17T10:00:00Z"),
+      historyEntry("doc-broken", "succeeded", "Broken.pdf", "2026-08-17T11:00:00Z"),
+    ];
+    await renderWorkspace(true);
+    expect(folderRow("Broken").textContent).not.toContain(FAILED_COUNT);
   });
 });

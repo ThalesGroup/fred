@@ -43,27 +43,27 @@ A Deep agent turn SHALL emit the same LLM call/response log lines, tool-call lat
   emitted for the tool call
 - **AND** the tool-call latency KPI is recorded
 
-### Requirement: Every unbound Deep filesystem tool stays disabled
+### Requirement: Runtime-provided safe filesystem tools are bound without a capability
 
-For each filesystem tool name registered internally by the Deep agent library, the Deep agent
-runtime SHALL keep that tool unavailable unless the agent's declared toolset or selected capability
-binds that exact name. Binding one filesystem operation SHALL NOT authorize any other built-in
-filesystem operation.
+The Deep agent runtime SHALL bind `ls`, `read_file`, `write_file`, `edit_file`, `glob`, and `grep`
+to its standard conversation-scoped backend even when the agent has no optional filesystem
+capability selected. The runtime SHALL keep `execute` unavailable; binding any safe filesystem
+operation SHALL NOT authorize it.
 
 #### Scenario: No filesystem capability selected
 
-- **GIVEN** a Deep agent with no filesystem capability selected
+- **GIVEN** a Deep agent with no optional filesystem capability selected
 - **WHEN** the agent's turn is planned
-- **THEN** the model is told filesystem tools are unavailable in this runtime
-- **AND** a call to any of the Deep agent library's built-in filesystem tool names is blocked before
-  it can execute
+- **THEN** the six safe filesystem operations use the runtime-provided conversation backend
+- **AND** the model is told that `execute` is unavailable
+- **AND** a call to `execute` is blocked before it can run
 
 #### Scenario: A partial filesystem surface is selected
 
-- **GIVEN** a Deep agent whose selected tools bind some filesystem operations but do not bind
-  `execute`
+- **GIVEN** a Deep agent whose selected tools add or replace some safe filesystem operations
 - **WHEN** the agent's turn is planned
-- **THEN** the bound filesystem operations remain available
+- **THEN** the standard and explicitly bound safe filesystem operations remain available by exact
+  model-visible name
 - **AND** the model is told that `execute` is unavailable
 - **AND** a call to the Deep agent library's internally registered `execute` tool is blocked before
   it can execute

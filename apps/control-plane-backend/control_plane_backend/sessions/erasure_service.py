@@ -33,6 +33,10 @@ import asyncio
 
 import httpx
 from fred_core.common import TeamId
+from fred_core.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    RefreshableTokenProvider,
+)
 from pydantic import BaseModel, Field, computed_field
 
 from control_plane_backend.product import service as product_service
@@ -43,11 +47,9 @@ STORE_ATTACHMENTS = "attachments"
 STORE_SESSION_METADATA = "session_metadata"
 STORE_KPI = "kpi"
 STORE_CHECKPOINT = "runtime_checkpoint"
+STORE_CONVERSATION_FILESYSTEM = "runtime_conversation_filesystem"
 STORE_HISTORY = "runtime_history"
 STORE_WIKI_PROPOSALS = "wiki_proposals"
-
-# Per-runtime-call timeout, matching the Knowledge Flow cleanup helper.
-_RUNTIME_TIMEOUT_SECONDS = 15.0
 
 
 class StoreErasureResult(BaseModel):
@@ -81,8 +83,14 @@ class ConversationErasureService:
     A2) runs with the caller's identity.
     """
 
-    def __init__(self, deps: ProductServiceDependencies) -> None:
+    def __init__(
+        self,
+        deps: ProductServiceDependencies,
+        *,
+        token_provider: RefreshableTokenProvider | None = None,
+    ) -> None:
         self._deps = deps
+        self._token_provider = token_provider
 
     async def erase_session(
         self,
@@ -134,6 +142,7 @@ class ConversationErasureService:
                     document_uid=attachment.document_uid,
                     storage_key=attachment.storage_key,
                     session_id=session_id,
+                    token_provider=self._token_provider,
                 )
             await attachment_store.delete_for_session(session_id)
             receipt.stores.append(
@@ -183,7 +192,7 @@ class ConversationErasureService:
         # runtime resolution — an unresolved runtime must not skip KPI erasure.
         receipt.stores.append(await self._anonymise_kpi(session_id))
 
-        # --- runtime checkpoint + history (A2) ---------------------------
+        # --- runtime checkpoint + conversation filesystem + history ------
         # The transcript and LangGraph checkpoint live on whichever runtime
         # served this session; resolve its server-side base_url from the
         # session's agent_instance_id (A0). An unresolved runtime is recorded,
@@ -194,7 +203,11 @@ class ConversationErasureService:
             source_runtime_id=session.source_runtime_id,
         )
         if base_url is None:
-            for store in (STORE_CHECKPOINT, STORE_HISTORY):
+            for store in (
+                STORE_CHECKPOINT,
+                STORE_CONVERSATION_FILESYSTEM,
+                STORE_HISTORY,
+            ):
                 receipt.stores.append(
                     StoreErasureResult(store=store, ok=False, error=resolve_error)
                 )
@@ -208,15 +221,41 @@ class ConversationErasureService:
             receipt.stores.append(checkpoint_result)
 
             if checkpoint_result.ok:
+                filesystem_result = await self._erase_runtime_filesystem(
+                    base_url, session_id, authorization
+                )
+                receipt.stores.append(filesystem_result)
+                if filesystem_result.ok:
+                    receipt.stores.append(
+                        await self._erase_runtime_history(
+                            base_url, session_id, authorization
+                        )
+                    )
+                else:
+                    receipt.stores.append(
+                        StoreErasureResult(
+                            store=STORE_HISTORY,
+                            ok=False,
+                            error=(
+                                "skipped: conversation filesystem erase failed; "
+                                "history retained so filesystem cleanup stays "
+                                "retryable"
+                            ),
+                        )
+                    )
+            else:
+                # History is the runtime's ownership proof for both cleanup
+                # operations. Do not proceed past a failed checkpoint erase.
                 receipt.stores.append(
-                    await self._erase_runtime_history(
-                        base_url, session_id, authorization
+                    StoreErasureResult(
+                        store=STORE_CONVERSATION_FILESYSTEM,
+                        ok=False,
+                        error=(
+                            "skipped: checkpoint erase failed; conversation "
+                            "filesystem retained so cleanup stays retryable"
+                        ),
                     )
                 )
-            else:
-                # Orphan fix (A2): history is the runtime's ownership proof for the
-                # checkpoint, so leave it intact when the checkpoint erase failed —
-                # a later retry can still delete the still-present checkpoint.
                 receipt.stores.append(
                     StoreErasureResult(
                         store=STORE_HISTORY,
@@ -360,10 +399,13 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/checkpoints/{session_id}"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
-                response = await client.delete(
-                    url, headers={"Authorization": authorization}
-                )
+            response = await self._deps.get_runtime_http_client().delete(
+                url,
+                headers={"Authorization": authorization},
+                auth=M2MBearerAuth(self._token_provider)
+                if self._token_provider is not None
+                else httpx.USE_CLIENT_DEFAULT,
+            )
             response.raise_for_status()
             deleted = int(response.json().get("deleted", 0))
             return StoreErasureResult(
@@ -382,6 +424,12 @@ class ConversationErasureService:
                 ok=False,
                 error=f"runtime checkpoint delete request failed: {exc}",
             )
+        except RuntimeError:
+            return StoreErasureResult(
+                store=STORE_CHECKPOINT,
+                ok=False,
+                error="runtime checkpoint delete authentication failed",
+            )
         except (ValueError, TypeError) as exc:
             # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet
             # rolled to the `{"deleted": n}` contract) — `response.json()`
@@ -391,6 +439,67 @@ class ConversationErasureService:
                 store=STORE_CHECKPOINT,
                 ok=False,
                 error=f"runtime checkpoint delete response was not parseable: {exc}",
+            )
+
+    async def _erase_runtime_filesystem(
+        self,
+        base_url: str,
+        session_id: str,
+        authorization: str,
+    ) -> StoreErasureResult:
+        """Purge both conversation filesystem namespaces on the owning runtime."""
+        url = f"{base_url.rstrip('/')}/agents/sessions/{session_id}/filesystem"
+        try:
+            response = await self._deps.get_runtime_http_client().delete(
+                url,
+                headers={"Authorization": authorization},
+                auth=M2MBearerAuth(self._token_provider)
+                if self._token_provider is not None
+                else httpx.USE_CLIENT_DEFAULT,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or payload.get("purged") is not True:
+                return StoreErasureResult(
+                    store=STORE_CONVERSATION_FILESYSTEM,
+                    ok=False,
+                    error=(
+                        "runtime conversation filesystem delete response did not "
+                        "confirm purge"
+                    ),
+                )
+            return StoreErasureResult(
+                store=STORE_CONVERSATION_FILESYSTEM,
+                deleted_count=None,
+                ok=True,
+            )
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text.strip() or str(exc)
+            return StoreErasureResult(
+                store=STORE_CONVERSATION_FILESYSTEM,
+                ok=False,
+                error=f"runtime conversation filesystem delete failed: {detail}",
+            )
+        except httpx.RequestError as exc:
+            return StoreErasureResult(
+                store=STORE_CONVERSATION_FILESYSTEM,
+                ok=False,
+                error=(f"runtime conversation filesystem delete request failed: {exc}"),
+            )
+        except RuntimeError:
+            return StoreErasureResult(
+                store=STORE_CONVERSATION_FILESYSTEM,
+                ok=False,
+                error="runtime conversation filesystem delete authentication failed",
+            )
+        except (ValueError, TypeError) as exc:
+            return StoreErasureResult(
+                store=STORE_CONVERSATION_FILESYSTEM,
+                ok=False,
+                error=(
+                    "runtime conversation filesystem delete response was not "
+                    f"parseable: {exc}"
+                ),
             )
 
     async def _erase_runtime_history(
@@ -407,10 +516,13 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/sessions/{session_id}"
         try:
-            async with httpx.AsyncClient(timeout=_RUNTIME_TIMEOUT_SECONDS) as client:
-                response = await client.delete(
-                    url, headers={"Authorization": authorization}
-                )
+            response = await self._deps.get_runtime_http_client().delete(
+                url,
+                headers={"Authorization": authorization},
+                auth=M2MBearerAuth(self._token_provider)
+                if self._token_provider is not None
+                else httpx.USE_CLIENT_DEFAULT,
+            )
             response.raise_for_status()
             deleted = int(response.json().get("deleted", 0))
             return StoreErasureResult(
@@ -428,6 +540,12 @@ class ConversationErasureService:
                 store=STORE_HISTORY,
                 ok=False,
                 error=f"runtime history delete request failed: {exc}",
+            )
+        except RuntimeError:
+            return StoreErasureResult(
+                store=STORE_HISTORY,
+                ok=False,
+                error="runtime history delete authentication failed",
             )
         except (ValueError, TypeError) as exc:
             # 2xx but an empty/non-JSON body (bare 204, or a runtime not yet

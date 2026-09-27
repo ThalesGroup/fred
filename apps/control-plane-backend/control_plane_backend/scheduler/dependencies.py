@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -86,7 +100,9 @@ def build_lifecycle_action_dependencies(
 
     async def _erase_session(**kwargs: Any) -> ErasureReceipt:
         product_deps = build_product_service_dependencies(container)
-        return await ConversationErasureService(product_deps).erase_session(**kwargs)
+        return await ConversationErasureService(
+            product_deps, token_provider=container.get_service_token_provider()
+        ).erase_session(**kwargs)
 
     return LifecycleActionDependencies(
         get_session_store=container.get_session_store,

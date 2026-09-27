@@ -13,14 +13,17 @@
 RFC links in this document preserve decision history only. This design document
 is the current authority for implemented runtime behavior.
 
-> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
-> `_authorize_execution_or_raise` now recognizes a **service identity** (a caller holding
+> ✅ **Service-agent execution — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A;
+> scoped to non-delegated deployments 2026-09-19).** Where the runtime does **not** act
+> for people (`security.delegation.act_for_people`), `_authorize_execution_or_raise` recognizes a **service identity** (a caller holding
 > the `service_agent` app role — the evaluation worker) for managed execution **scoped to
 > the request `team_id`**, **without** consulting OpenFGA and **without** any stored tuple.
 > Legitimacy is anchored upstream at campaign creation. It stays team-scoped and
 > fail-closed: a missing `team_id` still returns 403; the decision is audited as
 > `service_agent_authorized`. Regular users are unchanged (per-request OpenFGA `can_read`).
-> Read-only by design — the worker never mutates a team.
+> Read-only by design — the worker never mutates a team. Where the runtime **does** act
+> for people, that identity is refused and execution is authorized on the person the
+> grant names — see §8.89.
 
 > ✅ **Chat-context prompt injection — 2026-07-06 (PROMPT-08 / issue #1915).** The
 > runtime now folds `runtime_context.context_prompt_text` into the final system
@@ -60,6 +63,11 @@ is the current authority for implemented runtime behavior.
 > the ReBAC check for service-agent callers, mirroring the turn-start decision
 > instead of re-deriving a stricter one. Regular users are unaffected — the
 > least-privilege re-check still runs for every non-service-agent call.
+>
+> Scoped to non-delegated deployments (2026-09-19). A principal asserted through
+> a delegation grant carries no roles, so the stamp is never set for one and the
+> per-tool-call re-check always runs, on the person the grant names. The bypass
+> described above applies only to a caller presenting its own service token.
 
 > ✅ **Public-team content/execution gap closed — 2026-07-29 (issue #2146, PR #2147).**
 > TEAM-09/TEAM-10 widened `TeamPermission.CAN_READ` to include any authenticated
@@ -404,8 +412,10 @@ agent pod is the execution authority (RUNTIME-07 rev. 2):
   relation; see the 2026-07-29 callout above) on
   `runtime_context.team_id`. A canonical personal space
   (`personal-<authenticated uid>`) uses intrinsic ownership by exact identity
-  comparison, and the evaluation worker's `service_agent` identity uses the
-  separately documented team-scoped bypass. Every other case fails closed.
+  comparison. Where the runtime does not act for people, the evaluation worker's
+  `service_agent` identity uses the separately documented team-scoped bypass;
+  where it does, that identity is refused and the check runs on the
+  person the grant names (§8.89). Every other case fails closed.
 - **Identity integrity** — `user_id` is taken from the validated token, never the
   request body; body-supplied tokens are neutralized.
 
@@ -424,8 +434,9 @@ comparison, without an OpenFGA request. Another user's `personal-*` identifier
 and the bare `"personal"` alias deny. Other platform operations may still model
 personal teams in ReBAC as documented in
 [`REBAC.md` § Personal teams](../platform/REBAC.md#personal-teams--self-provisioned-never-admin-writable-authz-08);
-that does not change this turn-start fast path. `service_agent` callers are
-unaffected: their team-scoped, OpenFGA-free authorization is checked first.
+that does not change this turn-start fast path. Where the runtime does not act for
+people, `service_agent` callers are unaffected: their team-scoped, OpenFGA-free
+authorization is checked first.
 
 **Architectural constraint (unchanged):**
 
@@ -547,6 +558,11 @@ Key models:
 
 Fred-specific metadata travels in the top-level `fred` field of each chunk.
 Standard OpenAI clients ignore unknown top-level fields.
+
+Session ownership uses the native route's shared gate: with authentication enabled,
+`X-Fred-Session-Id` targeting another user's existing history session returns HTTP 403
+and emits `session_owner_mismatch` before credential admission or agent resolution.
+New sessions and security-disabled execution retain their existing behavior.
 
 **Current limitations of the OpenAI compat layer vs the native protocol:**
 
@@ -2836,12 +2852,14 @@ degradation would have been silent:
    now also honours the artifact flag, which aligns the audit trail with the
    trace for all three document tools.
 
-   **This does not fix the MCP case.** `ContextAwareTool._arun` returns its
-   error as *text* with a `None` artifact (`return msg, None`), so there is no
-   `is_error` flag for the middleware to read and an MCP tool failure is still
-   audited `outcome="succeeded"` — the misreporting recorded in #2073 as
-   adjacent to #2011 remains open. Closing it needs a distinct signal from
-   `ContextAwareTool`, which is outside this change.
+   **MCP follow-up (#2733, 2026-09-22).** `ContextAwareTool` still returns error
+   text to the model so every tool call has a result, but now pairs it with an
+   `is_error=True` artifact. The trace and `ToolObservabilityMiddleware` consume
+   that signal, so caught MCP failures render and audit as failed. Generic MCP
+   details remain behind §8.74's trust boundary. Knowledge Flow `read_query`
+   HTTP 400 is the narrow curated exception: its backend-redacted query error
+   reaches the trace without the HTTP wrapper, and the frontend pairs it with
+   the submitted SQL for the dedicated SQL failure view.
 
 Regression tests: `test_search_tool_failure_returns_is_error_result` and
 `test_search_adapter_wraps_httpx_error_with_status_code`
@@ -3229,14 +3247,16 @@ does not carry it). Additive and optional, so no existing runtime breaks.
 (tool `read_document`, positional verbatim slice) and `document_extract` (tool
 `extract_from_document`, exhaustive enumeration), both on this one port and
 differing only in tool intent and how the continuation footer is worded. The
-frontend Simple view groups them under one `document_reading` tool pack while the
-Advanced view keeps each toggle independent (front-only presentation, no backend
-change). Phase 1 relies on the agent paging to completion (guided by
-`next_offset`); a server-side map-reduce extraction endpoint is the deliberately
-deferred Phase 2 if that proves unreliable on very large documents. Tests:
-`test_capability_document_reading.py` (pagination contract, both tools' footers,
-config cap, error shaping), `test_capability_endpoints_1974.py` (pod advertises
-the pair).
+frontend Simple view grants both from either document-access pack — "team
+resources" or "conversation attachments" — while the Advanced view keeps each
+toggle independent (front-only presentation, no backend change; the standalone
+`document_reading` pack it first shipped with was retired 2026-09-18).
+`document_verbatim` still pages agent-side to completion (guided by
+`next_offset`); `document_extract` no longer does — Phase 2 moved it to a
+server-side map-reduce endpoint (§8.44, 2026-08-07). Tests:
+`test_capability_document_reading.py` (verbatim's pagination contract, footer and
+config cap; error shaping for both), `test_capability_endpoints_1974.py` (pod
+advertises the pair).
 
 ---
 
@@ -4363,7 +4383,7 @@ carries the wire call.
 **Why a capability and not a built-in tool ref.** The first cut of this issue
 ported the `mvp/rags-support` shape verbatim: a `knowledge.similarity_search`
 entry in the `fred-sdk` built-in catalog, next to `knowledge.search`. That was
-withdrawn before merge. `capabilities/document_access/capability.py` already
+withdrawn before merge. The `document_access` capability already
 documents the built-in surface as back-compat whose retirement is a follow-up,
 so adding to it would have meant shipping a new tool onto a surface with a
 scheduled end, and a second, differently-scoped comparison path the moment
@@ -5782,13 +5802,27 @@ and an operator-configured `ToolApprovalPolicy` route through that one gate and 
 runtime has a second approval mechanism. `GraphRuntime` keeps its own separate HITL lifecycle and is
 unaffected.
 
-Deep passes no explicit `backend=` to `create_deep_agent`, so `deepagents`'s built-in filesystem
-tools default to its `StateBackend` — a conversation-scoped checkpoint filesystem, not a durable
-Workspace: content is checkpointed by Fred's SQL checkpointer and survives across turns of the same
-thread, but is not a separate object store and is not visible outside the thread. Each built-in tool
-name stays guarded off (disabled prompt + `ToolCallLimitMiddleware` block) unless that exact
-model-visible name is contributed by the agent's declared toolset or selected capability. Binding a
-partial filesystem surface never enables the remaining built-ins.
+Deep receives one explicit conversation-scoped `CompositeBackend`. Its default backend maps the
+root workspace to the conversation scratchpad in the shared runtime object store; `/.deep/` is a
+separate mount with its own quota. The parent and all native children use the same backend, so
+successful writes are visible without child-state merge and across later turns or runtime replicas.
+The runtime composes this backend with its ordered filesystem rules once per conversation and binds
+the same backend to `ConversationFilesystemPort` for capabilities. The port accepts absolute virtual
+paths and an explicit agent or system origin. Agent operations follow first-match permission rules;
+system operations bypass model-facing rules but still obey namespace quotas. Agent reads from
+`/.deep/` are allowed, writes are denied, and an interrupt rule rejects capability access until
+custom-tool approval is integrated. Full-text reads use backend file download to preserve bytes.
+The root workspace is model-readable and writable. `/.deep/` is model-readable but model writes
+are rejected; trusted Deep middleware writes its internal artifacts there. Future special
+filesystems must be mounted explicitly with their own model write restrictions. The six safe
+built-ins (`ls`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`) are
+standard runtime bindings even with no optional filesystem capability, while `execute` remains
+guarded and unavailable.
+
+Checkpoint-held files are not migrated and have no legacy read-through. An active conversation may
+therefore need to be restarted after rollout if it refers to an old checkpoint file. Checkpoint
+deletion remains part of erasure for old state; the object-store namespaces join the same recovery
+and purge lifecycle.
 
 `_TransportBackedReActExecutor` is shared unchanged by both runtimes; its per-exchange log line and
 `[V2][EXECUTOR] build start` line name the actual runtime class rather than hard-coding
@@ -5846,3 +5880,345 @@ their team enablement and reasoning toggle have to be set again.
 `libs/fred-runtime/fred_runtime/app/agent_app.py`. Behavioral record:
 OpenSpec capability `model-routing` (`openspec/changes/model-profile-identity/`
 until archived).
+
+### 8.79 ✅ `app.runtime_id` — every pod names itself in telemetry (2026-09-16)
+
+`PodApplicationContext.initialize_kpi_writer` passed the literal
+`service_name="fred-runtime"` to `build_kpi_writer`. That value is the KPI
+writer's one static dim, so it landed on every event from every pod built on
+the SDK. Three pods running simultaneously — `fred-agents`, `fred-samples/agents`,
+`rags-agents`, three repos, three `/metrics` endpoints — all reported
+`service="fred-runtime"`, collapsing into one Prometheus series and one
+`kpi-index` bucket. The same startup used `config.app.name` for `log_setup` and
+for `RuntimeConfig.service_name`, so within one pod the logs said "Fred default
+agents" while the KPIs said "fred-runtime": no way to tell the pods apart, and
+no way to join a log line to its own KPI.
+
+- `PodAppConfig.runtime_id` (**required**, no default, `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+  is the pod's identity in all three streams: the KPI `service` dim, the
+  `runtime_id` KPI dim, and every log record's `service`. `app.name` stays what
+  it always was — a human display string, never an identifier.
+- The value MUST equal the id the control-plane registers the pod under in
+  `runtime_catalog_sources[].runtime_id` (`fred-agents`, `fred-samples-agents`,
+  `rags-agents`). That equality is the cross-stream join key. It also repairs the
+  `runtime_id` KPI dim, which is in `PROMETHEUS_ALLOWED_LABELS` and until now
+  carried display prose that matched no runtime the control-plane knew about.
+- The pattern is enforced at config load, so a display name can never reach a
+  Prometheus label through this field.
+- Required, not defaulted: one shared default is precisely what made every pod
+  agree. A pod that cannot say who it is fails Pydantic validation at boot
+  rather than quietly polluting a shared series.
+
+**Upgrade note (breaking — fred-runtime 4.0.0).** Every pod's
+`configuration.yaml` needs `app.runtime_id`, in-repo and third-party alike; a
+pod without it will not start. In a deployment that is a ConfigMap change
+shipped with the chart. `app-logs-index` `service` values for agent pods change
+from prose to slug, so saved OpenSearch queries matching the old display names
+need updating. No KPI preset, chart or manifest filtered on
+`service="fred-runtime"`, so nothing queried breaks.
+
+**Scope.** `libs/fred-runtime/fred_runtime/app/config.py`,
+`.../app/context.py`, `.../app/agent_app.py`, `.../runtime_context.py`,
+`apps/fred-agents/config/`, `deploy/charts/fred/values.yaml`.
+
+### 8.80 Capability-tool tracing (2026-09-18)
+
+ReAct and Deep tool observability creates spans for middleware-contributed tools.
+Binder-resolved tools carry an internal self-traced marker so the middleware does
+not duplicate their spans. Both paths share the same active-parent and terminal
+lifecycle: success, returned tool error, raised exception and cancellation end the
+span; nested execution attaches beneath the invoking tool and restores its parent.
+`v2.react.runtime_tool` is classified as a Langfuse tool observation. Arguments and
+returned content remain gated by `Tracer.captures_content`; KPI/audit payloads and
+labels are unchanged.
+
+Native-child middleware composition is a separate integration layer; this correction does not
+introduce custom delegation or a filesystem backend.
+
+### 8.81 Provider rate-limit retries (2026-09-18)
+
+ReAct and Deep **parent** model calls now share `RateLimitRetryMiddleware`,
+placed after capability wrappers and before `TracingKpiMiddleware`. Input
+preparation runs once per logical model call; each runtime attempt gets a span
+and latency sample. Only the model call is retried, so completed tools are not
+replayed. Native child graph wiring remains part of the later integration
+layer; this extraction does not complete issue #2535's child acceptance.
+
+The policy permits four total attempts and a 60-second retry scheduling window.
+It honors finite nonnegative numeric or HTTP-date `Retry-After` hints with
+jitter, otherwise using exponential jittered backoff (2-second base, 30-second
+cap). An unaffordable hint ends the call rather than retrying earlier than the
+provider requested. Scheduling is checked again after sleep; cancellation and
+non-429 errors propagate. Exhaustion raises a readable `ProviderRateLimitError`
+without the provider payload. The window bounds retry starts, not an in-flight
+request: existing `model/factory.py` explicit transport/request timeouts remain
+responsible for provider I/O. Configured SDK retries remain inside a runtime
+attempt; this does not claim a separate span for each SDK-internal HTTP retry.
+No profile settings change.
+
+`fred_core.model.rate_limit.is_rate_limit` is shared with Knowledge Flow's
+extraction map phase (§8.44). Explicit non-429 statuses override message fallback;
+malformed or nonfinite hints use normal backoff. Each detected throttle emits
+`llm.rate_limit_events_total` and a WARNING for backoff or ERROR for exhaustion.
+`model_name` and `status` are already in `PROMETHEUS_ALLOWED_LABELS`, so the counter
+is exported to Prometheus/Grafana; no new label cardinality is introduced.
+
+Concurrency admission and retry UI remain separate work.
+
+
+### 8.82 Model-input hygiene for Deep parents (2026-09-18)
+
+Deep parent calls now use Fred's shared request-only hygiene before capability
+wrappers and retries. Dangling tool exchanges are removed, open-turn reasoning is
+rehomed as text, and per-message names are removed from copied model inputs so
+OpenAI-compatible Mistral payloads omit unsupported `assistant.name`. Checkpoint
+history retains its original names, reasoning and tool messages. ReAct uses the
+same name sanitizer and retains its existing trimming policy.
+
+Deep applies neither message-count nor character trimming
+(`max_history_messages=None`, no `max_history_chars`): `create_deep_agent`
+already installs its summarization middleware, which owns context compaction.
+The 200,000-character guard stays ReAct-only.
+
+Native `task` child composition is the next extraction layer; this parent-only
+change does not complete issues #2740 and #2741's native-child acceptance.
+
+### 8.83 Native Deep child integration (2026-09-18)
+
+Deep explicitly configures the native general-purpose `task` child with the Fred-composed
+instance prompt, delegation framing and the parent's resolved tools and selected capability
+middleware. Its graph gets separate Fred hygiene, retry, model/tool observability and
+filesystem guard instances. Middleware-contributed tool names participate in availability
+checks; this does not select or lift any filesystem backend.
+
+The child reuses Fred's approval decisions: unconditional gates are hidden from model
+requests, and emitted gated calls receive error tool results without a human interrupt.
+Conditional predicates still apply per call and fail closed when they raise. Ungated calls
+in a mixed batch can execute; an unanswerable gated call without an ID skips the batch.
+Parents retain the existing Fred approval/resume contract. Child model and tool spans nest
+under the invoking task tool span, with request-local tracing context across concurrent
+children. Retries and input hygiene use the same policies as their parent frame.
+
+This integration does not restore custom `run_subagent` execution, add invocation-depth runtime fields, inject
+storage backends or implement compaction. Filesystem/backend work remains a separate slice;
+these tests do not establish durable workspace or replica-safe storage behavior.
+
+### 8.84 ✅ Capability packages regrouped under `libs/capabilities/`; five document capabilities leave `fred-runtime` (issue #2707, 2026-09-18)
+
+**Scope.** Packaging, plus one additive fred-sdk contract move (last bullet) —
+no behaviour, id, tuple or OpenAPI change.
+
+- The five existing capability packages moved as-is from `libs/` to
+  `libs/capabilities/` (directory name still equals distribution name).
+- `document_summarize`, `document_verbatim`, `document_extract`,
+  `document_similarity`, `document_label_search` and their shared
+  `document_read_common.py` moved out of `fred_runtime.capabilities` into the
+  new `libs/capabilities/fred-capability-documents/` package, which now
+  declares their five `fred.capabilities` entry points (`document_access`
+  followed, see below). Capability ids, OpenFGA
+  tuples, stored `selected_capability_ids` and the runtime OpenAPI are
+  unchanged; the fred-agents pod discovers the same twelve ids as before
+  (`apps/fred-agents/tests/test_capability_boot.py` pins the set).
+- Paths cited in earlier entries (`fred-runtime/capabilities/document_*`)
+  are historical; the modules live in the package above.
+- `DocumentScopeControlParams`, `SearchPolicyControlParams`,
+  `RagScopeControlParams` and the `SearchPolicyName` / `RagScopeName` literals
+  moved from `fred_runtime/capabilities/mcp.py` to `fred_sdk.contracts.models`,
+  beside `FieldSpec`/`UIHints`: they are UI contract, and a capability package
+  must be able to describe its composer surface without importing
+  `fred-runtime`. `mcp.py` imports them from the SDK. `DocumentScopeControlParams`
+  had been declared twice with different defaults (`False/False` in `mcp.py`,
+  `True/True` in `document_access`); the SDK keeps `True/True` and both copies
+  are deleted. Emitted params are byte-identical — every call site passes all
+  three fields explicitly, so no default was ever on the wire.
+- `document_access` left too, into its own single-capability package
+  `libs/capabilities/fred-capability-document-access/`
+  (`fred_capability_document_access.capability:DocumentAccessCapability`).
+  `fred-runtime` was then left declaring one entry point, `demo_echo`; §8.85
+  removes that one too, so it now declares none and ships the capability
+  *framework* only. The capability id, its OpenFGA tuples,
+  stored `selected_capability_ids` and the runtime OpenAPI are unchanged.
+- The framework tests that used `document_access` as their fixture were
+  rebased rather than moved, so `fred-runtime` keeps its no-dependency-on-a-
+  capability-package invariant (it does not even dev-depend on one):
+  `test_graph_capability_bridge.py` now builds a local citing tool
+  (`corpus_search`, blocks + sources) beside the `demo_echo` case it already
+  had for the other artifact shape; the tool-return-convention tests and the
+  `_document_tool_failure` message tests, both about this capability rather
+  than the framework, moved into the package; the URL-redaction half of
+  `test_document_port_error_redaction.py` stays, since `_wrap_document_port_error`
+  is the adapter's.
+- `GET /pod/v1/agents/templates` served from a bare `fred-runtime` venv
+  advertised `["demo_echo"]` alone at this point; §8.85 takes it to `[]`, and
+  the fred-agents pod from twelve ids to eleven.
+- The invariant now holds in both directions: **no capability package depends
+  on `fred-runtime` at runtime either.** `writable_document` was the last one —
+  it owns a table, and reached `load_agent_pod_config().storage.postgres` for
+  the database to build its engine and its Alembic env against. `fred-pod`
+  gained `load_postgres_config()` (re-exported by `fred_core.common`), which
+  reads `storage.postgres` alone through the same `ConfigFiles` /
+  `parse_yaml_mapping_file` path; the package declares `fred-runtime` in its
+  dev group only. A component that owns a table no longer needs the
+  configuration model of the pod hosting it.
+- The default that field carries when a config declares no `storage.postgres`
+  — the `~/.fred/pod/pod.sqlite3` laptop escape hatch — is now
+  `fred_pod.common.default_postgres_store_config()`, applied by both
+  `PodStorageConfig.postgres` and the narrow reader. It used to be a literal
+  inside `PodStorageConfig`'s `default_factory` alone, so a reader that parsed
+  the YAML section directly resolved an all-`None` config instead and failed
+  at engine build. One definition, both callers.
+
+### 8.85 ⚠️ The `demo_echo` capability is retired; `fred-runtime` declares no entry point (2026-09-22)
+
+`demo_echo` was a tracer — a capability written to exercise the full vertical
+(router, owned table, chat part, side panel) — but it shipped as a real
+`fred.capabilities` entry point with a real migration tree, so **every pod that
+ever ran `python -m fred_runtime migrate` holds `cap_demo_echo_notes` and its
+own `cap_demo_echo_alembic_version` row**.
+
+- `fred_runtime/capabilities/demo_migrations/` is deleted. Deleting a tree does
+  not drop what it created, so runtime revision `d4e5c6b7a8f9`
+  (`down_revision: c3d4b5a6f7e8`) drops both tables with `DROP TABLE IF EXISTS`
+  — idempotent, because a fresh install applies it before any capability tree
+  would have created anything. `downgrade()` is a deliberate no-op: there is no
+  longer a capability for those tables to belong to.
+- `DemoEchoCapability.migrations_location()` is removed. `manifest.tables`
+  stays: `validate()` checks table-name hygiene, it never required a tree.
+- `test_run_all_migrations_creates_per_capability_version_table` asserted that
+  an installed capability's tree runs and gets its own version table, using
+  `demo_echo` as the installed example. fred-runtime now ships no capability
+  with a tree, so it became
+  `test_run_all_migrations_applies_runtime_tree_and_drops_retired_demo` —
+  same runner, now also pinning the drop above. Per-capability tree *execution*
+  is only reachable where a capability that owns one is installed (the
+  fred-agents pod, via `writable_document`).
+
+**Deployment note.** The drop runs on the next `python -m fred_runtime migrate`.
+Data loss is intended and limited to demo rows.
+
+**The capability itself is gone too**, which supersedes §8.84's entry-point
+statements:
+
+- `fred_runtime/capabilities/demo.py` is deleted and
+  `[project.entry-points."fred.capabilities"]` is removed from
+  `libs/fred-runtime/pyproject.toml` entirely. **`fred-runtime` now declares
+  zero entry points**: it ships the capability *framework*, never a
+  capability. `GET /pod/v1/agents/templates` served from a bare `fred-runtime`
+  venv advertises `[]`. The fred-agents pod ships eleven ids, `demo_echo` no
+  longer among them.
+- Its i18n block is removed from `locales/{en,fr}/translation.json`, so it no
+  longer appears in the user-facing capability catalog.
+- The framework tests that used it as their harness now use
+  `libs/fred-runtime/tests/_tracer_capability.py` — the same full vertical
+  (tool, router, owned table, chat part, side panel, config field) under id
+  `tracer_echo`, living in the test tree: never packaged, never discovered,
+  no migrations. A test fixture is what it always was; shipping it as a real
+  entry point is what put a demo table in production databases.
+
+### 8.86 ✅ A stopped run is typed: `RuntimeErrorEvent.reason` (2026-09-17)
+
+`RuntimeErrorEvent.reason` identifies `authority_lost`, `cancelled` or
+`delegation_unavailable`; ordinary crashes omit it. Stop messages contain only
+bounded platform text. ReAct and DeepAgent propagate stops through capability
+tools and child agents, cancel descendants and emit one root terminal event.
+External cancellation emits no synthetic completion.
+
+`runtime_support/run_scope.py` owns the shared lifetime and stop state. Closed
+scopes cannot be reused. Delegation adds no run-duration or child-count limits;
+existing per-call timeouts and engine step limits still apply.
+
+Detailed lifecycle, error-confinement and cancellation scenarios are maintained
+in the [delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+
+### 8.87 Managed execution names its team, and a streamed run ends with its response (2026-09-17)
+
+Managed requests require `runtime_context.team_id`; direct template requests
+retain optional team context. Native and OpenAI-compatible streaming responses
+own their execution lifetime. Response termination revokes credential access,
+cancels and joins descendants, closes owned streams and releases the run record.
+
+A human pause ends the response; the answer requires fresh admission. Disconnect
+cleanup begins when the transport detects the loss and cannot undo remote work
+already authorized. Disconnected turns write neither history nor turn KPIs.
+
+### 8.88 Workload identity and person authorization (2026-09-18)
+
+Receivers authenticate workload bearers and authorize the person named by the
+plain `person`, `run`, `agent` grant using current standing and permissions.
+Caller trust follows §8.90. Runtime history, checkpoints, diagnostics, capability
+configuration and OpenAI-compatible admission require the directly authenticated
+identity. Native execute, evaluate and stream admissions accept delegated people.
+
+The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
+maintains the endpoint policy inventory and deferred Graph-agent work.
+
+### 8.89 Execution under delegation is authorized on the person a grant names (2026-09-19)
+
+With outgoing delegation enabled, a caller-role holder must name a person to
+admit a run. Asserted people carry no bearer roles and receive no service-role
+shortcuts. Managed execution requires current standing and `CAN_USE_TEAM_AGENTS`
+on the requested team; direct execution checks standing and any supplied team.
+
+Ordinary service identities without the caller role retain their existing
+execution gates and own-bearer calls, including tools configured as `delegated`.
+They create no delegated run record.
+
+### 8.90 Delegation callers are trusted by a role (2026-09-23)
+
+Grant acceptance requires a verified access token with the configured caller
+role, delegation audience and trusted issuer. Login-client tokens are excluded;
+optional service-account validation adds the configured marker checks. Receivers
+keep no per-caller allowlist. Under strict audience validation, admission on the
+delegation audience alone also requires a trusted workload identity.
+
+A complete grant from an untrusted caller is refused when receiving delegation
+is enabled. Without a grant, the caller retains its own identity, subject to the
+execution gate in §8.89. Exact claim, transport and refusal scenarios are in the
+[delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+
+### 8.91 One delegation switch per direction (2026-09-24)
+
+`act_for_people` controls outgoing delegation; `accept_delegated_calls` controls
+incoming grants. Both default off. A runtime acting for people requires user
+authentication; a runtime accepting asserted people must also act for people.
+Either switch requires account-standing enforcement and startup readiness.
+
+Service-role shortcuts always exclude caller-role holders, independently of the
+switches. Configuration defaults and rejection scenarios are maintained in the
+[delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
+
+### 8.92 Mistral completed-message tool-call recovery (2026-09-22)
+
+ReAct and Deep parent/child frames may recover a tool call only at the completed
+assistant-message boundary, only for a Mistral-qualified response, and only when
+the reconstructed provider content contains the exact empty typed sentinel
+`{"type":"reference","reference_ids":[]}` between a registered tool name
+and strict JSON arguments. Prose before, between, or after valid calls remains
+assistant content; the calls execute. Non-empty citation references, extra
+reference fields, literal exporter placeholders, duplicate JSON keys, unknown
+tools, schema-invalid arguments and over-cap representations remain assistant
+text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
+which carry reference IDs.
+Native tool calls, including duplicates, are preserved unchanged.
+
+Recovery is bounded, validates every call before allocating call IDs, and marks
+the normalized message so the Mistral-gated streaming bridge withholds the typed
+marker and call syntax from assistant/reasoning SSE. Only the longest suffix
+that remains a prefix of a registered tool name is held while the marker is
+unresolved; ordinary and non-Mistral text is released unchanged. Each completed
+representation is normalized at most once and then follows the normal tool
+route: existing limits run before HITL proposals, approved calls execute through
+tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
+sits outside `TracingKpiMiddleware`, so `llm.call_latency_ms` remains bare
+provider time. Each reconstructed call increments
+`agent.tool_call_text_recovered_total`, with a bounded model-name label for
+Prometheus/Grafana; this counts proposals even if a later gate prevents execution.
+
+### 8.93 OpenAI-compatible session ownership (2026-09-26)
+
+The OpenAI-compatible route now applies the native session ownership gate before
+credential admission or agent resolution; see §4 for the HTTP 403 and audit
+behavior. This closes #2810 for sessions with history ownership records, without
+changing request or response schemas. Checkpoint-only conversations remain a
+known gap; #2812 tracks the compatibility surface's intended uses and required
+ownership guarantees.

@@ -61,15 +61,15 @@ check-node:
 
 
 # node_modules: install dependencies (reproducibly via `npm ci` when a lockfile
-# exists, otherwise `npm install`). Runs only when package.json is newer than
-# the installed tree, so repeated builds are fast.
-.PHONY: node_modules
-node_modules: check-node package.json
+# exists, otherwise `npm install`). A real file target, and check-node is
+# order-only, so the install runs when the manifests move — not on every build.
+node_modules: package.json $(wildcard package-lock.json) | check-node
 	@if [ -f package-lock.json ]; then \
 		npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
 	else \
 		npm install --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000 --fetch-timeout=300000; \
 	fi
+	@touch node_modules
 
 .PHONY: regen-lockfile
 regen-lockfile: check-node ## Regenerate package-lock.json from scratch inside a clean Node container
@@ -125,37 +125,33 @@ run: check-node node_modules ## Start the local Vite dev server on :5173 (HMR; p
 ##@ Code quality
 
 .PHONY: type-check
-type-check: node_modules ## Type-check with tsc (no files emitted)
+type-check: check-node node_modules ## Type-check with tsc (no files emitted)
 	npx tsc --noEmit
 
 .PHONY: format-check
-format-check: node_modules ## Check formatting with prettier (fails on unformatted files, writes nothing)
+format-check: check-node node_modules ## Check formatting with prettier (fails on unformatted files, writes nothing)
 	npx prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore . --check
 
 .PHONY: format-fix
-format-fix: node_modules ## Reformat the codebase in place with prettier
+format-fix: check-node node_modules ## Reformat the codebase in place with prettier
 	npx prettier --config .prettierrc --ignore-path .prettierignore --ignore-path .gitignore . --write
 
 .PHONY: lint
-lint: node_modules ## Lint frontend source with ESLint
+lint: check-node node_modules ## Lint frontend source with ESLint
 	npx eslint --config eslint.config.mjs --no-error-on-unmatched-pattern "src/**/*.{ts,tsx}"
 
-# knip (unused-export/dependency detection) is not wired in yet; see the
-# code-quality TODO below. Uncomment once the config is stable.
-# .PHONY: knip
-# knip: node_modules ## Find unused exports, files and dependencies
-# 	npx knip
-
-# .PHONY: knip-fix
-# knip-fix: node_modules ## Auto-fix unused exports and files reported by knip
-# 	npx knip --fix --format
+# Diagnostic only; version pinned, fetched through npm's cache on first use.
+# Nonzero exit means findings OR execution failure: inspect output and stderr.
+.PHONY: knip
+knip: check-node node_modules ## Report unused-code candidates; never auto-fix
+	npm exec --yes --package=knip@6.38.0 -- knip
 
 # TODO: add `knip` to the prerequisites below once it is wired in.
 .PHONY: code-quality
 code-quality: type-check format-check lint  ## Run all checks (type-check + prettier + eslint) — the gate to pass before committing
 	@echo "All frontend code quality checks completed"
 
-# TODO: add `knip-fix` to the prerequisites below once knip is wired in.
+# Automatic removal is deliberately excluded: candidates need consumer review.
 .PHONY: code-quality-fix
 code-quality-fix: format-fix  ## Auto-fix what code-quality flags (currently prettier formatting)
 	@echo "Frontend auto-fix tasks completed"
@@ -225,15 +221,6 @@ update-evaluation-api: check-node node_modules ## Regenerate the API client for 
 # router has its OWN OpenAPI document (dumped by the runtime CLI) and its OWN
 # generated slice under features/capabilities/<id>/api/. Repo rule extends
 # verbatim: touched a capability router → regenerate that capability's slice.
-.PHONY: update-demo-echo-capability-api
-update-demo-echo-capability-api: check-node node_modules ## Regenerate the demo_echo capability client only
-	@echo "🔧 Dumping demo_echo capability OpenAPI document..."
-	cd ../../libs/fred-runtime && $(MAKE) --no-print-directory dev >/dev/null && \
-		.venv/bin/python -m fred_runtime dump-openapi demo_echo \
-		> ../../apps/frontend/src/rework/features/capabilities/demo_echo/api/openapi.json
-	@echo "🎯 Generating RTK Query hooks for demo_echo capability..."
-	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/demo_echo/api/demoEchoCapabilityOpenApiConfig.json
-
 # writable_document (#1905) is installed in the fred-agents pod (not fred-runtime),
 # so its OpenAPI dump must run from apps/fred-agents' venv — the same entry-point
 # discovery the pod uses at boot.

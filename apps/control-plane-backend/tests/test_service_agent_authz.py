@@ -18,8 +18,10 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from fred_core import KeycloakUser, TeamPermission
+from fred_core import KeycloakUser, Resource, TeamPermission
 from fred_core.common import TeamId
+from fred_core.security.delegation import DelegationConfig, initialize_delegation
+from fred_core.security.models import AuthorizationError
 from fred_core.teams.metadata_store import TeamMetadata
 
 
@@ -33,13 +35,16 @@ class _FakeMetadataStore:
 class _FakeRebac:
     """Records every team-permission check so tests can assert bypass vs fall-through."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, holds_relation: bool = True) -> None:
         self.calls: list[tuple[str, str, tuple[TeamPermission, ...]]] = []
+        self._holds_relation = holds_relation
 
     async def check_user_team_permissions_or_raise(
         self, *, user: KeycloakUser, team_id: str, permissions: list[TeamPermission]
     ) -> str | None:
         self.calls.append((user.uid, team_id, tuple(permissions)))
+        if not self._holds_relation:
+            raise AuthorizationError(user.uid, permissions[0].value, Resource.TEAM)
         return "consistency-token"
 
 
@@ -159,3 +164,72 @@ async def test_normal_user_still_checked_by_openfga() -> None:
     )
 
     assert rebac.calls == [("u", "fredlab", (TeamPermission.CAN_READ,))]
+
+
+_SWITCHES = pytest.mark.parametrize(
+    "config",
+    [
+        DelegationConfig(),
+        DelegationConfig(accept_delegated_calls=True),
+        DelegationConfig(act_for_people=True),
+    ],
+    ids=["off", "accepting", "acting-only"],
+)
+
+
+@pytest.mark.asyncio
+@_SWITCHES
+async def test_a_delegation_client_never_takes_the_read_shortcut(
+    config: DelegationConfig,
+) -> None:
+    """A workload that speaks for people holds the service role too; its read is
+    decided by ReBAC like anyone else's: holding no relation, it is refused."""
+    from control_plane_backend.teams.service import (
+        _validate_team_and_check_permission,
+    )
+
+    initialize_delegation(config)
+    rebac = _FakeRebac(holds_relation=False)
+    delegation_client = _user(["service_agent"]).model_copy(
+        update={
+            "client_id": "agents",
+            "caller_roles": frozenset({"delegation_caller"}),
+        }
+    )
+
+    with pytest.raises(AuthorizationError):
+        await _validate_team_and_check_permission(
+            delegation_client,
+            TeamId("fredlab"),
+            cast(Any, rebac),
+            [TeamPermission.CAN_READ],
+            _deps(rebac),
+        )
+
+    assert rebac.calls == [("u", "fredlab", (TeamPermission.CAN_READ,))]
+
+
+@pytest.mark.asyncio
+@_SWITCHES
+async def test_a_service_identity_without_the_role_keeps_the_read_shortcut(
+    config: DelegationConfig,
+) -> None:
+    """A service identity without the caller role reads as it does with delegation off."""
+    from control_plane_backend.teams.service import (
+        _validate_team_and_check_permission,
+    )
+
+    initialize_delegation(config)
+    rebac = _FakeRebac(holds_relation=False)
+
+    metadata, token = await _validate_team_and_check_permission(
+        _user(["service_agent"]),
+        TeamId("fredlab"),
+        cast(Any, rebac),
+        [TeamPermission.CAN_READ],
+        _deps(rebac),
+    )
+
+    assert rebac.calls == []
+    assert token is None
+    assert metadata.id == "fredlab"

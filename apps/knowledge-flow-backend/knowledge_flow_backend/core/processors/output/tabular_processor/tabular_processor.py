@@ -30,19 +30,16 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
     build_tabular_object_key,
     compute_source_revision,
+    describe_numeric_column,
+    describe_string_column,
     duckdb_schema,
+    max_categories,
     utc_now_iso,
     write_tabular_artifact,
 )
 from knowledge_flow_backend.features.tabular.structures import TabularColumnSchema
 
 logger = logging.getLogger(__name__)
-
-# A string column with at most this many distinct non-null values gets its
-# exact values recorded on the schema (TabularColumnSchema.sample_values), so
-# a SQL-writing agent can see the real stored casing/format (e.g. "CRITICAL"
-# vs "critical") instead of guessing it from the column name alone.
-_LOW_CARDINALITY_SAMPLE_LIMIT = 20
 
 
 @dataclass(frozen=True)
@@ -390,7 +387,7 @@ class TabularProcessor(BaseOutputProcessor):
             connection.execute(f"COPY source_csv TO '{quoted_path}' (FORMAT PARQUET, COMPRESSION '{compression}')")
 
             row_count = self._read_parquet_row_count(connection, parquet_path)
-            columns = self._read_parquet_schema(connection, parquet_path)
+            columns = self._read_parquet_schema(connection, parquet_path, row_count)
             return GeneratedParquetMetadata(row_count=row_count, columns=columns)
         finally:
             connection.close()
@@ -413,7 +410,7 @@ class TabularProcessor(BaseOutputProcessor):
         row_count = connection.execute(row_count_query).fetchone()
         return int(row_count[0]) if row_count else 0
 
-    def _read_parquet_schema(self, connection: duckdb.DuckDBPyConnection, parquet_path: Path) -> list[TabularColumnSchema]:
+    def _read_parquet_schema(self, connection: duckdb.DuckDBPyConnection, parquet_path: Path, row_count: int) -> list[TabularColumnSchema]:
         """
         Return the ordered API schema stored in one generated Parquet artifact.
 
@@ -431,17 +428,37 @@ class TabularProcessor(BaseOutputProcessor):
         schema_rows = connection.execute(schema_query).fetchall()
         normalized_rows = [(str(column_name), str(dtype_name) if dtype_name is not None else None) for column_name, dtype_name in schema_rows]
         columns = duckdb_schema(normalized_rows)
-        return [column.model_copy(update={"sample_values": self._read_low_cardinality_values(connection, quoted_path, column.name)}) if column.dtype == "string" else column for column in columns]
+        for index, column in enumerate(columns):
+            if column.dtype == "string":
+                values = self._read_distinct_string_values(connection, quoted_path, column.name, row_count)
+                columns[index] = describe_string_column(column, values, row_count)
+        numeric_columns = [(index, column) for index, column in enumerate(columns) if column.dtype in {"integer", "float"}]
+        if numeric_columns:
+            aggregates = []
+            for _, column in numeric_columns:
+                identifier = self._quote_identifier(column.name)
+                aggregates.extend(
+                    (
+                        f"MIN({identifier}) FILTER (WHERE isfinite({identifier}))",
+                        f"MAX({identifier}) FILTER (WHERE isfinite({identifier}))",
+                    )
+                )
+            bounds_query = f"SELECT {', '.join(aggregates)} FROM read_parquet('{quoted_path}')"  # nosec B608
+            bounds = connection.execute(bounds_query).fetchone()
+            if bounds is not None:
+                for position, (index, column) in enumerate(numeric_columns):
+                    columns[index] = describe_numeric_column(column, bounds[2 * position], bounds[2 * position + 1])
+        return columns
 
-    def _read_low_cardinality_values(
+    def _read_distinct_string_values(
         self,
         connection: duckdb.DuckDBPyConnection,
         quoted_parquet_path: str,
         column_name: str,
-    ) -> list[str] | None:
+        row_count: int,
+    ) -> list[str]:
         """
-        Return the sorted distinct non-null values of one string column, or
-        `None` when there are more than `_LOW_CARDINALITY_SAMPLE_LIMIT`.
+        Return up to one more than the category limit in distinct string values.
 
         Why this exists:
         - A SQL-writing agent that only sees a column name and "string" cannot
@@ -451,21 +468,19 @@ class TabularProcessor(BaseOutputProcessor):
           Recording the real values at ingestion time removes the guess.
 
         How to use:
-        - Call once per string column right after `parquet_schema(...)`
-          discovers it, on the same connection used to read that schema.
+        - Call once per string column after reading the total table row count.
         """
+        category_limit = max_categories(row_count)
         quoted_column = self._quote_identifier(column_name)
         # column_name comes from `parquet_schema(...)` on our own just-written
         # artifact (sanitized CSV headers), not from external input.
         query = (
             f"SELECT DISTINCT {quoted_column} AS value FROM read_parquet('{quoted_parquet_path}') "  # nosec B608
             f"WHERE {quoted_column} IS NOT NULL "
-            f"LIMIT {_LOW_CARDINALITY_SAMPLE_LIMIT + 1}"
+            f"LIMIT {category_limit + 1}"
         )
         rows = connection.execute(query).fetchall()
-        if len(rows) > _LOW_CARDINALITY_SAMPLE_LIMIT:
-            return None
-        return sorted(str(row[0]) for row in rows)
+        return [str(row[0]) for row in rows]
 
     def _quote_identifier(self, name: str) -> str:
         """

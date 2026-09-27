@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Security check script to verify FastAPI routes are properly secured with authentication.
 Analyzes routes in FastAPI backends to identify endpoints missing authentication dependencies.
@@ -130,6 +144,18 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
                         # Look for get_current_user in dependencies
                         for dep in route.dependencies:
                             if hasattr(dep, 'dependency'):
+                                # MCP mounts authenticate through this yielding
+                                # dependency, which validates the bearer and
+                                # resolves the request principal before yielding.
+                                # Match its qualified identity, not MCP paths or
+                                # arbitrary functions containing "auth".
+                                if (
+                                    getattr(dep.dependency, '__module__', None)
+                                    == 'fred_core.security.mcp_delegation'
+                                    and getattr(dep.dependency, '__name__', None)
+                                    == 'mcp_mount_auth'
+                                ):
+                                    return True
                                 dep_str = str(dep.dependency)
                                 if 'get_current_user' in dep_str:
                                     return True

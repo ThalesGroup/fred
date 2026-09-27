@@ -22,6 +22,7 @@ deliberately has no `submit` — task execution is not a fred-core concern.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Protocol
 
@@ -120,12 +121,16 @@ class TemporalWorkflowControl:
 
     def __init__(self, client_provider: TemporalClientProvider) -> None:
         self._client_provider = client_provider
+        # Same deadline the scheduler puts on its own RPCs: a stalled Temporal
+        # frontend fails one describe/cancel instead of pinning every task read.
+        seconds = client_provider.config.rpc_timeout_seconds
+        self._rpc_timeout = timedelta(seconds=seconds) if seconds else None
 
     async def get_status(self, workflow_id: str) -> ExecutionStatus | None:
         try:
             client = await self._client_provider.get_client()
             handle = client.get_workflow_handle(workflow_id)
-            description = await handle.describe()
+            description = await handle.describe(rpc_timeout=self._rpc_timeout)
         except Exception:
             logger.warning(
                 "[TemporalWorkflowControl] could not describe workflow_id=%s",
@@ -140,4 +145,4 @@ class TemporalWorkflowControl:
     async def cancel(self, workflow_id: str) -> None:
         client = await self._client_provider.get_client()
         handle = client.get_workflow_handle(workflow_id)
-        await handle.cancel()
+        await handle.cancel(rpc_timeout=self._rpc_timeout)

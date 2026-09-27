@@ -611,3 +611,11 @@ describe("selectAllTasks", () => {
     expect(selectAllTasks(root(s))[0].taskId).toBe("active");
   });
 });
+
+describe("ingestion terminal state", () => {
+  it.each(["failed", "succeeded"] as const)("preserves %s against a later event", (state) => {
+    const initial: TasksState = { byId: { t1: vm({ state, lastSeq: 2, error: "original", terminalAt: 123 }) } };
+    const result = reducer(initial, taskEventReceived(ev({ state: "running", seq: 3 })));
+    expect(result.byId.t1).toEqual(initial.byId.t1);
+  });
+});

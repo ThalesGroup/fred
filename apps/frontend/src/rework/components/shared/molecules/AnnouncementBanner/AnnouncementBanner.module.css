@@ -1,0 +1,172 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* One platform announcement banner, see AnnouncementBanner.tsx */
+
+/* Collapsible wrapper for the dismiss exit: animating grid-template-rows
+   1fr → 0fr eases an auto height down to nothing, so the app content slides
+   up smoothly instead of jumping when the banner goes. Duration must match
+   HIDE_TRANSITION_MS in AnnouncementBanner.tsx. */
+.collapse {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex-shrink: 0;
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 300ms ease;
+}
+
+.collapsing {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.collapseInner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Severity drives the whole strip: the container role fills the background and
+   its `on-` pair colours every glyph on top of it — icon, title, markdown and
+   both action buttons. No border: the filled container already separates the
+   banner from the page, and a rule on top of it only adds noise. */
+.banner {
+  background: var(--banner-container);
+  padding: var(--spacing-2xs) var(--spacing-m);
+  color: var(--banner-on-container);
+  font: var(--font-body-medium);
+}
+
+/* The fill spans the whole window; its contents must not. Centring a capped
+   column keeps the announcement readable on a wide screen instead of stranding
+   the actions a metre away from the text they belong to. */
+.inner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-m);
+  margin-inline: auto;
+  width: 100%;
+  max-width: 800px;
+}
+
+.banner[data-severity="warning"] {
+  --banner-container: var(--warning-container);
+  --banner-on-container: var(--on-warning-container);
+  --banner-hover: var(--state-on-warning-container-hover);
+  --banner-pressed: var(--state-on-warning-container-pressed);
+}
+
+.banner[data-severity="error"] {
+  --banner-container: var(--error-container);
+  --banner-on-container: var(--on-error-container);
+  --banner-hover: var(--state-on-error-container-hover);
+  --banner-pressed: var(--state-on-error-container-pressed);
+}
+
+.banner[data-severity="success"] {
+  --banner-container: var(--success-container);
+  --banner-on-container: var(--on-success-container);
+  --banner-hover: var(--state-on-success-container-hover);
+  --banner-pressed: var(--state-on-success-container-pressed);
+}
+
+.banner[data-severity="info"] {
+  --banner-container: var(--info-container);
+  --banner-on-container: var(--on-info-container);
+  --banner-hover: var(--state-on-info-container-hover);
+  --banner-pressed: var(--state-on-info-container-pressed);
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1.25rem;
+}
+
+/* Icon and text form one group with a tighter rhythm of their own, so the
+   space separating them from the actions stays wider than the space inside
+   them (gestalt proximity — one uniform gap across the row would read as four
+   unrelated things). */
+.lede {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+/* Title and description run on one line, sharing a baseline. The title holds
+   its width; only the description gives way when the strip gets narrow. */
+.text {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--spacing-l);
+  min-width: 0;
+}
+
+.title {
+  flex-shrink: 0;
+  font: var(--font-label-large);
+}
+
+/* The renderer paints its own reading colour, prose size and text selection on
+   its root, all three wrong on a filled strip: every glyph here belongs to the
+   severity's `on-` pair, at the banner's body size, and a one-line notice is
+   interface chrome rather than a reading zone — it takes the page-wide
+   `user-select: none` back. */
+.banner .short > * {
+  color: inherit;
+  font: var(--font-body-medium);
+  user-select: none;
+}
+
+/* Links keep the underline to stay distinguishable without the accent colour,
+   which has no contrast guarantee on a container background. */
+.banner .short a {
+  color: inherit;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+}
+
+/* The atoms colour themselves from their own `color` prop, which knows nothing
+   about the container they sit on. Override their documented custom-property
+   seam instead so both buttons take the banner's `on-` pair, state layers
+   included — the layer colour must be the majority content colour, never a
+   generic surface tone. The `[data-severity]` attribute is there to outrank
+   the atoms' own `.btn-<color>.btn-<variant>` rules. */
+.banner[data-severity] .actionButton {
+  --btn-text-color: var(--banner-on-container);
+}
+
+.banner[data-severity] .actionButton:hover:not(:disabled) {
+  --btn-background-surface: var(--banner-hover);
+}
+
+.banner[data-severity] .actionButton:active:not(:disabled) {
+  --btn-background-surface: var(--banner-pressed);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition: none;
+  }
+}

@@ -88,7 +88,7 @@ found" — tool selection is docstring-driven only, no semantic router exists in
 - `apps/knowledge-flow-backend/knowledge_flow_backend/core/processors/output/tabular_processor/tabular_processor.py` — `_emit_pointer_chunk` / `_build_pointer_chunk_text`
 - `apps/knowledge-flow-backend/knowledge_flow_backend/features/tabular/{service.py,controller.py,structures.py,artifacts.py,utils.py}`
 - `apps/fred-agents/fred_agents/sql_expert.py` + `prompts/basic_react_sql_expert_system_prompt.md` — the SQL Expert (Tessa) agent, which already does `list_tabular_datasets` first by prompt convention, independent of pointer chunks
-- `libs/fred-runtime/fred_runtime/capabilities/document_access/capability.py` — generalist RAG tool docstring (mutually-contrastive edit)
+- `libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py` — generalist RAG tool docstring (mutually-contrastive edit)
 - `libs/fred-core/fred_core/store/vector_search.py` — `DATASET_POINTER_CHUNK_KIND`, `select_citable_sources`
 - Commits: `71d85b18` (feature), `f62c5326`/`3e05acd2`/`4edc7537`/`4f9d69df` (fixes), `6862b81d` (sample_values grounding)
 

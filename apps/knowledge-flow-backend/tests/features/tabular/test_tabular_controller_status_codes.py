@@ -36,7 +36,14 @@ from knowledge_flow_backend.features.tabular.execution import (
     TabularExecutionTimeoutError,
     register_tabular_exception_handlers,
 )
-from knowledge_flow_backend.features.tabular.service import TabularQueryError
+from knowledge_flow_backend.features.tabular.service import TabularQueryError, forbidden_datasets_message
+from knowledge_flow_backend.features.tabular.structures import (
+    TabularColumnSchema,
+    TabularDocumentDescriptionResponse,
+    TabularDocumentResponse,
+    TabularTableSchema,
+    TabularTableSummary,
+)
 
 
 def _user() -> KeycloakUser:
@@ -76,6 +83,114 @@ def test_read_query_maps_each_failure_to_its_own_status(tabular_client, raised, 
 
     response = client.post("/tabular/query", json={"sql": "SELECT 1"})
 
+    assert response.status_code == expected_status
+
+
+def test_read_query_403_body_names_the_document_listing_tool(tabular_client):
+    """The HTTP denial preserves the recovery hint for an LLM caller."""
+    client, controller = tabular_client
+
+    async def _raise(*_args, **_kwargs):
+        raise PermissionError(forbidden_datasets_message(["exigences.xlsx"]))
+
+    controller.service.query_read = _raise
+
+    response = client.post("/tabular/query", json={"sql": "SELECT 1"})
+
+    assert response.status_code == 403
+    assert "list_tabular_documents" in response.json()["detail"]
+
+
+def test_document_list_returns_only_names_identifiers_and_excel_tables(tabular_client):
+    client, controller = tabular_client
+
+    async def _list(*_args, **_kwargs):
+        return [
+            TabularDocumentResponse(
+                document_uid="csv-uid",
+                document_name="Sales.csv",
+                kind="csv",
+                tables=[TabularTableSummary(query_alias="csv-alias", row_count=12)],
+                tag_names=["Finance"],
+            ),
+            TabularDocumentResponse(
+                document_uid="excel-uid",
+                document_name="Budget.xlsx",
+                kind="spreadsheet",
+                tables=[TabularTableSummary(query_alias="q1-alias", sheet="Q1", title="Revenue", row_count=8)],
+                tag_names=["Finance"],
+            ),
+        ]
+
+    controller.service.list_documents = _list
+
+    response = client.get("/tabular/documents")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"document_uid": "csv-uid", "document_name": "Sales.csv"},
+        {
+            "document_uid": "excel-uid",
+            "document_name": "Budget.xlsx",
+            "tables": [{"query_alias": "q1-alias", "sheet": "Q1", "title": "Revenue"}],
+        },
+    ]
+
+    paths = client.get("/openapi.json").json()["paths"]
+    assert paths["/tabular/documents"]["get"]["operationId"] == "list_tabular_documents"
+    assert paths["/tabular/documents/schemas"]["get"]["operationId"] == "describe_tabular_documents"
+    assert "/tabular/documents/{document_uid}/markdown" not in paths
+    assert "/tabular/mcp/documents" not in paths
+
+
+def test_document_description_exposes_categories_and_numeric_bounds(tabular_client):
+    client, controller = tabular_client
+
+    async def _describe(*_args, **_kwargs):
+        return [
+            TabularDocumentDescriptionResponse(
+                document_uid="doc-sales",
+                document_name="sales.csv",
+                kind="csv",
+                markdown=None,
+                tables=[
+                    TabularTableSchema(
+                        query_alias="d_sales",
+                        columns=[
+                            TabularColumnSchema(name="city", dtype="string", is_categorical=True, sample_values=["Lyon", "Paris"]),
+                            TabularColumnSchema(name="amount", dtype="integer", min_value=10, max_value=20),
+                        ],
+                    )
+                ],
+            )
+        ]
+
+    controller.service.describe_documents = _describe
+
+    response = client.get("/tabular/documents/schemas", params={"document_uids": "doc-sales"})
+    assert response.status_code == 200
+    columns = response.json()[0]["tables"][0]["columns"]
+    assert columns[0]["is_categorical"] is True
+    assert columns[0]["sample_values"] == ["Lyon", "Paris"]
+    assert columns[1]["min_value"] == 10
+    assert columns[1]["max_value"] == 20
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_status"),
+    [
+        (TabularCapacityExceededError("saturated"), 503),
+        (TabularExecutionTimeoutError("too slow"), 504),
+    ],
+)
+def test_document_description_preserves_bound_scan_failure_status(tabular_client, raised, expected_status):
+    client, controller = tabular_client
+
+    async def _raise(*_args, **_kwargs):
+        raise raised
+
+    controller.service.describe_documents = _raise
+
+    response = client.get("/tabular/documents/schemas", params={"document_uids": "doc-sales"})
     assert response.status_code == expected_status
 
 

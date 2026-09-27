@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from types import SimpleNamespace
 
 import pytest
@@ -9,7 +23,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import FileT
 
 
 @pytest.mark.asyncio
-async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> None:
+async def test_submit_documents_embeds_temporal_retry_policy(app_context, monkeypatch) -> None:
     """
     Ensure ingestion submissions carry the profile retry policy into file payloads.
 
@@ -20,6 +34,10 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
         Stub the scheduler backend, submit one document, and assert the captured
         pipeline file includes the normalized retry policy values.
     """
+    profile = app_context.configuration.processing.get_profile_config("medium")
+    monkeypatch.setattr(profile, "push_metadata_activity_timeout", "17s")
+    monkeypatch.setattr(profile, "pull_metadata_activity_timeout", "23s")
+    monkeypatch.setattr(profile, "output_activity_timeout", "41s")
     service = IngestionTaskService(
         scheduler_config=app_context.configuration.scheduler.model_copy(
             update={"backend": "memory"},
@@ -32,12 +50,13 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
     captured: dict[str, object] = {}
 
     class _StubScheduler:
-        async def start_document_processing(self, *, user, definition, background_tasks=None):
+        async def start_document_processing(self, *, user, definition, background_tasks=None, prepare=None):
             captured["user"] = user
             captured["definition"] = definition
             return SimpleNamespace(workflow_id="wf-123", run_id="run-123")
 
     service._scheduler = _StubScheduler()
+    service._admit_and_deliver = service._scheduler.start_document_processing
 
     user = KeycloakUser(
         uid="test-user",
@@ -69,3 +88,7 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context) -> Non
     assert file.retry_maximum_interval_seconds == 600
     assert file.retry_maximum_attempts == 6
     assert file.retry_non_retryable_error_types == []
+
+    assert file.push_metadata_activity_timeout_seconds == 17
+    assert file.pull_metadata_activity_timeout_seconds == 23
+    assert file.output_activity_timeout_seconds == 41

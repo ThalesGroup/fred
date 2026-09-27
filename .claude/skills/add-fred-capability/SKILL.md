@@ -35,13 +35,10 @@ Do not skip this. Open and skim:
   **Implement `tools()` — it is the primary authoring surface, execution-model-agnostic
   (works on both ReAct and Graph agents).** `middleware()` has a default that wraps
   `tools()`; only override it directly for a hook `tools()` cannot express (see Step 3).
-- **The canonical worked example** — `libs/fred-runtime/fred_runtime/capabilities/document_access/capability.py`
+- **The canonical worked example** — `libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py`
   (`DocumentAccessCapability`, #1906): a real tool wired to a platform service through a
   typed port, config-field scoping, one computed chat control, implemented via `tools()`.
   **Copy its shape.**
-- **The minimal tracer** — `libs/fred-runtime/fred_runtime/capabilities/demo.py`
-  (`DemoEchoCapability`): one static tool + one config field + router + owned table +
-  chat part + side panel. The smallest full vertical.
 - **Not everything is a capability** — if the thing adjusts *how the model is
   called* rather than *what the model can call*, stop and reconsider. Reasoning
   was built as a full capability and then withdrawn
@@ -51,9 +48,12 @@ Do not skip this. Open and skim:
   rendered in the Capabilities tab through the generic `CapabilityCard`) plus a
   platform-emitted chat control. Model-call parameters and per-turn platform
   options belong outside this system.
-- **Registration + boot rules** — `libs/fred-runtime/pyproject.toml`
-  (`[project.entry-points."fred.capabilities"]`) and
+- **Registration + boot rules** — any `libs/capabilities/*/pyproject.toml`
+  (`[project.entry-points."fred.capabilities"]`; `fred-capability-documents` shows
+  several entry points in one package) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).
+  New packages go under `libs/capabilities/fred-capability-<name>/` — the directory
+  name is the distribution name.
 
 ---
 
@@ -90,6 +90,9 @@ config, turn options, and services reach the tool through the middleware closure
 `CapabilityContext` — never the tool schema. The per-turn binding and raw access token
 **never** enter `CapabilityContext`; platform access is only through typed
 `RuntimeServices` ports. `document_access` is the reference for all of this.
+For conversation files, use `ctx.services.conversation_filesystem` with absolute virtual paths.
+Pass `origin="agent"` for model-supplied paths and `origin="system"` for trusted internal artifacts;
+see `AUTHORING.md` for the permission and mount contract.
 
 **Adding a field to an already-shipped `ConfigModel`?** If it's optional with a default,
 you're done — no version bump, no migration code, old stored configs just get the default.
@@ -119,7 +122,10 @@ do not fold tools into the `middleware()` override, or they vanish for Graph age
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
 
 Chat-time controls → return `ChatControlSpec`s from `chat_controls(config)` (computed at
-prep, never persisted). Custom chat card → a `BaseModel` with a `Literal` `type`
+prep, never persisted). Stock widget params (`DocumentScopeControlParams`,
+`SearchPolicyControlParams`, `RagScopeControlParams`) are SDK models in
+`contracts/models.py` — import, never re-declare; they carry the default only, the
+user's pick travels on `RuntimeContext`. Custom chat card → a `BaseModel` with a `Literal` `type`
 discriminator in `manifest.chat_parts` (the registry extends the `UiPart` union at boot;
 you do **not** edit the union).
 
@@ -150,8 +156,8 @@ compatibility once the picker is shown; it does not make one appear.
 - Boot fails loudly (each a named error) on: duplicate id, duplicate chat-part
   discriminator, missing required env, and `default_on` + a required team-settings field.
 - Owns tables? Own `DeclarativeBase`, `cap_<id>_*` names, no core foreign keys, an Alembic
-  tree beside the package, and `migrations_location()` returning its path. See `demo.py`
-  + `demo_migrations/`.
+  tree beside the package, and `migrations_location()` returning its path. See
+  `fred-capability-writable-document`: `store.py` + `writable_document_migrations/`.
 - Team scope: `TeamScopePolicy.DEFAULT_ON` (no admin gate; incompatible with a *required*
   team-settings field) or `ADMIN_GATED` (default). MCP catalog servers use the same enum
   via `MCPServerConfiguration.team_scope` in `mcp_catalog.yaml` — default `admin_gated`.

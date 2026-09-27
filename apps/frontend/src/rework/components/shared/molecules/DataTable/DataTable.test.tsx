@@ -204,6 +204,39 @@ describe("DataTable sorting", () => {
     expect(rowValues()).toEqual(["3", "1", "2"]);
   });
 
+  it("flips back to ascending instead of clearing when sortClearable is false", () => {
+    // A server-ordered table has no unsorted order to return to: clearing
+    // would fall back to a default column, so pressing one column's header
+    // would move the sort to another.
+    const onSortChange = vi.fn();
+    const sortState: SortState = { columnLabel: "Id", direction: "desc" };
+    render(
+      <DataTable
+        columns={sortableColumns}
+        data={[{ id: 1 }]}
+        sortState={sortState}
+        onSortChange={onSortChange}
+        sortClearable={false}
+      />,
+    );
+
+    click(headerButton());
+
+    expect(onSortChange).toHaveBeenCalledWith({ columnLabel: "Id", direction: "asc" });
+  });
+
+  it("still clears by default, where the data's own order is something to return to", () => {
+    const onSortChange = vi.fn();
+    const sortState: SortState = { columnLabel: "Id", direction: "desc" };
+    render(
+      <DataTable columns={sortableColumns} data={[{ id: 1 }]} sortState={sortState} onSortChange={onSortChange} />,
+    );
+
+    click(headerButton());
+
+    expect(onSortChange).toHaveBeenCalledWith(null);
+  });
+
   it("defers to the caller in controlled mode instead of sorting locally", () => {
     const rows = [{ id: 3 }, { id: 1 }, { id: 2 }];
     const onSortChange = vi.fn();
@@ -222,6 +255,27 @@ describe("DataTable sorting", () => {
     render(<DataTable columns={sortableColumns} data={rows} sortState={sortState} onSortChange={vi.fn()} />);
 
     expect(headerButton().dataset.active).toBe("true");
+  });
+
+  // The arrow points the way the list runs, the file-explorer convention:
+  // ascending puts A at the top and Z at the bottom, so it points DOWN.
+  function arrowName(): string | null {
+    const icon = container.querySelector('[class*="sort-icon"] span, [class*="sort-icon"] i');
+    return icon?.textContent?.trim() ?? null;
+  }
+
+  it("points the arrow down for an ascending sort", () => {
+    const sortState: SortState = { columnLabel: "Id", direction: "asc" };
+    render(<DataTable columns={sortableColumns} data={[{ id: 1 }]} sortState={sortState} onSortChange={vi.fn()} />);
+
+    expect(arrowName()).toBe("arrow_downward");
+  });
+
+  it("points it up for a descending sort", () => {
+    const sortState: SortState = { columnLabel: "Id", direction: "desc" };
+    render(<DataTable columns={sortableColumns} data={[{ id: 1 }]} sortState={sortState} onSortChange={vi.fn()} />);
+
+    expect(arrowName()).toBe("arrow_upward");
   });
 });
 

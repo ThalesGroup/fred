@@ -387,6 +387,23 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 
 ---
 
+## Migration notes and release policy
+
+Python tooling uses uv with an existing pyproject.toml and committed uv.lock
+where practical. Do not add a parallel requirements.txt/pip installation path.
+
+Every PR must add an English migration note, even when no operator action is
+needed. Follow `docs/swift/ops/MIGRATION-GUIDES.md` and its template. The maximum
+operational impact determines the minimum paired code/chart version increment:
+none -> patch, operations (including optional activation) -> minor, substantial
+incompatibility -> major. The release skill must generate and present the operator
+guide alongside UI notes before asking for tag approval.
+
+`configuration_prod.yaml` is local developer Docker Compose configuration.
+Production configuration changes must update Fred chart values and regenerated
+schemas in the same PR. DevOps reconcile their private customer overlays from
+published charts and migration guides; never require or expose those repositories.
+
 ## Git conventions
 
 - One commit per logical change.

@@ -110,9 +110,12 @@ def stringify_tool_output(value: object) -> str:
 
 def normalize_runtime_provider_artifact(
     artifact: object,
+    *,
+    trusted_error_blocks: bool = False,
 ) -> ToolInvocationResult | None:
     """Normalize a provider artifact and remove provider-controlled error detail.
-    Error blocks, sources, and UI parts never cross this trust boundary."""
+    Sources and UI parts never cross this trust boundary. Error blocks are kept
+    only when they were produced by Fred's own error classifier."""
 
     if artifact is None:
         return None
@@ -123,6 +126,12 @@ def normalize_runtime_provider_artifact(
     )
     if not result.is_error:
         return result
+    if trusted_error_blocks:
+        return ToolInvocationResult(
+            tool_ref=result.tool_ref,
+            blocks=result.blocks,
+            is_error=True,
+        )
     return ToolInvocationResult(
         tool_ref=result.tool_ref,
         blocks=(

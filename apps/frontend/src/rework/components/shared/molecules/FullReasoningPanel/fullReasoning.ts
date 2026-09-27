@@ -43,7 +43,11 @@ export type ReasoningTurn = { exchangeId: string; question: string; steps: Reaso
  * marker — they are why the reasoning resumed. Turns without reasoning are left out.
  * `hideRestatements` trims each block the way the chain of thought does, markdown kept.
  */
-export function fullReasoning(messages: ChatMessage[], hideRestatements = false): ReasoningTurn[] {
+export function fullReasoning(
+  messages: ChatMessage[],
+  hideRestatements = false,
+  translate?: (key: string) => string,
+): ReasoningTurn[] {
   const exchanges = new Map<string, ChatMessage[]>();
   for (const message of messages) {
     const group = exchanges.get(message.exchange_id);
@@ -62,7 +66,7 @@ export function fullReasoning(messages: ChatMessage[], hideRestatements = false)
       const { entry } = row;
       if (entry.kind === "combo") {
         pendingTools ??= { key: traceEntryKey(entry), labels: [] };
-        pendingTools.labels.push(entryLabel(entry));
+        pendingTools.labels.push(entryLabel(entry, translate));
         continue;
       }
       if (row.lane !== "reasoning") continue;

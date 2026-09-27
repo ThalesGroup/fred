@@ -90,6 +90,7 @@ class TagController:
             response_model_exclude_none=True,
             tags=["Tags"],
             summary=("List tags (optionally filter by type or path prefix). Supports pagination to avoid huge payloads."),
+            operation_id="list_tags",
         )
         async def list_all_tags(
             type: Annotated[Optional[TagType], Query(description="Filter by tag type")] = None,
@@ -124,6 +125,7 @@ class TagController:
             response_model=ResourceTypeStatsResponse,
             tags=["Tags"],
             summary="Corpus usage by file type (files-by-type histogram, size-by-type pie chart)",
+            operation_id="get_tag_corpus_type_stats",
         )
         async def get_corpus_type_stats(
             team_id: Annotated[
@@ -141,6 +143,7 @@ class TagController:
             response_model_exclude_none=True,
             tags=["Tags"],
             summary="Get a tag by ID",
+            operation_id="get_tag",
         )
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             return await self.service.get_tag_for_user(tag_id, user)
@@ -150,6 +153,7 @@ class TagController:
             response_model=TagMembersResponse,
             tags=["Tags"],
             summary="List users and groups who can access a tag",
+            operation_id="list_tag_members",
         )
         async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             users = await self.service.list_tag_members(tag_id, user)
@@ -162,6 +166,7 @@ class TagController:
             status_code=status.HTTP_201_CREATED,
             tags=["Tags"],
             summary="Create a new tag",
+            operation_id="create_tag",
         )
         async def create_tag(tag: TagCreate, user: KeycloakUser = Depends(get_current_user)):
             # Consider normalizing tag.path in the service if not already done
@@ -174,6 +179,7 @@ class TagController:
             response_model_exclude_none=True,
             tags=["Tags"],
             summary="Update a tag (can rename/move via name/path)",
+            operation_id="update_tag",
         )
         async def update_tag(tag_id: str, tag: TagUpdate, user: KeycloakUser = Depends(get_current_user)):
             return await self.service.update_tag_for_user(tag_id, tag, user)
@@ -183,6 +189,7 @@ class TagController:
             tags=["Tags"],
             status_code=status.HTTP_204_NO_CONTENT,
             summary="Delete a tag",
+            operation_id="delete_tag",
         )
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             await self.service.delete_tag_for_user(tag_id, user)
@@ -192,6 +199,7 @@ class TagController:
             status_code=status.HTTP_204_NO_CONTENT,
             tags=["Tags"],
             summary="Share a tag with another user",
+            operation_id="share_tag",
         )
         async def share_tag(
             tag_id: str,
@@ -211,6 +219,7 @@ class TagController:
             status_code=status.HTTP_204_NO_CONTENT,
             tags=["Tags"],
             summary="Stop sharing a tag with a user",
+            operation_id="unshare_tag",
         )
         async def unshare_tag(
             tag_id: str,

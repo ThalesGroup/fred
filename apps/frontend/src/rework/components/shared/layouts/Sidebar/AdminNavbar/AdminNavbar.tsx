@@ -67,6 +67,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.announcements"),
+      icon: { category: "outlined", type: "campaign", filled: false },
+      linkProps: { to: "/admin/annonces" },
+      requires: "admin",
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.features"),
       icon: { category: "outlined", type: "tune", filled: false },
       linkProps: { to: "/admin/features" },

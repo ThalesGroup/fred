@@ -26,7 +26,7 @@ import inspect
 from collections.abc import Callable, Coroutine, Sequence
 from typing import Any
 
-from fred_core import CONTRIBUTED_NAME_PATTERN, require_contributed_name
+from fred_pod.common.naming import CONTRIBUTED_NAME_PATTERN, require_contributed_name
 
 from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.knowledge_base.models import (
@@ -36,7 +36,7 @@ from fred_sdk.knowledge_base.models import (
 from fred_sdk.knowledge_base.schedule import FRED_FIELD_PREFIX, is_platform_field
 
 # One naming rule across everything a contributor adds to Fred: a dotted name
-# under a prefix they own. See fred_core.common.naming.
+# under a prefix they own. See fred_pod.common.naming.
 KNOWLEDGE_BASE_ID_PATTERN = CONTRIBUTED_NAME_PATTERN
 
 # `Coroutine`, not `Awaitable`: the resolved handler is handed straight to

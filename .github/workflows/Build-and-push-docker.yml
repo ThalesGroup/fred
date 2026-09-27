@@ -10,10 +10,18 @@ env:
   REGISTRY_NAMESPACE: thalesgroup/fred-agent
 
 jobs:
+  migration-guide:
+    if: startsWith(github.ref, 'refs/tags/code/v')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/Validate-release-migration.yml
+
   # The image list, contexts and build args live in .github/docker-images.json
   # and are built by the reusable workflow — the same one every pull request
   # runs with publish: false.
   build-and-push:
+    needs: migration-guide
+    if: ${{ !cancelled() && (needs.migration-guide.result == 'success' || github.ref_type != 'tag') }}
     permissions:
       contents: read
       packages: write
@@ -28,6 +36,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -49,5 +60,7 @@ jobs:
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/control-plane-backend:${{ steps.meta.outputs.version }}
             oci://${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/frontend:${{ steps.meta.outputs.version }}
             ```
+          files: docs/swift/ops/releases/${{ steps.meta.outputs.version }}/migration.md
+          fail_on_unmatched_files: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(steps.meta.outputs.version, '-') }}

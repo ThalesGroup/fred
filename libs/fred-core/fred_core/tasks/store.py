@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from pydantic import TypeAdapter
-from sqlalchemy import select
+from sqlalchemy import or_, select, true, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
@@ -73,6 +73,26 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _summary_from_run(row: TaskRunColumns) -> TaskSummary:
+    return TaskSummary(
+        task_id=row.task_id,
+        kind=row.kind,
+        state=TaskState(row.state),
+        progress=row.progress,
+        step=row.step,
+        error=row.error,
+        target=TaskTarget(**row.target) if row.target else None,
+        created_by=row.created_by,
+        team_id=row.team_id,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+        scheduled_for=row.scheduled_for,
+        detail=_parse_task_detail(row.kind, row.detail),
+        acknowledged_at=row.acknowledged_at,
+        acknowledged_by=row.acknowledged_by,
+    )
+
+
 class TaskNotFoundError(Exception):
     pass
 
@@ -104,6 +124,7 @@ class TaskStore:
         target: TaskTarget | None = None,
         scheduled_for: datetime | None = None,
         session: AsyncSession | None = None,
+        execution_id: str | None = None,
     ) -> None:
         # Persist `target` at creation so GET /tasks resolves it even before any
         # worker emits an event. Without this the inline indicator on the target's
@@ -119,6 +140,7 @@ class TaskStore:
             team_id=team_id,
             target=target.model_dump() if target is not None else None,
             scheduled_for=scheduled_for,
+            execution_id=execution_id,
             created_at=_utcnow(),
             updated_at=_utcnow(),
         )
@@ -129,33 +151,47 @@ class TaskStore:
         self,
         event: TaskEvent,
         session: AsyncSession | None = None,
-    ) -> int:
+        *,
+        only_if_unbound: bool = False,
+    ) -> int | None:
+        """Atomically append an event; ignore late events for settled ingestion tasks."""
         detail = event.detail.model_dump() if event.detail is not None else None
+        target = event.target.model_dump() if event.target is not None else None
+        values: dict[str, Any] = {
+            "state": event.state,
+            "error": event.error,
+            "updated_at": _utcnow(),
+        }
+        # Sparse events preserve known context; an omitted error clears a transient failure.
+        for key, value in (
+            ("progress", event.progress),
+            ("step", event.step),
+            ("detail", detail),
+            ("target", target),
+        ):
+            if value is not None:
+                values[key] = value
         async with use_session(self._sessions, session) as s:
-            run = await s.get(self._run, event.task_id)
-            if run is None:
-                raise TaskNotFoundError(event.task_id)
-            next_seq = run.seq + 1
-            run.state = event.state
-            run.seq = next_seq
-            # Preserve last-known progress/step/detail when a sparse event omits them
-            # (same rule already applied to target below): a running event that
-            # carries no progress means "unchanged", not "reset to indeterminate".
-            # Terminal/updating events set these explicitly and still overwrite.
-            # `error` is written directly so a later event can *clear* a transient
-            # error (e.g. a retry that recovers) rather than let it stick.
-            if event.progress is not None:
-                run.progress = event.progress
-            if event.step is not None:
-                run.step = event.step
-            if detail is not None:
-                run.detail = detail
-            run.error = event.error
-            run.updated_at = _utcnow()
-
-            target = event.target.model_dump() if event.target is not None else None
-            if target is not None:
-                run.target = target
+            result = await s.execute(
+                update(self._run)
+                .where(
+                    self._run.task_id == event.task_id,
+                    self._run.execution_id.is_(None) if only_if_unbound else true(),
+                    or_(
+                        self._run.kind != "ingestion",
+                        self._run.state.notin_(
+                            [state.value for state in TaskState if state.is_terminal]
+                        ),
+                    ),
+                )
+                .values(**values, seq=self._run.seq + 1)
+                .returning(self._run.seq)
+            )
+            next_seq = result.scalar_one_or_none()
+            if next_seq is None:
+                if await s.get(self._run, event.task_id) is None:
+                    raise TaskNotFoundError(event.task_id)
+                return None
             log_row = self._event_log(
                 task_id=event.task_id,
                 kind=event.kind,
@@ -179,6 +215,14 @@ class TaskStore:
     ) -> TaskRunColumns | None:
         async with use_session(self._sessions, session) as s:
             return await s.get(self._run, task_id)
+
+    async def get_task(
+        self,
+        task_id: str,
+        session: AsyncSession | None = None,
+    ) -> TaskSummary | None:
+        run = await self.get_run(task_id, session=session)
+        return _summary_from_run(run) if run is not None else None
 
     async def set_execution(
         self,
@@ -283,26 +327,7 @@ class TaskStore:
         async with use_session(self._sessions, session) as s:
             result = await s.execute(q)
             rows = result.scalars().all()
-        return [
-            TaskSummary(
-                task_id=row.task_id,
-                kind=row.kind,
-                state=TaskState(row.state),
-                progress=row.progress,
-                step=row.step,
-                error=row.error,
-                target=TaskTarget(**row.target) if row.target else None,
-                created_by=row.created_by,
-                team_id=row.team_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                scheduled_for=row.scheduled_for,
-                detail=_parse_task_detail(row.kind, row.detail),
-                acknowledged_at=row.acknowledged_at,
-                acknowledged_by=row.acknowledged_by,
-            )
-            for row in rows
-        ]
+        return [_summary_from_run(row) for row in rows]
 
     async def acknowledge(
         self,

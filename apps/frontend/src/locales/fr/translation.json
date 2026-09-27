@@ -116,29 +116,6 @@
     }
   },
   "capability": {
-    "demo_echo": {
-      "name": "Écho de démonstration",
-      "description": "Répète ce que vous dites en écho, avec une option pour répondre en majuscules.",
-      "cardAria": "Carte de la capacité de démonstration",
-      "fields": {
-        "uppercase": {
-          "title": "Majuscules",
-          "description": "Renvoyer la réponse en majuscules."
-        }
-      },
-      "panel": {
-        "demo_notes": {
-          "title": "Notes de démonstration",
-          "hint": "Appelle directement la route /analyze de la capacité de démonstration.",
-          "textPlaceholder": "texte",
-          "analyze": "Analyser",
-          "error": "Échec de la requête",
-          "original": "original",
-          "transformed": "transformé",
-          "length": "longueur"
-        }
-      }
-    },
     "document_access": {
       "name": "Rechercher dans les ressources",
       "description": "Capacité de rechercher une information dans les ressources de l'équipe.",
@@ -249,6 +226,10 @@
         }
       }
     },
+    "open_writable_document": {
+      "name": "Ouvrir un document de l’espace de travail",
+      "description": "Démo : copier un fichier Markdown de l’espace de travail d’un agent Deep dans l’éditeur de documents. Activez aussi Documents éditables."
+    },
     "writable_document": {
       "name": "Générer un document texte (Word)",
       "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
@@ -315,6 +296,11 @@
       "form": {
         "uploadTemplate": "Téléverser un modèle .pptx",
         "replaceTemplate": "Remplacer le modèle",
+        "downloadTemplate": "Télécharger le modèle",
+        "downloadTemplateHint": "Télécharge le modèle enregistré pour cet agent.",
+        "downloadTemplateUnavailable": "Aucun modèle enregistré pour cet agent.",
+        "downloadFailed": "Le modèle n'a pas pu être téléchargé.",
+        "downloadMissing": "Le fichier du modèle est introuvable pour cet agent. Téléversez-le à nouveau.",
         "uploadAria": "Fichier de modèle PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un modèle est configuré pour cet agent.",
@@ -370,6 +356,14 @@
           "description": "Durée maximale d'exécution d'une requête SQL avant annulation par le serveur (1 à 120 secondes)."
         }
       }
+    },
+    "document_triage": {
+      "name": "Tri de documents",
+      "description": "Passer en revue un dossier de documents et consigner les d\u00e9cisions."
+    },
+    "progress_tracker": {
+      "name": "Suivi d'avancement",
+      "description": "Suivre un travail de longue haleine et les d\u00e9cisions prises en chemin."
     },
     "team_wiki": {
       "name": "Wiki d'équipe",
@@ -575,6 +569,9 @@
   "common": {
     "cancel": "Annuler",
     "close": "Fermer",
+    "copied": "Copié",
+    "copy": "Copier",
+    "copyCode": "Copier le code",
     "delete": "Supprimer",
     "description": "Description",
     "edit": "Modifier",
@@ -1312,7 +1309,7 @@
       "edit": "Modifier",
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
-      "suspendedToggleLocked": "Cet agent est suspendu. Corrigez ses capacités dans le formulaire d'édition avant de le réactiver.",
+      "suspendedToggleLocked": "Suspendu",
       "duplicate": "Dupliquer",
       "delete": "Supprimer",
       "tooltip": {
@@ -1573,21 +1570,77 @@
       "awaitingConfirmation": "en attente de confirmation…",
       "cancelledByUser": "annulé par l'utilisateur",
       "details": "Détails",
-      "errorCopied": "Message d'erreur copié dans le presse-papier",
+      "documents_one": "{{count}} document",
+      "documents_other": "{{count}} documents",
+      "executionTime": "Temps d'exécution : {{duration}}",
       "turnFailed": "Le tour a échoué — ouvrir pour le détail",
       "hide": "Masquer le raisonnement et les appels d'outils",
+      "matches_one": "{{count}} correspondance",
+      "matches_other": "{{count}} correspondances",
       "openReasoning": "Ouvrir le raisonnement complet",
       "restatedReasoning": "Reprise du raisonnement précédent",
       "rows_one": "{{count}} ligne",
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
+      "sqlQuery": "Requête :",
+      "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",
       "sources_other": "{{count}} sources",
+      "tables_one": "{{count}} table",
+      "tables_other": "{{count}} tables",
       "summaryReasoning": "Réflexion {{duration}}",
       "summaryTools_one": "{{count}} outil",
       "summaryTools_other": "{{count}} outils",
-      "thinking": "Réflexion en cours…"
+      "thinking": "Réflexion en cours…",
+      "tabular": {
+        "catalogForDocument": "Lecture du sommaire du document « {{name}} ».",
+        "catalogForWorkbook": "Lecture du sommaire du classeur.",
+        "catalogComplete": "Sommaire complet : {{total}} lignes.",
+        "catalogPreview": "Sommaire : les {{shown}} premières lignes sur {{total}}.",
+        "emptyCatalog": "Ce catalogue est vide.",
+        "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
+        "kind": {
+          "csv": "CSV",
+          "spreadsheet": "Classeur"
+        },
+        "keyword": "Recherche du terme :",
+        "matchedColumns": "Colonnes correspondantes",
+        "identifiedDocuments_one": "Voici le document identifié :",
+        "identifiedDocuments_other": "Voici les {{count}} documents identifiés :",
+        "moreColumns_one": "+{{count}} autre colonne",
+        "moreColumns_other": "+{{count}} autres colonnes",
+        "noColumns": "Aucune colonne décrite.",
+        "noDocuments": "Aucun document tabulaire accessible.",
+        "noMatches": "Aucune correspondance trouvée dans les tables parcourues.",
+        "noSchemas": "Aucun schéma retourné.",
+        "noTables": "Aucune table décrite.",
+        "partialResult": "résultat partiel",
+        "rowsPreview": "aperçu de {{count}} lignes",
+        "rowsTruncated": "Aperçu partiel : d'autres lignes correspondent dans cette table.",
+        "categorical": "Catégorie",
+        "showCatalogPreview": "Réduire à 20 lignes",
+        "showFullCatalog": "Tout afficher",
+        "showMore_one": "Afficher {{count}} élément supplémentaire",
+        "showMore_other": "Afficher {{count}} éléments supplémentaires",
+        "tableNumber": "Table {{number}}",
+        "tablesHeading_one": "Table et colonnes",
+        "tablesHeading_other": "{{count}} tables et colonnes",
+        "tablesTruncated": "Résultat partiel : d'autres tables ou documents peuvent contenir cette valeur."
+      },
+      "toolStatus": {
+        "failure": "Échec",
+        "running": "En cours",
+        "success": "Succès"
+      },
+      "toolLabels": {
+        "readQuery": "Lecture de la requête",
+        "documents": "Liste des documents tabulaires",
+        "markdown": "Lecture du catalogue du classeur",
+        "schemas": "Lecture des schémas tabulaires",
+        "descriptions": "Lecture des documents tabulaires",
+        "search": "Recherche d'une valeur tabulaire"
+      }
     },
     "collapse": "Réduire",
     "create": "Créer",
@@ -1667,9 +1720,7 @@
         "gettingStarted": "Démarrage",
         "features": "Fonctionnalités",
         "guides": "Guides et cas d'usage",
-        "troubleshooting": "Résolution de problèmes",
-        "faq": "FAQ",
-        "changelog": "Nouveautés"
+        "troubleshooting": "Aide et limites"
       }
     },
     "avatarCrop": {
@@ -1887,7 +1938,7 @@
         "back": "Revenir au dossier précédent",
         "copyToTeam": "Copier dans l'espace d'équipe",
         "delete": "Supprimer",
-        "deleteDisabledWhileProcessing": "Indisponible pendant l'ingestion — utilisez « Arrêter l'ingestion »",
+        "deleteDisabledWhileProcessing": "Indisponible tant que l’ingestion est en attente ou en cours",
         "download": "Télécharger",
         "includeInSearch": "Inclure à la recherche",
         "manageLabels": "Gérer les labels",
@@ -1897,10 +1948,9 @@
         "preview": "Aperçu",
         "process": "Traiter",
         "refresh": "Rafraîchir cette vue",
+        "relaunchIngestion": "Relancer l'ingestion",
         "rename": "Renommer",
-        "reprocess": "Retraiter",
-        "searchable": "Exclure de la recherche",
-        "stopIngestion": "Arrêter l'ingestion"
+        "searchable": "Exclure de la recherche"
       },
       "confirm": {
         "deleteMessage": "Retirer « {{name}} » de ce dossier ?",
@@ -1913,13 +1963,19 @@
         "deleteMixedMessage": "Supprimer {{folderCount}} dossier(s) avec tout leur contenu et retirer {{docCount}} document(s) ? Cette action est irréversible.",
         "deleteFolderTitle": "Supprimer le dossier",
         "shareMessage": "Copier « {{name}} » dans l'espace d'équipe ? L'original reste à sa place.",
-        "shareTitle": "Copier dans l'espace d'équipe",
-        "stopIngestionMessage": "Interrompre le traitement de « {{name}} » ? Le document et toutes ses données (fichier, vecteurs, métadonnées) seront supprimés.",
-        "stopIngestionTitle": "Arrêter l'ingestion"
+        "shareTitle": "Copier dans l'espace d'équipe"
       },
       "errorTooltip": {
+        "noDetails": "Le traitement a échoué sans détail disponible. Transmettez la référence du document au support.",
+        "documentReference": "Document : {{id}}",
         "reported": "Signalé par le traitement",
-        "stage": "Étape : {{stage}}"
+        "stage": "Étape : {{stage}}",
+        "stages": {
+          "raw": "Stockage du fichier",
+          "preview": "Extraction du contenu",
+          "vector": "Indexation pour la recherche",
+          "sql": "Indexation des données structurées"
+        }
       },
       "empty": {
         "agentFiles": "Cet agent n'a encore créé aucun fichier pour vous. Les fichiers qu'il génère pour vous apparaîtront ici.",
@@ -2013,7 +2069,9 @@
         "delete": "Supprimer",
         "download": "Télécharger",
         "excludeFromSearch": "Exclure de la recherche",
-        "includeInSearch": "Inclure à la recherche"
+        "includeInSearch": "Inclure à la recherche",
+        "relaunchIngestion_one": "Relancer l'ingestion de {{count}} ressource",
+        "relaunchIngestion_other": "Relancer l'ingestion de {{count}} ressources"
       },
       "stats": {
         "toggle": "Statistiques",
@@ -2042,13 +2100,14 @@
         "deleteFolderSuccess": "Dossier supprimé",
         "downloadEmpty": "Les dossiers sélectionnés ne contiennent aucun document à télécharger",
         "downloadError": "Impossible de télécharger les fichiers sélectionnés",
-        "processError": "Impossible de lancer le traitement",
-        "processStarted": "Traitement lancé",
-        "stopIngestionError": "Impossible d'arrêter l'ingestion",
-        "stopIngestionRequested": "Arrêt de l'ingestion demandé"
+        "relaunchError": "Impossible de relancer l'ingestion",
+        "relaunchStarted_one": "Ingestion relancée",
+        "relaunchStarted_other": "Ingestion relancée pour {{count}} ressources"
       },
       "pageTitlePersonal": "Vos ressources personnelles",
-      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel."
+      "pageSubtitlePersonal": "Gérez vos ressources locales, manuellement ajoutée à votre espace personnel.",
+      "relaunchProfileHelp": "Choisissez un profil pour les documents dont le profil d’ingestion initial est inconnu. Les autres conservent leur profil initial.",
+      "relaunchProfileLabel": "Profil d’ingestion"
     },
     "save": "Sauvegarder",
     "serviceNotice": {
@@ -2083,7 +2142,8 @@
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes",
-          "platformPrompt": "Prompt global de la plateforme"
+          "platformPrompt": "Prompt global de la plateforme",
+          "announcements": "Annonces"
         },
         "title": "Espace administration"
       },
@@ -2226,9 +2286,16 @@
         "terminalCount": "Terminées ({{count}})",
         "title": "Tâches"
       },
+      "ingestionStep": {
+        "uploading": "Préparation du document",
+        "processing": "Extraction du contenu",
+        "indexing": "Indexation",
+        "done": "Traitement terminé"
+      },
       "popover": {
         "acknowledge": "Ignorer",
         "close": "Fermer",
+        "supportReference": "Référence support : {{id}}",
         "copyError": "Copier l'erreur",
         "errorCopied": "Erreur copiée",
         "startedAgo": "démarré {{time}}",
@@ -2587,10 +2654,6 @@
             "conversationAttachments": {
               "title": "Pièces jointes à une conversation",
               "description": "Permet l'ajout de documents dans une conversation pour en exploiter les informations."
-            },
-            "documentReading": {
-              "title": "Lecture de documents",
-              "description": "Permet à l'agent de lire un document mot à mot et d'en extraire des informations de façon exhaustive."
             },
             "wordDocument": {
               "title": "Générer un document Word",
@@ -3316,6 +3379,8 @@
         "definitionsLoading": "Chargement…",
         "definitionsFailed": "Impossible de charger la liste",
         "zoneFred": "Fréquence d'exécution",
+        "scheduleExplanation": "Chaque exécution recherche les changements dans la source. Le traitement des documents peut se poursuivre après la synchronisation.",
+        "suspended": "Suspendre la synchronisation",
         "zoneSource": "Provenance des documents",
         "submit": "Créer",
         "created": "{{name}} créée",
@@ -3332,6 +3397,63 @@
         "minutes": "minutes",
         "hours": "heures",
         "days": "jours"
+      }
+    },
+    "announcements": {
+      "banner": {
+        "moreInfo": "Plus d'info",
+        "dismiss": "Masquer cette annonce"
+      },
+      "dialog": {
+        "close": "Fermer"
+      },
+      "page": {
+        "title": "Annonces",
+        "subtitle_one": "{{count}} annonce est affichée à tous les utilisateurs.",
+        "subtitle_other": "{{count}} annonces sont affichées à tous les utilisateurs.",
+        "subtitle_zero": "Aucune annonce n'est affichée aux utilisateurs actuellement.",
+        "create": "Nouvelle annonce",
+        "empty": "Aucune annonce pour l'instant.\nCréez-en une pour afficher un bandeau en haut de l'application."
+      },
+      "severity": {
+        "info": "Info",
+        "warning": "Avertissement",
+        "error": "Erreur",
+        "success": "Succès"
+      },
+      "locale": {
+        "fr": "Français",
+        "en": "Anglais"
+      },
+      "row": {
+        "enabled": "Afficher cette annonce aux utilisateurs",
+        "enableHint": "Activer pour tous les utilisateurs",
+        "disableHint": "Désactiver pour tous les utilisateurs",
+        "edit": "Modifier cette annonce",
+        "delete": "Supprimer cette annonce"
+      },
+      "editor": {
+        "createTitle": "Nouvelle annonce",
+        "editTitle": "Modifier l'annonce",
+        "title": "Titre",
+        "titleRequired": "Donnez un titre à l'annonce dans au moins une langue.",
+        "descriptionShort": "Description courte",
+        "descriptionShortHint": "Affichée dans le bandeau. Tenez-vous à une ou deux lignes — gras, italique et liens uniquement.",
+        "shortRequired": "Rédigez une description courte dans au moins une langue.",
+        "descriptionLong": "Description longue (facultative)",
+        "descriptionLongHint": "Affichée dans la boîte de dialogue « Plus d'info ». Laissez vide et le bandeau n'affichera pas le bouton.",
+        "dismissible": "Peut être fermé",
+        "severityGroup": "Sévérité de l'annonce",
+        "localeGroup": "Langue en cours d'édition"
+      },
+      "saved": "Annonce enregistrée.",
+      "saveFailed": "L'annonce n'a pas été enregistrée.",
+      "toggleFailed": "Impossible de changer l'état de l'annonce.",
+      "deleted": "Annonce supprimée.",
+      "deleteFailed": "L'annonce n'a pas été supprimée.",
+      "delete": {
+        "title": "Supprimer cette annonce ?",
+        "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       }
     }
   },

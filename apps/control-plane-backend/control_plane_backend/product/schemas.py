@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -12,7 +26,6 @@ from pydantic import BaseModel, Field
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
     FrontendFeatureFlags,
-    InfoBanner,
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     UploadWarning,
@@ -139,20 +152,6 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
-        ),
-    )
-    info_banner: InfoBanner | None = Field(
-        default=None,
-        description=(
-            "Deployer-configured global announcement banner, from "
-            "`platform.frontend.info_banner`. `None` "
-            "when the deployment configures none — the frontend then renders "
-            "nothing. Deliberately on this public pre-auth surface, not the "
-            "authenticated `FrontendBootstrap`: the banner shows on every "
-            "page, including the GCU-acceptance and root-bootstrap screens, "
-            "which render before `/frontend/bootstrap` can succeed. Carries "
-            "only deployer-authored announcement content — never anything "
-            "sensitive."
         ),
     )
 

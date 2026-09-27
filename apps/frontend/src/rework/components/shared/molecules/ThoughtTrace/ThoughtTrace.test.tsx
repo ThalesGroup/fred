@@ -22,7 +22,9 @@ import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ThoughtTrace } from "./ThoughtTrace";
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => (key === "rework.chatTrace.toolLabels.readQuery" ? "Reading query" : key),
+  }),
 }));
 
 vi.mock("@shared/atoms/Icon/Icon", () => ({

@@ -27,12 +27,14 @@ from __future__ import annotations
 
 import pytest
 
+from fred_core.security.delegation import AssertedUser
 from fred_core.security.structure import KeycloakUser
 from fred_core.security.whitelist_access_control import access_control as _wl_module
 from fred_core.security.whitelist_access_control.access_control import (
     _normalize_email,
     _parse_whitelist,
     is_email_whitelisted,
+    is_principal_whitelisted,
     is_user_whitelisted,
 )
 
@@ -84,6 +86,9 @@ class TestParseWhitelist:
 
     def test_only_comments_returns_empty(self) -> None:
         assert _parse_whitelist("# comment\n# another\n") == frozenset()
+
+    def test_uid_entries_preserve_the_subject(self) -> None:
+        assert _parse_whitelist("uid:Person-123\n") == frozenset({"uid:Person-123"})
 
 
 # ---------------------------------------------------------------------------
@@ -142,3 +147,19 @@ class TestIsUserWhitelisted:
         _wl_module._WHITELIST_PATH.write_text("alice@example.com\n", encoding="utf-8")
         user = KeycloakUser(uid="u2", username="bob", email="bob@example.com", roles=[])
         assert is_user_whitelisted(user) is False
+
+    def test_authenticated_user_can_match_uid(self) -> None:
+        _wl_module._WHITELIST_PATH.write_text("uid:u1\n", encoding="utf-8")
+        user = KeycloakUser(uid="u1", username="alice", roles=[])
+        assert is_user_whitelisted(user) is True
+
+    def test_asserted_user_matches_uid_only(self) -> None:
+        asserted = AssertedUser(
+            uid="u1", client_id="caller", run_id="run", agent_id="agent"
+        )
+        _wl_module._WHITELIST_PATH.write_text("alice@example.com\n", encoding="utf-8")
+        assert is_principal_whitelisted(asserted) is False
+
+        _wl_module._WHITELIST_PATH.write_text("uid:u1\n", encoding="utf-8")
+        _wl_module._WHITELIST_CACHE.clear()
+        assert is_principal_whitelisted(asserted) is True

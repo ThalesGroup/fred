@@ -16,6 +16,9 @@ from openfga_sdk.models.check_response import CheckResponse
 from openfga_sdk.models.create_store_request import CreateStoreRequest
 from openfga_sdk.models.list_objects_response import ListObjectsResponse
 from openfga_sdk.models.list_users_response import ListUsersResponse
+from openfga_sdk.models.read_authorization_model_response import (
+    ReadAuthorizationModelResponse,
+)
 from openfga_sdk.models.read_request_tuple_key import ReadRequestTupleKey
 from openfga_sdk.models.read_response import ReadResponse
 from openfga_sdk.models.write_authorization_model_request import (
@@ -45,6 +48,14 @@ class OpenFgaClient:
         body: CreateStoreRequest,
         options: Mapping[str, object] | None = ...,
     ) -> Store: ...
+    async def read_authorization_model(
+        self,
+        options: Mapping[str, object] | None = ...,
+    ) -> ReadAuthorizationModelResponse: ...
+    async def read_latest_authorization_model(
+        self,
+        options: Mapping[str, object] | None = ...,
+    ) -> ReadAuthorizationModelResponse: ...
     async def write_authorization_model(
         self,
         body: WriteAuthorizationModelRequest,

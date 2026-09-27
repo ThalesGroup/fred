@@ -29,6 +29,7 @@ All tests are offline — no model or network required.
 from __future__ import annotations
 
 from fred_runtime.support.tool_loop import (
+    strip_message_names,
     total_char_len,
     trim_to_char_budget,
     trim_to_human_boundary,
@@ -214,3 +215,31 @@ def test_char_budget_never_raises_even_when_unfixable() -> None:
     messages = [HumanMessage(content="x" * 1000)]
     trimmed = trim_to_char_budget(messages, 1)
     assert trimmed == messages
+
+
+def test_strip_message_names_preserves_content_pairs_and_originals() -> None:
+    named = AIMessage(
+        content="analysis",
+        name="general-purpose",
+        id="assistant-1",
+        tool_calls=[{"name": "lookup", "args": {"query": "x"}, "id": "call-1"}],
+    )
+    result = ToolMessage(content="found", tool_call_id="call-1", name="lookup")
+    original = [named.model_dump(), result.model_dump()]
+    stripped = strip_message_names([named, result])
+    assert [message.name for message in stripped] == [None, None]
+    assert stripped[0].model_dump(exclude={"name"}) == named.model_dump(
+        exclude={"name"}
+    )
+    assert stripped[1].model_dump(exclude={"name"}) == result.model_dump(
+        exclude={"name"}
+    )
+    assert [named.model_dump(), result.model_dump()] == original
+
+
+def test_strip_message_names_preserves_unnamed_identity() -> None:
+    messages = [HumanMessage(content="hi"), AIMessage(content="hello")]
+    stripped = strip_message_names(messages)
+    assert all(
+        before is after for before, after in zip(messages, stripped, strict=True)
+    )

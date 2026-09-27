@@ -28,6 +28,7 @@ from temporalio import activity
 from temporalio.testing import ActivityEnvironment
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
 from knowledge_flow_backend.common.structures import ProcessingConfig
 from knowledge_flow_backend.core.processors.input.common.base_image_describer import BaseImageDescriber
 from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import (
@@ -37,6 +38,7 @@ from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.utils.i
     ImageTranscription,
 )
 from knowledge_flow_backend.features.scheduler.activity_utils import to_thread_with_heartbeat
+from knowledge_flow_backend.features.scheduler.kpi_utils import processor_activity_timer
 
 dotenv_path = os.getenv("ENV_FILE", "./config/.env")
 load_dotenv(dotenv_path)
@@ -49,7 +51,9 @@ class MockImageDescriber(BaseImageDescriber):
 
 @pytest.fixture
 def processor():
-    return PdfMarkdownProcessor()
+    # The execution boundary supplies telemetry; the processor only consumes it.
+    with processing_metrics_scope(processor_activity_timer):
+        yield PdfMarkdownProcessor()
 
 
 @pytest.fixture
@@ -456,3 +460,67 @@ def test_pdf_processor_end_to_end(processor: PdfMarkdownProcessor, sample_pdf_fi
     assert md_file.exists()
     md_content = md_file.read_text(encoding="utf-8").strip()
     assert md_content != ""
+
+
+@pytest.mark.parametrize("sink_fails", [False, True])
+def test_pdf_child_timer_forwards_without_temporal_context(processor, monkeypatch, sink_fails):
+    import socket
+    from unittest.mock import Mock
+
+    from knowledge_flow_backend.features.scheduler.kpi_utils import drain_extraction_kpis, extraction_kpi_socket
+
+    writer = Mock()
+    if sink_fails:
+        writer.emit.side_effect = RuntimeError("KPI sink unavailable")
+    monkeypatch.setattr(ApplicationContext, "get_instance", lambda: _FakeAppContext(writer))
+    receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+    with receiver, sender:
+        receiver.setblocking(False)
+        sender.setblocking(False)
+        token = extraction_kpi_socket.set(sender)
+        try:
+            assert not activity.in_activity()
+            with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {"pdf_stage": "image_loop"}):
+                pass
+        finally:
+            extraction_kpi_socket.reset(token)
+        drain_extraction_kpis(receiver)
+    writer.emit.assert_called_once()
+    assert writer.emit.call_args.kwargs["dims"] == {"pdf_stage": "image_loop", "status": "ok"}
+
+
+def test_pdf_child_timer_preserves_error_when_channel_is_closed(processor):
+    import socket
+
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket
+
+    sender = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    sender.close()
+    token = extraction_kpi_socket.set(sender)
+    try:
+        with pytest.raises(ValueError, match="original error"):
+            with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {}):
+                raise ValueError("original error")
+    finally:
+        extraction_kpi_socket.reset(token)
+
+
+def test_pdf_child_timer_drops_when_channel_is_full(processor, caplog):
+    import socket
+
+    from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket
+
+    receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+    with receiver, sender:
+        sender.setblocking(False)
+        sender.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+        with pytest.raises(BlockingIOError):
+            for _ in range(100):
+                sender.send(b"x")
+        token = extraction_kpi_socket.set(sender)
+        try:
+            with processor._pdf_kpi_timer("knowledge_flow.pdf.image_loop_latency_ms", {}):
+                pass
+        finally:
+            extraction_kpi_socket.reset(token)
+    assert any("Dropping timing" in record.message for record in caplog.records)

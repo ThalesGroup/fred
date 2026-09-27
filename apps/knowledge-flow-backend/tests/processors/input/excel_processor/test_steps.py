@@ -682,12 +682,31 @@ def test_b4_numeric_keeps_currency_percent_strips_thousands(make_table):
 
 
 def test_b4_boolean_column_not_coerced(make_table):
-    # La branche booléenne a été supprimée : oui/non reste du texte.
+    # Des libellés oui/non ne sont pas des booléens Excel natifs.
     p = _pipeline_for_b()
     t = make_table([["h"]])
     t.df = pd.DataFrame({"Dispo": ["oui", "non", "oui"]})
     p.b4_clean_and_coerce(t)
     assert list(t.df["Dispo"]) == ["oui", "non", "oui"]
+
+
+def test_b4_native_boolean_column_keeps_nullable_boolean_dtype(make_table):
+    p = _pipeline_for_b()
+    t = make_table([["h"]])
+    t.df = pd.DataFrame({"Dispo": [True, None, False]}, dtype=object)
+    p.b4_clean_and_coerce(t)
+    assert str(t.df["Dispo"].dtype) == "boolean"
+    assert bool(t.df["Dispo"].iloc[0])
+    assert pd.isna(t.df["Dispo"].iloc[1])
+    assert not bool(t.df["Dispo"].iloc[2])
+
+
+def test_b4_mixed_boolean_and_text_keeps_text(make_table):
+    p = _pipeline_for_b()
+    t = make_table([["h"]])
+    t.df = pd.DataFrame({"Dispo": [True, "oui", False]}, dtype=object)
+    p.b4_clean_and_coerce(t)
+    assert list(t.df["Dispo"]) == ["True", "oui", "False"]
 
 
 def test_b4_date_text_column(make_table):

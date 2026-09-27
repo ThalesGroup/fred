@@ -2031,7 +2031,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
-- Suspension/catalog warning banner, when applicable.
+- Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
@@ -4057,14 +4057,17 @@ more"), but **copy always writes the full list** — copying is exactly when the
 whole thing is wanted.
 
 A document's panel also carries the message the ingestion **task** reported,
-under "Signalé par le traitement", alongside the per-stage `processing.errors`.
+under "Reported by the pipeline", instead of repeating per-stage `processing.errors`.
 A run killed before any pipeline stage started (worker saturation, a Temporal
 `TIMED_OUT` verdict) stamps nothing per stage, so the tab used to show "Erreur"
 with an empty panel while the message sat on the task — visible only in the task
 popover, which is not mounted for most users. The parent workflow already pulls
 it out of the Temporal child job (`_wf_file_terminal_event_args`, #2315) and the
 rollup already fetches it with the task history, so this is a wiring change, not
-a new source. It is skipped when a stage message already says the same thing.
+a new source. Per-stage errors are the fallback when the final task explanation
+is absent. Their stage names are translated (for example, `preview` becomes
+"Content extraction"); copied fallback details retain the technical stage keys
+for support. The document reference remains available.
 
 One coupling worth knowing: terminal tasks are never evicted today because
 `taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
@@ -4284,38 +4287,82 @@ clears the binding back to "Using pod default".
 
 ---
 
-## Global info banner (2026-08-19)
+## Platform announcement banners (2026-08-19 as the config-driven info banner, replaced 2026-09-25, issue #2805)
 
-### `InfoBanner`
+### `AnnouncementStack` / `AnnouncementBanner`
 
-**Location:** `src/rework/components/shared/molecules/InfoBanner/`
+**Location:** `src/rework/features/announcements/` (stack, dismissal) and
+`src/rework/components/shared/molecules/AnnouncementBanner/` (one banner)
 **Status:** `Functional`
 
-Full-width, non-dismissable announcement banner mounted once at
-the app root (`src/app/App.tsx`), above the GCU/bootstrap guards, so it shows
-on every page — pre-auth ones included — and pushes the app content down
-instead of overlaying it (the app shell is now a `100vh` flex column; routed
-pages size with `height: 100%`, never `100vh` — see
-`FRONTEND_CODING_GUIDELINES.md` §2.5). Entirely config-driven from
-`platform.frontend.info_banner` (public pre-auth `/frontend/config`): without
-the config block, nothing renders — there is no default banner. Persistent
-by default; the optional `auto_hide_seconds` removes it that many seconds
-after app load with a 300ms eased collapse (opacity + `grid-template-rows`
-1fr→0fr, so the content below slides up instead of jumping; snaps under
-`prefers-reduced-motion`, and the banner is aria-hidden as soon as the exit
-starts). Background
-color comes from configuration via the `--banner-bg` custom property
-(deliberate token exception, comment in the module CSS); title/message/link
-labels are locale maps resolved with `en` fallback; links open in a new tab,
-separated by a `·`, and only http(s)/relative URLs are rendered.
-`role="status"` + `aria-live="polite"`.
+Full-width banners for the announcements a platform admin authors at
+`/admin/annonces`. The stack is mounted once at the app root
+(`src/app/App.tsx`) as the first flex child of the shell, so banners push the
+app content down instead of overlaying it (the shell is a `100vh` flex column;
+routed pages size with `height: 100%`, never `100vh` — see
+`FRONTEND_CODING_GUIDELINES.md` §2.5). It renders nothing, and issues no
+request, until the user is authenticated: unlike the config-driven banner it
+replaces, an announcement never appears on the GCU-acceptance or
+root-bootstrap screens.
+
+Every enabled announcement renders, stacked, ordered by severity (`error`,
+`warning`, `success`, `info`) then oldest-first within a severity. Each banner
+carries its severity icon and left accent rule, the localized title, and the
+short description through `MarkdownRenderer`. Severity drives both colour and
+icon from the shared map in `shared/utils/severity.ts` — the same
+severity → accent tokens Toast and `UploadWarningBanner` use. Nothing about the
+appearance is authorable, which is what retired the previous banner's
+configured background colour.
+
+**Actions.** A "Plus d'info" text button appears only when the announcement has
+a long description for the resolved locale; it opens the central `Dialog`
+molecule with the full markdown and a single "Fermer" button (backdrop
+dismissal works as usual). Closing the dialog is not a dismissal — the banner
+stays. A close `IconButton` appears only when the announcement is
+`dismissible`; it plays a 300 ms eased collapse (opacity +
+`grid-template-rows` 1fr→0fr, so the content below slides up instead of
+jumping; snaps under `prefers-reduced-motion`) and the node is removed on a
+fixed timeout rather than `transitionend`, which never fires when the
+transition is suppressed. The banner is `aria-hidden` as soon as the exit
+starts. `role="status"` + `aria-live="polite"`.
+
+**Dismissal** is per-browser, in `localStorage`, keyed by announcement id plus
+`content_version` — so re-editing an announcement, or switching a disabled one
+back on, brings it back for everyone who closed the previous run. Switching one
+off does not. Storage failures degrade to "never dismissed".
+
+### Admin page
+
+**Location:** `src/rework/components/pages/admin/AnnouncementsPage/`
+**Status:** `Functional`
+
+`/admin/annonces`, platform-admin only. One row per announcement, rendered
+with the real `AnnouncementBanner` in preview mode — the component itself, not a
+lookalike, so what an admin sees is what users get — with the delivery switch
+and edit/delete actions beside it. In preview the close button still renders
+(an admin must see whether users will get one) but does nothing: collapsing a
+row would leave a hole. The header reports how many are live, since that is the
+number an admin loses track of once several stack. Delete goes through
+`ConfirmationDialog` as a critical action.
+
+The compose/edit dialog carries a FR/EN language switch rather than six
+stacked fields, so an unwritten translation is visible instead of silently
+shipping a half-translated banner. The switch sits on one line with the
+severity strip and the closable toggle; the strip's active segment takes the
+corresponding banner's own container pair, so picking a severity shows the
+colour it will produce. Both descriptions are plain textareas — the banner
+still renders them through `MarkdownRenderer`, so hand-typed emphasis and links
+work; what a WYSIWYG toolbar bought was not worth its weight for two fields
+that hold a sentence and a paragraph. Composing never publishes — an admin
+enables from the list once the wording is right.
 
 #### Open UX issues
 
-- **Fixed dark text over a configured background.** `--banner-text: #00222c`
-  assumes the configured color stays light (like the documented `#00BBDD`
-  example); a dark configured color would fail contrast. Revisit only if a
-  deployment actually needs a dark banner.
+- **No cap on the stack.** Four enabled announcements take real vertical space
+  at the top of every page. Deliberate for now — silently truncating would hide
+  exactly the announcement someone published — and the enabled count in the
+  admin header is the mitigation. Revisit alongside scheduling, which will
+  bound how long a banner lingers.
 
 ---
 
@@ -4552,8 +4599,8 @@ Earlier behaviour (#2459):
   it - two title rows said the same thing twice and ate the top of the column. A
   panel declares `ownsHeader: true` on its `sidePanels` spec; the host then passes
   `InlineDrawer`'s new `hideHeader` (the drawer keeps `title` as its accessible
-  name) plus `flushBody`, and the pane renders its own close button. `demo_echo`,
-  which has no header of its own, keeps the drawer's.
+  name) plus `flushBody`, and the pane renders its own close button. A panel with
+  no header of its own keeps the drawer's.
 - **Switching conversations closes any open push drawer** (2026-08-28). Opening one
   is a statement about one conversation and every panel reads the open session, so
   a drawer carried across sat there empty. A capability whose new conversation
@@ -4842,3 +4889,38 @@ Three additions, all made for the rail and all useful beyond it:
   moment of an alt-tab was still open on return and — its own leave event
   having been lost for good — stayed open alongside the next one hovered. On a
   rail of many triggers that meant two panels on screen at once.
+
+
+### Ingestion actions — 2026-09-23
+
+`DocumentWorkspace` offers no user cancellation while ingestion is pending or
+running. Delete remains disabled until the task settles; its tooltip explains
+that ingestion is active. A durable terminal event refreshes document state and
+quota. Cancellation scope and cleanup are deferred to a separate design.
+
+
+### Ingestion failure explanations — 2026-09-23
+
+Ingestion task steps display localized preparation, extraction and indexing
+labels. Failures show the backend's stage/cause explanation; task-detail copy
+includes the document name, task/document references, stage and error. Resources
+shows the durable failure even if its browse snapshot still looks ready, with
+an explicit fallback when no reason was recorded and a copyable document ID.
+Personal Resources loads both failures and successes so an old failure does not
+return after a successful retry. Existing tooltip, copy and task components are
+reused. These changes have static review only; runtime/visual checks are pending.
+
+
+### Ingestion relaunch — 2026-09-26
+
+Resources offers row and bulk relaunch for raw or failed documents, excluding
+active tasks and any document with an in-progress stage. A missing local task
+never makes a processing document relaunchable. Relaunch registers the returned
+per-document tasks in the same Redux/SSE flow as upload; there is no temporary
+90-second status override. Server admission is the final concurrency guard.
+
+Known ingestion profiles are preserved. A dialog asks for an explicit profile
+only for documents whose original profile is unknown; in a mixed selection this
+choice applies only to those documents. Cancel submits nothing. Pending requests
+suppress repeated clicks. Completed relaunches supply a new terminal task outcome
+so an earlier failure does not outlive a successful retry.

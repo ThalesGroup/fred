@@ -49,6 +49,9 @@ from fred_sdk.contracts.runtime import HumanInputRequest
 from langchain_core.messages import AIMessageChunk, BaseMessage
 from pydantic import ValidationError
 
+from fred_runtime.react.middleware.tool_call_recovery import (
+    is_tool_call_recovery_reference_block,
+)
 from fred_runtime.runtime_support.model_metadata import (
     normalize_token_usage,
     runtime_metadata_from_message,
@@ -210,6 +213,10 @@ class StreamChunkDecode:
 
     thought_fragments: tuple[str, ...] = ()
     text: str | None = None
+    has_typed_content_blocks: bool = False
+    has_reference_marker: bool = False
+    text_before_reference: str = ""
+    text_after_reference: str = ""
 
 
 def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
@@ -241,6 +248,27 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
     if chunk.tool_calls or chunk.tool_call_chunks:
         return StreamChunkDecode()
 
+    typed_blocks = isinstance(chunk.content, list) and all(
+        isinstance(block, dict) and isinstance(block.get("type"), str)
+        for block in chunk.content
+    )
+    has_reference_marker = typed_blocks and any(
+        is_tool_call_recovery_reference_block(block) for block in chunk.content
+    )
+    before_reference: list[str] = []
+    after_reference: list[str] = []
+    seen_reference = False
+    if has_reference_marker:
+        for block in chunk.content:
+            if not isinstance(block, dict):
+                continue
+            if is_tool_call_recovery_reference_block(block):
+                seen_reference = True
+            elif block.get("type") == "text" and isinstance(block.get("text"), str):
+                (after_reference if seen_reference else before_reference).append(
+                    block["text"]
+                )
+
     fragments: list[str] = []
     # Some OpenAI-compatible gateways surface reasoning at the top level rather than
     # as a content block (e.g. DeepSeek-style `reasoning_content`).
@@ -255,6 +283,10 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
     return StreamChunkDecode(
         thought_fragments=tuple(fragment for fragment in fragments if fragment),
         text=text or None,
+        has_typed_content_blocks=typed_blocks,
+        has_reference_marker=has_reference_marker,
+        text_before_reference="".join(before_reference),
+        text_after_reference="".join(after_reference),
     )
 
 

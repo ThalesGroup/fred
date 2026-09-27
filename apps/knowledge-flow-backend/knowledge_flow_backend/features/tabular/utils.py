@@ -200,24 +200,28 @@ def _parse_read_statement(query: str) -> dict[str, Any]:
     ```
     """
 
-    try:
-        statements = [statement for statement in duckdb.extract_statements(query) if statement.query.strip()]
-    except duckdb.Error as exc:
-        raise ValueError(f"Invalid SQL query: {exc}") from exc
-
-    if len(statements) != 1:
-        raise ValueError("Exactly one SQL statement is allowed")
-
-    if statements[0].type.name != "SELECT":
-        raise ValueError("Only SELECT or WITH statements are allowed in read-only mode")
-
-    parser_connection = duckdb.connect(database=":memory:")
+    parser_connection = duckdb.connect(
+        database=":memory:",
+        config={"errors_as_json": "true"},
+    )
     try:
         # Parsing never executes a plan, but DuckDB still spins up its default
         # thread pool sized from the *host's* CPU count, not the container's
         # limit — measured at +8 OS threads per call on an 8-core machine. One
         # thread is all a `json_serialize_sql` needs.
         parser_connection.execute("SET threads=1")
+        try:
+            statements = [statement for statement in parser_connection.extract_statements(query) if statement.query.strip()]
+        except duckdb.Error as exc:
+            detail = _format_duckdb_parse_error(query, exc)
+            raise ValueError(f"Invalid SQL query: {detail}") from exc
+
+        if len(statements) != 1:
+            raise ValueError("Exactly one SQL statement is allowed")
+
+        if statements[0].type.name != "SELECT":
+            raise ValueError("Only SELECT or WITH statements are allowed in read-only mode")
+
         serialized = parser_connection.execute("SELECT json_serialize_sql(?)", [query]).fetchone()
     finally:
         parser_connection.close()
@@ -239,6 +243,61 @@ def _parse_read_statement(query: str) -> dict[str, Any]:
         raise ValueError("Unable to parse SQL query")
 
     return statement
+
+
+def _format_duckdb_parse_error(query: str, error: duckdb.Error) -> str:
+    """Render DuckDB's structured parser error with the complete source line.
+
+    Why this exists:
+    - DuckDB's default text renderer shortens long SQL lines with ``...``.
+    - ``errors_as_json`` keeps the byte position and semantic message, allowing
+      Knowledge Flow to rebuild the diagnostic from the original SQL.
+
+    How to use:
+    - Pass the submitted SQL and the exception raised by a connection configured
+      with ``errors_as_json=true``.
+    - If the structured payload cannot be decoded, the original DuckDB text is
+      returned unchanged.
+    """
+
+    raw_error = str(error)
+    payload_start = raw_error.find("{")
+    if payload_start < 0:
+        return raw_error
+    try:
+        payload: object = json.loads(raw_error[payload_start:])
+    except json.JSONDecodeError:
+        return raw_error
+    if not isinstance(payload, dict):
+        return raw_error
+
+    exception_type = payload.get("exception_type")
+    exception_message = payload.get("exception_message")
+    raw_position = payload.get("position")
+    if not isinstance(exception_type, str) or not isinstance(exception_message, str):
+        return raw_error
+    if not isinstance(raw_position, (str, int)) or isinstance(raw_position, bool):
+        return f"{exception_type} Error: {exception_message}"
+    try:
+        byte_position = max(0, int(raw_position))
+    except (TypeError, ValueError):
+        return f"{exception_type} Error: {exception_message}"
+
+    query_prefix = query.encode("utf-8")[:byte_position].decode(
+        "utf-8",
+        errors="ignore",
+    )
+    character_position = len(query_prefix)
+    line_number = query.count("\n", 0, character_position) + 1
+    line_start = query.rfind("\n", 0, character_position) + 1
+    line_end = query.find("\n", character_position)
+    if line_end < 0:
+        line_end = len(query)
+    source_line = query[line_start:line_end]
+    column = character_position - line_start
+    line_prefix = f"LINE {line_number}: "
+    caret = " " * (len(line_prefix) + column) + "^"
+    return f"{exception_type} Error: {exception_message}\n\n{line_prefix}{source_line}\n{caret}"
 
 
 def _cte_entries(statement: dict[str, Any]) -> list[dict[str, Any]]:

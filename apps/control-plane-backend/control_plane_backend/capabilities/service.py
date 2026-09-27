@@ -214,6 +214,9 @@ def _catalog_entry_for_revoke(
     if capability_id.startswith(MODEL_CAPABILITY_NAMESPACE_PREFIX):
         return CapabilityCatalogEntry(
             id=capability_id,
+            source_id=capability_id,
+            # No public_version: this is a placeholder for an id the catalog
+            # does not know, not a described capability.
             version="0",
             name=capability_id,
             description=capability_id,
@@ -224,6 +227,9 @@ def _catalog_entry_for_revoke(
     if capability_id.startswith(APPLICATION_CATALOG_NAMESPACE_PREFIX):
         return CapabilityCatalogEntry(
             id=capability_id,
+            source_id=capability_id,
+            # No public_version: this is a placeholder for an id the catalog
+            # does not know, not a described capability.
             version="0",
             name=capability_id,
             description=capability_id,
@@ -350,8 +356,11 @@ async def _build_enablement_item(
     entry_impact = None if is_projected_product_object(entry) else impact.get(entry.id)
     return CapabilityEnablementItem(
         id=entry.id,
+        runtime_id=entry.runtime_id,
+        source_id=entry.source_id,
         name=entry.name,
         version=entry.version,
+        public_version=entry.public_version,
         icon=entry.icon,
         team_scope=entry.team_scope,
         default_on=default_on,

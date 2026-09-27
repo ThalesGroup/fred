@@ -18,7 +18,7 @@ tools (fred-capability-team-wiki), wired the way `agent_app.py` wires them in
 production, against a simulated control-plane HTTP client.
 
 Why this test exists: `libs/fred-runtime/tests/test_team_wiki_adapter.py` pins
-the adapter against a fake HTTP client; `libs/fred-capability-team-wiki/tests/
+the adapter against a fake HTTP client; `libs/capabilities/fred-capability-team-wiki/tests/
 test_team_wiki.py` pins the capability against a fake `TeamWikiPort`. Neither
 proves the two layers AGREE on when a cached snapshot renews after a conflict
 and when read coverage resets to a newly-read revision — the exact seam the
@@ -76,7 +76,13 @@ class _ScriptedClient:
         self.calls: list[dict[str, Any]] = []
 
     async def request(
-        self, method: str, url: str, *, headers: dict[str, str], json: Any = None
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: Any = None,
+        auth: httpx.Auth | object = httpx.USE_CLIENT_DEFAULT,
     ) -> Any:
         self.calls.append({"method": method, "url": url, "json": json})
         item = self._payloads.pop(0)

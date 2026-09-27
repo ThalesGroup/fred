@@ -258,6 +258,13 @@ applications:
       # (RFC §7.1, #1979). Inherited from the base chart, restated for clarity.
       command: ["python"]
       args: ["-m", "fred_runtime", "migrate"]
+    extraEnvVars:
+      - name: MINIO_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: fred-secrets
+            key: SEAWEEDFS_ADMIN_PASSWORD
+            optional: false
     # -------------------------------------------------------------------------
     # Fred Agents Runtime — Application Configuration
     # -------------------------------------------------------------------------
@@ -291,6 +298,11 @@ applications:
           read: 60
 
       storage:
+        object_store:
+          type: minio
+          endpoint: http://seaweedfs:8333
+          access_key: "admin"
+          secure: false
         postgres:
           host: postgres
           port: 5432
@@ -494,13 +506,22 @@ applications:
   # ===========================================================================
   knowledge-flow-worker:
     enabled: true
+    replicaCount: 1 # Compact local topology: one pod serves all four roles.
     deployment:
       enabled: true
     image:
       tag: "0.2"
     configuration:
       security:           *kf-security
-      scheduler:          *kf-scheduler
+      # One pod for the whole cluster, so it serves the four worker roles itself:
+      # one Temporal worker each, on the common queue and the three extraction
+      # queues. The chart's production values instead give each role its own
+      # deployment. Drop a role here and the documents routed to it wait on a
+      # queue nobody polls, indefinitely — an activity's start_to_close_timeout
+      # only starts counting once a worker has picked it up.
+      scheduler:
+        <<: *kf-scheduler
+        worker_roles: ["common", "extraction-fast", "extraction-medium", "extraction-rich"]
       content_storage:    *kf-content-storage
       embedding_model:    *kf-embedding-model
       chat_model:         *kf-chat-model

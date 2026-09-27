@@ -86,6 +86,9 @@ async def aggregate_capability_catalog(
     )
 
     catalog: dict[str, CapabilityCatalogEntry] = {}
+    # Which pods advertised each id, so the stamp below can be withdrawn from
+    # the ones more than one pod serves.
+    advertisers: dict[str, set[str]] = {}
     for source in deps.configuration.platform.runtime_catalog_sources:
         if not source.enabled:
             continue
@@ -199,6 +202,13 @@ async def aggregate_capability_catalog(
                     KNOWLEDGE_BASE_CATALOG_NAMESPACE_PREFIX,
                 )
                 continue
+            if entry.kind != "model":
+                # Stamp the advertising pod. Skipped for models on purpose:
+                # several pods can serve the same model and their entries are
+                # unioned just below, so a single pod id would be whichever one
+                # merged last.
+                advertisers.setdefault(entry.id, set()).add(source.runtime_id)
+                entry = entry.model_copy(update={"runtime_id": source.runtime_id})
             existing = catalog.get(entry.id)
             if (
                 existing is not None
@@ -229,6 +239,14 @@ async def aggregate_capability_catalog(
                     }
                 )
             catalog[entry.id] = entry
+    # Every pod installing fred-runtime advertises its built-in capabilities
+    # under the same ids, and two pods can configure the same MCP server. The
+    # last stamp would name one pod as the host of something they all serve.
+    for entry_id, pods in advertisers.items():
+        if len(pods) > 1:
+            catalog[entry_id] = catalog[entry_id].model_copy(
+                update={"runtime_id": None}
+            )
     # Applications are control-plane projections of deployment configuration.
     # Inject them after the pod loop so runtime outages cannot remove
     # registered application rows from the platform-admin entitlement surface.
@@ -247,7 +265,11 @@ async def aggregate_capability_catalog(
     for definition in await deps.get_knowledge_base_definition_store().list_all():
         entry = CapabilityCatalogEntry(
             id=knowledge_base_catalog_id(definition.id),
+            # Same shape as an application above: its own deployed unit, so no
+            # pod serves it and `runtime_id` stays unset.
+            source_id=definition.id,
             version=definition.version,
+            public_version=definition.version,
             name=definition.name,
             description=definition.description,
             icon="database",

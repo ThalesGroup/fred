@@ -1,3 +1,19 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 @keyframes pulse {
   0% {
     transform: scale(1);
@@ -14,7 +30,7 @@
 }
 
 /* Full-viewport shell: the only place allowed to size against the viewport.
-   The InfoBanner renders (or not) as the first flex child; .appContent takes
+   .appContent takes
    the remaining height and everything routed below it uses height: 100%. */
 .appShell {
   display: flex;
@@ -22,7 +38,18 @@
   height: 100vh;
 }
 
+/* A flex column: the announcement banners (auto height, rendered inside the
+   guards) sit above .routedContent, which takes the rest. A blocked guard
+   renders its own page as the only child and keeps the definite height its
+   `height: 100%` resolves against. */
 .appContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.routedContent {
   flex: 1;
   min-height: 0;
 }

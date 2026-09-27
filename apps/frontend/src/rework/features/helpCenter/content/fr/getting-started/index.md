@@ -1,44 +1,48 @@
 ---
 title: Bienvenue
 order: 0
-description: Ce qu'est la plateforme, à qui elle s'adresse et par où commencer.
+description: Ce qu'est la plateforme, ce qu'elle ne fait pas, et par où commencer.
 icon: rocket_launch
 ---
 
 # Bienvenue
 
-Bienvenue ! La plateforme réunit, au même endroit, des **assistants IA** (les
-agents), les **documents** de vos équipes et les **conversations** qui les font
-travailler ensemble. L'objectif : vous aider à obtenir des réponses fiables,
-qui s'appuient sur vos propres contenus plutôt que sur des généralités sans lien
-avec votre travail.
+La plateforme réunit au même endroit des **agents** — des assistants IA — les **documents** de
+vos équipes et les **conversations** qui font travailler les deux ensemble.
+L'intérêt : obtenir des réponses appuyées sur vos propres contenus, avec les
+passages utilisés affichés pour que vous puissiez vérifier.
 
-Concrètement, vous travaillez au sein d'une **équipe**. Une équipe rassemble
-des personnes, des agents configurés pour un usage précis, une bibliothèque de
-prompts réutilisables et un espace documentaire. Vous disposez aussi d'un
-**espace personnel** pour expérimenter seul avant de partager.
+Tout se passe dans une **équipe**. Une équipe rassemble des personnes, des
+assistants configurés pour un usage précis, une bibliothèque de textes
+réutilisables et un espace documentaire. Vous disposez aussi d'un **espace
+personnel**, une équipe dont vous êtes le seul membre, pour essayer des choses
+sans rien partager.
 
-## À qui s'adresse ce centre d'aide
+## Ce que la plateforme ne fait pas
 
-- **Vous débutez ?** Suivez les pages de cette section dans l'ordre : elles
-  vous mènent de la première connexion à votre première conversation.
-- **Vous animez une équipe ?** La section
-  [Fonctionnalités](/help/fr/features) détaille agents, prompts, ressources et
-  administration d'équipe.
-- **Vous cherchez à résoudre un cas précis ?** Les
-  [Guides et cas d'usage](/help/fr/guides) proposent des parcours complets,
-  du besoin au résultat.
+Il est utile de le préciser dès maintenant :
+
+- **Elle ne garantit pas l'exactitude.** Un agent peut se tromper et le
+  formuler avec assurance. Les réponses qui comptent se vérifient sur les
+  sources citées.
+- **Elle ne permet pas à chacun de créer une équipe.** La création relève de
+  l'administration de la plateforme — voir
+  [Équipes et droits](/help/fr/features/teams-and-permissions).
+- **Elle ne devine pas vos documents.** Un agent ne voit que les documents
+  qu'on lui a rattachés.
 
 ## Par où commencer
 
-1. [Première connexion](/help/fr/getting-started/first-steps) — se connecter,
-   choisir sa langue et se repérer dans l'interface.
-2. [Les concepts clés](/help/fr/getting-started/concepts) — le vocabulaire de
-   la plateforme et comment tout s'articule.
-3. [Rejoindre ou créer une équipe](/help/fr/getting-started/join-create-team) —
-   trouver son équipe ou en fonder une.
-4. [Première conversation](/help/fr/getting-started/first-conversation) — poser
-   une question à un agent et lire sa réponse.
+1. [Premiers pas](/help/fr/getting-started/first-steps) — se connecter, se
+   repérer, trouver son équipe.
+2. [Première conversation](/help/fr/getting-started/first-conversation) — poser
+   une question et lire la réponse.
 
-> Une question qui ne trouve pas sa réponse ? Utilisez la **recherche** en haut
-> de ce centre d'aide, ou consultez la [FAQ](/help/fr/faq).
+Ensuite, selon ce que vous faites : les [fonctionnalités](/help/fr/features) si
+vous configurez des agents pour votre équipe, les
+[guides](/help/fr/guides) si vous avez un objectif précis en tête.
+
+> Les nouveautés de chaque version sont publiées sur la page
+> [Notes de version](/release-notes). Si l'application se comporte autrement que
+> ce centre d'aide ne le décrit, **fiez-vous à l'application** et signalez
+> l'écart à votre administrateur.

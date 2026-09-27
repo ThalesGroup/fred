@@ -149,6 +149,13 @@ export interface CapabilityConfigWidgetProps {
   capabilityId: string;
   /** The team the agent is being created/edited for (scopes any lookups). */
   teamId?: string;
+  /**
+   * The instance being edited. Absent while an agent is being CREATED — a
+   * widget that reads stored state must treat that as "nothing stored yet".
+   */
+  agentInstanceId?: string;
+  /** The instance's saved display name, for naming anything it hands back. */
+  agentDisplayName?: string;
   disabled: boolean;
   /** This capability's current config values (the stored-config `config` object). */
   configValues: Record<string, unknown>;

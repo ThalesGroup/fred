@@ -61,6 +61,13 @@ class FileToProcessWithoutUser(BaseModel):
 
 class FileToProcess(FileToProcessWithoutUser):
     processed_by: KeycloakUser
+    # Set at submission from the file's profile, and read back by the workflow to
+    # route this document's extraction activity. Absent on the in-process paths
+    # that call the activities directly, which never reach a Temporal queue.
+    extraction_task_queue: Optional[str] = None
+    push_metadata_activity_timeout_seconds: int = 300
+    pull_metadata_activity_timeout_seconds: int = 1800
+    output_activity_timeout_seconds: int = 3600
     input_activity_timeout_seconds: int = 3600
     heartbeat_timeout_seconds: int = 300
     retry_initial_interval_seconds: int = 30
@@ -156,12 +163,14 @@ class FileToProcess(FileToProcessWithoutUser):
 
 
 class PipelineDefinition(BaseModel):
+    workflow_id: Optional[str] = None
     name: str
     files: List[FileToProcess]
     max_parallelism: int = 1
 
 
 class ProcessDocumentsRequest(BaseModel):
+    relaunch: bool = False
     files: List[FileToProcessWithoutUser]
     pipeline_name: str
 
@@ -172,6 +181,7 @@ class ProcessDocumentsResponse(BaseModel):
     total_files: int
     workflow_id: str
     run_id: Optional[str] = None
+    task_ids: dict[str, str] = Field(default_factory=dict)
 
 
 class ProcessLibraryRequest(BaseModel):

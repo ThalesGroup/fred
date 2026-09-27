@@ -15,14 +15,14 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 import pytest_asyncio
 
-from fred_core.common import PostgresStoreConfig
+from fred_core.common import PostgresStoreConfig, TemporalSchedulerConfig
 from fred_core.sql import create_async_engine_from_config
 from fred_core.tasks.bus import MemoryEventBus
 from fred_core.tasks.models import (
@@ -78,12 +78,18 @@ async def test_noop_workflow_control_is_inert():
 
 @pytest.mark.asyncio
 async def test_temporal_workflow_control_maps_describe_status():
+    rpc_timeouts: list[timedelta | None] = []
+
     class _Handle:
         def __init__(self, name: str) -> None:
             self._name = name
 
-        async def describe(self):
+        async def describe(self, *, rpc_timeout: timedelta | None = None):
+            rpc_timeouts.append(rpc_timeout)
             return SimpleNamespace(status=SimpleNamespace(name=self._name))
+
+        async def cancel(self, *, rpc_timeout: timedelta | None = None) -> None:
+            rpc_timeouts.append(rpc_timeout)
 
     class _Client:
         def __init__(self, name: str) -> None:
@@ -93,6 +99,8 @@ async def test_temporal_workflow_control_maps_describe_status():
             return _Handle(self._name)
 
     class _Provider:
+        config = TemporalSchedulerConfig(rpc_timeout_seconds=7)
+
         def __init__(self, name: str | None, raises: bool = False) -> None:
             self._name = name
             self._raises = raises
@@ -106,9 +114,13 @@ async def test_temporal_workflow_control_maps_describe_status():
     assert await control.get_status("wf-1") == ExecutionStatus.timed_out
     control = TemporalWorkflowControl(cast(Any, _Provider("COMPLETED")))
     assert await control.get_status("wf-1") == ExecutionStatus.completed
+    await control.cancel("wf-1")
     # unreachable → None (never false-fail)
     control = TemporalWorkflowControl(cast(Any, _Provider(None, raises=True)))
     assert await control.get_status("wf-1") is None
+    # Every describe and cancel carries the configured deadline, so a stalled
+    # Temporal frontend fails one call instead of pinning every task read.
+    assert rpc_timeouts == [timedelta(seconds=7)] * 3
 
 
 # ── 3. end-to-end service reconciliation on SQLite ───────────────────────────
@@ -468,3 +480,47 @@ async def test_hook_failure_does_not_break_reconciliation(tmp_path, build_servic
     run = await service.get_run(task_id)
     assert run is not None
     assert TaskState(run.state) == TaskState.failed
+
+
+@pytest.mark.asyncio
+async def test_pending_delivery_failure_does_not_skip_reconciliation():
+    from fred_core.tasks.service import run_reconcile_sweeper
+
+    called = asyncio.Event()
+    order = []
+
+    async def retry():
+        order.append("delivery")
+        raise RuntimeError("transport unavailable")
+
+    class Service:
+        async def reconcile_stale(self, **kwargs):
+            order.append("reconcile")
+            called.set()
+            return 0
+
+    worker = asyncio.create_task(
+        run_reconcile_sweeper(Service(), before_reconcile=retry)  # type: ignore[arg-type]
+    )
+    await asyncio.wait_for(called.wait(), timeout=1)
+    worker.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await worker
+    assert order[:2] == ["delivery", "reconcile"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("execution_id,failed", [(None, True), ("workflow", False)])
+async def test_submission_failure_only_ends_a_still_unbound_task(
+    tmp_path, build_service, execution_id, failed
+):
+    service, _ = await build_service(tmp_path, {})
+    task_id = await _new_task(service, execution_id=execution_id)
+    assert (
+        await service.fail_task(task_id, "admission failed", only_if_unbound=True)
+        is failed
+    )
+    run = await service.get_run(task_id)
+    assert run is not None
+    assert TaskState(run.state) == (TaskState.failed if failed else TaskState.pending)
+    assert len(await service.replay(task_id, after_seq=-1)) == (1 if failed else 0)

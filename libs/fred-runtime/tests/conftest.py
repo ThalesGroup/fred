@@ -16,12 +16,58 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 import pytest
+from fred_core.portable.observability import Span, Tracer
+from fred_core.security.backend_to_backend_auth import (
+    M2MAuthConfig,
+    M2MTokenProvider,
+    TokenLease,
+)
+from fred_core.security.delegation import DelegationConfig
 from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    set_delegation_runtime,
+)
 from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
+
+
+class StaticWorkloadTokens(M2MTokenProvider):
+    def __init__(self, token: str = "workload-token") -> None:
+        super().__init__(
+            M2MAuthConfig(
+                keycloak_realm_url="https://iam.invalid/realms/test",
+                client_id="test-workload",
+                secret_env="FRED_TEST_UNUSED_WORKLOAD_SECRET",  # pragma: allowlist secret - env var name only
+            )
+        )
+        self.token = token
+
+    async def get_token(self) -> str:
+        return self.token
+
+    async def get_token_lease(self) -> TokenLease:
+        return TokenLease(self.token, self._generation)
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+        if lease.generation == self._generation:
+            self._generation += 1
+        return TokenLease(self.token, self._generation)
+
+
+def install_delegation_runtime(
+    token_provider: M2MTokenProvider | None,
+) -> DelegationRuntime:
+    runtime = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True),
+        token_provider=token_provider,
+    )
+    set_delegation_runtime(runtime)
+    return runtime
 
 
 def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:
@@ -91,6 +137,7 @@ def minimal_config() -> AgentPodConfig:
     """Minimal offline AgentPodConfig with security disabled."""
     return AgentPodConfig.model_validate(
         {
+            "app": {"runtime_id": "test-pod"},
             "security": {
                 "m2m": {
                     "enabled": False,
@@ -125,3 +172,45 @@ def static_factory(
     fake_model: ToolFriendlyFakeChatModel,
 ) -> StaticChatModelFactory:
     return StaticChatModelFactory(fake_model)
+
+
+class RecordingSpan(Span):
+    def __init__(self) -> None:
+        self.attributes: dict[str, object] = {}
+        self.ended = False
+        self.io: list[dict[str, object]] = []
+
+    def set_io(self, *, input: Any = None, output: Any = None) -> None:
+        self.io.append({"input": input, "output": output})
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attributes[key] = value
+
+    def end(self) -> None:
+        self.ended = True
+
+
+class RecordingTracer(Tracer):
+    def __init__(self, *, capture: bool = False) -> None:
+        self._capture = capture
+        self.spans: list[tuple[str, dict[str, object], RecordingSpan]] = []
+        self.parents: list[Span | None] = []
+
+    @property
+    def captures_content(self) -> bool:
+        return self._capture
+
+    def start_span(
+        self,
+        name: str,
+        *,
+        context: object | None = None,
+        attributes: Any = None,
+        parent: Span | None = None,
+        **kwargs: object,
+    ) -> Span:
+        del context, kwargs
+        span = RecordingSpan()
+        self.parents.append(parent)
+        self.spans.append((name, dict(attributes or {}), span))
+        return span

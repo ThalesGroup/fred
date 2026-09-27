@@ -1,7 +1,16 @@
 // Copyright Thales 2026
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import Button from "../../atoms/Button/Button";
@@ -69,6 +78,8 @@ export function DialogPrimitive({
   const originRef = useRef<HTMLSpanElement | null>(null);
   const openingFocus = useRef<HTMLElement | null>(null);
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [bodyScrolls, setBodyScrolls] = useState(false);
   const callbacks = useRef({ onCancel, onConfirm, confirmDisabled });
   callbacks.current = { onCancel, onConfirm, confirmDisabled };
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
@@ -148,6 +159,22 @@ export function DialogPrimitive({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
+  // A body that is all text has nothing focusable inside it, so once it
+  // scrolls a keyboard-only user cannot reach it. Making it a tab stop fixes
+  // that, but only while it actually overflows — an unconditional one would
+  // add a dead stop to every short dialog in the app. Measured after each
+  // render (and on resize) because the body grows and shrinks with its own
+  // content, not only with the window.
+  useEffect(() => {
+    const measure = () => {
+      const node = contentRef.current;
+      setBodyScrolls(!!node && node.scrollHeight > node.clientHeight);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  });
+
   if (!open) return null;
   return (
     <>
@@ -175,7 +202,9 @@ export function DialogPrimitive({
                   {title}
                 </p>
               </div>
-              <div className={styles.content}>{children}</div>
+              <div ref={contentRef} className={styles.content} tabIndex={bodyScrolls ? 0 : undefined}>
+                {children}
+              </div>
               <div className={styles.actions}>
                 {!hideCancel && (
                   <Button color="on-surface" variant="text" size="medium" onClick={onCancel}>

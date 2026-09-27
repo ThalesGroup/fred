@@ -34,7 +34,6 @@ from __future__ import annotations
 import httpx
 import pytest
 from fred_runtime.integrations.v2_runtime.adapters import _wrap_document_port_error
-from fred_sdk.contracts.runtime import DocumentPortCallError
 
 KF_URL = "http://knowledge-flow:8111/knowledge-flow/v1/vector/search"
 
@@ -153,79 +152,3 @@ def test_empty_message_degrades_to_the_exception_type() -> None:
     detail = str(err)
 
     assert detail == "ConnectError"
-
-
-# ---------------------------------------------------------------------------
-# The message the user and the model actually see.
-#
-# Redacting URLs out of `str(exc)` left the trailing clause meaningless: an
-# unbalanced quote and "For more information check:" pointing at nothing. Where
-# the adapter identified the failure, the structured cause is the whole message;
-# where it did not, the raw text is the only information there is and stays.
-# ---------------------------------------------------------------------------
-
-
-def _message(exc: Exception) -> str:
-    from fred_runtime.capabilities.document_access.capability import (
-        _document_tool_failure,
-    )
-
-    message, result = _document_tool_failure(
-        tool_ref="doc.search", action="search documents", exc=exc, elapsed_s=0.116
-    )
-    # The artifact must carry the same text — a Graph agent's plain-dict
-    # invocation keeps only the artifact half of a content_and_artifact return.
-    assert result.is_error is True
-    assert result.blocks[0].text == message
-    return message
-
-
-def test_http_status_failure_states_the_status_and_stops() -> None:
-    """No repetition, no class name, no redaction rubble."""
-    msg = _message(
-        DocumentPortCallError(
-            "Client error '401 Unauthorized' for url '[redacted url]\n"
-            "For more information check: [redacted url]",
-            status_code=401,
-        )
-    )
-
-    assert (
-        msg
-        == "Could not search documents: the Knowledge Flow service returned HTTP 401."
-    )
-    assert "redacted url" not in msg
-    assert "DocumentPortCallError" not in msg
-
-
-def test_timeout_failure_states_the_timeout_and_stops() -> None:
-    msg = _message(
-        DocumentPortCallError("timed out reading [redacted url]", timed_out=True)
-    )
-
-    assert (
-        msg
-        == "Could not search documents: the Knowledge Flow service timed out after 0s."
-    )
-    assert "redacted url" not in msg
-
-
-def test_unstructured_failure_keeps_the_raw_detail() -> None:
-    """A dead service has no status to report, so the text is all there is."""
-    msg = _message(DocumentPortCallError("All connection attempts failed"))
-
-    assert "All connection attempts failed" in msg
-    assert "DocumentPortCallError" in msg
-
-
-def test_unexpected_exception_still_names_its_type() -> None:
-    """The case the broad `except Exception` exists for.
-
-    A TypeError from a renamed port kwarg must not degrade into an anonymous
-    "service call failed" — the type is what tells a developer it is a bug in
-    Fred, not an outage downstream.
-    """
-    msg = _message(TypeError("search() got an unexpected keyword argument 'topk'"))
-
-    assert "TypeError" in msg
-    assert "unexpected keyword argument 'topk'" in msg

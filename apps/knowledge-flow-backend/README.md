@@ -16,6 +16,9 @@ MCP (Model Composition and Prompting) endpoints to serve structured knowledge to
 
 ---
 
+For Temporal roles, queues and the document lifecycle, see the
+[ingestion architecture](../../docs/swift/design/INGESTION.md).
+
 ## What It Does
 
 Knowledge Flow provides two primary services:
@@ -38,6 +41,11 @@ Knowledge Flow supports one tabular data runtime that can be queried with SQL:
 | ----------------------- | ------------------------------------------- | -------------------------------------------------------- | ----------- |
 | Dataset-centric runtime | `content_storage` + `storage.tabular_store` | One Parquet artifact per document + DuckDB at query time | Recommended |
 
+Tabular access denials return HTTP 403 and direct callers to `list_tabular_documents`
+for valid `document_uid` values: filenames and SQL aliases are not document UIDs.
+The same guidance applies to inaccessible and invalid identifiers without revealing
+whether a denied document exists; permission checks remain unchanged.
+
 All processing pipelines are defined declaratively in `config/configuration.yaml`.
 
 ---
@@ -54,7 +62,7 @@ To learn how to:
 
 For shared startup config and policy conventions across all Fred backends, read:
 
-- [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../docs/swift/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
+- [`docs/CONFIGURATION_AND_POLICY_CONVENTIONS.md`](../../docs/swift/platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md)
 
 Key point: Knowledge Flow uses the same `ENV_FILE` + `CONFIG_FILE` contract as Agentic and Control Plane.
 

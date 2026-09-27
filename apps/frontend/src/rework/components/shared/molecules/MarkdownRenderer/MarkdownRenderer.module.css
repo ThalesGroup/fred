@@ -1,3 +1,19 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /* Root container — prose reading width capped at 65ch for comfortable line length */
 .root {
   max-width: var(--content-prose-max-width);
@@ -8,6 +24,14 @@
   user-select: text;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Phrasing-content variant (`inline`) — the wrapper and its paragraphs are
+   spans, so it must not impose a reading measure or a block box on the line
+   it sits in. Its container decides the width. */
+.inline {
+  display: inline;
+  max-width: none;
 }
 
 /* Full-width variant — used by the document preview. Running text sits in a
@@ -99,6 +123,32 @@
 .root :global(h6) {
   color: var(--on-surface);
   font: var(--font-title-medium);
+}
+
+.root.compact {
+  font: var(--font-body-small);
+}
+
+.root.compact > :global(* + *) {
+  margin-top: var(--spacing-xs);
+}
+
+.root.compact > :global(* + h1),
+.root.compact > :global(* + h2),
+.root.compact > :global(* + h3) {
+  margin-top: var(--spacing-s);
+}
+
+.root.compact :global(h1) {
+  font: var(--font-title-small-emphasized);
+}
+
+.root.compact :global(h2),
+.root.compact :global(h3),
+.root.compact :global(h4),
+.root.compact :global(h5),
+.root.compact :global(h6) {
+  font: var(--font-body-medium-emphasized);
 }
 
 /* ---- Anchored headings (headingAnchors prop — Help Center articles) ---- */

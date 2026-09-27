@@ -16,17 +16,20 @@
 
 A source key and a version are the caller's own vocabulary: bounded, never read.
 A path says where in the library the document goes, so it is refused unless
-nothing but a location inside that library is left. And what comes back from a
-failure the caller did not cause is bounded too.
+nothing but a location inside that library is left. What comes back from a
+failure the caller did not cause is bounded too, and what it is told about
+where a write stands is read off the pipeline's stages, not guessed.
 """
 
 import pytest
+from fred_core.documents.document_structures import Processing, ProcessingStage, ProcessingStatus
 
 from knowledge_flow_backend.features.library_sync.controller import _bounded_failure
 from knowledge_flow_backend.features.library_sync.structures import (
     MAX_SOURCE_KEY_LENGTH,
     MAX_VERSION_LENGTH,
     InvalidSourceRequest,
+    document_state,
     split_document_path,
     validate_source_key,
     validate_version,
@@ -114,3 +117,31 @@ def test_a_failure_says_its_kind_and_none_of_the_server_s_business():
 def test_the_kind_is_what_tells_a_retry_from_a_dead_end():
     assert _bounded_failure(TimeoutError()).detail["failure"] == "TimeoutError"
     assert _bounded_failure(ValueError("x")).detail["failure"] == "ValueError"
+
+
+RAW, PREVIEW, VECTOR, SQL = ProcessingStage.RAW_AVAILABLE, ProcessingStage.PREVIEW_READY, ProcessingStage.VECTORIZED, ProcessingStage.SQL_INDEXED
+DONE, RUNNING, FAILED = ProcessingStatus.DONE, ProcessingStatus.IN_PROGRESS, ProcessingStatus.FAILED
+
+
+@pytest.mark.parametrize(
+    "stages,state",
+    [
+        ({}, "in_progress"),
+        ({RAW: DONE}, "in_progress"),
+        ({RAW: DONE, PREVIEW: RUNNING}, "in_progress"),
+        ({RAW: DONE, PREVIEW: DONE}, "in_progress"),
+        ({RAW: DONE, PREVIEW: DONE, VECTOR: RUNNING}, "in_progress"),
+        ({RAW: DONE, PREVIEW: DONE, VECTOR: DONE}, "succeeded"),
+        ({RAW: DONE, SQL: DONE}, "succeeded"),
+        ({RAW: DONE, PREVIEW: FAILED}, "failed"),
+        ({RAW: DONE, PREVIEW: DONE, VECTOR: FAILED}, "failed"),
+    ],
+)
+def test_where_a_write_stands_is_read_off_the_pipeline_s_stages(stages, state):
+    """Only an output stage done, with nothing failed or running, is success.
+
+    Acceptance records the raw stage alone and a rewrite starts over from it. A
+    preview done with vectorization not yet begun is the gap between two
+    activities — and where a timed-out run is left — not a finished document.
+    """
+    assert document_state(Processing(stages=stages)) == state

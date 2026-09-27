@@ -14,7 +14,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { TFunction } from "i18next";
-import { relativeTime } from "./taskLabels";
+import { relativeTime, stepLabel, taskSupportDetails } from "./taskLabels";
 
 const SEC = 1_000;
 const MIN = 60 * SEC;
@@ -68,5 +68,41 @@ describe("relativeTime", () => {
   it("returns correct hour count for multi-hour gaps", () => {
     const now = Date.now();
     expect(relativeTime(now - 3 * HOUR, t, now)).toBe("3h ago");
+  });
+});
+
+describe("ingestion support labels", () => {
+  it("translates known ingestion steps without changing other task kinds", () => {
+    expect(stepLabel({ kind: "ingestion", step: "indexing" }, t)).toBe("rework.tasks.ingestionStep.indexing");
+    expect(stepLabel({ kind: "migration", step: "indexing" }, t)).toBe("indexing");
+  });
+
+  it("copies the document, task reference, stage and failure together", () => {
+    const translate = ((key: string, options?: { id: string }) =>
+      options?.id ? `Reference: ${options.id}` : key) as TFunction;
+    const details = taskSupportDetails(
+      {
+        taskId: "task-123",
+        kind: "ingestion",
+        target: { type: "document", id: "doc-456", label: "report.pdf" },
+        step: "indexing",
+        error: "Configured attempts exhausted.",
+        owner: null,
+        localOnly: false,
+        state: "failed",
+        progress: null,
+        lastSeq: 3,
+        registeredAt: 1,
+        terminalAt: 2,
+        acknowledgedAt: null,
+        warnings: null,
+      },
+      translate,
+    );
+    expect(details).toContain("report.pdf");
+    expect(details).toContain("task-123");
+    expect(details).toContain("doc-456");
+    expect(details).toContain("indexing");
+    expect(details).toContain("Configured attempts exhausted.");
   });
 });

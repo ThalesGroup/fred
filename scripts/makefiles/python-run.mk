@@ -11,6 +11,14 @@ UNAME_S := $(shell uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')
 HOST ?= $(if $(filter darwin,$(UNAME_S)),127.0.0.1,0.0.0.0)
 UVICORN_OPTIONS ?=
 
+# Editable dependencies live outside the app cwd. Derive watches from its sources
+# so new capability packages are picked up without maintaining a second list.
+RELOAD_ROOTS = $(CURDIR) $(abspath $(addprefix $(CURDIR)/,$(shell awk '/^\[tool\.uv\.sources\]/{s=1;next} /^\[/{s=0} s' $(CURDIR)/pyproject.toml | sed -n 's/.*path *= *"\([^"]*\)".*/\1/p')))
+# The package, never the root: a root also holds .venv/ and target/, gigabytes
+# watchfiles would walk on every start.
+RELOAD_DIRS = $(filter-out %/tests,$(patsubst %/,%,$(dir $(wildcard $(addsuffix /*/__init__.py,$(RELOAD_ROOTS))))))
+RELOAD_OPTIONS = --reload $(foreach d,$(RELOAD_DIRS) $(wildcard $(CURDIR)/config),--reload-dir $(d)) --reload-include '*.yaml'
+
 ##@ Run
 
 .PHONY: run-local
@@ -35,13 +43,16 @@ run-prod: export CONFIG_FILE = ./config/configuration_prod.yaml
 run-prod: run ## run the app with prod like configuration
 
 .PHONY: rrun
-rrun: UVICORN_OPTIONS = --reload
+rrun: UVICORN_OPTIONS = $(RELOAD_OPTIONS)
 rrun: run ## run the app with uvicorn reloader
 
 .PHONY: rrun-prod
-rrun-prod: UVICORN_OPTIONS = --reload
+rrun-prod: UVICORN_OPTIONS = $(RELOAD_OPTIONS)
 rrun-prod: run-prod ## run the app with uvicorn reloader in production mode
 
 .PHONY: run-prod-uv-workers
 run-prod-uv-workers: UVICORN_OPTIONS = --workers 4
 run-prod-uv-workers: run-prod ## run the app in production mode with multiple uvicorn workers (to simulate a k8s setup with replicas easily)
+
+# Generated local identity policies; never auto-discovered by deployed applications.
+run run-worker: export FRED_LOCAL_DELEGATION_FILE ?= $(wildcard $(ROOT_DIR)/config/.delegation.local.json)

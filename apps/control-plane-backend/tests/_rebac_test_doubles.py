@@ -43,8 +43,7 @@ class CountingRebacEngine(NoopRebacEngine):
     """Test-only strict `RebacEngine` double.
 
     Subclasses `NoopRebacEngine` rather than `RebacEngine` directly, so a
-    method a given test never exercises (`delete_relation`,
-    `delete_all_relations_of_type`, ...) falls back to a real no-op instead
+    method a given test never exercises falls back to a real no-op instead
     of every test file re-implementing every abstract method. `enabled` is
     forced back to `True` (unlike the real no-op engine) so `add_relation`'s
     audit trail and `RebacEngine._ensure_personal_team_editor`'s self-heal

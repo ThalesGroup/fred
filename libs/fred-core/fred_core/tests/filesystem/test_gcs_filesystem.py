@@ -16,6 +16,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -158,10 +161,9 @@ async def test_read_missing_raises(gcs_fs):
 
 
 @pytest.mark.asyncio
-async def test_stat_missing_is_virtual_directory(gcs_fs):
-    info = await gcs_fs.stat("ghost")
-    assert info.type == FilesystemResourceInfo.DIRECTORY
-    assert info.size is None
+async def test_stat_missing_raises(gcs_fs):
+    with pytest.raises(FileNotFoundError, match="ghost"):
+        await gcs_fs.stat("ghost")
 
 
 @pytest.mark.asyncio
@@ -174,6 +176,42 @@ async def test_delete_recurses_then_listing_is_empty(gcs_fs):
 
     assert await gcs_fs.exists("docs/a.txt") is False
     assert await gcs_fs.list("docs") == []
+
+
+@pytest.mark.asyncio
+async def test_delete_rejects_bucket_root(gcs_fs):
+    with pytest.raises(ValueError, match="filesystem root"):
+        await gcs_fs.delete("")
+
+
+@pytest.mark.asyncio
+async def test_read_does_not_block_the_event_loop(gcs_fs, monkeypatch):
+    blob = gcs_fs.bucket.blob("note.txt")
+
+    def _slow_download():
+        time.sleep(0.05)
+        return b"hello"
+
+    monkeypatch.setattr(
+        blob.__class__, "download_as_bytes", lambda self: _slow_download()
+    )
+    loop = asyncio.get_running_loop()
+    heartbeat = loop.create_future()
+    loop.call_soon(heartbeat.set_result, None)
+
+    assert await gcs_fs.read("note.txt") == b"hello"
+    assert heartbeat.done()
+
+
+@pytest.mark.asyncio
+async def test_read_info_log_does_not_expose_object_key(gcs_fs, caplog):
+    gcs_fs.bucket.blob("conversations/session/private.txt").upload_from_string(b"x")
+
+    with caplog.at_level(logging.INFO):
+        await gcs_fs.read("conversations/session/private.txt")
+
+    assert "conversations/session/private.txt" not in caplog.text
+    assert "[GCS_READ] bucket=test-bucket" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { EntityIdentity } from "@shared/molecules/EntityIdentity/EntityIdentity.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
@@ -396,15 +397,14 @@ export default function FeaturesPage() {
       label: t("rework.admin.capabilities.col.capability"),
       size: "2.4fr",
       cellRenderer: (cap) => (
-        <div className={`${styles.capCell} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
-          <Icon category="outlined" type={toIconType(cap.icon, "tune")} />
-          <div className={styles.capText}>
-            <span className={styles.capName} title={capabilityLabel(t, cap)}>
-              {capabilityLabel(t, cap)}
-            </span>
-            <span className={styles.capVersion}>v{cap.version}</span>
-          </div>
-        </div>
+        <EntityIdentity
+          name={capabilityLabel(t, cap)}
+          icon={toIconType(cap.icon, "tune")}
+          sourceId={cap.source_id}
+          runtimeId={cap.runtime_id}
+          version={cap.public_version}
+          dimmed={rowIsUnused(cap)}
+        />
       ),
     },
     // Reasoning activation (REASON-01 §5) — a models-only column, so it is

@@ -27,6 +27,7 @@ from typing import Any, cast
 
 import httpx
 import pytest
+from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.documents import declare_library_synchronized
 
@@ -59,20 +60,14 @@ class _RecordingTransport:
         self.status = status
         self.text = text
         self.calls: list[tuple[str, dict, dict]] = []
+        self.auth: httpx.Auth | None = None
 
     def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
         recorder = self
 
-        class _Tokens:
-            def __init__(self, _config) -> None:
-                pass
-
-            async def get_token(self) -> str:
-                return "a-token"  # pragma: allowlist secret
-
         class _Client:
-            def __init__(self, **_kwargs) -> None:
-                pass
+            def __init__(self, **kwargs) -> None:
+                recorder.auth = kwargs.get("auth")
 
             async def __aenter__(self) -> "_Client":
                 return self
@@ -80,17 +75,14 @@ class _RecordingTransport:
             async def __aexit__(self, *_: object) -> None:
                 return None
 
-            async def put(self, url, *, json, headers):
-                recorder.calls.append((url, json, headers))
+            async def put(self, url, *, json, headers=None):
+                recorder.calls.append((url, json, headers or {}))
                 return httpx.Response(
                     recorder.status,
                     text=recorder.text,
                     request=httpx.Request("PUT", url),
                 )
 
-        monkeypatch.setattr(
-            "fred_sdk.knowledge_base.documents.M2MTokenProvider", _Tokens
-        )
         monkeypatch.setattr(
             "fred_sdk.knowledge_base.documents.httpx.AsyncClient", _Client
         )
@@ -114,7 +106,7 @@ def test_the_pod_names_itself_and_the_library_it_fills(monkeypatch):
         == f"http://kf.invalid/knowledge-flow/v1/libraries/{LIBRARY}/synchronized-by"
     )
     assert body == {"synchronized_by": f"knowledge_base:{INSTANCE}"}
-    assert headers["Authorization"].startswith("Bearer ")
+    assert isinstance(transport.auth, M2MBearerAuth)
 
 
 def test_a_pod_keeping_its_own_store_declares_nothing(monkeypatch):

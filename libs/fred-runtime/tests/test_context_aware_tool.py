@@ -27,10 +27,11 @@ capability-native), not just `ContextAwareTool`-wrapped ones.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
+import pytest
 from fred_runtime.common.context_aware_tool import ContextAwareTool
-from fred_sdk.contracts.context import RuntimeContext
+from fred_sdk.contracts.context import RuntimeContext, ToolContentKind
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from langchain_core.tools import ArgsSchema, BaseTool
 from pydantic import BaseModel
@@ -59,11 +60,82 @@ class _FakeSearchTool(BaseTool):
         return "ok"
 
 
+class _ReadQueryArgs(BaseModel):
+    sql: str
+
+
+class _FailingReadQueryTool(BaseTool):
+    name: str = "read_query"
+    description: str = "Run a read-only query."
+    args_schema: ArgsSchema | None = _ReadQueryArgs
+    response_format: Literal["content", "content_and_artifact"] = "content_and_artifact"
+    failure_message: str = (
+        "Error calling read_query. Status code: 400. Response: "
+        '{"detail":"Binder Error: Referenced column amount_typo not found"}'
+    )
+
+    def _run(self, *args: Any, **kwargs: Any) -> str:
+        raise NotImplementedError
+
+    async def _arun(self, *args: Any, **kwargs: Any) -> str:
+        raise RuntimeError(self.failure_message)
+
+
 class _FakeAgentSettings:
     id = "agent-1"
     team_id: str | None = "team-1"
     tuning: AgentTuning | None = None
     active_mcp_servers: Sequence[MCPServerRef] = ()
+
+
+@pytest.mark.asyncio
+async def test_fastapi_mcp_read_query_400_returns_a_typed_sql_failure() -> None:
+    """The model keeps a useful tool result while the runtime gets a trusted,
+    HTTP-free SQL failure payload for the trace and observability layers."""
+    wrapper = ContextAwareTool(
+        base_tool=_FailingReadQueryTool(),
+        context_provider=lambda: None,
+        agent_settings_provider=_FakeAgentSettings,
+    )
+
+    content, artifact = await wrapper._arun(sql="SELECT amount_typo FROM d_sales")
+
+    assert content == "Error: Binder Error: Referenced column amount_typo not found"
+    assert "HTTP" not in content
+    assert artifact is not None
+    assert artifact.is_error is True
+    assert len(artifact.blocks) == 1
+    assert artifact.blocks[0].kind == ToolContentKind.TEXT
+    assert artifact.blocks[0].text == (
+        "Binder Error: Referenced column amount_typo not found"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure_message",
+    [
+        (
+            "Error calling read_query. Status code: 500. Response: "
+            '{"detail":"internal provider secret"}'
+        ),
+        "Error calling read_query. Status code: 400. Response: not-json",
+    ],
+)
+async def test_read_query_untrusted_failures_keep_only_the_generic_artifact(
+    failure_message: str,
+) -> None:
+    wrapper = ContextAwareTool(
+        base_tool=_FailingReadQueryTool(failure_message=failure_message),
+        context_provider=lambda: None,
+        agent_settings_provider=_FakeAgentSettings,
+    )
+
+    _content, artifact = await wrapper._arun(sql="SELECT secret FROM d_sales")
+
+    assert artifact is not None
+    assert artifact.is_error is True
+    assert artifact.blocks == ()
 
 
 def test_context_aware_tool_injects_document_filters_for_mcp_search_tools() -> None:

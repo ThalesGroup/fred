@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import pytest
@@ -63,3 +77,18 @@ def test_validate_read_query_rejects_schema_qualified_tables_even_when_base_name
             "SELECT * FROM pg_catalog.pg_tables",
             allowed_relations={"pg_tables"},
         )
+
+
+def test_validate_read_query_keeps_the_full_sql_line_in_parser_errors():
+    query = 'SELCT DISTINCT "Véhicule" FROM d_9600f46d555f_parc_automobile_t1 WHERE "Véhicule" IS NOT NULL ORDER BY "Véhicule"'
+
+    with pytest.raises(ValueError) as error:
+        validate_read_query(
+            query,
+            allowed_relations={"d_9600f46d555f_parc_automobile_t1"},
+        )
+
+    message = str(error.value)
+    assert 'syntax error at or near "SELCT"' in message
+    assert f"LINE 1: {query}" in message
+    assert "..." not in message

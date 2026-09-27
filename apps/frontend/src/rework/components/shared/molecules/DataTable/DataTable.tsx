@@ -95,6 +95,15 @@ interface DataTableProps<T> {
    *  `sortValue`. */
   sortState?: SortState | null;
   onSortChange?: (next: SortState | null) => void;
+  /** Whether a third press on the sorted column clears the sort (default) or
+   *  simply flips it back to ascending.
+   *
+   *  Clearing only means something when there is an unsorted order to return
+   *  to — the `data` array's own. A server-ordered table has none: a page is
+   *  always cut out of some order, so clearing would have to fall back to a
+   *  default, and pressing one column's header would visibly move the sort to
+   *  another column. Pass `false` there. */
+  sortClearable?: boolean;
 }
 
 export interface DataTableColumn<T> {
@@ -152,6 +161,7 @@ export default function DataTable<T>({
   onSelectionChange,
   sortState: controlledSortState,
   onSortChange,
+  sortClearable = true,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
@@ -178,7 +188,13 @@ export default function DataTable<T>({
     const isCurrent = sortState?.columnLabel === column.label;
     // Cycle asc -> desc -> unsorted, matching the small-header sort icon
     // convention (arrow visible only on the active column).
-    const nextDirection: SortDirection | null = !isCurrent ? "asc" : sortState!.direction === "asc" ? "desc" : null;
+    const nextDirection: SortDirection | null = !isCurrent
+      ? "asc"
+      : sortState!.direction === "asc"
+        ? "desc"
+        : sortClearable
+          ? null
+          : "asc";
     const next: SortState | null = nextDirection ? { columnLabel: column.label, direction: nextDirection } : null;
     if (sortIsControlled) {
       onSortChange!(next);
@@ -292,9 +308,12 @@ export default function DataTable<T>({
                 >
                   <span className={styles["header-content"]}>{column.label}</span>
                   <span className={styles["sort-icon"]} data-visible={isSorted || undefined}>
+                    {/* The arrow points the way the list runs, as a file
+                        explorer does: down for ascending (A at the top, Z at
+                        the bottom), up for descending. */}
                     <Icon
                       category="outlined"
-                      type={isSorted && sortState?.direction === "desc" ? "arrow_downward" : "arrow_upward"}
+                      type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"}
                     />
                   </span>
                 </button>

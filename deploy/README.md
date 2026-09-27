@@ -2,6 +2,9 @@
 
 This directory contains Docker Compose files and Helm Charts for deployment of **Fred** elements.
 
+An importable operational dashboard for agent runtimes is in
+[`grafana/`](grafana/README.md).
+
 ## Security profiles & classification tiers
 
 Fred deployments target a classification level (e.g. **C1** baseline, **C2**, **C3**

@@ -55,7 +55,12 @@ from fred_sdk.contracts.capability.manifest import (
 from fred_sdk.contracts.capability.manifest import (
     TeamScopePolicy as ManifestTeamScopePolicy,
 )
-from fred_sdk.contracts.models import AgentTuning, FieldSpec, MCPServerConfiguration
+from fred_sdk.contracts.models import (
+    AgentTuning,
+    ClientAuthMode,
+    FieldSpec,
+    MCPServerConfiguration,
+)
 from fred_sdk.contracts.runtime import RuntimeServices
 from pydantic import BaseModel, ValidationError
 
@@ -517,6 +522,32 @@ def test_mcp_server_configuration_team_scope_defaults_to_admin_gated() -> None:
         {"id": "tavily", "name": "mcp.tavily.name"}
     )
     assert server.team_scope is TeamScopePolicy.ADMIN_GATED
+
+
+def test_client_auth_modes_are_exactly_the_three_declared_ones() -> None:
+    # A configuration file names the mode as a plain string, so the wire values
+    # are the contract — a renamed or dropped one breaks every deployment.
+    assert {mode.value for mode in list(ClientAuthMode)} == {
+        "user_token",
+        "no_token",
+        "delegated",
+    }
+
+
+def test_mcp_server_configuration_accepts_the_delegated_auth_mode() -> None:
+    server = MCPServerConfiguration.model_validate(
+        {"id": "tavily", "name": "mcp.tavily.name", "auth_mode": "delegated"}
+    )
+
+    assert server.auth_mode is ClientAuthMode.DELEGATED
+
+
+def test_mcp_server_configuration_auth_mode_still_defaults_to_user_token() -> None:
+    server = MCPServerConfiguration.model_validate(
+        {"id": "tavily", "name": "mcp.tavily.name"}
+    )
+
+    assert server.auth_mode is ClientAuthMode.USER_TOKEN
 
 
 def test_mcp_server_configuration_team_scope_parses_from_raw_value() -> None:

@@ -65,6 +65,16 @@ class ChatTurnTooLargeError(RuntimeError):
         )
 
 
+def strip_message_names(messages: List[Any]) -> List[Any]:
+    """Remove provider-incompatible names from model input, preserving checkpoints."""
+    return [
+        message.model_copy(update={"name": None})
+        if getattr(message, "name", None) is not None
+        else message
+        for message in messages
+    ]
+
+
 def sanitize_dangling_tool_calls(messages: List[Any]) -> List[Any]:
     """
     Remove any AIMessage(tool_calls=...) whose call_ids are not all answered

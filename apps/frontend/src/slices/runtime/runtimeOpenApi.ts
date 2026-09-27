@@ -63,26 +63,40 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/checkpoints/${queryArg.sessionId}` }),
     }),
-    evaluatePodV1AgentsEvaluatePost: build.mutation<
-      EvaluatePodV1AgentsEvaluatePostApiResponse,
-      EvaluatePodV1AgentsEvaluatePostApiArg
-    >({
-      query: (queryArg) => ({ url: `/pod/v1/agents/evaluate`, method: "POST", body: queryArg.runtimeExecuteRequest }),
+    evaluateAgent: build.mutation<EvaluateAgentApiResponse, EvaluateAgentApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/evaluate`,
+        method: "POST",
+        body: queryArg.runtimeExecuteRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
     }),
-    executePodV1AgentsExecutePost: build.mutation<
-      ExecutePodV1AgentsExecutePostApiResponse,
-      ExecutePodV1AgentsExecutePostApiArg
-    >({
-      query: (queryArg) => ({ url: `/pod/v1/agents/execute`, method: "POST", body: queryArg.runtimeExecuteRequest }),
+    executeAgent: build.mutation<ExecuteAgentApiResponse, ExecuteAgentApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/execute`,
+        method: "POST",
+        body: queryArg.runtimeExecuteRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
     }),
-    executeStreamPodV1AgentsExecuteStreamPost: build.mutation<
-      ExecuteStreamPodV1AgentsExecuteStreamPostApiResponse,
-      ExecuteStreamPodV1AgentsExecuteStreamPostApiArg
-    >({
+    executeAgentStream: build.mutation<ExecuteAgentStreamApiResponse, ExecuteAgentStreamApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/execute/stream`,
         method: "POST",
         body: queryArg.runtimeExecuteRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
       }),
     }),
     getKpiTurnsPodV1AgentsKpiTurnsGet: build.query<
@@ -131,6 +145,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}`, method: "DELETE" }),
     }),
+    deleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDelete: build.mutation<
+      DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse,
+      DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg
+    >({
+      query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/filesystem`, method: "DELETE" }),
+    }),
     getSessionMessagesPodV1AgentsSessionsSessionIdMessagesGet: build.query<
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse,
       GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg
@@ -146,16 +166,6 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           include_non_public: queryArg.includeNonPublic,
         },
-      }),
-    }),
-    analyzePodV1CapabilitiesDemoEchoAnalyzePost: build.mutation<
-      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse,
-      AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/pod/v1/capabilities/demo_echo/analyze`,
-        method: "POST",
-        body: queryArg.demoAnalyzeRequest,
       }),
     }),
   }),
@@ -199,11 +209,14 @@ export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiResponse =
 export type GetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetApiArg = {
   sessionId: string;
 };
-export type EvaluatePodV1AgentsEvaluatePostApiResponse = /** status 200 Successful Response */ EvalTrace;
-export type EvaluatePodV1AgentsEvaluatePostApiArg = {
+export type EvaluateAgentApiResponse = /** status 200 Successful Response */ EvalTrace;
+export type EvaluateAgentApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
-export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful Response */
+export type ExecuteAgentApiResponse = /** status 200 Successful Response */
   | (
       | ({
           kind: "assistant_delta";
@@ -243,11 +256,17 @@ export type ExecutePodV1AgentsExecutePostApiResponse = /** status 200 Successful
         } & TurnPersistedEvent)
     )
   | RuntimeErrorPayload;
-export type ExecutePodV1AgentsExecutePostApiArg = {
+export type ExecuteAgentApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
-export type ExecuteStreamPodV1AgentsExecuteStreamPostApiResponse = /** status 200 Successful Response */ any;
-export type ExecuteStreamPodV1AgentsExecuteStreamPostApiArg = {
+export type ExecuteAgentStreamApiResponse = /** status 200 Successful Response */ any;
+export type ExecuteAgentStreamApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
   runtimeExecuteRequest: RuntimeExecuteRequest;
 };
 export type GetKpiTurnsPodV1AgentsKpiTurnsGetApiResponse = /** status 200 Successful Response */ KpiTurnRecord[];
@@ -272,6 +291,11 @@ export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiResponse = 
 export type DeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteApiArg = {
   sessionId: string;
 };
+export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiResponse =
+  /** status 200 Successful Response */ ConversationFilesystemPurgeResponse;
+export type DeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteApiArg = {
+  sessionId: string;
+};
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse =
   /** status 200 Successful Response */ ChatMessage[];
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
@@ -281,11 +305,6 @@ export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
   includeNonPublic?: boolean;
-};
-export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiResponse =
-  /** status 200 Successful Response */ DemoAnalyzeResponse;
-export type AnalyzePodV1CapabilitiesDemoEchoAnalyzePostApiArg = {
-  demoAnalyzeRequest: DemoAnalyzeRequest;
 };
 export type AuditEventRecord = {
   agent_id?: string | null;
@@ -447,46 +466,87 @@ export type RuntimeContext = {
   trace_id?: string | null;
   user_id?: string | null;
 };
-export type RuntimeExecuteRequest = {
-  /** Direct template agent_id. For internal/dev use only. */
-  agent_id?: string | null;
-  /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
-  agent_instance_id?: string | null;
-  /** Real checkpointer-storage identifier for precise graph-state resume. Legacy Graph V2 runtime only — see interrupt_id for ReAct V2 HITL resume. */
-  checkpoint_id?: string | null;
-  /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
-  inline_tuning?: {
-    [key: string]:
-      | string
-      | number
-      | number
-      | boolean
-      | (string | number | number | boolean)[]
-      | {
-          [key: string]: string | number | number | boolean;
+export type RuntimeExecuteRequest =
+  | {
+      /** Direct template agent_id. For internal/dev use only. */
+      agent_id?: string | null;
+      /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
+      agent_instance_id: string | null;
+      /** Real checkpointer-storage identifier for precise graph-state resume. Legacy Graph V2 runtime only — see interrupt_id for ReAct V2 HITL resume. */
+      checkpoint_id?: string | null;
+      /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
+      inline_tuning?: {
+        [key: string]:
+          | string
+          | number
+          | number
+          | boolean
+          | (string | number | number | boolean)[]
+          | {
+              [key: string]: string | number | number | boolean;
+            };
+      } | null;
+      /** User turn input. Ignored when resume_payload is set (HITL resume). */
+      input?: string;
+      /** LangGraph's own Interrupt.id for the ReAct V2 HITL occurrence being resumed (#2216). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received. Required (and validated against the currently pending interrupt) whenever resume_payload targets a ReAct V2 agent — never used for the legacy Graph V2 runtime, which uses checkpoint_id instead. */
+      interrupt_id?: string | null;
+      /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
+      invocation_turns?: ConversationTurn[];
+      /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
+      occurrence_id?: string | null;
+      /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
+      resume_payload?: any | null;
+      /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
+      runtime_context: RuntimeContext | null;
+      /** Session identifier for multi-turn continuity. Keep stable across turns. */
+      session_id?: string | null;
+      /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
+      turn_options?: {
+        [key: string]: {
+          [key: string]: any;
         };
-  } | null;
-  /** User turn input. Ignored when resume_payload is set (HITL resume). */
-  input?: string;
-  /** LangGraph's own Interrupt.id for the ReAct V2 HITL occurrence being resumed (#2216). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received. Required (and validated against the currently pending interrupt) whenever resume_payload targets a ReAct V2 agent — never used for the legacy Graph V2 runtime, which uses checkpoint_id instead. */
-  interrupt_id?: string | null;
-  /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
-  invocation_turns?: ConversationTurn[];
-  /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
-  occurrence_id?: string | null;
-  /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
-  resume_payload?: any | null;
-  /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
-  runtime_context?: RuntimeContext | null;
-  /** Session identifier for multi-turn continuity. Keep stable across turns. */
-  session_id?: string | null;
-  /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
-  turn_options?: {
-    [key: string]: {
-      [key: string]: any;
+      };
+    }
+  | {
+      /** Direct template agent_id. For internal/dev use only. */
+      agent_id: string | null;
+      /** Managed agent instance ID (preferred). The pod authorizes the caller (Keycloak JWT + OpenFGA) on runtime_context.team_id. */
+      agent_instance_id?: string | null;
+      /** Real checkpointer-storage identifier for precise graph-state resume. Legacy Graph V2 runtime only — see interrupt_id for ReAct V2 HITL resume. */
+      checkpoint_id?: string | null;
+      /** Optional tuning value overrides for direct template execution (agent_id mode). Ignored when agent_instance_id is set. Intended for CLI and dev tooling — not for production frontend calls. */
+      inline_tuning?: {
+        [key: string]:
+          | string
+          | number
+          | number
+          | boolean
+          | (string | number | number | boolean)[]
+          | {
+              [key: string]: string | number | number | boolean;
+            };
+      } | null;
+      /** User turn input. Ignored when resume_payload is set (HITL resume). */
+      input?: string;
+      /** LangGraph's own Interrupt.id for the ReAct V2 HITL occurrence being resumed (#2216). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received. Required (and validated against the currently pending interrupt) whenever resume_payload targets a ReAct V2 agent — never used for the legacy Graph V2 runtime, which uses checkpoint_id instead. */
+      interrupt_id?: string | null;
+      /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
+      invocation_turns?: ConversationTurn[];
+      /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
+      occurrence_id?: string | null;
+      /** HITL resume data returned by the user after an AwaitingHumanRuntimeEvent. When set, input is ignored and the graph resumes from its checkpointed state. */
+      resume_payload?: any | null;
+      /** Per-request execution context carrying per-turn user retrieval selections (library IDs, search policy, context prompt text) and user auth delegation. Group A identity fields (user_id, team_id, session_id): for managed execution the pod authorizes the caller against OpenFGA on team_id, so team_id MUST be set. Group B auth fields (access_token, refresh_token) are required when the runtime calls knowledge-flow backend on behalf of the user. */
+      runtime_context?: RuntimeContext | null;
+      /** Session identifier for multi-turn continuity. Keep stable across turns. */
+      session_id?: string | null;
+      /** Per-capability typed chat-time values, keyed by capability id. Each slice is validated at turn start against the owning capability's TurnOptionsModel; an unknown capability id or an invalid slice is a typed 422 (RFC §3.5). The envelope is generic — the key is the discriminator — but every leaf is a typed model exported to OpenAPI, so each composer widget writes into turn_options[capability_id]. */
+      turn_options?: {
+        [key: string]: {
+          [key: string]: any;
+        };
+      };
     };
-  };
-};
 export type AssistantDeltaRuntimeEvent = {
   delta: string;
   kind?: "assistant_delta";
@@ -522,9 +582,11 @@ export type AwaitingHumanRuntimeEvent = {
   request: HumanInputRequest;
   sequence?: number;
 };
+export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
 export type RuntimeErrorEvent = {
   kind?: "execution_error";
   message: string;
+  reason?: RuntimeStopReason | null;
   sequence?: number;
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
@@ -572,11 +634,6 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
-export type DemoCardPart = {
-  body?: string;
-  title: string;
-  type?: "demo_card";
-};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -612,9 +669,6 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
-    | ({
-        type: "demo_card";
-      } & DemoCardPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -676,9 +730,6 @@ export type ToolResultRuntimeEvent = {
   sources?: VectorSearchHit[];
   tool_name?: string | null;
   ui_parts?: (
-    | ({
-        type: "demo_card";
-      } & DemoCardPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -742,6 +793,9 @@ export type ModelCatalogResponse = {
 export type PlatformPromptFileResponse = {
   platform_instructions: string;
   platform_prompt: string;
+};
+export type ConversationFilesystemPurgeResponse = {
+  purged: boolean;
 };
 export type Channel =
   | "final"
@@ -959,12 +1013,15 @@ export type CapabilityCatalogEntry = {
   model_thinking_profile_ids?: string[];
   /** i18n key */
   name: string;
+  public_version?: string | null;
   route_base_url?: string | null;
+  runtime_id?: string | null;
+  source_id?: string | null;
   team_scope?: TeamScopePolicy;
   team_settings_fields?: FieldSpec[];
   version: string;
 };
-export type ClientAuthMode = "user_token" | "no_token";
+export type ClientAuthMode = "user_token" | "no_token" | "delegated";
 export type McpServerConfiguration = {
   /** Non-negotiable behavioral instructions enforced whenever this server is active. The runtime appends them to the effective system prompt after any operator override. */
   agent_instructions?: string | null;
@@ -1048,14 +1105,6 @@ export type AgentTemplateSummary = {
   template_agent_id: string;
   title: string;
 };
-export type DemoAnalyzeResponse = {
-  length: number;
-  original: string;
-  transformed: string;
-};
-export type DemoAnalyzeRequest = {
-  text: string;
-};
 export const {
   useListAgentsPodV1AgentsGetQuery,
   useLazyListAgentsPodV1AgentsGetQuery,
@@ -1070,9 +1119,9 @@ export const {
   useDeleteCheckpointThreadPodV1AgentsCheckpointsSessionIdDeleteMutation,
   useGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
   useLazyGetCheckpointThreadPodV1AgentsCheckpointsSessionIdGetQuery,
-  useEvaluatePodV1AgentsEvaluatePostMutation,
-  useExecutePodV1AgentsExecutePostMutation,
-  useExecuteStreamPodV1AgentsExecuteStreamPostMutation,
+  useEvaluateAgentMutation,
+  useExecuteAgentMutation,
+  useExecuteAgentStreamMutation,
   useGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
   useLazyGetKpiTurnsPodV1AgentsKpiTurnsGetQuery,
   useGetMcpCatalogPodV1AgentsMcpCatalogGetQuery,
@@ -1084,9 +1133,9 @@ export const {
   useListSessionsPodV1AgentsSessionsGetQuery,
   useLazyListSessionsPodV1AgentsSessionsGetQuery,
   useDeleteSessionHistoryPodV1AgentsSessionsSessionIdDeleteMutation,
+  useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
-  useAnalyzePodV1CapabilitiesDemoEchoAnalyzePostMutation,
 } = injectedRtkApi;

@@ -52,20 +52,12 @@ export const HELP_SECTIONS: HelpSectionSpec[] = [
     titleKey: "rework.helpCenter.sections.guides",
     icon: { category: "outlined", type: "map" },
   },
+  // Absorbs what used to be a separate FAQ section: a reader with a problem
+  // does not know whether it is a bug, a limit or a question.
   {
     id: "troubleshooting",
     titleKey: "rework.helpCenter.sections.troubleshooting",
-    icon: { category: "outlined", type: "build" },
-  },
-  {
-    id: "faq",
-    titleKey: "rework.helpCenter.sections.faq",
-    icon: { category: "outlined", type: "quiz" },
-  },
-  {
-    id: "changelog",
-    titleKey: "rework.helpCenter.sections.changelog",
-    icon: { category: "outlined", type: "new_releases" },
+    icon: { category: "outlined", type: "help_center" },
   },
 ];
 

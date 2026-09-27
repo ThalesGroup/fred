@@ -21,6 +21,7 @@ Start with:
 
 import asyncio
 import logging
+import os
 from contextlib import suppress
 
 from fred_core.diagnostics import install_gc_diagnostics
@@ -122,7 +123,7 @@ async def main() -> None:
     # on the dedicated metrics port using the same toggle and exporter startup.
     prom_cfg = configuration.observability.kpi.prometheus
     if prom_cfg.enabled:
-        start_http_server(prom_cfg.port, addr=prom_cfg.address)
+        start_http_server(int(os.getenv("KF_WORKER_METRICS_PORT", str(prom_cfg.port))), addr=prom_cfg.address)
     kpi_tasks = _start_worker_kpi_tasks(configuration, app_context)
     # Manual SIGUSR1/SIGUSR2 triggers (`kubectl exec <pod> -- kill -USR1 1` /
     # `-USR2 1`) plus the periodic gc.collect()+malloc_trim() mitigation for the
@@ -134,6 +135,7 @@ async def main() -> None:
     try:
         await run_worker(
             configuration.scheduler.temporal,
+            roles=configuration.scheduler.worker_roles,
             max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
             max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
             pdf_render_ttl_days=configuration.app.pdf_render_ttl_days,

@@ -54,7 +54,7 @@ vi.mock("../../../../security/KeycloakService", () => ({
 // refused and cost the thread its history.
 const prepareExecutionCalls: Record<string, unknown>[] = [];
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation: () => [
+  usePrepareAgentExecutionMutation: () => [
     (args: Record<string, unknown>) => {
       prepareExecutionCalls.push(args);
       return {

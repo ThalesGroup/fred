@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import logging
 import pathlib
 import re
@@ -43,9 +44,7 @@ class IngestionService:
         self.context = ApplicationContext.get_instance()
         self.content_store = ApplicationContext.get_instance().get_content_store()
         self.metadata_service = MetadataService()
-        # Library-aware pipeline manager. For now it contains only the default
-        # pipeline mirroring legacy behaviour, but it is ready to support
-        # per-library pipelines via tag-based routing.
+        # Shared pipeline manager for the configured processing profiles.
         self.pipeline_manager = ProcessingPipelineManager.create_with_default(self.context)
 
     @staticmethod
@@ -233,12 +232,14 @@ class IngestionService:
         processor = pipeline.get_input_processor(suffix)
         source_config = self.context.get_config().document_sources.get(source_tag)
 
-        # Step 1: run processor
-        metadata = processor.process_metadata(file_path, tags=tags, source_tag=source_tag)
+        # Step 1: run processor — off the loop, since it hashes the whole file twice
+        # and opens PDF/DOCX, which would stall every other request meanwhile.
+        metadata = await asyncio.to_thread(processor.process_metadata, file_path, tags=tags, source_tag=source_tag)
         # Stamped once, here, regardless of file type — not delegated to any
         # per-processor extract_file_metadata(), which only ever sees the
         # file's own embedded metadata, never who is uploading it.
         metadata.identity.uploaded_by = user.uid
+        metadata.processing.profile = normalized_profile
         if apply_versioning:
             metadata = await self._apply_versioning(metadata)
 
@@ -269,11 +270,16 @@ class IngestionService:
         """
         Processes an input document from input_path and writes outputs to output_dir.
         Saves metadata.json alongside.
+
+        The work itself lives on the pipeline manager, which the extraction
+        subprocess also calls: one implementation, whichever process runs it.
         """
-        normalized_profile = coerce_processing_profile(profile)
-        with processing_profile_scope(normalized_profile):
-            pipeline = self.pipeline_manager.get_pipeline_for_metadata(metadata, profile=normalized_profile)
-            pipeline.process_input(input_path=input_path, output_dir=output_dir, metadata=metadata)
+        self.pipeline_manager.run_input(
+            input_path=input_path,
+            output_dir=output_dir,
+            metadata=metadata,
+            profile=profile,
+        )
 
     def process_output(
         self,
@@ -288,7 +294,7 @@ class IngestionService:
         """
         normalized_profile = coerce_processing_profile(profile)
         with processing_profile_scope(normalized_profile):
-            pipeline = self.pipeline_manager.get_pipeline_for_metadata(input_file_metadata, profile=normalized_profile)
+            pipeline = self.pipeline_manager.get_pipeline_for_profile(normalized_profile)
             return pipeline.process_output(
                 input_file_name=input_file_name,
                 output_dir=output_dir,

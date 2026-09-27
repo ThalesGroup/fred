@@ -1,5 +1,17 @@
 # Copyright Thales 2026
-# Licensed under the Apache License, Version 2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 """Behavioral tests for the Knowledge Base authoring surface."""
 
@@ -694,7 +706,7 @@ def test_task_queue_separates_two_contributors_using_the_same_last_segment() -> 
 
 
 def test_task_queue_matches_the_catalog_id_control_plane_derives() -> None:
-    from fred_core import knowledge_base_catalog_id
+    from fred_pod.common.naming import knowledge_base_catalog_id
     from fred_sdk.knowledge_base.routing import task_queue_for
 
     assert task_queue_for("acme.kb.local-folder") == knowledge_base_catalog_id(
@@ -736,8 +748,8 @@ def test_a_pod_is_configured_the_way_every_fred_component_is() -> None:
     under the paths an operator already knows from every other Fred backend,
     parsed by the models fred-core owns rather than by a second set.
     """
-    from fred_core.common import TemporalSchedulerConfig
-    from fred_core.security.structure import M2MSecurity
+    from fred_pod.common import TemporalSchedulerConfig
+    from fred_pod.security.structure import M2MSecurity
     from fred_sdk.knowledge_base.configuration import PodConfiguration
 
     configuration = PodConfiguration.model_validate(_valid_configuration())

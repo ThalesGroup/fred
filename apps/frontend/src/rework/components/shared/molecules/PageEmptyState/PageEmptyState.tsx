@@ -54,7 +54,7 @@ export default function PageEmptyState({ icon, message, action }: PageEmptyState
         <span className={styles.icon}>
           <Icon category="outlined" type={icon} filled />
         </span>
-        <span>{message}</span>
+        <span className={styles.message}>{message}</span>
       </div>
       {action && (
         <Button

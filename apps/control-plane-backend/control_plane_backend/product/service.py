@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -18,12 +32,17 @@ from fred_core import (
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
+    holds_caller_role,
     is_service_agent,
 )
 from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.security.backend_to_backend_auth import (
+    M2MBearerAuth,
+    RefreshableTokenProvider,
+)
 from fred_core.security.models import Resource
 from fred_core.security.rebac.application_authz import (
     APPLICATION_CATALOG_NAMESPACE_PREFIX,
@@ -431,7 +450,6 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
-        info_banner=deps.configuration.platform.frontend.info_banner,
     )
 
 
@@ -656,6 +674,11 @@ async def _runtime_execution_metadata_for_source(
     merged: OrderedDict[str, CapabilityCatalogEntry] = OrderedDict()
     for template in templates:
         for entry in template.available_capabilities:
+            if "public_version" not in entry.model_fields_set:
+                # A pod predating the version split sends `version` alone,
+                # where it meant both. Drop this once no pod below 4.0.0 can
+                # register; an explicit null still publishes nothing.
+                entry = entry.model_copy(update={"public_version": entry.version})
             merged.setdefault(entry.id, entry)
     max_chat_input_chars = next(
         (
@@ -772,6 +795,12 @@ async def _agent_capabilities_for_source(
     return [
         CapabilityCatalogEntry(
             id=template_capability_id(runtime_id, template.template_agent_id),
+            runtime_id=runtime_id,
+            source_id=template.template_agent_id,
+            # `version` is the stored-config schema version; no public_version
+            # because an agent has no version of its own yet. The id above is
+            # FGA-safe and mangled, which is why provenance travels as its own
+            # fields rather than being parsed back out of it.
             version="1",
             name=template.title,
             description=template.description,
@@ -872,6 +901,12 @@ async def _model_capabilities_for_source_uncached(
     entries = [
         CapabilityCatalogEntry(
             id=entry["id"],
+            source_id=entry["id"],
+            # No runtime_id on purpose: several pods can serve the same model,
+            # and the catalog unions their entries below. A single pod id would
+            # be whichever one merged last — arbitrary, and read as fact.
+            # No public_version either: a pod advertises a model's routable
+            # identity, not a version of it.
             version="1",
             name=entry["name"],
             description=entry.get("description") or entry["name"],
@@ -2428,6 +2463,7 @@ async def _delete_knowledge_flow_attachment(
     document_uid: str | None,
     storage_key: str | None,
     session_id: str,
+    token_provider: RefreshableTokenProvider | None = None,
 ) -> None:
     """
     Orchestrate the Knowledge Flow cleanup path for one persisted attachment.
@@ -2463,7 +2499,10 @@ async def _delete_knowledge_flow_attachment(
         params["storage_key"] = storage_key
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            auth=M2MBearerAuth(token_provider) if token_provider is not None else None,
+        ) as client:
             response = await client.delete(
                 url,
                 params=params,
@@ -3118,6 +3157,7 @@ async def prepare_execution(
     deps: ProductServiceDependencies,
     authorization: str | None = None,
     agent_model_override: str | None = None,
+    model_override_authorized: bool = False,
 ) -> ExecutionPreparation:
     """
     Prepare one authorized runtime execution context for one managed agent instance.
@@ -3134,8 +3174,9 @@ async def prepare_execution(
     - `agent_model_override`, when set, replaces this instance's entry in the
       `agent_profile_overrides` snapshot for THIS call only — never persisted,
       never visible via `GET .../routing-policy`. Restricted to the evaluator's
-      service identity (`is_service_agent`); rejected outright for any other
-      caller, and rejected if the profile isn't `can_use`-enabled for the team.
+      service identity (`is_service_agent`, without the delegation caller role);
+      rejected outright for any other caller, and rejected if the profile isn't
+      `can_use`-enabled for the team.
 
     Example:
     - `prep = await prepare_execution(user=user, team_id=team_id, agent_instance_id="inst-1", deps=deps)`
@@ -3299,7 +3340,10 @@ async def prepare_execution(
     # a caller who asked for model X and silently got the team default would
     # draw wrong conclusions from the resulting evaluation scores.
     if agent_model_override is not None:
-        if not is_service_agent(user):
+        # A delegation client holds the service role too; it never takes this path.
+        if not model_override_authorized and not (
+            is_service_agent(user) and not holds_caller_role(user)
+        ):
             raise ExecutionPreparationError(
                 "agent_model_override is only honored for the evaluator's "
                 "service identity.",

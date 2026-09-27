@@ -39,7 +39,7 @@ vi.mock("react-i18next", () => ({
 vi.mock("@shared/utils/Portal", () => ({ Portal: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({}) }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
-  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [probe.createTag, { isLoading: false }],
+  useCreateTagMutation: () => [probe.createTag, { isLoading: false }],
 }));
 
 import CreateFolderModal from "./CreateFolderModal";

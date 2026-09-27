@@ -29,13 +29,27 @@ both the middleware-list builder in isolation (mirrors
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from types import SimpleNamespace
 from typing import Any, cast
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
+from conftest import ToolFriendlyFakeChatModel
+from deepagents.backends import CompositeBackend, StateBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
-from fred_runtime.react.middleware.hitl import CapabilityHitlBinding, FredHitlMiddleware
+from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
+from fred_runtime.react.middleware.hitl import (
+    CapabilityHitlBinding,
+    DeepChildHitlMiddleware,
+    FredHitlMiddleware,
+    GatedToolCall,
+)
+from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -50,7 +64,12 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import SecretStr
 
 
 def _binding() -> BoundRuntimeContext:
@@ -66,14 +85,25 @@ def _binding() -> BoundRuntimeContext:
     )
 
 
+def _fake_conversation_filesystem() -> Any:
+    return SimpleNamespace(
+        scratchpad=SimpleNamespace,
+        namespace=lambda _name, **_kwargs: SimpleNamespace(),
+        quotas=SimpleNamespace(
+            scratchpad_max_bytes=100,
+            scratchpad_max_files=10,
+            deep_max_bytes=100,
+            deep_max_files=10,
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # _build_deepagent_runtime_middleware — list composition
 # ---------------------------------------------------------------------------
 
 
-def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled() -> (
-    None
-):
+def test_middleware_keeps_recovery_outside_model_observability() -> None:
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
@@ -82,6 +112,9 @@ def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled()
         available_tool_names=set(deep_mod._FILESYSTEM_TOOL_NAMES),
     )
     assert [type(m) for m in middleware] == [
+        CheckpointHygieneMiddleware,
+        RateLimitRetryMiddleware,
+        ToolCallTextRecoveryMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -100,13 +133,16 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
         approval_policy=ToolApprovalPolicy(),
         available_tool_names=set(),
     )
-    assert type(middleware[0]) is TracingKpiMiddleware
-    assert type(middleware[1]) is ToolObservabilityMiddleware
-    assert type(middleware[2]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[3:])
+    assert type(middleware[0]) is CheckpointHygieneMiddleware
+    assert type(middleware[1]) is RateLimitRetryMiddleware
+    assert type(middleware[2]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[3]) is TracingKpiMiddleware
+    assert type(middleware[4]) is ToolObservabilityMiddleware
+    assert type(middleware[5]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[6:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 3 + 7
+    assert len(middleware) == 5 + 7 + 1
 
 
 def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
@@ -125,6 +161,16 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
     assert deep_mod._filesystem_prompt_suffix(
         available_tool_names=available_tool_names
     ) == (
+        "# Conversation filesystem\n\n"
+        "- `/` is the shared workspace for collaboration between "
+        "the parent agent and its sub-agents in this conversation.\n"
+        "- It is also the designated future location for files the agent "
+        "creates for users. Do not claim that those files are user-accessible "
+        "unless a delivery mechanism is available.\n"
+        "- Use absolute paths when creating or editing shared files, for "
+        "example `/notes.md`.\n"
+        "- `/.deep/` is reserved for runtime artifacts. Do not write or edit "
+        "files there. Other mounted filesystems may also be read-only.\n\n"
         "The following filesystem tools are disabled in this runtime: "
         "execute. Do not call them."
     )
@@ -132,6 +178,53 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
 
 class _MarkerMiddleware(AgentMiddleware):
     pass
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_rejects_capability_filesystem_middleware(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiled = False
+
+    def _fake_compile(**kwargs: object) -> object:
+        del kwargs
+        nonlocal compiled
+        compiled = True
+        return object()
+
+    capability_block = CapabilityAgentBlock(
+        middleware=(
+            cast(
+                AgentMiddleware,
+                FilesystemMiddleware(backend=StateBackend()),
+            ),
+        ),
+        hitl={},
+        tools=(),
+        mcp_prompt_groups=(),
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=capability_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "capability middleware.*FilesystemMiddleware.*"
+            "conversation filesystem backend"
+        ),
+    ):
+        await runtime.build_executor(_binding())
+
+    assert not compiled
 
 
 def test_middleware_places_capability_middleware_before_observability() -> None:
@@ -147,10 +240,13 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
         available_tool_names=set(deep_mod._FILESYSTEM_TOOL_NAMES),
         capability_block=capability_block,
     )
-    assert middleware[0] is marker
-    assert type(middleware[1]) is TracingKpiMiddleware
-    assert type(middleware[2]) is ToolObservabilityMiddleware
-    assert type(middleware[3]) is FredHitlMiddleware
+    assert type(middleware[0]) is CheckpointHygieneMiddleware
+    assert middleware[1] is marker
+    assert type(middleware[2]) is RateLimitRetryMiddleware
+    assert type(middleware[3]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[4]) is TracingKpiMiddleware
+    assert type(middleware[5]) is ToolObservabilityMiddleware
+    assert type(middleware[6]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -261,17 +357,22 @@ async def test_deep_build_executor_wires_observability_middleware(
     monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
 
     runtime = deep_mod.DeepAgentRuntime(
-        definition=_fake_definition(), services=RuntimeServices()
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
     await runtime.build_executor(_binding())
 
     # The fake tool pipeline resolves no tools, so the filesystem guard
-    # clause also fires — this test only cares that observability leads.
+    # clause also fires — this test only cares about the model wrapper order.
     wired = captured["middleware"]
-    assert type(wired[0]) is TracingKpiMiddleware
-    assert type(wired[1]) is ToolObservabilityMiddleware
+    assert type(wired[0]) is CheckpointHygieneMiddleware
+    assert type(wired[1]) is RateLimitRetryMiddleware
+    assert type(wired[2]) is ToolCallTextRecoveryMiddleware
+    assert type(wired[3]) is TracingKpiMiddleware
+    assert type(wired[4]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio
@@ -290,7 +391,9 @@ async def test_deep_build_executor_guards_unbound_execute_tool(
     monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
 
     runtime = deep_mod.DeepAgentRuntime(
-        definition=_fake_definition(), services=RuntimeServices()
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -305,6 +408,79 @@ async def test_deep_build_executor_guards_unbound_execute_tool(
 
 
 @pytest.mark.asyncio
+async def test_deep_build_executor_uses_scratchpad_as_default_without_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    scratchpad = cast(Any, SimpleNamespace())
+    deep_namespace = cast(Any, SimpleNamespace())
+    conversation_filesystem = SimpleNamespace(
+        scratchpad=lambda: scratchpad,
+        namespace=lambda name, **kwargs: (
+            deep_namespace if name == ".deep" else scratchpad
+        ),
+        quotas=SimpleNamespace(
+            scratchpad_max_bytes=100,
+            scratchpad_max_files=10,
+            deep_max_bytes=100,
+            deep_max_files=10,
+        ),
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=cast(Any, conversation_filesystem),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    system_prompt = cast(str, captured["system_prompt"])
+    assert "BASE-TEMPLATE" in system_prompt
+    assert (
+        "`/` is the shared workspace for collaboration between the "
+        "parent agent and its sub-agents"
+    ) in system_prompt
+    assert "for example `/notes.md`" in system_prompt
+    assert "`/.deep/` is reserved for runtime artifacts." in system_prompt
+
+    backend = cast(CompositeBackend, captured["backend"])
+    assert isinstance(backend, CompositeBackend)
+    assert set(backend.routes) == {"/.deep/"}
+    assert backend.artifacts_root == "/.deep"
+    assert (
+        cast(
+            deep_mod.ConversationNamespaceBackend,
+            backend.default,
+        )._namespace
+        is scratchpad
+    )
+    assert (
+        cast(
+            deep_mod.ConversationNamespaceBackend,
+            backend.routes["/.deep/"],
+        )._namespace
+        is deep_namespace
+    )
+    guards = [
+        middleware.tool_name
+        for middleware in cast(list[AgentMiddleware], captured["middleware"])
+        if type(middleware) is ToolCallLimitMiddleware
+    ]
+    assert guards == ["execute"]
+
+
+@pytest.mark.asyncio
 async def test_deep_build_executor_wires_capability_middleware(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -316,7 +492,7 @@ async def test_deep_build_executor_wires_capability_middleware(
     captured: dict[str, Any] = {}
 
     def _fake_compile(**kwargs: object) -> object:
-        captured["middleware"] = list(cast(list, kwargs["middleware"]))
+        captured.update(kwargs)
         return object()
 
     monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
@@ -332,12 +508,85 @@ async def test_deep_build_executor_wires_capability_middleware(
         definition=_fake_definition(),
         services=RuntimeServices(),
         capability_block=capability_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
     await runtime.build_executor(_binding())
 
     assert marker in captured["middleware"]
+    assert marker in captured["subagent_middleware"]
+    parent_hygiene = next(
+        m for m in captured["middleware"] if isinstance(m, CheckpointHygieneMiddleware)
+    )
+    child_hygiene = next(
+        m
+        for m in captured["subagent_middleware"]
+        if isinstance(m, CheckpointHygieneMiddleware)
+    )
+    assert parent_hygiene is not child_hygiene
+    assert any(
+        isinstance(m, DeepChildHitlMiddleware) for m in captured["subagent_middleware"]
+    )
+    parent_recovery = next(
+        m
+        for m in captured["middleware"]
+        if isinstance(m, ToolCallTextRecoveryMiddleware)
+    )
+    child_recovery = next(
+        m
+        for m in captured["subagent_middleware"]
+        if isinstance(m, ToolCallTextRecoveryMiddleware)
+    )
+    assert parent_recovery is not child_recovery
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_binds_child_filesystem_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    child_rules = [
+        FilesystemPermission(operations=["read"], paths=["/**"], mode="deny")
+    ]
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
+        subagent_permissions=child_rules,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    assert captured["subagent_permissions"] == child_rules
+    assert captured["permissions"] != child_rules
+    child_concat = next(
+        middleware
+        for middleware in cast(list[AgentMiddleware], captured["subagent_middleware"])
+        if isinstance(middleware, deep_mod.ConcatFilesMiddleware)
+    )
+    result = await child_concat.tools[0].ainvoke(
+        {
+            "type": "tool_call",
+            "name": "concat_files",
+            "args": {"paths": ["/input.txt"], "output_path": "/output.txt"},
+            "id": "child-denied",
+        }
+    )
+    assert isinstance(result, ToolMessage)
+    assert getattr(result.artifact, "is_error", False)
+    assert "Permission denied for read on /output.txt" in str(result.content)
 
 
 @pytest.mark.asyncio
@@ -369,6 +618,7 @@ async def test_deep_build_executor_no_longer_rejects_capability_hitl(
         definition=_fake_definition(),
         services=RuntimeServices(),
         capability_block=capability_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -403,6 +653,7 @@ async def test_deep_build_executor_no_longer_rejects_operator_tool_approval(
     runtime = deep_mod.DeepAgentRuntime(
         definition=cast(ReActAgentDefinition, definition),
         services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -413,3 +664,197 @@ async def test_deep_build_executor_no_longer_rejects_operator_tool_approval(
     )
     assert hitl_middleware._approval_policy.enabled is True
     assert hitl_middleware._approval_policy.always_require_tools == ("send_email",)
+
+
+@pytest.mark.asyncio
+async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoint() -> (
+    None
+):
+    payloads: list[dict[str, Any]] = []
+    serializer = ChatOpenAI(model="mistral-small", api_key=SecretStr("offline-test"))
+
+    class CapturePayload(AgentMiddleware):
+        async def awrap_model_call(
+            self,
+            request: ModelRequest,
+            handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+        ) -> ModelResponse:
+            payloads.append(serializer._get_request_payload(request.messages))
+            return await handler(request)
+
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+        capability_block=CapabilityAgentBlock(
+            middleware=(CapturePayload(),),
+            tools=(),
+            hitl={},
+            mcp_prompt_groups=(),
+        ),
+    )
+    messages = [
+        HumanMessage(content="old question", id="human-old"),
+        AIMessage(
+            content="",
+            id="dangling",
+            tool_calls=[
+                {"name": "lookup", "args": {}, "id": "unanswered"},
+            ],
+        ),
+        HumanMessage(content="current question", id="human-current"),
+        AIMessage(
+            content=[
+                {"type": "thinking", "thinking": [{"type": "text", "text": "list it"}]}
+            ],
+            name="general-purpose",
+            id="named",
+            tool_calls=[
+                {"name": "lookup", "args": {}, "id": "answered"},
+            ],
+        ),
+        ToolMessage(
+            content="found", tool_call_id="answered", name="lookup", id="result"
+        ),
+    ]
+    before = [message.model_dump() for message in messages]
+    graph = cast(
+        Any,
+        deep_mod._create_compiled_deep_agent(
+            model=ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")]),
+            tools=[],
+            system_prompt="Answer briefly.",
+            checkpointer=InMemorySaver(),
+            subagent_middleware=[],
+            middleware=middleware,
+            backend=StateBackend(),
+            permissions=[],
+        ),
+    )
+    config = {"configurable": {"thread_id": "hygiene-parent"}}
+    await graph.ainvoke({"messages": messages}, config)
+    wire = payloads[0]["messages"]
+    assistants = [message for message in wire if message["role"] == "assistant"]
+    assert all("name" not in message for message in assistants)
+    replayed = next(
+        message
+        for message in assistants
+        if message["tool_calls"][0]["id"] == "answered"
+    )
+    assert isinstance(replayed["content"], str)
+    assert "list it" in replayed["content"]
+    # Deep repairs older dangling calls before model wrappers run.
+    call_ids = {call["id"] for message in assistants for call in message["tool_calls"]}
+    result_ids = {
+        message["tool_call_id"] for message in wire if message["role"] == "tool"
+    }
+    assert call_ids == result_ids
+    assert [message.model_dump() for message in messages] == before
+    checkpoint = await graph.aget_state(config)
+    persisted = {message.id: message for message in checkpoint.values["messages"]}
+    for original in messages:
+        assert persisted[original.id].model_dump() == original.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_deep_hygiene_leaves_history_size_to_deep_compaction() -> None:
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+    )
+    # Deep's summarization middleware owns compaction: no count or size trim.
+    messages: list[AnyMessage] = [
+        HumanMessage(content=str(index)) for index in range(501)
+    ]
+    messages.append(HumanMessage(content="x" * 250_000))
+    seen: list[ModelRequest] = []
+
+    async def handler(request: ModelRequest) -> ModelResponse:
+        seen.append(request)
+        return ModelResponse(result=[AIMessage(content="done")])
+
+    await middleware[0].awrap_model_call(
+        ModelRequest(model=ToolFriendlyFakeChatModel(responses=[]), messages=messages),
+        handler,
+    )
+    assert seen[0].messages == messages
+
+
+@pytest.mark.asyncio
+async def test_deep_hygiene_removes_dangling_calls_without_changing_input() -> None:
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+    )
+    messages = [
+        HumanMessage(content="old"),
+        AIMessage(
+            content="", tool_calls=[{"name": "lookup", "args": {}, "id": "missing"}]
+        ),
+        HumanMessage(content="new"),
+    ]
+    before = [message.model_dump() for message in messages]
+
+    async def handler(request: ModelRequest) -> ModelResponse:
+        assert request.messages == [messages[0], messages[2]]
+        return ModelResponse(result=[AIMessage(content="done")])
+
+    await middleware[0].awrap_model_call(
+        ModelRequest(model=ToolFriendlyFakeChatModel(responses=[]), messages=messages),
+        handler,
+    )
+    assert [message.model_dump() for message in messages] == before
+
+
+@pytest.mark.asyncio
+async def test_native_child_hides_flat_and_function_tool_schemas() -> None:
+    gate = DeepChildHitlMiddleware(
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(
+            enabled=True, always_require_tools=("gated",)
+        ),
+        available_tool_names={"gated", "safe"},
+    )
+    request = ModelRequest(
+        model=ToolFriendlyFakeChatModel(responses=[]),
+        messages=[],
+        tools=[
+            {"name": "gated"},
+            {"type": "function", "function": {"name": "gated"}},
+            {"name": "safe"},
+        ],
+    )
+    captured = []
+
+    async def handler(value: ModelRequest) -> ModelResponse:
+        captured.append(value)
+        return ModelResponse(result=[AIMessage(content="done")])
+
+    await gate.awrap_model_call(request, handler)
+    assert captured[0].tools == [{"name": "safe"}]
+    assert len(request.tools) == 3
+    await gate.awrap_model_call(captured[0], handler)
+    assert captured[1] is captured[0]
+
+
+def test_native_child_missing_call_id_refuses_entire_batch() -> None:
+    gate = DeepChildHitlMiddleware(
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names=set(),
+    )
+    assert gate._resolve_approval(
+        [
+            GatedToolCall(
+                tool_call_id=None, tool_name="gated", tool_args={}, question=None
+            )
+        ]
+    ) == {"jump_to": "model"}

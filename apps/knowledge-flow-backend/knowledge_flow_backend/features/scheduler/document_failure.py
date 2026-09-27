@@ -45,7 +45,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from fred_core.documents.document_structures import ProcessingStatus
+from fred_core.documents.document_structures import ProcessingStage, ProcessingStatus
 from fred_core.tasks.models import TaskState
 
 if TYPE_CHECKING:
@@ -73,7 +73,9 @@ async def mark_in_progress_stages_failed(document_uid: str, error_message: str) 
     Returns True when the document was actually updated -- a document with no
     `in_progress` stage is left untouched, which is both the common case (the
     activity already recorded its own, more precise error) and what makes this
-    safe to run from the worker and the API for the same task.
+    safe to run from the worker and the API for the same task. The one exception
+    is a document the pipeline never reached (only the raw stage recorded): its
+    first stage is failed instead, so it does not read "processing" for ever.
 
     Never raises: the caller is always on a failure path already.
     """
@@ -93,6 +95,10 @@ async def mark_in_progress_stages_failed(document_uid: str, error_message: str) 
         return False
 
     stuck = [stage for stage, status in metadata.processing.stages.items() if status == ProcessingStatus.IN_PROGRESS]
+    if not stuck and set(metadata.processing.stages) <= {ProcessingStage.RAW_AVAILABLE}:
+        # The workflow ended before its first activity ran (no worker picked it
+        # up), so nothing was ever marked in progress: fail the stage that was next.
+        stuck = [ProcessingStage.PREVIEW_READY]
     if not stuck:
         return False
 

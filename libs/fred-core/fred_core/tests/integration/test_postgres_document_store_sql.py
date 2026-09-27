@@ -47,13 +47,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from fred_core.documents.document_models import DocumentMetadataRow
+from fred_core.documents.document_store import DocumentSortField, SortOrder
 from fred_core.documents.document_structures import (
     DocumentMetadata,
+    FileInfo,
     Identity,
     ProcessingStage,
     ProcessingStatus,
     SourceInfo,
     SourceType,
+    Tagging,
 )
 from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
@@ -165,3 +168,99 @@ async def test_bulk_mark_vector_done_runs_on_postgres(
         ProcessingStatus.DONE
     )
     assert ProcessingStage.VECTORIZED not in after.processing.errors
+
+
+def _sortable_doc(
+    uid: str, name: str, *, day: int, size: int | None
+) -> DocumentMetadata:
+    return DocumentMetadata(
+        identity=Identity(document_name=name, document_uid=uid, title=f"title-{uid}"),
+        source=SourceInfo(
+            source_type=SourceType.PUSH,
+            source_tag="fred",
+            pull_location=None,
+            date_added_to_kb=datetime(2026, 1, day, tzinfo=timezone.utc),
+        ),
+        file=FileInfo(file_size_bytes=size),
+        tags=Tagging(tag_ids=["tag-a"]),
+    )
+
+
+async def _seed_sortable(pg_store: PostgresDocumentMetadataStore) -> None:
+    await pg_store.save_metadata(_sortable_doc("d1", "Zebra.pdf", day=3, size=100))
+    await pg_store.save_metadata(_sortable_doc("d2", "annexe.pdf", day=1, size=1000))
+    await pg_store.save_metadata(_sortable_doc("d3", "Beta.pdf", day=2, size=20))
+
+
+async def _browse_names(
+    pg_store: PostgresDocumentMetadataStore,
+    sort_by: DocumentSortField,
+    sort_order: SortOrder,
+) -> list[str]:
+    docs, _ = await pg_store.browse_metadata_in_tag(
+        "tag-a", sort_by=sort_by, sort_order=sort_order
+    )
+    return [doc.identity.document_name for doc in docs]
+
+
+@pytest.mark.asyncio
+async def test_browse_sort_by_name_runs_on_postgres(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    """The ORDER BY reaches into the JSONB `doc` blob for the displayed name.
+    SQLite takes the Python branch and never compiles this, so a wrong path or
+    a missing `.astext` would only ever fail here."""
+    await _seed_sortable(pg_store)
+
+    assert await _browse_names(pg_store, "name", "asc") == [
+        "annexe.pdf",
+        "Beta.pdf",
+        "Zebra.pdf",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_browse_sort_by_size_casts_out_of_jsonb_on_postgres(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    """Without the BIGINT cast this compares text: 1000 would file between 100
+    and 20."""
+    await _seed_sortable(pg_store)
+
+    assert await _browse_names(pg_store, "size", "asc") == [
+        "Beta.pdf",
+        "Zebra.pdf",
+        "annexe.pdf",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_browse_sort_by_created_runs_on_postgres(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    await _seed_sortable(pg_store)
+
+    assert await _browse_names(pg_store, "created", "desc") == [
+        "Zebra.pdf",
+        "Beta.pdf",
+        "annexe.pdf",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_browse_pages_a_tied_sort_without_repeating_on_postgres(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    """The uid tie-break, executed: three documents sharing a name must page
+    as a total order, not in whatever sequence the planner returns."""
+    for uid in ["c", "a", "b"]:
+        await pg_store.save_metadata(_sortable_doc(uid, "same.pdf", day=1, size=10))
+
+    seen: list[str] = []
+    for offset in (0, 2):
+        docs, _ = await pg_store.browse_metadata_in_tag(
+            "tag-a", offset=offset, limit=2, sort_by="name", sort_order="asc"
+        )
+        seen.extend(doc.identity.document_uid for doc in docs)
+
+    assert seen == ["a", "b", "c"]

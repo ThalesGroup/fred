@@ -61,6 +61,7 @@ def build_openapi_app() -> FastAPI:
     config = AgentPodConfig.model_validate(
         {
             "app": {
+                "runtime_id": "fred-runtime",
                 "name": "Fred Runtime",
                 "base_url": "/pod/v1",
                 "port": 8000,

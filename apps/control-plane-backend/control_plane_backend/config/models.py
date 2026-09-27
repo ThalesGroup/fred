@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import os
@@ -115,52 +129,6 @@ class UploadWarning(BaseModel):
     )
 
 
-class InfoBannerLink(BaseModel):
-    """One link rendered on the right side of the info banner."""
-
-    url: str = Field(description="Link target URL.")
-    labels: dict[str, str] = Field(
-        default_factory=dict,
-        description='Locale → label map (e.g. {"en": "...", "fr": "..."}).',
-    )
-
-
-class InfoBanner(BaseModel):
-    """Deployer-configured global announcement banner.
-
-    Full-width and non-dismissable, shown above the app content on every page
-    — including the pre-auth GCU-acceptance and root-bootstrap screens.
-    Persistent by default; set `auto_hide_seconds` to make it disappear on
-    its own. Texts are resolved from the user's locale with "en" fallback.
-    Omit the whole block to show nothing.
-    """
-
-    color: str = Field(
-        default="#00BBDD",
-        description="Banner background CSS color.",
-    )
-    auto_hide_seconds: int | None = Field(
-        default=None,
-        gt=0,
-        description=(
-            "Seconds after which the banner hides itself, measured from app "
-            "load. Omit for a persistent banner — the default."
-        ),
-    )
-    titles: dict[str, str] = Field(
-        default_factory=dict,
-        description='Locale → title map (e.g. {"en": "...", "fr": "..."}).',
-    )
-    messages: dict[str, str] = Field(
-        default_factory=dict,
-        description='Locale → message map (e.g. {"en": "...", "fr": "..."}).',
-    )
-    links: list[InfoBannerLink] = Field(
-        default_factory=list,
-        description="Links rendered on the right side of the banner.",
-    )
-
-
 class FrontendBootstrapConfig(BaseModel):
     """Static frontend bootstrap configuration served by control-plane."""
 
@@ -170,13 +138,6 @@ class FrontendBootstrapConfig(BaseModel):
         description=(
             "Optional banner shown on upload surfaces (document upload drawer, "
             "chat attachments). Omit to show nothing."
-        ),
-    )
-    info_banner: InfoBanner | None = Field(
-        default=None,
-        description=(
-            "Optional informative banner shown above the app content on every "
-            "page. Omit to show nothing."
         ),
     )
 

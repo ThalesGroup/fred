@@ -1,0 +1,38 @@
+# Jira requires network access, so these read-only operations may run outside the sandbox.
+prefix_rule(
+    pattern = ["acli", "jira", "auth", "status"],
+    decision = "allow",
+    justification = "Read the current Atlassian CLI authentication status",
+    match = ["acli jira auth status"],
+)
+
+prefix_rule(
+    pattern = ["acli", "jira", "workitem", ["view", "search"]],
+    decision = "allow",
+    justification = "Read Jira work items for triage",
+    match = [
+        "acli jira workitem view PRISM-90 --fields *all --json",
+        "acli jira workitem search --csv --limit 50 --jql project = PRISM",
+    ],
+    not_match = [
+        "acli jira workitem transition --key PRISM-90 --status Analysis in progress --yes",
+    ],
+)
+
+prefix_rule(
+    pattern = [
+        "python3",
+        ".claude/skills/jira/scripts/jira.py",
+        ["show", "attachments"],
+    ],
+    decision = "allow",
+    justification = "Read Jira ticket details and download ticket attachments for triage",
+    match = [
+        "python3 .claude/skills/jira/scripts/jira.py show PRISM-90",
+        "python3 .claude/skills/jira/scripts/jira.py attachments PRISM-90 --list",
+        "python3 .claude/skills/jira/scripts/jira.py attachments PRISM-90",
+    ],
+    not_match = [
+        "python3 .claude/skills/jira/scripts/jira.py comment PRISM-90 -F reply.md",
+    ],
+)

@@ -45,6 +45,12 @@ interface BulkActionsBarProps {
    *  reads as a dead click without this: swaps the icon for a spinner and
    *  disables the button instead of leaving it looking unresponsive. */
   downloadLoading?: boolean;
+  /** Relaunch ingestion for the selected documents whose ingestion failed,
+   *  never ran, or is stuck. `count` is how many will actually be relaunched,
+   *  which is not necessarily the selection size — the tooltip says so, since
+   *  the button stays available as soon as ONE selected document qualifies.
+   *  Omit to hide, like the actions around it. */
+  relaunch?: { count: number; onClick: () => void; loading?: boolean };
   /** True while a folder-containing delete is in flight — deleting a folder
    *  cascades server-side and, with several folders selected, the round-trips
    *  add up (#2446). Same in-button spinner as `downloadLoading`. */
@@ -65,6 +71,7 @@ export default function BulkActionsBar({
   onDownload,
   downloadLoading = false,
   deleteLoading = false,
+  relaunch,
 }: BulkActionsBarProps) {
   const { t } = useTranslation();
 
@@ -73,6 +80,22 @@ export default function BulkActionsBar({
   return (
     <div className={styles.bar}>
       <span className={styles.count}>{t("rework.resources.bulkActions.selectedCount", { count: selectedCount })}</span>
+      {relaunch &&
+        (() => {
+          const label = t("rework.resources.bulkActions.relaunchIngestion", { count: relaunch.count });
+          return (
+            <Tooltip text={label}>
+              <IconButton
+                variant="outlined"
+                size="small"
+                icon={{ category: "outlined", type: "refresh" }}
+                aria-label={label}
+                loading={relaunch.loading}
+                onClick={relaunch.onClick}
+              />
+            </Tooltip>
+          );
+        })()}
       {searchToggle &&
         (() => {
           const key =

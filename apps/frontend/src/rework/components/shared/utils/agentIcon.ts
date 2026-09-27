@@ -14,259 +14,422 @@
 
 import { materialIcons, type MaterialIconType } from "./Type.ts";
 
+type AgentIconRule = {
+  icon: MaterialIconType;
+  /** Names the domain on its own — one hit carries the category. */
+  strong?: string[];
+  /** Generic or ambiguous alone — needs a second keyword from the same rule. */
+  keywords?: string[];
+};
+
 /**
  * Keyword → icon rules for `guessAgentIcon` (#2076 follow-up).
  *
- * The 40 categories cover the day-to-day activities of a digital-services
- * company (ESN) — office work, engineering, finance, HR, legal, sales — the
- * intended audience for these ReAct assistants. Deliberately not exhaustive
- * of every possible profession (e.g. no aviation/medical/food-service
- * categories): a keyword-matching heuristic degrades in quality well before
- * it degrades in speed (see #2076 discussion) — collisions between
+ * The 60 categories cover the day-to-day activities of a digital-services
+ * company (ESN) — office work, engineering, data, finance, HR, legal, sales,
+ * product. Deliberately not exhaustive of every profession (no aviation,
+ * medical or food-service categories): a keyword-matching heuristic degrades
+ * in quality well before it degrades in speed, because collisions between
  * lookalike keywords across unrelated categories get more likely, and more
- * order-dependent, as the rule count grows. 40 well-differentiated, broadly
- * relevant categories is judged the right size for this audience; adding
- * niche categories on a one-off basis is a trap; extend deliberately.
+ * order-dependent, as the rule count grows. Extend deliberately, in families,
+ * not one niche category at a time.
  *
- * Each rule is scored by how many of its distinct keywords appear in the
- * agent's name + role + description (case-insensitive substring match) —
- * not just whether at least one does. The highest-scoring rule wins; ties
- * keep the first one in array order, so near-duplicate categories should
- * still be ordered by which reading feels more central to the role. This
- * scoring (vs. the earlier first-match-wins) is what gives icon selection
- * more diversity: an agent whose description leans heavily into one
- * category's vocabulary no longer loses to an earlier rule that happens to
- * match on a single incidental word.
+ * Keywords are bilingual (FR/EN) and matched as case-insensitive substrings,
+ * so a stem ("rédac", "financ") covers its inflections. They are split by how
+ * much one hit proves: a `strong` keyword names the domain and scores 2 (an
+ * acronym like "ppt"/"rgpd", a product name, a practice like "plan de
+ * charge"), a plain keyword scores 1 because it also shows up outside its
+ * domain ("test", "analyse", "document", "log"). Points are summed over the
+ * agent's name + role + description, the highest total at or above
+ * `MIN_ICON_SCORE` wins, ties keep the first rule in array order. So
+ * near-duplicate categories should be ordered by which reading feels more
+ * central to the role, and a new category placed at the end of its family
+ * never steals a tie from an older one.
+ *
+ * Beware French plurals: a multi-word keyword is matched literally, so
+ * "poste de travail" does not match "postes de travail".
+ *
+ * Exported for the test that replays every `strong` keyword on its own: a new
+ * one shadowed by an earlier rule's substring is otherwise silently dead.
  */
-const AGENT_ICON_RULES: { icon: MaterialIconType; keywords: string[] }[] = [
+export const AGENT_ICON_RULES: AgentIconRule[] = [
   // ── Engineering / IT ──────────────────────────────────────────────────
   {
     icon: "code",
-    keywords: [
-      "code",
-      "coding",
-      "dévelop",
-      "develop",
-      "programm",
-      "github",
-      "software",
-      "logiciel",
-      "ingénieur",
-      "engineer",
-      "api",
-    ],
+    strong: ["github", "programm"],
+    keywords: ["code", "coding", "dévelop", "develop", "software", "logiciel", "ingénieur", "engineer", "api"],
   },
   {
     icon: "cloud",
-    keywords: ["cloud", "devops", "kubernetes", "infrastructure", "infra", "déploiement", "deployment", "serveur"],
+    strong: ["cloud", "kubernetes", "devops"],
+    keywords: ["infra", "déploiement", "deployment", "serveur"],
   },
   {
     icon: "database",
-    keywords: ["base de données", "database", "sql", "entrepôt de données", "data warehouse"],
+    strong: ["base de données", "database", "sql", "entrepôt de données", "data warehouse"],
   },
   {
     icon: "architecture",
-    keywords: ["architecture", "conception technique", "technical design", "urbanisation", "schéma technique"],
+    strong: ["architecture", "conception technique", "technical design", "urbanisation", "schéma technique"],
   },
   {
     icon: "bug_report",
-    keywords: ["test", "qa", "qualité logicielle", "bug", "anomalie", "recette", "non-régression", "regression"],
+    strong: ["qualité logicielle", "non-régression", "bug"],
+    keywords: ["test", "qa", "anomalie", "recette", "regression"],
   },
   {
     icon: "shield",
-    keywords: [
-      "sécurité",
-      "securite",
-      "security",
-      "secure",
-      "cybersécurité",
-      "vulnérab",
-      "vulnerab",
-      "threat",
-      "menace",
-      "pentest",
-    ],
+    strong: ["vulnérab", "vulnerab", "pentest", "sécurité", "security"],
+    keywords: ["securite", "secure", "threat", "menace"],
   },
   {
     icon: "sync_alt",
-    keywords: ["intégration", "integration", "synchronis", "sync", "etl", "flux de données", "data pipeline"],
+    strong: ["etl", "flux de données", "data pipeline", "sync"],
+    keywords: ["intégration", "integration"],
   },
-
+  {
+    icon: "neurology",
+    strong: [
+      "intelligence artificielle",
+      "artificial intelligence",
+      "llm",
+      "machine learning",
+      "apprentissage automatique",
+      "modèle de langage",
+      "genai",
+    ],
+    keywords: ["prompt"],
+  },
+  {
+    icon: "hub",
+    strong: ["workflow", "orchestration", "rpa", "chaîne de traitement"],
+    keywords: ["automatis", "automation"],
+  },
+  {
+    icon: "extension",
+    strong: ["connecteur", "connector", "plugin", "mcp", "interopérab"],
+    keywords: ["extension"],
+  },
+  {
+    icon: "new_releases",
+    strong: ["changelog", "note de version", "montée de version", "livraison logicielle", "mise en production"],
+    keywords: ["release"],
+  },
   // ── Data / Analysis ───────────────────────────────────────────────────
   {
     icon: "analytics",
-    keywords: ["analytic", "analyse", "statistiq", "statistic", "dashboard", "kpi", "métrique", "metric"],
+    strong: ["kpi", "dashboard", "statistiq", "statistic", "analytic"],
+    keywords: ["analyse", "métrique", "metric"],
   },
   {
     icon: "table_chart",
-    keywords: ["tableur", "spreadsheet", "excel", "reporting", "rapport chiffré", "tableau de données"],
+    strong: ["tableur", "spreadsheet", "excel", "rapport chiffré", "tableau de données"],
+    keywords: ["reporting"],
   },
   {
     icon: "find_in_page",
-    keywords: ["recherche documentaire", "document search", "rag", "corpus", "base documentaire", "knowledge base"],
+    strong: [
+      "recherche documentaire",
+      "document search",
+      "rag",
+      "base documentaire",
+      "knowledge base",
+      "base de connaissances",
+      "wiki",
+      "corpus",
+    ],
   },
   {
     icon: "travel_explore",
-    keywords: ["veille", "market research", "recherche", "research", "explorat", "investigat", "innovation"],
+    strong: ["veille", "market research", "explorat", "investigat"],
+    keywords: ["recherche", "innovation"],
   },
-
+  {
+    icon: "show_chart",
+    strong: ["prévision", "forecast", "prospective"],
+    keywords: ["projection", "tendance", "trend"],
+  },
+  {
+    icon: "category",
+    strong: ["taxonomie", "classification", "catégorisation", "métadonnées", "metadata", "nomenclature", "étiquetage"],
+  },
+  {
+    icon: "upload_file",
+    strong: [
+      "import de données",
+      "importation",
+      "export de données",
+      "exportation",
+      "migration de données",
+      "reprise de données",
+      "chargement de fichiers",
+    ],
+  },
   // ── Writing / Documents / Media ───────────────────────────────────────
   {
     icon: "edit_note",
-    keywords: ["rédac", "writ", "draft", "contenu", "content", "blog", "article"],
+    strong: ["rédac", "blog"],
+    keywords: ["writ", "draft", "contenu", "content", "article"],
   },
   {
     icon: "summarize",
-    keywords: ["résum", "summar", "synthèse", "synthesis"],
+    strong: ["résum", "summar", "synthèse", "synthesis"],
   },
   {
     icon: "translate",
-    keywords: ["traduc", "translat", "langue", "language"],
+    strong: ["traduc", "translat"],
+    keywords: ["langue", "language"],
   },
   {
     icon: "description",
-    keywords: ["document", "documentation", "rapport", "report", "compte rendu"],
+    strong: ["documentation"],
+    keywords: ["document", "compte rendu", "rapport", "report"],
   },
   {
     icon: "picture_as_pdf",
-    keywords: ["pdf"],
+    strong: ["pdf", "acrobat"],
   },
   {
     icon: "slideshow",
-    keywords: ["présentation", "presentation", "slide", "powerpoint", "ppt"],
+    strong: ["présentation", "presentation", "powerpoint", "ppt", "slide"],
   },
   {
     icon: "image",
-    keywords: ["image", "photo", "visuel", "design graphique"],
+    strong: ["design graphique", "photo"],
+    keywords: ["image", "visuel"],
   },
   {
     icon: "video_file",
-    keywords: ["vidéo", "video"],
+    strong: ["vidéo", "video", "sous-titr"],
+    keywords: ["montage"],
   },
   {
     icon: "audio_file",
-    keywords: ["audio", "podcast", "voix", "voice", "transcription"],
+    strong: ["podcast", "audio", "transcription"],
+    keywords: ["voix", "voice"],
   },
   {
     icon: "folder",
-    keywords: ["fichier", "file", "classement", "gestion documentaire", "archivage"],
+    strong: ["gestion documentaire", "archivage", "classement"],
+    keywords: ["fichier", "file"],
   },
-
+  {
+    icon: "book_2",
+    strong: ["référentiel", "bonnes pratiques", "méthodologie", "guide pratique"],
+    keywords: ["norme", "procédure"],
+  },
+  {
+    icon: "article",
+    strong: ["revue de presse", "communiqué", "éditorial", "actualités"],
+    keywords: ["presse", "publication"],
+  },
+  {
+    icon: "help_center",
+    strong: [
+      "centre d'aide",
+      "aide en ligne",
+      "self-service",
+      "libre-service",
+      "aide utilisateur",
+      "guide de prise en main",
+    ],
+  },
   // ── Office / Productivity ─────────────────────────────────────────────
   {
     icon: "mail",
-    keywords: ["email", "e-mail", "courriel"],
+    strong: ["email", "e-mail", "courriel", "newsletter", "infolettre"],
   },
   {
     icon: "edit_calendar",
-    keywords: ["planning", "calendar", "calendrier", "schedul", "rendez-vous", "réunion", "meeting"],
+    strong: ["planning", "calendar", "calendrier", "schedul", "rendez-vous"],
+    keywords: ["réunion", "meeting"],
   },
   {
     icon: "assignment",
-    keywords: [
+    strong: [
       "gestion de projet",
       "project management",
-      "tâche",
       "planification de projet",
       "jalons",
       "milestone",
+      "chef de projet",
+    ],
+    keywords: [
       // "pilote"/"piloter"/"pilotage" are French business jargon for project
       // steering ("comité de pilotage", "piloter un projet") — nothing to do
       // with aviation, and squarely relevant to an ESN (#2076 discussion).
+      "tâche",
       "pilote",
-      "piloter",
       "pilotage",
-      "chef de projet",
     ],
   },
   {
     icon: "check_circle",
-    keywords: ["checklist", "suivi de tâches", "task tracking", "to-do", "todo"],
+    strong: ["checklist", "suivi de tâches", "task tracking", "to-do", "todo"],
   },
   {
     icon: "history",
-    keywords: ["historique", "history", "traçabilité", "audit trail", "journal des événements", "log"],
+    strong: ["historique", "traçabilité", "audit trail", "journal des événements"],
+    keywords: ["history", "log"],
   },
   {
     icon: "map",
-    keywords: ["voyage", "travel", "déplacement professionnel", "itinéraire", "itinerary", "note de frais mission"],
+    strong: ["voyage", "déplacement professionnel", "itinéraire", "itinerary", "note de frais mission"],
+    keywords: ["travel"],
   },
   {
     icon: "forum",
-    keywords: ["assistant conversationnel", "conversational assistant", "questions réponses", "faq"],
+    strong: ["assistant conversationnel", "conversational assistant", "questions réponses", "faq"],
   },
-
+  {
+    icon: "schedule",
+    strong: [
+      "compte rendu d'activité",
+      "timesheet",
+      "feuille de temps",
+      "imputation",
+      "temps passé",
+      "saisie des temps",
+    ],
+  },
+  {
+    icon: "quiz",
+    strong: ["questionnaire", "sondage", "qcm", "quiz", "évaluation des connaissances"],
+    keywords: ["enquête"],
+  },
+  {
+    icon: "lightbulb",
+    strong: ["idéation", "brainstorm", "design thinking", "atelier créatif", "génération d'idées"],
+    keywords: ["créativité"],
+  },
   // ── Support / Operations ──────────────────────────────────────────────
   {
     icon: "support_agent",
-    keywords: ["support", "assistance", "helpdesk", "help desk", "service client", "customer service", "sav"],
+    strong: ["helpdesk", "help desk", "service client", "customer service", "service après-vente"],
+    keywords: ["support", "assistance"],
   },
   {
     icon: "build",
-    keywords: ["outils internes", "internal tooling", "maintenance", "dépannage", "troubleshoot"],
+    strong: ["outils internes", "internal tooling", "dépannage", "troubleshoot"],
+    keywords: ["maintenance"],
   },
-
+  {
+    icon: "warning",
+    strong: ["incident", "astreinte", "post-mortem", "outage", "gestion de crise"],
+    keywords: ["panne", "escalade"],
+  },
+  {
+    icon: "desktop_windows",
+    strong: ["poste de travail", "parc informatique", "matériel informatique", "workstation", "support de proximité"],
+    keywords: ["hardware"],
+  },
   // ── HR ─────────────────────────────────────────────────────────────────
   {
     icon: "groups",
-    keywords: ["rh", "ressources humaines", "recrut", "recruit", "onboarding", "talent"],
+    strong: ["ressources humaines", "recrut", "recruit", "onboarding", "talent"],
+    keywords: ["rh"],
   },
   {
     icon: "school",
-    keywords: ["formation", "training", "apprentissage", "e-learning", "montée en compétence", "upskilling"],
+    strong: ["formation", "e-learning", "montée en compétence", "upskilling"],
+    keywords: ["training", "apprentissage"],
   },
-
+  {
+    icon: "people",
+    strong: ["staffing", "plan de charge", "intercontrat", "disponibilité des consultants"],
+    keywords: ["affectation", "effectifs"],
+  },
   // ── Finance ────────────────────────────────────────────────────────────
   {
     icon: "payments",
-    keywords: ["finance", "financ", "budget", "comptab", "accounting", "paiement", "payment", "trésorerie"],
+    strong: ["comptab", "accounting", "trésorerie", "financ"],
+    keywords: ["budget", "paiement", "payment"],
   },
   {
     icon: "receipt_long",
-    keywords: ["facture", "invoice", "facturation", "billing", "note de frais"],
+    strong: ["facture", "invoice", "facturation", "billing", "note de frais"],
   },
   {
     icon: "shopping_cart",
-    keywords: ["achat", "procurement", "fournisseur", "supplier", "approvisionnement", "commande"],
+    strong: ["achat", "procurement", "fournisseur", "supplier", "approvisionnement"],
+    keywords: ["commande"],
   },
-
   // ── Legal / Compliance ────────────────────────────────────────────────
   {
     icon: "gavel",
-    keywords: ["legal", "juridique", "contrat", "contract", "droit", "law"],
+    strong: ["juridique", "contrat", "contract", "law"],
+    keywords: ["legal", "droit"],
   },
   {
     icon: "admin_panel_settings",
-    keywords: ["conformité", "compliance", "gouvernance", "governance", "politique interne", "policy", "audit"],
+    strong: ["conformité", "compliance", "gouvernance", "governance", "politique interne"],
+    keywords: ["policy", "audit"],
   },
-
+  {
+    icon: "lock",
+    strong: ["rgpd", "gdpr", "données personnelles", "anonymisation", "pseudonymisation", "vie privée"],
+    keywords: ["confidentialité"],
+  },
   // ── Sales / Marketing ─────────────────────────────────────────────────
   {
     icon: "handshake",
-    keywords: ["commercial", "vente", "sales", "négociation", "negotiation", "relation client", "account management"],
+    strong: ["commercial", "négociation", "relation client", "account management"],
+    keywords: ["vente", "sales", "negotiation"],
   },
   {
     icon: "request_quote",
-    keywords: ["devis", "quote", "appel d'offres", "rfp", "avant-vente", "proposition commerciale"],
+    strong: ["devis", "appel d'offres", "rfp", "avant-vente"],
+    keywords: ["quote"],
   },
   {
     icon: "campaign",
-    keywords: ["marketing", "campagne", "campaign", "publicité", "advertis", "réseaux sociaux", "social media"],
+    strong: ["marketing", "campagne", "campaign", "publicité", "réseaux sociaux", "social media"],
+    keywords: ["advertis"],
+  },
+  {
+    icon: "reviews",
+    strong: ["satisfaction", "avis client", "nps", "csat", "retour client"],
+    keywords: ["feedback"],
+  },
+  // ── Produit / Design ──────────────────────────────────────────────────
+  {
+    icon: "rocket_launch",
+    strong: ["go-to-market", "mise sur le marché", "roadmap produit", "product launch", "time to market"],
+    keywords: ["lancement"],
+  },
+  {
+    icon: "widgets",
+    strong: [
+      "design system",
+      "maquette",
+      "wireframe",
+      "interface utilisateur",
+      "expérience utilisateur",
+      "ergonomie",
+      "figma",
+    ],
+    keywords: ["prototype"],
   },
 ];
 
-function scoreRule(keywords: string[], haystack: string): number {
-  return keywords.reduce((score, keyword) => score + (haystack.includes(keyword) ? 1 : 0), 0);
+/* A category needs 2 points to win, so one `strong` hit is enough but a lone
+   generic word is not ("test" in a name, "analyse" in a template's boilerplate
+   description). An honest fallback beats a confidently wrong icon. */
+const MIN_ICON_SCORE = 2;
+
+function scoreRule(rule: AgentIconRule, haystack: string): number {
+  const hits = (keywords: string[] | undefined) => (keywords ?? []).filter((k) => haystack.includes(k)).length;
+  return 2 * hits(rule.strong) + hits(rule.keywords);
 }
 
 /**
  * Guess a Material Symbol for an agent card from its name, role, and
  * description — a best-effort visual hint, not a guarantee of relevance.
  *
- * Each category is scored by how many of its distinct keywords match; the
- * highest score wins (ties keep the earlier category in `AGENT_ICON_RULES`).
- * Falls back to `fallback` (normally the site's configured default agent
- * icon) when every category scores zero.
+ * Each category scores 2 per matching `strong` keyword and 1 per plain one;
+ * the highest total wins (ties keep the earlier category in
+ * `AGENT_ICON_RULES`). Falls back to `fallback` (normally the site's
+ * configured default agent icon) when no category reaches `MIN_ICON_SCORE`.
  */
 export function guessAgentIcon(
   displayName: string,
@@ -277,8 +440,8 @@ export function guessAgentIcon(
   const haystack = `${displayName} ${role} ${description}`.toLowerCase();
   let best: { icon: MaterialIconType; score: number } | undefined;
   for (const rule of AGENT_ICON_RULES) {
-    const score = scoreRule(rule.keywords, haystack);
-    if (score > 0 && (!best || score > best.score)) {
+    const score = scoreRule(rule, haystack);
+    if (score >= MIN_ICON_SCORE && (!best || score > best.score)) {
       best = { icon: rule.icon, score };
     }
   }

@@ -1,13 +1,29 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
 import pathlib
 import shutil
 import tempfile
+from collections.abc import AsyncIterator
 
 import pytest
+import pytest_asyncio
 import yaml
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 _CONFIG_SOURCE = (
     pathlib.Path(__file__).resolve().parents[1] / "config" / "configuration_test.yaml"
@@ -115,6 +131,7 @@ def _setup_test_schema() -> None:
     models, even when new columns are added between test runs.
     """
     import control_plane_backend.models.agent_instance_models  # noqa: F401
+    import control_plane_backend.models.announcement_models  # noqa: F401
     import control_plane_backend.models.model_reasoning_models  # noqa: F401
     import control_plane_backend.models.platform_model_binding_models  # noqa: F401
     import control_plane_backend.models.prompt_models  # noqa: F401
@@ -140,6 +157,37 @@ def _setup_test_schema() -> None:
         await engine.dispose()
 
     asyncio.run(_create_all())
+
+
+@pytest_asyncio.fixture
+async def control_plane_sql_engine(
+    tmp_path: pathlib.Path,
+) -> AsyncIterator[AsyncEngine]:
+    """Isolated schema; close SQLite connections before the test loop ends."""
+    from control_plane_backend.models.base import Base as CPBase
+    from fred_core.common import PostgresStoreConfig
+    from fred_core.models.base import Base as FredCoreBase
+    from fred_core.sql import create_async_engine_from_config
+
+    engine = create_async_engine_from_config(
+        PostgresStoreConfig(sqlite_path=str(tmp_path / "control_plane.sqlite3"))
+    )
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(FredCoreBase.metadata.create_all)
+            await conn.run_sync(CPBase.metadata.create_all)
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _restore_delegation():
+    """Delegation settings are process-wide; a test that installs them must not leak."""
+    from fred_core.security.delegation import preserved_delegation
+
+    with preserved_delegation():
+        yield
 
 
 @pytest.fixture(autouse=True)

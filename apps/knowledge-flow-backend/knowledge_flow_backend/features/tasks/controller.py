@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -8,6 +22,7 @@ from fastapi.responses import StreamingResponse
 from fred_core import (
     KeycloakUser,
     get_current_user,
+    get_current_user_or_service,
 )
 from fred_core.tasks.authz import (
     authorize_task_access,
@@ -15,7 +30,7 @@ from fred_core.tasks.authz import (
     authorize_task_stream,
     list_tasks_scoped,
 )
-from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse
+from fred_core.tasks.models import AcknowledgeTaskResponse, TaskListResponse, TaskSummary
 from fred_core.tasks.service import TaskNotAcknowledgeableError, TaskService
 from fred_core.tasks.sse import task_event_stream, with_heartbeat
 from fred_core.tasks.store import TaskNotFoundError
@@ -63,6 +78,31 @@ class TasksController:
             return await list_tasks_scoped(self._service, get_rebac_engine(), user, scope=scope, team_id=team_id, kind=kind, state=state)
 
         @router.get(
+            "/tasks/{task_id}",
+            tags=["Tasks"],
+            response_model=TaskSummary,
+            summary="Read one task's current state",
+        )
+        async def get_task(
+            task_id: str,
+            user: KeycloakUser = Depends(get_current_user_or_service),
+        ) -> TaskSummary:
+            run = await self._service.get_run(task_id)
+            if run is None:
+                raise HTTPException(status_code=404, detail="Task not found")
+            await authorize_task_access(user, run, get_rebac_engine())
+            # Same read-time reconcile as the SSE stream, so a task whose
+            # workflow died is not read as running forever.
+            try:
+                await self._service.reconcile_task(task_id)
+            except Exception:
+                logger.warning("[TASKS] read-time reconcile failed for task_id=%s", task_id, exc_info=True)
+            summary = await self._service.get_task(task_id)
+            if summary is None:
+                raise HTTPException(status_code=404, detail="Task not found")
+            return summary
+
+        @router.get(
             "/tasks/{task_id}/events",
             tags=["Tasks"],
             summary="Stream task progress events (SSE)",
@@ -94,6 +134,7 @@ class TasksController:
             tags=["Tasks"],
             status_code=202,
             summary="Request cooperative cancellation of a running task",
+            responses={409: {"description": "Ingestion cancellation is not supported"}},
         )
         async def cancel_task(
             task_id: str,
@@ -103,6 +144,8 @@ class TasksController:
             if run is None:
                 raise HTTPException(status_code=404, detail="Task not found")
             await authorize_task_mutation(user, run, get_rebac_engine())
+            if run.kind == "ingestion":
+                raise HTTPException(status_code=409, detail="Ingestion cancellation is not supported. Processing continues until success or failure.")
             await self._service.cancel(task_id)
             if run.execution_id:
                 self._schedule_post_cancel_reconcile(task_id)

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { createKeycloakInstance } from "../security/KeycloakService";
-import type { FrontendConfig, InfoBanner } from "../slices/controlPlane/controlPlaneOpenApi";
+import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
 
 /** Public pre-auth control-plane config surface. */
 const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
@@ -49,15 +49,6 @@ export interface AppConfig {
    * marker is also `false`.
    */
   root_bootstrap_required: boolean;
-  /**
-   * Deployer-configured global announcement banner
-   * (`platform.frontend.info_banner`), or `null` when the deployment
-   * configures none. Sourced from the public pre-auth `/frontend/config` so
-   * the banner can render on every page — including the GCU-acceptance and
-   * root-bootstrap screens, which render before the authenticated bootstrap
-   * can succeed.
-   */
-  info_banner: InfoBanner | null;
 }
 
 type RawAppConfig = {
@@ -98,7 +89,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version, root_bootstrap_required, info_banner } = await loadPublicConfig();
+  const { user_auth, gcu_version, root_bootstrap_required } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
@@ -107,7 +98,6 @@ export const loadConfig = async () => {
     user_auth,
     gcu_version,
     root_bootstrap_required,
-    info_banner,
   };
 
   if (config.user_auth?.enabled) {
@@ -136,7 +126,7 @@ export const loadConfig = async () => {
  *   `/config.json`, since the control-plane is required to run the app
  */
 const loadPublicConfig = async (): Promise<
-  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required" | "info_banner">
+  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required">
 > => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
@@ -157,7 +147,6 @@ const loadPublicConfig = async (): Promise<
     // frontend must not otherwise re-derive ReBAC/auth policy itself.
     root_bootstrap_required:
       payload.root_bootstrap_required ?? (payload.user_auth.enabled && !payload.root_bootstrap_completed),
-    info_banner: payload.info_banner ?? null,
   };
 };
 
@@ -237,18 +226,3 @@ export const getGcuVersion = (): string | null => getConfig().gcu_version;
  * - call after `loadConfig()`; `true` means the bootstrap screen must be shown
  */
 export const getRootBootstrapRequired = (): boolean => getConfig().root_bootstrap_required;
-
-/**
- * Return the deployer-configured global announcement banner, or `null` when
- * the deployment configures none.
- *
- * Why this function exists:
- * - the `InfoBanner` component renders on every page, including the pre-auth
- *   GCU-acceptance and root-bootstrap screens, so its content must come from
- *   the public pre-auth `/frontend/config` rather than the authenticated
- *   bootstrap
- *
- * How to use it:
- * - call after `loadConfig()`; `null` means no banner is rendered
- */
-export const getInfoBanner = (): InfoBanner | null => getConfig().info_banner;

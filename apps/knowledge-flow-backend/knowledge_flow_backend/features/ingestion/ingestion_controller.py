@@ -52,6 +52,7 @@ from fred_core.documents.document_structures import (
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.scheduler import SchedulerBackend
+from fred_core.security.delegation import holds_caller_role
 from fred_core.security.structure import is_service_agent
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -172,7 +173,7 @@ async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None
     """
     for tag_id in tags:
         await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-    if not tags or is_service_agent(user):
+    if not tags or (is_service_agent(user) and not holds_caller_role(user)):
         return
 
     tag_store = ApplicationContext.get_instance().get_tag_store()
@@ -340,6 +341,69 @@ def cleanup_uploaded_temp_file(file_path: pathlib.Path) -> None:
             shutil.rmtree(temp_root)
     except Exception:  # noqa: BLE001
         logger.warning("Failed to clean up temporary upload workdir: %s", temp_root, exc_info=True)
+
+
+async def resolve_tag_owners(tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
+    """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
+
+    Team ownership prefers ReBAC, falling back to team metadata by `tag.owner_id`;
+    a tag resolving to neither is personal. One path, so quota enforcement and
+    task `team_id` tagging agree on who owns a tag, whichever surface asks.
+    """
+    tag_store = ApplicationContext.get_instance().get_tag_store()
+    rebac = ApplicationContext.get_instance().get_rebac_engine()
+
+    team_ids: set[str] = set()
+    user_ids: set[str] = set()
+    for tag_id in tags:
+        tag = await tag_store.get_tag_by_id(tag_id)
+        if not tag or not tag.owner_id:
+            continue
+
+        resolved_for_tag: list[str] = []
+        try:
+            from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+
+            subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
+            if not isinstance(subjects, RebacDisabledResult) and subjects:
+                for sub in subjects:
+                    resolved_for_tag.append(sub.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
+                tag.id,
+                exc,
+            )
+
+        if not resolved_for_tag:
+            try:
+                engine = ApplicationContext.get_instance().get_pg_async_engine()
+                store = TeamMetadataStore(engine)
+                meta = await store.get_by_team_id(TeamId(tag.owner_id))
+                if meta is not None:
+                    resolved_for_tag.append(tag.owner_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
+                    tag.id,
+                    exc,
+                )
+
+        if resolved_for_tag:
+            for t_id in resolved_for_tag:
+                if t_id.startswith("personal-"):
+                    user_ids.add(t_id[len("personal-") :])
+                else:
+                    team_ids.add(t_id)
+        else:
+            owner_id = tag.owner_id
+            if owner_id == "personal" or owner_id is None:
+                owner_id = user.uid
+            elif owner_id.startswith("personal-"):
+                owner_id = owner_id[len("personal-") :]
+            user_ids.add(owner_id)
+
+    return team_ids, user_ids
 
 
 class IngestionController:
@@ -624,69 +688,7 @@ class IngestionController:
             content_store.delete_object(stored_object.key)
 
     async def _resolve_tag_owners(self, tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
-        """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
-
-        Team ownership prefers ReBAC (`lookup_subjects`), falling back to a team
-        metadata lookup by `tag.owner_id` when ReBAC is disabled or errors. A tag
-        that resolves to neither is treated as personal, owned by `user` if the
-        tag itself carries no resolvable owner. Shared by quota enforcement
-        (`_check_quota_before_upload`) and task `team_id` tagging
-        (`_stream_upload_process`) so both agree on tag ownership from one path.
-        """
-        tag_store = ApplicationContext.get_instance().get_tag_store()
-        rebac = ApplicationContext.get_instance().get_rebac_engine()
-
-        team_ids: set[str] = set()
-        user_ids: set[str] = set()
-        for tag_id in tags:
-            tag = await tag_store.get_tag_by_id(tag_id)
-            if not tag or not tag.owner_id:
-                continue
-
-            resolved_for_tag: list[str] = []
-            try:
-                from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
-
-                subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
-                if not isinstance(subjects, RebacDisabledResult) and subjects:
-                    for sub in subjects:
-                        resolved_for_tag.append(sub.id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
-                    tag.id,
-                    exc,
-                )
-
-            if not resolved_for_tag:
-                try:
-                    engine = ApplicationContext.get_instance().get_pg_async_engine()
-                    store = TeamMetadataStore(engine)
-                    meta = await store.get_by_team_id(TeamId(tag.owner_id))
-                    if meta is not None:
-                        resolved_for_tag.append(tag.owner_id)
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
-                        tag.id,
-                        exc,
-                    )
-
-            if resolved_for_tag:
-                for t_id in resolved_for_tag:
-                    if t_id.startswith("personal-"):
-                        user_ids.add(t_id[len("personal-") :])
-                    else:
-                        team_ids.add(t_id)
-            else:
-                owner_id = tag.owner_id
-                if owner_id == "personal" or owner_id is None:
-                    owner_id = user.uid
-                elif owner_id.startswith("personal-"):
-                    owner_id = owner_id[len("personal-") :]
-                user_ids.add(owner_id)
-
-        return team_ids, user_ids
+        return await resolve_tag_owners(tags, user)
 
     async def _evaluate_quota(
         self,
@@ -800,19 +802,6 @@ class IngestionController:
         total = len(preloaded_files)
         scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
 
-        # Resolve once (tags are constant for the whole call) so every created
-        # task_run row carries the destination team_id — without it, the task is
-        # created with team_id=NULL and never matches a team-scoped Activity
-        # query (`WHERE team_id = :team_id` never matches NULL), even though it
-        # correctly shows up for a platform admin (no team_id filter at all).
-        # Ambiguous (tags spanning more than one team) or personal-space uploads
-        # deliberately leave it None rather than guess.
-        owning_team_id: str | None = None
-        if scheduler_task_service is not None:
-            team_ids, _ = await self._resolve_tag_owners(tags, user)
-            if len(team_ids) == 1:
-                owning_team_id = next(iter(team_ids))
-
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
             file_status = "error"
@@ -879,25 +868,7 @@ class IngestionController:
                 else:
                     await self.service.save_metadata(user, metadata=metadata)
 
-                    # OPS-04: create a task_run row so SSE events can be tracked
                     file_task_id: Optional[str] = None
-                    try:
-                        task_svc = ApplicationContext.get_instance().get_task_service()
-                        if task_svc is not None:
-                            from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, TaskTarget
-
-                            req = StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid]))
-                            # Set the target at creation so the document row's indicator survives a
-                            # reload even when no worker is running to emit the first event.
-                            target = TaskTarget(
-                                type="document",
-                                id=metadata.document_uid,
-                                label=metadata.document_name or metadata.document_uid,
-                            )
-                            resp = await task_svc.start(req, created_by=user.uid, team_id=owning_team_id, target=target)
-                            file_task_id = resp.task_id
-                    except Exception:
-                        logger.warning("OPS-04: could not create task_run for %s — tray tracking disabled", filename, exc_info=True)
 
                     yield (
                         ProcessingProgress(
@@ -949,26 +920,15 @@ class IngestionController:
                 # with the in-memory scheduler.
                 if self._scheduler_backend() == SchedulerBackend.MEMORY:
                     scheduler_background_tasks = None
-                _, handle = await scheduler_task_service.submit_documents(
+                definition, handle = await scheduler_task_service.submit_documents(
                     user=user,
                     pipeline_name="upload_ui_async",
                     files=files_to_schedule,
                     background_tasks=scheduler_background_tasks,
                 )
-                workflow_id = handle.workflow_id
                 logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
-                # OPS-04 reconciliation: bind each task to the workflow that backs it,
-                # so a task stuck pending (e.g. worker down past the workflow timeout)
-                # can be reconciled against Temporal's verdict instead of hanging.
-                bind_task_svc = ApplicationContext.get_instance().get_task_service()
-                if bind_task_svc is not None and workflow_id:
-                    for _bf, _bd, _bt, bind_task_id in scheduled_candidates:
-                        if not bind_task_id:
-                            continue
-                        try:
-                            await bind_task_svc.bind_execution(bind_task_id, execution_id=workflow_id)
-                        except Exception:
-                            logger.warning("OPS-04: could not bind task %s to workflow %s", bind_task_id, workflow_id, exc_info=True)
+                task_ids = {file.document_uid: file.task_id for file in definition.files}
+                scheduled_candidates = [(name, uid, kind, task_ids[uid]) for name, uid, kind, _ in scheduled_candidates]
                 for filename, document_uid, _, task_id in scheduled_candidates:
                     # Canonical progress event carrying task_id, like the preparation
                     # and processing steps — so the UI can correlate every step of the
@@ -1001,16 +961,8 @@ class IngestionController:
                 error_message = self._format_exception_message(e)
                 last_error = error_message
                 logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
-                # The workflow was never created: durably fail each task so it cannot
-                # stay "pending in the tray" with no execution behind it.
-                fail_task_svc = ApplicationContext.get_instance().get_task_service()
-                for filename, _, _, task_id in scheduled_candidates:
+                for filename, _, _, _ in scheduled_candidates:
                     yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
-                    if fail_task_svc is not None and task_id:
-                        try:
-                            await fail_task_svc.fail_task(task_id, f"Scheduling failed: {error_message}")
-                        except Exception:
-                            logger.warning("OPS-04: could not fail task %s after submission failure", task_id, exc_info=True)
 
         overall_status = Status.SUCCESS if success == total else Status.FAILED
         done_payload: dict = {"step": "done", "status": overall_status}

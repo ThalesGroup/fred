@@ -1,3 +1,17 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +42,7 @@ from fred_core import (
     TeamPermission,
     TeamVisibility,
     create_keycloak_admin,
+    holds_caller_role,
     is_service_agent,
     team_organization_relation,
 )
@@ -2185,7 +2200,11 @@ async def _validate_team_and_check_permission(
     permissions_are_read_only = (
         set(permissions) <= SERVICE_AGENT_ALLOWED_TEAM_PERMISSIONS
     )
-    if is_service_agent(user) and permissions_are_read_only:
+    if (
+        is_service_agent(user)
+        and not holds_caller_role(user)
+        and permissions_are_read_only
+    ):
         # Solution A (RFC EVAL-AUTH): recognize the evaluation worker's service
         # identity for team read, scoped to the request team_id, without any stored
         # OpenFGA relation. Write permissions are NOT in the allowed set, so mutating

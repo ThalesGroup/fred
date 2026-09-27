@@ -1,36 +1,38 @@
 ---
-title: Prompt library
-order: 30
-description: Organize categories, create prompts, reuse them in chat and agents.
+title: Prompts
+order: 40
+description: Save the team's recurring requests and reuse them.
 icon: category
 ---
 
-# Prompt library
+# Prompts
 
-A **prompt** is a reusable text: a typical question, an instruction, an answer
-frame. Your team's **Prompts** page holds this shared library.
+A **prompt** is a reusable piece of text: a standard question, an instruction, a
+frame for an answer. Your team's **Prompts** page holds this shared library.
 
-## Team categories
+> Creating and organizing the team's prompts requires the **Editor** role. Any
+> member can read and use them.
 
-Prompts are filed into team-owned **categories**. You create, rename, delete,
-and reorganize them your way. On creation, a team starts with a **starter kit**
-(a few categories and sample prompts) that you then grow.
+## Categories
 
-> Deleting a category still used by prompts is blocked: empty it or refile its
-> prompts first.
+Prompts go into **categories** belonging to the team, which you create, rename
+and reorder. A new team starts with a few categories and sample prompts, so
+nobody starts from a blank page.
 
-## Creating and viewing a prompt
+Deleting a category that still holds prompts is refused: empty it or move them
+first.
 
-A prompt has a title and a body. Click its card to **view** it, then **copy**
-it from within that view. A counter shows how many times it has been used —
-a handy signal for spotting the prompts that pull their weight.
+## Create, read, reuse
 
-![TODO: screenshot — the prompt library and a card](assets/prompts-library.png)
-
-## Using a prompt
+A prompt has a title and a body. Its card lets you read and copy it. A counter
+shows how many times it has been used: a useful way to tell the prompts that
+are genuinely used from the rest.
 
 A prompt serves in two places:
 
-- **In a conversation**: insert it so you don't rewrite a recurring request.
-- **In an agent's configuration**: attach it to steer its behavior durably (see
-  [Agents](/help/en/features/agents)).
+- **in a conversation**, inserted so you do not rewrite a recurring request;
+- **in an agent's configuration**, attached to steer its behaviour lastingly
+  (see [Agents](/help/en/features/agents)).
+
+> A well-written team prompt stops everyone reinventing the same wording.
+> Explicit categories let a newcomer understand the organization unaided.

@@ -1,3 +1,17 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // NOT GENERATED. Safe to edit.
 import {
   controlPlaneApi as api,
@@ -21,8 +35,30 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
     "ControlPlaneKnowledgeBase",
+    "ControlPlaneAnnouncement",
   ],
   endpoints: {
+    // Platform announcements. Both reads share one LIST tag: an admin mutation
+    // must refresh the admin table AND the banner stack behind it, since the
+    // admin is looking at the same app the banner renders in.
+    getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    listAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGet: {
+      providesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    createAnnouncementControlPlaneV1AdminPlatformAnnouncementsPost: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    updateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    setAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPut: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    deleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDelete: {
+      invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
     //
@@ -174,8 +210,18 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
       providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
     },
+    // Every space it deleted from, not just the inactive list: the team sidebar
+    // reads `LIST-<teamId>`, so without these the cleanup leaves ghost rows a
+    // user can still click (landing on an empty conversation) until the list's
+    // own 30s poll catches up. The single-session delete above already does it.
     postBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePost: {
-      invalidatesTags: [{ type: "ControlPlaneSession", id: "INACTIVE" }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneSession", id: "INACTIVE" },
+        ...[...new Set(arg.bulkDeleteSessionsRequest.sessions.map((s) => s.team_id))].map((teamId) => ({
+          type: "ControlPlaneSession" as const,
+          id: `LIST-${teamId}`,
+        })),
+      ],
     },
     patchTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdPatch: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
@@ -661,6 +707,18 @@ export const {
   useRestoreRevisionControlPlaneV1TeamsTeamIdWikiPagesPageIdRevisionsRevisionIdRestorePostMutation:
     useRestoreWikiRevisionMutation,
   useWriteRulesControlPlaneV1TeamsTeamIdWikiRulesPutMutation: useWriteWikiRulesMutation,
+  // Platform announcements: the admin CRUD, plus the delivery read the banner
+  // stack subscribes to. The stack drives its own refresh through
+  // `crossSessionRefreshOptions` — this app never calls `setupListeners`, so
+  // RTK's own `refetchOnFocus` would be inert.
+  useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery: useActiveAnnouncementsQuery,
+  useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery: useAnnouncementsQuery,
+  useCreateAnnouncementControlPlaneV1AdminPlatformAnnouncementsPostMutation: useCreateAnnouncementMutation,
+  useUpdateAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdPutMutation: useUpdateAnnouncementMutation,
+  useSetAnnouncementEnabledControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdEnabledPutMutation:
+    useSetAnnouncementEnabledMutation,
+  useDeleteAnnouncementControlPlaneV1AdminPlatformAnnouncementsAnnouncementIdDeleteMutation:
+    useDeleteAnnouncementMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

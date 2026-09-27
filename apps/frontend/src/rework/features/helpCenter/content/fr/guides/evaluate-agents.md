@@ -1,40 +1,39 @@
 ---
 title: Évaluer un agent
-order: 50
-description: Mesurer la qualité d'un agent au fil de campagnes d'évaluation.
+order: 20
+description: Mesurer la qualité d'un agent, plutôt que s'en faire une impression.
 icon: reviews
 ---
 
 # Évaluer un agent
 
 Comment savoir si un agent répond bien — et s'il s'améliore quand vous ajustez
-sa configuration ? Les **évaluations** apportent une réponse mesurée plutôt
-qu'une impression.
+sa configuration ? En le mesurant, plutôt qu'en s'en remettant à une impression
+formée sur quelques questions.
 
-## Créer une évaluation
+> Les évaluations demandent le rôle **Analyste** ou **Admin** dans l'équipe.
 
-Depuis les [réglages de l'équipe](/help/fr/features/teams), section
-**Évaluations**, créez une **évaluation** : donnez-lui un nom et ses cas. C'est
-une définition réutilisable et versionnée — la créer ne lance encore aucune
-exécution.
+## 1. Créer l'évaluation
 
-## La lancer sur un agent
+Dans les **Réglages** de l'équipe, section **Évaluations**, créez une
+**évaluation** : un nom et ses cas. C'est une définition réutilisable et
+versionnée — la créer ne lance aucune exécution.
 
-Une fois l'évaluation créée, déclenchez une **exécution** sur l'agent visé.
-L'exécution parcourt chaque cas et mesure les réponses de l'agent.
+Un bon jeu de cas ressemble à ce que vos collègues demanderont vraiment, y
+compris les questions auxquelles l'agent **ne devrait pas** savoir répondre :
+c'est ainsi que l'on repère les réponses inventées.
 
-## Lire les résultats
+## 2. La lancer
 
-Une fois l'exécution terminée, elle affiche pour chaque cas son résultat
-(réussi, échoué, ignoré). Parcourez-les pour repérer les cas où l'agent déçoit
-et comprendre pourquoi.
+Déclenchez une **exécution** sur l'agent visé. Elle parcourt chaque cas et
+mesure les réponses.
 
-## Itérer
+## 3. Lire et ajuster
 
-Servez-vous des résultats pour ajuster l'agent — instructions, prompts
-attachés, corpus documentaire — puis relancez une exécution pour vérifier que
-la qualité progresse. C'est ce cycle **mesurer → ajuster → remesurer** qui fait
-avancer un agent.
+Chaque cas ressort réussi, échoué ou ignoré. Parcourez les échecs pour
+comprendre _pourquoi_ : instructions trop vagues, corpus incomplet, question
+ambiguë. Ajustez un seul paramètre à la fois, relancez, comparez.
 
-> L'évaluation est particulièrement utile avant de partager largement un agent,
-> ou après une modification importante de sa configuration.
+C'est ce cycle **mesurer → ajuster → remesurer** qui fait progresser un agent —
+et c'est particulièrement utile avant de le partager largement, ou après une
+modification importante.

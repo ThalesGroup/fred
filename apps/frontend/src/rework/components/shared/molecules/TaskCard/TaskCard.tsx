@@ -16,7 +16,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
-import { relativeTime } from "../../../../features/tasks/taskLabels";
+import { relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -92,7 +92,7 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
             </Tooltip>
           </span>
         ) : task.step ? (
-          <span className={styles.stepText}>{task.step}</span>
+          <span className={styles.stepText}>{stepLabel(task, t)}</span>
         ) : null}
         {task.warnings && task.warnings.length > 0 && (
           <div className={styles.warningGroup}>

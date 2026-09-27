@@ -162,6 +162,11 @@ x-profile-medium: &profile-medium
   pdf:
     extractor: docling
     do_ocr: true
+    # Sized against the extraction-medium pod: 2 threads x its 2 concurrent
+    # activities fills its 4 CPU without oversubscribing them. This anchor is also
+    # the API pod's medium profile, whose in-process extraction (library sync, the
+    # no-scheduler upload path) therefore gets 2 threads instead of the default 4.
+    docling_num_threads: 2
   input_processors: *rich-input-processors
 
 x-profile-rich-backend: &profile-rich-backend
@@ -182,6 +187,10 @@ x-profile-rich-backend: &profile-rich-backend
   pdf:
     extractor: docling
     do_ocr: true
+    # Sized against the extraction-rich pod: one concurrent extraction, so a
+    # single document may use all 4 of its CPU. Also the API pod's rich profile,
+    # for which 4 is what the unset default already gave.
+    docling_num_threads: 4
   input_processors: *rich-input-processors
 
 # Rich profile for the Temporal worker: same as backend but generate_summary: true
@@ -238,13 +247,53 @@ x-kf-security: &kf-security
     # timeout_millisec: 2000            # Optional request timeout
     # headers:
     #   X-Custom-Header: "value"
+  delegation:
+    # Delegation lets a program act for a person. The program (a "workload") signs
+    # in with its own service account: a Keycloak client identity that belongs to
+    # the program, not to anyone. With each call it names the person, run and
+    # agent the call is for. Each backend has one switch per direction.
+    #
+    # accept_delegated_calls (incoming) - this backend's switch. It believes the
+    # person a calling workload names, but only when that workload's token carries
+    # the role named by caller_role (default delegation_caller) on the client
+    # named by audience (default fred-delegation). The role is granted in Keycloak
+    # to the caller's service account; no list of callers is kept here.
+    #
+    # act_for_people (outgoing) - this backend never calls others for a person;
+    # leave it false.
+    #
+    # Both are off by default; turn on the matching switch on each side together.
+    act_for_people: false
+    accept_delegated_calls: false
 
+# Shared by the knowledge-flow API and by the workers, here, in this file. It is an
+# anchor, so it is resolved when this file is parsed — it does NOT carry an override
+# from a -f values file or a --set. Retuning ingestion for an environment therefore
+# means editing two applications in that overlay:
+#
+#   applications.knowledge-flow-backend   the API: submits the workflows, derives
+#                                         each profile's extraction queue name, and
+#                                         writes the uploaded document to storage
+#   applications.knowledge-flow-worker    the common worker; the three
+#                                         knowledge-flow-worker-extraction-* groups
+#                                         inherit it at render time (`inheritFrom`)
+#
+# Overriding the worker alone leaves the API on the values below, and the two then
+# disagree on the queue names and on where the document is: submissions land on
+# queues nobody polls, or extraction cannot find its input. `make
+# check-chart-ingestion-workers` renders a whole retuned deployment and checks that
+# the API and the four groups come out with one Temporal server, one namespace, one
+# base queue, one content storage and one vector index.
 x-kf-scheduler: &kf-scheduler
   enabled: true
   backend: "temporal"
   temporal:
     host: "localhost:7233"
     namespace: "default"
+    # The base queue. Every workflow runs here, and each profile's extraction queue
+    # is derived from this one name ("ingestion-rich", …) by the submitting API and
+    # by the worker alike, so the two sides cannot disagree on it — provided both
+    # carry the same value, which is the overlay's job (see above).
     task_queue: "ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
@@ -254,7 +303,12 @@ x-kf-scheduler: &kf-scheduler
     # cores/limits available to the worker pod, concurrent extractions oversubscribe
     # the CPU and appear to stall rather than progress. Size docling_num_threads to
     # (pod CPU limit) / ingestion_max_concurrent_activities.
+    #
+    # This limit is per worker role, not per process. Each of the four deployments
+    # below serves one role, so there it is the pod's limit; a process configured
+    # with several roles runs up to this many activities for each of them.
     ingestion_max_concurrent_activities: 3
+
 
 x-kf-content-storage: &kf-content-storage
   type: local
@@ -393,6 +447,24 @@ x-cp-security: &cp-security
     enabled: true
     type: openfga
     api_url: "http://openfga:8080"
+  delegation:
+    # Delegation lets a program act for a person. The program (a "workload") signs
+    # in with its own service account: a Keycloak client identity that belongs to
+    # the program, not to anyone. With each call it names the person, run and
+    # agent the call is for. Each backend has one switch per direction.
+    #
+    # accept_delegated_calls (incoming) - this backend's switch. It believes the
+    # person a calling workload names, but only when that workload's token carries
+    # the role named by caller_role (default delegation_caller) on the client
+    # named by audience (default fred-delegation). The role is granted in Keycloak
+    # to the caller's service account; no list of callers is kept here.
+    #
+    # act_for_people (outgoing) - this backend never calls others for a person;
+    # leave it false.
+    #
+    # Both are off by default; turn on the matching switch on each side together.
+    act_for_people: false
+    accept_delegated_calls: false
 
 x-cp-scheduler: &cp-scheduler
   enabled: true
@@ -610,6 +682,10 @@ applications:
     # ── Application configuration (rendered as ConfigMap) ───────────────
     configuration:
       app:
+        # Must match this pod's entry in the control-plane's
+        # runtime_catalog_sources: that equality is what joins a log line to
+        # its own KPI.
+        runtime_id: "fred-agents"
         name: "Fred default agents"
         base_url: "/fred/agents/v2"
         host: "0.0.0.0"
@@ -635,6 +711,8 @@ applications:
           enabled: true
           client_id: "agentic"
           realm_url: "http://your.keycloak.host/realms/your-realm/app"
+          # Read once at startup, so a rotated value reaches the pod only on a
+          # restart. Ordered procedure: WORKLOAD_SECRET_ROTATION.md
           secret_env_var: KEYCLOAK_AGENTIC_CLIENT_SECRET
         user:
           enabled: true
@@ -654,6 +732,27 @@ applications:
           # timeout_millisec: 2000            # Optional request timeout
           # headers:
           #   X-Custom-Header: "value"
+        delegation:
+          # Delegation lets a program act for a person. The program (a "workload") signs
+          # in with its own service account: a Keycloak client identity that belongs to
+          # the program, not to anyone. With each call it names the person, run and
+          # agent the call is for. Each backend has one switch per direction.
+          #
+          # act_for_people (outgoing) - this backend's switch. During a person's run it
+          # calls other backends with its own service-account token (security.m2m) and
+          # names the person, run and agent. That service account must hold the role
+          # named by caller_role (default delegation_caller) on the client named by
+          # audience (default fred-delegation). In the Keycloak console: open the
+          # security.m2m client, then Service account roles > Assign role. Every backend
+          # it calls needs accept_delegated_calls.
+          #
+          # accept_delegated_calls (incoming) - believe the person a calling workload
+          # names. Turn it on only if another backend calls this one for a person; it
+          # then needs act_for_people as well.
+          #
+          # Both are off by default; turn on the matching switch on each side together.
+          act_for_people: false
+          accept_delegated_calls: false
 
       scheduler:
         enabled: true
@@ -679,6 +778,14 @@ applications:
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
       storage:
+        # Default is a local filesystem for one-replica development. Production
+        # deployments should select minio or gcs with a private runtime bucket.
+        # object_store:
+        #   type: minio
+        #   endpoint: http://seaweedfs:8333
+        #   access_key: admin
+        #   bucket_name: fred-runtime # optional default
+        #   secure: false
         postgres:
           host: localhost
           port: 5432
@@ -698,6 +805,8 @@ applications:
     # ── Sensitive environment variables (rendered as Kubernetes Secret) ────
     dotenv:
       AZURE_OPENAI_API_KEY: ""
+      # Changing this needs a pod roll under a provider-side rotation grace:
+      # WORKLOAD_SECRET_ROTATION.md
       KEYCLOAK_AGENTIC_CLIENT_SECRET: ""
       OPENAI_API_KEY: ""
       LANGFUSE_BASE_URL: ""
@@ -707,6 +816,7 @@ applications:
       M2M_CLIENT_SECRET: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
+      MINIO_SECRET_KEY: "" # required when storage.object_store.type=minio
 
     # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
     # These files override the versions embedded in the Docker image.
@@ -841,7 +951,7 @@ applications:
           transport: "inprocess"
           provider: "kf_vector_search"
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
           agent_instructions: |
             ## Grounding contract (enforced by the search tool — non-negotiable)
 
@@ -919,7 +1029,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-tabular"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-knowledge-flow-opensearch-ops"
           name: "mcp.servers.search_opensearch.name"
@@ -929,7 +1039,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-opensearch-ops"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-knowledge-flow-fs"
           name: "mcp.servers.filesystem.name"
@@ -939,7 +1049,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-fs"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-knowledge-flow-corpus"
           name: "mcp.servers.corpus.name"
@@ -949,7 +1059,7 @@ applications:
           url: "http://knowledge-flow-backend:8000/knowledge-flow/v1/mcp-corpus"
           sse_read_timeout: 2000
           enabled: true
-          auth_mode: "user_token"
+          auth_mode: "delegated"
 
         - id: "mcp-web-github-readonly"
           name: "mcp.servers.web_github_readonly.name"
@@ -1367,17 +1477,42 @@ applications:
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
 
-  # ── 3.4 Knowledge Flow Worker (Temporal) ───────────────────────────
-  # Toggle Temporal worker pod deployment.
+  # ── 3.4 Knowledge Flow Workers (Temporal) ──────────────────────────
+  # The isolated layout below defines four deployments, all running the same
+  # program and image. `knowledge-flow-worker` runs every workflow and activity
+  # but extraction; each `-extraction-<profile>` deployment runs nothing but the two
+  # extraction activities for its profile, on its own queue. That is what keeps a
+  # slow rich document from holding the activity slots a fast one needs.
+  #
+  # Choose a topology in your environment overlay (copyable examples in
+  # docs/swift/design/INGESTION.md, "What DevOps deploys"):
+  # - Compact: enable only knowledge-flow-worker, set replicaCount: 1 and
+  #   configuration.scheduler.worker_roles:
+  #     ["common", "extraction-fast", "extraction-medium", "extraction-rich"].
+  #   Keep all three extraction deployments disabled. Set per-role activity
+  #   concurrency conservatively: 1 still permits 4 activities across 4 roles.
+  #   All roles share the pod's CPU/RAM and failure boundary; size resources for
+  #   extraction too, not just the lightweight common activities.
+  # - Isolated: enable all four deployments and keep their role lists below.
+  #   Scale replicaCount/resources independently; the values are starting points,
+  #   not minimum replica requirements or measured production sizing.
+  # A role chooses queues/registrations; replicaCount chooses pods;
+  # ingestion_max_concurrent_activities limits activities PER ROLE PER POD.
+  #
+  # In isolated mode, enable them together. A profile whose queue has no consumer
+  # strands its documents indefinitely: an activity nobody polls is never started,
+  # and start_to_close_timeout only runs once an activity has started. The chart
+  # refuses to render rather than let that ship.
+  #
   # Note: You need to have set knowledge-flow-backend.configuration.scheduler.enabled = true
-  # otherwise this deployment will not be created.
+  # otherwise these deployments will not be created.
   knowledge-flow-worker:
     enabled: false
     applicationName: knowledge-flow-worker
     configurationFileName: configuration.yaml
     deployment:
       enabled: false
-    replicaCount: 3 # 3 temporal workers
+    replicaCount: 3 # Common-role replicas in isolated mode; use 1 for compact mode.
     statefulset:
       enabled: false
     job:
@@ -1487,9 +1622,26 @@ applications:
     configuration_type:
       backend: true
       frontend: false
+    # Workflows, metadata, progress events and indexing. No extraction runs here,
+    # but indexing is not cheap: chunking and its per-chunk work scale with the
+    # document's volume, and the rich profile generates a summary at this stage —
+    # several model calls over the whole text. Sizing this group on "no extraction"
+    # alone would be wrong.
+    # Starting hypothesis — measured and revised under load in a later slice.
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
     # ── Application configuration (rendered as ConfigMap) ───────────────
     # Most sections are shared with knowledge-flow-backend via YAML anchors.
     # Only app (port 8112) and processing.rich.generate_summary differ.
+    # The three extraction deployments below inherit this whole block through
+    # `inheritFrom` and replace `scheduler` alone. They inherit it at render time,
+    # not through a YAML anchor: an anchor is resolved when this file is parsed, so
+    # it would not carry an override supplied by a -f values file or a --set.
     configuration:
       app:
         name: "Knowledge Flow Backend"
@@ -1517,7 +1669,11 @@ applications:
       # attachment_processors: *fast-attachment-processors # WHEN NOT SET, FALLS BACK TO THE FAST PROCESSING PROFILE
 
       security:        *kf-security
-      scheduler:       *kf-scheduler
+      # `worker_roles` is what makes this deployment the common one: it registers
+      # every workflow and every activity but extraction, and polls the base queue.
+      scheduler:
+        <<: *kf-scheduler
+        worker_roles: ["common"]
       content_storage: *kf-content-storage
       document_sources: *kf-document-sources
       embedding_model: *kf-embedding-model
@@ -1544,6 +1700,128 @@ applications:
       PROMETHEUS_BEARER_TOKEN: ""
       OPENFGA_API_TOKEN: ""
       FRED_POSTGRES_PASSWORD: ""
+
+  # ── 3.4b Knowledge Flow Extraction Workers (Temporal) ──────────────
+  # One deployment per processing profile, each polling that profile's extraction
+  # queue and running nothing but the two extraction activities.
+  #
+  # `inheritFrom` deep-merges knowledge-flow-worker under each of them at render
+  # time, so each block below carries only what differs: name, volumes, resources,
+  # role and activity concurrency. Render time, not a YAML anchor: an anchor is
+  # resolved when this file is parsed, before Helm merges any -f values file or
+  # --set, so overriding the Temporal host, the base queue, the content storage or
+  # the image on knowledge-flow-worker would reach that deployment alone and leave
+  # these three on the values below. A base-queue mismatch loses every submission.
+  #
+  # This inheritance covers the worker groups only. knowledge-flow-backend is a
+  # separate application and inherits nothing from them: an overlay retuning
+  # ingestion configures the API too. See the note above x-kf-scheduler.
+  #
+  # Enable these for isolated mode; leave them disabled for compact mode.
+  # The chart refuses to render when enabled workers do not cover all four roles.
+  #
+  # One extraction per rich pod bounds what a single document may take. It is not an
+  # OOM guarantee: a large enough PDF still exhausts the pod on its own.
+
+  knowledge-flow-worker-extraction-fast:
+    inheritFrom: knowledge-flow-worker
+    enabled: false
+    applicationName: knowledge-flow-worker-extraction-fast
+    replicaCount: 2
+    volumeMounts:
+      - name: knowledge-flow-worker-extraction-fast-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: knowledge-flow-worker-extraction-fast-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: knowledge-flow-worker-extraction-fast-vol
+        configMap:
+          name: knowledge-flow-worker-extraction-fast-back
+      - name: knowledge-flow-worker-extraction-fast-env-vol
+        secret:
+          secretName: knowledge-flow-backend-env
+    # pypdfium2, no OCR: 4 concurrent extractions on 2 CPU, none of them threaded.
+    resources:
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    configuration:
+      scheduler:
+        worker_roles: ["extraction-fast"]
+        temporal:
+          ingestion_max_concurrent_activities: 4
+
+  knowledge-flow-worker-extraction-medium:
+    inheritFrom: knowledge-flow-worker
+    enabled: false
+    applicationName: knowledge-flow-worker-extraction-medium
+    replicaCount: 2
+    volumeMounts:
+      - name: knowledge-flow-worker-extraction-medium-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: knowledge-flow-worker-extraction-medium-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: knowledge-flow-worker-extraction-medium-vol
+        configMap:
+          name: knowledge-flow-worker-extraction-medium-back
+      - name: knowledge-flow-worker-extraction-medium-env-vol
+        secret:
+          secretName: knowledge-flow-backend-env
+    # 2 concurrent extractions x x-profile-medium's 2 docling threads = its 4 CPU.
+    resources:
+      requests:
+        cpu: "4"
+        memory: 8Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    configuration:
+      scheduler:
+        worker_roles: ["extraction-medium"]
+        temporal:
+          ingestion_max_concurrent_activities: 2
+
+  knowledge-flow-worker-extraction-rich:
+    inheritFrom: knowledge-flow-worker
+    enabled: false
+    applicationName: knowledge-flow-worker-extraction-rich
+    replicaCount: 2
+    volumeMounts:
+      - name: knowledge-flow-worker-extraction-rich-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: knowledge-flow-worker-extraction-rich-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: knowledge-flow-worker-extraction-rich-vol
+        configMap:
+          name: knowledge-flow-worker-extraction-rich-back
+      - name: knowledge-flow-worker-extraction-rich-env-vol
+        secret:
+          secretName: knowledge-flow-backend-env
+    # 1 concurrent extraction x x-profile-rich-*'s 4 docling threads = its 4 CPU.
+    # Memory is the widest guess of the four: full OCR plus image description.
+    resources:
+      requests:
+        cpu: "4"
+        memory: 12Gi
+      limits:
+        cpu: "4"
+        memory: 12Gi
+    configuration:
+      scheduler:
+        worker_roles: ["extraction-rich"]
+        temporal:
+          ingestion_max_concurrent_activities: 1
 
   # ── 3.5 Control Plane Backend ─────────────────────────────────────
   control-plane-backend:
@@ -1746,33 +2024,17 @@ applications:
             # Deployment-wide kill switch for the integrated Apps surface,
             # catalog/API, and frontend application-service gateway.
             enableApplications: false
-          # Optional deployer-configured frontend banners; each block is
-          # independent and can be omitted to show nothing. Texts resolved from
-          # the user's locale, "en" fallback.
-          # - upload_warning: banner shown on upload surfaces (document upload
-          #   drawer, chat attachments).
-          # - info_banner: full-width announcement banner shown above the app
-          #   content on every page (including pre-auth pages). Non-dismissable;
-          #   persistent by default, or auto-hidden after auto_hide_seconds.
+          # Optional deployer-configured upload warning, shown on upload
+          # surfaces (document upload drawer, chat attachments). Omit to show
+          # nothing. Texts resolved from the user's locale, "en" fallback.
+          # Platform-wide announcement banners are NOT configured here — a
+          # platform admin authors them at runtime from the Announcements
+          # admin page.
           # upload_warning:
           #   severity: warning # info | warning | error | success
           #   messages:
           #     en: "Do not upload sensitive or classified documents."
           #     fr: "Ne téléversez pas de documents sensibles ou classifiés."
-          # info_banner:
-          #   color: "#00BBDD"
-          #   auto_hide_seconds: 30 # omit for a persistent banner (the default)
-          #   titles:
-          #     en: "New version available"
-          #     fr: "Nouvelle version disponible"
-          #   messages:
-          #     en: "Access the Fred documentation & blog"
-          #     fr: "Accédez à la documentation et au blog de Fred."
-          #   links:
-          #     - url: "https://fredk8.dev"
-          #       labels:
-          #         en: "Go to the Fred blog"
-          #         fr: "Accéder au blog de Fred"
         knowledge_flow_base_url: *kf-url
         runtime_catalog_sources:
           - runtime_id: fred-agents

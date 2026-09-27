@@ -13,11 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Coverage (#2315 stop ingestion): a document with a live pending/running
-// ingestion task offers "Arrêter l'ingestion" in its row menu; selecting it
-// asks for confirmation, and confirming calls the task-cancel endpoint with
-// the task id resolved from the SSE feed. A document with no active task has
-// no such entry.
+// Active ingestion has no user cancellation action and prevents document deletion.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -34,7 +30,7 @@ vi.mock("react-i18next", () => ({
 }));
 // Forward the (mocked) selector's own return value — the live task map is the
 // unit under test here.
-vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: (selector: () => unknown) => selector() }));
 
 const rawDoc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
@@ -68,7 +64,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
+  useListTagsQuery: () => ({
     data: [{ id: "tag-cir", name: "CIR", path: "", type: "document", item_ids: [] }],
     isLoading: false,
     refetch: () => {},
@@ -83,8 +79,8 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
-  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  useCreateTagMutation: () => [vi.fn()],
+  useDeleteTagMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [cancelTask],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     vi.fn(() => ({ unwrap: async () => ({}) })),
@@ -170,31 +166,12 @@ function openMenu(button: HTMLButtonElement): Element[] {
   ];
 }
 
-describe("DocumentWorkspace — stop a live ingestion", () => {
-  it("offers 'Stop ingestion' for a document with a running task, and cancels its task on confirm", async () => {
-    // Row order matches the mocked `documents` array: running doc first.
+describe("DocumentWorkspace — ingestion cannot be cancelled", () => {
+  it("does not offer cancellation for a document with a running task", () => {
     const items = openMenu(moreButtons()[0]);
-    const entry = items.find((el) => el.textContent?.includes("rework.resources.action.stopIngestion"));
-    expect(entry).toBeTruthy();
-
-    act(() => {
-      entry!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(showConfirmationDialog).toHaveBeenCalledTimes(1);
-    const dialogArgs = showConfirmationDialog.mock.calls[0][0] as {
-      title: string;
-      message: string;
-      onConfirm: () => void;
-    };
-    expect(dialogArgs.title).toBe("rework.resources.confirm.stopIngestionTitle");
-    // Nothing is cancelled before the user confirms.
+    expect(items.find((el) => el.textContent?.includes("rework.resources.action.stopIngestion"))).toBeUndefined();
     expect(cancelTask).not.toHaveBeenCalled();
-
-    await act(async () => {
-      dialogArgs.onConfirm();
-    });
-    expect(cancelTask).toHaveBeenCalledWith({ taskId: "task-to-cancel" });
+    expect(showConfirmationDialog).not.toHaveBeenCalled();
   });
 
   it("does not offer 'Stop ingestion' for a document with no active task", () => {
@@ -202,7 +179,7 @@ describe("DocumentWorkspace — stop a live ingestion", () => {
     expect(items.find((el) => el.textContent?.includes("rework.resources.action.stopIngestion"))).toBeUndefined();
   });
 
-  it("greys out 'Delete' while the ingestion is live — stop is the only exit", () => {
+  it("greys out 'Delete' while the ingestion is live", () => {
     const items = openMenu(moreButtons()[0]);
     const deleteItem = items.find((el) => el.textContent?.includes("rework.resources.action.delete"));
     expect(deleteItem).toBeTruthy();

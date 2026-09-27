@@ -44,7 +44,7 @@ vi.mock("../../../../../hooks/useFrontendBootstrap", () => ({
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   TagType: { document: "document" },
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({ data: [TAG], isLoading: false }),
+  useListTagsQuery: () => ({ data: [TAG], isLoading: false }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     () => ({
       unwrap: async () => ({

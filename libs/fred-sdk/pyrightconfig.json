@@ -8,6 +8,7 @@
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": [
+    "../fred-pod",
     "../fred-core"
   ]
 }

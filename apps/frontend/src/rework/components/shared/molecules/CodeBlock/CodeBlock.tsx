@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useIsDark } from "../../../../core/hooks/useIsDark";
@@ -21,6 +22,8 @@ import styles from "./CodeBlock.module.css";
 
 interface CodeBlockProps {
   code: string;
+  /** Optional source copied by the button when it must differ from the rendered representation. */
+  copyText?: string;
   language?: string;
   inline?: boolean;
   streaming?: boolean;
@@ -31,6 +34,7 @@ interface CodeBlockProps {
 
 export function CodeBlock({
   code,
+  copyText,
   language,
   inline = false,
   streaming = false,
@@ -39,13 +43,14 @@ export function CodeBlock({
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isDark = useIsDark();
+  const { t } = useTranslation();
 
   if (inline) {
     return <code className={styles.inline}>{code}</code>;
   }
 
   function handleCopy() {
-    writeRichClipboard("", code).then((ok) => {
+    writeRichClipboard("", copyText ?? code).then((ok) => {
       if (ok) {
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
@@ -58,8 +63,8 @@ export function CodeBlock({
       <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>{language ?? "plaintext"}</span>
         {!hideCopy && (
-          <button className={styles.copy} onClick={handleCopy} aria-label="Copy code">
-            {copied ? "✓ Copied" : "Copy"}
+          <button className={styles.copy} onClick={handleCopy} aria-label={t("common.copyCode")}>
+            {copied ? `✓ ${t("common.copied")}` : t("common.copy")}
           </button>
         )}
       </div>
@@ -74,7 +79,7 @@ export function CodeBlock({
           style={isDark ? oneDark : oneLight}
           customStyle={{
             margin: 0,
-            padding: "var(--spacing-m, 16px)",
+            padding: "var(--spacing-m)",
             background: "var(--surface-container-lowest)",
             fontSize: "0.875rem",
             lineHeight: "1.6",

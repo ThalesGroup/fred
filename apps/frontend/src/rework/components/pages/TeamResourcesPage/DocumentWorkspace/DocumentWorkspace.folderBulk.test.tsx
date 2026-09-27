@@ -40,7 +40,7 @@ const { deleteTagSpy, updateRetrievableSpy, downloadManyAsZipSpy } = vi.hoisted(
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => [] }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: () => [] }));
 
 const doc = (uid: string, name: string) => ({
   identity: { document_uid: uid, title: name, document_name: `${name}.pdf`, uploaded_by: null },
@@ -54,7 +54,7 @@ const doc = (uid: string, name: string) => ({
 // "2024" (tag-2024). One document lives directly under each tag.
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({
+  useListTagsQuery: () => ({
     data: [
       { id: "tag-reports", name: "Reports", path: "", type: "document", item_ids: [] },
       { id: "tag-2024", name: "2024", path: "Reports", type: "document", item_ids: [] },
@@ -74,8 +74,8 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
-  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [deleteTagSpy],
+  useCreateTagMutation: () => [vi.fn()],
+  useDeleteTagMutation: () => [deleteTagSpy],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     updateRetrievableSpy,

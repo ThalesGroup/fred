@@ -82,6 +82,7 @@ def _build_config(tmp_path) -> AgentPodConfig:
     config = AgentPodConfig.model_validate(
         {
             "app": {
+                "runtime_id": "test-pod",
                 "name": "Test Pod",
                 "base_url": "/pod/v1",
                 "port": 8000,

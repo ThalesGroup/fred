@@ -1,30 +1,38 @@
 ---
 title: Vue d'ensemble
 order: 0
-description: La carte des fonctionnalités de la plateforme.
+description: Comment les pièces s'articulent, et qui a le droit de les modifier.
 icon: widgets
 ---
 
 # Fonctionnalités
 
-Cette section décrit chaque fonctionnalité en détail. Choisissez un thème :
+Tout part d'une **équipe**. Elle contient trois choses que vous alimentez, et
+une conversation les fait travailler ensemble :
 
-- [Le chat](/help/fr/features/chat) — dialoguer avec un agent, pièces jointes,
-  sources et documents produits.
-- [Les agents](/help/fr/features/agents) — créer, configurer et gérer vos
-  assistants IA.
-- [La bibliothèque de prompts](/help/fr/features/prompts) — catégories,
-  création et réutilisation de prompts.
-- [Les ressources documentaires](/help/fr/features/resources) — déposer et
-  organiser les documents que vos agents exploitent.
-- [Les capacités des agents](/help/fr/features/capabilities) — les fonctions
-  supplémentaires activables par équipe.
-- [Administrer son équipe](/help/fr/features/teams) — membres, réglages,
-  routage, rétention, évaluations.
-- [Rôles et droits](/help/fr/features/roles) — qui peut faire quoi, dans une
-  équipe et à l'échelle de la plateforme.
-- [Suivi d'usage](/help/fr/features/usage) — consommation et statistiques.
-- [Console d'administration](/help/fr/features/admin) — surfaces réservées aux
-  administrateurs de la plateforme.
+> **Équipe** → (agents · prompts · ressources) → **conversation** → **réponse
+> appuyée sur vos documents**
 
-> Vous débutez ? Commencez plutôt par le [Démarrage](/help/fr/getting-started).
+- **[Les agents](/help/fr/features/agents)** — les assistants à qui vous parlez.
+  Chacun part d'un modèle fourni par la plateforme, puis reçoit ses instructions,
+  ses documents et ses fonctions supplémentaires.
+- **[Les capacités](/help/fr/features/capabilities)** — le détail de ce qu'un
+  agent sait faire en plus de répondre, avec les limites de chaque capacité.
+- **[Les conversations](/help/fr/features/chat)** — l'endroit où vous les
+  interrogez, joignez un fichier, récupérez un document produit.
+- **[Les ressources](/help/fr/features/resources)** — les documents de l'équipe,
+  et la façon dont un agent les lit.
+- **[Les prompts](/help/fr/features/prompts)** — les demandes récurrentes,
+  enregistrées une fois pour toutes.
+
+Deux pages traitent des droits plutôt que des outils :
+
+- **[Équipes et droits](/help/fr/features/teams-and-permissions)** — qui peut
+  faire quoi dans une équipe, comment on en devient membre, et qui crée les
+  équipes.
+- **[Administration de la plateforme](/help/fr/features/administration)** — ce
+  qui dépasse une seule équipe, et donc n'est pas accessible à tout le monde.
+
+> Chaque autorisation est vérifiée côté serveur, à chaque action. L'affichage
+> d'un bouton n'accorde aucun droit, et l'absence d'un bouton traduit votre
+> rôle, non un dysfonctionnement.

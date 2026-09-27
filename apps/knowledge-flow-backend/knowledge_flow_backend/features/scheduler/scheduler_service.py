@@ -24,7 +24,7 @@ from fred_core.scheduler import (
     resolve_scheduler_backend,
 )
 
-from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig
+from knowledge_flow_backend.common.structures import ProcessingConfig, SchedulerConfig, extraction_task_queue, parse_duration_seconds
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.scheduler.in_memory_scheduler import InMemoryScheduler
@@ -59,7 +59,6 @@ class IngestionTaskService:
         self._processing_config = processing_config
         self._metadata_service = metadata_service
         self._client_provider = temporal_client_provider
-        self._task_queue: Optional[str] = None
         self._max_parallelism = max(1, int(max_parallelism))
 
         backend = resolve_scheduler_backend(scheduler_config.backend)
@@ -69,7 +68,6 @@ class IngestionTaskService:
             # Reuse the shared Temporal client provider if provided (preferred),
             # otherwise create a local one from configuration.
             self._client_provider = self._client_provider or TemporalClientProvider(scheduler_config.temporal)
-            self._task_queue = scheduler_config.temporal.task_queue
             self._scheduler = TemporalScheduler(
                 scheduler_config,
                 self._metadata_service,
@@ -89,17 +87,26 @@ class IngestionTaskService:
         """
         Kick off a document processing pipeline.
         """
+        if not files:
+            raise ValueError("At least one file is required")
         has_pull = any(file.is_pull() for file in files)
         has_push = any(file.is_push() for file in files)
         if has_pull and has_push:
             raise ValueError("Mixed push and pull files are not supported in a single workflow submission.")
 
         enriched_files: list[FileToProcess] = []
+        base_task_queue = self._scheduler_config.temporal.task_queue
         for file in files:
             normalized_profile = self._processing_config.normalize_profile(file.profile)
             profile_config = self._processing_config.get_profile_config(normalized_profile)
             with_timeout = FileToProcess.from_file_to_process_without_user(file, user).model_copy(
                 update={
+                    # Resolved per document, so one submission may freely mix profiles:
+                    # only the extraction activity leaves the common queue.
+                    "extraction_task_queue": extraction_task_queue(base_task_queue, normalized_profile),
+                    "push_metadata_activity_timeout_seconds": parse_duration_seconds(profile_config.push_metadata_activity_timeout, field_name="push_metadata_activity_timeout"),
+                    "pull_metadata_activity_timeout_seconds": parse_duration_seconds(profile_config.pull_metadata_activity_timeout, field_name="pull_metadata_activity_timeout"),
+                    "output_activity_timeout_seconds": parse_duration_seconds(profile_config.output_activity_timeout, field_name="output_activity_timeout"),
                     "input_activity_timeout_seconds": profile_config.input_activity_timeout_seconds,
                     "heartbeat_timeout_seconds": profile_config.activity_heartbeat_timeout_seconds,
                     "retry_initial_interval_seconds": profile_config.retry_initial_interval_seconds,
@@ -116,12 +123,38 @@ class IngestionTaskService:
             files=enriched_files,
             max_parallelism=self._max_parallelism,
         )
-        handle = await self._scheduler.start_document_processing(
-            user=user,
-            definition=definition,
-            background_tasks=background_tasks,
-        )
+        handle = await self._admit_and_deliver(user=user, definition=definition, background_tasks=background_tasks)
         return definition, handle
+
+    async def _admit_and_deliver(self, *, user: KeycloakUser, definition: PipelineDefinition, background_tasks: BackgroundTasks | None = None) -> WorkflowHandle:
+        from knowledge_flow_backend.features.ingestion.ingestion_controller import resolve_tag_owners
+
+        owners: dict[tuple[str, ...], str | None] = {}
+        team_ids: dict[str, str | None] = {}
+        for file in definition.files:
+            key = tuple(sorted(file.tags))
+            if key not in owners:
+                teams, _ = await resolve_tag_owners(file.tags, user)
+                owners[key] = next(iter(teams)) if len(teams) == 1 else None
+            uid = file.to_virtual_metadata().document_uid if file.is_pull() else file.document_uid
+            if uid:
+                team_ids[uid] = owners[key]
+        delivery = self.delivery()
+        workflow_id = await delivery.admit(user, definition, team_ids)
+        try:
+            return await delivery.deliver(workflow_id, background_tasks)
+        except Exception:
+            # Admission already committed. A delivery/acknowledgement failure
+            # must not tell callers to discard the accepted document or task.
+            logger.warning("Accepted ingestion %s awaits delivery recovery", workflow_id, exc_info=True)
+            return WorkflowHandle(workflow_id=workflow_id)
+
+    def delivery(self):
+        from knowledge_flow_backend.application_context import ApplicationContext
+        from knowledge_flow_backend.features.scheduler.ingestion_delivery import IngestionDelivery
+
+        context = ApplicationContext.get_instance()
+        return IngestionDelivery(context.get_pg_async_engine(), context.get_task_service(), self._scheduler)
 
     async def submit_library_processing(
         self,

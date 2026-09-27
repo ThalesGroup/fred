@@ -2002,9 +2002,9 @@ def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
       reinterpreted as an artifact. **If the artifact's own `blocks` are
       empty, `content` is folded in as one `ToolContentBlock` before the
       artifact is returned** (PR #2067 review): `document_access`'s tools
-      duplicate their answer into `blocks` themselves, but a tool like
-      `demo_echo` puts its actual answer only in `content`, with an artifact
-      carrying nothing but `ui_parts` — discarding `content` outright would
+      duplicate their answer into `blocks` themselves, but a tool that puts
+      its actual answer only in `content`, with an artifact carrying
+      nothing but `ui_parts`, would lose it — discarding `content` outright would
       silently drop the answer for any such tool. This is a safety net, not
       a substitute for a capability author populating `blocks` directly
       (`document_access` is still the reference pattern to copy).
@@ -2057,7 +2057,7 @@ def _adapt_capability_tool_for_graph(source_tool: BaseTool) -> BaseTool:
             content, artifact = raw
             # PR #2067 review (Codex): keeping ONLY the artifact is correct
             # for a tool like `document_access`'s, whose artifact duplicates
-            # its answer into `blocks` — but a tool like `demo_echo`'s puts
+            # its answer into `blocks` — but a tool may instead put
             # the actual answer in `content` and an artifact carrying only
             # `ui_parts` (a UI card), never `blocks`. Unwrapping to the
             # artifact alone would silently drop the answer for any such

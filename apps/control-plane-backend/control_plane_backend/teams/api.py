@@ -1,8 +1,22 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, File, Path, Query, UploadFile
 from fastapi.responses import JSONResponse
-from fred_core import AuthorizationError, KeycloakUser, get_current_user
+from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 
 from control_plane_backend.teams.dependencies import (
@@ -104,13 +118,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: AvatarUploadError,
     ) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
-
-    @app.exception_handler(AuthorizationError)
-    async def authorization_error_handler(
-        _request,
-        exc: AuthorizationError,
-    ) -> JSONResponse:
-        return JSONResponse(status_code=403, content={"detail": str(exc)})
 
     @app.exception_handler(TeamRescueNotOrphanedError)
     async def team_rescue_not_orphaned_handler(

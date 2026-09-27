@@ -27,7 +27,12 @@ Modules (one per concern):
 - `errors`   — named boot/assembly errors (fail pod startup loudly)
 - `registry` — `CapabilityRegistry`, `boot_capability_registry`
 - `assembly` — typed context resolution + the id-sorted capability block
-- `demo`     — the minimal in-tree tracer capability (one tool, one setting)
+- `mcp`      — one catalog MCP server surfaced as a capability
+- `assets`   — per-instance config-asset slots
+- `openapi_dump` — a single capability's router as its own OpenAPI document
+
+No capability lives here: this package is the framework. Capabilities ship as
+their own distributions under `libs/capabilities/`.
 """
 
 from __future__ import annotations

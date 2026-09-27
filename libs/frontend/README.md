@@ -38,7 +38,9 @@ make consumer-provision
 make browser-install
 ```
 
-`make install` installs the lockfile-pinned producer dependencies.
+`make install` reinstalls the lockfile-pinned producer dependencies from scratch. Every
+npm-backed target already installs them on its own when `node_modules` is missing or older
+than the manifests, so this step is only needed to force a clean reinstall.
 The separate frontend install provisions the lockfile-pinned test framework used by the direct
 packed-SDK/production-host compatibility gate; the gate itself performs no installation.
 `make consumer-provision` downloads the isolated React fixture and neutral iframe SDK

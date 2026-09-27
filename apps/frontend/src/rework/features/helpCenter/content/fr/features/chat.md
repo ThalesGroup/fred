@@ -1,61 +1,50 @@
 ---
-title: Le chat
-order: 10
-description: Dialoguer avec un agent, joindre des fichiers, lire sources et documents produits.
+title: Les conversations
+order: 20
+description: Reprendre un échange, joindre un fichier, insérer un prompt, récupérer un document.
 icon: forum
 ---
 
-# Le chat
+# Les conversations
 
-Le chat est le cœur de la plateforme : c'est là que vous posez vos questions à
-un agent et obtenez des réponses appuyées sur vos contenus.
+Chaque échange avec un agent est une **conversation**. Elle conserve les
+messages, les pièces jointes et les documents produits.
 
-## Conversations
+Comment poser une question et lire une réponse est traité dans
+[Première conversation](/help/fr/getting-started/first-conversation) ; cette
+page couvre le reste.
 
-Chaque échange avec un agent est une **conversation** (ou session). Vos
-conversations sont conservées dans la liste de gauche, et un interrupteur
-**« Grouper par agent »** permet de basculer vers l'affichage groupé quand
-vous le souhaitez (désactivé par défaut). Vous pouvez :
+## Gérer ses conversations
 
-- **reprendre** une conversation pour poursuivre l'échange là où vous l'aviez
-  laissé ;
-- **démarrer** une nouvelle conversation à tout moment ;
-- **supprimer** définitivement une conversation dont vous n'avez plus besoin.
+La liste de gauche garde vos conversations. Un interrupteur **Grouper par
+agent** bascule l'affichage (désactivé par défaut). Vous pouvez en **reprendre**
+une, en **démarrer** une nouvelle, ou en **supprimer** une.
 
-![TODO: capture — liste des conversations groupées par agent](assets/chat-list.png)
+Une conversation supprimée est **masquée immédiatement**, puis effacée
+définitivement au terme du délai de rétention fixé par l'équipe. Sans délai
+défini, l'effacement est immédiat.
 
-## Pièces jointes
+## Joindre un fichier
 
-Vous pouvez **joindre un fichier** à un message : l'agent en tient compte le
-temps de la conversation. C'est pratique pour un document ponctuel. Pour un
-usage durable et partagé, préférez les
-[ressources](/help/fr/features/resources) de l'équipe, que l'agent peut
-consulter au fil des conversations.
+Vous pouvez joindre un fichier à un message : l'agent en tient compte **le
+temps de la conversation**, et n'y accède pas depuis une autre. Pour un document
+durable et partagé, passez par les [ressources](/help/fr/features/resources) de
+l'équipe.
 
-## Utiliser un prompt
+Joindre un fichier suppose que l'agent dispose de la fonction correspondante ;
+sinon la pièce jointe est ignorée.
 
-Plutôt que de retaper une demande récurrente, vous pouvez insérer le contenu
-d'un prompt enregistré directement dans le champ de saisie, puis le modifier
-avant d'envoyer. C'est un raccourci ponctuel pour ce message, pas un réglage
-durable de la conversation (voir la
-[bibliothèque de prompts](/help/fr/features/prompts)).
+## Insérer un prompt
 
-## Lire une réponse
+Plutôt que de retaper une demande récurrente, insérez le contenu d'un prompt
+enregistré dans le champ de saisie, puis modifiez-le avant d'envoyer. C'est un
+raccourci pour ce message, pas un réglage durable de la conversation.
 
-Une réponse peut mêler plusieurs éléments :
+## Récupérer un document produit
 
-- **Le texte** de la réponse, mis en forme (titres, listes, tableaux, code).
-- **Les sources** : quand l'agent s'appuie sur vos documents, il signale les
-  passages utilisés — cliquez-les pour vérifier.
-- **La trace d'exécution** : le détail des étapes suivies par l'agent (une
-  recherche documentaire, l'appel d'une capacité, un calcul…). Utile pour
-  comprendre _comment_ la réponse a été construite.
-- **Les documents produits** : certains agents génèrent des fichiers (un
-  document rédigé, un tableau, une présentation), que vous pouvez
-  télécharger.
+Certains agents produisent un fichier — un document rédigé, une présentation,
+une page web. Il apparaît dans la conversation, d'où vous le téléchargez. Un
+document rédigé en conversation s'obtient au format Word ou Markdown.
 
-> **Vérifiez** les réponses importantes en vous appuyant sur les sources
-> citées. Voir [Les réponses de l'IA](/help/fr/faq/ai-answers).
-
-Un problème pendant une conversation ? Voir
-[Problèmes de chat](/help/fr/troubleshooting/chat-issues).
+En cas de difficulté, voir
+[Problèmes courants](/help/fr/troubleshooting/common-problems).

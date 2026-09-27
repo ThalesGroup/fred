@@ -8,13 +8,18 @@
 > `.well-known/grant-jwks` mention left below is a historical record, marked as such. See
 > [`RUNTIME-EXECUTION-CONTRACT.md`](./RUNTIME-EXECUTION-CONTRACT.md) §2.2 and §8.11.
 
-> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).**
-> The shared team check `_validate_team_and_check_permission` now recognizes a **service
-> identity** (`service_agent` role — the evaluation worker) for **read-only** team access
+> ✅ **Service-agent team gate — 2026-07-01 (EVAL-03 / RFC EVAL-AUTH, Solution A).** The
+> shared team check `_validate_team_and_check_permission` recognizes a **service
+> identity** (`service_agent` role — the evaluation worker — without the delegation
+> caller role) for **read-only** team access
 > (`can_read`), **scoped to the request `team_id`**, without any OpenFGA tuple. A **write**
 > permission (e.g. `can_update_agents`) is NOT bypassed: it falls through to the normal
 > ReBAC check and is therefore denied (the worker holds no team relation). Regular users
 > are unchanged. This covers the `prepare-execution` path the async worker calls.
+> A caller holding the delegation caller role is never recognized here, whatever
+> the delegation switches; where the control plane accepts delegated calls, team
+> permissions are decided on the person a grant names — see the 2026-09-19 section
+> below.
 
 This document is the authoritative design reference for the first
 control-plane product migration slice.
@@ -179,10 +184,6 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
-  - `info_banner` — **added 2026-08-19** — optional deployer-configured
-    global announcement banner (`platform.frontend.info_banner`), rendered
-    full-width above the app on every page. Omitted/`null` → nothing
-    rendered. See §42 for why it is pre-auth.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -1139,9 +1140,13 @@ closed, 422, on an unknown or disabled profile) and overwrites this
 instance's entry in the returned `agent_profile_overrides` snapshot for
 **this call only** — never persisted, never visible via
 `GET …/routing-policy`. Restricted to the evaluator's M2M service identity
-(`is_service_agent`); rejected (403) for a regular user token. This sits at
-the "team override" precedence level — a platform chat binding or pod
-static override still wins silently over it; `fred-agent-evaluator` detects
+(`service_agent` without the delegation caller role, whatever the switches); rejected
+(403) for a regular user token and for a delegation caller acting as itself. Where the
+control plane accepts delegated calls and a grant names a person, the override is
+authorized on the workload caller holding the delegation caller role instead: the
+grant's subject carries no roles, so the decision is made on the bearer, not on a
+service role. This sits at the "team override" precedence level — a platform chat
+binding or pod static override still wins silently over it; `fred-agent-evaluator` detects
 that by comparing the requested override against the model that actually
 answered (`EvalTrace.model_name`), not by anything this endpoint can
 guarantee.
@@ -1871,8 +1876,8 @@ workflow, `202 { task_id }`.
 `mode: incremental` → only docs with 0 vectors. `force: true` → always
 re-embed regardless of mode. `embedding_model` is advisory only (not wired
 into `prepare_revectorize_file`, which always uses
-`IngestionProcessingProfile.medium` — the original ingestion profile isn't
-recorded on `DocumentMetadata`). Migration default scope: all migrated
+`IngestionProcessingProfile.medium`; this repair path does not yet use the
+optional `DocumentMetadata.processing.profile`). Migration default scope: all migrated
 documents (by `source_tag`), `mode: full`.
 
 **Authorization:** a `source_tag`-only scope spans arbitrary teams (it's the
@@ -2322,9 +2327,12 @@ automatically and provably erased by an authenticated background worker.
 
 **Erasure fan-out (`ConversationErasureService.erase_session`).** Store order
 is fixed by dependency: attachments/Knowledge-Flow and KPI first
-(independent), then the runtime **checkpoint before transcript** (the runtime
-proves checkpoint ownership via the transcript), then the `session_metadata`
-row **last** — so a retry can always re-resolve and finish. Returns an
+(independent), then the runtime checkpoint, runtime conversation filesystem,
+and runtime transcript in that order (the runtime proves checkpoint and
+filesystem ownership via the transcript), then the `session_metadata` row
+**last** — so a retry can always re-resolve and finish. The filesystem step
+idempotently purges both `scratchpad` and `.deep`; a failure skips transcript
+deletion and preserves metadata for retry. Returns an
 `ErasureReceipt` (per store: count, ok, error); `receipt.ok` is true only when
 every touched store erased cleanly. Idempotent and retry-safe: re-running
 after a partial failure converges to full erasure, no store left orphaned, no
@@ -2354,8 +2362,8 @@ user-shortenable). Retention round-trips through platform export/import
 **Server-initiated erasure is authenticated, never unauthenticated.** The
 expiry worker has no user token, so the control-plane mints a
 client-credentials service token for its own `control-plane` Keycloak service
-account. The runtime checkpoint-delete, runtime history-delete, and
-Knowledge-Flow delete endpoints recognize the org-level
+account. The runtime checkpoint-delete, conversation-filesystem-delete,
+runtime history-delete, and Knowledge-Flow delete endpoints recognize the org-level
 `can_manage_platform` permission and waive the per-user **ownership** check
 for that principal — authentication itself is never waived. This reuses the
 existing platform-admin permission; it forks no second bypass.
@@ -2836,33 +2844,16 @@ surfacing the deciding precedence level in the UI, per-turn re-resolution, and
 any non-chat capability — `embedding` has no
 production consumer.
 
-## 42. Contract Notes — global info banner (2026-08-19)
+## 42. Contract Notes — global info banner (2026-08-19, removed 2026-09-25)
 
-`FrontendConfig` (§3.1.1) gains one optional field, `info_banner`
-(`InfoBanner`: `color` + `titles`/`messages` locale maps + `links: [{url,
-labels}]` + `auto_hide_seconds`), sourced from control-plane deployment
-config `platform.frontend.info_banner`. When set, the frontend renders one
-full-width, non-dismissable announcement banner (`InfoBanner`, mounted once
-at the app root) above the app content on **every** page, resolving texts
-from the active i18next locale with `en` fallback and pushing content down
-instead of overlaying it. Persistent by default; the optional
-`auto_hide_seconds` (integer > 0) makes the banner remove itself that many
-seconds after app load. `null`/omitted → nothing rendered — the shipped
-default: `values.yaml` (prod) and `configuration*.yaml` (dev) carry only
-commented-out example blocks.
-
-Boundary rationale (§3.1.1 vs §23): unlike `upload_warning` (post-auth
-surfaces only), the banner's whole point is to show on every page — the
-GCU-acceptance and root-bootstrap screens included, which render _before_
-the authenticated `/frontend/bootstrap` can succeed. So it follows the
-`gcu_version` precedent, not the `upload_warning` one: a pre-auth field on
-the public surface. It carries only deployer-authored announcement content
-— never secrets or per-user state — keeping §3.1.1's "no second bootstrap
-payload" rule intact. One deliberate scope note: on auth-enabled
-deployments the login page itself is Keycloak-hosted (`login-required`
-redirects away before the SPA renders), so the banner cannot cover the
-login screen — pre-auth here means "before the authenticated bootstrap",
-not "on the IdP's page".
+**Superseded by §55.** `FrontendConfig` carried an optional `info_banner`
+field, sourced from the deployment config `platform.frontend.info_banner`,
+that rendered one full-width non-dismissable banner above the app on every
+page — pre-auth screens included. Runtime, admin-authored announcements
+replaced it: the field, the Pydantic models, the Helm values block and the
+configuration samples are all gone. A deployment that set it recreates the
+banner from the announcements admin page. See §55 for the current contract,
+including the deliberate loss of pre-auth reach.
 
 ## 43. Contract Notes — platform-role management, root-protected (2026-08-21, issue #2405)
 
@@ -4057,3 +4048,141 @@ admin chip in light orange with a clock icon ("Admin (pending)" on hover).
 version: existing admins become pending at the next startup and see the charter
 when they open their team. Unsetting the version promotes every pending admin
 at the next startup.
+
+
+## 55. Contract Notes - platform announcements (2026-09-25, issue #2805)
+
+**What it is.** A platform admin authors announcements at runtime; every
+enabled one renders as a banner at the top of the app for every authenticated
+user. This replaces `platform.frontend.info_banner`, which was deploy-time
+configuration and is **removed** — see "Removal" below.
+
+**Model.** One `platform_announcement` row per announcement.
+
+| Field                                                | Meaning                                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `severity`                                           | `info \| warning \| error \| success`, the same `Literal` as `platform.frontend.upload_warning`. Fixes the banner's colour and icon; neither is separately authorable. |
+| `title`, `description_short`, `description_long`     | Locale → text maps (`fr`, `en`), resolved against the viewer's locale with an `en` fallback. The two descriptions are markdown. `description_long` empty for every locale is what removes the more-info action from the banner. |
+| `enabled`                                            | Whether it is delivered. Created disabled.                                                     |
+| `dismissible`                                        | Whether a user may close the banner.                                                           |
+| `content_version`                                    | Bumped when a reader-visible field changes — severity, any text, or `dismissible` — and when a disabled announcement is enabled again. **Never** when one is disabled. |
+
+**`content_version` is the dismissal key.** The frontend records a dismissal in
+`localStorage` as `<id>@<content_version>`, so bumping the version is the only
+lever the server has to bring a closed banner back — it cannot reach a
+browser's storage. It bumps on an edit, and on the off → on transition, because
+putting an announcement back on air is a relaunch and is meant to reach the
+users who closed the previous run. It does not bump when an announcement is
+switched off, nor when `enabled=true` is re-sent for one already live: neither
+changes what is on screen. The content `PUT` never changes `enabled` at all —
+the editor fills it from the announcement as it was when the dialog opened, so
+honouring it would let a save land on top of a toggle made meanwhile. Delivery
+is owned by the `/enabled` endpoint alone. Dismissals are per-browser:
+there is no server-side per-user state, and losing the stored set only makes a
+banner show again.
+
+**Endpoints.**
+
+| Method | Path                                                             | Permission           |
+| ------ | ---------------------------------------------------------------- | -------------------- |
+| GET    | `/announcements/active`                                          | authenticated        |
+| GET    | `/admin/platform/announcements`                                  | `can_manage_platform` |
+| POST   | `/admin/platform/announcements`                                  | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+| PUT    | `/admin/platform/announcements/{id}/enabled`                     | `can_manage_platform` |
+| DELETE | `/admin/platform/announcements/{id}`                             | `can_manage_platform` |
+
+`/announcements/active` returns the enabled set and is gated by authentication
+only — an announcement is content every user is meant to see. Every admin
+mutation emits an audit record (`platform.announcement.created` / `.updated` /
+`.toggled` / `.deleted`).
+
+**Delivery.** The frontend polls the active set every 60 s and refetches on
+window focus, through the shared `crossSessionRefresh` contract. Deliberately
+no SSE channel: the control-plane has one today (tasks), and a second
+always-on stream per tab to carry a payload that changes a few times a month is
+the wrong trade.
+
+**Removal — BREAKING.** `platform.frontend.info_banner` is gone: the Pydantic
+models, the `info_banner` field on the public pre-auth
+`GET /frontend/config`, the Helm values block and the configuration samples. A
+deployment that set it loses its banner on upgrade and recreates it from the
+admin page. Announcements are **post-authentication only**, so unlike the old
+banner they do not render on the GCU-acceptance and root-bootstrap screens.
+
+**Not in this slice.** Scheduling (start/end dates) — the planned follow-up; the
+model does not preclude it. No per-team or per-role targeting.
+
+## Knowledge Flow ingestion cancellation — 2026-09-23
+
+`POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
+authorization, then returns HTTP 409 for `kind=ingestion`, without requesting
+Temporal cancellation. Other task kinds retain their existing behavior. The
+resource document menu no longer offers Stop ingestion. This delivery exposes
+success/failure completion; user cancellation and its cleanup semantics are
+deferred. See [INGESTION.md](INGESTION.md).
+
+## Workload identity and person authorization (2026-09-18)
+
+The control plane authenticates the workload and authorizes the asserted
+person's current standing, whitelist and resource permissions. Caller trust is
+specified in runtime contract §8.90. Caller-only publication APIs retain their
+workload and ownership checks. Managed delegated runs resolve bindings through
+a read-only GET carrying the grant; direct runs need no binding request.
+
+The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
+maintains the endpoint policy inventory.
+
+## Team access under delegation is decided on the person a grant names (2026-09-19)
+
+The shared team gate grants its read-only service shortcut only to
+`service_agent` identities without the caller role. All other team checks use
+the acting subject's permissions; write access never receives this shortcut.
+Asserted people carry no bearer roles.
+
+For delegated `prepare-execution`, the one-shot model override is authorized
+against the workload caller's delegation role. Otherwise it requires an ordinary
+service identity. Detailed cases are in the
+[subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).
+
+## Deleting a person removes their standing first (2026-09-23)
+
+User deletion retains administrator permission and protected-account checks,
+and rejects wildcard or userset identifiers. It resolves identity administration
+before mutation, then writes suspension before deleting the account whenever
+standing is enforced. Failed account deletion leaves suspension effective;
+other authorization relations remain and retries are safe.
+
+Suspension applies at the next authorization decision, not to work already
+authorized. Direct identity-provider changes do not update platform standing.
+With standing disabled, deletion writes no suspension. Exact refusal and retry
+scenarios are maintained in the
+[subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).
+
+
+## Knowledge Flow ingestion admission and relaunch — 2026-09-26
+
+`POST /process-documents` returns `task_ids` keyed by document UID as well as the
+batch workflow ID. Uploads and relaunches create the document tasks, execution
+binding and immutable pending submission in one database transaction. Internal
+source synchronization can supply its existing task, which admission binds once.
+A partial unique index on active document-ingestion tasks rejects concurrent
+admission (HTTP 409). Push-document authorization uses its persisted document and
+folder memberships, not replacement tags supplied by the caller.
+
+Temporal delivery reuses the persisted workflow ID with `REJECT_DUPLICATE`, even
+if the first execution already completed. A timeout leaves the task pending;
+the existing reconciliation loop retries pending deliveries with bounded
+concurrency before reconciling execution outcomes. Only acknowledged deliveries
+are removed. The submission keeps the existing per-profile batch admission and
+common/extraction queue routing. Local memory execution retains its pending
+request until completion, serializes delivery within the process, and holds no
+SQL connection while running the pipeline; it is not a multi-replica scheduler.
+
+With `relaunch: true`, ready or processing documents are refused. The server
+preserves `processing.profile` when known; otherwise the request must explicitly
+choose fast, medium or rich (HTTP 422 if omitted). Queue wait and worker retries
+remain active; absence from a browser's task cache never proves abandonment.
+Raw-file preparation is outside the admission transaction: this does not make
+external content writes atomic with SQL, or recover historical unbound tasks.
+The source synchronization preparation contract is unchanged.
