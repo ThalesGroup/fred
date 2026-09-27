@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Helpers for the `jira` skill: the three things `acli` cannot do on its own.
+"""Helpers for the `jira` skill: operations `acli` cannot do reliably on its own.
 
 `show`        renders an issue (description + comments) as Markdown. `acli jira workitem
               view` silently drops the description because it is Atlassian Document Format,
@@ -11,6 +11,8 @@
               visibility and cannot set the internal flag; only the REST comment property
               `sd.public.comment` can. Markdown in, ADF out, so headings and code blocks
               survive.
+`assign`      assigns an issue by Atlassian account ID. `acli jira workitem assign` can
+              interpret a valid account ID as an instruction to remove the assignee.
 """
 
 from __future__ import annotations
@@ -91,15 +93,17 @@ class _StripAuthOnHostChange(urllib.request.HTTPRedirectHandler):
         return new
 
 
-def rest(url: str, profile: dict, payload: dict | None = None) -> bytes:
-    """GET, or POST when `payload` is given, authenticating with email + API token."""
+def rest(
+    url: str, profile: dict, payload: dict | None = None, method: str | None = None
+) -> bytes:
+    """Call Jira REST, authenticating with email + API token."""
     creds = base64.b64encode(f"{profile['email']}:{api_token()}".encode()).decode()
     headers = {"Authorization": f"Basic {creds}", "Accept": "application/json"}
     data = None
     if payload is not None:
         data = json.dumps(payload).encode()
         headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers)
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     opener = urllib.request.build_opener(_StripAuthOnHostChange())
     try:
         with opener.open(req, timeout=60) as resp:
@@ -433,6 +437,13 @@ def cmd_comment(args) -> None:
     print(f"https://{profile['site']}/browse/{args.key}?focusedCommentId={created.get('id')}")
 
 
+def cmd_assign(args) -> None:
+    profile = acli_profile()
+    url = f"https://{profile['site']}/rest/api/3/issue/{args.key}/assignee"
+    rest(url, profile, {"accountId": args.account_id}, method="PUT")
+    print(f"Assigned {args.key} to account {args.account_id}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -459,6 +470,13 @@ def main() -> None:
     com.add_argument("--yes", action="store_true", help="required confirmation for --public")
     com.add_argument("--dry-run", action="store_true", help="print the ADF and exit without posting")
     com.set_defaults(func=cmd_comment)
+
+    assign = sub.add_parser("assign", help="assign an issue by Atlassian account ID")
+    assign.add_argument("key")
+    assign.add_argument(
+        "--account-id", required=True, help="Atlassian account ID of the assignee"
+    )
+    assign.set_defaults(func=cmd_assign)
 
     args = parser.parse_args()
     args.func(args)

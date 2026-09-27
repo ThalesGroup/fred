@@ -63,8 +63,9 @@ Example `config/configuration.yaml`:
 
 from __future__ import annotations
 
+import os
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Optional
 
 if TYPE_CHECKING:
     from fred_runtime.runtime_context import McpConfigurationLike
@@ -79,7 +80,7 @@ from fred_core.common import (
 from fred_core.logs.log_structures import LogStorageConfig
 from fred_core.scheduler.backend import SchedulerBackend
 from fred_core.security.structure import SecurityConfiguration
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
 
@@ -297,6 +298,59 @@ class PodObservabilityConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class LocalRuntimeFilesystemConfig(BaseModel):
+    """Local-development object storage for Fred Runtime files."""
+
+    type: Literal["local"] = "local"
+    root: str = "~/.fred/pod/filesystem"
+
+
+class MinioRuntimeFilesystemConfig(BaseModel):
+    """MinIO or S3-compatible object storage for Fred Runtime files."""
+
+    type: Literal["minio"] = "minio"
+    endpoint: str
+    access_key: str
+    secret_key: str = Field(default=None)  # type: ignore[assignment]
+    bucket_name: str = "fred-runtime"
+    secure: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def load_env_secret(cls, values: Any) -> Any:
+        if isinstance(values, dict):
+            values = {**values}
+            values.setdefault("secret_key", os.getenv("MINIO_SECRET_KEY"))
+            if not values["secret_key"]:
+                raise ValueError("Missing MINIO_SECRET_KEY environment variable")
+        return values
+
+
+class GcsRuntimeFilesystemConfig(BaseModel):
+    """GCS object storage using Application Default Credentials."""
+
+    type: Literal["gcs"] = "gcs"
+    bucket_name: str = "fred-runtime"
+    project_id: str | None = None
+
+
+class ConversationFilesystemQuotaConfig(BaseModel):
+    """Independent soft limits for runtime-owned conversation namespaces."""
+
+    scratchpad_max_bytes: int = Field(default=100 * 1024 * 1024, ge=1)
+    scratchpad_max_files: int = Field(default=1_000, ge=1)
+    deep_max_bytes: int = Field(default=1024 * 1024 * 1024, ge=1)
+    deep_max_files: int = Field(default=10_000, ge=1)
+
+
+RuntimeFilesystemConfig = Annotated[
+    LocalRuntimeFilesystemConfig
+    | MinioRuntimeFilesystemConfig
+    | GcsRuntimeFilesystemConfig,
+    Field(discriminator="type"),
+]
+
+
 class PodStorageConfig(BaseModel):
     """
     Persistence backend settings for an agent pod.
@@ -310,11 +364,25 @@ class PodStorageConfig(BaseModel):
       local dev via sqlite_path, PostgreSQL in production via host/port/database)
     - `opensearch`: optional, for log forwarding in production
     - `log_store`: optional, for structured log persistence
+    - `object_store`: one bucket/root for all runtime-owned files
     """
 
     postgres: PostgresStoreConfig = Field(default_factory=default_postgres_store_config)
     opensearch: Optional[OpenSearchStoreConfig] = None
     log_store: Optional[LogStorageConfig] = None
+    object_store: RuntimeFilesystemConfig = Field(
+        default_factory=LocalRuntimeFilesystemConfig
+    )
+    conversation_filesystem: ConversationFilesystemQuotaConfig = Field(
+        default_factory=ConversationFilesystemQuotaConfig
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_legacy_filesystem_config(cls, values: Any) -> Any:
+        if isinstance(values, dict) and "filesystem" in values:
+            raise ValueError("storage.filesystem was renamed to storage.object_store")
+        return values
 
 
 # ---------------------------------------------------------------------------

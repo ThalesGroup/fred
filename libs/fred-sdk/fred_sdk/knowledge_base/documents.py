@@ -31,7 +31,7 @@ import mimetypes
 from typing import Literal
 
 import httpx
-from fred_pod.security.backend_to_backend_auth import M2MTokenProvider
+from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 from pydantic import BaseModel
 
 from fred_sdk.knowledge_base.configuration import PodConfiguration
@@ -143,12 +143,13 @@ async def declare_library_synchronized(
 
     machine = f"{_MACHINE_KIND}:{instance_id}"
     try:
-        tokens = M2MTokenProvider(configuration.m2m)
-        async with httpx.AsyncClient(timeout=_DECLARE_TIMEOUT) as client:
+        tokens = configuration.token_provider
+        async with httpx.AsyncClient(
+            timeout=_DECLARE_TIMEOUT, auth=M2MBearerAuth(tokens)
+        ) as client:
             response = await client.put(
                 f"{configuration.knowledge_flow_url}/libraries/{library_id}/synchronized-by",
                 json={"synchronized_by": machine},
-                headers={"Authorization": f"Bearer {await tokens.get_token()}"},
             )
     except Exception:  # noqa: BLE001 - reported, never fatal to the run
         logger.warning(
@@ -189,8 +190,10 @@ class DocumentPublisher:
         self._base_url = configuration.knowledge_flow_url
         self._library_id = library_id
         self._source_tag = source_tag
-        self._client = httpx.AsyncClient(timeout=_TIMEOUT)
-        self._tokens = M2MTokenProvider(configuration.m2m)
+        self._tokens = configuration.token_provider
+        self._client = httpx.AsyncClient(
+            timeout=_TIMEOUT, auth=M2MBearerAuth(self._tokens)
+        )
 
     async def publish(
         self,
@@ -226,16 +229,13 @@ class DocumentPublisher:
                 "profile": profile,
                 **({"document_version": version} if version else {}),
             },
-            headers=await self._headers(),
         )
         _raise_for(response, DocumentPublishError, relative_path)
         return DocumentHandle.model_validate(response.json())
 
     async def outcome(self, task_id: str) -> DocumentOutcome:
         """Where the ingestion behind a handle stands right now."""
-        response = await self._client.get(
-            f"{self._base_url}/tasks/{task_id}", headers=await self._headers()
-        )
+        response = await self._client.get(f"{self._base_url}/tasks/{task_id}")
         _raise_for(response, DocumentPublishError, f"task {task_id}")
         return DocumentOutcome.model_validate(response.json())
 
@@ -288,7 +288,6 @@ class DocumentPublisher:
         """
         response = await self._client.get(
             f"{self._base_url}/libraries/{self._library_id}/documents",
-            headers=await self._headers(),
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
         listing = response.json()
@@ -316,7 +315,6 @@ class DocumentPublisher:
             "DELETE",
             f"{self._base_url}/libraries/{self._library_id}/documents",
             params={"source_key": relative_path},
-            headers=await self._headers(),
         )
         _raise_for(response, DocumentRetractError, relative_path)
 
@@ -328,7 +326,6 @@ class DocumentPublisher:
         """
         response = await self._client.get(
             f"{self._base_url}/libraries/{self._library_id}/source-version",
-            headers=await self._headers(),
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
         return response.json().get("source_version")
@@ -338,12 +335,8 @@ class DocumentPublisher:
         response = await self._client.put(
             f"{self._base_url}/libraries/{self._library_id}/source-version",
             json={"source_version": value},
-            headers=await self._headers(),
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
-
-    async def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {await self._tokens.get_token()}"}
 
     async def aclose(self) -> None:
         await self._client.aclose()

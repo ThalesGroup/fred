@@ -34,7 +34,10 @@ write there, and the schedule Fred runs it on.
 
 A **run** is dispatched by Fred through Temporal onto a task queue derived from
 the definition id. The pod's worker picks it up, fetches the run context from
-the Control Plane, and calls the author's handler.
+the Control Plane, and calls the author's handler. A run names no person, so the
+pod does both with its own credential, whether or not delegation is on: the run
+context is bound to the definition's exact client, and the library to the grant
+its instance produced.
 
 One image, two commands: `publish` posts the declaration and exits, so it runs
 as a deployment hook; `run` serves runs and does not return. Publishing is

@@ -90,6 +90,9 @@ config, turn options, and services reach the tool through the middleware closure
 `CapabilityContext` — never the tool schema. The per-turn binding and raw access token
 **never** enter `CapabilityContext`; platform access is only through typed
 `RuntimeServices` ports. `document_access` is the reference for all of this.
+For conversation files, use `ctx.services.conversation_filesystem` with absolute virtual paths.
+Pass `origin="agent"` for model-supplied paths and `origin="system"` for trusted internal artifacts;
+see `AUTHORING.md` for the permission and mount contract.
 
 **Adding a field to an already-shipped `ConfigModel`?** If it's optional with a default,
 you're done — no version bump, no migration code, old stored configs just get the default.

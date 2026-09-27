@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "notes_dir": "docs/swift/ops/migrations",
+  "releases_dir": "docs/swift/ops/releases",
+  "activation_base": "3dbb8c717dc13f7aec1a6be2f36d64682abe1b9f",
+  "repository": "https://github.com/ThalesGroup/fred"
+}

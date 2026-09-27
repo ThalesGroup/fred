@@ -33,8 +33,11 @@ class TemporalClientProvider:
     Safe for concurrent use.
     """
 
-    def __init__(self, config: TemporalSchedulerConfig) -> None:
+    def __init__(
+        self, config: TemporalSchedulerConfig, *, log_connection_details: bool = True
+    ) -> None:
         self._config = config
+        self._log_connection_details = log_connection_details
         self._client: Optional[Client] = None
         self._lock = asyncio.Lock()
 
@@ -53,11 +56,14 @@ class TemporalClientProvider:
             if self._client is not None:
                 return self._client
 
-            logger.info(
-                "[TEMPORAL] Connecting: host=%s namespace=%s",
-                self._config.host,
-                self._config.namespace,
-            )
+            if self._log_connection_details:
+                logger.info(
+                    "[TEMPORAL] Connecting: host=%s namespace=%s",
+                    self._config.host,
+                    self._config.namespace,
+                )
+            else:
+                logger.info("event=scheduler_connection outcome=started")
             # temporalio Client.connect is async and exposes no per-call rpc_timeout of
             # its own — bound it ourselves so an unreachable/slow Temporal frontend
             # cannot hang every caller of get_client() indefinitely.
@@ -74,11 +80,16 @@ class TemporalClientProvider:
                     else await connect_call
                 )
             except TimeoutError:
-                logger.error(
-                    "[TEMPORAL] Connect to host=%s namespace=%s timed out after %ss",
-                    self._config.host,
-                    self._config.namespace,
-                    timeout,
-                )
+                if self._log_connection_details:
+                    logger.error(
+                        "[TEMPORAL] Connect to host=%s namespace=%s timed out after %ss",
+                        self._config.host,
+                        self._config.namespace,
+                        timeout,
+                    )
+                else:
+                    logger.error(
+                        "event=scheduler_connection outcome=failed reason=timeout"
+                    )
                 raise
             return self._client

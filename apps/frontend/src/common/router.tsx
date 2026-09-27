@@ -14,6 +14,7 @@
 
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
+import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
@@ -257,6 +258,17 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="features">
             <FeaturesPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform announcements: the banners every authenticated user sees at
+        // the top of the app. Full platform-admin gate, matching the backend's
+        // `can_manage_platform` on the admin routes.
+        path: "admin/annonces",
+        element: (
+          <Protected requires="admin">
+            <AnnouncementsPage />
           </Protected>
         ),
       },

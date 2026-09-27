@@ -10,7 +10,7 @@ worker roles, queue routing and shared-storage requirements.
 | --- | --- |
 | `configuration.yaml` | Default local API configuration; inspect its actual stores and scheduler before using it for a test |
 | `configuration_prod.yaml` | Deployment-style API settings; infrastructure endpoints and credentials must match your environment |
-| `configuration_worker.yaml` | Configuration used by `make run-worker`; the worker entrypoint starts no API |
+| `configuration_worker.yaml` | Optional dedicated-worker configuration; select explicitly with `CONFIG_FILE` |
 | `configuration_test.yaml` | Test configuration |
 
 A filename does not select the execution engine: `scheduler.backend` does.
@@ -112,7 +112,7 @@ Guidance:
 - Start the infrastructure required by your selected configuration first.
 - API: `make run`, or `CONFIG_FILE=/path/to/config.yaml make run` to select a configuration.
 - Local mode may still need authentication services and remote model access; inspect the configuration rather than assuming an infrastructure-free setup.
-- `make run-worker` starts one process; with the default `scheduler.worker_roles`, it serves all four ingestion roles.
+- `make run-worker` uses the same `CONFIG_FILE` selection as the API (including `config/.env`), with a separate local metrics port (`KF_WORKER_METRICS_PORT=9112`). It starts one process; with the default `scheduler.worker_roles`, it serves all four ingestion roles.
 - For separate processes, run `make run-worker-role ROLE=common`, then the same command with `fast`, `medium` and `rich`. Role configurations are derived under `target/worker-roles/`; metrics ports are 9112–9115.
 - These commands may prepare dependencies and download missing models. Docker Compose supplies infrastructure, not the worker processes started by these commands.
 - For a Temporal test, the API must also use `scheduler.backend: temporal` and the same namespace, base queue and shared stores as the workers. The standalone memory/local-storage API configuration is not suitable for this test.

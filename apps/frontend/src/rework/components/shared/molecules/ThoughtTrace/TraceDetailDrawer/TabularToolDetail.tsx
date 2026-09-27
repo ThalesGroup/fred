@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -23,9 +23,8 @@ import styles from "./TraceDetailDrawer.module.css";
 import tabularStyles from "./TabularToolDetail.module.css";
 
 const PAGE_SIZE = 10;
-const CATALOG_PREVIEW_CHARS = 12000;
+const CATALOG_PAGE_LINES = 20;
 const ROW_PREVIEW_COUNT = 5;
-const SAMPLE_PREVIEW_COUNT = 5;
 const COLUMN_PREVIEW_COUNT = 8;
 const CELL_PREVIEW_CHARS = 160;
 const COLUMN_NAME_PREVIEW_CHARS = 80;
@@ -181,21 +180,18 @@ function DocumentsDetail({ data }: { data: Extract<TabularTraceResult, { kind: "
   );
 }
 
-function MarkdownDetail({
-  data,
-  documentName,
-}: {
-  data: Extract<TabularTraceResult, { kind: "markdown" }>;
-  documentName?: string | null;
-}) {
+function CatalogContent({ content: fullContent, documentName }: { content: string; documentName?: string | null }) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const isLong = data.content.length > CATALOG_PREVIEW_CHARS;
-  const lastLine = data.content.lastIndexOf("\n", CATALOG_PREVIEW_CHARS);
-  const previewEnd = lastLine > CATALOG_PREVIEW_CHARS / 2 ? lastLine : CATALOG_PREVIEW_CHARS;
-  const content = isLong && !expanded ? data.content.slice(0, previewEnd) : data.content;
+  const [showAll, setShowAll] = useState(false);
+  const lines = useMemo(() => {
+    const result = fullContent.split(/\r?\n/);
+    if (result[result.length - 1] === "") result.pop();
+    return result;
+  }, [fullContent]);
+  const canCollapse = lines.length > CATALOG_PAGE_LINES;
+  const content = (showAll ? lines : lines.slice(0, CATALOG_PAGE_LINES)).join("\n");
   return (
-    <div className={styles.detail}>
+    <>
       <p className={styles.detailTitle}>
         {documentName
           ? t("rework.chatTrace.tabular.catalogForDocument", { name: documentName })
@@ -203,31 +199,50 @@ function MarkdownDetail({
       </p>
       {content.trim() ? (
         <div className={tabularStyles.catalogMarkdown}>
-          <MarkdownRenderer text={content} fullWidth />
+          <MarkdownRenderer text={content} fullWidth compact />
         </div>
       ) : (
         <p className={styles.metaInfo}>{t("rework.chatTrace.tabular.emptyCatalog")}</p>
       )}
-      {isLong && !expanded && (
+      {canCollapse && (
         <div className={tabularStyles.tabularPreviewNotice}>
-          <span>{t("rework.chatTrace.tabular.catalogPreview")}</span>
+          <span>
+            {t(showAll ? "rework.chatTrace.tabular.catalogComplete" : "rework.chatTrace.tabular.catalogPreview", {
+              shown: showAll ? lines.length : CATALOG_PAGE_LINES,
+              total: lines.length,
+            })}
+          </span>
           <Button
             className={tabularStyles.showMore}
             color="primary"
             variant="text"
             size="2xs"
             type="button"
-            onClick={() => setExpanded(true)}
+            onClick={() => setShowAll((current) => !current)}
           >
-            {t("rework.chatTrace.tabular.showFullCatalog")}
+            {t(showAll ? "rework.chatTrace.tabular.showCatalogPreview" : "rework.chatTrace.tabular.showFullCatalog")}
           </Button>
         </div>
       )}
+    </>
+  );
+}
+
+function MarkdownDetail({
+  data,
+  documentName,
+}: {
+  data: Extract<TabularTraceResult, { kind: "markdown" }>;
+  documentName?: string | null;
+}) {
+  return (
+    <div className={styles.detail}>
+      <CatalogContent content={data.content} documentName={documentName} />
     </div>
   );
 }
 
-function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "schemas" }> }) {
+function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "schemas" | "descriptions" }> }) {
   const { t } = useTranslation();
   return (
     <div className={styles.detail}>
@@ -237,51 +252,76 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
         <PagedItems
           items={data.documents}
           renderItem={(document) => (
-            <section className={tabularStyles.schemaDocument} key={document.document_uid}>
+            <section
+              className={`${tabularStyles.documentCard} ${tabularStyles.schemaDocument}`}
+              key={document.document_uid}
+            >
               <div className={tabularStyles.tabularHeading}>
-                <strong>{document.document_name}</strong>
+                <h3 className={tabularStyles.documentName}>{document.document_name}</h3>
                 <span className={styles.metaInfo}>{t(`rework.chatTrace.tabular.kind.${document.kind}`)}</span>
               </div>
-              {document.tables.length === 0 ? (
-                <p className={styles.metaInfo}>{t("rework.chatTrace.tabular.noTables")}</p>
-              ) : (
-                <div className={tabularStyles.schemaTables}>
-                  <PagedItems
-                    items={document.tables}
-                    renderItem={(table, tableIndex) => (
-                      <section className={tabularStyles.tabularTable} key={table.query_alias}>
-                        <TableHeading table={table} index={tableIndex} />
-                        {table.columns.length === 0 ? (
-                          <p className={styles.metaInfo}>{t("rework.chatTrace.tabular.noColumns")}</p>
-                        ) : (
-                          <div className={tabularStyles.tabularNested}>
-                            <PagedItems
-                              items={table.columns}
-                              renderItem={(column, columnIndex) => (
-                                <div className={tabularStyles.tabularColumn} key={`${column.name}-${columnIndex}`}>
-                                  <span>{column.name}</span>
-                                  <code>{column.dtype}</code>
-                                  {column.sample_values && column.sample_values.length > 0 && (
-                                    <span className={styles.metaInfo}>
-                                      {t("rework.chatTrace.tabular.samples")}:{" "}
-                                      {column.sample_values
-                                        .slice(0, SAMPLE_PREVIEW_COUNT)
-                                        .map((sample) => clipped(sample, CELL_PREVIEW_CHARS))
-                                        .join(", ")}
-                                      {column.sample_values.length > SAMPLE_PREVIEW_COUNT &&
-                                        ` ${t("rework.chatTrace.tabular.moreValues", { count: column.sample_values.length - SAMPLE_PREVIEW_COUNT })}`}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            />
-                          </div>
-                        )}
-                      </section>
-                    )}
-                  />
-                </div>
-              )}
+              <div className={tabularStyles.schemaDocumentContent}>
+                {"markdown" in document && typeof document.markdown === "string" && (
+                  <div className={tabularStyles.catalogSection}>
+                    <CatalogContent content={document.markdown} documentName={document.document_name} />
+                  </div>
+                )}
+                {document.tables.length === 0 ? (
+                  <p className={styles.metaInfo}>{t("rework.chatTrace.tabular.noTables")}</p>
+                ) : (
+                  <div className={tabularStyles.schemaTables}>
+                    <h4 className={tabularStyles.schemaTablesTitle}>
+                      {t("rework.chatTrace.tabular.tablesHeading", { count: document.tables.length })}
+                    </h4>
+                    <PagedItems
+                      items={document.tables}
+                      renderItem={(table, tableIndex) => (
+                        <section className={tabularStyles.tabularTable} key={table.query_alias}>
+                          <TableHeading table={table} index={tableIndex} />
+                          {table.columns.length === 0 ? (
+                            <p className={styles.metaInfo}>{t("rework.chatTrace.tabular.noColumns")}</p>
+                          ) : (
+                            <div className={tabularStyles.tabularNested}>
+                              <PagedItems
+                                items={table.columns}
+                                renderItem={(column, columnIndex) => {
+                                  const label = column.is_categorical
+                                    ? t("rework.chatTrace.tabular.categorical")
+                                    : column.dtype;
+                                  const isNumeric = column.dtype === "integer" || column.dtype === "float";
+                                  const hasValues = !isNumeric && Boolean(column.sample_values?.length);
+                                  const summary = (
+                                    <>
+                                      <span>{column.name}</span>
+                                      <code>{label}</code>
+                                    </>
+                                  );
+                                  return (
+                                    <div className={tabularStyles.tabularColumn} key={`${column.name}-${columnIndex}`}>
+                                      {hasValues || isNumeric ? (
+                                        <details className={tabularStyles.columnDisclosure}>
+                                          <summary className={tabularStyles.columnSummary}>{summary}</summary>
+                                          <code className={tabularStyles.columnDetails}>
+                                            {hasValues
+                                              ? column.sample_values?.join(" / ")
+                                              : `min ${column.min_value ?? "—"} · max ${column.max_value ?? "—"}`}
+                                          </code>
+                                        </details>
+                                      ) : (
+                                        <div className={tabularStyles.columnSummary}>{summary}</div>
+                                      )}
+                                    </div>
+                                  );
+                                }}
+                              />
+                            </div>
+                          )}
+                        </section>
+                      )}
+                    />
+                  </div>
+                )}
+              </div>
             </section>
           )}
         />
@@ -354,6 +394,7 @@ export function TabularToolDetail({ data, documentName }: { data: TabularTraceRe
     case "markdown":
       return <MarkdownDetail data={data} documentName={documentName} />;
     case "schemas":
+    case "descriptions":
       return <SchemasDetail data={data} />;
     case "search":
       return <SearchDetail data={data} />;

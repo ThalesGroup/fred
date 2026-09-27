@@ -239,6 +239,7 @@ class IngestionService:
         # per-processor extract_file_metadata(), which only ever sees the
         # file's own embedded metadata, never who is uploading it.
         metadata.identity.uploaded_by = user.uid
+        metadata.processing.profile = normalized_profile
         if apply_versioning:
             metadata = await self._apply_versioning(metadata)
 

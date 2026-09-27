@@ -35,6 +35,8 @@ party can install the whole thing without us — that is deliberate.**
 > may apply to deployments that use the affected component. Full detail, and the rest
 > of the dependency picture, in [Licensing Note](#licensing-note).
 
+For local development above deployment-factory, follow the [local delegation and startup guide](scripts/README-local-delegation.md). The shared assistant workflow is the [Fred skill](.claude/skills/fred/SKILL.md).
+
 ## How Fred is structured
 
 Fred has two complementary faces:

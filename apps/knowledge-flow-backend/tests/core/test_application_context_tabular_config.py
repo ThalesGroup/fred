@@ -50,7 +50,6 @@ def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
                 enabled=False,
                 realm_url=AnyUrl("http://localhost:8080/realms/test-m2m"),
                 client_id="m2m-client",
-                audience="test-audience",
             ),
             user=UserSecurity(
                 enabled=False,

@@ -314,7 +314,7 @@ wheels = [
 
 [[package]]
 name = "fred-pod"
-version = "4.1.0"
+version = "4.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

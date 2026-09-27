@@ -31,6 +31,7 @@ import fred_runtime.integrations.v2_runtime.adapters as adapters_module
 import httpx
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -175,3 +176,22 @@ async def test_transport_failure_is_mapped_to_the_sdk_typed_error(
 
     with pytest.raises(DocumentPortCallError):
         await adapter.find_similar("x", document_uids=["doc-a"])
+
+
+async def test_wrapped_authority_loss_is_not_mapped_to_a_document_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = _adapter(monkeypatch)
+    stop = AuthorityLostError()
+    try:
+        raise stop
+    except AuthorityLostError as exc:
+        try:
+            raise httpx.HTTPError("transport wrapper") from exc
+        except httpx.HTTPError as wrapper:
+            _RecordingClient.error = wrapper
+
+    with pytest.raises(AuthorityLostError) as raised:
+        await adapter.find_similar("x", document_uids=["doc-a"])
+
+    assert raised.value is stop

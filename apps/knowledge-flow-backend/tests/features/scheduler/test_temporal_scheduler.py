@@ -68,3 +68,23 @@ def test_start_revectorize_starts_the_workflow_on_the_ingestion_queue_with_a_tas
     assert args[1] == payload
     assert kwargs["id"] == "revectorize-task-1"
     assert kwargs["task_queue"] == "ingestion"
+
+
+def test_replayed_delivery_does_not_restart_a_completed_workflow():
+    from fred_core import KeycloakUser
+    from temporalio.common import WorkflowIDReusePolicy
+    from temporalio.exceptions import WorkflowAlreadyStartedError
+
+    from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
+    from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess, PipelineDefinition
+
+    client = MagicMock()
+    client.start_workflow = AsyncMock(side_effect=WorkflowAlreadyStartedError("ingestion-durable", "ProcessPush"))
+    scheduler = _bare_scheduler(client)
+    scheduler._register_workflow = MagicMock(return_value=WorkflowHandle(workflow_id="ingestion-durable"))
+    user = KeycloakUser(uid="user", username="user", roles=[])
+    definition = PipelineDefinition(name="retry", workflow_id="ingestion-durable", files=[FileToProcess(document_uid="doc", source_tag="uploads", processed_by=user)])
+    handle = asyncio.run(scheduler.start_document_processing(user, definition))
+    assert handle.workflow_id == "ingestion-durable"
+    assert client.start_workflow.call_args.kwargs["id_reuse_policy"] == WorkflowIDReusePolicy.REJECT_DUPLICATE
+    assert client.start_workflow.call_args.kwargs["rpc_timeout"] == timedelta(seconds=10)

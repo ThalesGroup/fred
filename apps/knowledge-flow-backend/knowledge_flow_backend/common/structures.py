@@ -32,6 +32,7 @@ from fred_core.common import (
     TemporalSchedulerConfig,
 )
 from fred_core.scheduler import SchedulerBackend
+from fred_core.tasks.models import IngestionProcessingProfile as IngestionProcessingProfile
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import WithJsonSchema
 
@@ -49,12 +50,6 @@ class Status(str, Enum):
     FAILED = "failed"
     ERROR = "error"
     FINISHED = "finished"
-
-
-class IngestionProcessingProfile(str, Enum):
-    fast = "fast"
-    medium = "medium"
-    rich = "rich"
 
 
 class IngestionWorkerRole(str, Enum):

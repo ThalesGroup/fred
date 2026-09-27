@@ -30,7 +30,7 @@
 }
 
 /* Full-viewport shell: the only place allowed to size against the viewport.
-   The InfoBanner renders (or not) as the first flex child; .appContent takes
+   .appContent takes
    the remaining height and everything routed below it uses height: 100%. */
 .appShell {
   display: flex;
@@ -38,7 +38,18 @@
   height: 100vh;
 }
 
+/* A flex column: the announcement banners (auto height, rendered inside the
+   guards) sit above .routedContent, which takes the rest. A blocked guard
+   renders its own page as the only child and keeps the definite height its
+   `height: 100%` resolves against. */
 .appContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.routedContent {
   flex: 1;
   min-height: 0;
 }

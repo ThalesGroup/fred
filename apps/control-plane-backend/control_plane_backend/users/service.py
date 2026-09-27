@@ -210,11 +210,7 @@ async def create_user(
     return UserSummary.from_raw_user(raw_user)
 
 
-async def delete_user(
-    _current_user: KeycloakUser,
-    user_id: str,
-    deps: UserServiceDependencies,
-) -> None:
+async def delete_user(admin: KeycloakAdmin, user_id: str) -> None:
     """
     Delete one Keycloak user by identifier.
 
@@ -223,15 +219,13 @@ async def delete_user(
       typed error mapping
 
     How to use it:
-    - pass the authenticated admin user, target user id, and request-scoped
-      dependencies from the API layer
+    - resolve `admin` with `_get_keycloak_admin_for_user_operations` before any
+      other change, so disabled user administration fails with nothing changed
     - expect `UserNotFoundError` when the Keycloak subject does not exist
 
     Example:
-    - `await delete_user(current_user, "user-123", deps)`
+    - `await delete_user(admin, "user-123")`
     """
-    admin = _get_keycloak_admin_for_user_operations(deps)
-
     try:
         await admin.a_delete_user(user_id)
     except KeycloakDeleteError as exc:

@@ -44,7 +44,7 @@ vi.mock("react-i18next", () => ({
     i18n: { language: "en" },
   }),
 }));
-vi.mock("react-redux", () => ({ useSelector: (selector: () => unknown) => selector() }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useSelector: (selector: () => unknown) => selector() }));
 
 const task = (taskId: string, documentUid: string, state: string, label: string) => ({
   taskId,
@@ -138,7 +138,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     );
     return { data: { tasks } };
   },
-  useListAllTagsKnowledgeFlowV1TagsGetQuery: () => ({ data: TAGS, isLoading: false, refetch: () => {} }),
+  useListTagsQuery: () => ({ data: TAGS, isLoading: false, refetch: () => {} }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     (arg: { browseDocumentsByTagRequest: { tag_id: string } }) => ({
       unwrap: async () =>
@@ -151,8 +151,8 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     () => ({ unwrap: async () => ({ sizes: {} }) }),
   ],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
-  useCreateTagKnowledgeFlowV1TagsPostMutation: () => [vi.fn()],
-  useDeleteTagKnowledgeFlowV1TagsTagIdDeleteMutation: () => [vi.fn()],
+  useCreateTagMutation: () => [vi.fn()],
+  useDeleteTagMutation: () => [vi.fn()],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     vi.fn(() => ({ unwrap: async () => ({}) })),

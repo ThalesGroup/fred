@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { usePrepareAgentExecutionMutation } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { getCachedSessionHistory, setCachedSessionHistory } from "./sessionHistoryCache";
 
 interface UseSessionHistoryArgs {
@@ -60,8 +60,7 @@ export function useSessionHistory({
   // which does not depend on the session — and asking for a session the caller
   // has only just minted (the URL is bound before the row is written) would be
   // refused, costing the thread its history.
-  const [prepareExecution] =
-    usePostPrepareExecutionControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPrepareExecutionPostMutation();
+  const [prepareExecution] = usePrepareAgentExecutionMutation();
 
   // The conversation this effect last saw. `startedForRef` suppresses a re-fire
   // WITHIN a visit; leaving and coming back is a NEW visit and must load again,

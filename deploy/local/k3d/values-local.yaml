@@ -258,6 +258,13 @@ applications:
       # (RFC §7.1, #1979). Inherited from the base chart, restated for clarity.
       command: ["python"]
       args: ["-m", "fred_runtime", "migrate"]
+    extraEnvVars:
+      - name: MINIO_SECRET_KEY
+        valueFrom:
+          secretKeyRef:
+            name: fred-secrets
+            key: SEAWEEDFS_ADMIN_PASSWORD
+            optional: false
     # -------------------------------------------------------------------------
     # Fred Agents Runtime — Application Configuration
     # -------------------------------------------------------------------------
@@ -291,6 +298,11 @@ applications:
           read: 60
 
       storage:
+        object_store:
+          type: minio
+          endpoint: http://seaweedfs:8333
+          access_key: "admin"
+          secure: false
         postgres:
           host: postgres
           port: 5432

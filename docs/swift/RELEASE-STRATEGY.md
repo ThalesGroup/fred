@@ -53,6 +53,10 @@ This separation is the key to conflict-free hotfix cherry-picks: a commit
 that touches `docs/swift/WORKPLAN.md` will never conflict with eagle's
 `docs/eagle/WORKPLAN.md` because the paths are disjoint.
 
+When creating a new release branch, also update the documentation paths in
+`.github/migration-policy.json` and both release-attachment workflows. Preserve the
+activation boundary's meaning; do not reset it to exempt already governed history.
+
 ### Why not a shared `docs/` at root?
 
 A flat `docs/` at root becomes a merge conflict surface the moment two release
@@ -114,6 +118,20 @@ apply it manually to `docs/eagle/` in the same commit or a follow-up commit.
 
 ---
 
+## Migration guides and version policy
+
+Every PR provides an operator migration note, including an explicit no-operation
+declaration. Follow [the migration workflow](ops/MIGRATION-GUIDES.md). The release
+helper aggregates the actual release range and requires patch for none, minor for
+operations including conditional activation, and major for substantial incompatible
+changes. The maximum impact sets the minimum version for both tags.
+
+Commit the generated `docs/swift/ops/releases/vX.Y.Z/migration.md` alongside the
+user-facing release notes before tagging. Both publication workflows reject an
+absent/stale guide, insufficient version or mismatched tag pair, and attach the
+guide to the GitHub release. The shared push-release skill retains explicit
+approval before tags; it no longer defaults blindly to a patch.
+
 ## Tagging a release
 
 A release is **two Git tags on the same commit**, not one — each drives its own CI
@@ -135,7 +153,7 @@ publishes nothing.
 git checkout swift
 git tag -a code/v2.1.0 -m "Release v2.1.0 — images"
 git tag -a chart/v2.1.0 -m "Release v2.1.0 — chart"
-git push origin swift --tags
+git push origin swift code/v2.1.0 chart/v2.1.0
 ```
 
 Tags live on the branch they were created from. No promotion to `main` is needed

@@ -36,6 +36,7 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.toolLabels.documents") return "Listing tabular documents";
       if (key === "rework.chatTrace.toolLabels.markdown") return "Reading the workbook catalog";
       if (key === "rework.chatTrace.toolLabels.schemas") return "Reading tabular schemas";
+      if (key === "rework.chatTrace.toolLabels.descriptions") return "Reading tabular documents";
       if (key === "rework.chatTrace.toolLabels.search") return "Searching tabular values";
       if (key === "rework.chatTrace.toolStatus.failure") return "Failed";
       if (key === "rework.chatTrace.toolStatus.success") return "Success";
@@ -301,8 +302,8 @@ describe("TraceDetailDrawer tabular tools", () => {
     expect(html).not.toContain("0 rows");
   });
 
-  it("renders a bounded catalog preview and an explicit full-catalog action", () => {
-    const content = `# Workbook\n${"a".repeat(13000)}\nTAIL`;
+  it("renders the first 20 catalog lines with a control for more", () => {
+    const content = ["# Workbook", ...Array.from({ length: 44 }, (_, index) => `line-${index + 1}`)].join("\n");
     const entry = tabularEntry("get_tabular_document_markdown", { document_uid: "uid-book", content });
     const list = tabularEntry(
       "list_tabular_documents",
@@ -327,9 +328,11 @@ describe("TraceDetailDrawer tabular tools", () => {
     expect(html).toContain("Reading the summary of document “Budget.xlsx”.");
     expect(html).not.toContain("Renamed.xlsx");
     expect(html).toContain("Workbook");
+    expect(html).toContain("line-19");
+    expect(html).not.toContain("line-20");
     expect(html).toContain("rework.chatTrace.tabular.catalogPreview");
     expect(html).toContain("rework.chatTrace.tabular.showFullCatalog");
-    expect(html).not.toContain("TAIL");
+    expect(html).not.toContain("line-44");
     expect(html).not.toContain("uid-book");
 
     const withoutDocumentName = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
@@ -359,7 +362,40 @@ describe("TraceDetailDrawer tabular tools", () => {
     expect(html).toContain("Costs");
     expect(html).toContain("amount");
     expect(html).toContain("DOUBLE");
-    expect(html).toContain("10, 20");
+    expect(html).toContain("10 / 20");
+    expect(html).not.toContain("d_secret");
+  });
+
+  it("shows the workbook catalog before its typed tables in a combined description", () => {
+    const entry = tabularEntry("describe_tabular_documents", [
+      {
+        document_uid: "uid-book",
+        document_name: "Budget.xlsx",
+        kind: "spreadsheet",
+        markdown: "# Catalog marker\nQ1 revenue",
+        tables: [
+          {
+            query_alias: "d_secret_q1",
+            sheet: "Q1",
+            title: "Revenue",
+            columns: [{ name: "amount", dtype: "float" }],
+          },
+        ],
+      },
+      {
+        document_uid: "uid-csv",
+        document_name: "Sales.csv",
+        kind: "csv",
+        markdown: null,
+        tables: [{ query_alias: "d_secret_csv", columns: [{ name: "city", dtype: "string" }] }],
+      },
+    ]);
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("Reading tabular documents");
+    expect(html.indexOf("Catalog marker")).toBeLessThan(html.indexOf("amount"));
+    expect(html.indexOf("Catalog marker")).toBeLessThan(html.indexOf("rework.chatTrace.tabular.tablesHeading"));
+    expect(html).toContain("Sales.csv");
+    expect(html).toContain("city");
     expect(html).not.toContain("d_secret");
   });
 

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -365,13 +365,13 @@ class FredHitlMiddleware(AgentMiddleware):
         *,
         binding: BoundRuntimeContext,
         approval_policy: ToolApprovalPolicy,
-        available_tool_names: set[str] | frozenset[str],
+        available_tool_names: Collection[str],
         capability_hitl: Mapping[str, CapabilityHitlBinding] | None = None,
     ) -> None:
         super().__init__()
         self._binding = binding
         self._approval_policy = approval_policy
-        self._available_tool_names = available_tool_names
+        self._available_tool_names = frozenset(available_tool_names)
         self._capability_hitl = dict(capability_hitl or {})
 
     def _requires_human_approval(self, tool_name: str) -> bool:

@@ -51,7 +51,6 @@
 
 .state-layer {
   display: flex;
-  min-width: 0;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-2xs);
@@ -61,6 +60,7 @@
   border-radius: var(--spacing-xs);
   background-color: var(--bg-color);
   padding: 0 8px 0 12px;
+  min-width: 0;
   height: var(--select-height);
 }
 

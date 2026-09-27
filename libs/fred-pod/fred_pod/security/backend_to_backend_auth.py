@@ -15,9 +15,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import math
 import os
 import time
 import typing as t
+from collections.abc import Callable
+from dataclasses import dataclass, field
 
 import httpx
 from httpx import Request, Response
@@ -38,6 +42,24 @@ ASGIApp = t.Callable[
 # A tool or pod calling a Fred API has no user bearer, so it needs a service
 # token (client_credentials) or the call 401s. It lives in fred-pod because every
 # pod needs it and none should install the agents platform to get it.
+
+
+# Optional process-local observer: fred-pod stays independent of metrics libraries.
+TokenObserver = Callable[[str, str, float], None]
+_token_observer: TokenObserver | None = None
+
+
+def set_token_observer(observer: TokenObserver | None) -> None:
+    global _token_observer
+    _token_observer = observer
+
+
+def _observe_token(event: str, outcome: str, seconds: float = 0.0) -> None:
+    if _token_observer is not None:
+        try:
+            _token_observer(event, outcome, seconds)
+        except Exception:
+            logging.getLogger(__name__).warning("Auth metrics observer failed")
 
 
 class M2MAuthConfig(BaseModel):
@@ -61,36 +83,106 @@ class M2MAuthConfig(BaseModel):
         return f"{self.keycloak_realm_url}/protocol/openid-connect/token"
 
 
+_REFRESH_FAILED = "Workload token refresh failed."
+
+
+@dataclass(frozen=True)
+class TokenLease:
+    token: str = field(repr=False)
+    generation: int
+
+
+class RefreshableTokenProvider(t.Protocol):
+    async def get_token_lease(self) -> TokenLease: ...
+
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease: ...
+
+
 class M2MTokenProvider:
     """
     Caches and refreshes a Keycloak client-credentials token.
     Thread-safe (async) and cheap to reuse across calls.
     """
 
-    def __init__(self, cfg: M2MAuthConfig):
+    def __init__(
+        self,
+        cfg: M2MAuthConfig,
+        *,
+        wall_clock: Callable[[], float] = time.time,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
         self.cfg = cfg
         self._secret = os.getenv(cfg.secret_env, "")
         self._lock = asyncio.Lock()
         self._token: str | None = None
-        self._exp: int = 0  # epoch seconds
+        self._exp: float = 0  # epoch seconds
+        self._generation = 0
+        self._renewal: asyncio.Task[None] | None = None
+        self._wall_clock = wall_clock
+        self._transport = transport
 
     async def get_token(self) -> str:
-        now = int(time.time())
-        if self._token and now < self._exp - 30:
-            return self._token
+        return (await self.get_token_lease()).token
 
+    async def get_token_lease(self) -> TokenLease:
+        started = time.perf_counter()
+        outcome = "error"
+        try:
+            lease = await self._get_token_lease()
+            outcome = "success"
+            return lease
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            _observe_token("acquire", outcome, time.perf_counter() - started)
+
+    async def _get_token_lease(self) -> TokenLease:
         async with self._lock:
-            # double-check inside lock
-            now = int(time.time())
-            if self._token and now < self._exp - 30:
-                return self._token
+            if self._token and self._wall_clock() < self._exp - 30:
+                _observe_token("cache", "hit")
+                return TokenLease(self._token, self._generation)
+            _observe_token("cache", "shared_refresh" if self._renewal else "miss")
+            task = self._start_renewal_locked()
+        await asyncio.shield(task)
+        async with self._lock:
+            assert self._token is not None
+            return TokenLease(self._token, self._generation)
 
+    async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+        started = time.perf_counter()
+        outcome = "error"
+        try:
+            async with self._lock:
+                if self._token is not None and self._generation != lease.generation:
+                    _observe_token("cache", "hit")
+                    outcome = "success"
+                    return TokenLease(self._token, self._generation)
+                _observe_token("cache", "shared_refresh" if self._renewal else "miss")
+                task = self._start_renewal_locked()
+            await asyncio.shield(task)
+            async with self._lock:
+                assert self._token is not None
+                outcome = "success"
+                return TokenLease(self._token, self._generation)
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        finally:
+            _observe_token("acquire", outcome, time.perf_counter() - started)
+
+    def _start_renewal_locked(self) -> asyncio.Task[None]:
+        if self._renewal is None:
+            self._renewal = asyncio.create_task(self._renew())
+            self._renewal.add_done_callback(
+                lambda task: None if task.cancelled() else task.exception()
+            )
+        return self._renewal
+
+    async def _renew(self) -> None:
+        try:
             if not self._secret:
-                # Fail fast: missing secret will otherwise cause confusing 401s
-                raise RuntimeError(
-                    f"Missing Keycloak client secret in env: {self.cfg.secret_env}"
-                )
-
+                raise RuntimeError(_REFRESH_FAILED)
             form = {
                 "grant_type": "client_credentials",
                 "client_id": self.cfg.client_id,
@@ -99,23 +191,52 @@ class M2MTokenProvider:
             if self.cfg.scope:
                 form["scope"] = self.cfg.scope
 
-            async with httpx.AsyncClient(timeout=10.0) as c:
-                r = await c.post(self.cfg.token_url, data=form)
-                r.raise_for_status()
-                payload = r.json()
+            now = self._wall_clock()
+            request_started = time.perf_counter()
+            request_outcome = "error"
+            try:
+                async with httpx.AsyncClient(
+                    timeout=10.0, transport=self._transport
+                ) as c:
+                    r = await c.post(self.cfg.token_url, data=form)
+                    r.raise_for_status()
+                    payload = r.json()
 
-            token = payload.get("access_token")
-            expires_in = int(payload.get("expires_in", 60))
+                token = payload.get("access_token")
+                raw_expires_in = payload.get("expires_in", 60)
+                if not isinstance(token, str) or not token:
+                    raise ValueError
+                if isinstance(raw_expires_in, bool):
+                    raise ValueError
+                expires_in = float(raw_expires_in)
+                if not math.isfinite(expires_in) or expires_in <= 0:
+                    raise ValueError
+                expires_at = now + expires_in
+                if self._wall_clock() >= expires_at:
+                    raise ValueError
+                request_outcome = "success"
+            except asyncio.CancelledError:
+                request_outcome = "cancelled"
+                raise
+            except httpx.TransportError as exc:
+                # Same httpx class as the underlying failure, without its request or detail.
+                raise type(exc)(_REFRESH_FAILED) from None
+            except Exception:
+                raise RuntimeError(_REFRESH_FAILED) from None
+            finally:
+                _observe_token(
+                    "request_renewal" if self._token is not None else "request_initial",
+                    request_outcome,
+                    time.perf_counter() - request_started,
+                )
 
-            if not isinstance(token, str) or not token:
-                raise RuntimeError("Auth server did not return a valid access_token")
-
-            self._token = token
-            self._exp = now + expires_in
-
-            # Guarantee to the outside world that we return str
-            assert self._token is not None
-            return self._token
+            async with self._lock:
+                self._token = token
+                self._exp = expires_at
+                self._generation += 1
+        finally:
+            async with self._lock:
+                self._renewal = None
 
 
 class M2MBearerAuth(httpx.Auth):
@@ -129,15 +250,22 @@ class M2MBearerAuth(httpx.Auth):
     requires_request_body = True
     requires_response_body = False
 
-    def __init__(self, provider: M2MTokenProvider):
+    def __init__(self, provider: RefreshableTokenProvider):
         self._provider = provider
 
     async def async_auth_flow(
         self, request: Request
     ) -> t.AsyncGenerator[Request, Response]:
-        token = await self._provider.get_token()
-        request.headers["Authorization"] = f"Bearer {token}"
-        yield request  # httpx performs the request; we don't need the response hook here.
+        await request.aread()
+        lease = await self._provider.get_token_lease()
+        request.headers["Authorization"] = f"Bearer {lease.token}"
+        response = yield request
+        if response.status_code == 401:
+            await response.aread()
+            await response.aclose()
+            replacement = await self._provider.refresh_rejected(lease)
+            request.headers["Authorization"] = f"Bearer {replacement.token}"
+            yield request
 
 
 def make_m2m_asgi_client(app: ASGIApp, auth: httpx.Auth) -> httpx.AsyncClient:

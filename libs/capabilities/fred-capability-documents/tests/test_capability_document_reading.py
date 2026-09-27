@@ -42,6 +42,7 @@ from fred_runtime.capabilities import (
 )
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_runtime.integrations.v2_runtime.adapters import paginate_markdown
+from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -431,6 +432,31 @@ async def test_403_failure_teaches_uid_recovery() -> None:
     assert "document_uid=cahier.pdf" in msg.content
     # The recovery hint must also land in the artifact blocks (Graph agent path).
     assert msg.artifact.blocks[0].text == msg.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+async def test_read_authority_loss_escapes_instead_of_becoming_an_artifact(
+    wrapped: bool,
+) -> None:
+    stop = AuthorityLostError()
+    error: Exception = stop
+    if wrapped:
+        try:
+            raise stop
+        except AuthorityLostError as exc:
+            try:
+                raise DocumentPortCallError("port wrapper") from exc
+            except DocumentPortCallError as wrapper:
+                error = wrapper
+    port = _FakeMarkdownPort(error=error)
+    cap = DocumentVerbatimCapability()
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_services(port), config={}
+    )
+
+    with pytest.raises(AuthorityLostError):
+        await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
 
 
 @pytest.mark.asyncio

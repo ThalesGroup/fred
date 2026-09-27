@@ -28,7 +28,8 @@ import duckdb
 import pandas as pd
 from fred_core import DocumentPermission, KeycloakUser, RebacDisabledResult, is_service_agent
 from fred_core.common import OwnerFilter
-from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, ProcessingStatus
+from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
@@ -49,9 +50,9 @@ from knowledge_flow_backend.features.tabular.execution import (
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
     TabularDatasetResponse,
+    TabularDocumentDescriptionResponse,
     TabularDocumentKind,
     TabularDocumentResponse,
-    TabularDocumentSchemaResponse,
     TabularQueryRequest,
     TabularSearchRequest,
     TabularSearchResponse,
@@ -235,9 +236,9 @@ class TabularService:
       exposing every ingested table globally.
 
     How to use:
-    - The tabular controller calls `list_documents`, `describe_documents`,
-      `get_document_markdown`, and `query_read`; the statistic feature and
-      document previews call `list_datasets` and the frame readers.
+    - The tabular controller calls `list_documents`, `describe_documents`, and
+      `query_read`; the statistic feature and document previews call
+      `list_datasets` and the frame readers.
     - Every method filters datasets through document-level permissions before
       exposing schema or data.
     """
@@ -312,7 +313,7 @@ class TabularService:
         How to use:
         - Call from `GET /tabular/documents`.
         - Table columns are intentionally absent; follow up with
-          `describe_documents(...)` for column-level schemas.
+          `describe_documents(...)` for the extraction catalog and typed tables.
         """
 
         datasets = await self._resolve_authorized_datasets(
@@ -342,17 +343,16 @@ class TabularService:
         document_library_tags_ids: list[str] | None = None,
         owner_filter: OwnerFilter | None = None,
         team_id: str | None = None,
-    ) -> list[TabularDocumentSchemaResponse]:
+    ) -> list[TabularDocumentDescriptionResponse]:
         """
-        Return the full table schemas of one or several authorized documents.
+        Return the catalog and typed tables of authorized tabular documents.
 
         Why this exists:
-        - Schema exposure must cover every table of a multi-table workbook,
-          not only the first one, and one batch call keeps agent round trips
-          low when a query joins several documents.
+        - One batch call covers every table of a multi-table workbook and its
+          extraction context, keeping agent round trips low.
 
         How to use:
-        - Call from `GET /tabular/documents/schemas` with the document uids
+        - Call from `GET /tabular/documents/schemas` with document uids
           selected from `list_documents(...)`.
         - Raises `PermissionError` when one requested uid is not readable and
           `FileNotFoundError` when it carries no tabular artifact.
@@ -383,47 +383,34 @@ class TabularService:
                 raise PermissionError(forbidden_datasets_message(forbidden_uids))
             raise FileNotFoundError(f"Requested tabular datasets were not found: {', '.join(missing_uids)}")
 
+        spreadsheet_uids = [document_uid for document_uid in requested_uids if self._document_kind(datasets_by_uid[document_uid]) == "spreadsheet"]
+        read_limit = asyncio.Semaphore(8)
+
+        async def read_catalog(document_uid: str) -> tuple[str, str]:
+            metadata = datasets_by_uid[document_uid][0].metadata
+            preview_status = metadata.processing.stages.get(ProcessingStage.PREVIEW_READY, ProcessingStatus.NOT_STARTED)
+            if preview_status != ProcessingStatus.DONE:
+                raise FileNotFoundError(f"Preview not ready for document {document_uid}. Current preview stage: {preview_status.value}.")
+            async with read_limit:
+                content = await asyncio.to_thread(self.content_store.get_output_artifact, f"{document_uid}/output/output.md")
+            return document_uid, content.decode("utf-8")
+
+        catalogs = dict(await asyncio.gather(*(read_catalog(document_uid) for document_uid in spreadsheet_uids)))
+        ordered_datasets = [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
+        tables_by_uid: dict[str, list[TabularTableSchema]] = {}
+        for dataset in ordered_datasets:
+            tables_by_uid.setdefault(dataset.metadata.document_uid, []).append(self._table_schema(dataset))
         return [
-            TabularDocumentSchemaResponse(
+            TabularDocumentDescriptionResponse(
                 document_uid=document_uid,
                 document_name=datasets_by_uid[document_uid][0].metadata.document_name,
                 kind=self._document_kind(datasets_by_uid[document_uid]),
-                tables=[self._table_schema(dataset) for dataset in datasets_by_uid[document_uid]],
+                markdown=catalogs.get(document_uid),
+                tables=tables_by_uid[document_uid],
                 source_tag=datasets_by_uid[document_uid][0].metadata.source_tag,
             )
             for document_uid in requested_uids
         ]
-
-    async def get_document_markdown(self, user: KeycloakUser, document_uid: str) -> str:
-        """
-        Return the `output.md` extraction catalog of one spreadsheet document.
-
-        Why this exists:
-        - The spreadsheet markdown summary is the LLM-readable catalog (sheet
-          layout, table context, ranges, residuals, exact `query_alias` per
-          table); agents on the tabular MCP need it without leaving the
-          tabular surface.
-
-        How to use:
-        - Call from `GET /tabular/documents/{document_uid}/markdown`.
-        - Spreadsheet documents only: raises `FileNotFoundError` when the
-          document carries no `tabular_multi_v1` artifact.
-        """
-
-        if not await self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid):
-            raise PermissionError(forbidden_datasets_message([document_uid]))
-        metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
-        if metadata is None:
-            raise FileNotFoundError(f"Tabular document '{document_uid}' was not found")
-        if read_tabular_multi_artifact(metadata) is None:
-            raise FileNotFoundError(f"Document '{document_uid}' is not a spreadsheet document with a markdown catalog")
-
-        # The content service owns preview resolution (output.md lookup) and
-        # re-checks document-level ReBAC; the guard above only scopes this
-        # route to spreadsheet documents.
-        from knowledge_flow_backend.features.content.content_service import ContentService
-
-        return await ContentService().get_markdown_preview(user, document_uid)
 
     @staticmethod
     def _group_datasets_by_document(datasets: list[ResolvedDataset]) -> dict[str, list[ResolvedDataset]]:
@@ -880,7 +867,7 @@ class TabularService:
             # test used everywhere else in this file, so a same-named tagged
             # corpus document stays visible.
             visible_documents = [metadata for metadata in await self.metadata_store.get_all_metadata({}) if metadata.source_tag != FAST_INGEST_SOURCE_TAG or metadata.tags.tag_ids]
-        elif is_service_agent(user):
+        elif is_service_agent(user) and not holds_caller_role(user):
             # EVAL-AUTH (Solution A), mirrors tag_service.resolve_authorized_tag_ids_in_rebac:
             # the evaluation worker holds no per-user document relations by design, so the
             # per-user READ lookup above is always empty and would zero out every dataset.

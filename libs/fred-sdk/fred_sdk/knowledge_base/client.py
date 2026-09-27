@@ -30,7 +30,7 @@ unfinished — and there is no second version of that fact to disagree with.
 from __future__ import annotations
 
 import httpx
-from fred_pod.security.backend_to_backend_auth import M2MTokenProvider
+from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
@@ -47,8 +47,10 @@ class ControlPlaneClient:
     def __init__(self, configuration: PodConfiguration) -> None:
         self._base_url = configuration.control_plane_url
         self._prefix = configuration.prefix
-        self._client = httpx.AsyncClient(timeout=_TIMEOUT)
-        self._tokens = M2MTokenProvider(configuration.m2m)
+        self._tokens = configuration.token_provider
+        self._client = httpx.AsyncClient(
+            timeout=_TIMEOUT, auth=M2MBearerAuth(self._tokens)
+        )
 
     async def publish(self, declaration: KnowledgeBaseDeclaration) -> None:
         """Upsert this definition's declaration. Idempotent, so a redeploy replays."""
@@ -83,9 +85,8 @@ class ControlPlaneClient:
         json: object | None = None,
         params: dict[str, str] | None = None,
     ) -> dict:
-        headers = {"Authorization": f"Bearer {await self._tokens.get_token()}"}
         response = await self._client.request(
-            method, f"{self._base_url}{path}", json=json, params=params, headers=headers
+            method, f"{self._base_url}{path}", json=json, params=params
         )
         response.raise_for_status()
         if not response.content:

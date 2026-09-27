@@ -17,7 +17,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
 import { ConfirmationDialogProvider } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import InfoBanner from "@shared/molecules/InfoBanner/InfoBanner";
+import AnnouncementStack from "../rework/features/announcements/AnnouncementStack";
 import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
@@ -99,21 +99,25 @@ function FredUiContent() {
       }
     >
       <AuthProvider>
-        {/* The InfoBanner (config-driven, absent by default) sits above the
-            guards so it shows on every page — GCU acceptance and root
-            bootstrap included — and pushes the app down instead of covering
-            it. Routed pages size with height: 100% against .appContent,
-            never 100vh. */}
+        {/* The announcement banners render INSIDE the guards — that is the
+            only reliable "past GCU and bootstrap" signal: `useAuth()`'s
+            isAuthenticated is `!!GetUserRoles()`, and that call always returns
+            an array, so it is never false. They still push the routed content
+            down instead of covering it: .appContent is a flex column, the
+            banners are its auto-height first child and .routedContent takes the
+            rest, so routed pages keep sizing with height: 100%, never 100vh. */}
         <div className={styles.appShell}>
-          <InfoBanner />
           <div className={styles.appContent}>
             <GcuGuard>
               <BootstrapGuard>
-                <ConfirmationDialogProvider>
-                  <ToastProvider>
-                    <RouterProvider router={router} />
-                  </ToastProvider>
-                </ConfirmationDialogProvider>
+                <AnnouncementStack />
+                <div className={styles.routedContent}>
+                  <ConfirmationDialogProvider>
+                    <ToastProvider>
+                      <RouterProvider router={router} />
+                    </ToastProvider>
+                  </ConfirmationDialogProvider>
+                </div>
               </BootstrapGuard>
             </GcuGuard>
           </div>

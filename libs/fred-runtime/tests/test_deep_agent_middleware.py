@@ -36,6 +36,8 @@ from typing import Any, cast
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
 from conftest import ToolFriendlyFakeChatModel
+from deepagents.backends import CompositeBackend, StateBackend
+from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPermission
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
@@ -45,6 +47,9 @@ from fred_runtime.react.middleware.hitl import (
     GatedToolCall,
 )
 from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
+from fred_runtime.react.middleware.tool_call_recovery import (
+    ToolCallTextRecoveryMiddleware,
+)
 from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
@@ -80,14 +85,25 @@ def _binding() -> BoundRuntimeContext:
     )
 
 
+def _fake_conversation_filesystem() -> Any:
+    return SimpleNamespace(
+        scratchpad=SimpleNamespace,
+        namespace=lambda _name, **_kwargs: SimpleNamespace(),
+        quotas=SimpleNamespace(
+            scratchpad_max_bytes=100,
+            scratchpad_max_files=10,
+            deep_max_bytes=100,
+            deep_max_files=10,
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # _build_deepagent_runtime_middleware — list composition
 # ---------------------------------------------------------------------------
 
 
-def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled() -> (
-    None
-):
+def test_middleware_keeps_recovery_outside_model_observability() -> None:
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,
         kpi=None,
@@ -98,6 +114,7 @@ def test_middleware_leads_with_observability_then_hitl_when_filesystem_enabled()
     assert [type(m) for m in middleware] == [
         CheckpointHygieneMiddleware,
         RateLimitRetryMiddleware,
+        ToolCallTextRecoveryMiddleware,
         TracingKpiMiddleware,
         ToolObservabilityMiddleware,
         FredHitlMiddleware,
@@ -118,13 +135,14 @@ def test_middleware_keeps_hitl_before_filesystem_guards() -> None:
     )
     assert type(middleware[0]) is CheckpointHygieneMiddleware
     assert type(middleware[1]) is RateLimitRetryMiddleware
-    assert type(middleware[2]) is TracingKpiMiddleware
-    assert type(middleware[3]) is ToolObservabilityMiddleware
-    assert type(middleware[4]) is FredHitlMiddleware
-    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[5:])
+    assert type(middleware[2]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[3]) is TracingKpiMiddleware
+    assert type(middleware[4]) is ToolObservabilityMiddleware
+    assert type(middleware[5]) is FredHitlMiddleware
+    assert all(type(m) is ToolCallLimitMiddleware for m in middleware[6:])
     # One guard per disabled filesystem tool name (ls/read_file/write_file/
     # edit_file/glob/grep/execute).
-    assert len(middleware) == 5 + 7
+    assert len(middleware) == 5 + 7 + 1
 
 
 def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
@@ -143,6 +161,16 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
     assert deep_mod._filesystem_prompt_suffix(
         available_tool_names=available_tool_names
     ) == (
+        "# Conversation filesystem\n\n"
+        "- `/` is the shared workspace for collaboration between "
+        "the parent agent and its sub-agents in this conversation.\n"
+        "- It is also the designated future location for files the agent "
+        "creates for users. Do not claim that those files are user-accessible "
+        "unless a delivery mechanism is available.\n"
+        "- Use absolute paths when creating or editing shared files, for "
+        "example `/notes.md`.\n"
+        "- `/.deep/` is reserved for runtime artifacts. Do not write or edit "
+        "files there. Other mounted filesystems may also be read-only.\n\n"
         "The following filesystem tools are disabled in this runtime: "
         "execute. Do not call them."
     )
@@ -150,6 +178,53 @@ def test_middleware_keeps_guard_for_each_unbound_filesystem_tool() -> None:
 
 class _MarkerMiddleware(AgentMiddleware):
     pass
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_rejects_capability_filesystem_middleware(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    compiled = False
+
+    def _fake_compile(**kwargs: object) -> object:
+        del kwargs
+        nonlocal compiled
+        compiled = True
+        return object()
+
+    capability_block = CapabilityAgentBlock(
+        middleware=(
+            cast(
+                AgentMiddleware,
+                FilesystemMiddleware(backend=StateBackend()),
+            ),
+        ),
+        hitl={},
+        tools=(),
+        mcp_prompt_groups=(),
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=capability_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    with pytest.raises(
+        RuntimeError,
+        match=(
+            "capability middleware.*FilesystemMiddleware.*"
+            "conversation filesystem backend"
+        ),
+    ):
+        await runtime.build_executor(_binding())
+
+    assert not compiled
 
 
 def test_middleware_places_capability_middleware_before_observability() -> None:
@@ -168,9 +243,10 @@ def test_middleware_places_capability_middleware_before_observability() -> None:
     assert type(middleware[0]) is CheckpointHygieneMiddleware
     assert middleware[1] is marker
     assert type(middleware[2]) is RateLimitRetryMiddleware
-    assert type(middleware[3]) is TracingKpiMiddleware
-    assert type(middleware[4]) is ToolObservabilityMiddleware
-    assert type(middleware[5]) is FredHitlMiddleware
+    assert type(middleware[3]) is ToolCallTextRecoveryMiddleware
+    assert type(middleware[4]) is TracingKpiMiddleware
+    assert type(middleware[5]) is ToolObservabilityMiddleware
+    assert type(middleware[6]) is FredHitlMiddleware
 
 
 def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
@@ -281,19 +357,22 @@ async def test_deep_build_executor_wires_observability_middleware(
     monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
 
     runtime = deep_mod.DeepAgentRuntime(
-        definition=_fake_definition(), services=RuntimeServices()
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
     await runtime.build_executor(_binding())
 
     # The fake tool pipeline resolves no tools, so the filesystem guard
-    # clause also fires — this test only cares that observability leads.
+    # clause also fires — this test only cares about the model wrapper order.
     wired = captured["middleware"]
     assert type(wired[0]) is CheckpointHygieneMiddleware
     assert type(wired[1]) is RateLimitRetryMiddleware
-    assert type(wired[2]) is TracingKpiMiddleware
-    assert type(wired[3]) is ToolObservabilityMiddleware
+    assert type(wired[2]) is ToolCallTextRecoveryMiddleware
+    assert type(wired[3]) is TracingKpiMiddleware
+    assert type(wired[4]) is ToolObservabilityMiddleware
 
 
 @pytest.mark.asyncio
@@ -312,7 +391,9 @@ async def test_deep_build_executor_guards_unbound_execute_tool(
     monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
 
     runtime = deep_mod.DeepAgentRuntime(
-        definition=_fake_definition(), services=RuntimeServices()
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -324,6 +405,79 @@ async def test_deep_build_executor_guards_unbound_execute_tool(
     assert "filesystem tools are disabled in this runtime: execute" in cast(
         str, captured["system_prompt"]
     )
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_uses_scratchpad_as_default_without_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    scratchpad = cast(Any, SimpleNamespace())
+    deep_namespace = cast(Any, SimpleNamespace())
+    conversation_filesystem = SimpleNamespace(
+        scratchpad=lambda: scratchpad,
+        namespace=lambda name, **kwargs: (
+            deep_namespace if name == ".deep" else scratchpad
+        ),
+        quotas=SimpleNamespace(
+            scratchpad_max_bytes=100,
+            scratchpad_max_files=10,
+            deep_max_bytes=100,
+            deep_max_files=10,
+        ),
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=cast(Any, conversation_filesystem),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    system_prompt = cast(str, captured["system_prompt"])
+    assert "BASE-TEMPLATE" in system_prompt
+    assert (
+        "`/` is the shared workspace for collaboration between the "
+        "parent agent and its sub-agents"
+    ) in system_prompt
+    assert "for example `/notes.md`" in system_prompt
+    assert "`/.deep/` is reserved for runtime artifacts." in system_prompt
+
+    backend = cast(CompositeBackend, captured["backend"])
+    assert isinstance(backend, CompositeBackend)
+    assert set(backend.routes) == {"/.deep/"}
+    assert backend.artifacts_root == "/.deep"
+    assert (
+        cast(
+            deep_mod.ConversationNamespaceBackend,
+            backend.default,
+        )._namespace
+        is scratchpad
+    )
+    assert (
+        cast(
+            deep_mod.ConversationNamespaceBackend,
+            backend.routes["/.deep/"],
+        )._namespace
+        is deep_namespace
+    )
+    guards = [
+        middleware.tool_name
+        for middleware in cast(list[AgentMiddleware], captured["middleware"])
+        if type(middleware) is ToolCallLimitMiddleware
+    ]
+    assert guards == ["execute"]
 
 
 @pytest.mark.asyncio
@@ -354,6 +508,7 @@ async def test_deep_build_executor_wires_capability_middleware(
         definition=_fake_definition(),
         services=RuntimeServices(),
         capability_block=capability_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -373,6 +528,65 @@ async def test_deep_build_executor_wires_capability_middleware(
     assert any(
         isinstance(m, DeepChildHitlMiddleware) for m in captured["subagent_middleware"]
     )
+    parent_recovery = next(
+        m
+        for m in captured["middleware"]
+        if isinstance(m, ToolCallTextRecoveryMiddleware)
+    )
+    child_recovery = next(
+        m
+        for m in captured["subagent_middleware"]
+        if isinstance(m, ToolCallTextRecoveryMiddleware)
+    )
+    assert parent_recovery is not child_recovery
+
+
+@pytest.mark.asyncio
+async def test_deep_build_executor_binds_child_filesystem_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+
+    child_rules = [
+        FilesystemPermission(operations=["read"], paths=["/**"], mode="deny")
+    ]
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
+        subagent_permissions=child_rules,
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    await runtime.build_executor(_binding())
+
+    assert captured["subagent_permissions"] == child_rules
+    assert captured["permissions"] != child_rules
+    child_concat = next(
+        middleware
+        for middleware in cast(list[AgentMiddleware], captured["subagent_middleware"])
+        if isinstance(middleware, deep_mod.ConcatFilesMiddleware)
+    )
+    result = await child_concat.tools[0].ainvoke(
+        {
+            "type": "tool_call",
+            "name": "concat_files",
+            "args": {"paths": ["/input.txt"], "output_path": "/output.txt"},
+            "id": "child-denied",
+        }
+    )
+    assert isinstance(result, ToolMessage)
+    assert getattr(result.artifact, "is_error", False)
+    assert "Permission denied for read on /output.txt" in str(result.content)
 
 
 @pytest.mark.asyncio
@@ -404,6 +618,7 @@ async def test_deep_build_executor_no_longer_rejects_capability_hitl(
         definition=_fake_definition(),
         services=RuntimeServices(),
         capability_block=capability_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -438,6 +653,7 @@ async def test_deep_build_executor_no_longer_rejects_operator_tool_approval(
     runtime = deep_mod.DeepAgentRuntime(
         definition=cast(ReActAgentDefinition, definition),
         services=RuntimeServices(),
+        conversation_filesystem=_fake_conversation_filesystem(),
     )
     runtime._model = cast(BaseChatModel, SimpleNamespace())
 
@@ -513,6 +729,8 @@ async def test_compiled_deep_parent_sanitizes_payload_without_rewriting_checkpoi
             checkpointer=InMemorySaver(),
             subagent_middleware=[],
             middleware=middleware,
+            backend=StateBackend(),
+            permissions=[],
         ),
     )
     config = {"configurable": {"thread_id": "hygiene-parent"}}

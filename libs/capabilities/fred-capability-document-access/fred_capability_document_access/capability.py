@@ -107,6 +107,7 @@ from fred_sdk.contracts.models import (
 from fred_sdk.contracts.runtime import (
     DocumentSearchResult,
     DocumentTreeResult,
+    unwrap_run_stop_error,
 )
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field, model_validator
@@ -645,6 +646,9 @@ class DocumentAccessCapability(
                     ),
                 )
             except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 # Same contract as the sibling tools: a failing tool returns an
                 # `is_error=True` artifact rather than raising, or the default
                 # ToolNode handler re-raises and the whole turn dies with an
@@ -736,6 +740,9 @@ class DocumentAccessCapability(
                     max_chars=effective_max_chars,
                 )
             except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 return _document_tool_failure(
                     tool_ref="list_document_tree",
                     action="list the document tree",

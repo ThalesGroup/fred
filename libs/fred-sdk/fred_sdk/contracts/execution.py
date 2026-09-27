@@ -210,6 +210,39 @@ def check_session_id(session_id: str | None) -> None:
         )
 
 
+def _advertise_runtime_execution_modes(schema: dict[str, Any]) -> None:
+    """Describe the two valid target shapes without changing the wire envelope."""
+    schema["oneOf"] = [
+        {
+            "title": "Managed agent instance",
+            "required": ["agent_instance_id", "runtime_context"],
+            "properties": {
+                "agent_instance_id": {"type": "string", "minLength": 1},
+                "agent_id": {"type": "null"},
+                "runtime_context": {
+                    "type": "object",
+                    "required": ["team_id"],
+                    "properties": {
+                        "team_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "pattern": r"\S",
+                        }
+                    },
+                },
+            },
+        },
+        {
+            "title": "Direct agent template",
+            "required": ["agent_id"],
+            "properties": {
+                "agent_id": {"type": "string", "minLength": 1},
+                "agent_instance_id": {"type": "null"},
+            },
+        },
+    ]
+
+
 class RuntimeExecuteRequest(BaseModel):
     """
     Frontend-facing execution request for fred-runtime endpoints.
@@ -237,6 +270,8 @@ class RuntimeExecuteRequest(BaseModel):
     - This model must never grow fields for infrastructure routing (pod URLs,
       database DSNs, service endpoints). Those are Kubernetes concerns.
     """
+
+    model_config = ConfigDict(json_schema_extra=_advertise_runtime_execution_modes)
 
     # Execution target — exactly one must be set
     agent_instance_id: str | None = Field(
@@ -347,8 +382,8 @@ class RuntimeExecuteRequest(BaseModel):
 
         - Exactly one of agent_id or agent_instance_id must be set.
         - When resume_payload is absent, input must have non-empty content.
-        - For managed (agent_instance_id) execution the pod authorizes the caller
-          against OpenFGA on runtime_context.team_id (enforced at the runtime).
+        - Managed (agent_instance_id) execution requires a non-blank
+          runtime_context.team_id before runtime resolution begins.
         - interrupt_id and occurrence_id are only meaningful alongside
           resume_payload — they identify WHICH pending occurrence a resume
           answers, so they have no purpose without a resume in flight.
@@ -357,6 +392,14 @@ class RuntimeExecuteRequest(BaseModel):
         has_template = bool(self.agent_id)
         if has_instance == has_template:
             raise ValueError("Provide exactly one of agent_id or agent_instance_id.")
+        if has_instance and (
+            self.runtime_context is None
+            or self.runtime_context.team_id is None
+            or not self.runtime_context.team_id.strip()
+        ):
+            raise ValueError(
+                "runtime_context.team_id is required for managed agent execution."
+            )
         if self.resume_payload is None and not self.input.strip():
             raise ValueError("input is required when resume_payload is not set.")
         if self.interrupt_id is not None and self.resume_payload is None:

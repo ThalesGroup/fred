@@ -20,7 +20,7 @@ update-uv-locks: ## Update uv lock state in subprojects except frontend
 	done
 
 .PHONY: code-quality
-code-quality: ## Run code quality checks in all submodules
+code-quality: migration-tests ## Run code quality checks in all submodules
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality in $$dir ************"; \
@@ -74,6 +74,10 @@ validation-report: ## Run the live cross-app validation suite (requires infra + 
 	$(MAKE) -C validation validation-report
 
 ##@ Setup
+
+.PHONY: delegation
+delegation: ## Prepare local delegation after docker-up, without editing tracked YAML (ARGS=--dry-run or --reset)
+	uv run scripts/populate_local_delegation.py $(ARGS)
 
 .PHONY: setup-env
 setup-env: ## Create each backend's .env from its .env.template (idempotent), fill in local-dev secrets that docker-compose already fixes to the same value everywhere, prompt once for a model provider API key
@@ -410,3 +414,23 @@ k3d-logs-kf: ## Tail logs for knowledge-flow-backend
 .PHONY: k3d-logs-frontend
 k3d-logs-frontend: ## Tail logs for frontend
 	kubectl logs -n $(K3D_NAMESPACE) -l app=frontend -f --tail=100
+
+##@ Migration notes and release preparation
+
+MIGRATION_BASE ?= origin/swift
+MIGRATION_GUIDES = uv run --project libs/fred-pod --locked --no-dev python scripts/migration_guides.py
+
+.PHONY: migration-check release-plan release-guide migration-tests
+migration-check: ## Check this PR's migration note, including uncommitted edits
+	@$(MIGRATION_GUIDES) check-pr --base "$(MIGRATION_BASE)" --worktree
+
+release-plan: ## Report release impact, minimum version and missing migration notes
+	@$(MIGRATION_GUIDES) plan
+
+release-guide: ## Generate and validate the DevOps guide: make release-guide RELEASE_VERSION=X.Y.Z
+	@test -n "$(RELEASE_VERSION)" || { echo "Usage: make release-guide RELEASE_VERSION=X.Y.Z"; exit 1; }
+	@$(MIGRATION_GUIDES) generate --worktree --version "$(RELEASE_VERSION)"
+	@$(MIGRATION_GUIDES) verify --worktree --version "$(RELEASE_VERSION)"
+
+migration-tests: ## Validate release migration tooling offline with synthetic Git histories
+	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v

@@ -29,8 +29,10 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from fred_core.security import oidc
+from fred_core.security.delegation import AssertedUser
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
 from fred_core.users.store import BaseUserStore
 
@@ -62,6 +64,19 @@ def bearer_token() -> str:
     return uuid4().hex
 
 
+def _request() -> Request:
+    """A bare request: the gate reads nothing from it, and delegation is off."""
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "query_string": b"",
+            "headers": [],
+        }
+    )
+
+
 def _bearer_resolves_to(monkeypatch: pytest.MonkeyPatch, user: KeycloakUser) -> None:
     """Make the token resolve to `user` without a signature to verify."""
     monkeypatch.setattr(oidc, "decode_jwt", lambda token: user)
@@ -88,6 +103,7 @@ async def test_a_service_passes_without_a_user_record(
     _bearer_resolves_to(monkeypatch, service)
 
     admitted = await oidc.get_current_user_or_service(
+        request=_request(),
         token=bearer_token,
         user_store=store,
         configuration=configuration,
@@ -106,6 +122,7 @@ async def test_get_current_user_still_refuses_a_service(
 
     with pytest.raises(HTTPException) as exc:
         await oidc.get_current_user(
+            request=_request(),
             token=bearer_token,
             user_store=store,
             configuration=configuration,
@@ -127,6 +144,7 @@ async def test_a_human_without_accepted_gcu_is_refused(
 
     with pytest.raises(HTTPException) as exc:
         await dependency(
+            request=_request(),
             token=bearer_token,
             user_store=store,
             configuration=configuration,
@@ -148,6 +166,7 @@ async def test_a_human_with_accepted_gcu_passes(
     _bearer_resolves_to(monkeypatch, human)
 
     admitted = await dependency(
+        request=_request(),
         token=bearer_token,
         user_store=store,
         configuration=configuration,
@@ -155,3 +174,36 @@ async def test_a_human_with_accepted_gcu_passes(
 
     assert admitted is human
     cast(AsyncMock, store.find_user_by_id).assert_awaited_once_with(UUID(human.uid))
+
+
+@pytest.mark.parametrize(
+    "dependency", [oidc.get_current_user, oidc.get_current_user_or_service]
+)
+@pytest.mark.asyncio
+async def test_an_asserted_person_is_admitted_without_a_record(
+    monkeypatch, configuration, dependency, bearer_token
+):
+    """A person a workload speaks for accepted the terms with their own token.
+
+    Their acceptance was checked when the run was admitted, and the workload
+    carries no acceptance row of its own, so neither gate may look one up.
+    """
+    asserted = AssertedUser(
+        uid=str(uuid4()), client_id="agentic", run_id="run-1", agent_id="agent-1"
+    )
+    store = _user_store()
+
+    async def _asserted(request, token):
+        return asserted
+
+    monkeypatch.setattr(oidc, "get_current_user_without_gcu", _asserted)
+
+    admitted = await dependency(
+        request=_request(),
+        token=bearer_token,
+        user_store=store,
+        configuration=configuration,
+    )
+
+    assert admitted is asserted
+    cast(AsyncMock, store.find_user_by_id).assert_not_awaited()

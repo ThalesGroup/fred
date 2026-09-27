@@ -72,7 +72,7 @@ if TYPE_CHECKING:
         escape_reserved_prompt_tags,
         find_reserved_prompt_tag,
     )
-    from .runtime import RuntimeErrorEvent, TurnPersistedEvent
+    from .runtime import RuntimeErrorEvent, RuntimeStopReason, TurnPersistedEvent
     from .ui_part_union import (
         BASE_UI_PARTS,
         current_ui_part_union,
@@ -125,6 +125,7 @@ _LAZY: dict[str, str] = {
     "find_reserved_prompt_tag": "fred_sdk.contracts.prompt_utils",
     # Runtime events
     "RuntimeErrorEvent": "fred_sdk.contracts.runtime",
+    "RuntimeStopReason": "fred_sdk.contracts.runtime",
     "TurnPersistedEvent": "fred_sdk.contracts.runtime",
     # UiPart union registration
     "BASE_UI_PARTS": "fred_sdk.contracts.ui_part_union",
@@ -185,6 +186,7 @@ __all__ = [
     # Runtime events (Phase 1 addition)
     "TurnPersistedEvent",
     "RuntimeErrorEvent",
+    "RuntimeStopReason",
     # OpenAI compat — typed tool call models
     "OpenAIModelCard",
     "OpenAIModelList",

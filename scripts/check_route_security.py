@@ -144,6 +144,18 @@ def has_auth_dependency(app, path: str, method: str) -> bool:
                         # Look for get_current_user in dependencies
                         for dep in route.dependencies:
                             if hasattr(dep, 'dependency'):
+                                # MCP mounts authenticate through this yielding
+                                # dependency, which validates the bearer and
+                                # resolves the request principal before yielding.
+                                # Match its qualified identity, not MCP paths or
+                                # arbitrary functions containing "auth".
+                                if (
+                                    getattr(dep.dependency, '__module__', None)
+                                    == 'fred_core.security.mcp_delegation'
+                                    and getattr(dep.dependency, '__name__', None)
+                                    == 'mcp_mount_auth'
+                                ):
+                                    return True
                                 dep_str = str(dep.dependency)
                                 if 'get_current_user' in dep_str:
                                     return True

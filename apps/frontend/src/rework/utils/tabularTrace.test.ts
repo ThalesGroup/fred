@@ -27,6 +27,7 @@ describe("tabular trace result validation", () => {
   it("recognizes bare and Knowledge Flow MCP tool names only", () => {
     expect(tabularToolKind("list_tabular_documents")).toBe("documents");
     expect(tabularToolKind("mcp__knowledge_flow__get_tabular_documents_schemas_2")).toBe("schemas");
+    expect(tabularToolKind("mcp__knowledge_flow__describe_tabular_documents_2")).toBe("descriptions");
     expect(tabularToolKind("mcp__other__list_tabular_documents")).toBeNull();
   });
 
@@ -62,11 +63,39 @@ describe("tabular trace result validation", () => {
     });
     const schema = {
       ...document,
-      tables: [{ ...table, columns: [{ name: "amount", dtype: "int64", sample_values: null }] }],
+      tables: [
+        {
+          ...table,
+          columns: [
+            { name: "amount", dtype: "int64", sample_values: null, min_value: 0, max_value: 20 },
+            {
+              name: "severity",
+              dtype: "string",
+              is_categorical: true,
+              has_two_values: true,
+              sample_values: ["CRITICAL", "LOW"],
+            },
+          ],
+        },
+      ],
     };
     expect(parseTabularTraceResult("get_tabular_documents_schemas", JSON.stringify([schema]))).toEqual({
       kind: "schemas",
       documents: [schema],
+    });
+    const description = { ...schema, markdown: "# Workbook\nQ1" };
+    const csvDescription = {
+      document_uid: "csv-uid",
+      document_name: "Sales.csv",
+      kind: "csv",
+      markdown: null,
+      tables: [{ query_alias: "d_csv", columns: [{ name: "amount", dtype: "float" }] }],
+    };
+    expect(
+      parseTabularTraceResult("describe_tabular_documents", JSON.stringify([description, csvDescription])),
+    ).toEqual({
+      kind: "descriptions",
+      documents: [description, csvDescription],
     });
   });
 
@@ -114,6 +143,45 @@ describe("tabular trace result validation", () => {
       ),
     ).toBeNull();
     expect(parseTabularTraceResult("get_tabular_documents_schemas", JSON.stringify([document]))).toBeNull();
+    expect(
+      parseTabularTraceResult("describe_tabular_documents", JSON.stringify([{ ...document, markdown: null }])),
+    ).toBeNull();
+    expect(
+      parseTabularTraceResult(
+        "describe_tabular_documents",
+        JSON.stringify([
+          {
+            ...document,
+            markdown: null,
+            tables: [{ ...table, columns: [{ name: "status", dtype: "string", is_categorical: "yes" }] }],
+          },
+        ]),
+      ),
+    ).toBeNull();
+    expect(
+      parseTabularTraceResult(
+        "describe_tabular_documents",
+        JSON.stringify([
+          {
+            ...document,
+            markdown: null,
+            tables: [{ ...table, columns: [{ name: "status", dtype: "string", has_two_values: "yes" }] }],
+          },
+        ]),
+      ),
+    ).toBeNull();
+    expect(
+      parseTabularTraceResult(
+        "describe_tabular_documents",
+        JSON.stringify([
+          {
+            ...document,
+            markdown: null,
+            tables: [{ ...table, columns: [{ name: "amount", dtype: "integer", min_value: "0" }] }],
+          },
+        ]),
+      ),
+    ).toBeNull();
     expect(
       parseTabularTraceResult(
         "search_tabular_values",

@@ -19,7 +19,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Portal } from "@shared/utils/Portal.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useCreateTagKnowledgeFlowV1TagsPostMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useCreateTagMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
 
@@ -53,7 +53,7 @@ export default function CreateFolderModal({
 }: CreateFolderModalProps) {
   const { t } = useTranslation();
   const { showError } = useToast();
-  const [createTag, { isLoading }] = useCreateTagKnowledgeFlowV1TagsPostMutation();
+  const [createTag, { isLoading }] = useCreateTagMutation();
   const [name, setName] = useState("");
 
   // Reset the field each time the modal opens (it mounts fresh, so the input's

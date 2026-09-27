@@ -103,6 +103,13 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For conversation-scoped text files, use `ctx.services.conversation_filesystem`
+(`ConversationFilesystemPort`) with absolute virtual paths such as `/notes.md` and an explicit
+`origin` on every call. Use `origin="agent"` for model-supplied paths; the port enforces the
+calling agent's filesystem rules. Use `origin="system"` only for trusted internal work, such as
+writing an artifact under `/.deep/`. The runtime binds the conversation and routes mounts; the
+capability cannot select a bucket or another conversation. Fail loudly when the optional port is
+absent.
 
 ---
 
@@ -337,3 +344,6 @@ if you touched the contract surface) — green before you claim done.
 - **Never persist asset blobs in `tuning_json`** — store binaries through a service in
   `validate_config` and keep only their keys (RFC §3.8).
 - **Keep runtime info out of LLM-exposed tool signatures** (RFC §3.5).
+- **Re-raise a run stop** — a tool that turns a failure into text first checks
+  `unwrap_run_stop_error(exc)` from `fred_sdk.contracts.runtime` and re-raises what it
+  finds, so a stopped run ends instead of reaching the model as tool text.

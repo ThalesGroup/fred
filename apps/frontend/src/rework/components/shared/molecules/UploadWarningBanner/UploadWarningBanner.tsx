@@ -13,16 +13,9 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon";
-import type { IconType } from "@shared/utils/Type";
+import { SEVERITY_ICONS, type Severity } from "@shared/utils/severity";
 import { useLocalizedUploadWarning } from "../../../../core/hooks/useLocalizedUploadWarning";
 import styles from "./UploadWarningBanner.module.css";
-
-const severityIcons: Record<string, IconType> = {
-  info: "info",
-  warning: "warning",
-  error: "error",
-  success: "check_circle",
-};
 
 interface UploadWarningBannerProps {
   className?: string;
@@ -59,7 +52,7 @@ export default function UploadWarningBanner({ className }: UploadWarningBannerPr
   return (
     <div className={className ? `${styles.banner} ${className}` : styles.banner} data-severity={severity} role="alert">
       <span className={styles.icon} aria-hidden>
-        <Icon category="outlined" type={severityIcons[severity] ?? "info"} />
+        <Icon category="outlined" type={SEVERITY_ICONS[severity as Severity] ?? "info"} />
       </span>
       <span className={styles.message}>{uploadWarningMessage}</span>
     </div>

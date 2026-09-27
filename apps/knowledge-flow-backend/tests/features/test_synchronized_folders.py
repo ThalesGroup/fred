@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 
 import pytest
 from fred_core import KeycloakUser
+from fred_core.security.delegation import DelegationConfig, initialize_delegation
 from fred_core.security.structure import SERVICE_AGENT_ROLE
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
@@ -82,6 +83,18 @@ def machine_identity() -> KeycloakUser:
     return KeycloakUser(uid="kb-pod", username="kb-pod", roles=[SERVICE_AGENT_ROLE], email=None)
 
 
+def delegation_client() -> KeycloakUser:
+    """A workload that speaks for people: it also holds the service role."""
+    return KeycloakUser(
+        uid="agents",
+        username="agents",
+        roles=[SERVICE_AGENT_ROLE],
+        email=None,
+        client_id="agents",
+        caller_roles=frozenset({"delegation_caller"}),
+    )
+
+
 @pytest.fixture
 def store() -> FakeTagStore:
     tags = FakeTagStore()
@@ -132,6 +145,34 @@ async def test_a_person_is_refused_inside_a_library(store):
 @pytest.mark.parametrize("tag_id", ["lib", "sub", "deep"])
 async def test_the_machine_itself_is_never_refused(store, tag_id):
     await refuse_if_synchronized_by_id(store, tag_id, machine_identity())
+
+
+_SWITCHES = pytest.mark.parametrize(
+    "config",
+    [DelegationConfig(), DelegationConfig(accept_delegated_calls=True), DelegationConfig(act_for_people=True)],
+    ids=["off", "accepting", "acting-only"],
+)
+
+
+@pytest.mark.asyncio
+@_SWITCHES
+async def test_the_machine_keeps_its_shortcut_whatever_the_switches(store, config):
+    initialize_delegation(config)
+    try:
+        await refuse_if_synchronized_by_id(store, "deep", machine_identity())
+    finally:
+        initialize_delegation(DelegationConfig())
+
+
+@pytest.mark.asyncio
+@_SWITCHES
+async def test_a_delegation_client_never_takes_the_service_role_shortcut(store, config):
+    initialize_delegation(config)
+    try:
+        with pytest.raises(FolderIsSynchronized):
+            await refuse_if_synchronized_by_id(store, "deep", delegation_client())
+    finally:
+        initialize_delegation(DelegationConfig())
 
 
 @pytest.mark.asyncio

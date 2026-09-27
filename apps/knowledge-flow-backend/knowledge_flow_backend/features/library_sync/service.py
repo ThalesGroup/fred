@@ -34,6 +34,7 @@ from fred_core.documents.document_structures import DocumentMetadata
 from fred_core.tasks.models import IngestionProcessingProfile as TaskProfile
 from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, TaskTarget
 from fred_core.tasks.service import TaskService
+from sqlalchemy.exc import IntegrityError
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
@@ -57,10 +58,12 @@ from knowledge_flow_backend.features.library_sync.structures import (
     validate_version,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
+from knowledge_flow_backend.features.scheduler.ingestion_delivery import IngestionAlreadyActive
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcessWithoutUser
 from knowledge_flow_backend.features.tag.structure import Tag, TagCreate, TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
+from knowledge_flow_backend.models.task_models import ACTIVE_DOCUMENT_INDEX
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +137,7 @@ class LibrarySyncService:
         input_file = await asyncio.to_thread(uploadfile_to_path, upload, filename=document_name)
         metadata: DocumentMetadata | None = None
         task_id: str | None = None
+        submission_started = False
         try:
             metadata = await self._ingestion_service.extract_metadata(
                 user,
@@ -162,14 +166,20 @@ class LibrarySyncService:
 
             # The task comes first and is not optional: it is the only thing
             # the caller gets back to follow the write with.
-            task = await self._task_service.start(
-                StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid], profile=TaskProfile(profile.value))),
-                created_by=user.uid,
-                team_id=owning_team_id,
-                target=TaskTarget(type="document", id=metadata.document_uid, label=document_name),
-            )
+            try:
+                task = await self._task_service.start(
+                    StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid], profile=TaskProfile(profile.value))),
+                    created_by=user.uid,
+                    team_id=owning_team_id,
+                    target=TaskTarget(type="document", id=metadata.document_uid, label=document_name),
+                )
+            except IntegrityError as exc:
+                if ACTIVE_DOCUMENT_INDEX in str(exc.orig):
+                    raise IngestionAlreadyActive("Ingestion is already active for this document") from exc
+                raise
             task_id = task.task_id
-            _, handle = await self._scheduler.submit_documents(
+            submission_started = True
+            await self._scheduler.submit_documents(
                 user=user,
                 pipeline_name="library_sync",
                 files=[
@@ -184,7 +194,6 @@ class LibrarySyncService:
                 ],
                 background_tasks=background_tasks,
             )
-            await self._bind_execution(task_id, handle.workflow_id)
 
             logger.info(
                 "[LIBRARY SYNC] library=%s key=%s created=%s task=%s by=%s",
@@ -202,16 +211,21 @@ class LibrarySyncService:
                 document_uid=metadata.document_uid,
                 task_id=task_id,
             )
-        except Exception as exc:
-            if existing is None and metadata is not None:
+        except IngestionAlreadyActive:
+            # The existing admission owns this document; never discard its input.
+            raise
+        except Exception:
+            if task_id is not None:
+                try:
+                    await self._task_service.fail_task(task_id, "Ingestion admission failed", only_if_unbound=True)
+                except Exception:
+                    logger.warning("Could not settle unsubmitted ingestion task %s", task_id, exc_info=True)
+            if not submission_started and existing is None and metadata is not None:
                 # Nothing was there before this call, so nothing of it should
                 # survive the failure. An update is left alone on purpose:
                 # discarding it would destroy a document the caller asked to
                 # replace, not to remove, and its next write converges anyway.
                 await self._discard(user.uid, metadata.document_uid)
-            if task_id is not None:
-                # No workflow was ever started, so nothing else will ever end it.
-                await self._fail_task(task_id, f"Scheduling failed: {type(exc).__name__}")
             raise
         finally:
             # The worker restores the input from the content store, so the
@@ -328,20 +342,6 @@ class LibrarySyncService:
         """
         team_ids, _ = await resolve_tag_owners([folder_id], user)
         return next(iter(team_ids)) if len(team_ids) == 1 else None
-
-    async def _bind_execution(self, task_id: str, workflow_id: str) -> None:
-        """Best-effort: the workflow runs either way, the binding only serves reconciliation."""
-        try:
-            await self._task_service.bind_execution(task_id, execution_id=workflow_id)
-        except Exception:  # noqa: BLE001
-            logger.warning("[LIBRARY SYNC] Could not bind task %s to workflow %s", task_id, workflow_id, exc_info=True)
-
-    async def _fail_task(self, task_id: str, message: str) -> None:
-        """Best-effort: the failure the caller needs to see is the one being raised."""
-        try:
-            await self._task_service.fail_task(task_id, message)
-        except Exception:  # noqa: BLE001
-            logger.warning("[LIBRARY SYNC] Could not fail task %s after a scheduling failure", task_id, exc_info=True)
 
     async def _resolve_folder(self, user: KeycloakUser, library: Tag, folders: list[str]) -> str:
         """Walk the path inside the library, creating the folders that are missing.

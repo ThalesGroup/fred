@@ -50,12 +50,13 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context, monkey
     captured: dict[str, object] = {}
 
     class _StubScheduler:
-        async def start_document_processing(self, *, user, definition, background_tasks=None):
+        async def start_document_processing(self, *, user, definition, background_tasks=None, prepare=None):
             captured["user"] = user
             captured["definition"] = definition
             return SimpleNamespace(workflow_id="wf-123", run_id="run-123")
 
     service._scheduler = _StubScheduler()
+    service._admit_and_deliver = service._scheduler.start_document_processing
 
     user = KeycloakUser(
         uid="test-user",

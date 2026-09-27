@@ -26,6 +26,14 @@
   overflow-wrap: anywhere;
 }
 
+/* Phrasing-content variant (`inline`) — the wrapper and its paragraphs are
+   spans, so it must not impose a reading measure or a block box on the line
+   it sits in. Its container decides the width. */
+.inline {
+  display: inline;
+  max-width: none;
+}
+
 /* Full-width variant — used by the document preview. Running text sits in a
    centred, comfortable reading column (like the old fixed reading column) while
    wide blocks (tables) break out to the full width. Implemented as a 3-track
@@ -115,6 +123,32 @@
 .root :global(h6) {
   color: var(--on-surface);
   font: var(--font-title-medium);
+}
+
+.root.compact {
+  font: var(--font-body-small);
+}
+
+.root.compact > :global(* + *) {
+  margin-top: var(--spacing-xs);
+}
+
+.root.compact > :global(* + h1),
+.root.compact > :global(* + h2),
+.root.compact > :global(* + h3) {
+  margin-top: var(--spacing-s);
+}
+
+.root.compact :global(h1) {
+  font: var(--font-title-small-emphasized);
+}
+
+.root.compact :global(h2),
+.root.compact :global(h3),
+.root.compact :global(h4),
+.root.compact :global(h5),
+.root.compact :global(h6) {
+  font: var(--font-body-medium-emphasized);
 }
 
 /* ---- Anchored headings (headingAnchors prop — Help Center articles) ---- */

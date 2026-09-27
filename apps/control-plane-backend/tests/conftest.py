@@ -131,6 +131,7 @@ def _setup_test_schema() -> None:
     models, even when new columns are added between test runs.
     """
     import control_plane_backend.models.agent_instance_models  # noqa: F401
+    import control_plane_backend.models.announcement_models  # noqa: F401
     import control_plane_backend.models.model_reasoning_models  # noqa: F401
     import control_plane_backend.models.platform_model_binding_models  # noqa: F401
     import control_plane_backend.models.prompt_models  # noqa: F401
@@ -178,6 +179,15 @@ async def control_plane_sql_engine(
         yield engine
     finally:
         await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _restore_delegation():
+    """Delegation settings are process-wide; a test that installs them must not leak."""
+    from fred_core.security.delegation import preserved_delegation
+
+    with preserved_delegation():
+        yield
 
 
 @pytest.fixture(autouse=True)

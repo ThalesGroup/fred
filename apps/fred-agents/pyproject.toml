@@ -7,9 +7,9 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
-  "fred-core>=4.0.0",
-  "fred-sdk[agents]>=4.1.0",
-  "fred-runtime[app]>=4.0.0",
+  "fred-core>=4.2.1",
+  "fred-sdk[agents]>=4.2.1",
+  "fred-runtime[app]>=4.2.1",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=0.1.0",

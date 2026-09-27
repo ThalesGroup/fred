@@ -28,14 +28,17 @@ Why this file exists:
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import pytest
 from control_plane_backend.sessions.erasure_service import (
     STORE_CHECKPOINT,
     STORE_HISTORY,
     ConversationErasureService,
 )
+from fred_core.security.backend_to_backend_auth import TokenLease
 
 
 class _FakeResponse:
@@ -91,28 +94,26 @@ class _FakeAsyncClient:
         self._response = response
         self._seen = seen
 
-    async def __aenter__(self) -> "_FakeAsyncClient":
-        return self
-
-    async def __aexit__(self, *exc_info: object) -> None:
-        return None
-
-    async def delete(self, url: str, headers: dict[str, str] | None = None):
+    async def delete(
+        self, url: str, headers: dict[str, str] | None = None, *, auth=None
+    ):
         self._seen["url"] = url
         self._seen["headers"] = headers
         return self._response
 
 
-@pytest.mark.asyncio
-async def test_erase_runtime_checkpoint_records_deleted_count(monkeypatch) -> None:
-    seen: dict[str, Any] = {}
-    response = _FakeResponse({"deleted": 3})
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        lambda *args, **kwargs: _FakeAsyncClient(response, seen=seen),
+def _service(response: Any, *, seen: dict[str, Any]) -> ConversationErasureService:
+    client = _FakeAsyncClient(response, seen=seen)
+    return ConversationErasureService(
+        cast(Any, SimpleNamespace(get_runtime_http_client=lambda: client))
     )
 
-    service = ConversationErasureService(cast(Any, None))
+
+@pytest.mark.asyncio
+async def test_erase_runtime_checkpoint_records_deleted_count() -> None:
+    seen: dict[str, Any] = {}
+    response = _FakeResponse({"deleted": 3})
+    service = _service(response, seen=seen)
     result = await service._erase_runtime_checkpoint(
         "http://runtime:8000/pod/v1",
         "session-1",
@@ -127,18 +128,13 @@ async def test_erase_runtime_checkpoint_records_deleted_count(monkeypatch) -> No
 
 
 @pytest.mark.asyncio
-async def test_erase_runtime_checkpoint_defaults_to_zero_when_body_omits_deleted(
-    monkeypatch,
-) -> None:
+async def test_erase_runtime_checkpoint_defaults_to_zero_when_body_omits_deleted() -> (
+    None
+):
     # Defensive: an older/mismatched runtime that still answers 200 with no
     # `deleted` field must not crash the erase — it records 0, not None.
     response = _FakeResponse({})
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        lambda *args, **kwargs: _FakeAsyncClient(response, seen={}),
-    )
-
-    service = ConversationErasureService(cast(Any, None))
+    service = _service(response, seen={})
     result = await service._erase_runtime_checkpoint(
         "http://runtime:8000/pod/v1", "session-1", "Bearer test-token"
     )
@@ -148,20 +144,13 @@ async def test_erase_runtime_checkpoint_defaults_to_zero_when_body_omits_deleted
 
 
 @pytest.mark.asyncio
-async def test_erase_runtime_checkpoint_handles_empty_body_without_crashing(
-    monkeypatch,
-) -> None:
+async def test_erase_runtime_checkpoint_handles_empty_body_without_crashing() -> None:
     # A real 2xx-with-empty-body response (bare 204, or a runtime not yet
     # rolled to the `{"deleted": n}` contract) makes `response.json()` raise
     # `json.JSONDecodeError`. This must degrade to an isolated ok=False result,
     # not propagate and crash the whole erase fan-out.
     response = _EmptyBodyResponse()
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        lambda *args, **kwargs: _FakeAsyncClient(cast(Any, response), seen={}),
-    )
-
-    service = ConversationErasureService(cast(Any, None))
+    service = _service(response, seen={})
     result = await service._erase_runtime_checkpoint(
         "http://runtime:8000/pod/v1", "session-1", "Bearer test-token"
     )
@@ -174,17 +163,10 @@ async def test_erase_runtime_checkpoint_handles_empty_body_without_crashing(
 
 
 @pytest.mark.asyncio
-async def test_erase_runtime_history_handles_empty_body_without_crashing(
-    monkeypatch,
-) -> None:
+async def test_erase_runtime_history_handles_empty_body_without_crashing() -> None:
     # Symmetric case for the sibling history store — same shape, same gap.
     response = _EmptyBodyResponse()
-    monkeypatch.setattr(
-        "control_plane_backend.sessions.erasure_service.httpx.AsyncClient",
-        lambda *args, **kwargs: _FakeAsyncClient(cast(Any, response), seen={}),
-    )
-
-    service = ConversationErasureService(cast(Any, None))
+    service = _service(response, seen={})
     result = await service._erase_runtime_history(
         "http://runtime:8000/pod/v1", "session-1", "Bearer test-token"
     )
@@ -194,3 +176,45 @@ async def test_erase_runtime_history_handles_empty_body_without_crashing(
     assert result.deleted_count is None
     assert result.error is not None
     assert "not parseable" in result.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("store", ["checkpoint", "history", "filesystem"])
+@pytest.mark.parametrize("refresh_fails", [False, True])
+async def test_shared_runtime_client_refreshes_rejected_token(
+    store: str, refresh_fails: bool
+) -> None:
+    """Pooled deletes keep token renewal and isolate renewal failures per store."""
+    seen: list[str] = []
+
+    class Tokens:
+        async def get_token_lease(self) -> TokenLease:
+            return TokenLease("expired", 1)
+
+        async def refresh_rejected(self, lease: TokenLease) -> TokenLease:
+            assert lease.generation == 1
+            if refresh_fails:
+                raise RuntimeError("private IAM detail")
+            return TokenLease("renewed", 2)
+
+    def endpoint(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["Authorization"])
+        if len(seen) == 1:
+            return httpx.Response(401)
+        return httpx.Response(200, json={"deleted": 1, "purged": True})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(endpoint)) as client:
+        service = ConversationErasureService(
+            cast(Any, SimpleNamespace(get_runtime_http_client=lambda: client)),
+            token_provider=Tokens(),
+        )
+        erase = getattr(service, f"_erase_runtime_{store}")
+        result = await erase("http://runtime/pod/v1", "session-1", "Bearer initial")
+        assert not client.is_closed
+    assert result.ok is not refresh_fails
+    if refresh_fails:
+        assert seen == ["Bearer expired"]
+        assert "authentication failed" in result.error
+        assert "private IAM detail" not in result.error
+    else:
+        assert seen == ["Bearer expired", "Bearer renewed"]

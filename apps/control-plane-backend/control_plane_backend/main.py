@@ -32,11 +32,15 @@ from fred_core import (
     log_setup,
 )
 from fred_core.common import read_env_bool
+from fred_core.common.fastapi_handlers import (
+    register_exception_handlers as register_authorization_handlers,
+)
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
+from control_plane_backend.announcements.api import router as announcements_router
 from control_plane_backend.app.container import (
     build_application_container,
     initialize_shared_stores,
@@ -137,6 +141,19 @@ def _norm_origin(origin: object) -> str:
 # reconciliation of the `organization -> team` structural edge so they don't
 # all issue the same bulk read+write on the same rollout.
 _TEAM_ORGANIZATION_RECONCILE_LOCK_KEY = "team_organization_relations_reconcile"
+
+
+async def _initialize_account_standing(container) -> None:
+    # Every start re-writes the everyone entry and the marker (idempotent writes);
+    # a marker that does not read back means standing is unusable, so startup fails.
+    rebac = container.get_rebac_engine()
+    if not rebac.enforces_standing:
+        return
+    await rebac.validate_standing_model()
+    await rebac.grant_default_standing()
+    await rebac.mark_standing_seed_ready()
+    if not await rebac.is_standing_seed_ready():
+        raise RuntimeError("Account standing is not ready.")
 
 
 async def _reconcile_team_organization_relations(container) -> None:
@@ -277,6 +294,7 @@ def create_app() -> FastAPI:
         # protection every fred-runtime agent pod gets automatically.
         gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
+        await _initialize_account_standing(container)
         await _reconcile_team_organization_relations(container)
         await _reconcile_team_admin_charter_roles(container)
         await _seed_capability_registration_defaults(container)
@@ -424,6 +442,7 @@ def create_app() -> FastAPI:
     router.include_router(routing_policy_router)
     router.include_router(team_wiki_router)
     router.include_router(platform_prompt_router)
+    router.include_router(announcements_router)
     router.include_router(build_tasks_router())
     router.include_router(build_kpi_router())
     router.include_router(build_evaluations_router())
@@ -431,6 +450,7 @@ def create_app() -> FastAPI:
 
     register_user_exception_handlers(app)
     register_team_exception_handlers(app)
+    register_authorization_handlers(app)
     register_bootstrap_exception_handlers(app)
     register_routing_policy_exception_handlers(app)
     register_team_wiki_exception_handlers(app)

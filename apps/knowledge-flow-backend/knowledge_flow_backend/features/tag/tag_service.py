@@ -35,6 +35,7 @@ from fred_core import (
 )
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
+from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
@@ -201,7 +202,7 @@ class TagService:
         return {bucket: (count, size) for bucket, (count, size) in totals.items()}
 
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
-        if is_service_agent(user):
+        if is_service_agent(user) and not holds_caller_role(user):
             # EVAL-AUTH (Solution A) — extends the bypass already applied to the
             # bulk resolver (resolve_authorized_tag_ids_in_rebac) to this
             # single-tag lookup. The service_agent holds no per-user tag
@@ -517,7 +518,7 @@ class TagService:
         # TEAM's tags directly, scoped to the request team_id (read-only). This lets a
         # RAG agent run by the worker retrieve the team's indexed corpus. Fail closed
         # without a (non-personal) team.
-        if is_service_agent(user):
+        if is_service_agent(user) and not holds_caller_role(user):
             if not team_id or is_personal_team_id(team_id):
                 return set()
             team_ref = RebacReference(type=Resource.TEAM, id=team_id)

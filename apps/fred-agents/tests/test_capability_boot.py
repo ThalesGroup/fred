@@ -119,6 +119,7 @@ _SHIPPED_CAPABILITY_IDS = frozenset(
         "document_similarity",
         "document_label_search",
         "html_artifact",
+        "open_writable_document",
         "platform_postgres",
         "ppt_filler",
         "team_wiki",

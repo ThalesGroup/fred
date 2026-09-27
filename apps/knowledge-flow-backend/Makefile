@@ -63,7 +63,7 @@ tools-check:
 	fi
 
 .PHONY: run-worker
-run-worker: export CONFIG_FILE = ./config/configuration_worker.yaml
+run-worker: export KF_WORKER_METRICS_PORT ?= 9112
 run-worker: dev tools-check download-models ## Run an ingestion worker (requires Temporal daemon)
 	@echo "🚀 Running the worker..."
 	PYTHONPATH=. \

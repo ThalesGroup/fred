@@ -36,9 +36,9 @@ from fred_pod.common import (
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
 )
-from fred_pod.security.backend_to_backend_auth import M2MAuthConfig
+from fred_pod.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
 from fred_pod.security.structure import M2MSecurity
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,8 @@ class PodScheduler(BaseModel):
 class PodConfiguration(BaseModel):
     """Everything a Knowledge Base pod needs to reach Fred and Temporal."""
 
+    _token_provider: M2MTokenProvider | None = PrivateAttr(default=None)
+
     knowledge_base: KnowledgeBaseSettings
     security: PodSecurity
     scheduler: PodScheduler = Field(default_factory=PodScheduler)
@@ -150,6 +152,12 @@ class PodConfiguration(BaseModel):
             client_id=self.security.m2m.client_id,
             secret_env=self.security.m2m.secret_env_var,
         )
+
+    @property
+    def token_provider(self) -> M2MTokenProvider:
+        if self._token_provider is None:
+            self._token_provider = M2MTokenProvider(self.m2m)
+        return self._token_provider
 
     # ── loading ───────────────────────────────────────────────────────────────
 

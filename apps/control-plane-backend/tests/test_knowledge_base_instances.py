@@ -28,9 +28,10 @@ import json
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from control_plane_backend.knowledge_bases import api as knowledge_base_api
 from control_plane_backend.knowledge_bases import instances as instances_module
 from control_plane_backend.knowledge_bases.instances import (
     KnowledgeBaseInstanceNotFound,
@@ -48,8 +49,10 @@ from control_plane_backend.knowledge_bases.runs import (
 from control_plane_backend.knowledge_bases.validation import (
     InstanceConfigurationInvalid,
 )
-from fred_core import Resource
+from fastapi import HTTPException
+from fred_core import AssertedUser, Resource
 from fred_core.scheduler import IntervalSchedule
+from fred_core.security.delegation import DelegationConfig, initialize_delegation
 from fred_core.security.models import AuthorizationError
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
 from fred_sdk.contracts.models import FieldSpec
@@ -62,6 +65,7 @@ TEAM = "team-1"
 OTHER_TEAM = "team-2"
 POD_SUBJECT = "service-account-kb-acme"
 POD_CLIENT = "kb-acme"
+ISSUER = "https://id.invalid/realms/fred"
 
 
 # --------------------------------------------------------------------------
@@ -324,6 +328,36 @@ def _pod(client_id: str = POD_CLIENT) -> KeycloakUser:
         roles=[SERVICE_AGENT_ROLE],
         email=None,
         client_id=client_id,
+    )
+
+
+def _workload(
+    client_id: str = POD_CLIENT,
+    caller_roles: frozenset[str] = frozenset({"delegation_caller"}),
+) -> KeycloakUser:
+    """A pod's bearer that holds no service role, only the delegation caller role."""
+    return KeycloakUser(
+        uid=POD_SUBJECT,
+        username="pod",
+        roles=[],
+        email=None,
+        client_id=client_id,
+        token_issuer=ISSUER,
+        token_audiences=frozenset({"fred-delegation"}),
+        token_type="Bearer",
+        caller_roles=caller_roles,
+    )
+
+
+def _person(run_id: str = "run-1") -> AssertedUser:
+    return AssertedUser(uid="alice", client_id=POD_CLIENT, run_id=run_id, agent_id="a")
+
+
+def _accept_delegated_calls() -> None:
+    initialize_delegation(
+        DelegationConfig(accept_delegated_calls=True),
+        issuers=[ISSUER],
+        user_clients=["app"],
     )
 
 
@@ -724,6 +758,71 @@ async def test_an_instance_of_another_definition_is_not_this_pods_to_read():
             run_id="run-1",
             deps=deps,
         )
+
+
+_EVERY_DELEGATION_SETTING = pytest.mark.parametrize(
+    "config",
+    [
+        DelegationConfig(),
+        DelegationConfig(act_for_people=True),
+        DelegationConfig(accept_delegated_calls=True),
+        DelegationConfig(act_for_people=True, accept_delegated_calls=True),
+    ],
+    ids=["delegation-off", "acting-for-people", "accepting-calls", "both"],
+)
+
+
+@pytest.mark.asyncio
+@_EVERY_DELEGATION_SETTING
+async def test_the_bound_pod_reads_its_run_whatever_the_delegation_setting(
+    config: DelegationConfig,
+):
+    # A run names no person, so the pod's own credential is the whole authority.
+    initialize_delegation(config, issuers=[ISSUER], user_clients=["app"])
+    deps = _deps()
+    instance = await _create(deps)
+
+    context = await knowledge_base_api.get_knowledge_base_run_context(
+        DEFINITION, instance.id, "run-1", cast(Any, deps), _pod()
+    )
+
+    assert context.run_id == "run-1"
+    assert context.library_id == instance.library_id
+
+
+@pytest.mark.asyncio
+@_EVERY_DELEGATION_SETTING
+async def test_the_delegation_role_alone_never_reads_a_run(config: DelegationConfig):
+    """The caller role lets a workload name people; it is not a service identity."""
+    initialize_delegation(config, issuers=[ISSUER], user_clients=["app"])
+    deps = _deps()
+    instance = await _create(deps)
+
+    with pytest.raises(RunAccessDenied, match="requires a service identity"):
+        await build_run_context(
+            user=_workload(),
+            definition_id=DEFINITION,
+            instance_id=instance.id,
+            run_id="run-1",
+            deps=deps,
+        )
+
+
+@pytest.mark.asyncio
+async def test_a_person_named_by_a_grant_cannot_read_a_run():
+    _accept_delegated_calls()
+    deps = _deps()
+    instance = await _create(deps)
+
+    with pytest.raises(HTTPException) as raised:
+        await knowledge_base_api.get_knowledge_base_run_context(
+            DEFINITION, instance.id, "run-1", cast(Any, deps), _person()
+        )
+
+    assert (raised.value.status_code, raised.value.detail) == (
+        403,
+        "requires_own_credential",
+    )
 
 
 # --------------------------------------------------------------------------

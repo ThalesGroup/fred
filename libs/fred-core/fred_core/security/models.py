@@ -107,3 +107,17 @@ class AuthorizationError(PermissionError):
         self.subject_id = subject_id
         default_message = f"Not authorized to {action} {resource.value}"
         super().__init__(message or default_message)
+
+
+class StandingAuthorizationError(AuthorizationError):
+    """Bounded denial raised when current person standing cannot be established."""
+
+    def __init__(self, *, unavailable: bool = False) -> None:
+        self.unavailable = unavailable
+        super().__init__(
+            "",
+            "access protected resources",
+            Resource.ORGANIZATION,
+            "Current account standing could not be established.",
+            subject_type=Resource.USER,
+        )

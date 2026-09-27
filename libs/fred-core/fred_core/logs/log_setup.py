@@ -210,6 +210,14 @@ def _sanitize_sensitive_query_params(value: str) -> str:
     return _SENSITIVE_QUERY_PARAM_RE.sub(r"\1<redacted>", value)
 
 
+def _delegation_in_use() -> bool:
+    # Local import avoids coupling logging module import order to security/audit
+    # initialization, which itself imports the logging package.
+    from fred_core.security.delegation import get_delegation_config
+
+    return get_delegation_config().in_use
+
+
 class UvicornSensitiveQueryFilter(logging.Filter):
     """
     Redact sensitive query parameter values from uvicorn log records.
@@ -223,6 +231,43 @@ class UvicornSensitiveQueryFilter(logging.Filter):
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
+        delegation_in_use = _delegation_in_use()
+        if delegation_in_use:
+            if record.name == "uvicorn.access":
+                method = None
+                status = None
+                if isinstance(record.args, tuple) and len(record.args) >= 5:
+                    method = record.args[1]
+                    status = record.args[4]
+                if method not in {
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "HEAD",
+                    "OPTIONS",
+                }:
+                    method = "OTHER"
+                if not isinstance(status, int) or not 100 <= status <= 599:
+                    status = None
+                record.msg = (
+                    "access event=delegated_request outcome=completed "
+                    "method=%s status=%s"
+                )
+                record.args = (method, status)
+            else:
+                outcome = "failed" if record.levelno >= logging.ERROR else "observed"
+                record.msg = "server event=uvicorn outcome=%s reason=%s"
+                record.args = (
+                    outcome,
+                    "server_error" if outcome == "failed" else "lifecycle",
+                )
+            record.__dict__.pop("message", None)
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
+            return True
         if isinstance(record.msg, str):
             record.msg = _sanitize_sensitive_query_params(record.msg)
 
@@ -230,7 +275,8 @@ class UvicornSensitiveQueryFilter(logging.Filter):
             sanitized_args: list[object] = []
             for arg in record.args:
                 if isinstance(arg, str):
-                    sanitized_args.append(_sanitize_sensitive_query_params(arg))
+                    sanitized = _sanitize_sensitive_query_params(arg)
+                    sanitized_args.append(sanitized)
                 else:
                     sanitized_args.append(arg)
             record.args = tuple(sanitized_args)

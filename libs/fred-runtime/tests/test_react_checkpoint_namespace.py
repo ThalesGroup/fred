@@ -30,6 +30,7 @@ from fred_runtime.app.agent_app import _resume_checkpoint_locations
 from fred_runtime.react.react_message_codec import to_runnable_config
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
+from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.execution import RuntimeExecuteRequest
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import ExecutionConfig
@@ -164,6 +165,7 @@ def test_resume_probes_the_graph_thread_then_the_session_thread() -> None:
 
     request = RuntimeExecuteRequest(
         agent_instance_id="instance-123",
+        runtime_context=RuntimeContext(team_id="synthetic-team"),
         session_id="session-1",
         interrupt_id="interrupt-a",
         resume_payload={"choice_id": "proceed"},

@@ -51,7 +51,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 }));
 vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation: () => [renameMutation],
-  useUpdateTagKnowledgeFlowV1TagsTagIdPutMutation: () => [vi.fn()],
+  useUpdateTagMutation: () => [vi.fn()],
   useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [vi.fn()],
   useMutateDocumentLabelsMutation: () => [vi.fn()],
