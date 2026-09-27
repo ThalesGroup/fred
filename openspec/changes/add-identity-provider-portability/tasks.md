@@ -72,13 +72,13 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 
 ## 8. Documentation and deployment
 
-- [ ] 8.1 New `docs/swift/platform/IDENTITY-PROVIDERS.md`: the settings table (defaults = Keycloak); a complete Microsoft Entra ID recipe; a generic OIDC checklist; known limitations (directory contains only people who signed in, `uuid5` ids tied to the issuer, server-side person-token refresh depends on the provider).
-- [ ] 8.2 The Entra recipe must state, as prerequisites:
+- [x] 8.1 New `docs/swift/platform/IDENTITY-PROVIDERS.md`: the settings table (defaults = Keycloak); a complete Microsoft Entra ID recipe; a generic OIDC checklist; known limitations (directory contains only people who signed in, `uuid5` ids tied to the issuer, server-side person-token refresh depends on the provider).
+- [x] 8.2 The Entra recipe must state, as prerequisites:
   - app registrations: **Fred UI** (SPA platform, redirect and post-logout URLs, delegated permission `access_as_user`); **Fred API** (App ID URI `api://fred-api`, scope `access_as_user`, `requestedAccessTokenVersion: 2`, app roles `service_agent` and `delegation_caller` with allowed member type Application, optional claims `email`, `given_name`, `family_name`); one confidential app each for **runtime**, **knowledge flow** and **control plane** with the matching app roles granted;
   - Fred settings: `realm_url: https://login.microsoftonline.com/<tid>/v2.0`, `provider: oidc`, `client_id: <UI client id>`, `audience: <API client id GUID>`, `scope: api://fred-api/access_as_user`, `claims.uid: oid`, `roles_claim: [roles]`, `user_directory: local`, `m2m.scope: api://fred-api/.default`, delegation `act_for_people` / `accept_delegated_calls` on, `caller_roles_claim: [roles]`, `audience: <API client id GUID>`, `service_accounts_only: false`;
   - environment: `FRED_JWT_MAX_LIFETIME_SECONDS=5400`.
-- [ ] 8.3 `docs/swift/platform/KEYCLOAK.md`: add one paragraph pointing to `IDENTITY-PROVIDERS.md` and noting that Keycloak remains the default.
-- [ ] 8.4 Add a commented `values-entra.example.yaml` next to the Helm values. It is an example only; customer values live in the customer's deployment repository.
+- [x] 8.3 `docs/swift/platform/KEYCLOAK.md`: add one paragraph pointing to `IDENTITY-PROVIDERS.md` and noting that Keycloak remains the default.
+- [x] 8.4 Add a commented `values-entra.example.yaml` next to the Helm values. It is an example only; customer values live in the customer's deployment repository.
 
 ## 9. Local test bench (`fred-deployment-factory`, sibling repository)
 
