@@ -3636,29 +3636,6 @@ def _build_capability_block(
                 "(CapabilityManifest.execution_models) and cannot run on a "
                 "Graph agent."
             )
-        # CAPAB-02 stopgap: `CapabilityAgentBlock.hitl` is built (assembly.py)
-        # but `GraphRuntime.invoke_runtime_tool` never consults it — a
-        # capability's `HitlSpec` gates a ReAct tool call but not a Graph
-        # one. No production capability declares an active `HitlSpec` today,
-        # so refusing here costs nothing real yet; reconciling Graph's own
-        # node-level pause/resume with the per-tool HITL gate is real design
-        # work, deferred (see AGENT-CAPABILITY-RFC.md §3.9). Refusing loudly
-        # keeps the RFC's "never silently degrade" guarantee intact in the meantime
-        # — a capability with `HitlSpec`s that silently ran ungated on Graph
-        # would be exactly the kind of governance gap this platform exists to
-        # prevent.
-        hitl_gated = [
-            cap_id
-            for cap_id in effective
-            if cap_id in capability_registry
-            and capability_registry.capability(cap_id).hitl_specs()
-        ]
-        if hitl_gated:
-            raise CapabilityError(
-                f"Agent selects capabilities {hitl_gated} which declare "
-                "HitlSpec approval gates; Graph agents do not yet enforce "
-                "capability HITL (CAPAB-02) and cannot run them."
-            )
     contexts = build_capability_contexts(
         capability_registry,
         selected_capability_ids=effective,

@@ -5594,21 +5594,11 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         )
 
 
-def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() -> None:
-    """
-    CAPAB-02 stopgap: `GraphRuntime` never consults `CapabilityAgentBlock.hitl`
-    (`invoke_runtime_tool` calls the tool directly) — a capability declaring a
-    `HitlSpec` approval gate would silently run ungated on a Graph agent. Full
-    Graph HITL enforcement is deferred (see AGENT-CAPABILITY-RFC.md §3.9);
-    until then, selecting such a capability on a Graph agent must fail loudly,
-    not run unapproved.
-
-    Example:
-    - `pytest tests/test_agent_app.py::test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent -q`
-    """
+def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() -> None:
+    """Graph now consumes the same capability HITL declarations as ReAct/Deep."""
     from collections.abc import Mapping as _Mapping
 
-    from fred_runtime.app.agent_app import CapabilityError, _build_capability_block
+    from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry
     from fred_sdk.contracts.capability import (
         AgentCapability,
@@ -5707,17 +5697,19 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
         selected_capability_ids=["hitl_gated_cap"],
     )
 
-    with pytest.raises(CapabilityError, match="hitl_gated_cap"):
-        _build_capability_block(
-            registry,
-            tuning,
-            definition=definition,
-            services=RuntimeServices(),
-            user_id=None,
-            session_id=None,
-            team_id=None,
-            agent_instance_id=None,
-        )
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is not None
+    assert block.hitl["gated_probe"].spec.require
 
 
 def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (

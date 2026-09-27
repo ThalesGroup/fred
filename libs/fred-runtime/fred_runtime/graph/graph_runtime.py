@@ -30,6 +30,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import (
     GraphAgentDefinition,
+    ToolApprovalPolicy,
 )
 from fred_sdk.contracts.runtime import (
     AgentRuntime,
@@ -50,6 +51,7 @@ from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.runtime_support.checkpoints import (
     checkpoint_namespace,
 )
+from fred_runtime.runtime_support.tool_approval import ToolApproval
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,12 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             runtime_tools=mcp_tools + capability_tools,
             checkpointer=cast(BaseCheckpointSaver, checkpointer),
             checkpoint_ns=graph_checkpoint_ns,
+            tool_approval=ToolApproval(
+                approval_policy=ToolApprovalPolicy(),
+                capability_hitl=self._capability_block.hitl
+                if self._capability_block
+                else None,
+            ),
         )
 
     async def on_dispose(self) -> None:

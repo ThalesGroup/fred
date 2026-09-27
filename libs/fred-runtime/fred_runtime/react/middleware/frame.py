@@ -31,9 +31,11 @@ from fred_sdk.contracts.models import ToolApprovalPolicy
 from fred_sdk.contracts.runtime import TracerPort
 from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 
+from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
-from .hitl import CapabilityHitlBinding, FredHitlMiddleware
+from .hitl import FredHitlMiddleware
 from .rate_limit_retry import RateLimitRetryMiddleware
 from .tool_call_recovery import ToolCallTextRecoveryMiddleware
 from .tool_observability import ToolObservabilityMiddleware

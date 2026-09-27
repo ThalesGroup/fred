@@ -41,7 +41,6 @@ from deepagents.middleware.filesystem import FilesystemMiddleware, FilesystemPer
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
-    CapabilityHitlBinding,
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
     GatedToolCall,
@@ -54,6 +53,7 @@ from fred_runtime.react.middleware.tool_observability import (
     ToolObservabilityMiddleware,
 )
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
+from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_sdk.contracts.capability import HitlSpec
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -270,7 +270,7 @@ def test_middleware_threads_capability_hitl_into_fred_hitl_middleware() -> None:
         capability_block=capability_block,
     )
     hitl_middleware = next(m for m in middleware if type(m) is FredHitlMiddleware)
-    assert hitl_middleware._capability_hitl == {"send_email": binding}
+    assert hitl_middleware._approval.decision("send_email", {}) == (True, None)
 
 
 # ---------------------------------------------------------------------------
@@ -627,7 +627,7 @@ async def test_deep_build_executor_no_longer_rejects_capability_hitl(
     hitl_middleware = next(
         m for m in captured["middleware"] if type(m) is FredHitlMiddleware
     )
-    assert hitl_middleware._capability_hitl == {"send_email": binding}
+    assert hitl_middleware._approval.decision("send_email", {}) == (True, None)
 
 
 @pytest.mark.asyncio
@@ -662,8 +662,8 @@ async def test_deep_build_executor_no_longer_rejects_operator_tool_approval(
     hitl_middleware = next(
         m for m in captured["middleware"] if type(m) is FredHitlMiddleware
     )
-    assert hitl_middleware._approval_policy.enabled is True
-    assert hitl_middleware._approval_policy.always_require_tools == ("send_email",)
+    assert hitl_middleware._approval.decision("send_email", {}) == (True, None)
+    assert hitl_middleware._approval.decision("other_tool", {}) == (False, None)
 
 
 @pytest.mark.asyncio

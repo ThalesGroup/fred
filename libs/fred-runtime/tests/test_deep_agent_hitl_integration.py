@@ -45,9 +45,9 @@ from deepagents.middleware.filesystem import FilesystemMiddleware
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.react.react_tracing import active_agent_span
+from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_sdk.contracts.capability import HitlSpec, ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,

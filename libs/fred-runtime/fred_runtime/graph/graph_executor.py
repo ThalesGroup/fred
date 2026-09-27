@@ -84,6 +84,7 @@ from fred_runtime.react.react_stream_adapter import (
 )
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
+from fred_runtime.runtime_support.tool_approval import ToolApproval
 
 logger = logging.getLogger(__name__)
 
@@ -270,8 +271,10 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         runtime_tools: tuple[BaseTool, ...],
         checkpointer: BaseCheckpointSaver,
         checkpoint_ns: str,
+        tool_approval: ToolApproval | None = None,
     ) -> None:
         self._definition = definition
+        self._tool_approval = tool_approval
         self._binding = binding
         self._services = (
             replace(
@@ -329,6 +332,8 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 runtime_tools=self._runtime_tools,
                 tuning_values=self._definition.tuning_values,
                 sink=writer,
+                tool_approval=self._tool_approval,
+                checkpoint_tools=True,
             )
             span = _start_runtime_span(
                 services=self._services,

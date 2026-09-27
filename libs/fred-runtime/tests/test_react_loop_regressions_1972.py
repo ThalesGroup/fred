@@ -451,7 +451,7 @@ def test_build_tool_approval_request_rejects_empty_calls() -> None:
     gated call — pin that as an explicit, loud precondition rather than
     letting a future caller violate it silently (found in PR review)."""
 
-    from fred_runtime.react.middleware.hitl import build_tool_approval_request
+    from fred_runtime.runtime_support.tool_approval import build_tool_approval_request
 
     with pytest.raises(ValueError, match="at least one"):
         build_tool_approval_request(binding=_binding(), calls=[])

@@ -6285,3 +6285,23 @@ on the requested team; direct execution checks standing and any supplied team.
 Ordinary service identities without the caller role retain their existing
 execution gates and own-bearer calls, including tools configured as `delegated`.
 They create no delegated run record.
+
+
+### 8.96 Capability tool approval across runtimes (2026-09-27)
+
+`runtime_support.tool_approval.ToolApproval` owns capability/operator approval
+rules and request rendering for ReAct, Deep and Graph. Graph capability assembly
+now accepts `HitlSpec`; this supersedes the rejection stopgap in §8.24. Public SDK
+contracts remain unchanged. Deep child agents retain their no-human-wait boundary.
+Only explicit `proceed` authorizes execution; Graph refusals return an error tool
+result to the author node before the shared tool execution boundary.
+
+Graph mediated tool calls run in native LangGraph tasks. A completed child task
+persists the tool name, arguments and call ID before interruption, so node replay
+cannot substitute a different invocation for the approved one. Completed tool
+results are replayed without executing or auditing them again. Each pending tool
+has a distinct native interrupt and occurrence ID, visible to the existing HTTP
+resume admission and atomic claim mechanism. Authors must preserve call ordering;
+arbitrary node side effects, model calls and delegation are not memoized by this
+boundary. External effects still require idempotency across a crash before the
+result checkpoint is durable.

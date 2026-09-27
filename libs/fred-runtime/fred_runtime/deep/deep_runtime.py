@@ -58,7 +58,6 @@ from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
 from fred_runtime.react.middleware.hitl import (
-    CapabilityHitlBinding,
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
 )
@@ -94,6 +93,7 @@ from fred_runtime.react.react_tool_binding import (
     tabular_tools_bound as _tabular_tools_bound,
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
+from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 
 logger = logging.getLogger(__name__)
 

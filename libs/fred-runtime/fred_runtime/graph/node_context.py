@@ -40,6 +40,8 @@ from fred_sdk.contracts.context import (
     FsEntry,
     InvocationScope,
     PublishedArtifact,
+    ToolContentBlock,
+    ToolContentKind,
     ToolInvocationRequest,
     ToolInvocationResult,
 )
@@ -65,6 +67,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphInterrupt
+from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
@@ -72,6 +75,12 @@ from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
+)
+from fred_runtime.runtime_support.tool_approval import (
+    GatedToolCall,
+    ToolApproval,
+    build_tool_approval_request,
+    is_tool_approval_granted,
 )
 from fred_runtime.runtime_support.tool_execution import ToolExecution
 from fred_runtime.runtime_support.trace_payloads import (
@@ -173,6 +182,8 @@ class NodeContext:
     # Receives every runtime event as it happens (LangGraph's stream writer),
     # so status and tool events keep their order relative to tokens.
     sink: Callable[[RuntimeEvent], None]
+    tool_approval: ToolApproval | None = None
+    checkpoint_tools: bool = False
     _last_model_name: str | None = None
     # A node may call the model several times; its usage is their sum.
     _total_token_usage: dict[str, int] | None = None
@@ -391,6 +402,80 @@ class NodeContext:
     async def invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
     ) -> ToolInvocationResult:
+        if not self.checkpoint_tools:
+            return await self._invoke_tool(tool_ref, payload)
+
+        @task(name="fred_tool_ref")
+        async def call() -> dict[str, object]:
+            result = await self._invoke_tool(tool_ref, payload)
+            return result.model_dump(mode="json")
+
+        return ToolInvocationResult.model_validate(await call())
+
+    async def invoke_runtime_tool(
+        self, tool_name: str, arguments: dict[str, object]
+    ) -> object:
+        if not self.checkpoint_tools:
+            return await self._invoke_runtime_tool(tool_name, arguments)
+
+        @task(name="fred_runtime_tool")
+        async def call() -> object:
+            return await self._invoke_runtime_tool(tool_name, arguments)
+
+        return await call()
+
+    async def _approve_tool(
+        self, name: str, arguments: dict[str, object], call_id: str
+    ) -> bool:
+        if self.tool_approval is None:
+            return True
+        needs, question = self.tool_approval.decision(
+            name, {"name": name, "args": arguments, "id": call_id}
+        )
+        if not needs:
+            return True
+        request = build_tool_approval_request(
+            binding=self.binding,
+            calls=[
+                GatedToolCall(
+                    tool_call_id=call_id,
+                    tool_name=name,
+                    tool_args=arguments,
+                    question=question,
+                )
+            ],
+        ).model_copy(update={"occurrence_id": call_id})
+        return is_tool_approval_granted(interrupt(request.model_dump(mode="json")))
+
+    def _refused_tool(self, name: str, call_id: str) -> ToolInvocationResult:
+        result = ToolInvocationResult(
+            tool_ref=name,
+            is_error=True,
+            blocks=(
+                ToolContentBlock(
+                    kind=ToolContentKind.TEXT, text="Tool execution was not approved."
+                ),
+            ),
+        )
+        self.sink(
+            ToolResultRuntimeEvent(
+                sequence=0,
+                call_id=call_id,
+                tool_name=name,
+                content=_render_tool_result(result),
+                is_error=True,
+            )
+        )
+        return result
+
+    async def _invoke_tool(
+        self, tool_ref: str, payload: dict[str, object]
+    ) -> ToolInvocationResult:
+        tool_ref, payload, call_id = (
+            await _checkpointed_tool_invocation(tool_ref, payload)
+            if self.checkpoint_tools
+            else (tool_ref, payload, _tool_call_id())
+        )
         if tool_ref not in self.allowed_tool_refs:
             raise RuntimeError(
                 f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
@@ -399,7 +484,6 @@ class NodeContext:
         if tool_invoker is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
 
-        call_id = f"call_{uuid.uuid4().hex[:20]}"
         self.sink(
             ToolCallRuntimeEvent(
                 sequence=0,
@@ -408,6 +492,8 @@ class NodeContext:
                 arguments=payload,
             )
         )
+        if not await self._approve_tool(tool_ref, payload, call_id):
+            return self._refused_tool(tool_ref, call_id)
         with _observe(
             self,
             "v2.graph.tool",
@@ -443,14 +529,18 @@ class NodeContext:
         )
         return result
 
-    async def invoke_runtime_tool(
+    async def _invoke_runtime_tool(
         self, tool_name: str, arguments: dict[str, object]
     ) -> object:
+        tool_name, arguments, call_id = (
+            await _checkpointed_tool_invocation(tool_name, arguments)
+            if self.checkpoint_tools
+            else (tool_name, arguments, _tool_call_id())
+        )
         tool = self.runtime_tools.get(tool_name)
         if tool is None:
             raise RuntimeError(f"Runtime tool '{tool_name}' is not available.")
 
-        call_id = f"call_{uuid.uuid4().hex[:20]}"
         self.sink(
             ToolCallRuntimeEvent(
                 sequence=0,
@@ -459,6 +549,8 @@ class NodeContext:
                 arguments=arguments,
             )
         )
+        if not await self._approve_tool(tool_name, arguments, call_id):
+            return self._refused_tool(tool_name, call_id).model_dump(mode="json")
         with _observe(
             self,
             "v2.graph.runtime_tool",
@@ -877,3 +969,15 @@ def _stringify_content(value: object) -> str:
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
     return str(value)
+
+
+def _tool_call_id() -> str:
+    return f"call_{uuid.uuid4().hex[:20]}"
+
+
+@task
+async def _checkpointed_tool_invocation(
+    name: str, arguments: dict[str, object]
+) -> tuple[str, dict[str, object], str]:
+    """Persist the exact invocation before approval, including across node replay."""
+    return name, arguments, _tool_call_id()

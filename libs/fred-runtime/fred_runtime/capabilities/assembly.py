@@ -61,7 +61,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
-from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
+from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 
 from .errors import (
     CapabilityAssemblyError,
