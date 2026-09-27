@@ -78,11 +78,13 @@ from fred_runtime.runtime_context import (
 )
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.runtime_support.run_scope import RunScope
+from fred_runtime.runtime_support.tool_execution import ToolExecution
 from fred_sdk.contracts.capability import ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
     PortableEnvironment,
+    ToolInvocationResult,
 )
 from fred_sdk.contracts.context import (
     RuntimeContext as PortableRuntimeContext,
@@ -261,7 +263,7 @@ async def test_awrap_tool_call_raised_exception_sets_error_status_failed_counter
 
     with caplog.at_level(
         logging.DEBUG,
-        logger="fred_runtime.react.middleware.tool_observability",
+        logger="fred_runtime.runtime_support.tool_execution",
     ):
         with pytest.raises(RuntimeError):
             await middleware.awrap_tool_call(request, handler)
@@ -293,7 +295,7 @@ async def test_awrap_tool_call_terminal_stop_logs_only_bounded_reason(caplog) ->
 
     with caplog.at_level(
         logging.DEBUG,
-        logger="fred_runtime.react.middleware.tool_observability",
+        logger="fred_runtime.runtime_support.tool_execution",
     ):
         with pytest.raises(AuthorityLostError):
             await middleware.awrap_tool_call(request, handler)
@@ -970,7 +972,9 @@ def test_base_dims_includes_identifiers_from_portable_context_and_baggage() -> N
         ),
     )
 
-    dims = middleware._base_dims(tool_name="fake.search", source="capability")
+    dims = middleware._execution._base_dims(
+        tool_name="fake.search", source="capability"
+    )
 
     assert dims["tool_name"] == "fake.search"
     assert dims["source"] == "capability"
@@ -1306,7 +1310,7 @@ async def test_personal_delegated_tool_rechecks_standing(team_id, unavailable):
     with _with_rebac_engine(engine), RunScope.open() as scope:
         scope.set_delegated_credentials(True)
         with pytest.raises(AuthorityLostError):
-            await ToolObservabilityMiddleware._reverify_team_authorization(
+            await ToolExecution._reverify_team_authorization(
                 user_id="user-1", team_id=team_id, is_service_agent=False
             )
     assert engine.calls == []
@@ -1323,8 +1327,199 @@ async def test_personal_delegated_tool_allows_active_person():
     engine = StandingEngine(enabled=True)
     with _with_rebac_engine(engine), RunScope.open() as scope:
         scope.set_delegated_credentials(True)
-        await ToolObservabilityMiddleware._reverify_team_authorization(
+        await ToolExecution._reverify_team_authorization(
             user_id="user-1", team_id="personal-user-1", is_service_agent=False
         )
     assert checked == ["user-1"]
     assert engine.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path", ["react", "deep", "graph_runtime_tool", "graph_tool_ref"]
+)
+@pytest.mark.parametrize(
+    "outcome", ["success", "reported_error", "raised", "cancelled", "denied"]
+)
+async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
+    """The real adapters authorize once, execute at most once and record one outcome."""
+    from fred_core.portable import InMemoryMetricsProvider
+    from fred_runtime.graph.graph_runtime import _adapt_capability_tool_for_graph
+    from fred_runtime.graph.node_context import NodeContext
+    from fred_runtime.integrations.v2_runtime.adapters import InProcessToolInvoker
+    from fred_sdk.contracts.context import ToolInvocationResult
+    from fred_sdk.contracts.runtime import RuntimeServices
+
+    store, kpi = _install_recording_kpi_writer()
+    engine = _FakeRebacEngine(enabled=True, deny=outcome == "denied")
+    executions = 0
+
+    async def execute() -> ToolInvocationResult:
+        nonlocal executions
+        executions += 1
+        assert engine.calls == [("user-1", "team-1")]
+        if outcome == "raised":
+            raise ValueError("private failure detail")
+        if outcome == "cancelled":
+            raise asyncio.CancelledError()
+        return ToolInvocationResult(
+            tool_ref="probe", is_error=outcome == "reported_error"
+        )
+
+    @tool("probe", response_format="content_and_artifact")
+    async def probe() -> tuple[str, ToolInvocationResult]:
+        """Exercise the same capability under each runtime."""
+        return "private result", await execute()
+
+    metrics = InMemoryMetricsProvider()
+    if path.startswith("graph"):
+        ctx = NodeContext(
+            binding=_binding(),
+            services=RuntimeServices(
+                kpi_writer=kpi,
+                metrics=metrics,
+                tool_invoker=InProcessToolInvoker(
+                    handlers={"probe": lambda _: execute()}
+                ),
+            ),
+            model=None,
+            graph_agent_id="graph",
+            node_id="call",
+            allowed_tool_refs=frozenset({"probe"}),
+            runtime_tools={"probe": _adapt_capability_tool_for_graph(probe)},
+            tuning_values={},
+            sink=lambda _: None,
+        )
+
+        async def invoke() -> object:
+            if path == "graph_tool_ref":
+                return await ctx.invoke_tool("probe", {})
+            return await ctx.invoke_runtime_tool("probe", {})
+    else:
+        if path == "deep":
+            frame = _build_deepagent_runtime_middleware(
+                tracer=None,
+                kpi=kpi,
+                binding=_binding(),
+                approval_policy=ToolApprovalPolicy(),
+                available_tool_names={"probe"},
+            )
+            middleware = next(
+                m for m in frame if isinstance(m, ToolObservabilityMiddleware)
+            )
+        else:
+            from fred_runtime.react.middleware.frame import (
+                build_react_platform_middleware_frame,
+            )
+
+            frame = build_react_platform_middleware_frame(
+                tracer=None,
+                kpi=kpi,
+                binding=_binding(),
+                approval_policy=ToolApprovalPolicy(),
+                available_tool_names={"probe"},
+                max_history_messages=None,
+                max_history_chars=None,
+                max_tool_calls_per_turn=None,
+            )
+            middleware = next(
+                m for m in frame if isinstance(m, ToolObservabilityMiddleware)
+            )
+        request = _request(name="probe", tool_obj=probe)
+
+        async def invoke() -> object:
+            return await middleware.awrap_tool_call(
+                request,
+                lambda req: probe.ainvoke({**req.tool_call, "type": "tool_call"}),
+            )
+
+    expected_exception = {
+        "denied": AuthorizationError,
+        "raised": ValueError,
+        "cancelled": asyncio.CancelledError,
+    }.get(outcome)
+    with _with_rebac_engine(engine), _AuditEvents() as audit:
+        if expected_exception is not None:
+            with pytest.raises(expected_exception):
+                await invoke()
+        else:
+            await invoke()
+    assert executions == (0 if outcome == "denied" else 1)
+    assert engine.calls == [("user-1", "team-1")]
+    assert audit.event_names() == [
+        "agent.tool.invocation.started",
+        "agent.tool.invocation.completed",
+    ]
+    expected_status = (
+        "ok"
+        if outcome == "success"
+        else "cancelled"
+        if outcome == "cancelled"
+        else "error"
+    )
+    assert _latency_event(store).dims["status"] == expected_status
+    assert getattr(audit.records[-1], "outcome") == (
+        "succeeded"
+        if outcome == "success"
+        else "cancelled"
+        if outcome == "cancelled"
+        else "failed"
+    )
+    assert len(_failed_events(store)) == (
+        0 if outcome in ("success", "cancelled") else 1
+    )
+    if outcome == "reported_error":
+        assert _failed_events(store)[0].dims["error_code"] == "tool_error_artifact"
+    assert not metrics.timers  # Graph no longer emits a second, generic tool timer.
+    assert "private result" not in audit.payload_text()
+    assert "private failure detail" not in audit.payload_text()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fails", [False, True])
+async def test_graph_mcp_keeps_handled_failure_for_audit_kpi_and_event(
+    fails: bool,
+) -> None:
+    from fred_runtime.graph.node_context import NodeContext
+    from fred_sdk.contracts.runtime import RuntimeServices, ToolResultRuntimeEvent
+
+    calls = 0
+
+    @tool("mcp_probe", response_format="content_and_artifact")
+    async def probe() -> tuple[str, None]:
+        """An MCP server response, including caught failures."""
+        nonlocal calls
+        calls += 1
+        if fails:
+            raise ValueError("provider failed")
+        return "ok", None
+
+    wrapped = ContextAwareTool(
+        base_tool=probe,
+        context_provider=lambda: None,
+        agent_settings_provider=_FakeAgentSettings,
+    )
+    store, kpi = _install_recording_kpi_writer()
+    events = []
+    ctx = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(kpi_writer=kpi),
+        model=None,
+        graph_agent_id="graph",
+        node_id="call",
+        allowed_tool_refs=frozenset(),
+        runtime_tools={wrapped.name: wrapped},
+        tuning_values={},
+        sink=events.append,
+    )
+    with _with_rebac_engine(_FakeRebacEngine(enabled=True)), _AuditEvents() as audit:
+        await ctx.invoke_runtime_tool(wrapped.name, {})
+    assert calls == 1
+    assert _latency_event(store).dims["source"] == "mcp"
+    assert _latency_event(store).dims["status"] == ("error" if fails else "ok")
+    assert len(_failed_events(store)) == int(fails)
+    assert len(audit.records) == 2
+    assert getattr(audit.records[-1], "outcome") == ("failed" if fails else "succeeded")
+    results = [event for event in events if isinstance(event, ToolResultRuntimeEvent)]
+    assert len(results) == 1
+    assert results[0].is_error == fails

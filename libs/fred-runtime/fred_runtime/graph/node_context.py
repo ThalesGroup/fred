@@ -62,16 +62,18 @@ from fred_sdk.contracts.runtime import (
 )
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphInterrupt
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
 )
+from fred_runtime.runtime_support.tool_execution import ToolExecution
 from fred_runtime.runtime_support.trace_payloads import (
     serialize_messages,
     serialize_model_output,
@@ -410,16 +412,20 @@ class NodeContext:
             self,
             "v2.graph.tool",
             {"tool_ref": tool_ref, "call_id": call_id},
-            phase="v2_graph_tool",
-            agent_step=f"{self.node_id}:{tool_ref}",
-            dims={"tool_name": tool_ref},
         ) as obs:
-            result = await tool_invoker.invoke(
-                ToolInvocationRequest(
-                    tool_ref=tool_ref,
-                    payload=payload,
-                    context=self.binding.portable_context,
-                )
+            result = await ToolExecution(
+                kpi=self.services.kpi_writer, binding=self.binding
+            ).run(
+                lambda: tool_invoker.invoke(
+                    ToolInvocationRequest(
+                        tool_ref=tool_ref,
+                        payload=payload,
+                        context=self.binding.portable_context,
+                    )
+                ),
+                tool_name=tool_ref,
+                source="capability",
+                span=obs.span,
             )
             if result.is_error:
                 obs.fail()
@@ -457,12 +463,34 @@ class NodeContext:
             self,
             "v2.graph.runtime_tool",
             {"tool_name": tool_name, "call_id": call_id},
-            phase="v2_graph_runtime_tool",
-            agent_step=f"{self.node_id}:{tool_name}",
-            dims={"tool_name": tool_name},
         ) as obs:
             try:
-                raw_result = await tool.ainvoke(arguments)
+                raw_result = await ToolExecution(
+                    kpi=self.services.kpi_writer, binding=self.binding
+                ).run(
+                    lambda: tool.ainvoke(
+                        {
+                            "type": "tool_call",
+                            "id": call_id,
+                            "name": tool_name,
+                            "args": arguments,
+                        }
+                        if tool.response_format == "content_and_artifact"
+                        else arguments
+                    ),
+                    tool_name=tool_name,
+                    source="mcp"
+                    if isinstance(tool, ContextAwareTool)
+                    else "capability",
+                    span=obs.span,
+                )
+                # A ToolCall envelope preserves MCP artifacts that plain args discard.
+                if isinstance(raw_result, ToolMessage):
+                    raw_result = (
+                        raw_result.artifact
+                        if isinstance(raw_result.artifact, ToolInvocationResult)
+                        else raw_result.content
+                    )
                 normalized = _normalize_runtime_tool_output(raw_result)
                 # A capability tool reports failure with an is_error result rather
                 # than raising; read it off the typed result before normalization

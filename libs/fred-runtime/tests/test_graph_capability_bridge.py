@@ -166,13 +166,8 @@ def test_adapted_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     assert result["is_error"] is False
 
 
-def test_unadapted_capability_tool_loses_sources_via_invoke_runtime_tool() -> None:
-    """
-    Control case: registering the RAW (unadapted) capability tool reproduces
-    Phase 1's finding through the real `invoke_runtime_tool` path — no
-    sources, proving the adapter in the test above is load-bearing, not
-    a no-op.
-    """
+def test_unadapted_capability_tool_preserves_sources_via_tool_call() -> None:
+    """The native ToolCall envelope preserves artifacts without a capability adapter."""
 
     source_tool = _sourced_capability_tool()
     ctx = _node_context({source_tool.name: source_tool})
@@ -182,7 +177,7 @@ def test_unadapted_capability_tool_loses_sources_via_invoke_runtime_tool() -> No
     )
 
     assert isinstance(result, dict)
-    assert "sources" not in result
+    assert result["sources"][0]["uid"] == "d1"
 
 
 def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:
@@ -358,37 +353,6 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
     (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.tool_name == "failing_probe"
     assert event.is_error is True
-
-
-def test_invoke_runtime_tool_marks_kpi_status_error_for_reported_failure() -> None:
-    """
-    CAPAB-02: the span status was fixed to reflect `is_error` (prior round),
-    but the KPI timer's `status` dim was not — `_graph_phase_timer` defaults
-    it to "ok" whenever no exception propagates (`InMemoryMetricsProvider`'s
-    `setdefault("status", "ok")`), so a capability tool reporting failure via
-    `ToolInvocationResult(is_error=True)` (never raising, per RFC §3.9) was
-    recorded as a successful call. Mirrors the canonical `invoke_tool`
-    pattern (`kpi_dims["status"] = "error"`).
-    """
-
-    from fred_core.portable import InMemoryMetricsProvider
-
-    @lc_tool("kpi_failing_probe", response_format="content_and_artifact")
-    async def _kpi_failing_probe(x: str) -> tuple[str, ToolInvocationResult]:
-        """A tool that reports failure via is_error, never raises."""
-        del x
-        return "boom", ToolInvocationResult(tool_ref="kpi_failing_probe", is_error=True)
-
-    metrics = InMemoryMetricsProvider()
-    adapted = _adapt_capability_tool_for_graph(_kpi_failing_probe)
-    ctx = _node_context(
-        {adapted.name: adapted}, services=RuntimeServices(metrics=metrics)
-    )
-
-    asyncio.run(ctx.invoke_runtime_tool("kpi_failing_probe", {"x": "y"}))
-
-    assert len(metrics.timers) == 1
-    assert metrics.timers[0].dims["status"] == "error"
 
 
 def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None:
