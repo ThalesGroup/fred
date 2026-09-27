@@ -53,13 +53,15 @@ export class OidcBrowserSession {
   }
 
   get token(): string | null {
-    return this.invalidated ? null : this.user?.access_token ?? null;
+    return this.invalidated || this.user?.expired ? null : this.user?.access_token ?? null;
   }
 
   get refreshToken(): string | null {
     return this.invalidated ? null : this.user?.refresh_token ?? null;
   }
 
+  // Access tokens stay in oidc-client-ts's session store; Fred does not copy
+  // them to its legacy localStorage key.
   get tokenParsed(): Record<string, unknown> | null {
     const token = this.token;
     if (!token) return null;
@@ -92,6 +94,9 @@ export class OidcBrowserSession {
       window.history.replaceState({}, "", this.redirectUri);
     }
     this.user ??= await this.manager.getUser();
+    if (this.user?.expired && this.user.refresh_token) {
+      await this.ensureFreshToken(0);
+    }
     if (this.user?.access_token && !this.user.expired) {
       this.invalidated = false;
       onAuthenticated();

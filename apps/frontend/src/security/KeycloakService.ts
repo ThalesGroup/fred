@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import Keycloak, { KeycloakInstance } from "keycloak-js";
-import { v5, validate as isUuid } from "uuid";
+import { v5 } from "uuid";
 import { OidcBrowserSession } from "./OidcBrowserSession";
 
 let keycloakInstance: KeycloakInstance | null = null;
@@ -229,7 +229,7 @@ export function createKeycloakInstance(keycloak_url: string, keycloak_client_id:
       });
     };
   }
-  return keycloakInstance!;
+  return identityProvider === "oidc" ? oidcSession!.manager : keycloakInstance!;
 }
 
 /**
@@ -252,7 +252,6 @@ const Login = (onAuthenticatedCallback: Function) => {
   if (identityProvider === "oidc") {
     void oidcSession!.login(() => {
       sessionInvalidated = false;
-      localStorage.setItem("keycloak_token", oidcSession!.token ?? "");
       onAuthenticatedCallback();
     }).catch((error) => console.error("[OIDC] login error:", error));
     return;
@@ -320,7 +319,6 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
     const epochAtStart = authEpoch;
     const fresh = await oidcSession.ensureFreshToken(minValidity);
     if (!fresh || epochAtStart !== authEpoch || sessionInvalidated) return false;
-    localStorage.setItem("keycloak_token", oidcSession.token ?? "");
     return true;
   }
   if (!keycloakInstance) return true;
@@ -440,7 +438,7 @@ const claimPath = (payload: Record<string, any>, path: string[]): unknown =>
   path.reduce<unknown>((value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : null), payload);
 
 const GetRealmRoles = (): string[] => {
-  if (!isSecurityEnabled) return ["admin"];
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return ["admin"];
   const value = GetTokenParsed()?.realm_access?.roles;
   return Array.isArray(value) ? value : [];
 };
@@ -456,30 +454,34 @@ const GetUserRoles = (): string[] => {
 };
 
 const GetUserName = (): string | null => {
-  if (!isSecurityEnabled) return DEV_USERNAME;
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return DEV_USERNAME;
   return GetTokenParsed()?.preferred_username || null;
 };
 
 const GetUserFullName = (): string | null => {
-  if (!isSecurityEnabled) return DEV_USERNAME;
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return DEV_USERNAME;
   return GetTokenParsed()?.name || null;
 };
 
 const GetUserGivenName = (): string | null => {
-  if (!isSecurityEnabled) return DEV_USERNAME;
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return DEV_USERNAME;
   return GetTokenParsed()?.given_name || null;
 };
 
 const GetUserMail = (): string | null => {
-  if (!isSecurityEnabled) return `${DEV_USERNAME}@localhost`;
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return `${DEV_USERNAME}@localhost`;
   return GetTokenParsed()?.email || null;
 };
 
+// Match Python uuid.UUID() acceptance, including hyphenless and braced UUIDs.
+const isPythonUuid = (value: string): boolean =>
+  /^[0-9a-fA-F]{32}$/.test(value.replace(/^urn:uuid:/i, "").replace(/^\{|\}$/g, "").replace(/-/g, ""));
+
 const GetUserId = (): string | null => {
-  if (!isSecurityEnabled) return DEV_USERNAME;
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return DEV_USERNAME;
   const value = GetTokenParsed()?.[uidClaim];
   if (typeof value !== "string" || !value) return null;
-  return identityProvider === "oidc" && !isUuid(value)
+  return identityProvider === "oidc" && !isPythonUuid(value)
     ? v5(`${identityIssuer}#${value}`, v5.URL)
     : value;
 };
