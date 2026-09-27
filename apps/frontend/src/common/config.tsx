@@ -24,6 +24,11 @@ export interface UserAuthConfig {
   enabled?: boolean;
   realm_url?: string;
   client_id?: string;
+  provider?: "keycloak" | "oidc";
+  scope?: string;
+  user_directory?: "keycloak" | "local";
+  uid_claim?: string;
+  roles_claim?: string[] | null;
 }
 
 /** Final merged app config used by the UI before runtime bootstrap completes. */
@@ -104,7 +109,14 @@ export const loadConfig = async () => {
     if (!realm_url || !client_id) {
       throw new Error("user_auth is enabled but realm_url or client_id is missing.");
     }
-    createKeycloakInstance(realm_url, client_id);
+    createKeycloakInstance(realm_url, client_id, {
+      provider: config.user_auth.provider,
+      scope: config.user_auth.scope,
+      user_directory: config.user_auth.user_directory,
+      uid_claim: config.user_auth.uid_claim,
+      roles_claim: config.user_auth.roles_claim,
+      redirect_uri: new URL(config.frontend_basename || "/", window.location.origin).toString(),
+    });
   }
 };
 
@@ -137,6 +149,11 @@ const loadPublicConfig = async (): Promise<
       enabled: payload.user_auth.enabled,
       realm_url: payload.user_auth.realm_url ?? undefined,
       client_id: payload.user_auth.client_id ?? undefined,
+      provider: payload.user_auth.provider === "oidc" ? "oidc" : "keycloak",
+      scope: payload.user_auth.scope ?? undefined,
+      user_directory: payload.user_auth.user_directory === "local" ? "local" : "keycloak",
+      uid_claim: payload.user_auth.uid_claim ?? "sub",
+      roles_claim: payload.user_auth.roles_claim ?? null,
     },
     gcu_version: payload.gcu_version ?? null,
     // Rolling-compatibility fallback only: a control-plane deployed before

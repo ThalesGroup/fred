@@ -13,9 +13,27 @@
 // limitations under the License.
 
 import Keycloak, { KeycloakInstance } from "keycloak-js";
+import { v5, validate as isUuid } from "uuid";
+import { OidcBrowserSession } from "./OidcBrowserSession";
 
 let keycloakInstance: KeycloakInstance | null = null;
 let isSecurityEnabled = false;
+let oidcSession: OidcBrowserSession | null = null;
+let identityProvider: "keycloak" | "oidc" = "keycloak";
+let identityIssuer = "";
+let identityClientId = "";
+let uidClaim = "sub";
+let rolesClaim: string[] | null = null;
+
+export interface BrowserAuthOptions {
+  provider?: "keycloak" | "oidc";
+  scope?: string | null;
+  user_directory?: "keycloak" | "local";
+  uid_claim?: string;
+  roles_claim?: string[] | null;
+  redirect_uri?: string;
+}
+
 
 // keycloak-js's own floor: `updateToken` does `minValidity = minValidity || 5`,
 // so 0 does NOT mean "don't check" — it means five seconds. `isTokenExpired`
@@ -172,9 +190,23 @@ function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
   return { url: match[1] + "/", realm: match[2] };
 }
 
-export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string) {
-  if (!keycloakInstance) {
+export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string, options: BrowserAuthOptions = {}) {
+  if (!keycloakInstance && !oidcSession) {
     isSecurityEnabled = true;
+    identityProvider = options.provider ?? "keycloak";
+    identityIssuer = keycloak_url.replace(/\/+$/, "");
+    identityClientId = keycloak_client_id;
+    uidClaim = options.uid_claim ?? "sub";
+    rolesClaim = options.roles_claim ?? null;
+    if (identityProvider === "oidc") {
+      oidcSession = new OidcBrowserSession(
+        keycloak_url,
+        keycloak_client_id,
+        options.scope ?? undefined,
+        options.redirect_uri ?? `${window.location.origin}/`,
+      );
+      return oidcSession.manager;
+    }
     const { url, realm } = parseKeycloakUrl(keycloak_url);
 
     keycloakInstance = new Keycloak({ url, realm, clientId: keycloak_client_id });
@@ -217,6 +249,15 @@ const Login = (onAuthenticatedCallback: Function) => {
     return;
   }
 
+  if (identityProvider === "oidc") {
+    void oidcSession!.login(() => {
+      sessionInvalidated = false;
+      localStorage.setItem("keycloak_token", oidcSession!.token ?? "");
+      onAuthenticatedCallback();
+    }).catch((error) => console.error("[OIDC] login error:", error));
+    return;
+  }
+
   keycloakInstance!
     .init({
       onLoad: "login-required",
@@ -250,6 +291,12 @@ const Logout = () => {
     return;
   }
 
+  if (identityProvider === "oidc") {
+    // oidc-client-ts keeps its logout callback state in sessionStorage.
+    clearPersistedToken();
+    void oidcSession?.logout().catch((error) => console.error("[OIDC] logout error:", error));
+    return;
+  }
   if (!keycloakInstance) return;
   try {
     sessionStorage.clear();
@@ -267,7 +314,16 @@ const Logout = () => {
  * intentionally long-lived to avoid surprising dev UX during demos.
  */
 export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
-  if (!isSecurityEnabled || !keycloakInstance) return true;
+  if (!isSecurityEnabled) return true;
+  if (identityProvider === "oidc") {
+    if (!oidcSession) return false;
+    const epochAtStart = authEpoch;
+    const fresh = await oidcSession.ensureFreshToken(minValidity);
+    if (!fresh || epochAtStart !== authEpoch || sessionInvalidated) return false;
+    localStorage.setItem("keycloak_token", oidcSession.token ?? "");
+    return true;
+  }
+  if (!keycloakInstance) return true;
 
   // Already enough headroom: keycloak-js would no-op anyway (it only refreshes
   // when isTokenExpired(minValidity)), and settling it here means a caller
@@ -380,41 +436,52 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
 
 // ========================= Getters =========================
 
+const claimPath = (payload: Record<string, any>, path: string[]): unknown =>
+  path.reduce<unknown>((value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : null), payload);
+
 const GetRealmRoles = (): string[] => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return ["admin"];
-  return keycloakInstance.tokenParsed.realm_access?.roles || [];
+  if (!isSecurityEnabled) return ["admin"];
+  const value = GetTokenParsed()?.realm_access?.roles;
+  return Array.isArray(value) ? value : [];
 };
 
 const GetUserRoles = (): string[] => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return ["admin"];
-  const clientId = (keycloakInstance as any).clientId as string;
-  const clientRoles = keycloakInstance.tokenParsed.resource_access?.[clientId]?.roles || [];
-  return [...clientRoles];
+  if (!isSecurityEnabled) return ["admin"];
+  const payload = GetTokenParsed();
+  if (!payload) return ["admin"];
+  const value = rolesClaim
+    ? claimPath(payload, rolesClaim)
+    : payload.resource_access?.[identityClientId]?.roles;
+  return Array.isArray(value) ? [...value] : [];
 };
 
 const GetUserName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).preferred_username || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  return GetTokenParsed()?.preferred_username || null;
 };
 
 const GetUserFullName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).name || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  return GetTokenParsed()?.name || null;
 };
 
 const GetUserGivenName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).given_name || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  return GetTokenParsed()?.given_name || null;
 };
 
 const GetUserMail = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return `${DEV_USERNAME}@localhost`;
-  return (keycloakInstance.tokenParsed as any).email || null;
+  if (!isSecurityEnabled) return `${DEV_USERNAME}@localhost`;
+  return GetTokenParsed()?.email || null;
 };
 
 const GetUserId = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).sub || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  const value = GetTokenParsed()?.[uidClaim];
+  if (typeof value !== "string" || !value) return null;
+  return identityProvider === "oidc" && !isUuid(value)
+    ? v5(`${identityIssuer}#${value}`, v5.URL)
+    : value;
 };
 
 /**
@@ -439,6 +506,7 @@ const GetToken = (): string | null => {
   // session is invalidated, never hand that back, and never fall through to
   // the localStorage copy either, since clearPersistedToken already removed it.
   if (sessionInvalidated) return null;
+  if (identityProvider === "oidc") return oidcSession?.token ?? null;
   return keycloakInstance?.token || localStorage.getItem("keycloak_token");
 };
 const GetRefreshToken = (): string | null => {
@@ -447,6 +515,7 @@ const GetRefreshToken = (): string | null => {
     return "dev-refresh-token-dummy";
   }
   if (sessionInvalidated) return null;
+  if (identityProvider === "oidc") return oidcSession?.refreshToken ?? null;
   // 🔑 Access the refreshToken property on the KeycloakInstance
   return keycloakInstance?.refreshToken || null;
 };
@@ -456,6 +525,7 @@ const GetTokenParsed = (): any => {
     return parseJwtPayload(tok); // <- decode and return payload JSON
   }
   if (sessionInvalidated) return null;
+  if (identityProvider === "oidc") return oidcSession?.tokenParsed ?? null;
   return keycloakInstance?.tokenParsed ?? null;
 };
 
@@ -490,6 +560,7 @@ const GetTokenSecondsLeft = (): number | null => {
   // sees the response), which made `!tokenParsed` false and suppressed the
   // dead-session report for an already-invalidated session.
   if (sessionInvalidated) return 0;
+  if (identityProvider === "oidc") return oidcSession?.tokenSecondsLeft ?? null;
   const exp = GetTokenParsed()?.exp;
   if (typeof exp !== "number") return null;
   // `timeSkew` cancels client-clock drift exactly as keycloak-js's own
@@ -529,7 +600,7 @@ export interface KeycloakRealmConfig {
  * `null` in insecure/dev-token mode: there is no real Keycloak to target.
  */
 const GetKeycloakRealmConfig = (): KeycloakRealmConfig | null => {
-  if (!isSecurityEnabled || !keycloakInstance) return null;
+  if (!isSecurityEnabled || identityProvider === "oidc" || !keycloakInstance) return null;
   const { authServerUrl, realm, clientId } = keycloakInstance as unknown as {
     authServerUrl?: string;
     realm?: string;
