@@ -1023,16 +1023,16 @@ class ApplicationContext:
         logger.info("  🔒 security (Knowledge → Knowledge/Third Party):")
         logger.info("     • enabled: %s", sec.enabled)
         logger.info("     • client_id: %s", sec.client_id or "<unset>")
-        logger.info("     • keycloak_url: %s", sec.realm_url or "<unset>")
-        # realm parsing
+        logger.info("     • %s: %s", "issuer" if sec.provider == "oidc" else "keycloak_url", sec.realm_url or "<unset>")
 
         if sec.enabled:
-            try:
-                base, realm = split_realm_url(str(sec.realm_url))
-                logger.info("     • realm: %s  (base=%s)", realm, base)
-            except Exception as e:
-                logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
-                raise ValueError("Invalid Keycloak URL") from e
+            if sec.provider == "keycloak":
+                try:
+                    base, realm = split_realm_url(str(sec.realm_url))
+                    logger.info("     • realm: %s  (base=%s)", realm, base)
+                except Exception as e:
+                    logger.error("     ❌ keycloak_url invalid (expected …/realms/<realm>): %s", e)
+                    raise ValueError("Invalid Keycloak URL") from e
             # Only the refusal names the variable; secret names stay out of the log.
             if not os.getenv("KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET"):
                 raise ValueError("Missing required environment variable: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")

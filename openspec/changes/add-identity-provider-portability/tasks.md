@@ -40,7 +40,7 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 ## 5. Startup validation
 
 - [x] 5.1 Add `validate_provider_configuration(config: SecurityConfiguration)` in `oidc.py` and call it wherever `apply_security_profile` is called (control plane, knowledge flow, runtime). It raises `ValueError` for the three combinations in design §6, with actionable messages.
-- [ ] 5.2 `apps/knowledge-flow-backend/knowledge_flow_backend/application_context.py` `_log_config_summary`: today a `split_realm_url` failure **raises `ValueError("Invalid Keycloak URL")` and stops startup**. When `provider == "oidc"`, skip the realm parsing and log the issuer instead. Keep the check, and its failure, when `provider == "keycloak"`. Keep the `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` check unchanged (the variable name is only a name).
+- [x] 5.2 `apps/knowledge-flow-backend/knowledge_flow_backend/application_context.py` `_log_config_summary`: today a `split_realm_url` failure **raises `ValueError("Invalid Keycloak URL")` and stops startup**. When `provider == "oidc"`, skip the realm parsing and log the issuer instead. Keep the check, and its failure, when `provider == "keycloak"`. Keep the `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET` check unchanged (the variable name is only a name).
 - [ ] 5.3 Tests: each refused combination fails; valid `oidc` + `local` + `caller_roles_claim` passes; Keycloak defaults pass; Knowledge Flow starts with an Entra-style issuer in `oidc` mode and still refuses a malformed realm URL in `keycloak` mode.
 
 ## 6. Local user directory
