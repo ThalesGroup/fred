@@ -1,0 +1,17 @@
+# Security-only overlay. Merge with configuration_prod.yaml into a temporary
+# complete YAML file before setting CONFIG_FILE; the loader validates a full config.
+security:
+  user_directory: local
+  user:
+    provider: oidc
+    realm_url: http://localhost:8090/fred
+    audience: fred-api
+    roles_claim: [roles]
+  m2m:
+    provider: oidc
+    realm_url: http://localhost:8090/fred
+  delegation:
+    accept_delegated_calls: true
+    caller_roles_claim: [roles]
+    audience: fred-api
+    service_accounts_only: false

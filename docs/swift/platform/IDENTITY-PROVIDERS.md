@@ -93,3 +93,41 @@ explain the Entra-side setup.
 - Select `user_directory: local` and test sign-in, user lookup, personal spaces,
   create refusal, and deletion suspension. People absent from the local table
   cannot be found until they sign in.
+
+## Local configuration examples
+
+Each backend has `config/configuration_generic_oidc.example.yaml` and
+`config/configuration_mock_oidc.example.yaml`. These contain only `security`
+differences. `CONFIG_FILE` expects a complete configuration, so merge an example
+with the application's existing `configuration_prod.yaml` into a temporary file;
+do not edit the tracked baseline. For example, from the repository root:
+
+```bash
+APP=control-plane-backend PROFILE=generic_oidc \
+  apps/control-plane-backend/.venv/bin/python - <<'PY'
+import os
+from pathlib import Path
+import yaml
+
+root = Path('apps') / os.environ['APP'] / 'config'
+base = yaml.safe_load((root / 'configuration_prod.yaml').read_text())
+overlay = yaml.safe_load((root / f"configuration_{os.environ['PROFILE']}.example.yaml").read_text())
+
+def merge(target, source):
+    for key, value in source.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            merge(target[key], value)
+        else:
+            target[key] = value
+
+merge(base, overlay)
+output = Path('/tmp') / f"fred-{os.environ['APP']}-{os.environ['PROFILE']}.yaml"
+output.write_text(yaml.safe_dump(base, sort_keys=False))
+print(output)
+PY
+```
+
+Set `CONFIG_FILE` to the printed path when starting that backend. Repeat with
+`APP=knowledge-flow-backend` or `APP=fred-agents`, and set `PROFILE=mock_oidc`
+for the mock provider. The examples are only configuration fragments; the mock
+provider and frontend login still need their own test-bench setup.
