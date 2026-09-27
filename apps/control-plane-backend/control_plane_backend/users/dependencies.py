@@ -72,7 +72,8 @@ def build_user_service_dependencies(
     return UserServiceDependencies(
         configuration=container.configuration,
         create_keycloak_admin_client=lambda: create_keycloak_admin(
-            container.configuration.security.m2m
+            container.configuration.security.m2m,
+            user_directory=container.configuration.security.user_directory,
         ),
     )
 

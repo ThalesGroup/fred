@@ -2116,7 +2116,10 @@ async def count_all_personal_spaces(deps: TeamServiceDependencies) -> int:
     "unknown" rather than "no personal spaces".
     """
 
-    admin = create_keycloak_admin(deps.configuration.security.m2m)
+    admin = create_keycloak_admin(
+        deps.configuration.security.m2m,
+        user_directory=deps.configuration.security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; user count unavailable.")
         return 0
