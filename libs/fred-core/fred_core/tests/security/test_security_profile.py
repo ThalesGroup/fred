@@ -175,3 +175,42 @@ def test_the_retired_workload_audience_setting_is_refused() -> None:
         M2MSecurity.model_validate(
             {"realm_url": str(_REALM), "client_id": "cp", "audience": "an-old-one"}
         )
+
+
+@pytest.mark.parametrize(
+    ("delegation", "directory", "message"),
+    [
+        (
+            DelegationConfig(service_accounts_only=True),
+            "local",
+            "service_accounts_only",
+        ),
+        (DelegationConfig(act_for_people=True), "local", "caller_roles_claim"),
+        (DelegationConfig(), "keycloak", "user_directory"),
+    ],
+)
+def test_oidc_startup_rejects_incompatible_settings(
+    delegation: DelegationConfig, directory: str, message: str
+) -> None:
+    config = _security()
+    config.user.provider = "oidc"
+    config.user_directory = directory
+    config.delegation = delegation
+
+    with pytest.raises(ValueError, match=message):
+        oidc.apply_security_profile(config)
+
+
+def test_oidc_startup_accepts_local_directory_with_explicit_caller_roles() -> None:
+    config = _security()
+    config.user.provider = "oidc"
+    config.user_directory = "local"
+    config.delegation = DelegationConfig(
+        act_for_people=True, caller_roles_claim=["roles"]
+    )
+
+    oidc.apply_security_profile(config)
+
+
+def test_keycloak_default_configuration_remains_valid() -> None:
+    oidc.apply_security_profile(_security())
