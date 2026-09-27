@@ -34,7 +34,8 @@ class IdentityManagedByProviderError(Exception):
     def __init__(self, username: str | None = None) -> None:
         subject = f" for '{username}'" if username else ""
         super().__init__(
-            f"Identity creation{subject} is managed by the identity provider."
+            f"Identity creation{subject} is managed by the identity provider "
+            "(managed_by_identity_provider)."
         )
 
 

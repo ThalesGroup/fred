@@ -57,6 +57,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -71,6 +72,7 @@ from control_plane_backend.import_export.importer import (
     run_import,
 )
 from control_plane_backend.import_export.schemas import BundleUserEntry
+from control_plane_backend.users.schemas import IdentityManagedByProviderError
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -1253,6 +1255,37 @@ async def test_provision_bundle_identities_creates_missing_user_with_password() 
     ]
     # existing/nopass never triggered a_create_user.
     assert {c["username"] for c in admin.create_calls} == {"newuser"}
+
+
+@pytest.mark.asyncio
+async def test_local_import_refuses_unknown_password_identities_before_role_writes() -> (
+    None
+):
+    def no_admin():
+        raise AssertionError("Keycloak Admin API must not be constructed")
+
+    deps = UserServiceDependencies(
+        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        create_keycloak_admin_client=no_admin,
+    )
+    resolver = UserSubResolver({"known": "existing-id"})
+    report = MigrationReport(import_id="local-import", source_platform="swift")
+    entries = [
+        BundleUserEntry(username="known", password="generated-test-value"),
+        BundleUserEntry(username="alice", password="generated-test-value"),
+        BundleUserEntry(username="bob", password="generated-test-value"),
+    ]
+
+    with pytest.raises(IdentityManagedByProviderError) as raised:
+        await _provision_bundle_identities(
+            entries, resolver, deps, _admin_user(), report
+        )
+
+    assert "alice, bob" in str(raised.value)
+    assert "managed_by_identity_provider" in str(raised.value)
+    assert report.identities_created == 0
+    assert report.team_roles_granted == 0
+    assert report.platform_roles_granted == 0
 
 
 # ── find_user_sub_by_username: unit tests ──────────────────────────────────
