@@ -63,13 +63,8 @@ class FredHitlMiddleware(AgentMiddleware):
     - tool-call argument rewrites are applied IN PLACE on the checkpointed
       AIMessage, exactly like the legacy gate, so the updates stream carries no
       extra message events for the transcoder
-    - cancel jumps back to the model WITHOUT executing any tool of the batch;
-      the dangling assistant tool-call message is then dropped from the model
-      input by CheckpointHygieneMiddleware, so the model replans. The legacy
-      graph *intended* this via a `skip_tools` state key, but LangGraph
-      silently dropped that write (unknown channel on `MessagesState`), so
-      cancelling never actually prevented execution — this middleware fixes
-      that latent bug (#1972).
+    - cancel skips the entire batch and supplies a refusal result for each
+      call, so the model can replan with the user's decision in its context.
     - the legacy `notes` free-text injection was dead code in the ReAct wiring
       (the approval callback never returned notes) and is not carried over
 
@@ -140,17 +135,37 @@ class FredHitlMiddleware(AgentMiddleware):
         # so a partial per-call answer was never meaningful even before this.
         if not gated:
             return None
-        return self._resolve_approval(gated)
+        return self._resolve_approval(gated, tool_calls=tool_calls)
 
     def _resolve_approval(
-        self, gated: Sequence[GatedToolCall]
+        self,
+        gated: Sequence[GatedToolCall],
+        *,
+        tool_calls: Sequence[dict[str, Any]],
     ) -> dict[str, Any] | None:
         request = build_tool_approval_request(binding=self._binding, calls=gated)
         decision = interrupt(request.model_dump(mode="json"))
         if not is_tool_approval_granted(decision):
-            # Skip the whole tool batch (gated and ungated calls alike) and
-            # let the model replan.
-            return {"jump_to": "model"}
+            # Pair every skipped call so hygiene preserves the refusal for replan.
+            return {
+                "jump_to": "model",
+                "messages": [
+                    ToolMessage(
+                        content=(
+                            "The user rejected this tool batch. This tool was not executed. "
+                            "Do not request these actions again unless the user explicitly "
+                            "asks. Acknowledge the refusal and use existing information "
+                            "or offer an alternative."
+                        ),
+                        tool_call_id=tc["id"],
+                        name=tc["name"],
+                        status="error",
+                        additional_kwargs={"fred_tool_approval_rejected": True},
+                    )
+                    for tc in tool_calls
+                    if tc.get("id")
+                ],
+            }
         return None
 
 
@@ -185,7 +200,12 @@ class DeepChildHitlMiddleware(FredHitlMiddleware):
             request = request.override(tools=kept)
         return await handler(request)
 
-    def _resolve_approval(self, gated: Sequence[GatedToolCall]) -> dict[str, Any]:
+    def _resolve_approval(
+        self,
+        gated: Sequence[GatedToolCall],
+        *,
+        tool_calls: Sequence[dict[str, Any]] = (),
+    ) -> dict[str, Any]:
         # A result prevents execution of that call while allowing ungated calls
         # in the same batch. Without a call ID, fail closed on the whole batch.
         if not all(call.tool_call_id for call in gated):

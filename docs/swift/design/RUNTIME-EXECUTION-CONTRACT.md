@@ -6298,6 +6298,13 @@ contracts remain unchanged. Deep child agents retain their no-human-wait boundar
 Only explicit `proceed` authorizes execution; Graph refusals return an error tool
 result to the author node before the shared tool execution boundary.
 
+ReAct and Deep refusals skip the entire proposed tool batch and checkpoint a
+paired refusal message for every call, including ungated siblings. The next
+model call receives the refusal and an instruction not to retry those actions
+without a new user request. This feedback is model context, not an executed
+tool result or a technical failure; it does not suppress the model's final
+acknowledgment. Model compliance still requires live validation.
+
 Graph mediated tool calls run in native LangGraph tasks. A completed child task
 persists the tool name, arguments and call ID before interruption, so node replay
 cannot substitute a different invocation for the approved one. Completed tool
