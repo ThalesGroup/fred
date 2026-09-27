@@ -58,7 +58,7 @@ _USER_SUMMARY_CACHE: ThreadSafeLRUCache[str, tuple[float, UserSummary]] = (
 
 
 def _uses_local_directory(deps: UserServiceDependencies) -> bool:
-    security = getattr(deps.configuration, "security", None)
+    security = getattr(getattr(deps, "configuration", None), "security", None)
     return getattr(security, "user_directory", "keycloak") == "local"
 
 
