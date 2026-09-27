@@ -62,6 +62,7 @@ from control_plane_backend.users.platform_roles import (
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
     GrantPlatformRoleRequest,
+    IdentityManagedByProviderError,
     KeycloakM2MUserOperationDisabledError,
     PlatformAdminRootOnlyError,
     PlatformBootstrapNotCompletedError,
@@ -145,6 +146,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: KeycloakM2MUserOperationDisabledError,
     ) -> JSONResponse:
         return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(IdentityManagedByProviderError)
+    async def identity_managed_by_provider_handler(
+        _request, exc: IdentityManagedByProviderError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "reason": "managed_by_identity_provider",
+            },
+        )
 
     @app.exception_handler(UserAlreadyExistsError)
     async def user_already_exists_handler(

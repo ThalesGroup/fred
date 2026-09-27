@@ -28,6 +28,16 @@ class KeycloakM2MUserOperationDisabledError(Exception):
         super().__init__("Keycloak M2M is disabled; cannot perform user operations.")
 
 
+class IdentityManagedByProviderError(Exception):
+    """The identity provider owns user creation in local directory mode."""
+
+    def __init__(self, username: str | None = None) -> None:
+        subject = f" for '{username}'" if username else ""
+        super().__init__(
+            f"Identity creation{subject} is managed by the identity provider."
+        )
+
+
 class UserNotFoundError(Exception):
     """Raised when a user cannot be found in Keycloak."""
 
