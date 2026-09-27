@@ -2,6 +2,9 @@
 
 (Fred: Agentic ↔ Knowledge Flow)
 
+Keycloak remains the default identity provider. For OIDC providers such as Microsoft
+Entra ID, see [IDENTITY-PROVIDERS.md](./IDENTITY-PROVIDERS.md).
+
 This guide explains how to configure Keycloak so every request processed by the Agentic backend — including calls into Knowledge Flow — carries the authenticated **user’s** identity. Agent actions are now audited as user actions. The Agentic service account remains available for administrative jobs such as enumerating known users, but it is not used for runtime calls between backends.
 
 > [!IMPORTANT]
