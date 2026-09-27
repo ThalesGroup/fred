@@ -47,6 +47,20 @@ async def test_person_snapshot_is_throttled_and_service_identity_is_ignored(
     )
     await oidc._snapshot_local_identity(service, store, config)
     assert store.upsert_identity.await_count == 2
+    for excluded in (
+        KeycloakUser(
+            uid=str(uuid4()),
+            username="caller",
+            roles=[],
+            caller_roles=frozenset({"delegation_caller"}),
+        ),
+        KeycloakUser(
+            uid=str(uuid4()), username="service-account", roles=[], service_account=True
+        ),
+        KeycloakUser(uid=str(uuid4()), username="", roles=[]),
+    ):
+        await oidc._snapshot_local_identity(excluded, store, config)
+    assert store.upsert_identity.await_count == 2
     oidc._IDENTITY_SNAPSHOT_DEADLINES.clear()
 
 
@@ -63,3 +77,16 @@ async def test_snapshot_failure_does_not_fail_authentication(monkeypatch):
     await oidc._snapshot_local_identity(user, store, config)
 
     assert not oidc._IDENTITY_SNAPSHOT_DEADLINES
+
+
+@pytest.mark.asyncio
+async def test_no_security_mock_is_not_snapshotted(monkeypatch):
+    oidc._IDENTITY_SNAPSHOT_DEADLINES.clear()
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", False)
+    store = SimpleNamespace(upsert_identity=AsyncMock())
+    config = SimpleNamespace(security=SimpleNamespace(user_directory="local"))
+    user = KeycloakUser(uid=str(uuid4()), username="mock", roles=[])
+
+    await oidc._snapshot_local_identity(user, store, config)
+
+    store.upsert_identity.assert_not_awaited()
