@@ -45,7 +45,7 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 
 ## 6. Local user directory
 
-- [ ] 6.1 `libs/fred-core/fred_core/users/user_models.py`: add nullable `username`, `email`, `first_name`, `last_name` (`String`) and `last_seen_at` (`DateTime(timezone=True)`) to `UserRow`.
+- [x] 6.1 `libs/fred-core/fred_core/users/user_models.py`: add nullable `username`, `email`, `first_name`, `last_name` (`String`) and `last_seen_at` (`DateTime(timezone=True)`) to `UserRow`.
 - [ ] 6.2 Add one Alembic migration in `apps/control-plane-backend/alembic/versions/` adding those columns and an index on `lower(username)`, with a working downgrade. Check that knowledge flow's Alembic tree and backfill scripts are not affected. Run `make db-check-combined-sqlite`.
 - [ ] 6.3 `BaseUserStore` / `PostgresUserStore`: add `upsert_identity`, `search_identities(query, limit)` (case-insensitive match on username, email, first and last name), `list_identities(offset, limit)`, `get_identities(ids)`, `count_identities()`, `find_ids_by_usernames(usernames | None)`, `identity_exists(id)`. Read methods return dicts shaped like Keycloak Admin API users: `{"id","username","email","firstName","lastName"}`.
 - [ ] 6.4 `libs/fred-core/fred_core/security/keycloak/keycloack_admin_client.py`: accept the `SecurityConfiguration` (or a `user_directory` argument) and return `KeycloackDisabled()` before any realm parsing when `user_directory == "local"`. Update the callers' arguments.
