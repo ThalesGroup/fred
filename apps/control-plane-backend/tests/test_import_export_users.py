@@ -1258,6 +1258,29 @@ async def test_provision_bundle_identities_creates_missing_user_with_password() 
 
 
 @pytest.mark.asyncio
+async def test_local_import_reuses_resolved_identity_even_with_password() -> None:
+    deps = UserServiceDependencies(
+        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
+            AssertionError("Keycloak Admin API must not be constructed")
+        ),
+    )
+    resolver = UserSubResolver({"alice": "existing-id"})
+    report = MigrationReport(import_id="local-existing", source_platform="swift")
+
+    await _provision_bundle_identities(
+        [BundleUserEntry(username="alice", password="generated-test-value")],
+        resolver,
+        deps,
+        _admin_user(),
+        report,
+    )
+
+    assert report.identities_created == 0
+    assert await resolver.find_sub("alice") == "existing-id"
+
+
+@pytest.mark.asyncio
 async def test_local_import_refuses_unknown_password_identities_before_role_writes() -> (
     None
 ):

@@ -32,9 +32,14 @@ The load-bearing guarantees these tests lock in:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
+from control_plane_backend.users import service as users_service
+from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.platform_roles import (
     grant_platform_role,
     list_platform_roles,
@@ -339,6 +344,31 @@ async def test_grant_refuses_a_target_keycloak_does_not_know(monkeypatch):
             _USER_DEPS,
         )
     assert rebac.added == []
+
+
+@pytest.mark.asyncio
+async def test_local_grant_refuses_unknown_identity_without_writing(monkeypatch):
+    store = SimpleNamespace(identity_exists=AsyncMock(return_value=False))
+    monkeypatch.setattr(users_service, "get_user_store", lambda: store)
+    deps = UserServiceDependencies(
+        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
+            AssertionError("Keycloak Admin API must not be constructed")
+        ),
+    )
+    rebac = _FakeRebac()
+
+    with pytest.raises(UserNotFoundError):
+        await grant_platform_role(
+            _user(ADMIN_UID),
+            str(uuid4()),
+            PlatformRoleRelation.PLATFORM_OBSERVER,
+            *_args(rebac, _FakeBootstrapStore()),
+            deps,
+        )
+
+    assert rebac.added == []
+    store.identity_exists.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

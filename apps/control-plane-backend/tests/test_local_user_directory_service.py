@@ -17,9 +17,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
 import pytest
 
-from control_plane_backend.users import service
+from control_plane_backend.users import api, service
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
@@ -81,3 +84,21 @@ async def test_local_user_creation_is_refused_before_admin_client() -> None:
 
     with pytest.raises(IdentityManagedByProviderError, match="alice"):
         await service.create_user(None, request, deps)
+
+
+@pytest.mark.asyncio
+async def test_managed_identity_error_maps_to_http_409() -> None:
+    app = FastAPI()
+    api.register_exception_handlers(app)
+
+    @app.get("/managed-identity")
+    async def raise_managed_identity():
+        raise IdentityManagedByProviderError("alice")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/managed-identity")
+
+    assert response.status_code == 409
+    assert response.json()["reason"] == "managed_by_identity_provider"
