@@ -400,6 +400,11 @@ async def delete_user(
     # "*" is the wildcard subject and "#" marks a userset: neither names a person.
     if user_id == "*" or "#" in user_id:
         raise UserNotFoundError(user_id)
+    if deps.configuration.security.user_directory == "local":
+        if rebac.enforces_standing:
+            await rebac.remove_user_standing(user_id)
+        return
+
     admin = _get_keycloak_admin_for_user_operations(deps)
     # The ban alone ends access, so the person's other relations stay. It comes before
     # the identity-provider account: a failure after it leaves the person refused, and
