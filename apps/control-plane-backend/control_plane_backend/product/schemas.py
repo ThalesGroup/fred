@@ -103,6 +103,11 @@ class FrontendUserAuthConfig(BaseModel):
     enabled: bool
     realm_url: str | None = None
     client_id: str | None = None
+    provider: str = "keycloak"
+    scope: str | None = None
+    user_directory: str = "keycloak"
+    uid_claim: str = "sub"
+    roles_claim: list[str] | None = None
 
 
 class FrontendUiThemes(BaseModel):

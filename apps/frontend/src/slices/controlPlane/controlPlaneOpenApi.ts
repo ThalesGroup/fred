@@ -2940,6 +2940,11 @@ export type FrontendUserAuthConfig = {
   enabled: boolean;
   realm_url?: string | null;
   client_id?: string | null;
+  provider?: string;
+  scope?: string | null;
+  user_directory?: string;
+  uid_claim?: string;
+  roles_claim?: string[] | null;
 };
 export type FrontendUiThemes = {
   default_theme?: string | null;
