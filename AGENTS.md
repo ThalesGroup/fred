@@ -1,59 +1,105 @@
-# Codex / AI Assistant Instructions
+# Team / AI Assistant Instructions
 
-This repository uses `CLAUDE.md` as the primary development workflow and governance guide.
+`AGENTS.md` is the primary team workflow and governance entrypoint for coding
+agents. The team is moving away from Claude/Anthropic tooling; the workflow
+must remain usable through ordinary repository files and command-line tools.
 
-For this checkout, first apply `CLAUDE.md`'s **Local collaboration agreement —
-webdav checkout (2026-09-21)**. It records the developer's explicit overrides,
-including the suspension of OpenSpec and GitHub branch/PR workflows below.
+Before changing code or documentation, read:
 
-Before making any code or documentation change, read and follow:
+1. This root `AGENTS.md`.
+2. Root `CLAUDE.md`, which temporarily retains detailed engineering guidance.
+3. Any nested `AGENTS.override.md`, `AGENTS.md`, or legacy `CLAUDE.md` in the
+   target directory.
 
-1. The root `CLAUDE.md`
-2. This root `AGENTS.md`
-3. Any nested `AGENTS.md`, `AGENTS.override.md`, or `CLAUDE.md` files in the target subdirectory
-
-When `CLAUDE.md` refers to Claude or Claude Code, apply the same instruction to Codex unless the instruction is technically impossible in Codex.
-
-**OpenSpec comes before implementation.** For agreed, scoped work, create or
-update the OpenSpec change before writing code and use its tasks and acceptance
-criteria to guide the implementation. After verification and independent
-review, update the artifacts with the final evidence and archive the change.
-
-**OpenSpec is the one exception worth spelling out.** CLAUDE.md's OpenSpec
-workflow (see "RFC vs. OpenSpec vs. doc") is driven by the `openspec` CLI, not
-by a Claude-Code-only feature - but the
-`openspec-propose`/`-apply-change`/`-archive-change`/`-explore`/`-sync-specs`/`-update-change`
-names are Claude Code Skill wrappers, and the procedure each one runs is real
-work, not just one CLI call: `.agents/skills/<name>/SKILL.md` (mirrored at
-`.claude/skills/<name>/SKILL.md`) is the actual, plain-markdown procedure - read
-and follow it directly. A bare `openspec new change <name>` only scaffolds empty
-files (`.openspec.yaml` plus placeholders); the proposal/design/tasks/spec-delta
-content only gets written by following `openspec-propose`'s steps (`openspec
-status --json` for the artifact order, `openspec instructions <artifact-id>
---change <name> --json` per artifact, then drafting each one before
-implementation). Likewise, archiving well means following
-`openspec-archive-change`'s steps (completion checks, delta-spec sync, then the
-move), not just calling `openspec archive`. Codex has no Skill tool to
-auto-invoke these, but every one of these SKILL.md files is a plain file in the
-repo Codex already reads - follow it by hand.
+The guidance in `CLAUDE.md` remains applicable where it does not conflict with
+this file. Its unconditional OpenSpec requirements are superseded by the
+policy below. The former reference to a webdav checkout agreement is obsolete:
+there is no checkout-wide suspension of OpenSpec or GitHub workflows.
+Migrate remaining guidance as it is maintained; do not keep two authoritative
+copies of the same rule. Legacy tool names do not require using Claude Code.
 
 Conflict resolution order:
 
-1. Explicit user instruction
-2. Closest nested `AGENTS.override.md`, `AGENTS.md`, or `CLAUDE.md`
-3. Root `CLAUDE.md`
-4. Root `AGENTS.md`
-5. Root `AGENT.md`, if present
+1. Explicit user instruction.
+2. Closest nested `AGENTS.override.md` or `AGENTS.md`.
+3. Root `AGENTS.md`.
+4. Closest legacy `CLAUDE.md`, then root `CLAUDE.md`.
+5. Root `AGENT.md`, if present (orientation only).
 
-If there is a conflict that cannot be resolved safely, stop and ask for clarification before changing files.
+If a conflict cannot be resolved using this order, ask before changing files.
 
-Do not implement changes until the required workflow checks from `CLAUDE.md` have been completed.
+## OpenSpec — team choice, under evaluation
+
+OpenSpec is the team's chosen default for substantial development, and remains
+under evaluation. Use it where explicit requirements and acceptance criteria
+help implementation and review; producing artifacts is not an end in itself.
+
+Choose the workflow before implementation and briefly state the reason:
+
+- **Use OpenSpec** for features, changed product behavior or public contracts,
+  cross-component changes, migrations, and substantial or risky fixes and
+  refactors. A small diff can still need OpenSpec when it affects authorization,
+  data integrity, concurrency, or another sensitive contract.
+- **Use a lightweight workflow** for localized, well-understood fixes restoring
+  agreed behavior, mechanical typing/lint/format fixes, test-only improvements,
+  and documentation corrections or maintenance. This applies when scope and
+  acceptance can be stated clearly in the issue or PR, with no unresolved
+  design or contract change. No separate permission to skip OpenSpec is needed.
+- **Investigate first** for read-only reviews, diagnosis, and exploration. Do not
+  create an OpenSpec change merely to investigate. If implementation follows,
+  choose the appropriate workflow once the scope is known.
+
+For lightweight work, state the problem, intended change, and verification in
+concise prose; implement within the user's authorized scope, then report the
+result and why OpenSpec was unnecessary. No RFC or separate planning approval
+is required. This exception supersedes legacy planning gates in `CLAUDE.md`;
+applicable engineering, testing, and review requirements still apply.
+If the work grows beyond these conditions, reassess before expanding scope.
+
+For OpenSpec work, find and extend an existing relevant change first. Before
+implementation, prepare the proposal, design, tasks, and delta specs and obtain
+developer confirmation of the scope and acceptance criteria. Follow the
+repository procedures in `.agents/skills/openspec-*/SKILL.md`, using the
+`openspec` CLI; these are plain Markdown procedures, not vendor-specific
+features. Use `openspec status --json` and `openspec instructions` to guide
+artifact creation. Scaffolding an empty directory does not complete planning.
+After verification and required review, reconcile the artifacts with the final
+implementation, sync the delta specs, and archive the completed change using
+the archive procedure. Use an RFC only for genuinely unresolved design choices
+or work too broad to scope into a buildable change.
+
+## Keep the specification set manageable
+
+- One change per coherent, reviewable outcome, not per alert, file, or tiny
+  implementation task. Do not combine unrelated work just to reduce file count.
+- Extend existing capability specs; do not create a new capability for every
+  issue. Keep durable specs focused on current observable behavior and contracts,
+  with acceptance scenarios that add useful coverage.
+- Give each fact one authoritative home: GitHub issues/PRs track work; active
+  changes describe intended deltas; `openspec/specs/` describes shipped capability
+  requirements; compact docs cover cross-capability guidance. Link between them
+  instead of repeating requirements or status.
+- Keep the required artifacts concise. Do not add status documents, parallel
+  summaries, or standalone verification files by default; record evidence in
+  existing tasks or the PR unless a separate record has a concrete purpose.
+- At close-out, reconcile superseded requirements and archive completed changes
+  promptly. Archives preserve history, not current instructions: exclude them
+  from default current-behavior searches and consult them only for history.
+- Do not bulk-delete archives or rewrite historical decisions as cleanup.
+  Agree any retention or deletion policy separately as a team.
+
+During the evaluation, use team retrospectives to assess whether OpenSpec made
+scope, acceptance, and review clearer, and whether artifact effort, stale active
+changes, duplicated requirements, or capability fragmentation are growing.
+Adjust this policy from that evidence; do not build another tracking system
+solely to measure the workflow. Under evaluation means the policy can evolve,
+not that substantial work may silently bypass it.
 
 ## Branch and draft PR workflow
 
-Before any implementation, create or identify the GitHub issue that tracks the
-work, then create a dedicated topic branch for that issue. Keep unrelated local
-changes out of commits. At the end of the implementation, push the branch and
-open a draft pull request for review. If the user explicitly asks to skip
-planning artifacts such as OpenSpec for a small issue fix, honor that scope and
-record the skipped workflow step in the close-out.
+For implementation work, identify or create the tracking GitHub issue and use
+a dedicated topic branch. Reuse the current branch when the user identifies it
+as the branch for this work. Keep unrelated local changes out of commits.
+At completion, push and open a draft PR unless the user limits the task to local
+changes. Lightweight work does not require an OpenSpec change alongside its
+issue or PR. Explicit user instructions take precedence over this workflow.

@@ -104,7 +104,6 @@ async def test_immediate_retry_recovers_and_success_is_cached(
     tokens = await asyncio.gather(*(provider.get_token() for _ in range(8)))
 
     assert tokens == ["workload-token"] * 8
-    assert attempts == 2
     assert await provider.get_token() == "workload-token"
     assert attempts == 2
 

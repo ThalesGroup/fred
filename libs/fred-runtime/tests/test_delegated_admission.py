@@ -23,9 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 import time
-from collections import deque
 from collections.abc import Iterator, Sequence
 from types import SimpleNamespace
 from typing import Any
@@ -51,6 +49,7 @@ from fred_core.security.delegation import (
 from fred_core.security.oidc import get_current_user_without_gcu
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
+from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.common import mcp_utils
 from fred_runtime.common.kf_base_client import KfBaseClient
@@ -102,14 +101,28 @@ LOGIN_CLIENT = "app"
 
 
 class Container(PodApplicationContext):
-    """The pod container as admission and the gate use it: the audit buffer they
-    write to, the KPI writer their stage timers take, and a control-plane client
-    the stubbed binding call never sends anything through. Built without the pod
-    configuration, which none of that path reads."""
+    """Initialize pod state without starting services, with offline KPI and HTTP."""
 
     def __init__(self) -> None:
-        self._audit_events_lock = threading.Lock()
-        self.audit_events_buffer = deque(maxlen=200)
+        super().__init__(
+            AgentPodConfig.model_validate(
+                {
+                    "app": {"runtime_id": "test-admission"},
+                    "security": {
+                        "m2m": {
+                            "enabled": False,
+                            "realm_url": GRANT_ISSUER,
+                            "client_id": LOGIN_CLIENT,
+                        },
+                        "user": {
+                            "enabled": False,
+                            "realm_url": GRANT_ISSUER,
+                            "client_id": LOGIN_CLIENT,
+                        },
+                    },
+                }
+            )
+        )
         self._kpi_writer = NoOpKPIWriter()
         self._control_plane_http_client = httpx.AsyncClient(
             transport=httpx.MockTransport(lambda _request: httpx.Response(503))

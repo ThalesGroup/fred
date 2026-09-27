@@ -81,9 +81,9 @@ def reset_owner_execution(token: Token[bool]) -> None:
 
 async def complete_cleanup(work: Awaitable[T]) -> T:
     """Await teardown to completion across task and cancel-scope cancellation."""
+    cleanup = asyncio.ensure_future(work)
+    interrupted = False
     with anyio.CancelScope(shield=True):
-        cleanup = asyncio.ensure_future(work)
-        interrupted = False
         while not cleanup.done():
             try:
                 await asyncio.shield(cleanup)
@@ -92,11 +92,10 @@ async def complete_cleanup(work: Awaitable[T]) -> T:
                 current = asyncio.current_task()
                 if current is not None:
                     current.uncancel()
-        result = cleanup.result()
-        if interrupted:
-            raise asyncio.CancelledError()
-        return result
-    raise asyncio.CancelledError()
+    result = cleanup.result()
+    if interrupted:
+        raise asyncio.CancelledError()
+    return result
 
 
 class RunScope:
@@ -134,7 +133,7 @@ class RunScope:
 
     @classmethod
     @contextmanager
-    def open(cls) -> Iterator[RunScope]:
+    def open(cls: type[RunScope]) -> Iterator[RunScope]:
         """Join an active scope; never inherit a closed scope from an abandoned stream."""
 
         parent = _CURRENT_RUN_SCOPE.get()
