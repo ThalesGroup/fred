@@ -30,7 +30,10 @@ _USER_PAGE_SIZE = 200
 
 async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
     await get_rebac_engine().check_user_permission_or_raise(_curent_user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
-    admin = create_keycloak_admin(get_configuration().security.m2m)
+    admin = create_keycloak_admin(
+        get_configuration().security.m2m,
+        user_directory=get_configuration().security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty user list.")
         return []
@@ -56,7 +59,10 @@ async def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
     if not unique_ids:
         return {}
 
-    admin = create_keycloak_admin(get_configuration().security.m2m)
+    admin = create_keycloak_admin(
+        get_configuration().security.m2m,
+        user_directory=get_configuration().security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning fallback users.")
         return {}
