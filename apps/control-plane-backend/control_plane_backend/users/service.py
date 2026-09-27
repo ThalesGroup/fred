@@ -36,6 +36,7 @@ from keycloak.exceptions import KeycloakDeleteError, KeycloakGetError, KeycloakP
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
+    IdentityManagedByProviderError,
     KeycloakM2MUserOperationDisabledError,
     UserAlreadyExistsError,
     UserNotFoundError,
@@ -220,6 +221,9 @@ async def create_user(
     Example:
     - `summary = await create_user(current_user, request, deps)`
     """
+    if _uses_local_directory(deps):
+        raise IdentityManagedByProviderError(request.username)
+
     admin = _get_keycloak_admin_for_user_operations(deps)
 
     try:

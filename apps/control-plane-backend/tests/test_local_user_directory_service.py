@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import secrets
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -20,6 +21,10 @@ import pytest
 
 from control_plane_backend.users import service
 from control_plane_backend.users.dependencies import UserServiceDependencies
+from control_plane_backend.users.schemas import (
+    CreateUserRequest,
+    IdentityManagedByProviderError,
+)
 
 
 @pytest.mark.asyncio
@@ -60,3 +65,19 @@ async def test_local_user_reads_never_construct_admin(monkeypatch):
     assert await service.find_user_sub_by_username("alice", deps) == str(user_id)
     assert await service.user_exists_in_keycloak(str(user_id), deps) is True
     assert await service.user_exists_in_keycloak("invalid", deps) is False
+
+
+@pytest.mark.asyncio
+async def test_local_user_creation_is_refused_before_admin_client() -> None:
+    deps = UserServiceDependencies(
+        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
+            AssertionError("Keycloak Admin API must not be constructed")
+        ),
+    )
+    request = CreateUserRequest(
+        username="alice", email="alice@example.test", password=secrets.token_urlsafe()
+    )
+
+    with pytest.raises(IdentityManagedByProviderError, match="alice"):
+        await service.create_user(None, request, deps)
