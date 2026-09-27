@@ -3,6 +3,8 @@
 Work on a branch created from `test-23-09` (it contains `add-delegated-agent-execution`). Read `proposal.md` and `design.md` first. **Hard rule for every task: with no new setting configured, behavior, URLs, claims and responses must stay identical to today.** Do not rename existing symbols, settings or files.
 
 - [ ] 0.1 Frontend spike: in a throwaway branch, create `keycloak-js ^25` with `new Keycloak({ oidcProvider: <issuer>, clientId })` against a real Entra tenant (SPA app registration, scope `api://fred-api/access_as_user`). Verify login with PKCE, silent refresh, logout through `end_session_endpoint` and that the access token's `aud` is the Fred API. Record the result in this file. If it fails, stop and open a follow-up change "replace keycloak-js with oidc-client-ts behind KeyCloakService"; tasks 1–6 below do not depend on it.
+Spike status (2026-09-27): blocked before a tenant run. The installed `keycloak-js` 25.0.6 API and source have no `oidcProvider` constructor option, so the prescribed construction cannot compile. An Entra test tenant is also not available in this workspace. The frontend adapter choice and the follow-up change are awaiting developer confirmation.
+
 - [x] 0.2 Confirm the baseline: run `make test` and `make code-quality` on the unmodified branch and record failures that already exist, so they are not attributed to this change. Both commands stopped in `libs/fred-pod` before checks ran: Python 3.14 could not create `.venv` because `ensurepip` is unavailable (`python3.14-venv` missing).
 
 ## 1. Configuration models (`libs/fred-pod`)
