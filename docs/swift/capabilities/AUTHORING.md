@@ -172,6 +172,19 @@ use LangChain middleware on ReAct/Deep.
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
 
+All three runtimes build `CapabilityContext` through the same assembly path:
+identity, typed stored config, turn options, team settings and `RuntimeServices`
+reach `tools(ctx)` unchanged. Graph keeps those original tool objects and calls
+LangChain's `ainvoke`, including native argument validation and asynchronous
+execution of synchronous tools. `content_and_artifact` results preserve Fred
+sources/UI parts; content fills empty artifact blocks without replacing authored
+blocks. For reliable failure classification on Graph, return a typed
+`ToolInvocationResult(is_error=True)` artifact or let exceptions propagate. A
+plain-content tool using native `handle_tool_error` / `handle_validation_error`
+returns only its handled string on Graph, with no failure status; use
+`content_and_artifact` if configuring those handlers. Model middleware and MCP prompt-group injection remain specific to the
+ReAct/Deep model loop; Graph authors control their own model prompts.
+
 Graph capability approval uses the same `HitlSpec` predicate, question and choices
 as ReAct/Deep. Only an explicit `proceed` executes the tool. A refusal returns an
 `is_error` tool result to the graph node. Deep child agents still cannot open a

@@ -1441,6 +1441,8 @@ the long-running summarize path. First consumer: `document_access`'s
 
 ### 8.22 ✅ `AgentCapability.tools()` — Graph agents can use capabilities (2026-07-22)
 
+The tool adapter described below was replaced by native invocation in §8.97.
+
 **What changed.** `AgentCapability` (`fred-sdk/contracts/capability/base.py`) gains
 `tools(ctx) -> Sequence[BaseTool]`, the primary, execution-model-agnostic runtime
 surface (RFC §3.2); `middleware()` loses its `@abstractmethod` and defaults to
@@ -6305,3 +6307,18 @@ resume admission and atomic claim mechanism. Authors must preserve call ordering
 arbitrary node side effects, model calls and delegation are not memoized by this
 boundary. External effects still require idempotency across a crash before the
 result checkpoint is durable.
+
+
+### 8.97 Native capability tools on Graph (2026-09-27)
+
+Graph now keeps the original capability tool instances, as ReAct/Deep do, and
+invokes them through LangChain `ainvoke`. The former wrapper calling `.coroutine`
+directly is removed. Native validation, callbacks and synchronous-tool offloading
+are preserved. The runtime reads `ToolMessage.artifact` for structured results,
+keeps plain tuples as data, and fills empty Fred artifact blocks from textual
+content. Native `ToolMessage.status` reaches tool events. Plain-content handled-error
+strings carry no status under LangChain's raw invocation contract; capabilities
+requiring classified failures must use typed artifacts or propagated exceptions.
+Tool-name collision checks, authorization, audit and HITL are unchanged.
+Identity, services and typed capability options already use one assembly path;
+model middleware and MCP prompt injection remain specific to ReAct/Deep.

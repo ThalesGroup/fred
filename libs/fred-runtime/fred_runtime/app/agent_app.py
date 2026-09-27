@@ -3580,7 +3580,7 @@ def _build_capability_block(
     capabilities so their instructions are delivered — otherwise a default
     ReAct agent would silently lose its non-negotiable grounding contract.
     This block is built identically for both agent kinds (CAPAB-02), but a
-    Graph agent reads only `block.tools` — MCP tools reach it (a separate,
+    Graph agent consumes `block.tools` and `block.hitl` — MCP tools reach it (a separate,
     already execution-model-agnostic path, `FredMcpToolProvider`),
     `block.mcp_prompt_groups` does NOT (Graph never builds a ReAct tool-prompt
     suffix). A Graph agent that needs an MCP server's grounding instructions

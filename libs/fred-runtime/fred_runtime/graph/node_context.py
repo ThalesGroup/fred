@@ -578,11 +578,30 @@ class NodeContext:
                 )
                 # A ToolCall envelope preserves MCP artifacts that plain args discard.
                 if isinstance(raw_result, ToolMessage):
-                    raw_result = (
-                        raw_result.artifact
-                        if isinstance(raw_result.artifact, ToolInvocationResult)
-                        else raw_result.content
-                    )
+                    if raw_result.status == "error":
+                        obs.fail()
+                    artifact = raw_result.artifact
+                    if isinstance(artifact, ToolInvocationResult):
+                        if (
+                            not artifact.blocks
+                            and isinstance(raw_result.content, str)
+                            and raw_result.content
+                        ):
+                            artifact = artifact.model_copy(
+                                update={
+                                    "blocks": (
+                                        ToolContentBlock(
+                                            kind=ToolContentKind.TEXT,
+                                            text=raw_result.content,
+                                        ),
+                                    )
+                                }
+                            )
+                        raw_result = artifact
+                    else:
+                        raw_result = (
+                            artifact if artifact is not None else raw_result.content
+                        )
                 normalized = _normalize_runtime_tool_output(raw_result)
                 # A capability tool reports failure with an is_error result rather
                 # than raising; read it off the typed result before normalization
@@ -936,12 +955,8 @@ def _render_tool_result(result: ToolInvocationResult) -> str:
 
 
 def _normalize_runtime_tool_output(raw: object) -> object:
-    if isinstance(raw, tuple) and len(raw) == 2:
-        content, artifact = raw
-        normalized_artifact = _normalize_runtime_tool_output(artifact)
-        if isinstance(normalized_artifact, (dict, list)):
-            return normalized_artifact
-        raw = normalize_mcp_content(content)
+    if isinstance(raw, tuple):
+        return [_normalize_runtime_tool_output(item) for item in raw]
 
     if isinstance(raw, list):
         raw = normalize_mcp_content(raw)

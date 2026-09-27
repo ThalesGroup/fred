@@ -1344,7 +1344,6 @@ async def test_personal_delegated_tool_allows_active_person():
 async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
     """The real adapters authorize once, execute at most once and record one outcome."""
     from fred_core.portable import InMemoryMetricsProvider
-    from fred_runtime.graph.graph_runtime import _adapt_capability_tool_for_graph
     from fred_runtime.graph.node_context import NodeContext
     from fred_runtime.integrations.v2_runtime.adapters import InProcessToolInvoker
     from fred_sdk.contracts.context import ToolInvocationResult
@@ -1386,7 +1385,7 @@ async def test_runtime_tool_guarantees_match(path: str, outcome: str) -> None:
             graph_agent_id="graph",
             node_id="call",
             allowed_tool_refs=frozenset({"probe"}),
-            runtime_tools={"probe": _adapt_capability_tool_for_graph(probe)},
+            runtime_tools={"probe": probe},
             tuning_values={},
             sink=lambda _: None,
         )
