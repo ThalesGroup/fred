@@ -52,3 +52,44 @@ class BaseUserStore(ABC):
         as the sole enforcement input — a negative usage silently grants free
         quota (#2149).
         """
+
+    @abstractmethod
+    async def upsert_identity(
+        self,
+        user_id: UUID,
+        username: str,
+        email: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> None:
+        """Record a person's current identity without changing their local state."""
+
+    @abstractmethod
+    async def search_identities(
+        self, query: str, limit: int
+    ) -> list[dict[str, str | None]]:
+        """Search signed-in people by name or email."""
+
+    @abstractmethod
+    async def list_identities(
+        self, offset: int, limit: int
+    ) -> list[dict[str, str | None]]:
+        """Return one page of signed-in people."""
+
+    @abstractmethod
+    async def get_identities(self, ids: list[UUID]) -> list[dict[str, str | None]]:
+        """Return signed-in people with these IDs."""
+
+    @abstractmethod
+    async def count_identities(self) -> int:
+        """Count signed-in people."""
+
+    @abstractmethod
+    async def find_ids_by_usernames(
+        self, usernames: list[str] | None = None
+    ) -> dict[str, str]:
+        """Resolve usernames to IDs for declarative imports."""
+
+    @abstractmethod
+    async def identity_exists(self, user_id: UUID) -> bool:
+        """Whether a signed-in identity exists."""
