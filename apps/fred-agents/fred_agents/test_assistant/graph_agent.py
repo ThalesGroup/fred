@@ -161,6 +161,7 @@ class TestAssistantGraphAgent(GraphAgent):
     __test__ = False  # an agent definition, not a pytest test class
 
     agent_id: str = TEST_ASSISTANT_AGENT_ID
+    supports_capabilities: bool = True
     role: str = "Test Assistant (no LLM)"
     description: str = (
         "Graph agent for UI and form testing (no LLM by default). "

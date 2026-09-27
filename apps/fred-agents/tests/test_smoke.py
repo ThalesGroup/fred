@@ -238,6 +238,11 @@ def test_fred_agents_pod_registers_and_streams_sentinel_offline(
             for template in templates_response.json()
             if template["template_agent_id"] == "fred.github.test_assistant"
         )
+        assert test_assistant_template["supports_capabilities"] is True
+        assert "document_access" in {
+            capability["id"]
+            for capability in test_assistant_template["available_capabilities"]
+        }
         field_keys = {
             field["key"]
             for field in test_assistant_template["default_tuning"]["fields"]
