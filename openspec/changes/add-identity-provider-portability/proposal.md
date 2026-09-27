@@ -22,7 +22,7 @@ The delegation work on `test-23-09` (`add-delegated-agent-execution`) already re
 - Add `security.user_directory: keycloak | local` (default `keycloak`). With `local`, the Keycloak Admin API is never called: Fred records a minimal identity snapshot (username, email, first/last name) in the existing Postgres `users` table on authenticated requests, and serves list, search, display names, counts, `users.json` username resolution and existence checks from it. User creation is refused with an explicit reason; user deletion suspends the person in Fred and leaves the identity-provider account untouched.
 - The declarative `users.json` import never creates identities in `local` mode: an entry that cannot be resolved and would have been created is refused with the same `managed_by_identity_provider` reason, and the import fails closed as it does today.
 - First-party applications configured from the environment (`security/env_config.py`) accept the same provider settings as YAML-configured services.
-- Frontend: expose `provider`, `scope`, `user_directory` and the identity and roles claims through `/frontend/config`. With `oidc`, `keycloak-js` is created in generic OIDC mode (`oidcProvider`) with the configured scope. The browser derives the **same user id as the backends** (configured claim, `uuid5` fallback), so personal-space ids stay consistent, and reads roles from the configured claim. Keycloak-only features (password-grant self-test probe, user creation button) are hidden.
+- Frontend: expose `provider`, `scope`, `user_directory` and the identity and roles claims through `/frontend/config`. With `oidc`, `oidc-client-ts` handles Authorization Code with PKCE, refresh and provider logout behind the existing `KeyCloakService` facade; Keycloak continues to use `keycloak-js`. The browser derives the **same user id as the backends** (configured claim, `uuid5` fallback), so personal-space ids stay consistent, and reads roles from the configured claim. Keycloak-only features (password-grant self-test probe, user creation button) are hidden.
 - Knowledge Flow no longer refuses to start when the issuer is not a `…/realms/<realm>` URL in `oidc` mode.
 - Add local test tooling in the sibling `fred-deployment-factory` repository: a Keycloak "generic OIDC shape" profile, an optional non-Keycloak mock OIDC provider, and a script that records the demo users in the local directory before import.
 - Document provider setup, with a complete Microsoft Entra ID recipe (app registrations, v2 tokens, scope, audience, app roles, token lifetime).
@@ -46,7 +46,7 @@ None. Keycloak deployments keep their current behavior.
 - No SCIM endpoint, no Microsoft Graph directory lookup, no invitation workflow (people who never signed in are not searchable in `local` mode).
 - No renaming of Keycloak-named symbols, settings or files.
 - No change to OpenFGA models, existing tuples or the delegation protocol.
-- No replacement of `keycloak-js` unless the validation spike (task 0) fails.
+- No replacement of `keycloak-js` for existing Keycloak deployments. The OIDC path uses a separate browser adapter because the installed `keycloak-js` 25.0.6 has no `oidcProvider` API.
 
 ## Impact
 

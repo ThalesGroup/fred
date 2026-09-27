@@ -144,16 +144,15 @@ Server-side refresh of a person's token remains provider-dependent. Entra refuse
 
 *Alternative rejected:* a `UserDirectory` interface with two implementations and a refactor of every caller. It is cleaner in the abstract, but it touches far more Keycloak code for the same behavior; the one-branch approach keeps the Keycloak path untouched.
 
-### 8. Frontend: generic mode of `keycloak-js`
+### 8. Frontend: provider-specific browser adapters behind `KeyCloakService`
 
-`/frontend/config` `user_auth` gains `provider`, `scope` and `user_directory` (from `security.user` / `security`). In `KeycloakService.ts` `createKeycloakInstance`:
+`/frontend/config` `user_auth` supplies `provider`, `scope`, `user_directory`, `uid_claim` and `roles_claim`. The public `KeyCloakService` facade and its callers remain unchanged.
 
-- `keycloak`: unchanged (`parseKeycloakUrl`, realm mode);
-- `oidc`: `new Keycloak({ oidcProvider: realm_url, clientId })`, without calling `parseKeycloakUrl`; `init` and `login` pass `scope` when configured, keeping `pkceMethod: "S256"` and `checkLoginIframe: false`.
+- `keycloak` (default): keep the existing `keycloak-js` construction, login, refresh, logout and token lifecycle exactly as today.
+- `oidc`: create an `oidc-client-ts` `UserManager` from the configured issuer and UI client id. Use Authorization Code with PKCE S256, browser redirect callback handling and session storage. Request `openid profile offline_access` plus the configured API scope. Keep the access token (not the ID token) as the API bearer. On page reload, restore the validated `User`; on token expiry/401, use `signinSilent()` (refresh token where available, silent iframe otherwise) with the existing timeout and single-flight behavior. A missing/failed session fails closed and re-enters the provider sign-in flow. Logout clears Fred's persisted bearer and calls `signoutRedirect()` with a registered post-logout URI. The callback handles sign-out state without starting a second login before the provider returns.
+- The OIDC adapter maps access-token claims to the existing getters. `GetKeycloakRealmConfig()` returns `null` in OIDC mode. The self-test password probe and expiry scenario remain hidden. No OIDC callback may replay a token after logout.
 
-`GetKeycloakRealmConfig()` returns `null` in `oidc` mode, which already disables the password-grant self-test probe and the credential-expiry scenario (`SkipStep`). The user administration page hides "create user" when `user_directory == "local"`.
-
-**Validation spike first (task 0):** `keycloak-js ^25` generic mode against a real Entra tenant, covering login, silent refresh, logout and the requested scope. If it fails, the fallback is `oidc-client-ts` behind the same `KeyCloakService` facade (≈300 extra lines), tracked as a separate follow-up.
+The former `keycloak-js` `oidcProvider` spike failed at the API precondition: the installed 25.0.6 types and implementation have no such option. The developer authorized updating this change to use `oidc-client-ts`. Live Entra validation still requires tenant credentials; mock OIDC covers the browser flow locally.
 
 ### 8b. Frontend identity and roles match the backends
 
@@ -190,7 +189,7 @@ Testing uses the sibling `fred-deployment-factory` repository on its branch matc
 - **Local directory completeness.** Only people who signed in at least once are searchable, and suspended people still appear in pickers. Acceptable for this change; SCIM or Graph can be added later.
 - **Snapshot staleness.** Name and email changes appear after the next throttled write (≤10 minutes after activity).
 - **Grant trust model** is unchanged from delegation: any workload holding `delegation_caller` can name any person, bounded by that person's permissions. The Entra recipe restricts the app role to the runtime and first-party apps.
-- **`keycloak-js` generic mode** is the main unknown, hence the spike.
+- **Browser OIDC compatibility** depends on the provider allowing the configured redirect and post-logout URIs, refresh-token or silent renew policy, and CORS on discovery/token endpoints; test with the mock and then a real Entra tenant.
 - **Import before first sign-in.** In `local` mode the demo import fails closed until every named user has signed in once. Locally the warm-up script covers it; at a customer, imports are run after users' first sign-in.
 - **Browser/backend uid drift.** A normalization mismatch would silently point people at another personal space. It is mitigated by the shared test vector and by the level-3 bench (non-UUID `sub`).
 
