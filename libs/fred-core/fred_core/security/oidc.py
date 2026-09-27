@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import time
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from typing import Any, Dict, Tuple
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -89,6 +90,10 @@ USER_SECURITY_CONFIG: UserSecurity | None = None
 # machine address carry that issuer. Set by apply_security_profile.
 _REALM_ISSUERS: frozenset[str] = frozenset()
 _JWKS_CLIENT: PyJWKClient | None = None  # cached for perf
+# Per-process write throttle; entries hold only IDs and monotonic deadlines.
+_IDENTITY_SNAPSHOT_DEADLINES: OrderedDict[UUID, float] = OrderedDict()
+_IDENTITY_SNAPSHOT_INTERVAL_SECONDS = 600.0
+_IDENTITY_SNAPSHOT_MAX_ENTRIES = 2048
 _JWT_CACHE: ThreadSafeLRUCache[str, tuple[float, KeycloakUser]] = ThreadSafeLRUCache(
     JWT_CACHE_MAX_SIZE
 )
@@ -654,6 +659,40 @@ async def _enforce_gcu(
     return user
 
 
+async def _snapshot_local_identity(
+    user: KeycloakUser, user_store: BaseUserStore, configuration: Any
+) -> None:
+    if configuration.security.user_directory != "local" or not KEYCLOAK_ENABLED:
+        return
+    delegation = get_delegation_config()
+    if (
+        not user.username
+        or is_service_agent(user)
+        or delegation.caller_role in user.caller_roles
+        or user.service_account
+    ):
+        return
+    try:
+        user_id = UUID(user.uid)
+    except ValueError:
+        return
+    now = time.monotonic()
+    deadline = _IDENTITY_SNAPSHOT_DEADLINES.get(user_id, 0.0)
+    if now < deadline:
+        return
+    _IDENTITY_SNAPSHOT_DEADLINES[user_id] = now + _IDENTITY_SNAPSHOT_INTERVAL_SECONDS
+    _IDENTITY_SNAPSHOT_DEADLINES.move_to_end(user_id)
+    if len(_IDENTITY_SNAPSHOT_DEADLINES) > _IDENTITY_SNAPSHOT_MAX_ENTRIES:
+        _IDENTITY_SNAPSHOT_DEADLINES.popitem(last=False)
+    try:
+        await user_store.upsert_identity(
+            user_id, user.username, user.email, user.first_name, user.last_name
+        )
+    except Exception:
+        _IDENTITY_SNAPSHOT_DEADLINES.pop(user_id, None)
+        logger.warning("[AUTH] Local identity snapshot failed", exc_info=True)
+
+
 async def get_current_user(
     request: Request,
     token: str = Security(oauth2_scheme),
@@ -681,6 +720,7 @@ async def get_current_user(
         # The person's acceptance was gated by their own token when the run was
         # admitted; the workload speaking for them has no acceptance row of its own.
         return user
+    await _snapshot_local_identity(user, user_store, configuration)
     return await _enforce_gcu(user, user_store, configuration)
 
 
@@ -698,6 +738,7 @@ async def get_current_user_or_service(
         return user
     if is_service_agent(user):
         return user
+    await _snapshot_local_identity(user, user_store, configuration)
     return await _enforce_gcu(user, user_store, configuration)
 
 
