@@ -283,6 +283,6 @@ describe("SelfTestPage credential-expiry check", () => {
     });
 
     expect(container.textContent).not.toContain("rework.selftest.authz.expiry");
-    expect(container.textContent).toContain("rework.selftest.authz.testProfile.disabledInsecure");
+    expect(container.textContent).not.toContain("rework.selftest.authz.testProfile.title");
   });
 });
