@@ -3,8 +3,9 @@
 Fred keeps Keycloak as the default identity provider. A deployment can select an
 OIDC issuer in its security configuration. OIDC mode uses the issuer's discovery
 document at startup for the JWKS and token endpoint; explicit endpoint overrides
-are available. The browser login for a non-Keycloak provider still needs its
-frontend adapter validated before this configuration can be used end to end.
+are available. In the browser, Keycloak uses `keycloak-js` and other OIDC
+providers use `oidc-client-ts` behind the same authentication service. A new
+provider still needs a live sign-in, refresh and logout check before rollout.
 
 ## Settings
 
@@ -48,8 +49,8 @@ enable workload delegation rather than relying on backend person-token refresh.
    `family_name` if Fred needs them. Record the API application's GUID.
 2. Create a **Fred UI** SPA registration. Register the exact browser redirect
    and post-logout URLs (for local development, `http://localhost:5173/`), grant
-   delegated permission `api://fred-api/access_as_user`, and use authorization
-   code with PKCE. Record its client ID. The browser never receives a client
+   delegated permission `api://fred-api/access_as_user` and `offline_access`,
+   and use authorization code with PKCE. Record its client ID. The browser never receives a client
    secret.
 3. Create separate confidential registrations for **runtime**, **knowledge
    flow**, and **control plane**. Grant each the Fred API `service_agent`
@@ -84,7 +85,9 @@ explain the Entra-side setup.
 - Confirm the issuer's discovery document reports the exact issuer URL and
   valid JWKS and token endpoints. Fred checks the issuer at startup.
 - Confirm browser code flow with PKCE, CORS for the token endpoint, exact
-  redirect/logout URLs, and a scope that yields an API access token.
+  redirect/logout URLs, and a scope that yields an API access token. The UI
+  requests `openid profile offline_access` along with the configured API scope;
+  confirm that refresh tokens or silent authorization work for this provider.
 - Inspect a person access token and a client-credentials access token for
   issuer, audience, uid, username, roles, and expiry. Configure claim paths
   against those access tokens, not an ID token.
