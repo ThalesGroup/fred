@@ -60,7 +60,7 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 
 ## 7. Frontend
 
-- [ ] 7.1 Control plane `/frontend/config`: add `provider`, `scope`, `user_directory`, `uid_claim` and `roles_claim` to `user_auth` (from `security.user.provider`, `security.user.scope`, `security.user_directory`, `security.user.claims.uid`, `security.user.roles_claim`). Regenerate `controlPlaneOpenApi.ts`.
+- [x] 7.1 Control plane `/frontend/config`: add `provider`, `scope`, `user_directory`, `uid_claim` and `roles_claim` to `user_auth` (from `security.user.provider`, `security.user.scope`, `security.user_directory`, `security.user.claims.uid`, `security.user.roles_claim`). Regenerate `controlPlaneOpenApi.ts`.
 - [ ] 7.2 `apps/frontend/src/common/config.tsx`: pass the new values to `createKeycloakInstance`, which keeps them in module state.
 - [ ] 7.3 `apps/frontend/src/security/KeycloakService.ts`: when `provider === "oidc"`, create `new Keycloak({ oidcProvider: realm_url, clientId })` without `parseKeycloakUrl`, and pass `scope` to `init`/`login` when set. Keep `pkceMethod: "S256"` and `checkLoginIframe: false`. `GetKeycloakRealmConfig()` returns `null` in `oidc` mode. The Keycloak branch is untouched.
 - [ ] 7.4 Check that `SelfTestPage.tsx` / `useAuthzProbeRun.ts` hide the "test another profile" probe when `GetKeycloakRealmConfig()` is `null`, and that `credentialExpiryScenario.ts` skips. Add the guard if either does not already.

@@ -449,6 +449,11 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
             enabled=True,
             realm_url=str(user_security.realm_url),
             client_id=user_security.client_id,
+            provider=user_security.provider,
+            scope=user_security.scope,
+            user_directory=deps.configuration.security.user_directory,
+            uid_claim=user_security.claims.uid,
+            roles_claim=user_security.roles_claim,
         )
         if user_security.enabled
         else FrontendUserAuthConfig(enabled=False)
