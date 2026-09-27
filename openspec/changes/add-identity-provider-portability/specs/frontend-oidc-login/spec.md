@@ -16,7 +16,7 @@ Defines how the Fred frontend signs people in, keeps their session alive and sig
 
 ### Requirement: Sign-in uses the configured provider
 
-With `provider: oidc`, the frontend SHALL create its client in generic OIDC mode from the issuer, SHALL NOT require a `…/realms/<realm>` URL, SHALL use Authorization Code with PKCE (S256), and SHALL request the configured scope. Sign-in SHALL redirect to the provider's own login page.
+With `provider: oidc`, the frontend SHALL create an `oidc-client-ts` browser client from the issuer behind `KeyCloakService`, SHALL NOT require a `…/realms/<realm>` URL, SHALL use Authorization Code with PKCE (S256), and SHALL request `openid profile offline_access` plus the configured API scope. The API bearer SHALL be the access token, not the ID token. Sign-in SHALL redirect to the provider's own login page.
 
 #### Scenario: Entra sign-in
 
@@ -27,7 +27,7 @@ With `provider: oidc`, the frontend SHALL create its client in generic OIDC mode
 
 ### Requirement: Session renewal and sign-out work with the provider
 
-With `provider: oidc`, the frontend SHALL renew the access token in the browser before expiry and SHALL sign out through the provider's `end_session_endpoint`, returning to Fred.
+With `provider: oidc`, the frontend SHALL restore a valid session on reload, renew the access token in the browser before expiry (using a refresh token or silent authorization), reject a failed refresh without replaying an invalidated token, and sign out through the provider's `end_session_endpoint`, returning to Fred. With the default `keycloak` provider, the existing `keycloak-js` flow SHALL be unchanged.
 
 #### Scenario: Long session
 
