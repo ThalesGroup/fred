@@ -34,7 +34,7 @@ Work on a branch created from `test-23-09` (it contains `add-delegated-agent-exe
 - [x] 4.1 `fred_pod/security/backend_to_backend_auth.py`: add `token_url_override: str | None = None` to `M2MAuthConfig`. `token_url` returns the override when set, else today's value.
 - [x] 4.2 Pass `scope=m2m.scope` and `token_url_override=<resolved token_endpoint>` in the three builders: `apps/control-plane-backend/control_plane_backend/app/context.py`, `libs/fred-runtime/fred_runtime/common/outbound_credentials.py`, `libs/fred-sdk/fred_sdk/knowledge_base/configuration.py`. Resolve with `resolve_endpoints(provider=m2m.provider, realm_url=m2m.realm_url, token_url=m2m.token_url)`.
 - [x] 4.3 `libs/fred-runtime/fred_runtime/runtime_support/user_token_refresher.py`: take the full token URL instead of the realm URL; move the `/protocol/openid-connect/token` suffix out. In `integrations/v2_runtime/adapters.py`, pass `get_token_endpoint()` instead of `get_keycloak_url()`. Keep `_identity_digest` stable by digesting the token URL.
-- [ ] 4.4 `libs/fred-core/fred_core/security/outbound.py`: `ClientCredentialsProvider.__init__` accepts an optional keyword `token_url` that takes precedence over `keycloak_base` + `realm`. Existing callers are unchanged.
+- [x] 4.4 `libs/fred-core/fred_core/security/outbound.py`: `ClientCredentialsProvider.__init__` accepts an optional keyword `token_url` that takes precedence over `keycloak_base` + `realm`. Existing callers are unchanged.
 - [ ] 4.5 Tests: the token URL and form (including `scope`) sent by `M2MTokenProvider` for Keycloak (unchanged) and for `oidc`; the refresher posts to the given URL; `ClientCredentialsProvider` honors `token_url`.
 
 ## 5. Startup validation
