@@ -197,6 +197,26 @@ def initialize_user_security(config: UserSecurity) -> None:
         )
 
 
+def validate_provider_configuration(config: SecurityConfiguration) -> None:
+    """Refuse OIDC settings that require Keycloak-specific token or directory data."""
+    if config.user.provider != "oidc":
+        return
+    if config.delegation.service_accounts_only:
+        raise ValueError(
+            "security.delegation.service_accounts_only requires Keycloak; "
+            "set it to false for security.user.provider=oidc"
+        )
+    if config.delegation.in_use and not config.delegation.caller_roles_claim:
+        raise ValueError(
+            "security.delegation.caller_roles_claim is required when delegation "
+            "is in use with security.user.provider=oidc"
+        )
+    if config.user_directory == "keycloak":
+        raise ValueError(
+            "security.user_directory must be local when security.user.provider=oidc"
+        )
+
+
 def apply_security_profile(config: SecurityConfiguration) -> None:
     """
     Enforce a hardened security profile at startup (RUNTIME-07 rev. 2, F5/F6).
@@ -217,6 +237,8 @@ def apply_security_profile(config: SecurityConfiguration) -> None:
     (dev behavior unchanged).
     """
     global STRICT_ISSUER, STRICT_AUDIENCE, _REALM_ISSUERS
+
+    validate_provider_configuration(config)
 
     from fred_pod.security.backend_to_backend_auth import set_token_observer
 
