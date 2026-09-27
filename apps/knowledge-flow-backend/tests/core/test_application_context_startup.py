@@ -56,3 +56,30 @@ def test_user_security_refuses_to_start_without_the_client_secret(app_context: A
 
     assert records.records
     assert all(_REQUIRED_VARIABLE not in record.getMessage() for record in records.records)
+
+
+def test_oidc_issuer_does_not_need_keycloak_realm_path(
+    app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configuration = app_context.configuration.model_copy(deep=True)
+    configuration.security.user.provider = "oidc"
+    configuration.security.user.enabled = True
+    configuration.security.user.realm_url = "https://identity.example/tenant/v2.0"
+    monkeypatch.setenv(_REQUIRED_VARIABLE, secrets.token_urlsafe())
+    monkeypatch.setattr(ApplicationContext, "_instance", None)
+
+    ApplicationContext(configuration)
+
+
+def test_keycloak_issuer_still_requires_realm_path(
+    app_context: ApplicationContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configuration = app_context.configuration.model_copy(deep=True)
+    configuration.security.user.provider = "keycloak"
+    configuration.security.user.enabled = True
+    configuration.security.user.realm_url = "https://identity.example/tenant/v2.0"
+    monkeypatch.setenv(_REQUIRED_VARIABLE, secrets.token_urlsafe())
+    monkeypatch.setattr(ApplicationContext, "_instance", None)
+
+    with pytest.raises(ValueError, match="Invalid Keycloak URL"):
+        ApplicationContext(configuration)
