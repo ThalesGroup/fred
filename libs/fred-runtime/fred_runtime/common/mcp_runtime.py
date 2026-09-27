@@ -364,10 +364,10 @@ class MCPRuntime:
                 raise RuntimeError("MCPRuntime lifecycle attempt was not prepared.")
             await ready_event.wait()
 
-            if self._lifecycle_error is None:
+            last_error = self._lifecycle_error
+            if last_error is None:
                 return
 
-            last_error = self._lifecycle_error
             await self._await_lifecycle_attempt_completion()
 
             if isinstance(last_error, RunStopError):
