@@ -13,11 +13,11 @@
 # limitations under the License.
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -56,6 +56,129 @@ class PostgresUserStore(BaseUserStore):
 
     async def save(self, user: UserRow) -> None:
         pass
+
+    @staticmethod
+    def _identity_dict(user: UserRow) -> dict[str, str | None]:
+        return {
+            "id": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "firstName": user.first_name,
+            "lastName": user.last_name,
+        }
+
+    async def upsert_identity(
+        self,
+        user_id: UUID,
+        username: str,
+        email: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> None:
+        values = {
+            "username": username,
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "last_seen_at": datetime.now(timezone.utc),
+        }
+        async with use_session(self._sessions) as session:
+            result = await session.execute(
+                update(UserRow).where(UserRow.id == user_id).values(**values)
+            )
+            if result.rowcount:
+                return
+            try:
+                async with session.begin_nested():
+                    session.add(UserRow(id=user_id, **values))
+                    await session.flush()
+            except IntegrityError:
+                await session.execute(
+                    update(UserRow).where(UserRow.id == user_id).values(**values)
+                )
+
+    async def search_identities(
+        self, query: str, limit: int
+    ) -> list[dict[str, str | None]]:
+        pattern = f"%{query}%"
+        fields = (
+            UserRow.username,
+            UserRow.email,
+            UserRow.first_name,
+            UserRow.last_name,
+        )
+        async with use_session(self._sessions) as session:
+            rows = (
+                await session.scalars(
+                    select(UserRow)
+                    .where(UserRow.username.is_not(None))
+                    .where(or_(*(field.ilike(pattern) for field in fields)))
+                    .order_by(UserRow.username, UserRow.id)
+                    .limit(limit)
+                )
+            ).all()
+        return [self._identity_dict(row) for row in rows]
+
+    async def list_identities(
+        self, offset: int, limit: int
+    ) -> list[dict[str, str | None]]:
+        async with use_session(self._sessions) as session:
+            rows = (
+                await session.scalars(
+                    select(UserRow)
+                    .where(UserRow.username.is_not(None))
+                    .order_by(UserRow.username, UserRow.id)
+                    .offset(offset)
+                    .limit(limit)
+                )
+            ).all()
+        return [self._identity_dict(row) for row in rows]
+
+    async def get_identities(self, ids: list[UUID]) -> list[dict[str, str | None]]:
+        if not ids:
+            return []
+        async with use_session(self._sessions) as session:
+            rows = (
+                await session.scalars(
+                    select(UserRow).where(
+                        UserRow.id.in_(ids), UserRow.username.is_not(None)
+                    )
+                )
+            ).all()
+        by_id = {row.id: self._identity_dict(row) for row in rows}
+        return [by_id[user_id] for user_id in ids if user_id in by_id]
+
+    async def count_identities(self) -> int:
+        async with use_session(self._sessions) as session:
+            count = await session.scalar(
+                select(func.count())
+                .select_from(UserRow)
+                .where(UserRow.username.is_not(None))
+            )
+        return count or 0
+
+    async def find_ids_by_usernames(
+        self, usernames: list[str] | None = None
+    ) -> dict[str, str]:
+        stmt = select(UserRow).where(UserRow.username.is_not(None))
+        if usernames is not None:
+            if not usernames:
+                return {}
+            stmt = stmt.where(
+                func.lower(UserRow.username).in_([name.lower() for name in usernames])
+            )
+        async with use_session(self._sessions) as session:
+            rows = (await session.scalars(stmt)).all()
+        return {row.username: str(row.id) for row in rows if row.username is not None}
+
+    async def identity_exists(self, user_id: UUID) -> bool:
+        async with use_session(self._sessions) as session:
+            value = await session.scalar(
+                select(UserRow.id).where(
+                    UserRow.id == user_id, UserRow.username.is_not(None)
+                )
+            )
+        return value is not None
 
     async def find_user_by_id(
         self, user_id: UUID, session: AsyncSession | None = None
