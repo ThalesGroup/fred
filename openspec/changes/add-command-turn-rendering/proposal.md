@@ -46,16 +46,19 @@ Nothing writes a descriptor yet. The composer trigger is the next slice.
 
 **Runtime — `libs/fred-runtime`, `libs/fred-core`**
 
-No model changes. `_AgentExecuteRequest.context` is already an open
-`dict[str, Any]` and is already the channel for caller-supplied facts about a
-turn that are not the message — it carries `session_id`, `user_id` and
-`team_id` today, and the frontend already sends it as `runtime_context`. The
-descriptor becomes one more key in it.
+One optional field on `RuntimeContext` (`libs/fred-sdk`), which is the
+model the frontend already fills per turn — it carries `context_prompt_text`,
+`language`, `attachments_markdown` and a dozen other per-turn selections, and
+growing it one field at a time is how it is meant to work. No new endpoint,
+no new request model, nothing breaking.
 
-What that costs: one key read where `session_id` is read, one optional
-argument threaded to `make_user_text`, and a line in
-`RUNTIME-EXECUTION-CONTRACT.md` recording the new `context` key. No field is
-added to a frozen model.
+From there the descriptor rides for free: `RuntimeContext` is
+`model_dump()`ed into the internal `_AgentExecuteRequest.context` dict, which
+the turn-build site already reads by key for `session_id` and `team_id`. So
+the runtime side is one key read plus one optional argument threaded to
+`make_user_text`.
+
+`RUNTIME-EXECUTION-CONTRACT.md` gets a dated line for the new field.
 
 `ChatMetadata` is `extra="allow"`, so the storage side needs no schema change
 either and an older reader ignores the key.

@@ -13,11 +13,12 @@ What the existing code already gives, and what it does not:
 - `postgres_history_store.py` persists `parts_json` and the metadata as
   written; nothing there needs to learn about commands.
 - The user turn is built from a bare string: `agent_app.py` calls
-  `make_user_text(session_id, exchange_id, rank, request_message)`. But
-  `_AgentExecuteRequest.context` travels alongside it as an open
-  `dict[str, Any]`, is read by key where the turn is assembled
-  (`session_id`, `user_id`, `team_id`), and the frontend already sends it as
-  `runtime_context`. That is the seam.
+  `make_user_text(session_id, exchange_id, rank, request_message)`. But a
+  context travels alongside it. The frontend's managed path sends a **typed**
+  `RuntimeContext` (`libs/fred-sdk/fred_sdk/contracts/context.py`), which
+  `model_dump()`s into the internal `_AgentExecuteRequest.context` dict that
+  the turn-build site reads by key. That is the seam — and it is already how
+  every other per-turn frontend value reaches the runtime.
 
 ## Goals / Non-Goals
 
@@ -39,20 +40,25 @@ What the existing code already gives, and what it does not:
 
 ## Decisions
 
-**Carry the descriptor in the existing `context` dict.** It is a client fact —
-which command the user typed, what they appended — and `context` is already
-the channel for exactly that class of per-turn caller fact. One key added, one
-optional argument threaded to `make_user_text`, no model touched.
+**Carry the descriptor as one optional field on `RuntimeContext`.** It is a
+client fact — which command the user typed, what they appended — and
+`RuntimeContext` is the model the frontend already fills with per-turn facts:
+`context_prompt_text`, `language`, `attachments_markdown`,
+`selected_chat_context_ids`. Adding one more is the established pattern, not
+a new one, and it keeps the descriptor typed and visible in the generated
+client.
 
-`RUNTIME-EXECUTION-CONTRACT.md` still gets a line: a new `context` key is a
-contract addition even when no schema changes, and the next reader needs to
-know the key exists and is optional.
+It then reaches the turn for free through the `model_dump()` into the
+internal context dict, so the runtime side adds one key read and one optional
+argument to `make_user_text`.
 
-Alternative rejected: a typed descriptor field on `_AgentExecuteRequest`.
-Better typing — validation and an OpenAPI shape the frontend could generate
-against — but it extends a frozen model to gain a type on one optional key.
-Not worth it. If the descriptor ever grows beyond "render this turn
-differently", promoting it to a typed field is a contained follow-up.
+`RUNTIME-EXECUTION-CONTRACT.md` gets a dated line for the field.
+
+Alternative rejected: an untyped key on `_AgentExecuteRequest.context`. That
+dict is the internal/dev path; the frontend does not build it directly, so
+the key would have to be injected somewhere along the way and would be
+invisible to the generated client. Typed at the edge the frontend actually
+fills is both lighter and clearer.
 
 Alternative rejected: deriving the descriptor server-side by matching the sent
 text against the team's prompts. It would break the moment two prompts share
@@ -92,10 +98,11 @@ Design-system tokens only; no new token for this work.
 
 ## Risks / Trade-offs
 
-**The descriptor rides untyped in `context`.** → No validation, and the
-frontend cannot generate against it. Accepted: the key is optional and drives
-rendering only, so a malformed one degrades to a plain text turn. The parse
-site owns the shape and must tolerate junk rather than assume it.
+**A contract model gains a field.** → `RuntimeContext` is designed to grow
+this way and already carries a dozen per-turn values; the field is optional,
+an older client omits it and an older reader ignores it. The internal read is
+still defensive: the value arrives as a plain dict after `model_dump()`, so a
+malformed one degrades to a plain text turn rather than failing the turn.
 
 **This change ships invisible.** → Deliberate. The alternative order makes the
 trigger slice briefly print prompt text in the chat body, which the RFC rules

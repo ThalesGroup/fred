@@ -13,10 +13,14 @@
 # limitations under the License.
 
 from fred_core.history.history_schema import (
+    ChatMessage,
+    ChatMetadata,
+    CommandDescriptor,
     HitlRequestPart,
     HitlResponsePart,
     make_hitl_request,
     make_hitl_response,
+    make_user_text,
 )
 
 
@@ -57,3 +61,56 @@ def test_legacy_hitl_response_shape_remains_readable() -> None:
     assert response.choice_id == "legacy free text"
     assert response.text is None
     assert response.occurrence_id is None
+
+
+def test_a_command_descriptor_changes_metadata_only() -> None:
+    """The turn's content is the assembled text either way.
+
+    History is replayed to the model, so a command turn must read to the
+    model exactly like a turn the user typed by hand. The descriptor is side
+    data.
+    """
+
+    text = "Résume le document et rédige une synthèse de : 33 lignes"
+    plain = make_user_text("s-1", "e-1", 1, text)
+    with_command = make_user_text(
+        "s-1",
+        "e-1",
+        1,
+        text,
+        command=CommandDescriptor(
+            command="summary",
+            appended_text="33 lignes",
+            prompt_id="p-1",
+            prompt_name="Revue hebdo",
+        ),
+    )
+
+    assert [part.model_dump() for part in plain.parts] == [
+        part.model_dump() for part in with_command.parts
+    ]
+    assert plain.metadata.command is None
+    assert with_command.metadata.command is not None
+    assert with_command.metadata.command.command == "summary"
+    assert with_command.metadata.command.appended_text == "33 lignes"
+    assert with_command.metadata.command.prompt_name == "Revue hebdo"
+
+
+def test_a_command_descriptor_round_trips_through_serialisation() -> None:
+    message = make_user_text(
+        "s-1", "e-1", 1, "text", command=CommandDescriptor(command="summary")
+    )
+
+    revived = ChatMessage.model_validate(message.model_dump(mode="json"))
+
+    assert revived.metadata.command is not None
+    assert revived.metadata.command.command == "summary"
+    # Absent by default, so every turn written before this existed reads back
+    # as an ordinary one.
+    assert ChatMetadata().command is None
+
+
+def test_a_command_run_with_nothing_appended_has_empty_appended_text() -> None:
+    descriptor = CommandDescriptor(command="summary")
+
+    assert descriptor.appended_text == ""

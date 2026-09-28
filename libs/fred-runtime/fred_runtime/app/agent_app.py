@@ -72,7 +72,7 @@ from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
 from fred_core.diagnostics import install_gc_diagnostics
-from fred_core.history.history_schema import ChatMessage
+from fred_core.history.history_schema import ChatMessage, CommandDescriptor
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
@@ -2658,11 +2658,30 @@ class _OpenThought:
     text: list[str] = field(default_factory=list)
 
 
+def _turn_command(ctx: dict[str, Any]) -> CommandDescriptor | None:
+    """Read the prompt command off the turn context, tolerating junk.
+
+    The value arrives as a plain dict after `RuntimeContext.model_dump()`. It
+    decides rendering only, so a malformed one degrades to an ordinary text
+    turn rather than failing the turn.
+    """
+
+    raw = ctx.get("command")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return CommandDescriptor.model_validate(raw)
+    except ValidationError:
+        logger.warning("[history] ignoring malformed turn command descriptor")
+        return None
+
+
 async def _write_turn_history(
     *,
     session_id: str,
     user_id: str,
     request_message: str | None,
+    turn_command: CommandDescriptor | None = None,
     payloads: list[dict[str, Any]],
     history_store: HistoryStorePort,
     team_id: str | None = None,
@@ -2769,7 +2788,11 @@ async def _write_turn_history(
             )
             rank += 1
     elif request_message:
-        messages.append(make_user_text(session_id, exchange_id, rank, request_message))
+        messages.append(
+            make_user_text(
+                session_id, exchange_id, rank, request_message, command=turn_command
+            )
+        )
         rank += 1
 
     # Reasoning blocks still accumulating, keyed by thought_id. A block reserves
@@ -3412,6 +3435,7 @@ async def _stream(
                     session_id=session_id,
                     user_id=user_id,
                     request_message=request.message,
+                    turn_command=_turn_command(ctx),
                     payloads=collected,
                     history_store=history_store,
                     team_id=resolved_team_id,
@@ -5509,6 +5533,7 @@ def _build_agent_router(
                     session_id=session_id,
                     user_id=user_id_str,
                     request_message=request.input,
+                    turn_command=_turn_command(internal_req.context or {}),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,
@@ -5612,6 +5637,7 @@ def _build_agent_router(
                     session_id=session_id,
                     user_id=user_id_str,
                     request_message=request.input,
+                    turn_command=_turn_command(internal_req.context or {}),
                     payloads=payloads,
                     history_store=history_store,
                     team_id=target.team_id,

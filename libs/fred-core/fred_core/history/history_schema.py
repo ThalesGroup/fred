@@ -369,6 +369,24 @@ class ChatTokenUsage(BaseModel):
     cache_creation_tokens: int = 0
 
 
+class CommandDescriptor(BaseModel):
+    """What a user turn ran, when it was launched by a prompt command.
+
+    Side data: the turn's parts still hold the full assembled text, which is
+    what replays to the model. This only says "render that turn as its
+    command instead of its text". `prompt_id` is attribution, never a pointer
+    to resolve at display time — a prompt is overwritten on edit and can be
+    deleted.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    command: str
+    appended_text: str = ""
+    prompt_id: Optional[str] = None
+    prompt_name: Optional[str] = None
+
+
 class ChatMetadata(BaseModel):
     """
     Small structured metadata attached to each stored message.
@@ -400,6 +418,9 @@ class ChatMetadata(BaseModel):
     # renders the same cards the live stream did. Raw objects because `UiPart` is
     # open. Full rationale: RUNTIME-EXECUTION-CONTRACT.md §8.59.
     ui_parts: List[Dict[str, Any]] = Field(default_factory=list)
+    # User rows: set when the turn was launched by a prompt command. A reader
+    # that does not know it renders the turn as plain text.
+    command: Optional[CommandDescriptor] = None
 
     @field_validator("finish_reason", mode="before")
     @classmethod
@@ -442,13 +463,20 @@ class ChatMessage(BaseModel):
 
 
 def make_user_text(
-    session_id: str, exchange_id: str, rank: int, text: str
+    session_id: str,
+    exchange_id: str,
+    rank: int,
+    text: str,
+    *,
+    command: Optional[CommandDescriptor] = None,
 ) -> ChatMessage:
     """
     Build a user message with a single TextPart.
 
     How to use it:
     - call once per user turn before invoking the runtime
+    - pass `command` when the turn was launched by a prompt command; `text`
+      is the assembled text either way, so the parts are identical
     """
     return ChatMessage(
         session_id=session_id,
@@ -458,6 +486,7 @@ def make_user_text(
         role=Role.user,
         channel=Channel.final,
         parts=[TextPart(text=text)],
+        metadata=ChatMetadata(command=command),
     )
 
 

@@ -41,6 +41,7 @@ from fred_core.history.history_schema import (
     ChatMetadata,
     ChatTokenUsage,
     CodePart,
+    CommandDescriptor,
     ImageUrlPart,
     MessagePart,
     Role,
@@ -79,5 +80,6 @@ __all__ = [
     "make_assistant_final",
     "make_tool_call",
     "make_tool_result",
+    "CommandDescriptor",
     "make_user_text",
 ]

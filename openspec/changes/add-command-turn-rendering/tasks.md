@@ -1,34 +1,36 @@
 ## 1. Turn contract
 
-- [ ] 1.1 Define the command descriptor as a typed model beside `ChatMetadata`
+- [x] 1.1 Define the command descriptor as a typed model beside `ChatMetadata`
       in `libs/fred-core/fred_core/history/history_schema.py` — command,
       appended text, prompt id, prompt name — and carry it as an optional
       field on `ChatMetadata`; verify a round-trip test stores a message with
       a descriptor and reads it back, and that a message without one still
       validates.
-- [ ] 1.2 Give `make_user_text` an optional descriptor argument that lands on
+- [x] 1.2 Give `make_user_text` an optional descriptor argument that lands on
       the turn's metadata; verify a test builds a turn with and without one
       and asserts the parts are identical in both cases — the descriptor
       changes metadata only.
-- [ ] 1.3 Read the descriptor from `_AgentExecuteRequest.context` where
-      `session_id` is already read in `agent_app.py`, and thread it to the
-      user turn; no model change. Verify tests cover an ask carrying the key
-      (descriptor on the stored turn), an ask without it (no descriptor), and
-      an ask whose key holds junk (no descriptor, no error — the turn still
-      stores and renders as text).
-- [ ] 1.4 Confirm the descriptor never reaches the model: verify a test
+- [x] 1.3 Add the optional descriptor field to `RuntimeContext` in
+      `libs/fred-sdk`, beside the other per-turn frontend values; verify a
+      test round-trips a context carrying one through `model_dump()`.
+- [x] 1.3b Read it from the internal context dict where `session_id` is read
+      in `agent_app.py` and thread it to the user turn; verify tests cover a
+      request carrying it (descriptor on the stored turn), one without it (no
+      descriptor), and one whose value is malformed (no descriptor, no error
+      — the turn still stores and renders as text).
+- [x] 1.4 Confirm the descriptor never reaches the model: verify a test
       asserts the message handed to the agent is the assembled text alone.
-- [ ] 1.5 Record the new `context` key and the turn-metadata key in
+- [x] 1.5 Record the new `RuntimeContext` field and the turn-metadata key in
       `RUNTIME-EXECUTION-CONTRACT.md §8`; verify the entry states that both
-      are optional, that no model changed, and that an older reader degrades
-      to plain text.
+      are optional and that an older reader degrades to plain text.
 
 ## 2. Frontend — the command turn
 
-- [ ] 2.1 Send the descriptor on the existing `runtime_context` the chat
-      already builds in `useChatSse.ts`; verify a test asserts the key reaches
-      the request. No client regeneration: `context` is untyped, so nothing in
-      the generated client changes.
+- [ ] 2.1 Run `make update-runtime-api` in `apps/frontend` and commit the
+      regenerated client, then send the descriptor on the `runtime_context`
+      the chat already builds in `useChatSse.ts`; verify the generated
+      `RuntimeContext` type carries the field and a test asserts it reaches
+      the request.
 - [ ] 2.2 Build the command component for the user bubble using design-system
       tokens only — no fill, `1px solid --outline-muted`, `--radius-xs`, hover
       via `--state-on-secondary-container-hover`; verify a test asserts it
