@@ -53,11 +53,11 @@ export class OidcBrowserSession {
   }
 
   get token(): string | null {
-    return this.invalidated || this.user?.expired ? null : this.user?.access_token ?? null;
+    return this.invalidated || this.user?.expired ? null : (this.user?.access_token ?? null);
   }
 
   get refreshToken(): string | null {
-    return this.invalidated ? null : this.user?.refresh_token ?? null;
+    return this.invalidated ? null : (this.user?.refresh_token ?? null);
   }
 
   // Access tokens stay in oidc-client-ts's session store; Fred does not copy
