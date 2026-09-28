@@ -278,20 +278,20 @@ def max_categories(row_count: int, cap: int = 256) -> int:
 
 
 def describe_string_column(column: TabularColumnSchema, distinct_values: Iterable[str], row_count: int) -> TabularColumnSchema:
-    """Apply the shared category and two-value rules to one string column."""
+    """Classify one string column; its values are read by the description tool."""
     values = set(distinct_values)
     is_categorical = bool(values) and len(values) <= max_categories(row_count)
     return column.model_copy(
         update={
             "is_categorical": is_categorical,
             "has_two_values": len(values) == 2,
-            "sample_values": sorted(values) if is_categorical else None,
+            "sample_values": None,
         }
     )
 
 
 def describe_numeric_column(column: TabularColumnSchema, minimum: Any, maximum: Any) -> TabularColumnSchema:
-    """Store finite bounds from DuckDB or pandas on an integer/float column."""
+    """Add finite DuckDB bounds to an integer/float description column."""
     if column.dtype not in {"integer", "float"} or minimum is None or maximum is None:
         return column
     convert = int if column.dtype == "integer" else float

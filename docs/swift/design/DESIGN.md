@@ -246,17 +246,22 @@ in-band (not a frozen platform contract):
 - `DTypes = Literal["string","integer","float","boolean","datetime","unknown"]`
   — one stable vocabulary independent of pandas or DuckDB internals; both
   producers converge on the same `TabularColumnSchema` shape.
-- For string columns, `is_categorical` is true when 1 to `max_categories(n)`
-  distinct non-null values occur across `n` table rows. Null rows count in `n`;
-  the limit is 2 through 10 rows, then `min(256, int(2 × (n/10)^0.7))`.
-  `sample_values` contains every distinct non-null value when the rule passes.
-  `has_two_values` reports exactly two distinct strings without interpreting
-  their true/false meaning. Non-string columns have no category verdict.
-- For integer and float columns, `min_value` and `max_value` hold the smallest
-  and largest finite non-null values in the table. They remain null when no
-  finite value exists. These bounds and categorical values are calculated at
-  ingestion. Older artifacts without stored bounds keep null values until
-  re-ingestion; describing them does not scan Parquet.
+- For string columns, ingestion sets `is_categorical` when 1 to
+  `max_categories(n)` distinct non-null values occur across `n` table rows.
+  Null rows count in `n`; the limit is 2 through 10 rows, then
+  `min(256, int(2 × (n/10)^0.7))`. Ingestion also sets `has_two_values` for
+  exactly two distinct strings without assigning true/false meaning. It does
+  not store category samples; non-string columns have no category verdict.
+- For integer and float columns, ingestion stores the type but does not
+  calculate or store bounds. On each `describe_tabular_documents` call, the
+  authorized Parquet tables are read under the tabular execution limits:
+  `sample_values` contains every distinct non-null value of columns already
+  classified as categorical, and `min_value`/`max_value` contain the smallest
+  and largest finite non-null numeric values. Columns without such values keep
+  null samples or bounds. Historical stored samples/bounds are ignored in the
+  description response; old documents need no re-ingestion. Every table is
+  checked for readability, and requests above `max_selected_datasets` are
+  rejected before scanning.
 
 **Object-store layout** — content-addressed, under
 `storage.tabular_store.artifacts_prefix` (default `tabular/datasets`):

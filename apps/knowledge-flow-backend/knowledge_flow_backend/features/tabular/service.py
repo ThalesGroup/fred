@@ -38,6 +38,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
     TabularTableArtifactV1,
     build_default_query_alias,
+    describe_numeric_column,
     read_tabular_artifact,
     read_tabular_multi_artifact,
 )
@@ -49,6 +50,7 @@ from knowledge_flow_backend.features.tabular.execution import (
 )
 from knowledge_flow_backend.features.tabular.structures import (
     RawSQLResponse,
+    TabularColumnSchema,
     TabularDatasetResponse,
     TabularDocumentDescriptionResponse,
     TabularDocumentKind,
@@ -395,11 +397,15 @@ class TabularService:
                 content = await asyncio.to_thread(self.content_store.get_output_artifact, f"{document_uid}/output/output.md")
             return document_uid, content.decode("utf-8")
 
-        catalogs = dict(await asyncio.gather(*(read_catalog(document_uid) for document_uid in spreadsheet_uids)))
         ordered_datasets = [dataset for document_uid in requested_uids for dataset in datasets_by_uid[document_uid]]
+        max_selected = self.tabular_config.query.max_selected_datasets
+        if len(ordered_datasets) > max_selected:
+            raise ValueError(f"Description references {len(ordered_datasets)} datasets, above the limit of {max_selected}; request fewer documents or increase max_selected_datasets")
+        catalogs = dict(await asyncio.gather(*(read_catalog(document_uid) for document_uid in spreadsheet_uids)))
+        described_columns = await self._describe_columns(ordered_datasets)
         tables_by_uid: dict[str, list[TabularTableSchema]] = {}
-        for dataset in ordered_datasets:
-            tables_by_uid.setdefault(dataset.metadata.document_uid, []).append(self._table_schema(dataset))
+        for dataset, columns in zip(ordered_datasets, described_columns, strict=True):
+            tables_by_uid.setdefault(dataset.metadata.document_uid, []).append(self._table_schema(dataset, columns))
         return [
             TabularDocumentDescriptionResponse(
                 document_uid=document_uid,
@@ -411,6 +417,52 @@ class TabularService:
             )
             for document_uid in requested_uids
         ]
+
+    async def _describe_columns(self, datasets: list[ResolvedDataset]) -> list[list[TabularColumnSchema]]:
+        """Read categorical values and numeric bounds from authorized Parquet tables."""
+
+        query_config = self.tabular_config.query
+
+        def _job(handle: DuckDBAbortHandle) -> list[list[TabularColumnSchema]]:
+            connection = open_duckdb_connection(handle, config=query_config)
+            try:
+                results: list[list[TabularColumnSchema]] = []
+                httpfs_ready = False
+                for dataset in datasets:
+                    handle.raise_if_aborted()
+                    columns = [column.model_copy(update={"sample_values": None, "min_value": None, "max_value": None}) for column in dataset.artifact.columns]
+                    numeric = [(index, column) for index, column in enumerate(columns) if column.dtype in {"integer", "float"}]
+                    categorical = [(index, column) for index, column in enumerate(columns) if column.dtype == "string" and column.is_categorical is True]
+                    location = self._resolve_dataset_location(dataset.artifact.object_key)
+                    if self._requires_httpfs(location) and not httpfs_ready:
+                        self._ensure_httpfs_ready(connection)
+                        httpfs_ready = True
+                    with _redacting_dataset_read_errors():
+                        connection.from_parquet(location).create_view("tabular_description_table", replace=True)
+                        if numeric:
+                            aggregates = []
+                            for _, column in numeric:
+                                identifier = quote_identifier(column.name)
+                                aggregates.extend((f"MIN({identifier}) FILTER (WHERE isfinite({identifier}))", f"MAX({identifier}) FILTER (WHERE isfinite({identifier}))"))
+                            bounds = connection.execute(f"SELECT {', '.join(aggregates)} FROM tabular_description_table").fetchone()  # nosec B608 — quoted stored column names
+                            if bounds is not None:
+                                for position, (index, column) in enumerate(numeric):
+                                    columns[index] = describe_numeric_column(column, bounds[2 * position], bounds[2 * position + 1])
+                        for index, column in categorical:
+                            handle.raise_if_aborted()
+                            identifier = quote_identifier(column.name)
+                            rows = connection.execute(
+                                f"SELECT DISTINCT {identifier} FROM tabular_description_table WHERE {identifier} IS NOT NULL"  # nosec B608 — quoted stored column name
+                            ).fetchall()
+                            columns[index] = column.model_copy(update={"sample_values": sorted(str(row[0]) for row in rows) or None})
+                        if not numeric and not categorical:
+                            connection.execute("SELECT COUNT(*) FROM tabular_description_table").fetchone()
+                    results.append(columns)
+                return results
+            finally:
+                close_duckdb_connection(handle, connection)
+
+        return await run_duckdb_job(_job, config=query_config, operation="description")
 
     @staticmethod
     def _group_datasets_by_document(datasets: list[ResolvedDataset]) -> dict[str, list[ResolvedDataset]]:
@@ -441,7 +493,7 @@ class TabularService:
         )
 
     @staticmethod
-    def _table_schema(dataset: ResolvedDataset) -> TabularTableSchema:
+    def _table_schema(dataset: ResolvedDataset, columns: list[TabularColumnSchema]) -> TabularTableSchema:
         """Build the full table view (columns included) exposed by the schemas endpoint."""
 
         artifact = dataset.artifact
@@ -451,7 +503,7 @@ class TabularService:
             title=artifact.title if isinstance(artifact, TabularTableArtifactV1) else None,
             row_count=artifact.row_count,
             generated_at=artifact.generated_at,
-            columns=artifact.columns,
+            columns=columns,
         )
 
     async def read_dataset_frame(

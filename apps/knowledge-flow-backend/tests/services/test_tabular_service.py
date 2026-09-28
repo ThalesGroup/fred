@@ -36,6 +36,7 @@ from fred_core.documents.document_structures import (
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
+from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import (
     FAST_INGEST_SOURCE_TAG,
@@ -46,7 +47,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     max_categories,
     read_tabular_artifact,
 )
-from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularService
+from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularDatasetReadError, TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
@@ -132,9 +133,8 @@ async def _ingest_attachment_csv(
     return processed_metadata
 
 
-async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str) -> tuple[DocumentMetadata, Path]:
-    """Run the spreadsheet input + output stages for a two-sheet workbook
-    (Ventes: city/amount, Cibles: city/target) and save the metadata.
+async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str, extra_tables: int = 0) -> tuple[DocumentMetadata, Path]:
+    """Run spreadsheet input + output for Ventes, Cibles and optional extra sheets.
 
     Returns the saved metadata and the local output directory (output.md +
     tables.json), which callers can upload as document preview content.
@@ -147,12 +147,17 @@ async def _ingest_excel_workbook(*, tmp_path: Path, document_uid: str) -> tuple[
     workbook_path = tmp_path / f"{document_uid}.xlsx"
     workbook = Workbook()
     ventes = workbook.active
+    assert ventes is not None
     ventes.title = "Ventes"
     for row in [("city", "amount"), ("Paris", 10), ("Lyon", 20)]:
         ventes.append(row)
     cibles = workbook.create_sheet("Cibles")
     for row in [("city", "target"), ("Paris", 15), ("Lyon", 25)]:
         cibles.append(row)
+    for index in range(extra_tables):
+        extra = workbook.create_sheet(f"Extra {index + 1}")
+        for row in [("city", "amount"), ("Paris", index), ("Lyon", index + 10)]:
+            extra.append(row)
     workbook.save(str(workbook_path))
 
     metadata = DocumentMetadata(
@@ -425,9 +430,10 @@ async def test_tabular_processor_converts_csv_without_pandas_read_csv(tmp_path, 
     assert artifact.row_count == 2
     assert [column.name for column in artifact.columns] == ["city", "amount"]
     assert [column.dtype for column in artifact.columns] == ["string", "integer"]
-    assert artifact.columns[0].sample_values == ["Lyon", "Paris"]
-    assert artifact.columns[1].min_value == 10
-    assert artifact.columns[1].max_value == 20
+    assert artifact.columns[0].is_categorical is True
+    assert artifact.columns[0].sample_values is None
+    assert artifact.columns[1].min_value is None
+    assert artifact.columns[1].max_value is None
     assert processed_metadata.processing.stages[ProcessingStage.PREVIEW_READY] == ProcessingStatus.DONE
     assert processed_metadata.processing.stages[ProcessingStage.SQL_INDEXED] == ProcessingStatus.DONE
 
@@ -457,7 +463,7 @@ async def test_tabular_processor_keeps_mixed_numeric_and_text_column_as_string(t
 
 
 @pytest.mark.asyncio
-async def test_tabular_processor_records_float_bounds_without_nulls(tmp_path):
+async def test_tabular_processor_types_float_without_storing_bounds(tmp_path):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
 
@@ -469,8 +475,8 @@ async def test_tabular_processor_records_float_bounds_without_nulls(tmp_path):
     assert artifact is not None
     score = next(column for column in artifact.columns if column.name == "score")
     assert score.dtype == "float"
-    assert score.min_value == -2.25
-    assert score.max_value == 1.5
+    assert score.min_value is None
+    assert score.max_value is None
 
 
 @pytest.mark.parametrize(
@@ -486,12 +492,10 @@ def test_decimal_parquet_schema_is_reported_as_float():
 
 
 @pytest.mark.asyncio
-async def test_tabular_processor_records_values_for_categorical_string_columns(tmp_path):
+async def test_tabular_processor_classifies_strings_without_storing_category_values(tmp_path):
     """
-    A categorical string column carries its exact distinct values on the
-    schema, so a SQL-writing agent sees the real stored casing instead of
-    guessing it (e.g. it must not guess 'critical' when the data says
-    'CRITICAL').
+    Ingestion classifies a categorical string column; the description tool
+    reads its exact distinct values from Parquet later.
     """
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
@@ -509,7 +513,7 @@ async def test_tabular_processor_records_values_for_categorical_string_columns(t
     severity_column = next(column for column in artifact.columns if column.name == "severity")
     assert severity_column.is_categorical is True
     assert severity_column.has_two_values is True
-    assert severity_column.sample_values == ["CRITICAL", "LOW"]
+    assert severity_column.sample_values is None
 
     # Non-string columns are never sampled, regardless of cardinality.
     id_column = next(column for column in artifact.columns if column.name == "id")
@@ -563,7 +567,7 @@ async def test_tabular_processor_counts_null_rows_for_category_limit(tmp_path):
     status_column = next(column for column in artifact.columns if column.name == "status")
     assert status_column.is_categorical is True
     assert status_column.has_two_values is False
-    assert status_column.sample_values == ["BLUE", "GREEN", "RED"]
+    assert status_column.sample_values is None
     blank_column = next(column for column in artifact.columns if column.name == "blank")
     assert blank_column.dtype == "string"
     assert blank_column.is_categorical is False
@@ -594,7 +598,7 @@ async def test_tabular_processor_preserves_duckdb_boolean_columns(tmp_path):
     assert columns["available"].has_two_values is None
     assert columns["french"].dtype == "string"
     assert columns["french"].has_two_values is True
-    assert columns["french"].sample_values == ["non", "oui"]
+    assert columns["french"].sample_values is None
 
 
 @pytest.mark.asyncio
@@ -1567,7 +1571,7 @@ async def test_tabular_service_describes_documents_in_batch_with_all_tables(tmp_
 
 
 @pytest.mark.asyncio
-async def test_describe_documents_keeps_older_bounds_unavailable_without_scanning(tmp_path, metadata_store, monkeypatch):
+async def test_describe_documents_reads_values_instead_of_legacy_metadata(tmp_path, metadata_store):
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()
 
@@ -1579,8 +1583,14 @@ async def test_describe_documents_keeps_older_bounds_unavailable_without_scannin
         content="city,amount,rate\nParis,10,-1.5\nLyon,20,2.25\n",
     )
     for column in csv_metadata.extensions[TABULAR_EXTENSION_KEY]["columns"]:
-        column.pop("min_value", None)
-        column.pop("max_value", None)
+        if column["name"] == "city":
+            column["sample_values"] = ["stale city"]
+        elif column["name"] == "amount":
+            column["min_value"] = 999
+            column["max_value"] = 999
+        else:
+            column.pop("min_value", None)
+            column.pop("max_value", None)
     await MetadataService().save_document_metadata(_user(), csv_metadata)
 
     excel_metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-excel")
@@ -1588,19 +1598,183 @@ async def test_describe_documents_keeps_older_bounds_unavailable_without_scannin
     excel_metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
     for table in excel_metadata.extensions[TABULAR_MULTI_EXTENSION_KEY]["tables"]:
         for column in table["columns"]:
-            column.pop("min_value", None)
-            column.pop("max_value", None)
+            if column["name"] == "city":
+                column["sample_values"] = ["stale city"]
+            else:
+                column.pop("min_value", None)
+                column.pop("max_value", None)
     await MetadataService().save_document_metadata(_user(), excel_metadata)
 
     service = TabularService()
-    monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: pytest.fail("Description must not read Parquet"))
     descriptions = await service.describe_documents(_user(), ["doc-sales", "doc-excel"])
     csv_columns = {column.name: column for column in descriptions[0].tables[0].columns}
-    assert (csv_columns["amount"].min_value, csv_columns["amount"].max_value) == (None, None)
-    assert (csv_columns["rate"].min_value, csv_columns["rate"].max_value) == (None, None)
+    assert csv_columns["city"].sample_values == ["Lyon", "Paris"]
+    assert (csv_columns["amount"].min_value, csv_columns["amount"].max_value) == (10, 20)
+    assert (csv_columns["rate"].min_value, csv_columns["rate"].max_value) == (-1.5, 2.25)
     excel_bounds = {table.sheet: (table.columns[1].min_value, table.columns[1].max_value) for table in descriptions[1].tables}
-    assert excel_bounds == {"Ventes": (None, None), "Cibles": (None, None)}
+    assert excel_bounds == {"Ventes": (10, 20), "Cibles": (15, 25)}
+    assert all(table.columns[0].sample_values == ["Lyon", "Paris"] for table in descriptions[1].tables)
     assert descriptions[1].markdown is not None
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_reads_current_values_on_every_call(tmp_path, metadata_store):
+    import pandas as pd
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-current",
+        file_name="current.csv",
+        content="city,score\nParis,-1.5\nLyon,2.25\n",
+    )
+    artifact = read_tabular_artifact(metadata)
+    assert artifact is not None
+
+    service = TabularService()
+    first = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
+    assert first[0].sample_values == ["Lyon", "Paris"]
+    assert (first[1].min_value, first[1].max_value) == (-1.5, 2.25)
+
+    replacement = tmp_path / "replacement.parquet"
+    pd.DataFrame({"city": ["Milan", "Rome", "Turin"], "score": [-5.0, 30.0, 15.0]}).to_parquet(replacement, index=False)
+    content_store.put_file(artifact.object_key, replacement, content_type="application/vnd.apache.parquet")
+    second = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
+    assert second[0].sample_values == ["Milan", "Rome", "Turin"]
+    assert (second[1].min_value, second[1].max_value) == (-5.0, 30.0)
+
+    pd.DataFrame({"city": [None, None], "score": [float("inf"), float("nan")]}).to_parquet(replacement, index=False)
+    content_store.put_file(artifact.object_key, replacement, content_type="application/vnd.apache.parquet")
+    third = (await service.describe_documents(_user(), ["doc-current"]))[0].tables[0].columns
+    assert third[0].sample_values is None
+    assert (third[1].min_value, third[1].max_value) == (None, None)
+
+    stored = read_tabular_artifact(await metadata_store.get_metadata_by_uid("doc-current"))
+    assert stored is not None
+    assert stored.columns[0].sample_values is None
+    assert (stored.columns[1].min_value, stored.columns[1].max_value) == (None, None)
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_reads_all_twenty_workbook_tables(tmp_path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    metadata, output_dir = await _ingest_excel_workbook(tmp_path=tmp_path, document_uid="doc-twenty", extra_tables=18)
+    content_store.save_output("doc-twenty", output_dir)
+    metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+    await MetadataService().save_document_metadata(_user(), metadata)
+
+    tables = (await TabularService().describe_documents(_user(), ["doc-twenty"]))[0].tables
+    assert len(tables) == 20
+    assert all(table.columns[0].sample_values == ["Lyon", "Paris"] for table in tables)
+    assert [(table.columns[1].min_value, table.columns[1].max_value) for table in tables[:2]] == [(10, 20), (15, 25)]
+    assert [(table.columns[1].min_value, table.columns[1].max_value) for table in tables[2:]] == [(index, index + 10) for index in range(18)]
+
+    limited_service = TabularService()
+    limited_service.tabular_config = limited_service.tabular_config.model_copy(update={"query": limited_service.tabular_config.query.model_copy(update={"max_selected_datasets": 19})})
+    monkeypatch.setattr(limited_service, "_resolve_dataset_location", lambda *_: pytest.fail("No table scan above the configured limit"))
+    with pytest.raises(ValueError, match="above the limit of 19"):
+        await limited_service.describe_documents(_user(), ["doc-twenty"])
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_checks_all_uids_before_reading_tables(tmp_path, metadata_store, monkeypatch):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-allowed",
+        file_name="allowed.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+    )
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-denied",
+        file_name="denied.csv",
+        content="city,amount\nParis,30\nLyon,40\n",
+    )
+    service = TabularService()
+    monkeypatch.setattr(service, "rebac", _FakeRebac({"doc-allowed"}))
+    monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: pytest.fail("No Parquet read before all UIDs are authorized"))
+    with pytest.raises(PermissionError):
+        await service.describe_documents(_user(), ["doc-allowed", "doc-denied"])
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_fails_when_a_table_artifact_is_missing(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-missing-artifact",
+        file_name="missing.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+    )
+    artifact = read_tabular_artifact(metadata)
+    assert artifact is not None
+    assert isinstance(content_store, FileSystemContentStore)
+    (content_store.object_root / artifact.object_key).unlink()
+
+    with pytest.raises(FileNotFoundError, match="Tabular artifact"):
+        await TabularService().describe_documents(_user(), ["doc-missing-artifact"])
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_checks_artifacts_without_value_columns(tmp_path, metadata_store):
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-plain-strings",
+        file_name="plain-strings.csv",
+        content="name\nAlice\nBob\nCarla\n",
+    )
+    artifact = read_tabular_artifact(metadata)
+    assert artifact is not None
+    assert artifact.columns[0].is_categorical is False
+    assert isinstance(content_store, FileSystemContentStore)
+    (content_store.object_root / artifact.object_key).unlink()
+
+    with pytest.raises(FileNotFoundError, match="Tabular artifact"):
+        await TabularService().describe_documents(_user(), ["doc-plain-strings"])
+
+
+@pytest.mark.asyncio
+async def test_describe_documents_redacts_signed_url_from_parquet_errors(tmp_path, metadata_store, monkeypatch):
+    import duckdb
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=metadata_store,
+        document_uid="doc-signed",
+        file_name="signed.csv",
+        content="city,amount\nParis,10\nLyon,20\n",
+    )
+
+    signed_url = "https://signed.example.invalid/data.parquet?X-Amz-Signature=secret"
+
+    class FailingConnection:
+        def from_parquet(self, _location):
+            raise duckdb.IOException(f"Could not read {signed_url}")
+
+    service = TabularService()
+    monkeypatch.setattr(service, "_resolve_dataset_location", lambda *_: signed_url)
+    monkeypatch.setattr(service, "_ensure_httpfs_ready", lambda *_: None)
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.open_duckdb_connection", lambda *_args, **_kwargs: FailingConnection())
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.close_duckdb_connection", lambda *_args: None)
+
+    with pytest.raises(TabularDatasetReadError) as exc_info:
+        await service.describe_documents(_user(), ["doc-signed"])
+    assert "secret" not in str(exc_info.value)
+    assert "<redacted-signed-url>" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
