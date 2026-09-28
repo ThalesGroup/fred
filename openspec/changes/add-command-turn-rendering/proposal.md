@@ -44,22 +44,21 @@ Nothing writes a descriptor yet. The composer trigger is the next slice.
 
 ## Impact
 
-**Frozen contract — `libs/fred-runtime`, `libs/fred-core`**
+**Runtime — `libs/fred-runtime`, `libs/fred-core`**
 
-This is the part to confirm before building. The RFC says the descriptor rides
-on the turn's metadata, but it does not say how it gets there. It cannot get
-there today: `agent_app.py` builds the user turn with
-`make_user_text(session_id, exchange_id, rank, request_message)`, whose only
-input is the ask request's `message`/`input` string. Carrying a descriptor
-therefore needs:
+No model changes. `_AgentExecuteRequest.context` is already an open
+`dict[str, Any]` and is already the channel for caller-supplied facts about a
+turn that are not the message — it carries `session_id`, `user_id` and
+`team_id` today, and the frontend already sends it as `runtime_context`. The
+descriptor becomes one more key in it.
 
-- an optional command-descriptor field on the ask request, and
-- `make_user_text` (or a sibling) able to attach it to the turn's metadata.
+What that costs: one key read where `session_id` is read, one optional
+argument threaded to `make_user_text`, and a line in
+`RUNTIME-EXECUTION-CONTRACT.md` recording the new `context` key. No field is
+added to a frozen model.
 
 `ChatMetadata` is `extra="allow"`, so the storage side needs no schema change
-and an older reader ignores the key. The request side is a genuine extension
-of `RUNTIME-EXECUTION-CONTRACT.md`, which requires a dated §8 entry in the
-same change.
+either and an older reader ignores the key.
 
 **Frontend — `apps/frontend`**
 

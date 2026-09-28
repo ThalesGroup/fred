@@ -12,10 +12,12 @@ What the existing code already gives, and what it does not:
   schema change, and an older reader ignores it.
 - `postgres_history_store.py` persists `parts_json` and the metadata as
   written; nothing there needs to learn about commands.
-- **But the user turn is built from a bare string.** `agent_app.py` calls
-  `make_user_text(session_id, exchange_id, rank, request_message)`, and
-  `request_message` comes from the ask request's `message` / `input`. There is
-  no seam today through which a descriptor could reach the turn.
+- The user turn is built from a bare string: `agent_app.py` calls
+  `make_user_text(session_id, exchange_id, rank, request_message)`. But
+  `_AgentExecuteRequest.context` travels alongside it as an open
+  `dict[str, Any]`, is read by key where the turn is assembled
+  (`session_id`, `user_id`, `team_id`), and the frontend already sends it as
+  `runtime_context`. That is the seam.
 
 ## Goals / Non-Goals
 
@@ -37,16 +39,20 @@ What the existing code already gives, and what it does not:
 
 ## Decisions
 
-**Extend the ask request rather than infer the descriptor.** The descriptor is
-a client fact — which command the user typed, what they appended — and nothing
-server-side can reconstruct it from the assembled text without guessing. So
-the ask request gains one optional descriptor field, `make_user_text` gains an
-optional metadata argument, and the turn carries it.
+**Carry the descriptor in the existing `context` dict.** It is a client fact —
+which command the user typed, what they appended — and `context` is already
+the channel for exactly that class of per-turn caller fact. One key added, one
+optional argument threaded to `make_user_text`, no model touched.
 
-This touches `RUNTIME-EXECUTION-CONTRACT.md`, which is frozen: the change owes
-it a dated §8 entry. Flagged in the proposal as the thing to confirm before
-building, because the RFC asserted the destination (§2.5, "metadata_json gains
-the command descriptor") without noticing there was no road to it.
+`RUNTIME-EXECUTION-CONTRACT.md` still gets a line: a new `context` key is a
+contract addition even when no schema changes, and the next reader needs to
+know the key exists and is optional.
+
+Alternative rejected: a typed descriptor field on `_AgentExecuteRequest`.
+Better typing — validation and an OpenAPI shape the frontend could generate
+against — but it extends a frozen model to gain a type on one optional key.
+Not worth it. If the descriptor ever grows beyond "render this turn
+differently", promoting it to a typed field is a contained follow-up.
 
 Alternative rejected: deriving the descriptor server-side by matching the sent
 text against the team's prompts. It would break the moment two prompts share
@@ -55,6 +61,10 @@ something the client already knows.
 
 Alternative rejected: storing the descriptor only in the browser. It would not
 survive a reload, and the transcript must render the same way on every device.
+
+Alternative rejected: storing it in control-plane against `exchange_id`. It
+splits one turn across two stores, with the ordering and orphan-row problems
+that follow.
 
 **Store the assembled text, and read the panel from it.** Both halves of the
 same decision. `prompt.text` is overwritten on edit, `prompt.version` is a
@@ -82,9 +92,10 @@ Design-system tokens only; no new token for this work.
 
 ## Risks / Trade-offs
 
-**A frozen contract gains a field.** → Additive and optional: an older client
-omits it, an older reader ignores it. The dated §8 entry is the cost, and it
-is the correct cost rather than a workaround.
+**The descriptor rides untyped in `context`.** → No validation, and the
+frontend cannot generate against it. Accepted: the key is optional and drives
+rendering only, so a malformed one degrades to a plain text turn. The parse
+site owns the shape and must tolerate junk rather than assume it.
 
 **This change ships invisible.** → Deliberate. The alternative order makes the
 trigger slice briefly print prompt text in the chat body, which the RFC rules

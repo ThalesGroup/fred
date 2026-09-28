@@ -10,23 +10,25 @@
       the turn's metadata; verify a test builds a turn with and without one
       and asserts the parts are identical in both cases — the descriptor
       changes metadata only.
-- [ ] 1.3 Add the optional descriptor field to the ask request in
-      `libs/fred-runtime` and pass it through to the user turn in
-      `agent_app.py`; verify a test posts an ask carrying a descriptor and
-      finds it on the stored turn, and that an ask without one stores a turn
-      with no descriptor.
+- [ ] 1.3 Read the descriptor from `_AgentExecuteRequest.context` where
+      `session_id` is already read in `agent_app.py`, and thread it to the
+      user turn; no model change. Verify tests cover an ask carrying the key
+      (descriptor on the stored turn), an ask without it (no descriptor), and
+      an ask whose key holds junk (no descriptor, no error — the turn still
+      stores and renders as text).
 - [ ] 1.4 Confirm the descriptor never reaches the model: verify a test
       asserts the message handed to the agent is the assembled text alone.
-- [ ] 1.5 Add the dated entry to `RUNTIME-EXECUTION-CONTRACT.md §8` recording
-      the ask-request field and the turn-metadata key; verify the entry states
-      that both are optional and that an older reader degrades to plain text.
+- [ ] 1.5 Record the new `context` key and the turn-metadata key in
+      `RUNTIME-EXECUTION-CONTRACT.md §8`; verify the entry states that both
+      are optional, that no model changed, and that an older reader degrades
+      to plain text.
 
 ## 2. Frontend — the command turn
 
-- [ ] 2.1 Run `make update-runtime-api` (or `make update-all-apis`) in
-      `apps/frontend` and commit the regenerated client; verify the generated
-      ask-request and message types carry the descriptor and that no
-      hand-written type duplicates it.
+- [ ] 2.1 Send the descriptor on the existing `runtime_context` the chat
+      already builds in `useChatSse.ts`; verify a test asserts the key reaches
+      the request. No client regeneration: `context` is untyped, so nothing in
+      the generated client changes.
 - [ ] 2.2 Build the command component for the user bubble using design-system
       tokens only — no fill, `1px solid --outline-muted`, `--radius-xs`, hover
       via `--state-on-secondary-container-hover`; verify a test asserts it
