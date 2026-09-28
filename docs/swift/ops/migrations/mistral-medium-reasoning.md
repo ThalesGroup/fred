@@ -15,10 +15,10 @@ remains `default.chat.openai.prod`.
 ## Prerequisites
 
 To select Mistral Medium in a deployed agent pod, provide a Mistral API key as
-`applications.fred-agents.dotenv.OPENAI_API_KEY`. The current OpenAI-compatible
-model factory uses this one credential for all `provider: openai` profiles in a
-pod. A pod configured with a Mistral key cannot also call OpenAI models through
-those profiles; use a separate agent pod if both providers are needed.
+`applications.fred-agents.dotenv.OPENAI_API_KEY`. The bundled GPT and Mistral profiles do not override `api_key`, so they
+share `OPENAI_API_KEY` within a pod. A pod configured with a Mistral key cannot
+also call the bundled GPT profiles; use a separate agent pod if both providers
+are needed.
 
 ## Configuration
 
@@ -47,6 +47,7 @@ restore the prior chart/catalog. No data migration is involved.
 
 ## Limitations
 
-The existing shared `OPENAI_API_KEY` prevents one pod from using both OpenAI and
-Mistral profiles with different credentials. Deployments overriding the bundled
-model catalog must add this profile to their own values to receive the fix.
+The bundled GPT and Mistral profiles share `OPENAI_API_KEY`, so they cannot
+use different credentials in one pod without custom credential handling.
+Deployments overriding the bundled model catalog must add this profile to
+their own values to receive the fix.
