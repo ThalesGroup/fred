@@ -1,7 +1,7 @@
-"""`DELETE /users/{user_id}`: the only Fred operation that removes a person's standing.
+"""`DELETE /users/{user_id}`: the only Fred operation that suspends a person's account.
 
 Order: identity administration is resolved before anything changes; the ban is
-written when standing is enforced; the identity-provider account is deleted last.
+written when account status is enforced; the identity-provider account is deleted last.
 The person's other relations are kept.
 """
 
@@ -13,22 +13,26 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
-from _standing_test_doubles import EVERYONE_ACTIVE, StandingRebacEngine, ban
+from _account_status_test_doubles import AccountStatusRebacEngine, ban
 from control_plane_backend.app.dependencies import attach_application_container
 from control_plane_backend.users import api as users_api
 from control_plane_backend.users.dependencies import get_user_service_dependencies
 from fastapi import FastAPI
 from fred_core import (
+    AccountStatusError,
+    DelegationConfig,
     KeycloackDisabled,
     KeycloakUser,
     RebacReference,
     Relation,
     RelationType,
     Resource,
-    StandingAuthorizationError,
     TeamPermission,
+    enforce_account_status,
     get_current_user,
+    initialize_delegation,
 )
+from fred_core.security.delegation import require_active_subject
 from httpx import ASGITransport, AsyncClient
 from keycloak.exceptions import KeycloakDeleteError
 
@@ -66,7 +70,7 @@ class _IdentityProvider:
 @dataclass
 class _Deployment:
     client: AsyncClient
-    rebac: StandingRebacEngine
+    rebac: AccountStatusRebacEngine
     identity: _IdentityProvider
     calls: list[str]
 
@@ -74,14 +78,14 @@ class _Deployment:
 @asynccontextmanager
 async def _deployment(
     *,
-    rebac: StandingRebacEngine | None = None,
+    rebac: AccountStatusRebacEngine | None = None,
     identity_administration: bool = True,
 ) -> AsyncIterator[_Deployment]:
     calls: list[str] = []
-    engine_under_test = rebac if rebac is not None else StandingRebacEngine()
+    engine_under_test = rebac if rebac is not None else AccountStatusRebacEngine()
     engine_under_test.calls = calls
-    # Startup state: everyone in good standing, plus one team membership.
-    engine_under_test.relations |= {EVERYONE_ACTIVE, _MEMBERSHIP}
+    # Stored state: one team membership and no suspension.
+    engine_under_test.relations |= {_MEMBERSHIP}
     identity = _IdentityProvider(calls, {_PERSON, _BYSTANDER})
 
     async def root() -> str:
@@ -108,20 +112,20 @@ async def _deployment(
         yield _Deployment(client, engine_under_test, identity, calls)
 
 
-async def _assert_banned(rebac: StandingRebacEngine) -> None:
-    with pytest.raises(StandingAuthorizationError):
-        await rebac.require_user_standing(_PERSON)
-    await rebac.require_user_standing(_BYSTANDER)
+async def _assert_banned(rebac: AccountStatusRebacEngine) -> None:
+    with pytest.raises(AccountStatusError):
+        await rebac.require_active_account(_PERSON)
+    await rebac.require_active_account(_BYSTANDER)
 
 
-async def _can_read_team(rebac: StandingRebacEngine, person_id: str) -> bool:
+async def _can_read_team(rebac: AccountStatusRebacEngine, person_id: str) -> bool:
     return await rebac.has_permission(
         RebacReference(Resource.USER, person_id), TeamPermission.CAN_READ, _TEAM
     )
 
 
 async def _assert_person_untouched(deployment: _Deployment) -> None:
-    await deployment.rebac.require_user_standing(_PERSON)
+    await deployment.rebac.require_active_account(_PERSON)
     assert _MEMBERSHIP in deployment.rebac.relations
     assert deployment.identity.accounts == {_PERSON, _BYSTANDER}
 
@@ -132,7 +136,7 @@ async def test_delete_bans_before_identity_deletion() -> None:
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 204
-        assert deployment.calls == ["remove_user_standing", "delete_identity_account"]
+        assert deployment.calls == ["suspend_account", "delete_identity_account"]
         await _assert_banned(deployment.rebac)
         assert ban(_PERSON) in deployment.rebac.relations
         assert deployment.identity.accounts == {_BYSTANDER}
@@ -143,29 +147,33 @@ async def test_delete_bans_before_identity_deletion() -> None:
     "enforced", [True, False], ids=["delegation_on", "delegation_off"]
 )
 async def test_delete_keeps_the_persons_other_relations(enforced: bool) -> None:
-    rebac = StandingRebacEngine(enforces_standing=enforced)
+    rebac = AccountStatusRebacEngine(requires_active_accounts=enforced)
     async with _deployment(rebac=rebac) as deployment:
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 204
         assert "delete_all_relations_of_reference" not in deployment.calls
-        kept = {EVERYONE_ACTIVE, _MEMBERSHIP}
+        kept = {_MEMBERSHIP}
         assert rebac.relations == (kept | {ban(_PERSON)} if enforced else kept)
 
 
 @pytest.mark.asyncio
-async def test_a_deleted_person_is_refused_at_their_next_decision() -> None:
+async def test_a_deleted_person_is_refused_at_their_next_request() -> None:
+    person = KeycloakUser(uid=_PERSON, username="synthetic", roles=[])
+    bystander = KeycloakUser(uid=_BYSTANDER, username="synthetic", roles=[])
     async with _deployment() as deployment:
-        assert await _can_read_team(deployment.rebac, _PERSON)
+        initialize_delegation(DelegationConfig(act_for_people=True))
+        await enforce_account_status(deployment.rebac)
+        await require_active_subject(person)
 
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 204
         # The membership is still stored; the ban refuses the person anyway.
         assert _MEMBERSHIP in deployment.rebac.relations
-        with pytest.raises(StandingAuthorizationError):
-            await _can_read_team(deployment.rebac, _PERSON)
-        assert await _can_read_team(deployment.rebac, _BYSTANDER)
+        with pytest.raises(AccountStatusError):
+            await require_active_subject(person)
+        await require_active_subject(bystander)
 
 
 @pytest.mark.asyncio
@@ -186,7 +194,7 @@ async def test_identity_failure_after_the_ban_leaves_the_person_banned() -> None
         retried = await deployment.client.delete(_DELETE)
 
         assert retried.status_code == 204
-        assert deployment.calls == ["remove_user_standing", "delete_identity_account"]
+        assert deployment.calls == ["suspend_account", "delete_identity_account"]
         assert deployment.identity.accounts == {_BYSTANDER}
 
 
@@ -198,7 +206,7 @@ async def test_missing_identity_returns_not_found_after_the_ban() -> None:
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 404
-        assert deployment.calls == ["remove_user_standing", "delete_identity_account"]
+        assert deployment.calls == ["suspend_account", "delete_identity_account"]
         await _assert_banned(deployment.rebac)
 
 
@@ -212,13 +220,13 @@ async def test_disabled_identity_administration_refuses_before_any_change() -> N
             "detail": "Keycloak M2M is disabled; cannot perform user operations."
         }
         assert deployment.calls == []
-        await deployment.rebac.require_user_standing(_PERSON)
+        await deployment.rebac.require_active_account(_PERSON)
         assert _MEMBERSHIP in deployment.rebac.relations
 
 
 @pytest.mark.asyncio
-async def test_without_standing_enforcement_delete_writes_no_ban() -> None:
-    rebac = StandingRebacEngine(enforces_standing=False)
+async def test_without_account_status_enforcement_delete_writes_no_ban() -> None:
+    rebac = AccountStatusRebacEngine(requires_active_accounts=False)
     async with _deployment(rebac=rebac) as deployment:
         response = await deployment.client.delete(_DELETE)
 
@@ -235,13 +243,13 @@ async def test_without_standing_enforcement_delete_writes_no_ban() -> None:
 async def test_an_id_naming_no_person_is_refused_as_not_found_before_any_change(
     enforced: bool, path_id: str
 ) -> None:
-    rebac = StandingRebacEngine(enforces_standing=enforced)
+    rebac = AccountStatusRebacEngine(requires_active_accounts=enforced)
     async with _deployment(rebac=rebac) as deployment:
         response = await deployment.client.delete(f"/users/{path_id}")
 
         assert response.status_code == 404
         assert deployment.calls == []
-        assert deployment.rebac.relations == {EVERYONE_ACTIVE, _MEMBERSHIP}
+        assert deployment.rebac.relations == {_MEMBERSHIP}
         await _assert_person_untouched(deployment)
 
 
@@ -256,9 +264,9 @@ async def test_deleting_the_bootstrap_root_is_refused_before_any_change() -> Non
         await _assert_person_untouched(deployment)
 
 
-class _BanWriteFails(StandingRebacEngine):
-    async def remove_user_standing(self, user_id: str) -> str | None:
-        self.calls.append("remove_user_standing")
+class _BanWriteFails(AccountStatusRebacEngine):
+    async def suspend_account(self, user_id: str) -> str | None:
+        self.calls.append("suspend_account")
         raise RuntimeError("synthetic store failure")
 
 
@@ -268,5 +276,5 @@ async def test_a_failed_ban_write_keeps_the_identity_account() -> None:
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 500
-        assert deployment.calls == ["remove_user_standing"]
+        assert deployment.calls == ["suspend_account"]
         await _assert_person_untouched(deployment)

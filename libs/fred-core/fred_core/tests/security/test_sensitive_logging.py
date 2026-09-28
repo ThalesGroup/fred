@@ -257,9 +257,7 @@ def test_delegation_request_log_confinement_precedes_parsing(
     )
     log_setup_module.UvicornSensitiveQueryFilter().filter(record)
     rendered = logging.Formatter().format(record)
-    assert rendered == (
-        "access event=delegated_request outcome=completed method=POST status=403"
-    )
+    assert rendered == "access event=request outcome=responded method=POST status=403"
     assert record.exc_info is None
 
 

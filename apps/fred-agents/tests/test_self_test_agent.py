@@ -39,19 +39,20 @@ class _FakeContext:
         tuning_values=None,
         context_prompt_text: str | None = None,
         folders: object | None = None,
+        access_token: str | None = None,
     ) -> None:
         self._result = SimpleNamespace(sources=tuple(sources), blocks=())
         self.tuning_values = dict(tuning_values or {})
         self.services = SimpleNamespace(document_folders=folders)
-        # Mirror BoundRuntimeContext.runtime_context.context_prompt_text so the
-        # agent can echo the conversation-scoped (marketplace) prompt.
+        # Mirror the runtime context fields the agent reads: the conversation-scoped
+        # prompt it echoes, and the person token a delegated turn does not hold.
         self.binding = SimpleNamespace(
-            runtime_context=SimpleNamespace(context_prompt_text=context_prompt_text)
+            runtime_context=SimpleNamespace(
+                context_prompt_text=context_prompt_text, access_token=access_token
+            )
         )
         self.statuses: list[tuple[str, str | None]] = []
         self.thoughts: list[tuple[str, str]] = []
-        # Statuses are buffered by the runtime and thoughts stream live, so their
-        # relative order is part of what the hold has to get right.
         self.emit_order: list[str] = []
         self.tool_calls: list[tuple[str, dict[str, object]]] = []
 
@@ -263,8 +264,7 @@ def test_hold_field_and_workflow_are_wired() -> None:
 
     workflow = SELF_TEST_AGENT.workflow
     assert workflow is not None
-    # The credential is proven before any waiting, in its own node so that
-    # evidence reaches the stream before the hold rather than after it.
+    # The credential is proven before any waiting.
     assert workflow.entry == "baseline"
     assert workflow.edges["baseline"] == "hold"
     assert workflow.edges["hold"] == "retrieve"
@@ -278,8 +278,11 @@ def test_agent_is_registered() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("renewed", [False, True])
 async def test_retrieval_reports_only_observed_renewal(renewed: bool) -> None:
-    ctx = _FakeContext(sources=[], tuning_values={"settings.hold_seconds": 60})
-    ctx.binding.runtime_context.access_token = "synthetic-before"
+    ctx = _FakeContext(
+        sources=[],
+        tuning_values={"settings.hold_seconds": 60},
+        access_token="synthetic-before",
+    )
 
     async def invoke(tool_ref: str, payload: dict[str, object]) -> object:
         if renewed:
@@ -331,6 +334,7 @@ async def test_access_check_accepts_empty_metadata_without_retrieving_documents(
         sources=[],
         tuning_values={"settings.hold_seconds": 10, "settings.check_access": True},
         folders=SimpleNamespace(resolve_folder=resolve),
+        access_token="synthetic-session",
     )
     state = SelfTestState(latest_user_text="Check access")
 
@@ -378,23 +382,38 @@ async def test_access_check_classifies_a_failed_call_without_echoing_it(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("renewed", [False, True])
-async def test_access_check_reports_only_observed_renewal(renewed: bool) -> None:
-    ctx = _FakeContext(sources=[], tuning_values={"settings.check_access": True})
-    ctx.binding.runtime_context.access_token = "synthetic-before"
+@pytest.mark.parametrize(
+    ("before", "after", "marker"),
+    [
+        ("synthetic-before", "synthetic-after", ["credential_renewed"]),
+        (None, None, ["person_credential_absent"]),
+        ("synthetic-before", "synthetic-before", []),
+        (None, "synthetic-after", []),
+        ("synthetic-before", None, []),
+    ],
+    ids=["renewed", "absent", "unchanged", "gained", "lost"],
+)
+async def test_access_check_reports_the_person_token_held_across_the_call(
+    before: str | None, after: str | None, marker: list[str]
+) -> None:
+    ctx = _FakeContext(
+        sources=[],
+        tuning_values={"settings.check_access": True},
+        access_token=before,
+    )
 
     async def resolve_folder(folder: str) -> str | None:
-        if renewed:
-            ctx.binding.runtime_context.access_token = "synthetic-after"
+        ctx.binding.runtime_context.access_token = after
         return None
 
     ctx.services.document_folders = SimpleNamespace(resolve_folder=resolve_folder)
 
     await retrieve_step(SelfTestState(latest_user_text="q"), _ctx(ctx))
 
-    emitted = [status for status, _ in ctx.statuses]
-    assert ("credential_renewed" in emitted) is renewed
-    assert "protected_call_succeeded" in emitted
+    assert [status for status, _ in ctx.statuses] == [
+        *marker,
+        "protected_call_succeeded",
+    ]
     assert "synthetic-" not in str(ctx.statuses)
 
 

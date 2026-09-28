@@ -112,11 +112,7 @@ def _collect_hits(result: object) -> list[VectorSearchHit]:
 
 @typed_node(SelfTestState)
 async def baseline_step(state: SelfTestState, context: GraphNodeContext) -> StepResult:
-    """Prove the credential is accepted before any waiting.
-
-    Its own node on purpose: a node's statuses are flushed when it ends, so this
-    one reaches the stream before the hold begins rather than after it.
-    """
+    """Prove the credential is accepted before any waiting."""
     if context.tuning_values.get("settings.check_access") is True:
         await _check_access(context)
         context.emit_status("credential_baseline")
@@ -130,9 +126,8 @@ async def hold_step(state: SelfTestState, context: GraphNodeContext) -> StepResu
     if total == 0:
         return StepResult()
 
-    # Heartbeats are thoughts because only those reach the stream while the node
-    # is still running; the one status is buffered with the node's events, so it
-    # is flushed last and marks the moment retrieval begins.
+    # Heartbeats are thoughts because the page reads its progress from their text;
+    # the one status below marks the hold's end, which the verdict times.
     elapsed = 0
     while elapsed < total:
         await _sleep(min(_HOLD_SLICE_SECONDS, total - elapsed))
@@ -179,6 +174,9 @@ async def retrieve_step(state: SelfTestState, context: GraphNodeContext) -> Step
         current = getattr(runtime_context, "access_token", None)
         if original and current and original != current:
             context.emit_status("credential_renewed")
+        elif not original and not current:
+            # Reports only what was held; a turn without the person's token is a delegated one.
+            context.emit_status("person_credential_absent")
         context.emit_status("protected_call_succeeded")
         return StepResult(
             state_update={

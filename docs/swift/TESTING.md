@@ -285,11 +285,14 @@ actually hides a button it should, or shows a sane error. That layer is:
 - **`/admin/self-test`**, as a real `platform_admin` in the browser — a
   functional self-test (real documents, real agent turns), an
   authorization self-test (proves the API/UI honor the model for your own
-  session, or for any other account you have the password for), and a
-  credential-expiry check (one real agent turn whose work outlives the
-  credential it was handed; passes only when the authenticated call made
-  as the person *after* that credential expired succeeds, so it stays red
-  until in-turn renewal exists). The check runs on your own session's
+  session, or for any other account you have the password for), and the
+  "Agent access after your session expires" check (one real agent turn
+  whose work outlives the credential it was handed; passes only when the
+  authenticated call made as the person *after* that credential expired
+  succeeds). With delegated execution on, that call runs without the
+  person's token and the check is green; with it off, the call is refused
+  and the check is red, which is the expected limitation of that mode, not
+  a regression. The check runs on your own session's
   token — no password, no realm change — so it takes about that token's
   remaining lifetime plus a short margin, and skips with the reason when
   that would exceed fifteen minutes. It creates and deletes one temporary

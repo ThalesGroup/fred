@@ -6233,7 +6233,7 @@ execution gate in §8.89. Exact claim, transport and refusal scenarios are in th
 `act_for_people` controls outgoing delegation; `accept_delegated_calls` controls
 incoming grants. Both default off. A runtime acting for people requires user
 authentication; a runtime accepting asserted people must also act for people.
-Either switch requires account-standing enforcement and startup readiness.
+Either switch requires account status enforcement and a compatible authorization model at startup.
 
 Service-role shortcuts always exclude caller-role holders, independently of the
 switches. Configuration defaults and rejection scenarios are maintained in the
@@ -6278,7 +6278,7 @@ ownership guarantees.
 ### 8.94 Workload identity and person authorization (2026-09-18)
 
 Receivers authenticate workload bearers and authorize the person named by the
-plain `person`, `run`, `agent` grant using current standing and permissions.
+plain `person`, `run`, `agent` grant using current account status and permissions.
 Caller trust follows §8.90. Runtime history, checkpoints, diagnostics, capability
 configuration and OpenAI-compatible admission require the directly authenticated
 identity. Native execute, evaluate and stream admissions accept delegated people.
@@ -6290,8 +6290,10 @@ maintains the endpoint policy inventory and deferred Graph-agent work.
 
 With outgoing delegation enabled, a caller-role holder must name a person to
 admit a run. Asserted people carry no bearer roles and receive no service-role
-shortcuts. Managed execution requires current standing and `CAN_USE_TEAM_AGENTS`
-on the requested team; direct execution checks standing and any supplied team.
+shortcuts. Account status is the request's own check, made once before admission;
+managed execution then requires `CAN_USE_TEAM_AGENTS` on the requested team, direct
+execution any supplied team, and a delegated run rechecks account status
+before every tool call in every team.
 
 Ordinary service identities without the caller role retain their existing
 execution gates and own-bearer calls, including tools configured as `delegated`.

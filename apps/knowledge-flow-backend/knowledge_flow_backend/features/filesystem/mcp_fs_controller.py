@@ -17,7 +17,7 @@ import mimetypes
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
-from fred_core import AuthorizationError, FilesystemResourceInfoResult, KeycloakUser, StandingAuthorizationError, get_current_user
+from fred_core import AuthorizationError, FilesystemResourceInfoResult, KeycloakUser, get_current_user
 from pydantic import BaseModel
 
 from knowledge_flow_backend.features.filesystem.download_token import (
@@ -92,8 +92,6 @@ class McpFilesystemController:
         return f"{prefix}/fs/download/{normalize_virtual_path(path)}"
 
     def _handle_exception(self, e: Exception, context: str) -> NoReturn:
-        if isinstance(e, StandingAuthorizationError):
-            raise e
         if isinstance(e, AuthorizationError):
             # An expected, routine denial — not a bug. The audit trail (see
             # `_run` below) already carries the structured record; avoid a

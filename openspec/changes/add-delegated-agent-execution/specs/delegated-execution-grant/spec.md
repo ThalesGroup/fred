@@ -76,8 +76,13 @@ or one the delegation block lists. A receiver configured to trust service-accoun
 tokens only SHALL also require the identity provider's service-account markers.
 An `azp` claim alone SHALL NOT establish that trust. The person SHALL be an
 immutable subject identifier in the configured realm, not an email or username.
-The grant SHALL have no lifetime of its own, SHALL be presented on every call
-including retries, and a receiver SHALL NOT forward it to another service.
+The `person`, `run` and `agent` values SHALL NOT contain `*` or `#`; a grant
+carrying such a value SHALL be malformed. A value containing `:` SHALL remain a
+well-formed grant value; whether the authorization store accepts that subject is
+decided by the account-status and permission checks that follow. The
+grant SHALL have no lifetime of its
+own, SHALL be presented on every call including retries, and a receiver SHALL NOT
+forward it to another service.
 
 #### Scenario: Statement from a workload without the caller role
 
@@ -119,6 +124,25 @@ including retries, and a receiver SHALL NOT forward it to another service.
 
 - **WHEN** the parameters are incomplete or malformed
 - **THEN** no person is asserted from those parameters
+
+#### Scenario: A grant value names a wildcard or a userset
+
+- **GIVEN** a receiver that accepts delegated calls and a caller holding the
+  delegation caller role
+- **WHEN** the grant's `person`, `run` or `agent` value contains `*` or `#`
+- **THEN** the grant is rejected as invalid parameters, no person is asserted,
+  the rejection is audited without the grant's values, and the request is decided
+  on the calling workload's ordinary endpoint policy
+
+#### Scenario: A grant value containing a colon
+
+- **GIVEN** a receiver that accepts delegated calls and a caller holding the
+  delegation caller role
+- **WHEN** the grant's `person` is a subject identifier of the form
+  `f:<component>:<external id>`
+- **THEN** the grant is well formed and names that person
+- **AND** account status and permissions are then decided for that subject as
+  for any other
 
 #### Scenario: Parameters split across transports
 
@@ -199,7 +223,11 @@ by the runtime, including a child's own identity on the shared run. No execution
 request argument, tool input or model output SHALL override those identities.
 A run with a missing or terminal record SHALL obtain no delegated credential or
 start a delegated call, including when token acquisition is already awaiting a
-renewal as the run ends.
+renewal as the run ends. Resolving a run's grant SHALL check the record's
+liveness and SHALL acquire no token. The workload bearer of every delegated HTTP
+request attempt SHALL be obtained only through the shared HTTP authentication
+adapter, which SHALL release a token or its renewal only while the run's record
+is live.
 
 #### Scenario: Call without a record
 
@@ -214,16 +242,31 @@ renewal as the run ends.
 
 #### Scenario: Run ends during workload-token acquisition
 
-- **GIVEN** credential acquisition is waiting for the workload token
+- **GIVEN** a delegated request is waiting for the workload token or its renewal
 - **WHEN** the run ends before acquisition returns
-- **THEN** no credential is returned for that run and no outbound request starts
+- **THEN** no token is released for that run, and neither a first request nor a
+  retry is sent
+
+#### Scenario: A delegated request acquires its bearer once
+
+- **GIVEN** outgoing delegation and a live run
+- **WHEN** one REST, binding, team-wiki or tool HTTP request is accepted on its
+  first attempt
+- **THEN** exactly one workload-token acquisition is recorded, grant resolution
+  acquires none, and the request carries that bearer and the record's grant
 
 ### Requirement: An asserted person is distinct from an authenticated one
 
 A principal built from a grant SHALL be a distinct kind, SHALL never carry any
 role, and SHALL be rejected by any endpoint with an explicit guard requiring the
-directly authenticated caller. The runtime endpoint inventory in
-[the design](../../design.md#own-credential-endpoints) SHALL enforce these guards.
+directly authenticated caller. The runtime and control-plane endpoint inventory
+in [the design](../../design.md#own-credential-endpoints) SHALL enforce these
+guards. A service that does not act for people SHALL NOT present a delegated
+caller's bearer to another service: its routes that present their caller's bearer
+to another service SHALL refuse a person named by a grant with 403
+`requires_own_credential` before protected work, except managed execution
+preparation, which SHALL accept such a person, make no call presenting the
+caller's bearer and return no capability composer controls.
 
 #### Scenario: Service-role shortcuts do not apply
 
@@ -238,6 +281,34 @@ directly authenticated caller. The runtime endpoint inventory in
   credential
 - **THEN** the request is rejected before protected work, including on the
   OpenAI-compatible chat endpoint
+
+#### Scenario: Own-credential control-plane guard rejects a delegated person
+
+- **GIVEN** a control plane that accepts delegated calls and does not act for
+  people, and a trusted workload presenting a valid grant
+- **WHEN** it enrolls or updates an agent instance, with or without asset
+  uploads, deletes a session, sessions in bulk or a session attachment, or
+  creates or deletes a knowledge-base instance
+- **THEN** the request is refused with 403 `requires_own_credential` before
+  protected work: no team authorization, store write or onward call is made
+
+#### Scenario: A workload acting as itself is not refused as a delegated person
+
+- **GIVEN** the same workload bearer with no grant
+- **WHEN** it calls one of those control-plane routes
+- **THEN** it is not refused as requiring its own credential, and the route's
+  ordinary authorization applies
+
+#### Scenario: Delegated managed preparation relays nothing
+
+- **GIVEN** a control plane that accepts delegated calls and does not act for
+  people
+- **WHEN** a trusted workload prepares, for a person named by a grant, a managed
+  agent instance whose capabilities contribute composer controls
+- **THEN** preparation succeeds with no capability composer controls, and no
+  request to another service carries the workload's bearer
+- **AND** a person preparing the same instance with their own bearer still
+  receives the capability composer controls
 
 ### Requirement: Permission checks are live on the asserted person
 
@@ -257,10 +328,15 @@ The terminal error event SHALL carry an optional `reason` with the values
 crash. A first HTTP 401 SHALL refresh the workload token and retry the same call
 exactly once. Concurrent 401 responses for the same cached token SHALL share
 that refresh. A first 403, a retry returning 401 or 403, or a structured
-standing-unavailable refusal (503) SHALL end the run with reason `authority_lost`.
+`account_status_unavailable` refusal (503) SHALL end the run with reason `authority_lost`.
 Unrelated 503 responses SHALL retain ordinary
-error handling. A local per-tool permission or standing refusal during delegated
-execution SHALL produce the same typed stop. When delegation cannot be used —
+error handling. While account status is enforced, before each tool call of a
+delegated run, the per-tool recheck SHALL check the person's account status in
+every team, concurrently with the team permission check where the team is
+collaborative; a run without delegated credentials SHALL make no per-tool account
+status check. A local per-tool
+permission or account status refusal during delegated execution SHALL produce the same
+typed stop. When delegation cannot be used —
 no workload credential, a refused tool server — the run SHALL end with
 `delegation_unavailable`. A stopped run's message SHALL be a bounded
 platform-owned sentence chosen from the reason, with no upstream detail. A stopped
@@ -278,14 +354,23 @@ capability's own error handling.
 
 - **GIVEN** a live delegated run
 - **WHEN** a downstream call returns 401 and succeeds after the shared token refresh
-- **THEN** the call uses one retry with the original grant and the run continues
+- **THEN** the call uses one retry with the original grant and one renewal
+  acquisition, and the run continues
 
 #### Scenario: A local tool recheck refuses authority
 
-- **GIVEN** a delegated run that passed admission
-- **WHEN** a local per-tool authorization recheck refuses permission or standing, or cannot establish standing
+- **GIVEN** a delegated run that passed admission, in a personal or a
+  collaborative team
+- **WHEN** a local per-tool authorization recheck refuses permission or account status, or cannot establish account status
 - **THEN** the tool handler is not called and the run ends with `authority_lost`
 - **AND** ordinary execution without delegated credentials retains its existing authorization error behavior
+
+#### Scenario: An undelegated run makes no per-tool account status check
+
+- **GIVEN** account status is enforced and a run holds no delegated credentials
+- **WHEN** it calls a tool in a personal or a collaborative team
+- **THEN** the per-tool recheck makes no account status check, and a
+  collaborative team's permission is still checked
 
 #### Scenario: Upstream detail is not exposed
 
@@ -590,12 +675,21 @@ team optional.
 When `act_for_people` is on and the workload client configuration is missing or
 its token cannot be obtained, the platform SHALL fail admission or end the run
 with `delegation_unavailable` and SHALL NOT fall back to forwarding the person's
-credential.
+credential. Admission SHALL also fail with HTTP 403, keeping no record, when the
+person, run or agent value it would record is one a receiver rejects as a grant
+value.
 
 #### Scenario: Missing workload client with act_for_people on
 
 - **WHEN** a run is admitted while no workload credential is configured
 - **THEN** admission fails, no run record is kept and no downstream call is made
+
+#### Scenario: A value no grant can carry
+
+- **GIVEN** `act_for_people` on
+- **WHEN** a run is admitted whose person, run or agent value contains `*` or `#`
+- **THEN** admission fails with HTTP 403, no run record is kept, and the refusal
+  is audited without the value
 
 ### Requirement: A grant cannot enter from outside
 
@@ -639,8 +733,12 @@ When either delegation switch is on, request logging SHALL exclude identifiers,
 payloads, credentials and unbounded upstream text before authentication or body
 parsing. This SHALL cover query and body grants, malformed requests, errors and
 redirects. Only bounded event, outcome, method, status and reason fields SHALL be
-logged for a request carrying a grant. With both switches off, request
-diagnostics SHALL remain available subject to existing sensitive-query scrubbing.
+logged for a request, whether or not it carries a grant, and the event SHALL NOT
+state that a request was delegated. Health probes SHALL stay below the default
+level. With both switches off, request diagnostics SHALL remain available
+subject to existing sensitive-query scrubbing. With either switch on, the access
+log SHALL write each request's only per-request line; no request or response
+logging middleware SHALL write another.
 
 #### Scenario: Body grant is rejected before authentication
 
@@ -656,11 +754,25 @@ diagnostics SHALL remain available subject to existing sensitive-query scrubbing
   identifier
 - **THEN** the location is absent from every emitted log field
 
-#### Scenario: Access log of a delegated request
+#### Scenario: Access log of a request
 
 - **GIVEN** either delegation switch is on
-- **WHEN** a request carrying grant parameters is logged by the access log
-- **THEN** the record carries only the method and status of a delegated request
+- **WHEN** any request, with or without grant parameters, is logged by the access log
+- **THEN** the record carries only a neutral event, its outcome, the method and the status
+
+#### Scenario: Health probe under delegation
+
+- **GIVEN** either delegation switch is on
+- **WHEN** a health or readiness probe is answered
+- **THEN** its access record is not emitted at the default level
+
+#### Scenario: A request is logged once
+
+- **GIVEN** either delegation switch is on
+- **WHEN** any backend serves a request
+- **THEN** it produces one access record, and no request or response logging
+  middleware writes a second line recording its path, query, client address or
+  bearer claims
 
 ### Requirement: Workload acquisition failures preserve safe retry behavior
 
@@ -668,8 +780,10 @@ Workload-token acquisition SHALL remain synchronized by the provider lock.
 After an acquisition failure, the next caller MAY retry immediately. Successful
 acquisition SHALL populate the cache for subsequent callers. An unreachable token
 endpoint SHALL surface as a transport error of the same class so existing
-polling callers can retry. Failures SHALL NOT expose upstream details or secret
-names, return expired credentials or fall back to the person's credential.
+polling callers can retry. A failed acquisition for a delegated request SHALL
+write one log line naming only the error type. Failures SHALL NOT expose upstream
+details or secret names, return expired credentials or fall back to the person's
+credential.
 
 #### Scenario: Recovery after a failed acquisition
 
@@ -682,6 +796,12 @@ names, return expired credentials or fall back to the person's credential.
 - **GIVEN** a document publisher waiting for processing to complete
 - **WHEN** the token endpoint cannot be reached during polling
 - **THEN** the transport error preserves the caller's existing retry behavior
+
+#### Scenario: A failed delegated acquisition is logged without detail
+
+- **WHEN** acquiring the workload token for a delegated request fails
+- **THEN** one log line records the failure with its error type only, and no
+  further request is sent for it
 
 ### Requirement: Children are attributed individually
 
@@ -700,7 +820,8 @@ copied credential; cancelling the run SHALL cancel every child.
 Each backend SHALL export, without identity, URL, client, team, token or run
 labels: workload token requests to the identity provider by operation (`initial`
 for a provider's first token, `renewal` afterwards) and outcome (`success`,
-`error`, `cancelled`) with their latency; the caller's total wait for a token;
+`error`, `cancelled`) with their latency; the caller's wait for each acquisition,
+one per authenticated request and one per renewal, the retry reusing the renewed token;
 token cache decisions (`hit`, `miss`, `shared_refresh`); and grant
 admission decisions by outcome and bounded reason. Every known series SHALL exist
 at zero before traffic. A failing metrics observer SHALL NOT affect token

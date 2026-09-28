@@ -20,6 +20,9 @@ from typing import cast as _cast
 
 from fred_core.common.team_id import is_personal_team_ref as _is_personal_team_ref
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter as _BaseKPIWriter
+from fred_core.security.delegation import (
+    enforce_account_status as _enforce_account_status,
+)
 from fred_core.security.models import AuthorizationError as _AuthorizationError
 from fred_core.security.models import Resource as _Resource
 from fred_core.security.oidc import apply_security_profile as _apply_security_profile
@@ -242,7 +245,8 @@ async def rebac_sdk_factory(
 
     First-party application backends are ReBAC readers, never schema or store
     owners. They must use the hardened C3 profile and supply their process KPI
-    writer so every OpenFGA call remains observable.
+    writer so every OpenFGA call remains observable. With a delegation switch on,
+    the engine also serves the account status check of each authenticated request.
     """
 
     writer = _require_kpi_writer(kpi_writer)
@@ -276,13 +280,7 @@ async def rebac_sdk_factory(
     engine = _rebac_factory(security_config, kpi_writer=writer)
     sdk = _RebacSdk(engine)
     await _cast(_InitializableRebacEngine, engine).get_client()
-    # Under delegation, a store without the standing marker refuses every
-    # person at request time; the backend refuses to start instead, as the
-    # platform services do.
-    if security_config.delegation.in_use:
-        await engine.validate_standing_model()
-        if not await engine.is_standing_seed_ready():
-            raise ValueError("Account standing is not ready.")
+    await _enforce_account_status(engine)
     return sdk
 
 

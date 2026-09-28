@@ -19,8 +19,8 @@ from typing import Any, Dict, Optional, Protocol
 
 import httpx
 from fred_core.common.fastapi_handlers import (
+    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
-    STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
@@ -237,8 +237,8 @@ class KfBaseClient:
         """
         url = f"{self.base_url}{path}"
 
-        # One source for both halves of the call's identity: the header, and the
-        # grant parameters a delegated call carries beside it.
+        # The provider supplies the grant and, for a person, the header; a
+        # delegated call's bearer is set on each attempt by M2MBearerAuth.
         provider = self.credential_provider()
         override_token = kwargs.pop("access_token", None)
         credentials = await provider.credentials(override_token=override_token)
@@ -304,7 +304,8 @@ class KfBaseClient:
                 r.status_code in (401, 403)
                 or (
                     r.status_code == 503
-                    and r.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
+                    and r.headers.get(DENIAL_CAUSE_HEADER)
+                    == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
                 )
             ):
                 # The receiver refused this run's authority after service-token

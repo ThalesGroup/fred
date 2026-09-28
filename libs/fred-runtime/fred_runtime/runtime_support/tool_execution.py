@@ -84,20 +84,33 @@ class ToolExecution:
         # The service-agent flag is stamped by trusted admission, never tool args.
         if not user_id or is_service_agent:
             return
+        scope = RunScope.current()
+        delegated = scope is not None and scope.delegated_credentials
         try:
             if not team_id or is_personal_team_id(team_id):
-                scope = RunScope.current()
-                if scope is not None and scope.delegated_credentials:
-                    await rebac.require_user_standing(user_id)
+                if delegated:
+                    await rebac.require_active_account(user_id)
                 return
-            await rebac.check_permission_or_raise(
+            permission = rebac.check_permission_or_raise(
                 RebacReference(Resource.USER, user_id),
                 TeamPermission.CAN_USE_TEAM_AGENTS,
                 RebacReference(Resource.TEAM, team_id),
             )
+            if not delegated:
+                await permission
+                return
+            # Both are awaited to the end so an account status refusal wins over a
+            # permission check failure, whichever arrives first.
+            outcomes = await asyncio.gather(
+                rebac.require_active_account(user_id),
+                permission,
+                return_exceptions=True,
+            )
+            for outcome in outcomes:
+                if isinstance(outcome, BaseException):
+                    raise outcome
         except AuthorizationError:
-            scope = RunScope.current()
-            if scope is not None and scope.delegated_credentials:
+            if delegated:
                 raise AuthorityLostError() from None
             raise
 

@@ -473,51 +473,48 @@ Important consequence:
 - A `platform_admin` user can still be denied team operations when they are not an explicit team relation holder for that team.
 - A team's first `team_admin` is set once, at team creation, by the bootstrap endpoint — not by post-install scripts guessing at ownership.
 
-### Account standing — `active`, `suspended` and `standing_ready`
+### Suspended accounts — `suspended`
 
-Fred owns account standing through three relations on `organization:fred`:
+Fred records the people it has removed through one relation on `organization:fred`:
+`suspended: [user]`. Every other authenticated person, service identities checked
+as people included, has an active account; nothing is stored for them.
 
-- `active: [user:*] but not suspended` — the stored everyone entry
-  `organization:fred#active@user:*` puts every authenticated person in good
-  standing, service identities checked as people included, unless suspended.
-- `suspended: [user]` — a person Fred has removed.
-- `standing_ready: [organization]` — the marker that the everyone entry is written.
-
-**Writers.** At every start with delegation on, the control plane validates the
-selected model, then writes the everyone entry and the marker, and does not start
-without them. `DELETE /users/{user_id}` is the only Fred operation that removes
-standing: it writes `suspended` before deleting the identity-provider account and
-leaves the person's other relations in place (see
-[`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#deleting-a-person-removes-their-standing-first-2026-09-23)).
+**Writers.** Nothing is written at startup. `DELETE /users/{user_id}` is the only
+Fred operation that suspends an account: it writes `suspended` before deleting the
+identity-provider account and leaves the person's other relations in place (see
+[`CONTROL-PLANE-PRODUCT-CONTRACT.md`](../design/CONTROL-PLANE-PRODUCT-CONTRACT.md#deleting-a-person-suspends-their-account-first-2026-09-23)).
 While control-plane delegation is off it writes no ban; the deleted person has no
 identity-provider account left.
-Generic writes and deletes of the three relations are refused, and user tokens and
-delegation grants never write them, so a caller cannot assert its own standing.
+Generic writes and deletes of `suspended` are refused, and user tokens and
+delegation grants never write it, so a caller cannot lift its own suspension.
 
 **Enforcement.** Delegation turns the check on, with no separate switch; a service
 whose relationship engine would not enforce — no OpenFGA, or either OIDC half
-disabled — does not start. While delegation is on, every authorization decision
-whose subject is a person also requires `active`, ordinary signed-in requests
-included; team-subject checks are unaffected. Standing that cannot be established
-is refused, and a store that cannot answer is reported as unavailable. A ban
-applies from the person's next authorization decision; work already authorized is
-not interrupted.
+disabled — does not start. While delegation is on, the shared user dependency
+checks once per authenticated request, where the subject is set and before the
+route runs, that the subject is not `suspended`: a signed-in person, a person
+named by a grant or a service identity, with no exemption. A tool mount only
+authenticates; the route serving a tool call makes that call's check.
+Checks, batch checks and lookups do not repeat it and keep their caller's
+consistency. A delegated run also checks the person's account status before
+every tool call, in every team.
+A store that cannot answer, or a service with no engine installed for the check,
+refuses the request with 503 `account_status_unavailable`. A ban applies from the
+person's next request; a request that has passed its check completes, and
+background work it admitted finishes.
 
-**Identity provider.** Standing never follows identity-provider account state.
+**Identity provider.** Account status never follows identity-provider account state.
 Disabling or deleting an account there ends interactive access when the token
 expires; delegated agents continue until the person is deleted in Fred.
 
-**Activation and rollback.** Standing needs OpenFGA 1.10 or later: every start
-rewrites the everyone entry and the marker, and a retried delete rewrites the ban,
-relying on the server ignoring duplicate writes. Publish and select a model
-carrying these relations on every participating reader and writer, then enable
-delegation at the control plane, and only then at the readers. Every service, the control plane included,
-validates the selected model at startup while its delegation is on and refuses an
-incompatible one; a reader also refuses to start ("Account standing is not
-ready.") until the marker exists. Rollback reverses the order: disable delegation
-before pointing any service back at an older model. The model and tuples already
-written may stay; with delegation off no decision consults them, so a retained ban
-has no effect.
+**Activation and rollback.** Account status needs OpenFGA 1.10 or later: a retried
+delete rewrites the ban, relying on the server ignoring duplicate writes. Publish
+and select a model carrying `suspended` on every participating reader and writer
+before enabling delegation. Every service validates the selected model at startup
+while its delegation is on, refuses an incompatible one and installs its engine for
+the request check; services start in any order. Rollback: disable delegation before pointing any service back at an older
+model. Suspensions may stay; with delegation off no decision consults them, so a
+retained ban has no effect.
 
 ## Configuration
 
@@ -594,7 +591,10 @@ initializes fred-core's process-local JWT verifier from `security.user`, so the
 C3 issuer and audience checks guard the user dependency that supplies `user`.
 The async factory resolves the configured store before startup completes;
 invalid credentials, an absent store, or an unavailable OpenFGA endpoint do
-not wait for the first request. Build the facade once with the process-level
+not wait for the first request. With a delegation switch on, the factory also
+installs its engine for the account status check of each request authenticated
+through fred-core's user dependency; without it, or while OpenFGA cannot answer,
+those requests return 503 `account_status_unavailable`. Build the facade once with the process-level
 writer, reuse it across requests, and close it during shutdown:
 
 ```python

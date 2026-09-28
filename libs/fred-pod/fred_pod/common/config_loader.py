@@ -116,7 +116,6 @@ def _load_local_delegation(configuration: object) -> None:
             f"Invalid local delegation file {path}; rerun scripts/populate_local_delegation.py: {exc}"
         ) from exc
     security.delegation = policy
-    logger.info("[CONFIG] Loaded local delegation from: %s", path)
 
 
 def load_configuration_with_config_files(

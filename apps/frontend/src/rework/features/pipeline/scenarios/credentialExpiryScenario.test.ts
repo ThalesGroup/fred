@@ -19,6 +19,13 @@ import { AgentTurnExecutionError, AgentTurnRejectedError } from "../actions";
 import { MAX_HOLD_MINUTES, type PipelineDeps, type StepReport } from "../types";
 
 const NOW = 1_000_000;
+
+/** The fixed refusal names the cause and the remedy, and nothing from upstream. */
+function expectExpiryRefusal(error: string | undefined): void {
+  expect(error).toContain("session expired during the run");
+  expect(error).toContain("delegated execution keeps long runs working");
+  expect(error).not.toContain("An error occurred");
+}
 const auth = vi.hoisted(() => ({
   configured: true,
   fresh: vi.fn(),
@@ -77,6 +84,21 @@ function setup() {
   };
 }
 
+/** A turn whose call after the hold succeeded, plus the markers under test. */
+function succeededTurn(markers: Record<string, number>) {
+  return {
+    answer: "Authenticated check completed.",
+    sources: [],
+    sessionId: null,
+    statusSeenAt: {
+      credential_baseline: NOW,
+      hold: NOW + 315_000,
+      protected_call_succeeded: NOW + 316_000,
+      ...markers,
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   auth.configured = true;
@@ -104,6 +126,48 @@ describe("SSO credential expiry", () => {
     );
     expect(test.deps.deleteAgentInstance).toHaveBeenCalledExactlyOnceWith("temporary-instance");
   });
+
+  it("passes when renewal is observed after the hold", async () => {
+    const test = setup();
+    await test.run();
+    expect(test.step("expiry-turn")?.status).toBe("passed");
+    expect(test.step("expiry-turn")?.detail).toContain("credential renewal was observed");
+  });
+
+  it("passes when the call after the hold ran without the person's token", async () => {
+    const test = setup();
+    vi.mocked(test.deps.runAgentTurn).mockResolvedValue(succeededTurn({ person_credential_absent: NOW + 316_000 }));
+    await test.run();
+    expect(test.step("expiry-turn")?.status).toBe("passed");
+    expect(test.step("expiry-turn")?.detail).toBe("access survived the session's expiry without the person's token");
+    expect(test.deps.deleteAgentInstance).toHaveBeenCalledExactlyOnceWith("temporary-instance");
+  });
+
+  it("is inconclusive when the call succeeded on a person token that never changed", async () => {
+    const test = setup();
+    vi.mocked(test.deps.runAgentTurn).mockResolvedValue(succeededTurn({}));
+    await test.run();
+    expect(test.step("expiry-turn")?.status).toBe("failed");
+    expect(test.step("expiry-turn")?.error).toMatch(/^inconclusive: .*original token may still be accepted$/);
+  });
+
+  it.each(["credential_renewed", "person_credential_absent"])(
+    "does not pass on %s observed before the hold ended",
+    async (marker) => {
+      const test = setup();
+      vi.mocked(test.deps.runAgentTurn).mockResolvedValue(succeededTurn({ [marker]: NOW + 314_000 }));
+      await test.run();
+      expect(test.step("expiry-turn")?.status).toBe("failed");
+      expect(test.step("expiry-turn")?.error).toContain("inconclusive");
+    },
+  );
+
+  it("names its steps by access before and after the session expires", async () => {
+    const test = setup();
+    await test.run();
+    expect(test.step("baseline-access")?.title).toBe("Access before your session expires");
+    expect(test.step("expiry-turn")?.title).toBe("Access after your session expires");
+  });
 });
 
 describe("pre-expiry evidence", () => {
@@ -130,6 +194,8 @@ describe("pre-expiry evidence", () => {
 
     expect(seenDuringTurn?.status).toBe("passed");
     expect(test.step("baseline-access")?.status).toBe("passed");
+    // True in both delegation modes: it does not say which credential carried the call.
+    expect(test.step("baseline-access")?.detail).toBe("access was granted before the wait began");
     // Timed like every other row, so the report reads consistently.
     expect(test.step("baseline-access")?.durationMs).toEqual(expect.any(Number));
     expect(test.step("expiry-turn")?.status).toBe("passed");
@@ -236,7 +302,7 @@ describe("expiry test guards", () => {
       new AgentTurnExecutionError({ credential_baseline: NOW, hold: NOW + 315_000 }, true),
     );
     await test.run();
-    expect(test.step("expiry-turn")?.error).toContain("expired during the protected call");
+    expectExpiryRefusal(test.step("expiry-turn")?.error);
     expect(test.deps.deleteAgentInstance).toHaveBeenCalledExactlyOnceWith("temporary-instance");
     expect(test.forbidden).not.toHaveBeenCalled();
   });
@@ -249,7 +315,7 @@ describe("expiry test guards", () => {
       statusSeenAt: { credential_baseline: NOW, hold: NOW + 315_000 },
     });
     await test.run();
-    expect(test.step("expiry-turn")?.error).toContain("expired during the protected call");
+    expectExpiryRefusal(test.step("expiry-turn")?.error);
     expect(test.deps.deleteAgentInstance).toHaveBeenCalledExactlyOnceWith("temporary-instance");
   });
   it.each([

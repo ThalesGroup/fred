@@ -23,18 +23,26 @@ own arguments, where no model output can reach it.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from conftest import (
+    MockIdentityProvider,
+    StaticWorkloadTokens,
+    admitted_provider,
+)
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
     GRANT_PARAM_RUN,
+    DelegationConfig,
 )
 from fred_runtime.common import mcp_runtime, mcp_utils
 from fred_runtime.common.mcp_interceptors import (
@@ -43,11 +51,15 @@ from fred_runtime.common.mcp_interceptors import (
 )
 from fred_runtime.common.mcp_runtime import _mcp_cache_key
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
+    DelegationRuntime,
     OutboundCredentialProvider,
     OutboundCredentials,
     PersonCredentialProvider,
+    RunRecord,
     static_person_provider,
 )
+from fred_runtime.common.tool_node_utils import create_mcp_tool_node
 from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.authority import (
@@ -56,9 +68,13 @@ from fred_runtime.runtime_support.authority import (
 )
 from fred_sdk.contracts.context import RuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration, MCPServerRef
+from langchain_core.messages import AIMessage
+from langchain_mcp_adapters import sessions as mcp_sessions
 from langchain_mcp_adapters import tools as mcp_adapter_tools
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 from langchain_mcp_adapters.sessions import StreamableHttpConnection
+from langgraph.graph import END, START, MessagesState, StateGraph
 from mcp.types import CallToolResult, TextContent, Tool
 
 UPSTREAM_MARKER = "upstream-detail-marker"
@@ -66,42 +82,9 @@ PERSON_BEARER = "Bearer person-token"
 WORKLOAD_BEARER = "Bearer workload-token"
 
 
-class DelegatedProvider(OutboundCredentialProvider):
-    """A provider already admitted for one run, with a rotatable bearer."""
-
-    delegated = True
-
-    def __init__(
-        self,
-        *,
-        person: str = "alice",
-        run: str = "run-7",
-        agent: str = "agent-a",
-        authorization: str = WORKLOAD_BEARER,
-    ) -> None:
-        self.parameters = {
-            GRANT_PARAM_PERSON: person,
-            GRANT_PARAM_RUN: run,
-            GRANT_PARAM_AGENT: agent,
-        }
-        self.authorization = authorization
-        self.asked = 0
-
-    async def credentials(self, *, override_token: str | None = None):
-        self.asked += 1
-        return OutboundCredentials(
-            authorization=self.authorization,
-            parameters=dict(self.parameters),
-            delegated=True,
-        )
-
-    def for_agent(self, agent_id: str) -> "DelegatedProvider":
-        return DelegatedProvider(
-            person=self.parameters[GRANT_PARAM_PERSON],
-            run=self.parameters[GRANT_PARAM_RUN],
-            agent=agent_id,
-            authorization=self.authorization,
-        )
+def delegated_provider() -> DelegatedCredentialProvider:
+    """A real provider admitted for one run: alice, run-7, agent-a."""
+    return admitted_provider(StaticWorkloadTokens())
 
 
 def server(
@@ -159,13 +142,20 @@ async def connect(
 
 
 @pytest.mark.asyncio
-async def test_a_delegated_server_receives_the_workload_bearer_and_the_grant(
-    connections,
+async def test_a_delegated_server_gets_the_bearer_adapter_and_the_grant(
+    connections, monkeypatch
 ):
-    await connect([server("delegated")], credentials=DelegatedProvider())
+    """The connection holds no bearer of its own: the adapter takes one per
+    request, so building it acquires nothing."""
+    identity = MockIdentityProvider(monkeypatch)
+    await connect(
+        [server("delegated")], credentials=admitted_provider(identity.provider)
+    )
 
     connection = connections["kf-mcp"]
-    assert connection["headers"]["Authorization"] == WORKLOAD_BEARER
+    assert isinstance(connection["auth"], M2MBearerAuth)
+    assert "headers" not in connection
+    assert identity.acquisitions == 0
     assert "person=alice" in connection["url"]
     assert "run=run-7" in connection["url"]
     assert "agent=agent-a" in connection["url"]
@@ -175,17 +165,17 @@ async def test_a_delegated_server_receives_the_workload_bearer_and_the_grant(
 async def test_the_grant_travels_outside_the_tools_arguments(connections):
     """It is on the endpoint, so a tool schema never carries it and a model can
     never write it."""
-    await connect([server("delegated")], credentials=DelegatedProvider())
+    await connect([server("delegated")], credentials=delegated_provider())
 
     connection = connections["kf-mcp"]
     assert connection["url"].startswith("http://kf.invalid/mcp?")
-    assert set(connection["headers"]) == {"Authorization"}
+    assert "headers" not in connection
 
 
 @pytest.mark.asyncio
 async def test_a_user_token_server_is_refused_under_delegation(connections):
     with pytest.raises(DelegationUnavailableError) as raised:
-        await connect([server("user_token")], credentials=DelegatedProvider())
+        await connect([server("user_token")], credentials=delegated_provider())
 
     assert raised.value.reason == "delegation_unavailable"
     assert connections == {}  # nothing was connected, so no bearer was sent
@@ -193,16 +183,17 @@ async def test_a_user_token_server_is_refused_under_delegation(connections):
 
 @pytest.mark.asyncio
 async def test_a_no_token_server_is_unchanged_under_delegation(connections):
-    await connect([server("no_token")], credentials=DelegatedProvider())
+    await connect([server("no_token")], credentials=delegated_provider())
 
     assert connections["kf-mcp"].get("headers") in (None, {})
+    assert "auth" not in connections["kf-mcp"]
 
 
 @pytest.mark.asyncio
 async def test_a_transport_that_cannot_carry_the_grant_is_refused(connections):
     with pytest.raises(DelegationUnavailableError):
         await connect(
-            [server("delegated", transport="stdio")], credentials=DelegatedProvider()
+            [server("delegated", transport="stdio")], credentials=delegated_provider()
         )
 
     assert connections == {}
@@ -215,7 +206,7 @@ async def test_a_refused_server_exposes_no_identifier_to_logs_or_the_run(
     caplog.clear()
     with caplog.at_level(logging.ERROR):
         with pytest.raises(DelegationUnavailableError) as raised:
-            await connect([server("user_token")], credentials=DelegatedProvider())
+            await connect([server("user_token")], credentials=delegated_provider())
 
     assert "kf-mcp" not in caplog.text
     assert "kf-mcp" not in str(raised.value)
@@ -224,7 +215,7 @@ async def test_a_refused_server_exposes_no_identifier_to_logs_or_the_run(
 @pytest.mark.asyncio
 async def test_the_grant_is_kept_out_of_the_connection_logs(connections):
     with recorded_logs() as logs:
-        await connect([server("delegated")], credentials=DelegatedProvider())
+        await connect([server("delegated")], credentials=delegated_provider())
 
     assert logs.lines
     assert not [
@@ -376,7 +367,7 @@ async def test_a_delegated_connection_is_not_kept(monkeypatch, empty_client_cach
         mcp_servers=[server("delegated")],
         runtime_context=RuntimeContext(),
         tool_interceptors=[],
-        credentials=DelegatedProvider(),
+        credentials=delegated_provider(),
     )
 
     assert client is connected
@@ -430,11 +421,13 @@ def tool_request(headers: dict[str, str] | None = None) -> MCPToolCallRequest:
 
 
 def refusal(
-    status_code: int, *, standing_unavailable: bool = False
+    status_code: int, *, account_status_unavailable: bool = False
 ) -> httpx.HTTPStatusError:
     request = httpx.Request("POST", "http://kf.invalid/mcp")
     headers = (
-        {"X-Fred-Denial-Cause": "standing_unavailable"} if standing_unavailable else {}
+        {"X-Fred-Denial-Cause": "account_status_unavailable"}
+        if account_status_unavailable
+        else {}
     )
     return httpx.HTTPStatusError(
         f"HTTP {status_code}",
@@ -443,30 +436,6 @@ def refusal(
             status_code, text=UPSTREAM_MARKER, request=request, headers=headers
         ),
     )
-
-
-@pytest.mark.asyncio
-async def test_every_tool_call_carries_a_current_bearer():
-    """The connection was opened with the token of the moment; a later call must
-    not be sent with it once the provider has moved on."""
-    provider = DelegatedProvider()
-    interceptor = DelegatedAuthorityInterceptor(
-        provider, delegated_server_ids={"kf-mcp"}
-    )
-    seen: list[dict[str, Any]] = []
-
-    async def _handler(request: MCPToolCallRequest):
-        seen.append(dict(request.headers or {}))
-        return "ok"
-
-    await interceptor(tool_request({"Authorization": "Bearer stale-token"}), _handler)
-    provider.authorization = "Bearer workload-token-2"
-    await interceptor(tool_request({"Authorization": "Bearer stale-token"}), _handler)
-
-    assert [headers["Authorization"] for headers in seen] == [
-        WORKLOAD_BEARER,
-        "Bearer workload-token-2",
-    ]
 
 
 @pytest.mark.asyncio
@@ -568,7 +537,7 @@ async def test_mcp_runtime_converted_tool_reads_rotated_person_bearer(
 @pytest.mark.parametrize("status_code", [401, 403])
 @pytest.mark.asyncio
 async def test_a_refused_tool_call_ends_the_run_without_a_retry(status_code: int):
-    provider = DelegatedProvider()
+    provider = delegated_provider()
     interceptor = DelegatedAuthorityInterceptor(
         provider, delegated_server_ids={"kf-mcp"}
     )
@@ -590,7 +559,7 @@ async def test_a_refused_tool_call_ends_the_run_without_a_retry(status_code: int
 @pytest.mark.asyncio
 async def test_an_ordinary_tool_failure_is_left_alone():
     interceptor = DelegatedAuthorityInterceptor(
-        DelegatedProvider(), delegated_server_ids={"kf-mcp"}
+        delegated_provider(), delegated_server_ids={"kf-mcp"}
     )
 
     async def _handler(request: MCPToolCallRequest):
@@ -601,13 +570,13 @@ async def test_an_ordinary_tool_failure_is_left_alone():
 
 
 @pytest.mark.asyncio
-async def test_standing_unavailable_tool_transport_ends_authority():
+async def test_account_status_unavailable_tool_transport_ends_authority():
     interceptor = DelegatedAuthorityInterceptor(
-        DelegatedProvider(), delegated_server_ids={"kf-mcp"}
+        delegated_provider(), delegated_server_ids={"kf-mcp"}
     )
 
     async def _handler(request: MCPToolCallRequest):
-        raise refusal(503, standing_unavailable=True)
+        raise refusal(503, account_status_unavailable=True)
 
     with pytest.raises(AuthorityLostError):
         await interceptor(tool_request(), _handler)
@@ -616,7 +585,7 @@ async def test_standing_unavailable_tool_transport_ends_authority():
 @pytest.mark.asyncio
 async def test_structured_mcp_refusal_stops_before_tool_error_conversion():
     interceptor = DelegatedAuthorityInterceptor(
-        DelegatedProvider(), delegated_server_ids={"kf-mcp"}
+        delegated_provider(), delegated_server_ids={"kf-mcp"}
     )
 
     async def _handler(request: MCPToolCallRequest):
@@ -633,7 +602,7 @@ async def test_structured_mcp_refusal_stops_before_tool_error_conversion():
 @pytest.mark.asyncio
 async def test_unstructured_mcp_error_text_does_not_claim_lost_authority():
     interceptor = DelegatedAuthorityInterceptor(
-        DelegatedProvider(), delegated_server_ids={"kf-mcp"}
+        delegated_provider(), delegated_server_ids={"kf-mcp"}
     )
     result = CallToolResult(
         content=[TextContent(type="text", text='{"cause":"authority_lost"}')],
@@ -735,12 +704,22 @@ async def test_a_run_whose_record_is_gone_makes_no_tool_call():
 
 
 @pytest.mark.asyncio
-async def test_converted_no_token_tool_never_receives_delegated_bearer(monkeypatch):
-    """Exercise the adapter path that merges interceptor headers into the
-    HTTP connection used for each converted tool call."""
-    provider = DelegatedProvider()
+async def test_the_tool_gate_adds_no_header_and_stops_only_delegated_calls(
+    monkeypatch,
+):
+    """The bearer comes from the connection's authentication adapter, so the
+    interceptor adds none; it refuses an ended run's delegated call before a
+    session opens and leaves a no_token server alone."""
+    runtime = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True),
+        token_provider=StaticWorkloadTokens(),
+    )
+    runtime.records.admit(
+        RunRecord(run_id="run-7", person_id="alice", agent_id="agent-a")
+    )
     interceptor = DelegatedAuthorityInterceptor(
-        provider, delegated_server_ids={"delegated-mcp"}
+        runtime.provider_for(run_id="run-7", agent_id="agent-a"),
+        delegated_server_ids={"delegated-mcp"},
     )
     opened_connections: list[dict[str, Any]] = []
 
@@ -766,30 +745,26 @@ async def test_converted_no_token_tool_never_receives_delegated_bearer(monkeypat
         "transport": "streamable_http",
         "url": "http://tools.invalid/mcp",
     }
-
-    no_token_tool = mcp_adapter_tools.convert_mcp_tool_to_langchain_tool(
-        None,
-        tool,
-        connection=connection,
-        tool_interceptors=[interceptor],
-        server_name="no-token-mcp",
+    no_token_tool, delegated_tool = (
+        mcp_adapter_tools.convert_mcp_tool_to_langchain_tool(
+            None,
+            tool,
+            connection=connection,
+            tool_interceptors=[interceptor],
+            server_name=server_name,
+        )
+        for server_name in ("no-token-mcp", "delegated-mcp")
     )
+
     await no_token_tool.ainvoke({})
-
-    assert opened_connections[-1].get("headers") in (None, {})
-    assert provider.asked == 0
-
-    delegated_tool = mcp_adapter_tools.convert_mcp_tool_to_langchain_tool(
-        None,
-        tool,
-        connection=connection,
-        tool_interceptors=[interceptor],
-        server_name="delegated-mcp",
-    )
     await delegated_tool.ainvoke({})
+    assert opened_connections == [dict(connection), dict(connection)]
 
-    assert opened_connections[-1]["headers"]["Authorization"] == WORKLOAD_BEARER
-    assert provider.asked == 1
+    runtime.records.mark_terminal("run-7")
+    await no_token_tool.ainvoke({})
+    with pytest.raises(DelegationUnavailableError):
+        await delegated_tool.ainvoke({})
+    assert len(opened_connections) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -831,7 +806,7 @@ def refusing_client(
     status: int | None,
     *,
     transport_error: bool = False,
-    standing_unavailable: bool = False,
+    account_status_unavailable: bool = False,
 ):
     """A `MultiServerMCPClient` whose tool listing fails the way the adapter's
     does: the HTTP error the SDK raises from `raise_for_status`, quoting the
@@ -855,8 +830,8 @@ def refusing_client(
                 request=request,
                 text="refused",
                 headers=(
-                    {"X-Fred-Denial-Cause": "standing_unavailable"}
-                    if standing_unavailable
+                    {"X-Fred-Denial-Cause": "account_status_unavailable"}
+                    if account_status_unavailable
                     else {}
                 ),
             )
@@ -933,6 +908,186 @@ async def init_mcp_runtime(
         set_runtime_context(None)
 
 
+# ---------------------------------------------------------------------------
+# The real MCP client library against a delegated tool server
+# ---------------------------------------------------------------------------
+
+
+class _ToolServer:
+    """A minimal streamable-HTTP tool server answering over httpx.MockTransport.
+
+    It sets no session id, so the library opens no event stream and sends no
+    session teardown: every request it receives is one the run made.
+    """
+
+    def __init__(self) -> None:
+        self.requests: list[httpx.Request] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        # The authentication adapter re-sends one request object, so copy it.
+        self.requests.append(
+            httpx.Request(
+                request.method,
+                request.url,
+                headers=request.headers,
+                content=request.content,
+            )
+        )
+        message = json.loads(request.content)
+        if "id" not in message:
+            return httpx.Response(202)
+        results = {
+            "initialize": {
+                "protocolVersion": message.get("params", {}).get("protocolVersion"),
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "synthetic", "version": "1"},
+            },
+            "tools/list": {
+                "tools": [
+                    {
+                        "name": "search",
+                        "description": "Synthetic search tool",
+                        "inputSchema": {"type": "object", "properties": {}},
+                    }
+                ]
+            },
+            "tools/call": {"content": [{"type": "text", "text": "found"}]},
+        }
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": message["id"],
+                "result": results[message["method"]],
+            },
+        )
+
+    def methods(self) -> list[str]:
+        return [json.loads(request.content)["method"] for request in self.requests]
+
+
+@pytest.fixture
+def tool_server(monkeypatch) -> _ToolServer:
+    """Serve the library's own HTTP client from a local tool server."""
+    served = _ToolServer()
+
+    def _client(headers=None, timeout=None, auth=None) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            headers=headers,
+            timeout=timeout,
+            auth=auth,
+            follow_redirects=True,
+            transport=httpx.MockTransport(served),
+        )
+
+    monkeypatch.setattr(mcp_sessions, "create_mcp_http_client", _client)
+    return served
+
+
+@asynccontextmanager
+async def running_mcp_runtime(
+    monkeypatch, provider: OutboundCredentialProvider
+) -> AsyncIterator[mcp_runtime.MCPRuntime]:
+    monkeypatch.setattr(mcp_utils, "MultiServerMCPClient", MultiServerMCPClient)
+    set_runtime_context(
+        FredRuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="http://kf.invalid/kf/v1",
+                mcp_configuration=_McpCatalog(server("delegated")),
+            )
+        )
+    )
+    runtime = mcp_runtime.MCPRuntime(agent=cast(Any, _AgentShim(provider=provider)))
+    try:
+        await runtime.init()
+        yield runtime
+    finally:
+        await runtime.aclose()
+        set_runtime_context(None)
+
+
+async def call_search(runtime: mcp_runtime.MCPRuntime) -> dict[str, Any]:
+    """One tool call through the tool node a turn uses."""
+    builder = StateGraph(MessagesState)
+    builder.add_node("tools", create_mcp_tool_node(runtime.get_tools()))
+    builder.add_edge(START, "tools")
+    builder.add_edge("tools", END)
+    call = AIMessage(
+        content="", tool_calls=[{"name": "search", "args": {}, "id": "call-1"}]
+    )
+    return await builder.compile().ainvoke({"messages": [call]})
+
+
+def carries_the_grant(request: httpx.Request) -> bool:
+    return dict(request.url.params) == {
+        GRANT_PARAM_PERSON: "alice",
+        GRANT_PARAM_RUN: "run-7",
+        GRANT_PARAM_AGENT: "agent-a",
+    }
+
+
+@pytest.mark.asyncio
+async def test_every_request_to_a_delegated_tool_server_carries_a_current_bearer(
+    monkeypatch, tool_server, empty_client_cache
+):
+    """A connection outlives one workload token: each HTTP request the library
+    sends takes its own bearer, and grant resolution acquires none."""
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1", "workload-token-2")
+
+    async with running_mcp_runtime(
+        monkeypatch, admitted_provider(identity.provider)
+    ) as runtime:
+        identity.expire()
+        result = await call_search(runtime)
+
+    assert "found" in str(result["messages"][-1].content)
+    # The library validates a call's result against a listing of its own.
+    assert tool_server.methods() == [
+        "initialize",
+        "notifications/initialized",
+        "tools/list",
+        "initialize",
+        "notifications/initialized",
+        "tools/call",
+        "tools/list",
+    ]
+    assert [request.headers["Authorization"] for request in tool_server.requests] == [
+        "Bearer workload-token-1"
+    ] * 3 + ["Bearer workload-token-2"] * 4
+    assert all(carries_the_grant(request) for request in tool_server.requests)
+    assert identity.acquisitions == len(tool_server.requests)
+
+
+@pytest.mark.parametrize("stage", ["listing", "tool_call"])
+@pytest.mark.asyncio
+async def test_a_failed_workload_acquisition_ends_the_run_before_any_tool_request(
+    monkeypatch, tool_server, empty_client_cache, stage
+):
+    identity = MockIdentityProvider(monkeypatch)
+    provider = admitted_provider(identity.provider)
+    listed: list[httpx.Request] = []
+
+    with recorded_logs() as logs:
+        with pytest.raises(DelegationUnavailableError) as raised:
+            if stage == "listing":
+                identity.failure = "refused"
+                async with running_mcp_runtime(monkeypatch, provider):
+                    pass
+            else:
+                async with running_mcp_runtime(monkeypatch, provider) as runtime:
+                    listed = list(tool_server.requests)
+                    identity.expire()
+                    identity.failure = "refused"
+                    await call_search(runtime)
+
+    assert raised.value.reason == "delegation_unavailable"
+    assert tool_server.requests == listed
+    assert (stage == "listing") == (listed == [])
+    assert [line for line in logs.lines if "workload credential" in line] == [
+        "The workload credential could not be obtained (RuntimeError)."
+    ]
+
+
 @pytest.mark.asyncio
 async def test_no_token_only_runtime_never_asks_the_workload_provider(
     monkeypatch, empty_client_cache
@@ -975,7 +1130,7 @@ async def test_a_refused_tool_listing_ends_the_run_at_once(
             await init_mcp_runtime(
                 monkeypatch,
                 client_cls=client_cls,
-                provider=DelegatedProvider(),
+                provider=delegated_provider(),
                 auth_mode="delegated",
             )
 
@@ -1013,7 +1168,7 @@ async def test_iam_refusal_during_listing_keeps_delegation_unavailable(
         await init_mcp_runtime(
             monkeypatch,
             client_cls=_Client,
-            provider=DelegatedProvider(),
+            provider=delegated_provider(),
             auth_mode="delegated",
         )
     assert attempts == 1
@@ -1022,7 +1177,7 @@ async def test_iam_refusal_during_listing_keeps_delegation_unavailable(
 @pytest.mark.asyncio
 async def test_iam_refusal_during_tool_call_keeps_delegation_unavailable() -> None:
     interceptor = DelegatedAuthorityInterceptor(
-        DelegatedProvider(), delegated_server_ids={"kf-mcp"}
+        delegated_provider(), delegated_server_ids={"kf-mcp"}
     )
     request = httpx.Request("POST", "https://iam.invalid/token")
     response = httpx.Response(401, request=request)
@@ -1047,7 +1202,7 @@ async def test_a_receiver_that_is_merely_unwell_is_still_retried(
         await init_mcp_runtime(
             monkeypatch,
             client_cls=client_cls,
-            provider=DelegatedProvider(),
+            provider=delegated_provider(),
             auth_mode="delegated",
         )
 
@@ -1056,15 +1211,15 @@ async def test_a_receiver_that_is_merely_unwell_is_still_retried(
 
 
 @pytest.mark.asyncio
-async def test_standing_unavailable_tool_listing_ends_without_retry(
+async def test_account_status_unavailable_tool_listing_ends_without_retry(
     monkeypatch, empty_client_cache
 ):
-    client_cls, instances = refusing_client(503, standing_unavailable=True)
+    client_cls, instances = refusing_client(503, account_status_unavailable=True)
     with pytest.raises(AuthorityLostError):
         await init_mcp_runtime(
             monkeypatch,
             client_cls=client_cls,
-            provider=DelegatedProvider(),
+            provider=delegated_provider(),
             auth_mode="delegated",
         )
     assert [instance.calls for instance in instances] == [1]
@@ -1078,7 +1233,7 @@ async def test_a_transport_failure_is_still_retried(monkeypatch, empty_client_ca
         await init_mcp_runtime(
             monkeypatch,
             client_cls=client_cls,
-            provider=DelegatedProvider(),
+            provider=delegated_provider(),
             auth_mode="delegated",
         )
 

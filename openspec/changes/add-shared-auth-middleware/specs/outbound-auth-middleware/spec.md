@@ -79,7 +79,7 @@ On service-token access, the provider SHALL renew by default when 30 seconds or 
 
 ### Requirement: Authentication integration preserves requests and delegation
 
-Apart from the token acquisition and HTTP 401/403 handling specified above, integration SHALL preserve request methods, destinations, query parameters, bodies, non-authentication headers, timeouts and response streaming. It SHALL preserve delegation switches, selected identity, grant values, receiver permission and standing checks, and local run-liveness and cancellation checks. Refresh SHALL NOT change the identity used for a call.
+Apart from the token acquisition and HTTP 401/403 handling specified above, integration SHALL preserve request methods, destinations, query parameters, bodies, non-authentication headers, timeouts and response streaming. It SHALL preserve delegation switches, selected identity, grant values, receiver permission and account status checks, and local run-liveness and cancellation checks. Refresh SHALL NOT change the identity used for a call.
 
 #### Scenario: A delegated request is retried
 

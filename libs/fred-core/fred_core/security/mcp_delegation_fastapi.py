@@ -13,8 +13,8 @@ from typing import Any
 import httpx
 
 from fred_core.common.fastapi_handlers import (
+    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
-    STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_core.security.mcp_delegation import apply_verified_grant
 
@@ -70,7 +70,8 @@ class DelegatedFastApiMCP(FastApiMCP):
         )
         if response.status_code in (401, 403) or (
             response.status_code == 503
-            and response.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
+            and response.headers.get(DENIAL_CAUSE_HEADER)
+            == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
         ):
             return types.CallToolResult(
                 content=[

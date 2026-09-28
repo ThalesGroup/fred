@@ -37,6 +37,7 @@ from fred_core.security.delegation import (
     DelegationConfig,
     DelegationGrant,
     bears_service_account_markers,
+    enforce_account_status,
     get_delegation_config,
     holds_caller_role,
     initialize_delegation,
@@ -185,6 +186,26 @@ def test_an_unknown_delegation_field_is_refused() -> None:
 def test_a_blank_setting_is_refused(field: str, value: object) -> None:
     with pytest.raises(ValidationError, match=field):
         DelegationConfig.model_validate({"accept_delegated_calls": True, field: value})
+
+
+@pytest.mark.parametrize("char", ["*", "#"])
+def test_a_setting_may_hold_a_character_a_grant_value_may_not(char: str) -> None:
+    value = f"urn{char}delegation"
+
+    config = DelegationConfig.model_validate(
+        {
+            "accept_delegated_calls": True,
+            "audience": value,
+            "caller_role": value,
+            "caller_roles_claim": [value],
+            "user_clients": [value],
+        }
+    )
+
+    assert config.audience == value
+    assert config.caller_role == value
+    assert config.caller_roles_claim == [value]
+    assert config.user_clients == [value]
 
 
 # ---------------------------------------------------------------------------
@@ -568,12 +589,16 @@ def test_the_delegation_surface_is_reachable_from_the_package_root() -> None:
         "is_delegation_caller": is_delegation_caller,
         "require_own_credential": require_own_credential,
         "require_workload_caller": require_workload_caller,
-        "resolve_delegated_principal": resolve_delegated_principal,
+        "enforce_account_status": enforce_account_status,
     }
 
     for name, obj in exported.items():
         assert getattr(fred_core, name) is obj, name
         assert name in fred_core.__all__, name
+    # A subject resolved outside the shared dependency skips its account status check.
+    for name in ("resolve_request_principal", "resolve_delegated_principal"):
+        assert not hasattr(fred_core, name), name
+        assert name not in fred_core.__all__, name
 
 
 def test_both_kinds_satisfy_the_permission_check_shape() -> None:

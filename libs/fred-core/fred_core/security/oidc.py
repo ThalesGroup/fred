@@ -34,6 +34,7 @@ from fred_core.security.delegation import (
     initialize_delegation,
     is_user_client,
     read_caller_roles,
+    require_active_subject,
     resolve_delegated_principal,
 )
 from fred_core.security.structure import (
@@ -608,7 +609,8 @@ async def get_current_user_without_gcu(
 
     Returns an `AssertedUser` instead when this backend accepts delegated calls and a
     caller holding the delegation caller role presented a whole grant beside its own
-    verified bearer.
+    verified bearer. With a delegation switch on, the subject's account status is
+    checked once here, before the route runs.
     """
     if not KEYCLOAK_ENABLED:
         logger.debug("[AUTH] Authentication is DISABLED. Returning a mock user.")
@@ -636,7 +638,9 @@ async def get_current_user_without_gcu(
 
     logger.debug("[AUTH] Received bearer credential")
     caller = decode_jwt(token)
-    return await resolve_request_principal(request, caller)
+    subject = await resolve_request_principal(request, caller)
+    await require_active_subject(subject)
+    return subject
 
 
 async def resolve_request_principal(

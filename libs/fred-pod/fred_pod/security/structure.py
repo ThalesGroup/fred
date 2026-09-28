@@ -167,7 +167,7 @@ class OpenFgaRebacConfig(RebacBaseConfig):
         # Ignored, the former key would leave the check off without a word.
         if isinstance(data, dict) and "standing_gate_enabled" in data:
             raise ValueError(
-                "standing_gate_enabled was removed; using delegation enforces standing"
+                "standing_gate_enabled was removed; using delegation enforces account status"
             )
         return data
 

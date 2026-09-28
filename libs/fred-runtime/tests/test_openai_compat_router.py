@@ -57,11 +57,12 @@ from fred_core.security.delegation import (
     initialize_delegation,
     preserved_delegation,
 )
-from fred_core.security.models import StandingAuthorizationError
+from fred_core.security.models import AccountStatusError
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import AgentPodConfig, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     DelegationRuntime,
     set_delegation_runtime,
 )
@@ -581,6 +582,8 @@ def compat_client(
         if provider is not None:
             captured["credentials"] = await provider.credentials()
             captured["record"] = getattr(provider, "record", None)
+        if isinstance(provider, DelegatedCredentialProvider):
+            captured["workload_token"] = (await provider.get_token_lease()).token
         yield {"kind": "final", "content": "done"}
 
     monkeypatch.setattr(
@@ -629,16 +632,16 @@ def chat_completion(client: TestClient):
 
 @pytest.mark.parametrize(
     ("unavailable", "expected_status", "cause"),
-    [(True, 503, "standing_unavailable"), (False, 403, "standing_refused")],
+    [(True, 503, "account_status_unavailable"), (False, 403, "account_suspended")],
 )
-def test_chat_completion_preserves_standing_decision_at_http_boundary(
+def test_chat_completion_preserves_account_status_decision_at_http_boundary(
     monkeypatch, compat_pod, unavailable, expected_status, cause
 ) -> None:
     install_delegation()
     rebac = SimpleNamespace(
         enabled=True,
         check_user_team_permission_or_raise=AsyncMock(
-            side_effect=StandingAuthorizationError(unavailable=unavailable)
+            side_effect=AccountStatusError(unavailable=unavailable)
         ),
     )
     context = get_runtime_context()
@@ -668,7 +671,7 @@ def test_a_chat_completion_under_delegation_carries_no_persons_bearer(
     assert response.status_code == 200
     credentials = captured["credentials"]
     assert credentials.delegated is True
-    assert credentials.authorization == "Bearer workload-token"
+    assert captured["workload_token"] == "workload-token"
     assert credentials.parameters[GRANT_PARAM_PERSON] == "alice"
     assert credentials.parameters[GRANT_PARAM_AGENT] == "test.hello.v1"
     assert PERSON_TOKEN not in str(credentials)

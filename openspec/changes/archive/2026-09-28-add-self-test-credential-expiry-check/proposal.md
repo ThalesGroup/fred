@@ -6,19 +6,24 @@ lifetime of the credential it was handed. The case that fails in real use stays
 unproven: an agent whose work outlives that credential, and whose next call made
 as the person is refused. The runtime forwards a turn's credential unchanged for
 the whole turn and cannot renew it, so that failure reaches a user as an opaque
-mid-stream error. The page needs a repeatable, deployment-local check that is red
-while that limitation exists and green once in-turn renewal ships.
+mid-stream error. The page needs a repeatable, deployment-local check that is
+green when the call after expiry succeeds — through in-turn renewal, or through
+delegated execution, where the turn holds no copy of the person's token — and red
+otherwise. With delegated execution off, red is the expected result.
 
 ## What Changes
 
 - Give the deterministic self-test agent a bounded hold before its call, and an
   authenticated-access mode that makes one metadata call as the person on each
   side of the hold instead of reading documents.
-- Add a credential-expiry check to the Self-test page: it captures the signed-in
+- Add a check named "Agent access after your session expires" to the Self-test
+  page: it captures the signed-in
   session's current access token once, hands that one token to a single agent
   turn, and asserts that the authenticated call made after the token's expiry
   succeeds. The browser keeps refreshing its own session throughout, and the
-  captured token never appears in a report.
+  captured token never appears in a report. The agent reports whether the call
+  after the hold ran on a renewed token or with no person token at all, so the
+  verdict is right in both delegation modes.
 - Size the hold from the captured token's own remaining lifetime plus a margin,
   bounded to a safe maximum; skip with the reason above that bound and where no
   realm is configured. Report an inconclusive run as a failure, never a pass.

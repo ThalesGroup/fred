@@ -23,13 +23,12 @@ import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager, suppress
-from typing import Any, Protocol
 
 import uvicorn
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import get_config, initialize_user_security, log_setup
+from fred_core import enforce_account_status, get_config, initialize_user_security, log_setup
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
@@ -105,20 +104,6 @@ def _norm_origin(o) -> str:
 _RESPONSES_HEADING = "\n\n### Responses:"
 
 
-class _StandingContext(Protocol):
-    def get_rebac_engine(self) -> Any: ...
-
-
-async def _require_delegation_standing(context: _StandingContext, *, enabled: bool) -> None:
-    """Fail startup when delegated identity cannot enforce account standing."""
-    if not enabled:
-        return
-    rebac = context.get_rebac_engine()
-    await rebac.validate_standing_model()
-    if not await rebac.is_standing_seed_ready():
-        raise ValueError("Account standing is not ready.")
-
-
 def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
     """
     Strip the `### Responses:` block from every tool description of `mcp` (#2412).
@@ -186,10 +171,9 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        await _require_delegation_standing(
-            application_context,
-            enabled=configuration.security.delegation.in_use,
-        )
+        # Guarded so the engine is only built where a switch needs it.
+        if configuration.security.delegation.in_use:
+            await enforce_account_status(application_context.get_rebac_engine())
         # #2314 (closes the #2313 defect): startup creates NO tables — DDL is
         # owned by the Alembic trees alone (see models/table_ownership.py and
         # DATABASE_MIGRATIONS.md §"Table ownership across trees"). A

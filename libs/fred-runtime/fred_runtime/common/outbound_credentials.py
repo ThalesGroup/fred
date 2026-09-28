@@ -54,7 +54,7 @@ class DelegationConfigurationError(RuntimeError):
 
 @dataclass(frozen=True)
 class OutboundCredentials:
-    """Authorization and grant parameters for one outbound request."""
+    """The person's bearer, or a delegated call's grant, for one outbound request."""
 
     authorization: str | None = None
     parameters: Mapping[str, str] = field(default_factory=dict)
@@ -166,8 +166,15 @@ def static_person_provider(
     return PersonCredentialProvider(_token, agent_id=agent_id)
 
 
+def _log_acquisition_failure(exc: Exception) -> None:
+    # Upstream errors can expose credentials; report only the type.
+    logger.error(
+        "The workload credential could not be obtained (%s).", type(exc).__name__
+    )
+
+
 class DelegatedCredentialProvider(OutboundCredentialProvider):
-    """Resolve the workload token and live run authority before each call."""
+    """Supply a live run's grant; M2MBearerAuth obtains the bearer per request."""
 
     delegated = True
 
@@ -200,25 +207,8 @@ class DelegatedCredentialProvider(OutboundCredentialProvider):
     async def credentials(
         self, *, override_token: str | None = None
     ) -> OutboundCredentials:
-        # Delegated calls cannot fall back to a caller-supplied person token.
-        record = self.record
-        if record.terminal:
-            raise DelegationUnavailableError()
-        scope = RunScope.current()
-        if scope is not None:
-            if scope.closed:
-                raise DelegationUnavailableError()
-            scope.raise_if_stopped()
-        token = await self._runtime.workload_token()
-        live_record = self.record
-        if live_record is not record or live_record.terminal:
-            raise DelegationUnavailableError()
-        if scope is not None:
-            if scope.closed:
-                raise DelegationUnavailableError()
-            scope.raise_if_stopped()
+        record = self._require_live_run()
         return OutboundCredentials(
-            authorization=f"Bearer {token}",
             parameters={
                 GRANT_PARAM_PERSON: record.person_id,
                 GRANT_PARAM_RUN: record.run_id,
@@ -234,7 +224,8 @@ class DelegatedCredentialProvider(OutboundCredentialProvider):
             raise DelegationUnavailableError()
         try:
             lease = await provider.get_token_lease()
-        except Exception:
+        except Exception as exc:
+            _log_acquisition_failure(exc)
             raise DelegationUnavailableError() from None
         if self._require_live_run() is not record:
             raise DelegationUnavailableError()
@@ -247,7 +238,8 @@ class DelegatedCredentialProvider(OutboundCredentialProvider):
             raise DelegationUnavailableError()
         try:
             replacement = await provider.refresh_rejected(lease)
-        except Exception:
+        except Exception as exc:
+            _log_acquisition_failure(exc)
             raise DelegationUnavailableError() from None
         if self._require_live_run() is not record:
             raise DelegationUnavailableError()
@@ -301,26 +293,6 @@ class DelegationRuntime:
             raise DelegationUnavailableError(
                 "act_for_people is on but this deployment has no workload client."
             )
-
-    async def workload_token(self) -> str:
-        self.ensure_usable()
-        assert self._token_provider is not None  # ensure_usable proved it
-        try:
-            token = await self._token_provider.get_token()
-        except Exception as exc:
-            # Upstream errors can expose credentials; report only the type.
-            logger.error(
-                "The workload credential could not be obtained (%s).",
-                type(exc).__name__,
-            )
-            raise DelegationUnavailableError(
-                "The platform could not obtain its workload credential."
-            ) from None
-        if not token:
-            raise DelegationUnavailableError(
-                "The platform could not obtain its workload credential."
-            )
-        return token
 
     def provider_for(self, *, run_id: str, agent_id: str) -> OutboundCredentialProvider:
         return DelegatedCredentialProvider(

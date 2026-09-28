@@ -65,6 +65,7 @@ from fred_sdk.contracts.runtime import (
     WIKI_RULES_MAX_CHARS,
     TeamWikiPort,
     WikiPageRef,
+    unwrap_run_stop_error,
 )
 from langchain.agents.middleware.types import (
     AgentMiddleware,
@@ -121,8 +122,13 @@ def _wiki_tool_failure(
     The runtime surfaces `ToolInvocationResult.is_error` directly, so a failing
     tool returns such a result instead of raising. Failure shape arrives via
     the SDK-typed `TeamWikiPortError` attributes read with `getattr` — this
-    module never imports the adapter's HTTP stack.
+    module never imports the adapter's HTTP stack. A run stop anywhere in the
+    failure's chain is raised instead: it ends the run, never the tool call.
     """
+
+    run_stop = unwrap_run_stop_error(exc)
+    if run_stop is not None:
+        raise run_stop from None
 
     status_code = getattr(exc, "status_code", None)
     timed_out = bool(getattr(exc, "timed_out", False))
@@ -361,9 +367,18 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         port = self._port
         if port is None:
             return ""
+        rules_read = asyncio.ensure_future(port.read_rules())
+        pages_read = asyncio.ensure_future(port.list_pages())
         try:
-            rules, pages = await asyncio.gather(port.read_rules(), port.list_pages())
+            rules, pages = await asyncio.gather(rules_read, pages_read)
         except Exception as exc:
+            run_stop = unwrap_run_stop_error(exc)
+            if run_stop is not None:
+                # The run ends here, so its other read must not outlive it.
+                for read in (rules_read, pages_read):
+                    read.cancel()
+                await asyncio.gather(rules_read, pages_read, return_exceptions=True)
+                raise run_stop from None
             logger.warning("Team wiki prompt block unavailable: %s", exc)
             return (
                 "\n\n# Team wiki\n\nThe team wiki could not be read this turn. "
@@ -965,7 +980,10 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 published = next((p for p in after if p.slug == slug), None)
                 if published is not None:
                     at = f" '{_page_path(after, published)}'"
-            except Exception:
+            except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 logger.warning(
                     "team_wiki: proposal %s published, but the tree could not "
                     "be read back to name the page.",

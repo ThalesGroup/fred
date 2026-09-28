@@ -24,19 +24,21 @@ import logging
 import re
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Mapping
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Annotated, Any, Mapping
 
 from fastapi import HTTPException
 from fred_pod.security.delegation import DelegationConfig, GrantIdentifier
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, StringConstraints, ValidationError
 from starlette.requests import ClientDisconnect, Request
 
 if TYPE_CHECKING:
+    from fred_core.security.rebac.rebac_engine import RebacEngine
     from fred_core.security.structure import KeycloakUser
 
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.auth_metrics import DELEGATION
+from fred_core.security.models import AccountStatusError
 from fred_core.security.structure import is_service_agent
 
 logger = logging.getLogger(__name__)
@@ -55,13 +57,17 @@ _GRANT_QUERY_VALUE = re.compile(
 AUDIT_GRANT_ACCEPTED = "delegation.grant.accepted"
 AUDIT_GRANT_REJECTED = "delegation.grant.rejected"
 
+# In the authorization model `*` is the wildcard subject and `#` a userset; a
+# grant names one plain identifier, never either.
+_GrantValue = Annotated[GrantIdentifier, StringConstraints(pattern=r"^[^*#]*$")]
+
 
 class DelegationGrant(BaseModel):
     """The three parameters as received; validated shape only, trust is decided elsewhere."""
 
-    person: GrantIdentifier
-    run: GrantIdentifier
-    agent: GrantIdentifier
+    person: _GrantValue
+    run: _GrantValue
+    agent: _GrantValue
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +93,7 @@ class _Installed:
     config: DelegationConfig
     issuers: frozenset[str]
     user_clients: frozenset[str]
+    account_status: RebacEngine | None = None
 
 
 _installed = _Installed(DelegationConfig(), frozenset(), frozenset())
@@ -105,7 +112,8 @@ def initialize_delegation(
     """Install the delegation block read at startup. Off until a backend calls this.
 
     `issuers` are the addresses of the realm this receiver trusts; `user_clients`
-    adds to the block's own list of clients people sign in through.
+    adds to the block's own list of clients people sign in through. Replacing the
+    block drops the engine `enforce_account_status` installed for the old one.
     """
     global _installed
     _installed = _Installed(
@@ -135,6 +143,30 @@ def preserved_delegation() -> Iterator[None]:
 
 def get_delegation_config() -> DelegationConfig:
     return _installed.config
+
+
+async def enforce_account_status(engine: RebacEngine) -> None:
+    """Validate `engine`'s account status model and install it for each request's check.
+
+    Does nothing with both switches off; a failed validation stops startup.
+    """
+    global _installed
+    if not _installed.config.in_use:
+        return
+    if not engine.requires_active_accounts:
+        raise ValueError("Delegation requires an engine that enforces account status.")
+    await engine.validate_account_status_model()
+    _installed = replace(_installed, account_status=engine)
+
+
+async def require_active_subject(subject: KeycloakUser | AssertedUser) -> None:
+    """Refuse a request whose subject is suspended, or whose account status is unknown."""
+    if not _installed.config.in_use:
+        return
+    engine = _installed.account_status
+    if engine is None:
+        raise AccountStatusError(unavailable=True)
+    await engine.require_active_account(subject.uid)
 
 
 def is_user_client(client_id: str | None) -> bool:
@@ -387,6 +419,7 @@ __all__ = [
     "DelegationConfig",
     "DelegationGrant",
     "bears_service_account_markers",
+    "enforce_account_status",
     "get_delegation_config",
     "holds_caller_role",
     "initialize_delegation",
@@ -395,6 +428,5 @@ __all__ = [
     "preserved_delegation",
     "read_caller_roles",
     "require_workload_caller",
-    "resolve_delegated_principal",
     "scrub_grant_text",
 ]

@@ -89,12 +89,12 @@ from fred_core.security.delegation import (
     AssertedUser,
     DelegationConfig,
     DelegationGrant,
+    enforce_account_status,
     get_delegation_config,
     holds_caller_role,
     initialize_delegation,
     is_delegation_caller,
     require_workload_caller,
-    resolve_delegated_principal,
     scrub_grant_text,
 )
 from fred_core.security.env_config import security_configuration_from_env
@@ -110,10 +110,10 @@ from fred_core.security.mcp_delegation import (
     verified_grant,
 )
 from fred_core.security.models import (
+    AccountStatusError,
     Action,
     AuthorizationError,
     Resource,
-    StandingAuthorizationError,
 )
 from fred_core.security.oidc import (
     decode_jwt,
@@ -126,7 +126,6 @@ from fred_core.security.oidc import (
     initialize_user_security,
     oauth2_scheme,
     require_own_credential,
-    resolve_request_principal,
     split_realm_url,
 )
 from fred_core.security.outbound import BearerAuth, ClientCredentialsProvider
@@ -237,7 +236,6 @@ __all__ = [
     "is_delegation_caller",
     "require_workload_caller",
     "get_principal_context",
-    "resolve_request_principal",
     "PrincipalContext",
     "DelegationGrant",
     "GRANT_PARAM_AGENT",
@@ -245,10 +243,10 @@ __all__ = [
     "GRANT_PARAM_PERSON",
     "GRANT_PARAM_RUN",
     "Principal",
+    "enforce_account_status",
     "get_delegation_config",
     "initialize_delegation",
     "require_own_credential",
-    "resolve_delegated_principal",
     "scrub_grant_text",
     "TODO_PASS_REAL_USER",
     "NO_AUTHZ_CHECK_USER",
@@ -263,7 +261,7 @@ __all__ = [
     "Action",
     "Resource",
     "AuthorizationError",
-    "StandingAuthorizationError",
+    "AccountStatusError",
     "oauth2_scheme",
     "ClientCredentialsProvider",
     "BearerAuth",

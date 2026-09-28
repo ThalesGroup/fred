@@ -47,8 +47,8 @@ from urllib.parse import quote
 import httpx
 from fred_core.common import OwnerFilter
 from fred_core.common.fastapi_handlers import (
+    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
-    STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
@@ -3111,14 +3111,12 @@ class TeamWikiAdapter(TeamWikiPort):
                 or (
                     response.status_code == 503
                     and response.headers.get(DENIAL_CAUSE_HEADER)
-                    == STANDING_UNAVAILABLE_CAUSE
+                    == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
                 )
             ):
                 # Refused authority ends the run under this same identity.
                 raise AuthorityLostError()
             response.raise_for_status()
-        except AuthorityLostError:
-            raise
         except Exception as exc:
             raise _wrap_team_wiki_error(exc) from exc
         return response.json() if response.content else None

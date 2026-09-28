@@ -1,9 +1,9 @@
 ## Purpose
 
 Prove, on a running deployment and from the admin's own browser, that an agent
-turn whose work outlives the credential it was handed can still call platform
-services as the person afterwards — and make that proof fail loudly while the
-runtime cannot renew a delegated credential.
+turn whose work outlives the person's session can still call platform services
+for the person afterwards — and fail loudly when neither in-turn renewal nor
+delegated execution carries that call.
 
 ## ADDED Requirements
 
@@ -39,7 +39,7 @@ lifetime plus a margin, and SHALL skip with the reason when that exceeds the
 supported maximum. The harness agent SHALL support a per-instance hold,
 configured by an integer tuning field clamped to the same maximum, executed
 before its call. A hold of zero SHALL leave the agent's behavior unchanged.
-During a hold the agent SHALL emit periodic events on the live channel so the
+During a hold the agent SHALL emit periodic progress events so the
 execution stream stays alive, and SHALL emit one status marking the hold's end.
 
 #### Scenario: The remaining lifetime exceeds the bound
@@ -56,8 +56,9 @@ execution stream stays alive, and SHALL emit one status marking the hold's end.
 
 In its access-check mode the harness agent SHALL make one authenticated metadata
 call as the person before the hold and one after it, SHALL emit a status for
-each, and SHALL NOT read documents or invoke retrieval. The check SHALL create
-no library, document, prompt or session.
+each, and SHALL NOT read documents or invoke retrieval. It SHALL also emit a
+status when the call after the hold succeeded while the turn held no person
+credential. The check SHALL create no library, document, prompt or session.
 
 #### Scenario: The metadata call answers with nothing to report
 
@@ -102,17 +103,23 @@ run never reached its teardown.
 The check SHALL pass only when all of the following are observed: the first
 authenticated call succeeded; the hold ended at least a fixed tolerance after
 the captured credential's recorded expiry; the call after the hold succeeded
-after the hold ended; and the credential was observed to be renewed. Any run
+after the hold ended; and that call was observed either to run on a renewed
+person credential or to run while the turn held no person credential. Any run
 missing one of these SHALL be reported as failed, naming it as inconclusive
 where the run demonstrated nothing. A refusal SHALL be reported with one fixed
 explanation, whether it arrives as an execution error or as the turn's final
 text, and SHALL carry no upstream response text or credential value. A turn
 refused before it started SHALL NOT be reported as expiry during execution.
 
-#### Scenario: Renewal is not available
+#### Scenario: Delegated execution is off and renewal is not available
 
 - **WHEN** the call after the hold is refused because the credential expired
-- **THEN** the step fails with the fixed expiry explanation and the instance is still deleted
+- **THEN** the step fails with the fixed expiry explanation, which states that delegated execution keeps long runs working, and the instance is still deleted
+
+#### Scenario: Delegated execution is on
+
+- **WHEN** the call after the hold succeeds while the turn holds no person credential
+- **THEN** the step passes, stating that access survived the session's expiry without the person's token
 
 #### Scenario: Renewal works
 
@@ -121,7 +128,7 @@ refused before it started SHALL NOT be reported as expiry during execution.
 
 #### Scenario: The call succeeded but no renewal was observed
 
-- **WHEN** the call after the hold succeeds while the credential in hand never changed
+- **WHEN** the call after the hold succeeds while the person credential in hand never changed and the turn did hold one
 - **THEN** the step fails as inconclusive, because the original credential may simply still be accepted
 
 #### Scenario: The hold did not outlast the credential
@@ -136,8 +143,9 @@ refused before it started SHALL NOT be reported as expiry during execution.
 
 ### Requirement: Placement on the self-test page
 
-The check SHALL be its own sub-section of the authorization self-test, with its
-own action and step report, running as the signed-in account and asking for no
+The check SHALL be its own sub-section of the authorization self-test, titled
+"Agent access after your session expires", with its own action and step report,
+running as the signed-in account and asking for no
 password. The page SHALL run one self-test at a time, so its action is
 unavailable while any run on the page is in flight.
 
@@ -148,17 +156,16 @@ unavailable while any run on the page is in flight.
 
 ### Requirement: The credential is proven before the wait
 
-The agent SHALL make the authenticated call once before any waiting, in a stage
-of its own so that the result reaches the stream before the wait begins rather
-than with it. The check SHALL report that evidence as its own step, marked as
+The agent SHALL make the authenticated call once before any waiting, and its
+result SHALL reach the stream before the wait begins. The check SHALL report that evidence as its own step, marked as
 soon as it arrives, and SHALL mark it failed when it never arrives. The step
 that creates the run's temporary agent SHALL name the template it is enrolled
 from and what kind of agent that is.
 
-#### Scenario: The credential is accepted before the wait
+#### Scenario: Access is granted before the wait
 
 - **WHEN** the agent's first authenticated call succeeds
-- **THEN** the pre-expiry step is reported as passed while the wait is still running
+- **THEN** the pre-expiry step is reported as passed while the wait is still running, stating that access was granted without claiming which credential carried it
 
 #### Scenario: The first call never succeeded
 

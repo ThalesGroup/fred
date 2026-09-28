@@ -3237,7 +3237,10 @@ OpenFGA timeout is between 1 ms and 30 seconds. The control plane remains the
 store and authorization-model owner. The async factory also initializes
 fred-core's process-local user JWT verifier from `security.user`, requires the
 backend's process-level KPI writer, creates one private OpenFGA engine, and
-resolves the configured store before startup completes. A backend reuses that
+resolves the configured store before startup completes. With a delegation switch
+on, it installs that engine for the account status check of each request
+authenticated through fred-core's user dependency; without it, or while OpenFGA
+cannot answer, those requests return 503 `account_status_unavailable`. A backend reuses that
 facade for requests and awaits `close()` during shutdown (or uses its async
 context manager); it never constructs a client per request.
 
@@ -4132,7 +4135,7 @@ deferred. See [INGESTION.md](INGESTION.md).
 ## Workload identity and person authorization (2026-09-18)
 
 The control plane authenticates the workload and authorizes the asserted
-person's current standing, whitelist and resource permissions. Caller trust is
+person's current account status, whitelist and resource permissions. Caller trust is
 specified in runtime contract §8.90. Caller-only publication APIs retain their
 workload and ownership checks. Managed delegated runs resolve bindings through
 a read-only GET carrying the grant; direct runs need no binding request.
@@ -4149,22 +4152,32 @@ Asserted people carry no bearer roles.
 
 For delegated `prepare-execution`, the one-shot model override is authorized
 against the workload caller's delegation role. Otherwise it requires an ordinary
-service identity. Detailed cases are in the
-[subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).
+service identity. Routes that present the caller's bearer to another service
+(agent-instance enrollment and update, with or without asset uploads, session,
+bulk session and attachment deletion, knowledge-base instance creation and
+deletion) refuse an asserted person with 403 `requires_own_credential`, and
+managed `prepare-execution` for that person returns no capability chat controls
+and presents no bearer to the agent pod
+([grant specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md)).
+Detailed cases are in the
+[subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
-## Deleting a person removes their standing first (2026-09-23)
+## Deleting a person suspends their account first (2026-09-23)
 
 User deletion retains administrator permission and protected-account checks,
 and rejects wildcard or userset identifiers. It resolves identity administration
 before mutation, then writes suspension before deleting the account whenever
-standing is enforced. Failed account deletion leaves suspension effective;
+account status is enforced. Failed account deletion leaves suspension effective;
 other authorization relations remain and retries are safe.
 
-Suspension applies at the next authorization decision, not to work already
-authorized. Direct identity-provider changes do not update platform standing.
-With standing disabled, deletion writes no suspension. Exact refusal and retry
+Suspension applies at the next request, before the route runs, not to work
+already authorized. That includes personal-team routes such as the runtime-binding
+lookup and execution preparation, which refuse a suspended subject with 403
+`account_suspended`, or 503 `account_status_unavailable` when account status cannot
+be read. Direct identity-provider changes do not update platform account status.
+With account status disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
-[subject and standing specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-standing/spec.md).
+[subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
 
 ## Knowledge Flow ingestion admission and relaunch — 2026-09-26

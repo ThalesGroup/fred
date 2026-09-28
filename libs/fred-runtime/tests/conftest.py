@@ -18,6 +18,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any
 
+import httpx
 import pytest
 from fred_core.portable.observability import Span, Tracer
 from fred_core.security.backend_to_backend_auth import (
@@ -26,9 +27,12 @@ from fred_core.security.backend_to_backend_auth import (
     TokenLease,
 )
 from fred_core.security.delegation import DelegationConfig
+from fred_pod.security import backend_to_backend_auth as workload_auth
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     DelegationRuntime,
+    RunRecord,
     set_delegation_runtime,
 )
 from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
@@ -68,6 +72,80 @@ def install_delegation_runtime(
     )
     set_delegation_runtime(runtime)
     return runtime
+
+
+WORKLOAD_SECRET_ENV = "FRED_TEST_WORKLOAD_SECRET"  # pragma: allowlist secret
+IAM_MARKER = "iam-detail-marker"
+
+
+class MockIdentityProvider:
+    """The real workload-token provider over a local token endpoint and clock.
+
+    Acquisitions, cache decisions and token requests are read from the
+    provider's own metrics observer, so the counts are what a pod exports.
+    """
+
+    def __init__(
+        self, monkeypatch: pytest.MonkeyPatch, *tokens: str, secret: bool = True
+    ) -> None:
+        if secret:
+            monkeypatch.setenv(WORKLOAD_SECRET_ENV, "synthetic")
+        else:
+            monkeypatch.delenv(WORKLOAD_SECRET_ENV, raising=False)
+        monkeypatch.setattr(workload_auth, "_token_observer", self._observe)
+        self._tokens = list(tokens) or ["workload-token-1"]
+        self.issued: list[str] = []
+        self.events: list[tuple[str, str]] = []
+        self.failure: str | None = None
+        self.now = 1_000_000.0
+        self.provider = M2MTokenProvider(
+            M2MAuthConfig(
+                keycloak_realm_url="https://iam.invalid/realms/test",
+                client_id="test-workload",
+                secret_env=WORKLOAD_SECRET_ENV,
+            ),
+            wall_clock=lambda: self.now,
+            transport=httpx.MockTransport(self._token_endpoint),
+        )
+
+    def _observe(self, event: str, outcome: str, _seconds: float) -> None:
+        self.events.append((event, outcome))
+
+    def _token_endpoint(self, request: httpx.Request) -> httpx.Response:
+        if self.failure == "unreachable":
+            raise httpx.ConnectError(IAM_MARKER, request=request)
+        if self.failure == "refused":
+            return httpx.Response(503, text=IAM_MARKER)
+        token = self._tokens[min(len(self.issued), len(self._tokens) - 1)]
+        self.issued.append(token)
+        return httpx.Response(200, json={"access_token": token, "expires_in": 300})
+
+    def expire(self) -> None:
+        """Move past the cached token's lifetime; the next request renews it."""
+        self.now += 301
+
+    @property
+    def acquisitions(self) -> int:
+        return sum(1 for event, _ in self.events if event == "acquire")
+
+    @property
+    def token_requests(self) -> list[str]:
+        return [event for event, _ in self.events if event.startswith("request_")]
+
+
+def admitted_provider(
+    token_provider: M2MTokenProvider | None,
+) -> DelegatedCredentialProvider:
+    """A real delegated provider for one admitted run: alice, run-7, agent-a."""
+    runtime = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True), token_provider=token_provider
+    )
+    runtime.records.admit(
+        RunRecord(run_id="run-7", person_id="alice", agent_id="agent-a")
+    )
+    provider = runtime.provider_for(run_id="run-7", agent_id="agent-a")
+    assert isinstance(provider, DelegatedCredentialProvider)
+    return provider
 
 
 def migrate_test_config(config: AgentPodConfig) -> AgentPodConfig:

@@ -22,7 +22,7 @@ streams, each with an explicit purpose, audience, retention model, and privacy b
 |---|---|---|---|---|
 | **Operational metrics** | Is the platform healthy? | Prometheus, scraped by Google Managed Prometheus, visualized in Grafana | Platform SREs | No — user/session/team identity is structurally excluded |
 | **Product analytics** | How is the platform used, by whom, how much? | OpenSearch, queried through Fred's own authorization-scoped API | Org admins, team owners, individual users (each sees only their own scope) | Yes, but access is scoped server-side per viewer |
-| **Security & audit trail** | Who did what, when, with what outcome? | Structured log line → the platform's log pipeline (Cloud Logging at C1/C2, sovereign equivalent at C3) | Security/incident response, compliance | Yes — this is its entire purpose |
+| **Security & audit trail** | Who did what, when, with what outcome? | Structured log line → the platform's log pipeline (Cloud Logging at C1/C2, sovereign equivalent at C3) | Security/incident response, compliance | Yes with both delegation switches off; with a switch on, runtime, grant and account status events carry only event, outcome and reason (§5) |
 
 A fourth, lower-stakes stream — generic application/debug logging — is covered in §6.
 
@@ -78,16 +78,35 @@ that it exists and must not be broken by changes to Stream 1 or Stream 3.
 "prove this happened" for incident response, security review, and compliance.
 
 **What is recorded, per event:**
-- The acting principal (human user or service identity).
+- The acting principal (human user or service identity), with both delegation switches off (see
+  below).
 - What was done: an authorization decision (granted/denied) or a tool invocation, identified by a
   stable, finite vocabulary of event names — not free text.
 - The outcome: `succeeded`, `failed`, `cancelled`, or `timed_out` (kept distinct — a timeout does
   not prove the target system produced no effect, and collapsing it into "failed" or "succeeded"
   would misrepresent that uncertainty).
 - Correlation identifiers (session, exchange, trace) sufficient to relate the event to the rest of
-  the platform's telemetry for the same interaction.
+  the platform's telemetry for the same interaction, with both delegation switches off.
 - Bounded error information (an error code, an exception class name, an HTTP status) — never a raw
   exception message or stack trace.
+
+**What an agent runtime's events carry, per delegation setting:**
+- Both switches off: each event carries the fields its call site passes. Admission and session
+  events (`rebac_authorized`, `service_agent_authorized`, `managed_execution_without_team`,
+  `direct_execution_forbidden`, `session_owner_mismatch`, `team_binding_mismatch`) name the
+  principal, team, agent or session involved. Tool invocation events carry the principal, team,
+  session, agent and correlation identifiers. `rebac_denied`, a managed admission refused for a
+  missing team permission, carries only outcome `rejected` and reason `permission_refused` in
+  either setting.
+- A switch on: every runtime event carries only its event name, an outcome and a reason. Admission
+  events keep a supplied outcome and reason only when each is a bounded code of lowercase letters
+  and underscores; otherwise the outcome is `rejected` for a warning or error, `accepted` for
+  anything else, and the reason is the event name. Tool invocation events carry `started`,
+  `succeeded`, `failed` or `cancelled` with a bounded reason.
+- Grant decisions (`delegation.grant.accepted`, `delegation.grant.rejected`) and account status
+  refusals (`authorization.account.refused`, reason `account_suspended` or
+  `account_status_unavailable`) carry only an outcome and a reason, whatever the switches. An
+  account status refusal at admission produces no `rebac_denied` event.
 
 **What is never recorded, under any circumstance:**
 - Full tool arguments or tool results/content.
@@ -97,9 +116,20 @@ that it exists and must not be broken by changes to Stream 1 or Stream 3.
 - Raw stack traces or unbounded exception text.
 - Directly identifying data (name, email) where an opaque platform identifier already suffices.
 
-**A proposal is not an action.** A tool call the model proposed but that was refused — by
-human-in-the-loop confirmation or by an authorization check — before execution never produces an
-audit event. The audit trail records what Fred actually did, not what a model suggested.
+**A proposal is not an action.** A tool call the model proposed but that was refused by
+human-in-the-loop confirmation never produces an audit event. The audit trail records what Fred
+actually did, not what a model suggested. A call that passes confirmation and is then refused by
+the per-tool authorization recheck produces `agent.tool.invocation.started` followed by
+`agent.tool.invocation.completed` with outcome `failed`: reason `authority_lost` in a delegated
+run; otherwise reason `AuthorizationError` with a switch on, or error code and exception type
+`AuthorizationError` beside the identifiers above with both switches off.
+
+**Known gap: relation writes.** `authz.relation.granted`, written by the shared relationship engine
+on every relation write, and `authz.relation.revoked` name the acting user and the relation's
+subject and resource whatever the switches. The engine also writes `authz.relation.granted` inside
+an agent runtime when a person's first run in their personal space creates their own membership.
+The control plane's `platform.announcement.*` and `team_admin.charter.accepted` events name the
+acting user. Bringing these events to the bounded shape is left for a later change.
 
 **Where it goes, and why this is the harder design question.** Fred emits this as a structured,
 single-line JSON entry through its normal logging output — it never makes a direct, synchronous
@@ -156,21 +186,25 @@ logger does). Real audit events (Stream 3) never appear in this store at all —
 `fred.security.audit` does not propagate to the root logger, and the store's ingestion handler
 independently drops any record from that logger by name.
 
+With either delegation switch on, request access lines carry only a neutral event, outcome, method
+and status; the request route is available through the KPI `route` dimension (§3).
+
 ## 7. Data protection summary
 
 | Field category | Example fields | Where it may appear |
 |---|---|---|
 | Directly identifying | user email, full name | **Nowhere** — Fred uses opaque platform identifiers everywhere an identity reference is needed |
-| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Product analytics (Stream 2, access-scoped) and the audit trail (Stream 3) — never in operational metrics (Stream 1) |
+| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Product analytics (Stream 2, access-scoped) and the audit trail (Stream 3, per delegation setting as §5 details) — never in operational metrics (Stream 1) |
 | Content | prompts, tool arguments/results, documents, attachments | **Nowhere** in any observability or audit stream — content lives only in the product's own storage, under the product's own access control. One deliberate, default-off local exception: `observability.langfuse.capture_content` (see below) |
 | Secrets | tokens, cookies, signed URLs | **Nowhere**, ever |
 | Technical/bounded | tool name, error code, HTTP status, model name | All streams as relevant — none of this is personal data |
 
 **Practical reading for an RSSI:** the only stream that intentionally carries user identity is
 Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the audit trail, whose
-entire purpose is to attribute an action to a principal). Stream 1 (what a platform-wide Grafana
-audience can see) is designed to never carry it at all — not filtered as an afterthought, but
-structurally excluded before a metric is ever labeled.
+entire purpose is to attribute an action to a principal). With a delegation switch on, runtime,
+grant and account status audit events carry no identity; relation-write events still do (§5). Stream 1
+(what a platform-wide Grafana audience can see) is designed to never carry it at all — not
+filtered as an afterthought, but structurally excluded before a metric is ever labeled.
 
 ### 7.1 The one content exception: Langfuse local debugging (2026-08-20)
 
@@ -224,7 +258,7 @@ and nothing else does. This observability architecture is designed against that 
 | Operational metrics exclude direct identity | **True today** — enforced in code |
 | Operational metrics exclude all per-call correlation and team/agent-instance identifiers | **True today** — `PROMETHEUS_ALLOWED_LABELS` is an explicit allow-list; a new dim needs a deliberate decision to become a label |
 | Product analytics scoped per viewer via authorization | **True today**, shipped |
-| Every tool invocation produces an audit-channel event | **Shared boundary for ReAct, Deep and Graph.** `runtime_support.tool_execution.ToolExecution` owns authorization rechecks, `agent.tool.invocation.{started,completed}` audit events and canonical tool KPIs. ReAct/Deep enter through `ToolObservabilityMiddleware`; Graph enters through both `NodeContext.invoke_tool` and `invoke_runtime_tool`. Returned error artifacts, raised failures and cancellation remain distinct. Capability HITL uses shared approval rules across all three runtimes; refused calls do not execute or emit invocation audits/KPIs. The audit destination/retention guarantee remains a deployment responsibility. |
+| Every tool invocation produces an audit-channel event | **Shared boundary for ReAct, Deep and Graph.** `runtime_support.tool_execution.ToolExecution` owns authorization rechecks, `agent.tool.invocation.{started,completed}` audit events and canonical tool KPIs. ReAct/Deep enter through `ToolObservabilityMiddleware`; Graph enters through both `NodeContext.invoke_tool` and `invoke_runtime_tool`. Returned error artifacts, raised failures and cancellation remain distinct. Capability HITL uses shared approval rules across all three runtimes; calls refused at approval do not execute or emit invocation audits/KPIs, while a call refused by the per-tool recheck emits `started` then `failed` (§5). The audit destination/retention guarantee remains a deployment responsibility. |
 | Every runtime emits canonical LLM/tool latency KPIs | **Tools: shared across ReAct, Deep and Graph. Models: still partial.** All three tool paths emit `agent.tool_latency_ms` and `agent.tool_failed_total` through `ToolExecution`; Graph no longer emits a duplicate generic tool-phase timer. ReAct/Deep emit `llm.call_latency_ms`; Graph model phases still use `app.phase_latency_ms`. |
 | Audit records are valid structured JSON on the log output | **True today** |
 | Generic logs land in durable storage, explorable via OpenSearch Dashboards | **True today** where a service's `storage.log_store` is set to `opensearch` — still `RamLogStore` (in-memory, lost on restart) where it isn't; flipping the C1 reference deployment's config is a separate, infra-only follow-up |
@@ -258,7 +292,7 @@ registry. No metrics dependency is added to fred-pod.
 | Metric | Meaning |
 | --- | --- |
 | `fred_auth_m2m_request_seconds` | Actual IAM token attempts including response validation; operation initial/renewal and outcomes success/error/cancelled. Histogram `_count` gives request/error rates. |
-| `fred_auth_m2m_acquire_seconds` | Caller wait including cache, lock and IAM; same outcomes. |
+| `fred_auth_m2m_acquire_seconds` | Caller wait including cache, lock and IAM; same outcomes. A delegated request records one, plus one per 401 renewal; the retry reuses the renewed token. |
 | `fred_auth_m2m_cache_total` | Decisions hit/miss/shared_refresh; not mutually exclusive request outcomes. |
 | `fred_auth_delegation_decisions_total` | Grant admission accepted/rejected, with the bounded reasons of the existing audit events. Not downstream authorization or execution success. |
 
@@ -317,10 +351,9 @@ automatically enforces it. Runtime tests verify initial acquisition, cache reuse
 renewal and acquisition-failure observations.
 
 Runtime user refresh already emits `auth.token_refresh_latency_ms` through the
-KPI writer. Browser refresh contacts the IAM directly: its console event
-`browser_token_refresh` reports refreshed/reused/error/timeout/superseded and
-`duration_ms`, without token contents. This is browser-local evidence, not central
-production telemetry. Central browser/IAM event collection remains separate work.
+KPI writer. Browser refresh contacts the IAM directly and only warns in the
+browser console when a refresh times out or fails, without token contents or the
+rejection value; there is no central browser/IAM telemetry.
 These counters do not cover all JWT rejection paths or count auth-related run
 failures. A short chat after expiry does not prove renewal during a long run.
 
