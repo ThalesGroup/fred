@@ -63,7 +63,7 @@ from fred_sdk import (
 from fred_sdk import (
     finalize_step as _finalize_step,
 )
-from fred_sdk.contracts.context import GeoPart
+from fred_sdk.contracts.context import GeoPart, ToolInvocationResult
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -1546,28 +1546,16 @@ async def document_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """
-    Search documents through the `document_access` capability's
-    `search_documents_using_vectorization` tool via `context.invoke_runtime_tool`
-    (the Graph <-> AgentCapability bridge, NOTES-GRAPH-CAPABILITY-BRIDGE.md),
-    then pause on a HITL choice to confirm or discard the top hit.
+    """`document <question>` searches then asks a business confirmation.
 
-    Unlike `default_mcp_servers`, this tool is not declared on the agent
-    class — `document_access` must be selected per-instance via
-    `tuning.selected_capability_ids`. When it isn't, `invoke_runtime_tool`
-    raises `RuntimeError('Runtime tool ... is not available.')`; this step
-    catches that and degrades to a helpful final_text instead of crashing
-    the node.
-
-    Content: the text after the `document` keyword, or a built-in probe
-    question when the user supplies none.
-
-    SSE events exercised: status (x2), tool_call/tool_result (from
-    invoke_runtime_tool), awaiting_human (choice), final (confirm/discard
-    branch — sources attached only when confirmed).
+    `document summarize <question>` instead invokes the summary capability;
+    its configured gate controls execution, including its model call.
     """
     delay = _delay_seconds(context)
     remainder = state.latest_user_text.strip()[len("document") :].strip()
+    summarize = remainder.lower().split(maxsplit=1)[:1] == ["summarize"]
+    if summarize:
+        remainder = remainder[len("summarize") :].strip()
     question = remainder or _DOCUMENT_PROBE_QUESTION
 
     context.emit_status("document", f"Searching documents for: {question}")
@@ -1602,6 +1590,39 @@ async def document_step(
         )
 
     top_hit = hits[0]
+    if summarize:
+        try:
+            summary = ToolInvocationResult.model_validate(
+                await context.invoke_runtime_tool(
+                    "summarize_document",
+                    {
+                        "document_uid": top_hit["uid"],
+                        "instruction": "Résume ce document en cinq points clés.",
+                        "max_chars": 1500,
+                    },
+                )
+            )
+        except RuntimeError:
+            return StepResult(
+                state_update={
+                    "final_text": (
+                        "Document summary is unavailable. Check the selected "
+                        "Document summarize capability and its service configuration."
+                    ),
+                    "done_reason": "document_summary_unavailable",
+                }
+            )
+        return StepResult(
+            state_update={
+                "final_text": "\n\n".join(
+                    block.text for block in summary.blocks if block.text
+                ),
+                "sources_data": [] if summary.is_error else [top_hit],
+                "done_reason": "document_summary_error"
+                if summary.is_error
+                else "document_summarized",
+            }
+        )
     title = top_hit.get("title", "untitled")
     score = top_hit.get("score", 0.0)
     content = top_hit.get("content", "")
@@ -2046,6 +2067,7 @@ _SCENARIO_TABLE = """\
 | `files` | Unified `/fs` round-trip: write to the agent's space → read back → list directory |
 | `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
+| `document summarize <question>` | Search, then call `summarize_document` on the top hit through its capability approval gate; no business confirmation or agent model call |
 | `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → two HITL gates → file publish (`assist direct …` skips the search) |
 | `delegate` | `invoke_agent` on this same agent (`delegate model hi` makes the sub-agent call the model) |
 | `crash` | Node error with no `on_error` route → the turn fails cleanly |

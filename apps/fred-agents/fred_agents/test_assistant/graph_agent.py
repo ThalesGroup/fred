@@ -38,6 +38,7 @@ Tool coverage:
                        artifacts.publish_text (required=False, toggleable)
 
 Capability coverage:
+  document summarize  Search then summarize through the capability approval gate.
   document scenario   AgentCapability tool invocation via
                        context.invoke_runtime_tool (NOTES-GRAPH-CAPABILITY-BRIDGE.md).
                        "document_access" is selected per-instance via
