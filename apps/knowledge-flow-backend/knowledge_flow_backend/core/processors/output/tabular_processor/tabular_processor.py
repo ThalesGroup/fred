@@ -30,7 +30,6 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     TabularArtifactV1,
     build_tabular_object_key,
     compute_source_revision,
-    describe_numeric_column,
     describe_string_column,
     duckdb_schema,
     max_categories,
@@ -432,22 +431,6 @@ class TabularProcessor(BaseOutputProcessor):
             if column.dtype == "string":
                 values = self._read_distinct_string_values(connection, quoted_path, column.name, row_count)
                 columns[index] = describe_string_column(column, values, row_count)
-        numeric_columns = [(index, column) for index, column in enumerate(columns) if column.dtype in {"integer", "float"}]
-        if numeric_columns:
-            aggregates = []
-            for _, column in numeric_columns:
-                identifier = self._quote_identifier(column.name)
-                aggregates.extend(
-                    (
-                        f"MIN({identifier}) FILTER (WHERE isfinite({identifier}))",
-                        f"MAX({identifier}) FILTER (WHERE isfinite({identifier}))",
-                    )
-                )
-            bounds_query = f"SELECT {', '.join(aggregates)} FROM read_parquet('{quoted_path}')"  # nosec B608
-            bounds = connection.execute(bounds_query).fetchone()
-            if bounds is not None:
-                for position, (index, column) in enumerate(numeric_columns):
-                    columns[index] = describe_numeric_column(column, bounds[2 * position], bounds[2 * position + 1])
         return columns
 
     def _read_distinct_string_values(
@@ -461,11 +444,9 @@ class TabularProcessor(BaseOutputProcessor):
         Return up to one more than the category limit in distinct string values.
 
         Why this exists:
-        - A SQL-writing agent that only sees a column name and "string" cannot
-          know the exact stored casing/format of a categorical value (e.g.
-          "CRITICAL" vs "critical") and has to guess — a guess that silently
-          returns zero matching rows on a mismatch instead of failing loudly.
-          Recording the real values at ingestion time removes the guess.
+        - A bounded distinct-value scan identifies categorical columns and
+          two-value columns at ingestion. The description tool later reads
+          their exact values from Parquet, preserving stored casing.
 
         How to use:
         - Call once per string column after reading the total table row count.

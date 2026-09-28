@@ -299,7 +299,6 @@ def test_parquet_category_metadata_matches_exported_mixed_values(run_export, coe
         "dtype": "string",
         "is_categorical": True,
         "has_two_values": True,
-        "sample_values": stored_values,
     }
 
 
@@ -348,20 +347,20 @@ def test_excel_catalog_marks_only_categorical_string_columns(run_export):
     columns = {column["name"]: column for column in entries[0]["columns"]}
     assert columns["Status"]["is_categorical"] is True
     assert columns["Status"]["has_two_values"] is False
-    assert columns["Status"]["sample_values"] == ["BLUE", "GREEN", "RED"]
+    assert "sample_values" not in columns["Status"]
     assert columns["Disponible"]["dtype"] == "string"
     assert columns["Disponible"]["has_two_values"] is True
-    assert columns["Disponible"]["sample_values"] == ["non", "oui"]
+    assert "sample_values" not in columns["Disponible"]
     assert columns["Reference"]["is_categorical"] is False
     assert columns["Reference"]["has_two_values"] is False
     assert "sample_values" not in columns["Reference"]
     assert "is_categorical" not in columns["Row"]
     assert "has_two_values" not in columns["Row"]
-    assert columns["Row"]["min_value"] == 0
-    assert columns["Row"]["max_value"] == 19
+    assert "min_value" not in columns["Row"]
+    assert "max_value" not in columns["Row"]
     assert columns["Score"]["dtype"] == "float"
-    assert columns["Score"]["min_value"] == -2.5
-    assert columns["Score"]["max_value"] == 2.25
+    assert "min_value" not in columns["Score"]
+    assert "max_value" not in columns["Score"]
 
 
 def test_parquet_markdown_shows_object_key_not_link(run_export):

@@ -34,7 +34,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import math
 import os
 import re
 import shutil
@@ -66,7 +65,6 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     build_table_query_alias,
     build_tabular_table_object_key,
     dataframe_dtype_to_literal,
-    describe_numeric_column,
     describe_string_column,
     max_categories,
     utc_now_iso,
@@ -454,12 +452,6 @@ class ExcelProcessor(BaseMarkdownProcessor):
                     if len(values) > category_limit:
                         break
                 column = describe_string_column(column, values, len(df))
-            elif dtype in {"integer", "float"}:
-                numeric_values = series.dropna()
-                if dtype == "float":
-                    numeric_values = cast(pd.Series, numeric_values[numeric_values.map(math.isfinite)])
-                if not numeric_values.empty:
-                    column = describe_numeric_column(column, numeric_values.min(), numeric_values.max())
             columns.append(column.model_dump(exclude_none=True))
 
         return {
