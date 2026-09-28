@@ -27,6 +27,7 @@ so it authenticates as the platform service principal using the existing
 from __future__ import annotations
 
 import pytest
+from control_plane_backend.app.container import build_application_container
 from control_plane_backend.app.context import ApplicationContext
 from control_plane_backend.config.loader import load_configuration
 
@@ -60,6 +61,7 @@ def test_service_token_provider_uses_oidc_endpoint_and_scope(
     config.security.m2m = config.security.m2m.model_copy(
         update={
             "provider": "oidc",
+            "enabled": True,
             "scope": "api://fred/.default",
             "token_url": "https://identity.example/token",
         }
@@ -79,7 +81,12 @@ def test_service_token_provider_uses_oidc_endpoint_and_scope(
         )(),
     )
 
-    provider = ApplicationContext(config).get_service_token_provider()
+    ctx = build_application_container(config)
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.resolve_endpoints",
+        lambda **kwargs: pytest.fail("Discovery must not run after startup"),
+    )
+    provider = ctx.get_service_token_provider()
 
     assert provider.cfg.scope == "api://fred/.default"
     assert provider.cfg.token_url == "https://identity.example/token"
@@ -116,3 +123,20 @@ async def test_get_service_bearer_fails_closed_without_secret(
     # un-done (retryable) rather than silently skipping the erase.
     with pytest.raises(RuntimeError):
         await ctx.get_service_bearer()
+
+
+def test_oidc_workload_discovery_failure_stops_container_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _context(monkeypatch).configuration
+    config.security.m2m.provider = "oidc"
+    config.security.m2m.enabled = True
+
+    def fail_discovery(**kwargs):
+        raise RuntimeError("OIDC discovery failed")
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.resolve_endpoints", fail_discovery
+    )
+    with pytest.raises(RuntimeError, match="OIDC discovery failed"):
+        build_application_container(config)
