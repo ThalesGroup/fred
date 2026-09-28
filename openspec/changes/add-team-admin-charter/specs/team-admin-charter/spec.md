@@ -6,7 +6,7 @@ Makes every team administrator read and accept a deployment-defined charter of r
 
 ### Requirement: The charter is off unless a version is configured
 
-The control-plane SHALL apply the charter only when `app.team_admin_charter_version` is set. When it is unset, nominating an administrator MUST grant `team_admin`, and recording an acceptance MUST be refused.
+The control-plane SHALL apply the charter only when `app.team_admin_charter_version` is set and SHALL expose that state as `team_admin_charter_enabled` in the authenticated frontend bootstrap. When it is unset, nominating an administrator MUST grant `team_admin`, recording an acceptance MUST be refused, and the frontend MUST NOT offer the charter.
 
 #### Scenario: Nomination with no version configured
 - **WHEN** `app.team_admin_charter_version` is unset and a team admin grants `team_admin` to a member
@@ -15,6 +15,14 @@ The control-plane SHALL apply the charter only when `app.team_admin_charter_vers
 #### Scenario: Accepting with no version configured
 - **WHEN** `app.team_admin_charter_version` is unset and a user records an acceptance
 - **THEN** the request is refused with HTTP 409 and detail `team_admin_charter_disabled`, and nothing is stored
+
+#### Scenario: Charter disabled in the frontend
+- **WHEN** `app.team_admin_charter_version` is unset and a team administrator opens their team's settings or a direct Responsibilities URL
+- **THEN** the bootstrap reports `team_admin_charter_enabled` as false, the sidebar has no Responsibilities entry, and the URL redirects to Members without showing the charter or an Accept action
+
+#### Scenario: Charter enabled in the frontend
+- **WHEN** `app.team_admin_charter_version` is set
+- **THEN** the bootstrap reports `team_admin_charter_enabled` as true and eligible administrators can reach the charter from team settings
 
 ### Requirement: The charter text is a deployment-overridable markdown document
 
@@ -29,8 +37,16 @@ The frontend SHALL load the charter from `team-admin-charter.<lang>.md`, then `t
 - **THEN** the stock template is shown
 
 #### Scenario: Theme archive uses the content-storage credentials
-- **WHEN** the control-plane content storage has an access key and a MinIO secret key
+- **WHEN** the frontend is enabled, `applications.frontend.extraEnvVars` configures `FRONTEND_THEME_URL` with a nonempty literal value or a `valueFrom` source, and the control-plane content storage has an access key and a MinIO secret key
 - **THEN** the Helm chart creates `s3-credentials` with `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` for the frontend theme configuration to reference
+
+#### Scenario: Theme archive is not configured
+- **WHEN** `applications.frontend.extraEnvVars` omits `FRONTEND_THEME_URL` or sets it to an empty literal value
+- **THEN** the Helm chart omits `s3-credentials` even when both content-storage credentials are present
+
+#### Scenario: Frontend or content-storage credentials are unavailable
+- **WHEN** the frontend is disabled or either content-storage credential is empty
+- **THEN** the Helm chart omits `s3-credentials` even when `FRONTEND_THEME_URL` is configured
 
 ### Requirement: A nominated administrator is pending until they accept the configured version
 
@@ -94,7 +110,7 @@ At startup, when the configured version differs from the last version applied, t
 
 ### Requirement: A team's pages show the charter to its pending administrators
 
-When a user opens a page of a team on which they hold `pending_team_admin` and the team has no `team_admin`, the frontend SHALL show the charter in place of the page, with an Accept action. When the team already has a `team_admin`, the frontend MUST leave the page to the user's other roles and SHALL show a notice leading to the charter instead. The home page, the personal space and the pages of teams where the user is not pending MUST NOT show either. After Accept, the team's pages MUST become available without reloading the app.
+While the charter is enabled, when a user opens a page of a team on which they hold `pending_team_admin` and the team has no `team_admin`, the frontend SHALL show the charter in place of the page, with an Accept action. When the team already has a `team_admin`, the frontend MUST leave the page to the user's other roles and SHALL show a notice leading to the charter instead. The home page, the personal space and the pages of teams where the user is not pending MUST NOT show either. After Accept, the team's pages MUST become available without reloading the app.
 
 #### Scenario: Pending administrator opens a team with no administrator
 - **WHEN** a user holding `pending_team_admin` opens a page of a team that has no `team_admin`
@@ -114,7 +130,7 @@ When a user opens a page of a team on which they hold `pending_team_admin` and t
 
 ### Requirement: Team settings show the charter to administrators and pending administrators
 
-Team settings SHALL show a Responsibilities section with the charter to users who hold `team_admin` or `pending_team_admin` on that team, and to no one else, with an Accept action for pending administrators only. The member list MUST show a pending nomination on the administrator role.
+While the charter is enabled, team settings SHALL show a Responsibilities section with the charter to users who hold `team_admin` or `pending_team_admin` on that team, and to no one else, with an Accept action for pending administrators only. While the charter is disabled, the section and navigation entry MUST be hidden. The member list MUST show a pending nomination on the administrator role.
 
 #### Scenario: Administrator opens Responsibilities
 - **WHEN** a `team_admin` opens the Responsibilities section

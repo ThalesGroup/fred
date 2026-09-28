@@ -108,12 +108,15 @@
   min-width: 0;
 }
 
-/* Title and description run on one line, sharing a baseline. The title holds
-   its width; only the description gives way when the strip gets narrow. */
+/* Title and description run on one line; the title holds its width and only
+   the description gives way when the strip gets narrow. Centred rather than
+   baseline-aligned: the two fonts share a size and line-height, so one line
+   renders identically, while a wrapped description keeps the title centred
+   like the icon and the actions. */
 .text {
   display: flex;
   flex: 1;
-  align-items: baseline;
+  align-items: center;
   gap: var(--spacing-l);
   min-width: 0;
 }
