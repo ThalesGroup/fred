@@ -19,6 +19,7 @@ import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TeamAdminCharterPage from "@components/pages/TeamAdminCharterPage/TeamAdminCharterPage.tsx";
 import { useSelectedTeam } from "../../../../../hooks/useSelectedTeam.ts";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.ts";
 import styles from "./TeamAdminCharterGate.module.css";
 
 /** Leads a pending admin of the selected team to the charter. It replaces the team's pages only
@@ -26,6 +27,7 @@ import styles from "./TeamAdminCharterGate.module.css";
 export default function TeamAdminCharterGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const { teamId, selectedTeam } = useSelectedTeam();
+  const { bootstrap } = useFrontendBootstrap();
   const onResponsibilities = useMatch("/team/:teamId/settings/responsibilities") !== null;
   // Keyed to the team in the URL: off team pages the team query is skipped but still returns
   // the last team it loaded, which would show the notice on the home page.
@@ -36,7 +38,7 @@ export default function TeamAdminCharterGate({ children }: { children: ReactNode
     "my_relations" in selectedTeam &&
     (selectedTeam.my_relations ?? []).includes("pending_team_admin");
 
-  if (!pending) return <>{children}</>;
+  if (bootstrap?.team_admin_charter_enabled !== true || !pending) return <>{children}</>;
   if ((selectedTeam?.admins ?? []).length === 0) return <TeamAdminCharterPage />;
   return (
     <>

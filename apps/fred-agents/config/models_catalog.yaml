@@ -19,16 +19,17 @@ profiles:
   - profile_id: chat.mistral.medium
     capability: chat
     model_display_name: "Mistral Medium 3.5"
-    # Non-reasoning model: structured output (JSON) and tool loops are reliable.
-    # A reasoning model (mistral-small-2603 + reasoning_effort) emits its content
-    # as `thinking` blocks → structured/JSON parsing fails ("expected value at
-    # line 1 column 1"), and the tool loop re-issues calls (see GH #1780).
+    supports_thinking: true
+    # Medium supports reasoning when the platform admin enables it.
     model:
       provider: openai
       name: mistral-medium-latest
       settings:
         base_url: https://api.mistral.ai/v1
         max_retries: 2
+        reasoning_effort: high
+        # Greedy sampling at temperature 0 requires top_p=1 on Mistral Medium.
+        top_p: 1.0
   - profile_id: chat.mistral.small
     capability: chat
     model_display_name: "Mistral Small 4"

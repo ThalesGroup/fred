@@ -4,6 +4,7 @@
 - [x] 1.2 Add generic templates `apps/frontend/public/team-admin-charter.md` and `team-admin-charter.fr.md`; verify the hook test resolves `team-admin-charter.fr.md` for a French language
 - [x] 1.3 List `team-admin-charter` in `build-theme-archive.sh` and the frontend README; verify the script warns when only `team-admin-charter.md` is present
 - [x] 1.4 Create the Helm `s3-credentials` Secret from the control-plane content-storage credentials and document the frontend references; verify Helm renders it only when both credentials are set
+- [x] 1.5 Gate `s3-credentials` on a configured frontend `FRONTEND_THEME_URL`; verify Helm renders the Secret only with the URL and both credentials, and omits it for an empty URL or disabled frontend
 
 ## 2. Model and storage
 
@@ -18,6 +19,7 @@
 - [x] 3.3 Reconcile admin relations at startup when the configured version changed, fail-closed; verify the reconciliation tests for enabling, a new version, turning off and an unchanged version
 - [x] 3.4 Remove the first version's permission gate and restore the routing policy and projection code to `swift`; verify the routing policy and projection tests pass unchanged
 - [x] 3.5 Update `authz-endpoint-matrix.yaml` and regenerate `controlPlaneOpenApi.ts`; verify `test_authz_endpoint_matrix.py`
+- [x] 3.6 Expose `team_admin_charter_enabled` in the authenticated frontend bootstrap from `app.team_admin_charter_version`; regenerate frontend API types and verify both configured and unset values in the bootstrap test
 
 ## 4. Frontend
 
@@ -25,9 +27,11 @@
 - [x] 4.2 Open the Responsibilities section to `team_admin`s, with their acceptance time, and to pending admins, with Accept; verify the TeamSettingsPage and section tests
 - [x] 4.3 Show a pending admin as a light orange admin chip with a clock icon in the member list, and "Admin (pending)" in the team banner and the team lists, and gate its revoke on `canAdministerAdmins`; verify `tsc` and the affected tests
 - [x] 4.4 Add the en and fr i18n keys and drop the first version's pop-up keys; verify `tsc`
+- [x] 4.5 Hide the charter gate and Responsibilities navigation when disabled, and redirect a direct Responsibilities URL to Members; verify focused tests for enabled, disabled and pending bootstrap states
 
 ## 5. Docs and handoff
 
 - [x] 5.1 Rewrite `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54, the `REBAC.md` paragraph and the `TERMS_OF_USE.md` section for the pending relation
-- [ ] 5.2 Run `make code-quality` and `make test` in the touched modules, `/code-review` on the diff, rebase on `swift` and update draft PR #2669
-- [ ] 5.3 After merge, `openspec archive add-team-admin-charter` and close #2658
+- [x] 5.2 Document the bootstrap state and disabled frontend behavior in `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54
+- [x] 5.3 Run `make code-quality` and tests in the touched modules, review the diff, rebase on `swift` and update the draft PR for #2824
+- [ ] 5.4 After merge, `openspec archive add-team-admin-charter` and close #2824

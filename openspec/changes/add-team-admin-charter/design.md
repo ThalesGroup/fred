@@ -54,13 +54,15 @@ The last-admin guard and the rescue check keep counting `team_admin` only. Count
 
 `TeamAdminCharterGate` wraps the `MainLayout` outlet. When `useSelectedTeam` returns a team whose `my_relations` holds `pending_team_admin`, it renders `TeamAdminCharterPage` (charter and Accept) instead of the page, but only while the team's `admins` (`team_admin` only) is empty: nobody has vouched for the user's other roles yet. When the team has an accepted admin, the gate renders the page under a notice leading to the Responsibilities section, so a pending admin who is also an editor keeps working and is never locked out for declining. The backend is unchanged either way: `pending_team_admin` never carries an admin permission. The home page and the personal space have no such relation. Accept invalidates `ControlPlaneTeam`, so `my_relations` refreshes and the gate opens. Team settings show the Responsibilities section to `team_admin`s and pending admins, with Accept for the latter; the admin role chip of a pending admin turns light orange with a clock icon ("Admin (pending)" on hover), and toggling it cancels the nomination.
 
+The authenticated frontend bootstrap exposes `team_admin_charter_enabled`, derived solely from whether `app.team_admin_charter_version` is set. The gate, the Responsibilities navigation entry and the section route require this value to be true. They remain hidden while bootstrap is loading or unavailable. A direct Responsibilities URL redirects to Members when the charter is off. This keeps the UI aligned with the server's disabled acceptance endpoint without a second deployment switch.
+
 ### Markdown hook extracted from the GCU and GDPR pages
 
 `useLegalMarkdown(name)` keeps the current candidate order and SPA-fallback rejection, and replaces both inline copies.
 
 ### Reuse the content-storage credentials for the theme archive
 
-When the control-plane content storage has both credentials configured, the Helm chart exposes them in the namespace-local `s3-credentials` Secret under `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`. The frontend can reference that Secret without copying either value into a second values block. The Secret is omitted when either credential is empty.
+When the frontend is enabled, `applications.frontend.extraEnvVars` configures `FRONTEND_THEME_URL` with a nonempty literal value or a `valueFrom` source, and the control-plane content storage has both credentials configured, the Helm chart exposes them in the namespace-local `s3-credentials` Secret under `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`. The frontend can reference that Secret without copying either value into a second values block. The Secret is omitted when the theme URL is absent or empty, the frontend is disabled, or either credential is empty.
 
 ## Risks / Trade-offs
 

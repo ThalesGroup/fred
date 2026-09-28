@@ -127,6 +127,8 @@ Phase 3a uses one control-plane-owned bootstrap payload:
       the personal/system space and for any team the caller is not a member of.
   - `gcu_version`
     - optional Terms of Use / CGU gating switch exposed by deployment config
+  - `team_admin_charter_enabled`
+    - whether `app.team_admin_charter_version` is configured; see §54
   - `feature_flags`
   - `permissions`
   - `upload_warning`
@@ -3982,7 +3984,9 @@ the theme archive like `gcu.md`; the stock file is a template.
 
 **Configuration.** `app.team_admin_charter_version: str | None`. `None`, the
 default, turns the charter off. Changing the value asks every admin to accept
-again (see Reconciliation).
+again (see Reconciliation). Authenticated `FrontendBootstrap.team_admin_charter_enabled`
+is true exactly when the version is not `None`; it is derived from this setting,
+not configured separately.
 
 **Model.** `schema.fga` adds `team.pending_team_admin: [user]`, part of the
 `team_member` union and of nothing else. A pending admin is a member with no
@@ -4034,9 +4038,13 @@ an error stops the startup.
 check count `team_admin` only, so a team whose nominated admin never accepts can
 still be rescued.
 
-**Frontend.** On the pages of a team where `my_relations` holds
-`pending_team_admin`, the charter page replaces the team content until Accept
-while the team has no `team_admin`. Once the team has one, the pages stay
+**Frontend.** When `team_admin_charter_enabled` is false or bootstrap has
+not loaded, the charter page and notice stay hidden, as does the Responsibilities
+entry in team settings. A direct Responsibilities URL redirects to Members once
+bootstrap has loaded and reported the charter disabled. When enabled, on the
+pages of a team where `my_relations` holds `pending_team_admin`, the charter
+page replaces the team content until Accept while the team has no `team_admin`.
+Once the team has one, the pages stay
 available to the user's other roles under a notice leading to the charter. The
 home page, the personal space and other teams stay usable. Team settings show
 the Responsibilities section to `team_admin`s, with the time they accepted it,
