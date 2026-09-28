@@ -398,6 +398,9 @@ async def build_frontend_bootstrap(
         active_team=active_team,
         available_teams=available_teams,
         gcu_version=deps.configuration.app.gcu_version,
+        team_admin_charter_enabled=(
+            deps.configuration.app.team_admin_charter_version is not None
+        ),
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
         upload_warning=deps.configuration.platform.frontend.upload_warning,

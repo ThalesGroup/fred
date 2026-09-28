@@ -872,6 +872,7 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["active_team"]["id"] == _PERSONAL_TEAM_ID
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
+    assert payload["team_admin_charter_enabled"] is False
     assert payload["feature_flags"]["enableK8Features"] is False
     assert payload["feature_flags"]["enableApplications"] is False
     assert "ui_settings" not in payload
@@ -883,6 +884,21 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["permissions"]["platform_roles"] == [
         r.value for r in list(PlatformRoleRelation)
     ]
+
+
+@pytest.mark.asyncio
+async def test_frontend_bootstrap_reports_enabled_team_admin_charter() -> None:
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.configuration.app.team_admin_charter_version = "2026-09"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/bootstrap")
+
+    assert resp.status_code == 200
+    assert resp.json()["team_admin_charter_enabled"] is True
 
 
 @pytest.mark.asyncio

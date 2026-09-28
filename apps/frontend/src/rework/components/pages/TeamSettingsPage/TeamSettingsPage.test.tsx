@@ -23,11 +23,23 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ section: "members", relations: [] as string[] }));
+const h = vi.hoisted(() => ({
+  section: "members",
+  relations: [] as string[],
+  charterEnabled: true,
+  bootstrapLoading: false,
+}));
 
 vi.mock("react-router-dom", () => ({
   useParams: () => ({ section: h.section }),
   Navigate: ({ to }: { to: string }) => `navigate:${to}`,
+}));
+
+vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
+  useFrontendBootstrap: () => ({
+    bootstrap: h.bootstrapLoading ? undefined : { team_admin_charter_enabled: h.charterEnabled },
+    isLoading: h.bootstrapLoading,
+  }),
 }));
 
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
@@ -82,6 +94,8 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  h.charterEnabled = true;
+  h.bootstrapLoading = false;
 });
 
 describe("TeamSettingsPage responsibilities", () => {
@@ -95,6 +109,20 @@ describe("TeamSettingsPage responsibilities", () => {
     render("responsibilities", ["pending_team_admin", "team_editor"]);
 
     expect(container.textContent).toBe("responsibilities-section:true");
+  });
+
+  it("redirects an admin when the charter is disabled", () => {
+    h.charterEnabled = false;
+    render("responsibilities", ["team_admin"]);
+
+    expect(container.textContent).toBe("navigate:/team/team-1/settings/members");
+  });
+
+  it("waits for bootstrap before resolving a direct Responsibilities URL", () => {
+    h.bootstrapLoading = true;
+    render("responsibilities", ["team_admin"]);
+
+    expect(container.textContent).toBe("");
   });
 
   it("redirects a plain member away from the Responsibilities section", () => {

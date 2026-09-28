@@ -26,10 +26,20 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 type SelectedTeam = { id: string; my_relations: string[]; admins: Array<{ id: string }> };
 
-const h = vi.hoisted(() => ({ team: undefined as SelectedTeam | undefined, offTeamPages: false }));
+const h = vi.hoisted(() => ({
+  team: undefined as SelectedTeam | undefined,
+  offTeamPages: false,
+  charterEnabled: true as boolean | undefined,
+}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock("../../../../../hooks/useFrontendBootstrap.ts", () => ({
+  useFrontendBootstrap: () => ({
+    bootstrap: h.charterEnabled === undefined ? undefined : { team_admin_charter_enabled: h.charterEnabled },
+  }),
 }));
 
 vi.mock("../../../../../hooks/useSelectedTeam.ts", () => ({
@@ -70,9 +80,26 @@ afterEach(() => {
   container.remove();
   h.team = undefined;
   h.offTeamPages = false;
+  h.charterEnabled = true;
 });
 
 describe("TeamAdminCharterGate", () => {
+  it("leaves team pages available when the charter is disabled", () => {
+    h.charterEnabled = false;
+    h.team = { id: "team-1", my_relations: ["pending_team_admin"], admins: [] };
+    render();
+
+    expect(container.textContent).toBe("team-pages");
+  });
+
+  it("shows no notice while bootstrap has not reported charter enablement", () => {
+    h.charterEnabled = undefined;
+    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
+    render();
+
+    expect(container.textContent).toBe("team-pages");
+  });
+
   it("shows the charter instead of the pages of a team with no accepted admin", () => {
     h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [] };
     render();

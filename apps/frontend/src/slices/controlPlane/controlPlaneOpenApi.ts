@@ -2835,6 +2835,7 @@ export type FrontendBootstrap = {
   active_team: TeamWithPermissions;
   available_teams?: Team[];
   gcu_version?: string | null;
+  team_admin_charter_enabled: boolean;
   feature_flags: FrontendFeatureFlags;
   permissions: PermissionSummary;
   /** Deployer-configured banner for upload surfaces (document upload drawer, chat attachments), from `platform.frontend.upload_warning` (MIGR-01.01). `None` when the deployment configures none — the frontend then renders nothing. Deliberately on the authenticated bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only render post-auth, and `FrontendConfig` stays minimal. */

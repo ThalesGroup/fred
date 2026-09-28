@@ -16,10 +16,13 @@
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
   isPersonalTeam: false,
+  pathname: "/team/team-1/agents",
+  relations: ["team_member"] as string[],
+  charterEnabled: undefined as boolean | undefined,
   applicationsEnabled: false,
   result: { data: undefined, isError: false } as {
     data?: { items: Array<Record<string, unknown>> };
@@ -41,7 +44,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 vi.mock("react-router-dom", () => ({
-  useLocation: () => ({ pathname: "/team/team-1/agents" }),
+  useLocation: () => ({ pathname: h.pathname }),
   useNavigate: () => vi.fn(),
   NavLink: ({ to, children }: { to: string; children: ReactNode | ((args: { isActive: boolean }) => ReactNode) }) => (
     <a href={to}>{typeof children === "function" ? children({ isActive: false }) : children}</a>
@@ -62,7 +65,7 @@ vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
       id: "team-1",
       name: "Team One",
       is_member: true,
-      my_relations: ["team_member"],
+      my_relations: h.relations,
       avatar_image_url: h.teamAvatarImageUrl,
     },
     canOpenTeamSettings: false,
@@ -73,6 +76,11 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
     canUpdateAgents: false,
     canUpdateInfo: false,
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
+  }),
+}));
+vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
+  useFrontendBootstrap: () => ({
+    bootstrap: h.charterEnabled === undefined ? undefined : { team_admin_charter_enabled: h.charterEnabled },
   }),
 }));
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
@@ -296,5 +304,37 @@ describe("TeamContentNavbar — cross-session knowledge base availability", () =
     }
     window.dispatchEvent(new Event("focus"));
     expect(h.refetchKnowledgeBases).toHaveBeenCalledTimes(1);
+  });
+});
+
+afterEach(() => {
+  h.pathname = "/team/team-1/agents";
+  h.relations = ["team_member"];
+  h.charterEnabled = undefined;
+});
+
+describe("TeamContentNavbar Responsibilities entry", () => {
+  beforeEach(() => {
+    h.pathname = "/team/team-1/settings/members";
+    h.relations = ["team_admin"];
+  });
+
+  it("shows the entry when the charter is enabled", () => {
+    h.charterEnabled = true;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
+  });
+
+  it("also shows the entry to a pending admin when enabled", () => {
+    h.charterEnabled = true;
+    h.relations = ["pending_team_admin"];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/settings/responsibilities"');
+  });
+
+  it("hides the entry when the charter is disabled or bootstrap is unavailable", () => {
+    h.charterEnabled = false;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
+
+    h.charterEnabled = undefined;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
   });
 });
