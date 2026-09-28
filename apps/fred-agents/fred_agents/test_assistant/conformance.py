@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -47,9 +48,11 @@ class TurnResult:
 
 
 class Driver(Protocol):
+    @abstractmethod
     async def send(self, session_id: str, message: str) -> TurnResult:
         """Send a new turn through the driver."""
 
+    @abstractmethod
     async def resume(
         self, session_id: str, request: Event, choice_id: str
     ) -> TurnResult:
