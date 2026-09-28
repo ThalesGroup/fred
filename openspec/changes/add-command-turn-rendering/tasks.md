@@ -57,7 +57,7 @@
 - [x] 3.1 Run `make code-quality` and `make test` in `apps/frontend`,
       `libs/fred-core` and `libs/fred-runtime`; verify all pass with no new
       warnings.
-- [ ] 3.2 Run `/code-review` on the diff and address findings; verify no
+- [x] 3.2 Run `/code-review` on the diff and address findings; verify no
       correctness finding remains open. The assistant cannot invoke it — ask
       the developer to run it, and record what it found.
 - [x] 3.3 Run the `fred-performance-reviewer` skill: this touches the turn
@@ -107,6 +107,11 @@ addressed: a memo broken by an inline callback, an `aria-label` that swallowed
 the appended text, a 1000-row listing that could hide a held command from the
 import suffixer, `promote_prompt` silently dropping the command, and helper
 text promising a trigger this release does not have.
+
+A second `/code-review` pass, run by the developer over the whole branch once
+the trigger slice landed, reached this slice's code again and found nothing new
+in it — its four findings were all in the field and trigger slices. Recorded in
+`add-prompt-command-trigger/tasks.md`.
 
 **`fred-performance-reviewer`** (task 3.3) found one further issue, of the same
 class as the first: `ConversationThread` handed each row a callback built per
