@@ -20,6 +20,7 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
 import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
+import { canEditTeamContent } from "@hooks/teamCapabilities";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
@@ -33,8 +34,6 @@ import {
 import PromptViewDialog from "../../PromptsPage/PromptViewDialog/PromptViewDialog.tsx";
 import ImportPromptDialog from "./ImportPromptDialog/ImportPromptDialog.tsx";
 import styles from "./MarketplacePrompts.module.scss";
-
-const EDITOR_RELATIONS = new Set(["team_editor", "team_admin"]);
 
 /** "Prompts de la communauté" — every published prompt across all teams, a
  * live view of the team rows. Actions: copy to clipboard (records a use),
@@ -75,12 +74,7 @@ export default function MarketplacePrompts() {
   // Teams the caller can edit → they may remove that team's prompts from the
   // marketplace directly from here (UX convenience).
   const editableTeamIds = useMemo(
-    () =>
-      new Set(
-        availableTeams
-          .filter((team) => (team.my_relations ?? []).some((relation) => EDITOR_RELATIONS.has(relation)))
-          .map((team) => team.id),
-      ),
+    () => new Set(availableTeams.filter(canEditTeamContent).map((team) => team.id)),
     [availableTeams],
   );
 

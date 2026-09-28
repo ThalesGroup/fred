@@ -120,3 +120,17 @@ export function canAdministerTeamRole(capabilities: TeamCapabilities, role: User
   if (role === "team_admin" || role === "pending_team_admin") return capabilities.canAdministerAdmins;
   return capabilities.canAdministerMembers;
 }
+
+/**
+ * True when the caller may write this team's content — prompts, resources,
+ * agents. Derived from relations rather than `TeamPermission[]` because the
+ * bootstrap's `available_teams` are plain `Team`s, which carry `my_relations`
+ * but no `permissions`.
+ *
+ * `team_admin` administers members and holds **no** write authority
+ * (`schema.fga`: `define can_update_resources: team_editor`), so counting it
+ * here offers teams the backend then refuses.
+ */
+export function canEditTeamContent(team: { my_relations?: UserTeamRelation[] | null }): boolean {
+  return (team.my_relations ?? []).includes("team_editor");
+}

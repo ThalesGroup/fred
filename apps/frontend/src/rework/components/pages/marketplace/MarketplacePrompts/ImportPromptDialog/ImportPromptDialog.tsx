@@ -19,6 +19,7 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import { canEditTeamContent } from "@hooks/teamCapabilities";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap";
 import { usePostMarketplacePromptImportControlPlaneV1MarketplacePromptsPromptIdImportPostMutation } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ImportPromptDialog.module.scss";
@@ -31,8 +32,6 @@ interface ImportPromptDialogProps {
   originTeamId?: string | null;
   onClose: () => void;
 }
-
-const EDITOR_RELATIONS = new Set(["team_editor", "team_admin"]);
 
 /** Multi-select target picker for importing a marketplace prompt into the
  * caller's own spaces: the personal space plus every team the caller can edit.
@@ -60,12 +59,7 @@ export default function ImportPromptDialog({
   // offered separately at the top).
   const editableTeams = useMemo(
     () =>
-      availableTeams.filter(
-        (team) =>
-          !isPersonalTeamId(team.id) &&
-          team.id !== personalId &&
-          (team.my_relations ?? []).some((relation) => EDITOR_RELATIONS.has(relation)),
-      ),
+      availableTeams.filter((team) => !isPersonalTeamId(team.id) && team.id !== personalId && canEditTeamContent(team)),
     [availableTeams, personalId],
   );
 
