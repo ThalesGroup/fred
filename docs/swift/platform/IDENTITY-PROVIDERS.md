@@ -97,40 +97,130 @@ explain the Entra-side setup.
   create refusal, and deletion suspension. People absent from the local table
   cannot be found until they sign in.
 
-## Local configuration examples
+## Complete local test configurations
 
-Each backend has `config/configuration_generic_oidc.example.yaml` and
-`config/configuration_mock_oidc.example.yaml`. These contain only `security`
-differences. `CONFIG_FILE` expects a complete configuration, so merge an example
-with the application's existing `configuration_prod.yaml` into a temporary file;
-do not edit the tracked baseline. For example, from the repository root:
+The existing `configuration_generic_oidc.example.yaml` and
+`configuration_mock_oidc.example.yaml` files are security overlays. Prepare full
+configurations for all three backends with the repository script, from the root:
 
 ```bash
-APP=control-plane-backend PROFILE=generic_oidc \
-  apps/control-plane-backend/.venv/bin/python - <<'PY'
-import os
-from pathlib import Path
-import yaml
-
-root = Path('apps') / os.environ['APP'] / 'config'
-base = yaml.safe_load((root / 'configuration_prod.yaml').read_text())
-overlay = yaml.safe_load((root / f"configuration_{os.environ['PROFILE']}.example.yaml").read_text())
-
-def merge(target, source):
-    for key, value in source.items():
-        if isinstance(value, dict) and isinstance(target.get(key), dict):
-            merge(target[key], value)
-        else:
-            target[key] = value
-
-merge(base, overlay)
-output = Path('/tmp') / f"fred-{os.environ['APP']}-{os.environ['PROFILE']}.yaml"
-output.write_text(yaml.safe_dump(base, sort_keys=False))
-print(output)
-PY
+/usr/bin/python3 scripts/prepare_identity_provider_configs.py
 ```
 
-Set `CONFIG_FILE` to the printed path when starting that backend. Repeat with
-`APP=knowledge-flow-backend` or `APP=fred-agents`, and set `PROFILE=mock_oidc`
-for the mock provider. The examples are only configuration fragments; the mock
-provider and frontend login still need their own test-bench setup.
+This command worked with the system Python on this checkout. On another machine,
+use `uv run scripts/prepare_identity_provider_configs.py` to resolve its declared
+`pyyaml` and `jsonschema` dependencies. `--profile mock_oidc` selects one profile;
+`--output-dir <directory>` changes the output location. Every file is checked
+against its application's committed JSON schema before that profile is written.
+The script preserves non-security settings and never reads `.env` files.
+
+| Profile | Generated directory | Identity setup |
+| --- | --- | --- |
+| `keycloak` | `/tmp/fred-idp-tests/keycloak` | Existing Keycloak configuration and directory, unchanged |
+| `generic_oidc` | `/tmp/fred-idp-tests/generic_oidc` | Keycloak on port 8080 with the factory generic profile; local directory |
+| `mock_oidc` | `/tmp/fred-idp-tests/mock_oidc` | Factory mock issuer on port 8090; local directory and non-UUID subjects |
+
+Each directory contains `configuration_control-plane-backend.yaml`,
+`configuration_knowledge-flow-backend.yaml`, and `configuration_fred-agents.yaml`.
+These are complete local configurations selected directly with `CONFIG_FILE`.
+They retain the baseline Postgres, OpenFGA, Temporal, storage and model settings;
+those services and the normal application `.env` credentials must be available.
+Regenerate the files after changing a baseline configuration. These localhost
+URLs are for applications running on the host, not inside Kubernetes pods.
+For Kubernetes with Entra, use
+[`values-entra.example.yaml`](../../../deploy/charts/fred/values-entra.example.yaml)
+and replace the tenant/application IDs with the customer's registrations.
+
+### Select the identity setup
+
+From the Fred root, with the sibling factory checkout:
+
+```bash
+# generic_oidc: change the local realm to flat roles and a fred-api audience.
+make -C ../fred-deployment-factory keycloak-generic-oidc STRICT=1
+
+# mock_oidc: start the separate provider instead.
+make -C ../fred-deployment-factory mock-oidc-up
+
+# Restore the Keycloak token shape when returning to the keycloak profile.
+make -C ../fred-deployment-factory keycloak-generic-oidc-revert
+```
+
+Run the command matching the chosen profile. The mock provider is a local test
+server with an interactive login page, not a production identity provider.
+
+### Launch Fred
+
+Set these variables in each terminal, from the Fred root:
+
+```bash
+export FRED_TEST_ROOT="$PWD"
+export FRED_TEST_PROFILE=mock_oidc # or generic_oidc / keycloak
+export FRED_TEST_CONFIG_DIR="/tmp/fred-idp-tests/$FRED_TEST_PROFILE"
+export FRED_TEST_UV="$FRED_TEST_ROOT/apps/control-plane-backend/.venv/bin/uv"
+# OIDC profiles: allow the mock lifetime and ignore a stale Keycloak policy.
+if [ "$FRED_TEST_PROFILE" != keycloak ]; then
+  export FRED_JWT_MAX_LIFETIME_SECONDS=5400
+  export FRED_LOCAL_DELEGATION_FILE=
+fi
+```
+
+For the Keycloak baseline, use fresh terminals with the usual environment,
+without the OIDC overrides above. Start each process in a separate terminal
+using the same profile:
+
+```bash
+make -C apps/control-plane-backend run UV="$FRED_TEST_UV" \
+  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_control-plane-backend.yaml"
+
+make -C apps/knowledge-flow-backend run UV="$FRED_TEST_UV" \
+  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_knowledge-flow-backend.yaml"
+
+make -C apps/fred-agents run UV="$FRED_TEST_UV" \
+  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_fred-agents.yaml"
+
+make -C apps/control-plane-backend run-worker UV="$FRED_TEST_UV" \
+  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_control-plane-backend.yaml"
+
+make -C apps/knowledge-flow-backend run-worker UV="$FRED_TEST_UV" \
+  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_knowledge-flow-backend.yaml"
+
+make -C apps/frontend run
+```
+
+The frontend obtains its provider settings from the control plane; no separate
+frontend OIDC YAML or SPA client secret is needed. Register its redirect/logout
+URL `http://localhost:5173/` with the chosen provider. The runtime uses `agentic`,
+Knowledge Flow uses `knowledge-flow`, and the control plane uses `control-plane`
+as workload clients; their credentials retain the existing environment names.
+The workers use the same complete configuration as their corresponding API.
+
+Apply the database migrations before using the local directory. Follow the
+factory's `docs/LOCAL-DEVELOPMENT.md` bootstrap/import walkthrough. In
+`generic_oidc`, call the factory's `local-testing/scripts/warm-local-directory.sh`
+after the API is running and before importing the demo bundle. With the mock,
+people must first sign in through the mock page; importing accounts from the
+Keycloak demo does not create matching mock identities automatically.
+
+### Functional changes and checks
+
+| Area | Behavior to test |
+| --- | --- |
+| Login | `keycloak` retains its existing adapter; `oidc` uses the provider login page, Authorization Code + PKCE, API access tokens, session reload, refresh and provider logout. |
+| User management | No additional admin page was added. Existing user searches and member/name displays use the selected directory. |
+| Local directory | Only people who have authenticated are listed; usernames, email and names are stored in Postgres. Workload identities are excluded. |
+| Account creation | Local mode refuses the create API with HTTP 409 and reason `managed_by_identity_provider`; accounts belong to the provider. |
+| Account deletion | Local mode suspends the person in Fred without deleting their provider account; root and wildcard protections remain. |
+| Platform roles | Granting a role to an unknown local identity returns 404 and writes no authorization relation. |
+| Personal space | Browser and backend use the same configured identity claim. Non-UUID subjects become UUIDv5; changing issuer or identity claim changes the Fred ID. |
+| Documents and agent tools | Permissions and OpenFGA rules are unchanged. With delegation enabled, the runtime sends its workload bearer and the person/run/agent grant; document access remains limited by the person's permissions. Test both permitted and forbidden documents. |
+| Workload accounts | Each backend has its own M2M provider/client/scope configuration; it obtains tokens from the resolved endpoint. |
+| Bundle import | Known usernames resolve from the local directory. Unknown entries requiring account creation fail before authorization writes, including entries with a password. |
+| Admin self-test | The Keycloak password/profile probe and credential-expiry scenario are unavailable in OIDC mode. |
+| Startup | An OIDC issuer need not have a `/realms/` path. Discovery failure or inconsistent provider/delegation/directory settings stop startup. |
+
+Verification on 2026-09-28: all nine generated configurations passed their JSON
+schemas and the backend provider-configuration checks. The baseline profile has the same configuration values as the canonical
+production YAMLs, and the OIDC profiles retain all non-security values. This is
+configuration verification; the complete browser and document-access walkthroughs
+in tasks 10.2–10.5 remain pending.
