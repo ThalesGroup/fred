@@ -4992,3 +4992,23 @@ The turn itself renders as its command rather than as the assembled text
 readable. A control on that turn opens the text that was actually sent, read
 from the turn's own stored copy: the prompt behind it may since have been
 edited or deleted, so it cannot be re-fetched by id.
+
+That control carries **no fill and no border** — the bubble's
+`--secondary-container` shows through and the hover state layer
+(`--state-on-secondary-container-hover`, mixed from the bubble's own content
+colour) is what marks it actionable. `--radius-xs`, well inside the bubble's
+`--radius-m`, so it reads as nested rather than as a second bubble.
+
+A command-launched conversation takes its **title from what was run** — the
+prompt's name, plus any text typed after the command, falling back to
+`/<command>`. Not the composer's contents, which may hold only the partial
+query `Enter` matched, and not the prompt's body, which would name every run of
+one command identically. Nothing retitles a session afterwards.
+
+### `TextInput` — `prefix`
+
+Fixed, non-editable text before the input's own text, mirroring the existing
+`suffix`: presentational only, never part of the value, and it cannot be
+deleted. `--on-surface-retreat`, with the input padded out of its way. Its first
+use is the `/` on the prompt library's command field, so the field reads as the
+thing the user will type in the chat.

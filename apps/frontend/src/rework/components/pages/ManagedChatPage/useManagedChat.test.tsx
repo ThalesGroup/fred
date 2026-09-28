@@ -434,26 +434,50 @@ describe("useManagedChat — session write reliability", () => {
     expect(composerResetMock.mock.calls.length).toBe(resetsBeforeSend);
   });
 
-  // A command turn sends the prompt's body, not what the user typed — two
-  // things keyed off the draft have to say which one they mean.
-  it("titles a command-launched session with the command line, not the prompt body", async () => {
+  // A command turn sends the prompt's body, and the composer may hold only the
+  // partial query Enter matched — neither is the session's name.
+  it("titles a command-launched session from what was run", async () => {
     mount();
+    // What `Enter` matched on: the user never finished typing the command.
     act(() => {
-      latest.setInput("/summary 33 lignes");
+      latest.setInput("/ro");
     });
     rerender();
 
     await act(async () => {
       await latest.runCommand({
-        text: "Résume le document en :\n\n33 lignes",
-        command: { command: "summary", appended_text: "33 lignes", prompt_id: "p-1" },
+        text: "Liste la racine :\n\n33 lignes",
+        command: {
+          command: "root-ls",
+          appended_text: "33 lignes",
+          prompt_id: "p-1",
+          prompt_name: "Lister la racine",
+        },
       });
     });
 
     const created = registerSessionCalls[0] as { createSessionRequest: { title: string } };
-    expect(created.createSessionRequest.title).toBe("/summary 33 lignes");
+    expect(created.createSessionRequest.title).toBe("Lister la racine — 33 lignes");
     // The prompt's body is what actually goes on the wire.
-    expect(sendMock.mock.calls[0][0]).toBe("Résume le document en :\n\n33 lignes");
+    expect(sendMock.mock.calls[0][0]).toBe("Liste la racine :\n\n33 lignes");
+  });
+
+  it("falls back to the command itself when the prompt has no name to show", async () => {
+    mount();
+    act(() => {
+      latest.setInput("/ro");
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.runCommand({
+        text: "Liste la racine :",
+        command: { command: "root-ls", prompt_id: "p-1" },
+      });
+    });
+
+    const created = registerSessionCalls[0] as { createSessionRequest: { title: string } };
+    expect(created.createSessionRequest.title).toBe("/root-ls");
   });
 
   it("refuses a command whose assembled text is over the limit, without a round trip", async () => {

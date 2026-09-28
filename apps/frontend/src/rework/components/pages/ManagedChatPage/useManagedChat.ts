@@ -585,10 +585,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           // aborts the send if the row was never actually created. Re-fires on a
           // retry against the same (already URL-bound) sid whose prior creation
           // failed — see `sessionCreateFailedIdRef`.
-          // The command line the user typed, not the prompt body it expands to:
-          // titling by the body would give every `/summary` conversation the
-          // same name, and nothing retitles a session afterwards.
-          const titleSource = turnCommand ? input.trim() : text;
+          // A command turn titles itself from what was RUN, not from the
+          // composer (which may hold only the partial query `Enter` matched)
+          // and not from the prompt body (which would give every run of one
+          // command the same name). The prompt's name reads best; any text
+          // typed after the command is what makes this conversation its own.
+          // Nothing retitles a session afterwards, so this is the only shot.
+          const titleSource = turnCommand
+            ? [turnCommand.prompt_name || `/${turnCommand.command}`, turnCommand.appended_text]
+                .filter(Boolean)
+                .join(" — ")
+            : text;
           createSessionRow(sid, titleSource ? titleSource.slice(0, 120) : "Attached files");
         }
 
