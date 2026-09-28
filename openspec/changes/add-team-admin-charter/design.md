@@ -60,7 +60,7 @@ The last-admin guard and the rescue check keep counting `team_admin` only. Count
 
 ### Reuse the content-storage credentials for the theme archive
 
-When the control-plane content storage has both credentials configured, the Helm chart exposes them in the namespace-local `s3-credentials` Secret under `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`. The frontend can reference that Secret without copying either value into a second values block. The Secret is omitted when either credential is empty.
+When the frontend is enabled, `applications.frontend.extraEnvVars` configures `FRONTEND_THEME_URL` with a nonempty literal value or a `valueFrom` source, and the control-plane content storage has both credentials configured, the Helm chart exposes them in the namespace-local `s3-credentials` Secret under `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`. The frontend can reference that Secret without copying either value into a second values block. The Secret is omitted when the theme URL is absent or empty, the frontend is disabled, or either credential is empty.
 
 ## Risks / Trade-offs
 
