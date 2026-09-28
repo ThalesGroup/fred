@@ -32,13 +32,20 @@ interface UserTurnProps {
   /** Present when the turn was launched by a prompt command: the bubble then
    *  shows the command, and `onOpenCommand` reveals the text that was sent. */
   command?: CommandDescriptor | null;
-  onOpenCommand?: () => void;
+  /** Takes the turn's own values rather than a closure, so the caller can
+   *  hand down one stable callback for every row — an arrow built per message
+   *  would defeat this component's memo on every streamed frame. */
+  onOpenCommand?: (turn: { text: string; command: CommandDescriptor }) => void;
 }
 
 // Memoized alongside AssistantTurn — see #2221.
 export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, onOpenCommand }: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
+
+  const openCommand = useCallback(() => {
+    if (command && onOpenCommand) onOpenCommand({ text, command });
+  }, [command, onOpenCommand, text]);
 
   const copyAction = useCallback(() => {
     // Same call AssistantTurn makes when it has no rendered node to serialise:
@@ -68,7 +75,7 @@ export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, 
     <div className={styles.turn} data-turn-id={turnId}>
       {/* Beside the bubble (user turns are right-aligned), revealed on hover. */}
       <ActionBar actions={actions} className={styles.actions} />
-      <UserMessage text={text} command={command} onOpenCommand={onOpenCommand} />
+      <UserMessage text={text} command={command} onOpenCommand={command && onOpenCommand ? openCommand : undefined} />
     </div>
   );
 });

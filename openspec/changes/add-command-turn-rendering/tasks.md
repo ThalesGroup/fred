@@ -60,7 +60,7 @@
 - [ ] 3.2 Run `/code-review` on the diff and address findings; verify no
       correctness finding remains open. The assistant cannot invoke it — ask
       the developer to run it, and record what it found.
-- [ ] 3.3 Run the `fred-performance-reviewer` skill: this touches the turn
+- [x] 3.3 Run the `fred-performance-reviewer` skill: this touches the turn
       build path, which runs per request; verify no new per-turn allocation or
       lookup was introduced on the send path.
 - [x] 3.4 Write the migration note under `docs/swift/ops/migrations/`,
@@ -102,6 +102,25 @@ the frontend fills per turn (`context_prompt_text`, `language`,
 the internal context dict, so the runtime read still costs one key. The
 artifacts were corrected before implementation.
 
-**Not run.** `/code-review` (task 3.2) is a built-in CLI command the assistant
-cannot invoke — the developer runs it. `fred-performance-reviewer` (task 3.3)
-is still owed: this touches the per-turn history-write path.
+**`/code-review`** (task 3.2) was run by the developer. Five findings, all
+addressed: a memo broken by an inline callback, an `aria-label` that swallowed
+the appended text, a 1000-row listing that could hide a held command from the
+import suffixer, `promote_prompt` silently dropping the command, and helper
+text promising a trigger this release does not have.
+
+**`fred-performance-reviewer`** (task 3.3) found one further issue, of the same
+class as the first: `ConversationThread` handed each row a callback built per
+message, defeating `UserTurn`'s own memo for command turns on every streamed
+frame. Fixed by passing the turn's values to a stable callback instead of a
+closure, and locked by
+`ConversationThread.rowCallbacks.test.tsx`, which fails against the previous
+shape.
+
+It also measured what the change costs where it touches storage:
+`list_commands_by_team` plans as an **Index Only Scan with `Heap Fetches: 0`**
+against the partial unique index, and it replaced a `list_by_team(limit=1000)`
+that fetched whole rows including the `text` column — so the import path does
+less work than before. `_turn_command` runs after the SSE stream is fully
+sent, costing a dict read plus, at most, a four-field validation. No new
+metric, label, external call, client or module-level state; hot-path invariants
+otherwise not applicable to this diff.
