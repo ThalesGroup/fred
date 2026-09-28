@@ -88,6 +88,7 @@ function binding(overrides: Partial<CommandTriggerBinding> = {}): CommandTrigger
   return {
     onQueryChange: vi.fn(),
     onKeyDown: vi.fn(() => false),
+    onFocusChange: vi.fn(),
     listboxId: "menu",
     open: false,
     activeDescendantId: null,
@@ -158,6 +159,18 @@ describe("RichInputField command trigger", () => {
       textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
+  });
+
+  it("reports focus leaving and returning, so the menu can follow it", () => {
+    const trigger = binding();
+    render(<Host trigger={trigger} onSend={vi.fn()} />);
+
+    // The field focuses itself once enabled, so the first report is already in.
+    expect(trigger.onFocusChange).toHaveBeenLastCalledWith(true);
+    act(() => textarea().blur());
+    expect(trigger.onFocusChange).toHaveBeenLastCalledWith(false);
+    act(() => textarea().focus());
+    expect(trigger.onFocusChange).toHaveBeenLastCalledWith(true);
   });
 
   it("wires the composer as a combobox only while the menu is open", () => {

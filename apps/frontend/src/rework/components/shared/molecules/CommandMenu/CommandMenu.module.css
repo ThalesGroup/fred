@@ -86,6 +86,14 @@
   white-space: nowrap;
 }
 
+/* Shown in place of the list when there is nothing to offer. */
+.empty {
+  margin: 0;
+  padding: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
 .rowSublabel {
   overflow: hidden;
   color: var(--on-surface-retreat);

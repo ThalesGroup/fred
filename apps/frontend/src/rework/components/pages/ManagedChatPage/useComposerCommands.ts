@@ -41,6 +41,9 @@ export interface ComposerCommandsMenu {
   id: string;
   entries: CommandMenuEntry[];
   activeIndex: number;
+  /** False when the team holds no command at all — a different empty state
+   *  from a query that happens to match none of them. */
+  teamHasCommands: boolean;
   optionId: (index: number) => string;
   onActivate: (index: number) => void;
   onFocusEntry: (index: number) => void;
@@ -96,20 +99,28 @@ export function useComposerCommands(params: {
   const [query, setQuery] = useState<string | null>(null);
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  // The menu belongs to the focused composer. Without this it kept floating
+  // over the thread after a click elsewhere, with no way back to it but typing.
+  const [focused, setFocused] = useState(false);
 
   const entries = useMemo(
     () => (query === null ? [] : commands.filter((entry) => entry.command.startsWith(query))),
     [commands, query],
   );
   const safeIndex = entries.length === 0 ? 0 : Math.min(activeIndex, entries.length - 1);
-  const open = query !== null && query !== dismissedQuery && entries.length > 0;
+  // Two distinct states. The panel is shown whenever the trigger is live — with
+  // nothing to offer it says so rather than vanishing under a placeholder that
+  // just invited the user to type `/`. It only *claims keys* when it has
+  // entries, so `/nosuchcommand` + Enter still reaches the ordinary send.
+  const panelOpen = focused && query !== null && query !== dismissedQuery;
+  const hasEntries = entries.length > 0;
 
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
   const safeIndexRef = useRef(safeIndex);
   safeIndexRef.current = safeIndex;
-  const openRef = useRef(open);
-  openRef.current = open;
+  const panelOpenRef = useRef(panelOpen);
+  panelOpenRef.current = panelOpen;
   const queryRef = useRef(query);
   queryRef.current = query;
 
@@ -126,7 +137,7 @@ export function useComposerCommands(params: {
   // Prefetch keeps the detail fetch off the critical path when the command
   // runs; the set makes moving the focus back over an entry a no-op.
   const prefetchedRef = useRef(new Set<string>());
-  const focusedPromptId = open ? (entries[safeIndex]?.promptId ?? null) : null;
+  const focusedPromptId = panelOpen && hasEntries ? (entries[safeIndex]?.promptId ?? null) : null;
   useEffect(() => {
     if (!focusedPromptId) return;
     const key = `${teamId}:${focusedPromptId}`;
@@ -176,9 +187,19 @@ export function useComposerCommands(params: {
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
-      if (!openRef.current) return false;
+      if (!panelOpenRef.current) return false;
+      // Esc closes the panel whether or not it holds anything — an empty one
+      // the user cannot dismiss would be worse than no panel at all.
+      if (event.key === "Escape") {
+        event.preventDefault();
+        // Always available: while the menu is open `Tab` completes instead of
+        // moving focus, so this is the only way back to ordinary tabbing.
+        setDismissedQuery(queryRef.current);
+        return true;
+      }
       const count = entriesRef.current.length;
-      const focused = entriesRef.current[safeIndexRef.current];
+      if (count === 0) return false;
+      const focusedEntry = entriesRef.current[safeIndexRef.current];
       switch (event.key) {
         case "ArrowDown":
           event.preventDefault();
@@ -190,20 +211,14 @@ export function useComposerCommands(params: {
           return true;
         case "Tab":
           event.preventDefault();
-          complete(focused);
+          complete(focusedEntry);
           return true;
         case "Enter":
           if (event.shiftKey || event.nativeEvent.isComposing) return false;
           event.preventDefault();
           // The focused entry, not the typed token: the menu is open on a
           // partial query, which would resolve to nothing on its own.
-          void run(focused, "");
-          return true;
-        case "Escape":
-          event.preventDefault();
-          // Always available: while the menu is open `Tab` completes instead of
-          // moving focus, so this is the only way back to ordinary tabbing.
-          setDismissedQuery(queryRef.current);
+          void run(focusedEntry, "");
           return true;
         default:
           return false;
@@ -223,17 +238,24 @@ export function useComposerCommands(params: {
   const onFocusEntry = useCallback((index: number) => setActiveIndex(index), []);
   const optionId = useCallback((index: number) => `${optionIdPrefix}-${index}`, [optionIdPrefix]);
 
+  const onFocusChange = useCallback((next: boolean) => setFocused(next), []);
+
   const trigger: CommandTriggerBinding = {
     onQueryChange,
     onKeyDown,
+    onFocusChange,
     listboxId,
-    open,
-    activeDescendantId: open ? optionId(safeIndex) : null,
+    open: panelOpen,
+    activeDescendantId: panelOpen && hasEntries ? optionId(safeIndex) : null,
   };
 
+  const teamHasCommands = commands.length > 0;
   const menu = useMemo<ComposerCommandsMenu | null>(
-    () => (open ? { id: listboxId, entries, activeIndex: safeIndex, optionId, onActivate, onFocusEntry } : null),
-    [open, listboxId, entries, safeIndex, optionId, onActivate, onFocusEntry],
+    () =>
+      panelOpen
+        ? { id: listboxId, entries, activeIndex: safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry }
+        : null,
+    [panelOpen, listboxId, entries, safeIndex, teamHasCommands, optionId, onActivate, onFocusEntry],
   );
 
   return { trigger, menu, submit };

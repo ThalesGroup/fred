@@ -395,6 +395,8 @@
     "commandMenu": {
       "ariaLabel": "Available commands",
       "promptsSection": "Prompt library",
+      "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
+      "noMatch": "No command matches.",
       "runErrorSummary": "Could not run the command",
       "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
     },

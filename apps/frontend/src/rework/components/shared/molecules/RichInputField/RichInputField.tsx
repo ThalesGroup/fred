@@ -29,6 +29,9 @@ export interface CommandTriggerBinding {
   onQueryChange: (query: string | null) => void;
   /** Return true to consume the key: the field then neither sends nor types. */
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /** The menu belongs to the focused field: it closes when focus leaves and
+   *  comes back when focus returns, so it never floats over the thread. */
+  onFocusChange: (focused: boolean) => void;
   /** Combobox wiring for the menu the host renders in `aboveFieldSlot`. */
   listboxId: string;
   open: boolean;
@@ -437,6 +440,8 @@ export function RichInputField({
             resize();
           }}
           onKeyDown={handleKeyDown}
+          onFocus={commandTrigger ? () => commandTrigger.onFocusChange(true) : undefined}
+          onBlur={commandTrigger ? () => commandTrigger.onFocusChange(false) : undefined}
         />
 
         {accessibleDescription && (

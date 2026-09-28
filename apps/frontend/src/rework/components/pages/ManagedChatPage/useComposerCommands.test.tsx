@@ -131,6 +131,10 @@ async function pressAsync(key: string) {
   });
 }
 
+function panel(): HTMLElement | null {
+  return container.querySelector('[role="listbox"], [role="status"]');
+}
+
 function options(): HTMLElement[] {
   return Array.from(container.querySelectorAll('[role="option"]'));
 }
@@ -219,6 +223,28 @@ describe("the command menu", () => {
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it("closes when the composer loses focus, and comes back when it returns", () => {
+    type("/su");
+    expect(panel()).not.toBeNull();
+
+    act(() => textarea().blur());
+    expect(panel()).toBeNull();
+
+    act(() => textarea().focus());
+    expect(panel()).not.toBeNull();
+    expect(labels()).toEqual(["/summary"]);
+  });
+
+  it("stays closed after Esc even when focus comes back", () => {
+    type("/su");
+    press("Escape");
+    expect(panel()).toBeNull();
+
+    act(() => textarea().blur());
+    act(() => textarea().focus());
+    expect(panel()).toBeNull();
+  });
+
   it("closes on Esc, keeps what was typed, and gives Tab back", () => {
     type("/su");
     press("Escape");
@@ -259,6 +285,45 @@ describe("the command menu", () => {
 
     press("ArrowUp");
     expect(fetchPrompt.mock.calls).toHaveLength(2);
+  });
+});
+
+describe("with nothing to offer", () => {
+  it("says the team holds no command rather than vanishing", () => {
+    listResult = { data: [] };
+    act(() => {
+      root.render(<Host />);
+    });
+
+    type("/");
+    expect(panel()?.getAttribute("role")).toBe("status");
+    expect(container.textContent).toContain("chatbot.commandMenu.noneInTeam");
+    expect(options()).toHaveLength(0);
+  });
+
+  it("distinguishes a query that matches none of the team's commands", () => {
+    type("/zzz");
+
+    expect(container.textContent).toContain("chatbot.commandMenu.noMatch");
+    expect(container.textContent).not.toContain("chatbot.commandMenu.noneInTeam");
+  });
+
+  // The panel is shown but claims no key: the ordinary send has to still work.
+  it("leaves Enter and Tab alone so an unmatched token is sent as typed", async () => {
+    type("/zzz");
+    press("Tab");
+    expect(textarea().value).toBe("/zzz");
+
+    await pressAsync("Enter");
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(onRunCommand).not.toHaveBeenCalled();
+  });
+
+  it("still closes on Esc", () => {
+    type("/zzz");
+    expect(panel()).not.toBeNull();
+    press("Escape");
+    expect(panel()).toBeNull();
   });
 });
 

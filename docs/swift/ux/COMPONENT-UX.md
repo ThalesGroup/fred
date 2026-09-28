@@ -4976,6 +4976,21 @@ looking active.
 The focused entry's prompt detail is prefetched as the focus moves: the listing
 carries only a preview, so running a command needs the detail endpoint, and the
 prefetch keeps that round trip off the critical path without making it optional.
+The focused row is scrolled into view on every move (the list passes 40vh and
+the caret never moves, so nothing would bring it back on its own).
+
+The menu belongs to the **focused** composer: it closes when focus leaves and
+comes back when focus returns, so it never floats over the thread. A pointer
+activation suppresses its own default, so clicking an entry is not a focus loss.
+`Esc` outlives a focus round trip — a menu dismissed stays dismissed for that
+query.
+
+With nothing to offer, the panel still appears and says why — a team holding no
+command at all reads differently from a query matching none of the ones it has.
+The placeholder has just invited the user to type `/`, so a silent nothing would
+read as a broken hint. Such a panel is a `role="status"` line rather than an
+empty listbox (the swap `Menu` already makes) and claims no key but `Esc`: the
+typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Running a command, and the turn it leaves
 

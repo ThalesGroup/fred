@@ -62,6 +62,35 @@ unresolved token is sent to the agent as ordinary text.
 - **WHEN** the menu opens
 - **THEN** only those carrying a command are listed
 
+### Requirement: The menu SHALL say when it has nothing to offer
+
+When the trigger is live but no entry can be offered, the menu SHALL show why
+rather than not appearing: the composer's placeholder has just invited the user
+to type `/`, so a silent nothing reads as a broken hint. It SHALL distinguish a
+team that holds no command at all from a query matching none of the ones it
+holds.
+
+Such a panel SHALL claim no key but `Esc`: the typed token SHALL still submit as
+ordinary text, and `Tab` SHALL still move focus.
+
+#### Scenario: A team with no command says so
+
+- **GIVEN** the active team holds no prompt carrying a command
+- **WHEN** the user types `/`
+- **THEN** the menu says the team holds no command
+
+#### Scenario: A query matching nothing says something else
+
+- **GIVEN** the team holds commands and the user types `/zzz`
+- **WHEN** no command matches
+- **THEN** the menu says no command matches
+
+#### Scenario: An empty menu does not swallow the send
+
+- **GIVEN** the menu is showing that nothing matches `/zzz`
+- **WHEN** the user submits
+- **THEN** `/zzz` is sent as ordinary text
+
 ### Requirement: The menu SHALL be fully operable from the keyboard
 
 The menu SHALL open with its best match focused. `Down` and `Up` SHALL move
@@ -79,6 +108,10 @@ Focus SHALL remain in the composer throughout: the menu is a list the text
 field owns and points at, which is what frees `Tab` to mean "complete". Since
 `Tab` cannot move focus while the menu is open, `Esc` SHALL always close it —
 the menu SHALL NOT be dismissable by pointer alone.
+
+The menu belongs to the focused composer: it SHALL close when the composer
+loses focus and SHALL come back when focus returns, unless `Esc` closed it.
+A pointer activation SHALL NOT count as losing focus.
 
 The focused entry SHALL be conveyed to assistive technology without moving
 focus out of the composer.
@@ -115,6 +148,19 @@ focus out of the composer.
 - **WHEN** the user activates an entry with a pointer
 - **THEN** the composer contains that command with a trailing space
 - **AND** nothing is sent
+
+#### Scenario: Losing focus closes the menu, regaining it brings it back
+
+- **GIVEN** the menu is open on `/su`
+- **WHEN** the composer loses focus
+- **THEN** the menu closes
+- **AND** it opens again on the same entries when focus returns
+
+#### Scenario: Esc outlives a focus round trip
+
+- **GIVEN** `Esc` closed the menu on `/su`
+- **WHEN** the composer loses and regains focus
+- **THEN** the menu stays closed
 
 #### Scenario: The caret never leaves the composer
 

@@ -395,6 +395,8 @@
     "commandMenu": {
       "ariaLabel": "Commandes disponibles",
       "promptsSection": "Prompts de la bibliothèque",
+      "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
+      "noMatch": "Aucune commande ne correspond.",
       "runErrorSummary": "Commande impossible à lancer",
       "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
     },

@@ -31,6 +31,9 @@ interface CommandMenuProps {
   entries: CommandMenuEntry[];
   /** Index of the focused entry — the composer keeps the caret, this the focus. */
   activeIndex: number;
+  /** False when the team holds no command at all, which is worth saying plainly
+   *  — a different miss from a query that matches none of the ones it has. */
+  teamHasCommands: boolean;
   /** Builds the id the composer's active-descendant names. */
   optionId: (index: number) => string;
   /** Pointer activation, which behaves as `Tab`: completes, never sends. */
@@ -45,6 +48,7 @@ export const CommandMenu = memo(function CommandMenu({
   id,
   entries,
   activeIndex,
+  teamHasCommands,
   optionId,
   onActivate,
   onFocusEntry,
@@ -68,6 +72,19 @@ export const CommandMenu = memo(function CommandMenu({
     event.preventDefault();
     onActivate(index);
   };
+
+  // Nothing to offer: a status line rather than a listbox with no options, the
+  // same swap `Menu` makes. The panel still shows — the placeholder has just
+  // invited the user to type `/`, so vanishing would read as a broken hint.
+  if (entries.length === 0) {
+    return (
+      <div id={id} className={styles.menu} role="status">
+        <p className={styles.empty}>
+          {teamHasCommands ? t("chatbot.commandMenu.noMatch") : t("chatbot.commandMenu.noneInTeam")}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div id={id} ref={listRef} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
