@@ -33,5 +33,5 @@
 
 - [x] 5.1 Rewrite `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54, the `REBAC.md` paragraph and the `TERMS_OF_USE.md` section for the pending relation
 - [x] 5.2 Document the bootstrap state and disabled frontend behavior in `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54
-- [ ] 5.3 Run `make code-quality` and tests in the touched modules, review the diff, rebase on `swift` and update the draft PR for #2824
+- [x] 5.3 Run `make code-quality` and tests in the touched modules, review the diff, rebase on `swift` and update the draft PR for #2824
 - [ ] 5.4 After merge, `openspec archive add-team-admin-charter` and close #2824
