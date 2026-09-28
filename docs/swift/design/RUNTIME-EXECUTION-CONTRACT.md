@@ -6130,9 +6130,9 @@ statements:
 ### 8.86 ⚠️ One graph engine: native LangGraph; `checkpoint_id` and `parallel` are removed (2026-09-25)
 
 Graph agents now compile to a LangGraph `StateGraph` and run through `astream`.
-The hand-rolled executor is gone. The authoring API (`GraphWorkflow`,
-`typed_node`, `GraphNodeContext`) and the `Executor`/`RuntimeEvent` contracts
-are unchanged. This supersedes the Graph-specific parts of §8.39 and of the
+The hand-rolled executor is gone. The main authoring types (`GraphWorkflow`,
+`typed_node`, `GraphNodeContext`) remain; incompatible authoring removals and
+resume changes are listed below. This supersedes the Graph-specific parts of §8.39 and of the
 token-usage entry that cites `_GraphNodeExecutionContext` and
 `_DeterministicGraphExecutor`.
 
@@ -6162,9 +6162,15 @@ token-usage entry that cites `_GraphNodeExecutionContext` and
   Langfuse dimensions. `RuntimeExecuteRequest` and `HitlRequestPart` ignore
   unknown keys, so older clients and stored history rows still parse.
 - **Removed from authoring**: `GraphWorkflow.parallel` and
-  `GraphDefinition.parallel_groups`. The fan-out they declared ran
-  sequentially. Real parallel branches stay a recorded gap
-  (`apps/fred-agents/tests/test_graph_capabilities.py`).
+  `GraphDefinition.parallel_groups`. The previous runtime executed these
+  branches concurrently; their removal is an incompatible authoring change.
+  Agents using them must be adapted before upgrading. Native parallel
+  authoring remains unsupported (`apps/fred-agents/tests/test_graph_capabilities.py`).
+- **Upgrade boundary**: legacy Graph checkpoints cannot resume or supply
+  previous business state to the native executor. Parsing old chat history
+  does not migrate checkpoints. Complete pending Graph approvals before
+  rollout and start fresh Graph sessions afterward; see the
+  [migration procedure](../ops/migrations/native-graph-runtime.md).
 - **Node errors**: `on_error` routes are applied inside the node wrapper.
   LangGraph's native `error_handler` still re-raises under `astream` when
   `stream_mode` includes `custom` (langgraph 1.2.12). A strict xfail tracks this.

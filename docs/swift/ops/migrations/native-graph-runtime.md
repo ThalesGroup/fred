@@ -1,0 +1,74 @@
+---
+schema: 1
+title: "Replace the legacy Graph executor with native LangGraph execution"
+impact: major
+configuration: local
+configuration_reason: "Local fred-agents configuration changes logging and adds the test mock model profile. The chart only documents that optional test profile as a commented example; no production setting is activated."
+---
+
+## Applicability
+
+Deployments and external agent pods upgrading to the native Graph runtime.
+Graph, ReAct and Deep now share capability tool authorization, observability
+and approval handling. This change does not enable token delegation.
+
+## Prerequisites
+
+Review external SDK consumers before upgrading:
+
+- `GraphWorkflow.parallel` and `GraphDefinition.parallel_groups` are removed.
+  The legacy implementation supported concurrent branches. Adapt affected
+  agents before upgrading; a sequential rewrite requires a review of its
+  behavior and performance and is not an equivalent automatic migration.
+- `ThoughtRecord` and `GraphExecutionOutput.thought_trace` are removed.
+  Consumers needing authored thought events must use the existing streamed events.
+- Graph approval clients must use `interrupt_id` and, when supplied,
+  `occurrence_id`, instead of `checkpoint_id`. Old request/history keys may
+  still parse, but this does not make old Graph pauses resumable.
+- Custom session IDs must not contain `:`; the runtime rejects them with 422.
+
+## Configuration
+
+No production configuration activation is required. The bundled test mock
+model is optional and intended only for Test Assistant checks. Local settings
+are not a production model or observability recommendation.
+
+## Upgrade
+
+1. Stop admitting new Graph runs and finish or explicitly abandon pending
+   Graph approvals on the old deployment. Record any business work to restart.
+2. Back up runtime checkpoint and session-history storage using the deployment's
+   normal backup procedure. Do not delete old checkpoints as part of this upgrade.
+3. Upgrade the SDK, runtime, agent pods, frontend and custom approval clients
+   together. Avoid mixed runtime versions serving the same Graph session.
+4. Start fresh Graph sessions. Legacy Graph checkpoints use a different layout
+   and are not migrated: old paused runs cannot resume, and their business state
+   is not automatically restored on a new turn. Reconstruct required business
+   state explicitly and check previous side effects before rerunning work.
+
+## Validation
+
+Verify pod template discovery and external agent imports. In a new Graph session,
+exercise a capability approval, reload while paused, accept and confirm one tool
+execution and a terminal response. In a separate session, reject and confirm
+zero execution. Check ReAct and Deep approval/refusal behavior as well.
+
+## Rollback
+
+Stop new runs before reverting pods and clients together. The old Graph runtime
+cannot consume the new native checkpoints. Restore a consistent pre-upgrade
+backup only through the normal recovery procedure; this can discard intervening
+history. Neither rollback nor checkpoint restoration reverses external tool
+effects. Reconcile those effects before restarting business work.
+
+## Limitations
+
+No automatic legacy Graph checkpoint conversion is provided. Native parallel
+authoring, per-node retry/timeout configuration, automatic node progress and
+model-native reasoning visibility remain outside this change. Node error routes
+use the Fred wrapper because the native LangGraph 1.2.12 error handler does not
+recover correctly with the required custom stream mode.
+
+The upgrade procedure is an operational requirement, not evidence that legacy
+checkpoints can be resumed. Existing ReAct/Deep source aggregation may attach
+retrieved documents to an abstention; relevance filtering is a separate follow-up.
