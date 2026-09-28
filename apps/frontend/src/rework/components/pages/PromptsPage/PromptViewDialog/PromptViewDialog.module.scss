@@ -65,6 +65,13 @@
 
 /* ── Category chip (static — not selectable) ──────────────────────────────── */
 
+/* The category and, when the prompt has one, its command sit on one row. */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
 .categoryChip {
   align-self: flex-start;
   border: 0.5px solid var(--outline-variant);

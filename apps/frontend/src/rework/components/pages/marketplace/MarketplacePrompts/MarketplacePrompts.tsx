@@ -214,6 +214,7 @@ export default function MarketplacePrompts() {
                 name: viewDetail.name,
                 description: viewDetail.description,
                 text: viewDetail.text,
+                command: viewDetail.command,
               }
             : null
         }

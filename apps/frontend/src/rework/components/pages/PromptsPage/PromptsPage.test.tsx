@@ -72,7 +72,10 @@ const PROMPT_DETAIL = {
   description: "Real description",
   category_id: null,
   tags: ["greeting"],
+  // A command, so the view dialog's chip has something to show. Prompt B below
+  // deliberately has none: `command: null` keeps the two details one shape.
   text: "Real prompt text",
+  command: "summary" as string | null,
 };
 
 // A second prompt used only by the cross-prompt-leak test below. Its detail
@@ -93,6 +96,7 @@ const PROMPT_B_DETAIL = {
   category_id: null,
   tags: [],
   text: "Other prompt text",
+  command: null,
 };
 let promptBReady = false;
 const createCalls: unknown[] = [];
@@ -410,6 +414,45 @@ describe("PromptsPage card click", () => {
     });
     dialog = document.querySelector('[role="dialog"]') as HTMLElement;
     expect(dialog.textContent).toContain("Other prompt text");
+  });
+});
+
+describe("PromptsPage view dialog", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const openCard = (index: number) => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+    const card = container.querySelectorAll('[role="button"]')[index] as HTMLElement;
+    act(() => {
+      card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    return document.querySelector('[role="dialog"]') as HTMLElement;
+  };
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("shows the command as a chip beside the category", () => {
+    const dialog = openCard(0);
+
+    expect(dialog.textContent).toContain("/summary");
+  });
+
+  it("shows no command chip on a prompt that carries none", () => {
+    promptBReady = true;
+    const dialog = openCard(1);
+
+    expect(dialog.textContent).toContain("Other prompt text");
+    expect(dialog.textContent).not.toContain("/summary");
+    promptBReady = false;
   });
 });
 

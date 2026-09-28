@@ -32,6 +32,10 @@ export interface PromptViewDetail {
   description?: string | null;
   text: string;
   category_id?: string | null;
+  /** Shown as a chip when set — in the team library and on the marketplace
+   *  alike. On the marketplace it is the author team's command: an import into
+   *  a team already holding it gets the first free `-N` suffix instead. */
+  command?: string | null;
 }
 
 interface PromptViewDialogProps {
@@ -128,7 +132,12 @@ export default function PromptViewDialog({
 
             {detail.description && <p className={styles.description}>{detail.description}</p>}
 
-            {resolvedChipLabel && <span className={styles.categoryChip}>{resolvedChipLabel}</span>}
+            {(resolvedChipLabel || detail.command) && (
+              <div className={styles.chipRow}>
+                {resolvedChipLabel && <span className={styles.categoryChip}>{resolvedChipLabel}</span>}
+                {detail.command && <span className={styles.categoryChip}>/{detail.command}</span>}
+              </div>
+            )}
 
             <div className={styles.textSection}>
               <div className={styles.textHeader}>
