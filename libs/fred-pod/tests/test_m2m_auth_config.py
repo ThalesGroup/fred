@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import secrets
+
 import httpx
 import pytest
 from fred_pod.security import M2MAuthConfig, M2MTokenProvider
@@ -21,7 +23,7 @@ def test_token_url_keeps_the_keycloak_default() -> None:
     config = M2MAuthConfig(
         keycloak_realm_url="https://identity.example/realms/fred",
         client_id="service",
-        secret_env="SYNTHETIC_SECRET_ENV",
+        secret_env="X",
     )
 
     assert config.token_url == (
@@ -33,7 +35,7 @@ def test_token_url_uses_the_explicit_override() -> None:
     config = M2MAuthConfig(
         keycloak_realm_url="https://identity.example/realms/fred",
         client_id="service",
-        secret_env="SYNTHETIC_SECRET_ENV",
+        secret_env="X",
         token_url_override="https://identity.example/oauth2/v2.0/token",
     )
 
@@ -62,7 +64,8 @@ async def test_provider_posts_to_configured_endpoint_with_scope(
     scope: str | None,
     expected_url: str,
 ) -> None:
-    monkeypatch.setenv("SYNTHETIC_SECRET_ENV", "generated-test-secret")
+    credential = secrets.token_urlsafe(16)
+    monkeypatch.setenv("X", credential)
     requests: list[httpx.Request] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
@@ -74,7 +77,7 @@ async def test_provider_posts_to_configured_endpoint_with_scope(
     config = M2MAuthConfig(
         keycloak_realm_url="https://identity.example/realms/fred",
         client_id="service",
-        secret_env="SYNTHETIC_SECRET_ENV",
+        secret_env="X",
         scope=scope,
         token_url_override=override,
     )
@@ -87,6 +90,6 @@ async def test_provider_posts_to_configured_endpoint_with_scope(
     assert form == {
         "grant_type": "client_credentials",
         "client_id": "service",
-        "client_secret": "generated-test-secret",
+        "client_secret": credential,
         **({"scope": scope} if scope else {}),
     }

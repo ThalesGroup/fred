@@ -14,10 +14,11 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, cast
 from uuid import UUID
 
 from sqlalchemy import case, func, or_, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -86,7 +87,7 @@ class PostgresUserStore(BaseUserStore):
             result = await session.execute(
                 update(UserRow).where(UserRow.id == user_id).values(**values)
             )
-            if result.rowcount:
+            if cast(CursorResult, result).rowcount:
                 return
             try:
                 async with session.begin_nested():

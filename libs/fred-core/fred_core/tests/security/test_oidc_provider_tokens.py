@@ -24,8 +24,10 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from jwt import PyJWKClient
 from jwt.algorithms import RSAAlgorithm
+from pydantic import AnyUrl
 
 from fred_core.security import oidc
 from fred_core.security.structure import (
@@ -34,12 +36,11 @@ from fred_core.security.structure import (
     UserSecurity,
     is_service_agent,
 )
-from fred_pod.security.oidc_endpoints import resolve_endpoints
 
 REALM = "http://localhost:8080/realms/app"
 ISSUER = "https://login.microsoftonline.com/example-tenant/v2.0"
 JWKS_URL = "https://identity.example/keys"
-TOKEN_URL = "https://identity.example/token"
+ENDPOINT_URL = "https://identity.example/token"
 API_AUDIENCE = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 PERSON_ID = "b672a4f0-c986-46df-ac3d-d16c26b06741"
 KID = "local-test-key"
@@ -95,7 +96,9 @@ def signed_tokens(monkeypatch: pytest.MonkeyPatch):
 
 def test_keycloak_token_builds_the_same_user(signed_tokens) -> None:
     sign, fetch_urls = signed_tokens
-    oidc.initialize_user_security(UserSecurity(realm_url=REALM, client_id="app"))
+    oidc.initialize_user_security(
+        UserSecurity(realm_url=AnyUrl(REALM), client_id="app")
+    )
     oidc._REALM_ISSUERS = frozenset({REALM})
     token = sign(
         REALM,
@@ -129,14 +132,18 @@ def test_entra_shaped_token_uses_api_audience_oid_and_flat_app_roles(
     def discovery(url: str, *, timeout: float) -> httpx.Response:
         return httpx.Response(
             200,
-            json={"issuer": ISSUER, "jwks_uri": JWKS_URL, "token_endpoint": TOKEN_URL},
+            json={
+                "issuer": ISSUER,
+                "jwks_uri": JWKS_URL,
+                "token_endpoint": ENDPOINT_URL,
+            },
             request=httpx.Request("GET", url),
         )
 
     monkeypatch.setattr(httpx, "get", discovery)
     oidc.initialize_user_security(
         UserSecurity(
-            realm_url=ISSUER,
+            realm_url=AnyUrl(ISSUER),
             client_id="fred-ui",
             provider="oidc",
             audience=API_AUDIENCE,

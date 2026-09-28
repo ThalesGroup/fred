@@ -57,7 +57,9 @@ def test_existing_security_configuration_keeps_keycloak_defaults(
         (("user_directory",), "unknown"),
     ],
 )
-def test_invalid_provider_or_directory_is_rejected(legacy_security, path, value) -> None:
+def test_invalid_provider_or_directory_is_rejected(
+    legacy_security, path, value
+) -> None:
     config = {
         **legacy_security,
         "m2m": {**legacy_security["m2m"]},

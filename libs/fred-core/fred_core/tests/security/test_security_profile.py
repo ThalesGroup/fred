@@ -190,7 +190,7 @@ def test_the_retired_workload_audience_setting_is_refused() -> None:
     ],
 )
 def test_oidc_startup_rejects_incompatible_settings(
-    delegation: DelegationConfig, directory: str, message: str
+    delegation: DelegationConfig, directory: Literal["keycloak", "local"], message: str
 ) -> None:
     config = _security()
     config.user.provider = "oidc"

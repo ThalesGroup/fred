@@ -25,8 +25,8 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
 
 import jwt as pyjwt
@@ -34,6 +34,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
+from pydantic import AnyUrl
 
 from fred_core.security import delegation, oidc
 from fred_core.security.delegation import DelegationConfig
@@ -155,7 +156,7 @@ def test_configured_claims_and_flat_roles_are_read_from_the_verified_token(
         oidc,
         "USER_SECURITY_CONFIG",
         UserSecurity(
-            realm_url=_REALM,
+            realm_url=AnyUrl(_REALM),
             client_id=_CLIENT,
             roles_claim=["roles"],
             claims=UserClaims(
@@ -239,7 +240,7 @@ def test_configured_keycloak_identity_claim_is_used(
         oidc,
         "USER_SECURITY_CONFIG",
         UserSecurity(
-            realm_url=_REALM,
+            realm_url=AnyUrl(_REALM),
             client_id=_CLIENT,
             claims=UserClaims(uid="employee_id"),
         ),
@@ -267,7 +268,7 @@ def test_oidc_uuid_claim_is_used_unchanged(
         oidc,
         "USER_SECURITY_CONFIG",
         UserSecurity(
-            realm_url=_REALM,
+            realm_url=AnyUrl(_REALM),
             client_id=_CLIENT,
             provider="oidc",
             claims=UserClaims(uid="oid"),
@@ -294,7 +295,9 @@ def test_oidc_non_uuid_identity_matches_the_shared_vector(
     monkeypatch.setattr(
         oidc,
         "USER_SECURITY_CONFIG",
-        UserSecurity(realm_url=f"{issuer}/", client_id=_CLIENT, provider="oidc"),
+        UserSecurity(
+            realm_url=AnyUrl(f"{issuer}/"), client_id=_CLIENT, provider="oidc"
+        ),
     )
 
     first = oidc.decode_jwt(
@@ -320,7 +323,7 @@ def test_blank_oidc_identity_is_rejected(
     monkeypatch.setattr(
         oidc,
         "USER_SECURITY_CONFIG",
-        UserSecurity(realm_url=_REALM, client_id=_CLIENT, provider="oidc"),
+        UserSecurity(realm_url=AnyUrl(_REALM), client_id=_CLIENT, provider="oidc"),
     )
 
     with pytest.raises(HTTPException) as exc:
@@ -336,7 +339,7 @@ def test_missing_configured_identity_claim_is_rejected(
         oidc,
         "USER_SECURITY_CONFIG",
         UserSecurity(
-            realm_url=_REALM,
+            realm_url=AnyUrl(_REALM),
             client_id=_CLIENT,
             provider="oidc",
             claims=UserClaims(uid="oid"),

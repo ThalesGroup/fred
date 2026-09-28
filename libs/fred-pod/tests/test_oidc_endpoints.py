@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from fred_pod.security import OidcEndpoints, resolve_endpoints
 
 ISSUER = "https://identity.example/tenant/v2.0"

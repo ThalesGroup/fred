@@ -12,21 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import cast
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from fred_core.users.store.postgres_user_store import PostgresUserStore
 from fred_core.users.user_models import UserRow
+from sqlalchemy import Table, select
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.mark.asyncio
 async def test_identity_store_preserves_local_state_and_searches_each_field(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'users.db'}")
     async with engine.begin() as connection:
-        await connection.run_sync(UserRow.__table__.create)
+        await connection.run_sync(cast(Table, UserRow.__table__).create)
     store = PostgresUserStore(engine)
     user_id = uuid4()
     try:
@@ -53,14 +53,19 @@ async def test_identity_store_preserves_local_state_and_searches_each_field(tmp_
         )
         async with engine.begin() as connection:
             await connection.execute(
-                UserRow.__table__.update()
+                cast(Table, UserRow.__table__)
+                .update()
                 .where(UserRow.id == user_id)
                 .values(current_resources_storage_size=123)
             )
         await store.upsert_identity(user_id, "Alice", "new@example.test", None, None)
         async with engine.connect() as connection:
             row = (
-                await connection.execute(select(UserRow.current_resources_storage_size).where(UserRow.id == user_id))
+                await connection.execute(
+                    select(UserRow.current_resources_storage_size).where(
+                        UserRow.id == user_id
+                    )
+                )
             ).one()
         assert row.current_resources_storage_size == 123
         assert await store.count_identities() == 1

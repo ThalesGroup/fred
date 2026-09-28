@@ -26,9 +26,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 import jwt
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
-from jwt import PyJWKClient
-
 from fred_pod.security.oidc_endpoints import resolve_endpoints
+from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.security.delegation import (
@@ -84,7 +83,7 @@ KEYCLOAK_JWKS_URL = ""
 KEYCLOAK_CLIENT_ID = ""
 USER_AUDIENCE = ""
 USER_ISSUER = ""
-USER_TOKEN_ENDPOINT = ""
+USER_TOKEN_ENDPOINT: str | None = None
 USER_SECURITY_CONFIG: UserSecurity | None = None
 # Every address the realm is configured under: tokens minted at the machine-to-
 # machine address carry that issuer. Set by apply_security_profile.
@@ -662,7 +661,10 @@ async def _enforce_gcu(
 async def _snapshot_local_identity(
     user: KeycloakUser, user_store: BaseUserStore, configuration: Any
 ) -> None:
-    if configuration.security.user_directory != "local" or not KEYCLOAK_ENABLED:
+    directory = getattr(
+        getattr(configuration, "security", None), "user_directory", "keycloak"
+    )
+    if not KEYCLOAK_ENABLED or directory != "local":
         return
     delegation = get_delegation_config()
     if (
