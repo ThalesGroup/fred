@@ -133,6 +133,7 @@ def _make_prompt_record(
     team_id: str = "personal",
     name: str = "Daily brief",
     description: str | None = "Ops baseline",
+    command: str | None = None,
     category_id: str | None = None,
     emoji: str | None = None,
     tags: list[str] | None = None,
@@ -144,6 +145,7 @@ def _make_prompt_record(
         team_id=TeamId(team_id),
         name=name,
         description=description,
+        command=command,
         category_id=category_id,
         emoji=emoji,
         tags=tags,
@@ -451,6 +453,15 @@ class _FakePromptStore:
             from control_plane_backend.prompts.store import PromptAlreadyExistsError
 
             raise PromptAlreadyExistsError(record.name)
+        if record.command is not None and any(
+            existing.team_id == record.team_id and existing.command == record.command
+            for existing in self._records
+        ):
+            from control_plane_backend.prompts.store import (
+                PromptCommandAlreadyExistsError,
+            )
+
+            raise PromptCommandAlreadyExistsError(record.command)
         self._records.append(record)
         return record
 
@@ -487,6 +498,7 @@ class _FakePromptStore:
         *,
         name: str,
         description: str | None,
+        command: str | None = None,
         category_id: str | None = None,
         emoji: str | None = None,
         tags: list[str] | None = None,
@@ -495,17 +507,26 @@ class _FakePromptStore:
         record = await self.get_for_team(prompt_id, team_id)
         if record is None:
             return None
-        if any(
-            existing.prompt_id != prompt_id
-            and existing.team_id == team_id
-            and existing.name == name
+        siblings = [
+            existing
             for existing in self._records
-        ):
+            if existing.prompt_id != prompt_id and existing.team_id == team_id
+        ]
+        if any(existing.name == name for existing in siblings):
             from control_plane_backend.prompts.store import PromptAlreadyExistsError
 
             raise PromptAlreadyExistsError(name)
+        if command is not None and any(
+            existing.command == command for existing in siblings
+        ):
+            from control_plane_backend.prompts.store import (
+                PromptCommandAlreadyExistsError,
+            )
+
+            raise PromptCommandAlreadyExistsError(command)
         record.name = name
         record.description = description
+        record.command = command
         record.text = text
         record.version += 1
         return record
@@ -9526,3 +9547,99 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
     assert thales_row.admins == 1
     assert thales_row.agents == 2
     assert thales_row.prompts == 3
+
+
+@pytest.mark.asyncio
+async def test_create_prompt_reports_a_command_conflict_apart_from_a_name_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both conflicts are 409 on the same route, so the body must tell them apart.
+
+    The form marks a different input for each; without a stable code it would
+    have to match on prose.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    existing = _make_prompt_record(
+        prompt_id="p-held", team_id="personal", name="Held", command="summary"
+    )
+    store = _FakePromptStore([existing])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        on_command = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={"name": "Another", "text": "t", "command": "summary"},
+        )
+        on_name = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={"name": "Held", "text": "t"},
+        )
+
+    assert on_command.status_code == 409
+    assert on_command.json()["detail"]["code"] == "prompt_command_conflict"
+
+    assert on_name.status_code == 409
+    # The name conflict keeps the plain-string shape callers already handle.
+    assert isinstance(on_name.json()["detail"], str)
+
+
+@pytest.mark.asyncio
+async def test_create_prompt_rejects_a_malformed_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The API rejects rather than repairs: `Résumé` is an error, not `resume`."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore([])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        for bad in ["résumé", "mon resume", "Summary", "a" * 65]:
+            resp = await client.post(
+                "/control-plane/v1/teams/personal/prompts",
+                json={"name": f"n-{bad[:4]}", "text": "t", "command": bad},
+            )
+            assert resp.status_code == 422, bad
+            assert any("command" in error["loc"] for error in resp.json()["detail"]), (
+                bad
+            )
+    assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_prompt_payloads_carry_the_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Listing and detail both expose it — the import reads it from there."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore([_make_prompt_record(command="summary")])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        listing = await client.get("/control-plane/v1/teams/personal/prompts")
+        detail = await client.get("/control-plane/v1/teams/personal/prompts/prompt-1")
+
+    assert listing.status_code == 200
+    assert listing.json()[0]["command"] == "summary"
+    assert detail.status_code == 200
+    assert detail.json()["command"] == "summary"

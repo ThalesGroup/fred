@@ -21,11 +21,16 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
 )
+
+# Aliased: this module also declares a `text` column, which would shadow the
+# bare name for anyone reading the class body.
+from sqlalchemy import text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -66,11 +71,25 @@ class PromptRow(Base):
     """
 
     __tablename__ = "prompt"
-    __table_args__ = (UniqueConstraint("team_id", "name", name="uq_prompt_team_name"),)
+    __table_args__ = (
+        UniqueConstraint("team_id", "name", name="uq_prompt_team_name"),
+        # Partial, so any number of prompts may carry no command while a
+        # present one stays unique per team. The namespace is the team, shared
+        # with any future team-scoped invocable object.
+        Index(
+            "uq_prompt_team_command",
+            "team_id",
+            "command",
+            unique=True,
+            postgresql_where=sql_text("command IS NOT NULL"),
+            sqlite_where=sql_text("command IS NOT NULL"),
+        ),
+    )
 
     prompt_id: Mapped[str] = mapped_column(String, primary_key=True)
     team_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    command: Mapped[str | None] = mapped_column(String(64), nullable=True)
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
     category_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     emoji: Mapped[str | None] = mapped_column(String(8), nullable=True)

@@ -359,11 +359,11 @@
     },
     "document_triage": {
       "name": "Tri de documents",
-      "description": "Passer en revue un dossier de documents et consigner les d\u00e9cisions."
+      "description": "Passer en revue un dossier de documents et consigner les décisions."
     },
     "progress_tracker": {
       "name": "Suivi d'avancement",
-      "description": "Suivre un travail de longue haleine et les d\u00e9cisions prises en chemin."
+      "description": "Suivre un travail de longue haleine et les décisions prises en chemin."
     },
     "team_wiki": {
       "name": "Wiki d'équipe",
@@ -2756,6 +2756,9 @@
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "firstCreate": "Créer un prompt",
         "form": {
+          "command": "Commande",
+          "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
+          "commandHelp": "Facultatif. Pour lancer ce prompt depuis le chat en tapant / suivi de cette commande. Lettres sans accent, chiffres, tirets et underscores.",
           "description": "Description",
           "name": "Nom",
           "text": "Texte du prompt"

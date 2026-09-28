@@ -150,6 +150,19 @@ def _document_optional_delegation_grant_query(
     """
 
 
+def _prompt_error_detail(exc: PromptRequestError) -> str | dict[str, str]:
+    """Carry a machine-readable code when one exists, a plain string otherwise.
+
+    A name conflict and a command conflict are both 409 on the same endpoint,
+    so the form needs more than prose to mark the right input. Errors with no
+    code keep the string shape callers already handle.
+    """
+
+    if exc.code is None:
+        return str(exc)
+    return {"code": exc.code, "message": str(exc)}
+
+
 @router.get(
     "/frontend/bootstrap",
     response_model=FrontendBootstrap,
@@ -674,7 +687,9 @@ async def post_team_prompt(
     try:
         return await create_prompt(user=user, team_id=team_id, request=body, deps=deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
 
 
 @router.get(
@@ -833,7 +848,9 @@ async def put_team_prompt(
     try:
         result = await update_prompt(team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -933,7 +950,9 @@ async def post_promote_prompt(
     try:
         return await promote_prompt(user, team_id, prompt_id, body, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
 
 
 @router.post(
@@ -970,7 +989,9 @@ async def post_publish_prompt(
     try:
         result = await set_prompt_published(team_id, prompt_id, True, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -1011,7 +1032,9 @@ async def post_unpublish_prompt(
     try:
         result = await set_prompt_published(team_id, prompt_id, False, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -1261,7 +1284,9 @@ async def post_team_prompt_category(
     try:
         return await create_prompt_category(team_id, body, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
 
 
 @router.put(
@@ -1293,7 +1318,9 @@ async def put_team_prompt_category(
     try:
         result = await update_prompt_category(team_id, category_id, body, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -1333,7 +1360,9 @@ async def delete_team_prompt_category(
     try:
         deleted = await delete_prompt_category(team_id, category_id, deps)
     except PromptRequestError as exc:
-        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
     if not deleted:
         raise HTTPException(
             status_code=404,

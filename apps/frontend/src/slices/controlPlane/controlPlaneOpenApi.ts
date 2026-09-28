@@ -3152,6 +3152,7 @@ export type BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentIn
 export type PromptSummary = {
   id: string;
   name: string;
+  command?: string | null;
   description?: string | null;
   category_id?: string | null;
   emoji?: string | null;
@@ -3175,6 +3176,8 @@ export type CreatePromptRequest = {
   emoji?: string | null;
   tags?: string[];
   text: string;
+  /** Optional slug identifying this prompt for invocation from the chat composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per team. Empty or whitespace-only input is stored as no command. */
+  command?: string | null;
 };
 export type ContextPromptSummary = {
   id: string;
@@ -3189,6 +3192,7 @@ export type ContextPromptSummary = {
 export type PromptDetail = {
   id: string;
   name: string;
+  command?: string | null;
   description?: string | null;
   category_id?: string | null;
   emoji?: string | null;
@@ -3214,6 +3218,8 @@ export type UpdatePromptRequest = {
   emoji?: string | null;
   tags?: string[];
   text: string;
+  /** Optional slug identifying this prompt for invocation from the chat composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per team. Empty or whitespace-only input is stored as no command. */
+  command?: string | null;
 };
 export type PromptScoreUpdateRequest = {
   score: number;
@@ -3224,6 +3230,7 @@ export type PromptPromoteRequest = {
 export type MarketplacePromptSummary = {
   id: string;
   name: string;
+  command?: string | null;
   description?: string | null;
   category_id?: string | null;
   emoji?: string | null;
@@ -3245,6 +3252,7 @@ export type MarketplacePromptSummary = {
 export type MarketplacePromptDetail = {
   id: string;
   name: string;
+  command?: string | null;
   description?: string | null;
   category_id?: string | null;
   emoji?: string | null;

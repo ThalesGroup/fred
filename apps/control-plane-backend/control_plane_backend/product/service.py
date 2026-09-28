@@ -85,6 +85,7 @@ from control_plane_backend.config.models import (
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
+    COMMAND_MAX_LENGTH,
     AgentTemplateSummary,
     BulkDeleteSessionRef,
     BulkDeleteSessionsResponse,
@@ -124,6 +125,7 @@ from control_plane_backend.prompts.category_store import (
 )
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
+    PromptCommandAlreadyExistsError,
     PromptRecord,
     PromptStore,
 )
@@ -2361,12 +2363,24 @@ class EnrollmentError(Exception):
         self.http_status = http_status
 
 
+# Stable discriminator on the 409 body: a name conflict and a command
+# conflict share the status and the endpoint, and the form marks a different
+# input for each.
+PROMPT_COMMAND_CONFLICT = "prompt_command_conflict"
+
+
 class PromptRequestError(Exception):
     """Raised when prompt-library CRUD cannot be completed as requested."""
 
-    def __init__(self, message: str, *, http_status: int = 400) -> None:
+    def __init__(
+        self, message: str, *, http_status: int = 400, code: str | None = None
+    ) -> None:
         super().__init__(message)
         self.http_status = http_status
+        # Set only where the caller must tell two same-status failures apart —
+        # a name conflict and a command conflict are both 409 on one endpoint,
+        # and the form has to know which input to mark.
+        self.code = code
 
 
 class SessionAlreadyExistsError(Exception):
@@ -3520,6 +3534,7 @@ def _prompt_record_to_summary(record: PromptRecord) -> PromptSummary:
     return PromptSummary(
         id=record.prompt_id,
         name=record.name,
+        command=record.command,
         description=record.description,
         category_id=record.category_id,
         emoji=record.emoji,
@@ -3557,6 +3572,7 @@ def _prompt_record_to_detail(record: PromptRecord) -> PromptDetail:
         id=record.prompt_id,
         team_id=record.team_id,
         name=record.name,
+        command=record.command,
         description=record.description,
         category_id=record.category_id,
         emoji=record.emoji,
@@ -3602,6 +3618,7 @@ async def create_prompt(
         team_id=team_id,
         name=request.name,
         description=request.description,
+        command=request.command,
         category_id=request.category_id,
         emoji=request.emoji,
         tags=request.tags,
@@ -3610,6 +3627,12 @@ async def create_prompt(
     )
     try:
         created = await deps.get_prompt_store().create(record)
+    except PromptCommandAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Prompt command {request.command!r} already exists for team {team_id!r}.",
+            http_status=409,
+            code=PROMPT_COMMAND_CONFLICT,
+        ) from exc
     except PromptAlreadyExistsError as exc:
         raise PromptRequestError(
             f"Prompt name {request.name!r} already exists for team {team_id!r}.",
@@ -3722,11 +3745,18 @@ async def update_prompt(
             team_id,
             name=request.name,
             description=request.description,
+            command=request.command,
             category_id=request.category_id,
             emoji=request.emoji,
             tags=request.tags,
             text=request.text,
         )
+    except PromptCommandAlreadyExistsError as exc:
+        raise PromptRequestError(
+            f"Prompt command {request.command!r} already exists for team {team_id!r}.",
+            http_status=409,
+            code=PROMPT_COMMAND_CONFLICT,
+        ) from exc
     except PromptAlreadyExistsError as exc:
         raise PromptRequestError(
             f"Prompt name {request.name!r} already exists for team {team_id!r}.",
@@ -3971,6 +4001,37 @@ async def _next_imported_name(
     return f"{trimmed_base}_imported-{n}"
 
 
+async def _next_imported_command(
+    store: PromptStore,
+    target_team_id: TeamId,
+    base_command: str | None,
+) -> str | None:
+    """Pick the source command, or the first free ``{base}-N`` from N=2.
+
+    Unlike the name, which is always suffixed, a free command is kept as it
+    is: a command is meant to be typed, and `summary` is worth keeping when
+    nothing in the target team claims it. The base is trimmed so the suffix
+    still fits the 64-character column.
+    """
+
+    if base_command is None:
+        return None
+    taken = {
+        r.command
+        for r in await store.list_by_team(target_team_id, limit=1000)
+        if r.command is not None
+    }
+    if base_command not in taken:
+        return base_command
+    n = 2
+    while True:
+        suffix = f"-{n}"
+        candidate = f"{base_command[: COMMAND_MAX_LENGTH - len(suffix)]}{suffix}"
+        if candidate not in taken:
+            return candidate
+        n += 1
+
+
 async def import_published_prompt_into_team(
     user: KeycloakUser,
     prompt_id: str,
@@ -3994,10 +4055,15 @@ async def import_published_prompt_into_team(
             http_status=404,
         )
     name = await _next_imported_name(store, target_team_id, source.name)
+    # Copied, unlike `category_id` just below: a category is an id pointing at
+    # a row the destination team does not have, while a command is a plain
+    # string meaning the same thing everywhere.
+    command = await _next_imported_command(store, target_team_id, source.command)
     record = PromptRecord(
         prompt_id=str(uuid4()),
         team_id=target_team_id,
         name=name,
+        command=command,
         description=source.description,
         emoji=source.emoji,
         tags=source.tags,
@@ -4006,6 +4072,15 @@ async def import_published_prompt_into_team(
     )
     try:
         created = await store.create(record)
+    except PromptCommandAlreadyExistsError:
+        # Two concurrent imports into one team can pick the same free suffix;
+        # the partial unique index refuses the loser. Same shape as the name
+        # race below.
+        raise PromptRequestError(
+            f"Prompt command {command!r} already exists in team {target_team_id!r}.",
+            http_status=409,
+            code=PROMPT_COMMAND_CONFLICT,
+        )
     except PromptAlreadyExistsError:
         # _next_imported_name already avoids collisions; a conflict here means a
         # concurrent import raced us — surface it as a conflict rather than 500.

@@ -575,6 +575,7 @@ class PromptSummary(BaseModel):
 
     id: str
     name: str
+    command: str | None = None
     description: str | None = None
     category_id: str | None = None
     emoji: str | None = None
@@ -676,6 +677,13 @@ class MarketplaceImportResponse(BaseModel):
     results: list[MarketplaceImportResult]
 
 
+# Lowercase ASCII, digits, hyphen and underscore. Deliberately rejected
+# rather than repaired: a caller sending "Résumé" gets an error, not "resume".
+_COMMAND_PATTERN = r"^[a-z0-9_-]+$"
+# Matches `PromptRow.command`; the import suffixer trims against it too.
+COMMAND_MAX_LENGTH = 64
+
+
 class CreatePromptRequest(BaseModel):
     """Request body for creating one team-scoped prompt-library record."""
 
@@ -685,6 +693,25 @@ class CreatePromptRequest(BaseModel):
     emoji: str | None = Field(default=None, max_length=8)
     tags: list[str] = Field(default_factory=list)
     text: str = Field(..., min_length=1)
+    command: str | None = Field(
+        default=None,
+        pattern=_COMMAND_PATTERN,
+        max_length=COMMAND_MAX_LENGTH,
+        description=(
+            "Optional slug identifying this prompt for invocation from the chat "
+            "composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per "
+            "team. Empty or whitespace-only input is stored as no command."
+        ),
+    )
+
+    @field_validator("command", mode="before")
+    @classmethod
+    def _blank_command_is_none(cls, value: object) -> object:
+        """Collapse "" and whitespace to None so storage has one empty form."""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class UpdatePromptRequest(BaseModel):
@@ -696,6 +723,25 @@ class UpdatePromptRequest(BaseModel):
     emoji: str | None = Field(default=None, max_length=8)
     tags: list[str] = Field(default_factory=list)
     text: str = Field(..., min_length=1)
+    command: str | None = Field(
+        default=None,
+        pattern=_COMMAND_PATTERN,
+        max_length=COMMAND_MAX_LENGTH,
+        description=(
+            "Optional slug identifying this prompt for invocation from the chat "
+            "composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per "
+            "team. Empty or whitespace-only input is stored as no command."
+        ),
+    )
+
+    @field_validator("command", mode="before")
+    @classmethod
+    def _blank_command_is_none(cls, value: object) -> object:
+        """Collapse "" and whitespace to None so storage has one empty form."""
+
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
 
 class PromptCategorySummary(BaseModel):

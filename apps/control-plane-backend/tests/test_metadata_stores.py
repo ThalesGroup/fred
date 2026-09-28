@@ -26,6 +26,7 @@ from control_plane_backend.models.bootstrap_models import (
 )
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
+    PromptCommandAlreadyExistsError,
     PromptRecord,
     PromptStore,
 )
@@ -828,6 +829,7 @@ async def test_prompt_store_create_list_update_and_delete(
                 team_id=TeamId("personal"),
                 name="Daily brief",
                 description="Ops baseline",
+                command="brief",
                 text="Today is {today}.",
                 created_by="alice",
                 created_at=older,
@@ -854,6 +856,7 @@ async def test_prompt_store_create_list_update_and_delete(
             TeamId("personal"),
             name="Daily brief v2",
             description="Refined",
+            command="brief",
             category_id="cat-writing",
             emoji=None,
             tags=[],
@@ -863,17 +866,114 @@ async def test_prompt_store_create_list_update_and_delete(
         missing_delete = await store.delete("prompt-2", TeamId("personal"))
 
         assert created.name == "Daily brief"
+        assert created.command == "brief"
         assert second.name == "Follow-up"
+        assert second.command is None
         assert [item.prompt_id for item in listed] == ["prompt-2", "prompt-1"]
         assert fetched is not None
         assert fetched.text == "Today is {today}."
         assert updated is not None
         assert updated.name == "Daily brief v2"
+        # Re-saving a prompt with its own command is not a conflict.
+        assert updated.command == "brief"
         assert updated.description == "Refined"
         assert updated.text == "Today is {today}. Session: {session_id}."
         assert deleted is True
         assert missing_delete is False
         assert await store.get("prompt-2") is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_prompt_store_keeps_commands_unique_within_a_team(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify a prompt command is unique per team, and that absence never collides.
+
+    Why this test exists:
+    - the command is what the composer will match a keystroke against, so two
+      prompts of one team holding the same one would make the match ambiguous
+    - uniqueness is a storage guarantee, not an application check: the partial
+      index is what this exercises
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_metadata_stores.py -q`
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "prompt-commands.sqlite3")
+
+    def record(prompt_id: str, team: str, name: str, command: str | None):
+        return PromptRecord(
+            prompt_id=prompt_id,
+            team_id=TeamId(team),
+            name=name,
+            description=None,
+            command=command,
+            text="Today is {today}.",
+            created_by="alice",
+        )
+
+    try:
+        store = PromptStore(engine)
+        await store.create(record("p1", "fredlab", "Summary", "summary"))
+        # A command is team-local: another team may hold the same one.
+        await store.create(record("p2", "other-team", "Summary", "summary"))
+        # Any number of prompts may carry no command at all.
+        await store.create(record("p3", "fredlab", "No command A", None))
+        await store.create(record("p4", "fredlab", "No command B", None))
+
+        with pytest.raises(PromptCommandAlreadyExistsError):
+            await store.create(record("p5", "fredlab", "Other name", "summary"))
+
+        # A command conflict must stay distinguishable from a name conflict,
+        # so the form marks the right input.
+        with pytest.raises(PromptAlreadyExistsError):
+            await store.create(record("p6", "fredlab", "Summary", "different"))
+
+        # Updating a prompt to a command a sibling holds is refused too.
+        with pytest.raises(PromptCommandAlreadyExistsError):
+            await store.update(
+                "p3",
+                TeamId("fredlab"),
+                name="No command A",
+                description=None,
+                command="summary",
+                category_id=None,
+                emoji=None,
+                tags=[],
+                text="x",
+            )
+
+        # Releasing a command frees it for another prompt of the team.
+        await store.update(
+            "p1",
+            TeamId("fredlab"),
+            name="Summary",
+            description=None,
+            command=None,
+            category_id=None,
+            emoji=None,
+            tags=[],
+            text="x",
+        )
+        promoted = await store.update(
+            "p3",
+            TeamId("fredlab"),
+            name="No command A",
+            description=None,
+            command="summary",
+            category_id=None,
+            emoji=None,
+            tags=[],
+            text="x",
+        )
+        assert promoted is not None
+        assert promoted.command == "summary"
     finally:
         await engine.dispose()
 

@@ -151,7 +151,14 @@ export default function ImportPromptDialog({
                 const isOrigin = team.id === originTeamId;
                 return (
                   <label key={team.id} className={styles.row} data-disabled={isOrigin || undefined}>
-                    <Checkbox checked={selected.has(team.id)} disabled={isOrigin} onChange={() => toggle(team.id)} />
+                    {/* Checked because the team already holds the prompt — an empty
+                        disabled box states the opposite. It is never added to
+                        `selected`, so it is never submitted as a target. */}
+                    <Checkbox
+                      checked={isOrigin || selected.has(team.id)}
+                      disabled={isOrigin}
+                      onChange={() => toggle(team.id)}
+                    />
                     <span className={styles.rowLabel}>{team.name}</span>
                     {isOrigin && (
                       <span className={styles.originTag}>{t("rework.marketplace.prompts.import.originTeam")}</span>

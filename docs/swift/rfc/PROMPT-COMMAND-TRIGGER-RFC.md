@@ -1,8 +1,10 @@
 # Prompt Command Trigger RFC — running a library prompt from the composer with `/`
 
-**Status:** Design agreed 2026-09-28; nothing left open. To be built as
-OpenSpec changes — this file is the umbrella for work too broad for one slice,
-and should thin as each slice leaves it, then be archived.
+**Status:** Design agreed 2026-09-28; nothing left open. Slice 1 (the
+`command` field, §2.1 and §2.6) has shipped as `add-prompt-command-field`
+(issue #2828) and is summarised here rather than specified. What remains
+unbuilt: the `/` trigger and its menu (§2.2–§2.5, §2.7), and the transcript
+component (§2.8). This file thins as each slice leaves it, then is archived.
 **ID:** `PROMPT-CMD-01` (informal label, no registry)
 **Author:** Maxime
 **Date:** 2026-09-28
@@ -31,22 +33,18 @@ binds no trigger character at all today (`RichInputField` is a plain
 
 ## 2. Proposal
 
-### 2.1 A `command` field on a prompt
+### 2.1 A `command` field on a prompt — shipped
 
-Prompt creation and editing gain one field, labelled "Commande". The user types
-the string that will trigger the prompt.
+Delivered by the OpenSpec change `add-prompt-command-field` (issue #2828): the
+optional slug, its per-team uniqueness, its editing surface, and how an import
+carries it. The current contract is
+`openspec/specs/prompt-commands/spec.md` once that change is archived; until
+then, `openspec/changes/add-prompt-command-field/`.
 
-It is **not** the prompt's name. `PromptRow.name` is display text: it allows
-spaces and mixed case, and an autocompletion has no way to know where a
-multi-word token ends. `command` is a separate slug:
-
-- lowercase ASCII letters, digits and `-`; no whitespace, **no accented
-  characters**. A French team will be tempted by `/résumé`, but accepting it
-  drags accent folding and case folding into the uniqueness rule for a gain
-  the user never sees — they type the command, they do not read it.
-- optional — a prompt without a command stays panel-only
-- unique per team, enforced by its own constraint. The existing
-  `uq_prompt_team_name` covers `name`, not this.
+What the rest of this RFC needs to know: a prompt may carry an optional
+`command`, a lowercase unaccented slug unique within its team. It is not the
+prompt's name — a name allows spaces and mixed case, and an autocompletion
+cannot tell where a multi-word token ends.
 
 ### 2.2 The `/` trigger
 
@@ -190,21 +188,16 @@ entirely. (`session_context_prompts` references prompts by id with no copy;
 that is a precedent for referencing live session state, not a model for a
 historical record.)
 
-### 2.6 One namespace per team, decided now
+### 2.6 One namespace per team — decided and shipped
 
-A prompt command `/revue` and a future team skill named `revue` would collide.
-The collision surfaces only when custom skills ship, but by then teams will
-have authored commands that cannot be renamed without breaking their users'
-habits.
-
-Proposal: **commands and future team skills share one namespace per team**, and
-uniqueness is validated across both. While only prompts exist, that is a
-same-table constraint; when custom skills arrive, their creation validates
-against existing prompt commands and vice versa.
+Commands and future team-scoped skills share **one namespace per team**;
+uniqueness is validated across both. Discharged by where uniqueness lives:
+`add-prompt-command-field` puts it on the team, so a second kind of invocable
+object validates against the same scope when it arrives.
 
 The alternative — a distinguishing prefix per kind (`/p:revue`, `/s:revue`) —
-is rejected: it makes the user spell out an implementation detail, and the two
-kinds are meant to feel like one palette.
+was rejected: it makes the user spell out an implementation detail, and the
+two kinds are meant to feel like one palette.
 
 ---
 
