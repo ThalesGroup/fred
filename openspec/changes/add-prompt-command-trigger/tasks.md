@@ -78,8 +78,12 @@
       both pass with no new warnings.
 - [ ] 5.2 Ask the developer to run `/code-review` on the diff and address the
       findings; verify none remains open. The assistant cannot invoke it.
-- [ ] 5.3 Write the migration note under `docs/swift/ops/migrations/`; verify
-      `make migration-check` passes from the repository root.
+- [ ] 5.3 Fold `prompt-command-field.md` and `prompt-command-turn.md` into one
+      note under `docs/swift/ops/migrations/` covering the whole feature, and
+      delete the two: all three slices ship as a single PR, so operators read
+      one note. Its impact is `minor` — the Alembic revision dominates. Verify
+      `make migration-check` passes from the repository root and that no
+      stale declaration is left behind.
 - [ ] 5.4 Record verification evidence here, then fold whatever the RFC still
       holds into the OpenSpec specs and archive
       `PROMPT-COMMAND-TRIGGER-RFC.md`; verify the RFC directory no longer
