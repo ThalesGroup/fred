@@ -35,7 +35,11 @@ export function CommandTurn({ command, onOpen }: CommandTurnProps) {
       className={styles.command}
       onClick={onOpen}
       disabled={!onOpen}
-      aria-label={t("chatbot.commandTurn.open", { command: command.command })}
+      aria-label={
+        appended
+          ? t("chatbot.commandTurn.openWithText", { command: command.command, appended })
+          : t("chatbot.commandTurn.open", { command: command.command })
+      }
     >
       <span className={styles.slug}>/{command.command}</span>
       {appended && <span className={styles.appended}>{appended}</span>}

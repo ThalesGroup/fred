@@ -261,3 +261,20 @@ def test_marketplace_projections_expose_the_command() -> None:
 
     assert "command" in MarketplacePromptSummary.model_fields
     assert "command" in MarketplacePromptDetail.model_fields
+
+
+@pytest.mark.asyncio
+async def test_next_imported_command_sees_commands_past_a_listing_page(
+    store: PromptStore,
+) -> None:
+    """The suffixer must see every command the team holds.
+
+    A row-limited listing would hide a held command behind newer rows and
+    hand back a value the unique index then refuses — a 409 where the import
+    should simply have suffixed.
+    """
+
+    for i in range(1200):
+        await store.create(_record("team-a", f"Filler {i}", command=f"cmd-{i}"))
+
+    assert await _next_imported_command(store, TeamId("team-a"), "cmd-0") == "cmd-0-2"

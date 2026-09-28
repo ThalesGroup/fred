@@ -4016,11 +4016,7 @@ async def _next_imported_command(
 
     if base_command is None:
         return None
-    taken = {
-        r.command
-        for r in await store.list_by_team(target_team_id, limit=1000)
-        if r.command is not None
-    }
+    taken = await store.list_commands_by_team(target_team_id)
     if base_command not in taken:
         return base_command
     n = 2

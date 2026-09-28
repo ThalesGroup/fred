@@ -300,6 +300,29 @@ class PromptStore:
             )
         return [_row_to_record(row) for row in rows]
 
+    async def list_commands_by_team(
+        self,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> set[str]:
+        """Every command held in one team.
+
+        A targeted read rather than a slice of `list_by_team`: the import
+        suffixer must see every command a team holds, and a row limit would
+        let it pick one the unique index then refuses.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(PromptRow.command).where(
+                        PromptRow.team_id == str(team_id),
+                        PromptRow.command.is_not(None),
+                    )
+                )
+            ).all()
+        return {row.command for row in rows if row.command is not None}
+
     async def update(
         self,
         prompt_id: str,

@@ -389,6 +389,7 @@
     },
     "commandTurn": {
       "open": "Open the prompt behind the /{{command}} command",
+      "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
       "panelTitle": "Command prompt"
     },
     "uiParts": {

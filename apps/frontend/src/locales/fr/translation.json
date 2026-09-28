@@ -389,6 +389,7 @@
     },
     "commandTurn": {
       "open": "Ouvrir le prompt de la commande /{{command}}",
+      "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
       "panelTitle": "Prompt de la commande"
     },
     "uiParts": {

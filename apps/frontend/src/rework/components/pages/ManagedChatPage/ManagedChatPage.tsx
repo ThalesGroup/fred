@@ -41,6 +41,7 @@ import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabili
 import { ChatLauncherRail } from "../../../features/capabilities/ChatLauncherRail";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
+import type { ThreadMessage } from "@rework/types/thread";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
@@ -572,6 +573,17 @@ export default function ManagedChatPage() {
   // Expert tooling, so it sits at the rail's foot rather than among the
   // conversation's own panels. The full reasoning is for everyone — each block is
   // already readable in the trace drawer — the raw message dump for admins only.
+  // Stable identity: an inline arrow here would defeat ConversationThread's
+  // memo and re-render the whole transcript on every composer keystroke.
+  const openCommandPrompt = useCallback((turn: ThreadMessage) => {
+    setActivePushDrawer({
+      kind: "command-prompt",
+      text: turn.text,
+      command: turn.command?.command ?? null,
+      promptName: turn.command?.prompt_name ?? null,
+    });
+  }, []);
+
   const footerLaunchers = [
     {
       key: "full-reasoning",
@@ -695,14 +707,7 @@ export default function ManagedChatPage() {
                         maxChatInputChars={chat.maxChatInputChars}
                         hitlFreeText={chat.hitlFreeText}
                         onHitlFreeTextChange={chat.setHitlFreeText}
-                        onOpenCommandPrompt={(turn) =>
-                          setActivePushDrawer({
-                            kind: "command-prompt",
-                            text: turn.text,
-                            command: turn.command?.command ?? null,
-                            promptName: turn.command?.prompt_name ?? null,
-                          })
-                        }
+                        onOpenCommandPrompt={openCommandPrompt}
                       />
                     )}
                   </div>
