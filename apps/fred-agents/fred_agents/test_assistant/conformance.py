@@ -47,11 +47,13 @@ class TurnResult:
 
 
 class Driver(Protocol):
-    async def send(self, session_id: str, message: str) -> TurnResult: ...
+    async def send(self, session_id: str, message: str) -> TurnResult:
+        """Send a new turn through the driver."""
 
     async def resume(
         self, session_id: str, request: Event, choice_id: str
-    ) -> TurnResult: ...
+    ) -> TurnResult:
+        """Resume the requested pause with the selected choice."""
 
 
 @dataclass(frozen=True)

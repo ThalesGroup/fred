@@ -214,9 +214,12 @@ def test_observe_marks_an_error_result_without_an_exception() -> None:
 def test_observe_marks_a_raising_call_and_still_ends_its_span() -> None:
     context, tracer, metrics = _observed_context()
 
-    with pytest.raises(RuntimeError, match="boom"):
+    def failing_call() -> None:
         with _observe(context, "v2.graph.tool", {}, phase="v2_graph_tool"):
             raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        failing_call()
 
     span = _only_span(tracer)
     assert span.ended and span.attributes["status"] == "error"

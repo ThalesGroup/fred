@@ -173,18 +173,16 @@ class ToolExecution:
                         },
                         actor=KPIActor(type="system"),
                     )
+                reason = e.reason if isinstance(e, RunStopError) else type(e).__name__
                 if isinstance(e, RunStopError):
                     logger.warning(
-                        "[TOOL] event=tool_call outcome=stopped reason=%s", e.reason
+                        "[TOOL] event=tool_call outcome=stopped reason=%s", reason
                     )
-                    reason = e.reason
                 elif confined:
-                    reason = type(e).__name__
                     logger.error(
                         "[TOOL] event=tool_call outcome=failed reason=%s", reason
                     )
                 else:
-                    reason = type(e).__name__
                     logger.exception(
                         "[TOOL][%s] Tool execution failed (captured)", tool_name
                     )

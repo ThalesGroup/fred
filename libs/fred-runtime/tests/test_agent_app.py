@@ -1011,8 +1011,10 @@ def test_a_session_id_naming_a_graph_thread_is_refused_everywhere(
             },
         )
         assert execute.status_code == 422, execute.text
-        assert client.get(f"/pod/v1/agents/checkpoints/{stolen}").status_code == 422
-        assert client.delete(f"/pod/v1/agents/checkpoints/{stolen}").status_code == 422
+        checkpoints = client.get(f"/pod/v1/agents/checkpoints/{stolen}")
+        assert checkpoints.status_code == 422
+        deletion = client.delete(f"/pod/v1/agents/checkpoints/{stolen}")
+        assert deletion.status_code == 422
         openai = client.post(
             "/v1/chat/completions",
             json={
