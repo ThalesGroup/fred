@@ -93,9 +93,18 @@ The menu opens with its **best match focused**. From there:
 
 | Input | Effect |
 | --- | --- |
+| `Down` / `Up` | moves the focus to the next / previous entry, wrapping at either end |
 | `Tab` | completes the focused command in the text field, closes the menu, and appends a trailing space |
 | `Enter` | runs the focused command straight away |
+| `Esc` | closes the menu, leaving the typed text untouched |
 | Click on an entry | same as `Tab` |
+
+The whole menu is reachable from the keyboard, and never only from the
+keyboard's edges: the arrows walk every entry in visual order, crossing
+section boundaries as if the list were flat. Sections group what is shown,
+they do not partition what is reachable. Continuing to type re-filters the
+list and re-focuses its best match, so an arrow press and a keystroke never
+leave the focus somewhere the user cannot see.
 
 And once the menu is shut on a completed command (`/revue `), `Enter` runs it
 too. So a command resolves on submit as well as from the menu: `Tab` then
@@ -111,6 +120,14 @@ the assisted path commit to anything.
 The trailing space `Tab` appends is deliberate. It leaves the caret where an
 argument would go — arguments are a non-goal here (§5), but the keystroke
 should not have to change the day they arrive.
+
+Focus never leaves the composer. The menu is a listbox the text field owns and
+points at, so the caret stays where the user is typing and assistive
+technology announces the focused entry without a focus move. That is also what
+makes `Tab` available to mean "complete": it is not moving focus anywhere
+while the menu is open. `Esc` is the way back out — it closes the menu and
+`Tab` returns to its normal meaning, which is why the menu must never be
+dismissable only by clicking away.
 
 **Running a command sends the prompt behind it to the agent.** The prompt's
 text never passes through the composer, and the user does not see it appear.
