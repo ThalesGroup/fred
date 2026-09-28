@@ -6148,6 +6148,9 @@ token-usage entry that cites `_GraphNodeExecutionContext` and
   and `S`'s purge would sweep the caller's threads. `RuntimeExecuteRequest`,
   the `X-Fred-Session-Id` header and the checkpoint routes all refuse it with
   422 (`fred_sdk.contracts.execution.check_session_id`).
+- **Final output**: use the completed-state update from the invocation's own
+  stream, never reread the shared thread head after streaming. Another replica
+  advancing that thread must not replace this invocation's final response.
 - **HITL**: a node pause is a LangGraph `interrupt()`. `awaiting_human`
   carries `interrupt_id`, and a resume answers it with
   `Command(resume={interrupt_id: payload})`, behind the same pending-occurrence

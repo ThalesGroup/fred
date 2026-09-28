@@ -16,8 +16,12 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from typing import Any, cast
+
 import pytest
 import pytest_asyncio
+from fred_runtime.graph.graph_executor import GraphExecutor
 from fred_runtime.graph.graph_runtime import GraphRuntime
 from fred_runtime.runtime_support.checkpoints import graph_thread_prefix
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
@@ -86,6 +90,52 @@ def _binding() -> BoundRuntimeContext:
             baggage={"agent_instance_id": "inst-1"},
         ),
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streamed", [False, True])
+async def test_final_output_belongs_to_its_run_when_another_replica_advances_thread(
+    checkpointer: FredSqlCheckpointer,
+    monkeypatch: pytest.MonkeyPatch,
+    streamed: bool,
+) -> None:
+    runtimes = [
+        GraphRuntime(
+            definition=_Agent(), services=RuntimeServices(checkpointer=checkpointer)
+        )
+        for _ in range(2)
+    ]
+    for runtime in runtimes:
+        runtime.bind(_binding())
+    first, second = [
+        cast(GraphExecutor, await runtime.get_executor()) for runtime in runtimes
+    ]
+    original_stream = first._compiled.astream
+    competing_outputs: list[BaseModel] = []
+
+    async def advance_thread_after_stream(
+        *args: Any, **kwargs: Any
+    ) -> AsyncIterator[Any]:
+        async for event in original_stream(*args, **kwargs):
+            yield event
+        competing_outputs.append(
+            await second.invoke(
+                _Input(message="second"), ExecutionConfig(session_id="s1")
+            )
+        )
+
+    monkeypatch.setattr(first._compiled, "astream", advance_thread_after_stream)
+    config = ExecutionConfig(session_id="s1")
+    if streamed:
+        events = [
+            event async for event in first.stream(_Input(message="first"), config)
+        ]
+        assert isinstance(events[-1], FinalRuntimeEvent)
+        assert events[-1].content == "ok: first"
+    else:
+        output = await first.invoke(_Input(message="first"), config)
+        assert output.model_dump()["content"] == "ok: first"
+    assert competing_outputs[0].model_dump()["content"] == "ok: second"
 
 
 @pytest.mark.asyncio

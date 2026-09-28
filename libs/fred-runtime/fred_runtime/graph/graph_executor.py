@@ -446,6 +446,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         thread = self._thread_config(config)
         graph_input = await self._graph_input(input_model, config, thread)
         recorder = _TurnRecorder()
+        completed: BaseModel | None = None
         run_config = cast(
             RunnableConfig,
             {
@@ -469,6 +470,10 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                     request = extract_interrupt_request(payload)
                     if request is not None:
                         outcome.awaiting = request
+                    if isinstance(payload, dict) and _COMPLETE_NODE in payload:
+                        completed = self._state_model.model_validate(
+                            payload[_COMPLETE_NODE]
+                        )
         except GraphRecursionError:
             outcome.error = RuntimeError(
                 f"Graph execution exceeded max_steps={config.max_steps}."
@@ -487,8 +492,9 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             yield AwaitingHumanRuntimeEvent(request=outcome.awaiting)
             return
 
-        snapshot = await self._compiled.aget_state(thread)
-        completed = self._state_model.model_validate(snapshot.values)
+        if completed is None:
+            outcome.error = RuntimeError("Graph execution produced no completed state.")
+            return
         output = self._definition.output_model().model_validate(
             self._definition.build_output(completed)
         )
