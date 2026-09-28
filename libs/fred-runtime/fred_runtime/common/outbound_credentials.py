@@ -29,7 +29,6 @@ from fred_core.security.backend_to_backend_auth import (
     M2MTokenProvider,
     TokenLease,
 )
-from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
@@ -37,6 +36,7 @@ from fred_core.security.delegation import (
     DelegationConfig,
 )
 from fred_core.security.structure import SecurityConfiguration
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 
 from fred_runtime.runtime_support.authority import DelegationUnavailableError
 from fred_runtime.runtime_support.run_scope import RunScope

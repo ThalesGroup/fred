@@ -823,8 +823,8 @@ def test_the_secret_is_named_by_the_configuration_never_carried_in_it() -> None:
 def test_pod_m2m_uses_oidc_endpoint_and_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from fred_sdk.knowledge_base.configuration import PodConfiguration
     from fred_pod.security.oidc_endpoints import resolve_endpoints
+    from fred_sdk.knowledge_base.configuration import PodConfiguration
 
     configured = _valid_configuration()
     configured["security"]["m2m"].update(

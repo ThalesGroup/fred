@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import time
+from typing import cast
 
 import httpx
 import pytest
@@ -28,6 +29,7 @@ from fred_runtime.runtime_support.user_token_refresher import (
     aclose_token_refresh_client,
     refresh_user_access_token_from_keycloak,
 )
+from fred_sdk.contracts.context import RuntimeContext
 
 TOKEN_URL = "http://keycloak/realms/test/protocol/openid-connect/token"
 
@@ -113,7 +115,9 @@ async def test_runtime_adapter_passes_resolved_token_endpoint(monkeypatch):
         refresh_token="old-refresh", access_token="old-access"
     )
 
-    result = await adapters._refresh_runtime_context_access_token(runtime_context)
+    result = await adapters._refresh_runtime_context_access_token(
+        cast(RuntimeContext, runtime_context)
+    )
 
     assert result == "new-access"
     assert seen == {
