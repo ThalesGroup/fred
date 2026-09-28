@@ -150,6 +150,14 @@ a team that already holds that command appends the first free `-N` suffix from
 `promote` copies the command and returns 409 on a collision, matching how it
 already treats the name.
 
+The composer resolves a typed command against
+`GET /control-plane/v1/teams/{team_id}/prompt-commands`
+(`list[PromptCommandSummary]`: `prompt_id`, `command`, `name`, `description?`,
+`emoji?`), **not** against the prompt listing above — that one is capped at 100
+rows, and a command past the cap would resolve to nothing while the typed token
+went to the agent as ordinary text. Carrying no prompt text is what lets this
+listing be uncapped.
+
 Running a command sends the **prompt's text**, not the command, and the turn
 records a descriptor of what was run (`RuntimeContext.command`, and the stored
 turn's metadata) so the transcript can render it as its command. The runtime

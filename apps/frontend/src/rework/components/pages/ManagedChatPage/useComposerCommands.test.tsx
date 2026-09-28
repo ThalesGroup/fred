@@ -35,10 +35,12 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
+// The shape of `GET /teams/{id}/prompt-commands`: only invocable prompts, and
+// already ordered by command. Excluding the ones without a command is the
+// endpoint's job, proven by `test_prompt_commands_endpoint_lists_only_invocable_prompts`.
 const PROMPTS = [
-  { id: "p-search", name: "Recherche", command: "search", description: "Chercher", emoji: null },
-  { id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
-  { id: "p-notes", name: "Notes libres", command: null, description: null, emoji: null },
+  { prompt_id: "p-search", name: "Recherche", command: "search", description: "Chercher", emoji: null },
+  { prompt_id: "p-summary", name: "Résumé", command: "summary", description: "Résumer", emoji: null },
 ];
 
 const PROMPT_TEXT: Record<string, string> = {
@@ -50,7 +52,7 @@ const fetchPrompt = vi.fn();
 let listResult: { data?: typeof PROMPTS } = { data: PROMPTS };
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => listResult,
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => listResult,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [fetchPrompt],
 }));
 
@@ -153,11 +155,11 @@ describe("the command menu", () => {
     expect(focusedLabel()).toBe("/search");
   });
 
-  it("offers only prompts that carry a command", () => {
+  it("offers every command the endpoint returns, in its order", () => {
     type("/");
 
-    expect(container.textContent).not.toContain("Notes libres");
     expect(options()).toHaveLength(2);
+    expect(labels()).toEqual(["/search", "/summary"]);
   });
 
   it("filters on what is typed after the slash", () => {

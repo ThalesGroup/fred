@@ -370,6 +370,12 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.createPromptRequest,
       }),
     }),
+    getTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGet: build.query<
+      GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiResponse,
+      GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/prompt-commands` }),
+    }),
     getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet: build.query<
       GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse,
       GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiArg
@@ -1754,6 +1760,11 @@ export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiResponse =
 export type PostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostApiArg = {
   teamId: string;
   createPromptRequest: CreatePromptRequest;
+};
+export type GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiResponse =
+  /** status 200 Successful Response */ PromptCommandSummary[];
+export type GetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetApiArg = {
+  teamId: string;
 };
 export type GetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetApiResponse =
   /** status 200 Successful Response */ ContextPromptSummary[];
@@ -3179,6 +3190,13 @@ export type CreatePromptRequest = {
   /** Optional slug identifying this prompt for invocation from the chat composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per team. Empty or whitespace-only input is stored as no command. */
   command?: string | null;
 };
+export type PromptCommandSummary = {
+  prompt_id: string;
+  command: string;
+  name: string;
+  description?: string | null;
+  emoji?: string | null;
+};
 export type ContextPromptSummary = {
   id: string;
   name: string;
@@ -4309,6 +4327,8 @@ export const {
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
+  useLazyGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useLazyGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
   useGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,

@@ -548,6 +548,21 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
         return;
       }
+      // `inputTooLong` above measures the composer draft, which on a command
+      // is the short command line — not what goes on the wire. The runtime
+      // rejects an oversized turn either way; checking here spares the round
+      // trip and says so before the send rather than after.
+      if (
+        turnCommand !== undefined &&
+        maxChatInputChars !== undefined &&
+        countUnicodeCodePoints(text) > maxChatInputChars
+      ) {
+        showError({
+          summary: t("chatbot.commandMenu.runErrorSummary"),
+          detail: t("chatbot.errors.chatInputTooLong", { limit: maxChatInputChars }),
+        });
+        return;
+      }
       handleSendOwnerRef.current = true;
       try {
         // Composer input is left untouched until the session write barrier below
@@ -560,7 +575,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           console.debug(`[useManagedChat] sendTurn() — no session, creating new sid=${sid}, calling bindSessionId`);
           skipResetOnSessionBindRef.current = true;
           // See ensureSessionForAttachments: makes this turn's composer settings
-          // durable under the id they were picked for (#2369).
+          // durable under the id they were picked for.
           composer.bindSession(sid);
           bindSessionId(sid);
         }
@@ -570,7 +585,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           // aborts the send if the row was never actually created. Re-fires on a
           // retry against the same (already URL-bound) sid whose prior creation
           // failed — see `sessionCreateFailedIdRef`.
-          createSessionRow(sid, text ? text.slice(0, 120) : "Attached files");
+          // The command line the user typed, not the prompt body it expands to:
+          // titling by the body would give every `/summary` conversation the
+          // same name, and nothing retitles a session afterwards.
+          const titleSource = turnCommand ? input.trim() : text;
+          createSessionRow(sid, titleSource ? titleSource.slice(0, 120) : "Attached files");
         }
 
         // Block the send entirely on any pending or just-failed session write —
@@ -616,6 +635,9 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       flushSessionWrites,
       touchSessionActivity,
       send,
+      maxChatInputChars,
+      showError,
+      t,
     ],
   );
 

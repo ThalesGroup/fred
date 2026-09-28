@@ -34,7 +34,7 @@ vi.mock("react-i18next", () => ({
 let container: HTMLDivElement;
 let root: Root;
 
-function Host(props: { trigger?: CommandTriggerBinding; onSend: () => void; hint?: string }) {
+function Host(props: { trigger?: CommandTriggerBinding; onSend: () => void; hint?: string; sendDisabled?: boolean }) {
   const [value, setValue] = useState("");
   return (
     <RichInputField
@@ -44,6 +44,7 @@ function Host(props: { trigger?: CommandTriggerBinding; onSend: () => void; hint
       placeholder={props.hint}
       accessibleDescription={props.hint}
       commandTrigger={props.trigger}
+      sendDisabled={props.sendDisabled}
     />
   );
 }
@@ -138,6 +139,25 @@ describe("RichInputField command trigger", () => {
     type("/summary");
     pressEnter();
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  // Running a command IS sending, so it obeys the same gate as the send button:
+  // an attachment still uploading or an over-limit draft must not let Enter
+  // through the menu into a send the field itself refuses.
+  it("withholds Enter from the menu while sending is blocked, but not the other keys", () => {
+    const onKeyDown = vi.fn(() => true);
+    const onSend = vi.fn();
+    render(<Host trigger={binding({ open: true, onKeyDown })} onSend={onSend} sendDisabled />);
+
+    type("/summary");
+    pressEnter();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+
+    act(() => {
+      textarea().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    });
+    expect(onKeyDown).toHaveBeenCalledOnce();
   });
 
   it("wires the composer as a combobox only while the menu is open", () => {

@@ -51,6 +51,30 @@ class PromptCommandAlreadyExistsError(Exception):
     """Raised when one prompt command is already used inside the same team."""
 
 
+class PromptCommandRecord:
+    """One invocable prompt of a team: its command and what a menu shows.
+
+    Deliberately not a `PromptRecord`: the caller lists every command a team
+    holds, and carrying `text` for each would make an unbounded listing
+    expensive for no reader.
+    """
+
+    def __init__(
+        self,
+        *,
+        prompt_id: str,
+        command: str,
+        name: str,
+        description: str | None,
+        emoji: str | None,
+    ) -> None:
+        self.prompt_id = prompt_id
+        self.command = command
+        self.name = name
+        self.description = description
+        self.emoji = emoji
+
+
 class PromptRecord:
     """In-memory projection of one DB prompt row."""
 
@@ -322,6 +346,49 @@ class PromptStore:
                 )
             ).all()
         return {row.command for row in rows if row.command is not None}
+
+    async def list_commanded_by_team(
+        self,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> list[PromptCommandRecord]:
+        """Every invocable prompt of one team, with no row limit.
+
+        The composer resolves a typed command against this list, so a limit
+        would make a real command unresolvable — and silently, since an
+        unmatched token is sent as ordinary text. `list_by_team` is capped
+        (it carries whole rows, `text` included); this selects the five
+        columns a command menu needs.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        PromptRow.prompt_id,
+                        PromptRow.command,
+                        PromptRow.name,
+                        PromptRow.description,
+                        PromptRow.emoji,
+                    )
+                    .where(
+                        PromptRow.team_id == str(team_id),
+                        PromptRow.command.is_not(None),
+                    )
+                    .order_by(PromptRow.command.asc())
+                )
+            ).all()
+        return [
+            PromptCommandRecord(
+                prompt_id=row.prompt_id,
+                command=row.command,
+                name=row.name,
+                description=row.description,
+                emoji=row.emoji,
+            )
+            for row in rows
+            if row.command is not None
+        ]
 
     async def update(
         self,

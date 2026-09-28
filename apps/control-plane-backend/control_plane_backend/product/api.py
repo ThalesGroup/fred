@@ -71,6 +71,7 @@ from control_plane_backend.product.schemas import (
     MarketplacePromptDetail,
     MarketplacePromptSummary,
     PromptCategorySummary,
+    PromptCommandSummary,
     PromptDetail,
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
@@ -113,6 +114,7 @@ from control_plane_backend.product.service import (
     list_managed_agent_instances,
     list_marketplace_prompts,
     list_prompt_categories,
+    list_prompt_commands,
     list_prompts,
     list_session_attachments,
     list_sessions,
@@ -649,6 +651,43 @@ async def get_team_prompts(
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
     return await list_prompts(team_id, deps)
+
+
+@router.get(
+    "/teams/{team_id}/prompt-commands",
+    response_model=list[PromptCommandSummary],
+    response_model_exclude_none=True,
+    summary="List the invocable prompts of one team.",
+)
+async def get_team_prompt_commands(
+    team_id: Annotated[TeamId, Path()],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[PromptCommandSummary]:
+    """
+    Return every prompt of the team that carries a command.
+
+    Why this endpoint exists:
+    - the chat composer resolves a typed `/command` against the team's commands,
+      and the prompt listing is capped: a command past that cap would be
+      unresolvable, and silently, since an unmatched token is sent as text
+    - a command menu needs neither the prompt text nor its counters, so this
+      stays a small payload even uncapped
+
+    How to use it:
+    - call with one team id after authentication
+
+    Example:
+    - `GET /control-plane/v1/teams/personal/prompt-commands`
+    """
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    return await list_prompt_commands(team_id, deps)
 
 
 @router.post(

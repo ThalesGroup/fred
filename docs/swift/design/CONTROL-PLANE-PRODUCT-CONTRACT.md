@@ -4123,6 +4123,45 @@ banner they do not render on the GCU-acceptance and root-bootstrap screens.
 **Not in this slice.** Scheduling (start/end dates) — the planned follow-up; the
 model does not preclude it. No per-team or per-role targeting.
 
+## 56. Contract Notes — prompt commands (2026-09-28, PROMPT-CMD-01)
+
+**What it is.** A prompt may carry an optional `command`: a lowercase unaccented
+slug (`^[a-z0-9_-]+$`, ≤ 64 characters) that runs it from the chat composer by
+typing `/` plus that slug. Full design: `PROMPTS.md` §3.2.
+
+**Payload changes, all additive.** `PromptSummary` and `PromptDetail` gain
+`command: str | None`; `CreatePromptRequest` and `UpdatePromptRequest` accept it,
+with blank or whitespace-only input stored as no command. Uniqueness is per
+team, guaranteed by a partial unique index rather than an application check.
+
+**New endpoint — `GET /control-plane/v1/teams/{team_id}/prompt-commands`**,
+`CAN_USE_TEAM_AGENTS`, returning `list[PromptCommandSummary]`
+(`prompt_id`, `command`, `name`, `description?`, `emoji?`).
+
+Its own surface rather than a filter over the prompt listing, because that
+listing is **capped at 100 rows**: the composer resolves a typed command against
+every command the team holds, and a command past the cap would resolve to
+nothing — silently, since an unmatched token is sent to the agent as ordinary
+text. Carrying neither the prompt text nor its counters is what lets this one be
+uncapped.
+
+**Error shape — one new code.** A prompt write that collides on the command
+returns 409 with an **object** detail, `{"code": "prompt_command_conflict",
+"message": ...}`, so a form can mark the command field rather than the name.
+Every other prompt error keeps the plain-string detail. The two conflicts are
+told apart by asking the database which constraint fired, not by parsing the
+driver's message; a name collision wins when both apply.
+
+**Copy semantics.** `promote` copies the command and returns 409 on a collision,
+matching how it already treats the name. A marketplace import copies it and, on
+a collision in the destination team, appends the first free `-N` suffix from
+`-2` — again matching the name.
+
+**Execution.** `RuntimeContext` gains an optional `command` descriptor
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.98) that the composer sets on a command
+turn; the turn's content is the prompt's text, and the runtime knows nothing
+about prompts.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation

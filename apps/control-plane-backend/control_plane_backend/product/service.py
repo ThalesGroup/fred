@@ -107,6 +107,7 @@ from control_plane_backend.product.schemas import (
     MarketplacePromptSummary,
     PermissionSummary,
     PromptCategorySummary,
+    PromptCommandSummary,
     PromptDetail,
     PromptPromoteRequest,
     PromptScoreUpdateRequest,
@@ -3670,6 +3671,37 @@ async def list_prompts(
         (_prompt_record_to_summary(r) for r in records),
         key=lambda p: -p.session_count,
     )
+
+
+async def list_prompt_commands(
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> list[PromptCommandSummary]:
+    """List every invocable prompt of one team, ordered by command.
+
+    Why this function exists:
+    - the chat composer resolves a typed `/command` against the team's commands,
+      and `list_prompts` is capped: a real command past that cap would be
+      unresolvable, and silently, since an unmatched token is sent as text
+
+    How to use it:
+    - call from the team prompt-commands route after team membership is checked
+
+    Example:
+    - `commands = await list_prompt_commands(team_id, deps)`
+    """
+
+    records = await deps.get_prompt_store().list_commanded_by_team(team_id)
+    return [
+        PromptCommandSummary(
+            prompt_id=record.prompt_id,
+            command=record.command,
+            name=record.name,
+            description=record.description,
+            emoji=record.emoji,
+        )
+        for record in records
+    ]
 
 
 async def get_prompt(

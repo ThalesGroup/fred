@@ -15,6 +15,7 @@
 from .store import (
     PromptAlreadyExistsError,
     PromptCommandAlreadyExistsError,
+    PromptCommandRecord,
     PromptRecord,
     PromptStore,
 )
@@ -22,6 +23,7 @@ from .store import (
 __all__ = [
     "PromptAlreadyExistsError",
     "PromptCommandAlreadyExistsError",
+    "PromptCommandRecord",
     "PromptRecord",
     "PromptStore",
 ]

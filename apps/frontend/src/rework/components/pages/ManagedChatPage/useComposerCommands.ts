@@ -16,7 +16,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type Keyboard
 import type { CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
 import type { CommandTriggerBinding } from "@shared/molecules/RichInputField/RichInputField";
 import {
-  useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
@@ -67,26 +67,24 @@ export function useComposerCommands(params: {
   const paramsRef = useRef(params);
   paramsRef.current = params;
 
-  const { data: prompts } = useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery({ teamId }, { skip: !teamId });
+  // Its own endpoint rather than a filter over the prompt listing: that listing
+  // is capped, and a command past the cap would resolve to nothing — silently,
+  // since an unmatched token is sent to the agent as ordinary text.
+  const { data: prompts } = useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery(
+    { teamId },
+    { skip: !teamId },
+  );
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
   const commands = useMemo<CommandMenuEntry[]>(
     () =>
-      (prompts ?? [])
-        .flatMap((prompt) =>
-          prompt.command
-            ? [
-                {
-                  promptId: prompt.id,
-                  command: prompt.command,
-                  name: prompt.name,
-                  description: prompt.description,
-                  emoji: prompt.emoji,
-                },
-              ]
-            : [],
-        )
-        .sort((a, b) => a.command.localeCompare(b.command)),
+      (prompts ?? []).map((prompt) => ({
+        promptId: prompt.prompt_id,
+        command: prompt.command,
+        name: prompt.name,
+        description: prompt.description,
+        emoji: prompt.emoji,
+      })),
     [prompts],
   );
   const commandsRef = useRef(commands);

@@ -42,6 +42,10 @@ What the release gives users:
   and the stored turn's metadata each gain an optional `command`) and the
   transcript renders it as that command, with the text actually sent one click
   away in a side panel.
+- One new read endpoint,
+  `GET /control-plane/v1/teams/{team_id}/prompt-commands`, which the composer
+  resolves a typed command against. Additive; no existing endpoint changes
+  shape.
 - Importing a published prompt copies its command and, where the destination
   team already holds it, appends the first free `-N` suffix from `-2` — the
   same treatment the prompt's name already receives.

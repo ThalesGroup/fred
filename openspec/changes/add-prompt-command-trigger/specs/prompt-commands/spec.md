@@ -39,12 +39,22 @@ flat list, with a single section today titled for the team's prompt library.
 The heading SHALL render even when it is the only section, so introducing a
 second kind of invocable object is a new entry and not a visual change.
 
-Only prompts of the active team that carry a command SHALL be offered.
+Only prompts of the active team that carry a command SHALL be offered, and
+**every** one of them SHALL be, whatever the size of the team's library: a
+command the menu cannot see is also a command submit cannot resolve, and an
+unresolved token is sent to the agent as ordinary text.
 
 #### Scenario: The single section is titled
 
 - **WHEN** the menu opens
 - **THEN** its entries appear under a heading naming the prompt library
+
+#### Scenario: A large library still offers every command
+
+- **GIVEN** a team holding more prompts than one page of its library lists
+- **WHEN** the menu opens
+- **THEN** a command held by a prompt outside that page is still offered
+- **AND** submitting it runs the prompt rather than sending the token as text
 
 #### Scenario: Prompts without a command are not offered
 

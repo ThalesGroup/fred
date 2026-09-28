@@ -979,6 +979,73 @@ async def test_prompt_store_keeps_commands_unique_within_a_team(
 
 
 @pytest.mark.asyncio
+async def test_prompt_store_lists_every_command_past_the_listing_cap(
+    tmp_path: Path,
+) -> None:
+    """
+    Verify the command listing has no row limit and carries no prompt text.
+
+    Why this test exists:
+    - the composer resolves a typed `/command` against this listing, and an
+      unmatched token is sent to the agent as ordinary text: a capped listing
+      would make a real command fail silently
+    - `list_by_team` is capped at 100 and ordered by `updated_at`, so the oldest
+      prompt of a large library is exactly the one it drops
+
+    How to use it:
+    - run with the offline `control-plane-backend` test suite
+
+    Example:
+    - `pytest tests/test_metadata_stores.py -q`
+    """
+
+    engine = await _make_sqlite_engine(tmp_path, "prompt-command-listing.sqlite3")
+
+    try:
+        store = PromptStore(engine)
+        # The one command, on the prompt the capped listing drops first.
+        await store.create(
+            PromptRecord(
+                prompt_id="p-oldest",
+                team_id=TeamId("fredlab"),
+                name="Weekly review",
+                description="The Monday review",
+                command="weekly-review",
+                emoji="📋",
+                text="Review the week:",
+                created_by="alice",
+            )
+        )
+        for index in range(120):
+            await store.create(
+                PromptRecord(
+                    prompt_id=f"p-{index}",
+                    team_id=TeamId("fredlab"),
+                    name=f"Filler {index}",
+                    description=None,
+                    text="x",
+                    created_by="alice",
+                )
+            )
+
+        capped = await store.list_by_team(TeamId("fredlab"))
+        commands = await store.list_commanded_by_team(TeamId("fredlab"))
+
+        assert len(capped) == 100
+        assert "p-oldest" not in {record.prompt_id for record in capped}
+        assert [record.command for record in commands] == ["weekly-review"]
+        entry = commands[0]
+        assert entry.prompt_id == "p-oldest"
+        assert entry.name == "Weekly review"
+        assert entry.description == "The Monday review"
+        assert entry.emoji == "📋"
+        # No `text` on the projection: an uncapped listing must stay cheap.
+        assert not hasattr(entry, "text")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_prompt_store_rejects_duplicate_name_within_same_team(
     tmp_path: Path,
 ) -> None:

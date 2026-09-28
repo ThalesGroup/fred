@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #2221's memo covers ConversationThread itself; UserTurn is memoized too, and
+// ConversationThread's own memo covers the thread; UserTurn is memoized too, and
 // a callback built per message would defeat that one instead — silently, since
 // behaviour stays correct and only the render count regresses. The thread
 // re-renders on every streamed frame, so a command turn would then re-render

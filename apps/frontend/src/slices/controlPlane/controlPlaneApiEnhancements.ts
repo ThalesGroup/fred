@@ -452,6 +452,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
             ]
           : [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
     },
+    // The chat composer's command list. Shares the team's LIST tag, so
+    // authoring or clearing a command on the prompts page refreshes the menu
+    // instead of leaving a command that resolves to nothing.
+    getTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGet: {
+      providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: `LIST-${arg.teamId}` }],
+    },
     getTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGet: {
       providesTags: (_, __, arg) => [{ type: "ControlPlanePrompt" as const, id: arg.promptId }],
     },

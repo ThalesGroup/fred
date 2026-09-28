@@ -593,6 +593,21 @@ class PromptSummary(BaseModel):
     updated_at: datetime | None = None
 
 
+class PromptCommandSummary(BaseModel):
+    """One invocable prompt of a team, as the chat composer's menu needs it.
+
+    Its own payload rather than a filter over `PromptSummary`: the composer
+    resolves a typed command against every command the team holds, so this
+    listing is not capped, and it must stay small enough for that to be free.
+    """
+
+    prompt_id: str
+    command: str
+    name: str
+    description: str | None = None
+    emoji: str | None = None
+
+
 class PromptDetail(PromptSummary):
     """Full team-scoped prompt-library payload including prompt text."""
 

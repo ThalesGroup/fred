@@ -76,7 +76,7 @@
 
 - [x] 5.1 Run `make code-quality` and `make test` in `apps/frontend`; verify
       both pass with no new warnings.
-- [ ] 5.2 Ask the developer to run `/code-review` on the diff and address the
+- [x] 5.2 Ask the developer to run `/code-review` on the diff and address the
       findings; verify none remains open. The assistant cannot invoke it.
 - [x] 5.3 Fold `prompt-command-field.md` and `prompt-command-turn.md` into one
       note under `docs/swift/ops/migrations/` covering the whole feature, and
@@ -119,6 +119,46 @@ That is the platform's own placeholder rule, not this code's behaviour, so the
 test asserts what is ours: the attribute is set unconditionally rather than only
 on focus, and the same sentence is durably announced on the accessible
 description. The test says so in a comment.
+
+**`/code-review`** (task 5.2) was run by the developer on the whole branch.
+Four findings, all fixed, each with a test that fails against the previous code:
+
+1. *The command list was capped.* The menu read `GET /teams/{id}/prompts`, which
+   returns at most 100 rows ordered by `updated_at` — so in a large library a
+   real command was missing from the menu **and** from the submit-time lookup,
+   and the typed token went to the agent as literal text with no error. Fixed by
+   its own uncapped surface, `GET /teams/{team_id}/prompt-commands`
+   (`PromptCommandSummary`: five columns, no prompt text), with
+   `list_commanded_by_team` on the store. Covered by
+   `test_prompt_store_lists_every_command_past_the_listing_cap` (121 prompts,
+   the command on the one the capped listing drops first) and
+   `test_prompt_commands_endpoint_lists_only_invocable_prompts`. The new route
+   also has its row in `authz-endpoint-matrix.yaml` (`can_use_team_agents`,
+   approved) — `test_authz_endpoint_matrix` refuses any published route without
+   one, and caught this before the branch was committed.
+2. *Enter ran a command while sending was blocked.* The trigger was consulted
+   before the `disabled`/`sendDisabled` guard, so an attachment still uploading
+   or an over-limit draft let a command through into a send `sendTurn` then
+   dropped with only a `console.debug`. The field now withholds Enter alone from
+   the menu while sending is blocked — the arrows, `Tab` and `Esc` still work,
+   and the menu needs to know nothing about uploads.
+3. *Every `/summary` conversation got the same title.* `createSessionRow` was
+   handed the assembled prompt body; nothing retitles a session afterwards. It
+   now takes the command line the user actually typed.
+4. *The character limit was measured on the wrong text.* `inputTooLong` counts
+   the composer draft, which on a command is the short command line. The runtime
+   does enforce the limit on `input`, so this was a round trip and a late toast
+   rather than a true bypass — the command path now counts the assembled text
+   before sending and says so immediately.
+
+Two convention notes came with it. The issue numbers in new code are gone
+(`ConversationThread.rowCallbacks.test.tsx`'s header, and a `(#2369)` on a
+`useManagedChat.ts` line this diff rewrote). The other — the
+`ImportPromptDialog` origin-team checkbox, which rode in with the field slice
+and is unrelated to commands — is left in place deliberately: it was asked for
+in the same breath as the import-collision design, extracting nine lines from a
+commit fifteen deep would rewrite the whole branch, and splitting it into its
+own PR would put two PRs on the same file. Stated rather than silently ignored.
 
 **Where the design now lives.** `PROMPT-COMMAND-TRIGGER-RFC.md` is archived
 (deleted, the convention this repository follows for a closed RFC): the prompt

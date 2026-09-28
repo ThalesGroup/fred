@@ -58,7 +58,7 @@ from control_plane_backend.product.service import (
     _RuntimeTemplatePayload,
 )
 from control_plane_backend.prompts.category_store import PromptCategoryRecord
-from control_plane_backend.prompts.store import PromptRecord
+from control_plane_backend.prompts.store import PromptCommandRecord, PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import Team
@@ -473,6 +473,29 @@ class _FakePromptStore:
     ) -> list[PromptRecord]:
         records = [record for record in self._records if record.team_id == team_id]
         return records[:limit]
+
+    async def list_commanded_by_team(
+        self,
+        team_id: TeamId,
+    ) -> list[PromptCommandRecord]:
+        return [
+            PromptCommandRecord(
+                prompt_id=record.prompt_id,
+                command=record.command,
+                name=record.name,
+                description=record.description,
+                emoji=record.emoji,
+            )
+            for record in sorted(
+                (
+                    r
+                    for r in self._records
+                    if r.team_id == team_id and r.command is not None
+                ),
+                key=lambda r: r.command or "",
+            )
+            if record.command is not None
+        ]
 
     async def get(self, prompt_id: str) -> PromptRecord | None:
         return next((r for r in self._records if r.prompt_id == prompt_id), None)
@@ -9643,6 +9666,49 @@ async def test_prompt_payloads_carry_the_command(
     assert listing.json()[0]["command"] == "summary"
     assert detail.status_code == 200
     assert detail.json()["command"] == "summary"
+
+
+@pytest.mark.asyncio
+async def test_prompt_commands_endpoint_lists_only_invocable_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The composer's resolution source: every command, and nothing else.
+
+    Separate from the prompt listing because that one is capped, and a command
+    the composer cannot see is sent to the agent as literal text.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore(
+        [
+            _make_prompt_record(
+                prompt_id="p-summary", name="Résumé", command="summary"
+            ),
+            _make_prompt_record(prompt_id="p-plain", name="No command"),
+            _make_prompt_record(
+                prompt_id="p-search", name="Recherche", command="search"
+            ),
+        ]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/control-plane/v1/teams/personal/prompt-commands")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [entry["command"] for entry in body] == ["search", "summary"]
+    assert [entry["prompt_id"] for entry in body] == ["p-search", "p-summary"]
+    assert body[1]["name"] == "Résumé"
+    # No prompt text on this surface: it stays cheap enough to be uncapped.
+    assert "text" not in body[0]
+    assert "text_preview" not in body[0]
 
 
 @pytest.mark.asyncio

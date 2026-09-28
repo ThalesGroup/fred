@@ -434,6 +434,48 @@ describe("useManagedChat — session write reliability", () => {
     expect(composerResetMock.mock.calls.length).toBe(resetsBeforeSend);
   });
 
+  // A command turn sends the prompt's body, not what the user typed — two
+  // things keyed off the draft have to say which one they mean.
+  it("titles a command-launched session with the command line, not the prompt body", async () => {
+    mount();
+    act(() => {
+      latest.setInput("/summary 33 lignes");
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.runCommand({
+        text: "Résume le document en :\n\n33 lignes",
+        command: { command: "summary", appended_text: "33 lignes", prompt_id: "p-1" },
+      });
+    });
+
+    const created = registerSessionCalls[0] as { createSessionRequest: { title: string } };
+    expect(created.createSessionRequest.title).toBe("/summary 33 lignes");
+    // The prompt's body is what actually goes on the wire.
+    expect(sendMock.mock.calls[0][0]).toBe("Résume le document en :\n\n33 lignes");
+  });
+
+  it("refuses a command whose assembled text is over the limit, without a round trip", async () => {
+    chatSseMaxChatInputChars = 20;
+    mount();
+    act(() => {
+      latest.setInput("/summary");
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.runCommand({
+        text: "x".repeat(21),
+        command: { command: "summary", prompt_id: "p-1" },
+      });
+    });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(registerSessionCalls).toHaveLength(0);
+    expect(showErrorMock).toHaveBeenCalledTimes(1);
+  });
+
   it("restores the complete ordinary draft after a backend length rejection", async () => {
     mount();
     const draft = "  full draft 🙂  ";
