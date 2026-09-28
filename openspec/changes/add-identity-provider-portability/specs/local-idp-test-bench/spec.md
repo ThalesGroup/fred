@@ -55,3 +55,14 @@ A factory script SHALL record every demo user in Fred's local directory by signi
 - **GIVEN** the demo users are seeded in Keycloak and `user_directory: local`
 - **WHEN** the warm-up script runs and the demo bundle is imported
 - **THEN** the import succeeds and every named user is resolved
+
+### Requirement: Local provider configurations are complete before launch
+
+A preparation command SHALL derive complete backend YAML files from the existing production configurations and provider overlays for Keycloak, generic OIDC and the mock provider. It SHALL validate each file against the matching configuration schema, preserve non-security settings and SHALL NOT read or copy credentials. Launch instructions SHALL cover the three backends, both workers and the frontend, and prevent a stale local delegation file from overriding an OIDC profile.
+
+#### Scenario: Prepare a mock deployment
+
+- **GIVEN** the canonical backend configurations and mock security overlays
+- **WHEN** the preparation command runs for the mock profile
+- **THEN** each generated YAML is complete and validates against its backend schema
+- **AND** the documented commands select it using `CONFIG_FILE`, with credentials retained in the existing environment files
