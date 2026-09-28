@@ -257,6 +257,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         traceMessages: [],
         sources: [],
         uiParts: [],
+        command: userMsg.metadata?.command ?? null,
       });
     }
 

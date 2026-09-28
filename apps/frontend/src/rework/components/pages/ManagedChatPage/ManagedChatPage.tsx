@@ -21,6 +21,7 @@ import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRa
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
+import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
@@ -99,6 +100,9 @@ type ActivePushDrawer =
   | { kind: "prompt-library" }
   | { kind: "debug" }
   | { kind: "full-reasoning" }
+  // Carries the turn's own stored text: the prompt is overwritten on edit
+  // and gone once deleted, so it cannot be re-fetched by id.
+  | { kind: "command-prompt"; text: string; command: string | null; promptName: string | null }
   | null;
 
 export default function ManagedChatPage() {
@@ -691,6 +695,14 @@ export default function ManagedChatPage() {
                         maxChatInputChars={chat.maxChatInputChars}
                         hitlFreeText={chat.hitlFreeText}
                         onHitlFreeTextChange={chat.setHitlFreeText}
+                        onOpenCommandPrompt={(turn) =>
+                          setActivePushDrawer({
+                            kind: "command-prompt",
+                            text: turn.text,
+                            command: turn.command?.command ?? null,
+                            promptName: turn.command?.prompt_name ?? null,
+                          })
+                        }
                       />
                     )}
                   </div>
@@ -731,6 +743,14 @@ export default function ManagedChatPage() {
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}
             onActiveKeyChange={handleCapabilityPanelChange}
+          />
+
+          <CommandPromptPanel
+            open={activePushDrawer?.kind === "command-prompt"}
+            onClose={() => setActivePushDrawer((v) => (v?.kind === "command-prompt" ? null : v))}
+            text={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.text : ""}
+            command={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.command : null}
+            promptName={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.promptName : null}
           />
 
           <FullReasoningPanel

@@ -26,35 +26,35 @@
 
 ## 2. Frontend — the command turn
 
-- [ ] 2.1 Run `make update-runtime-api` in `apps/frontend` and commit the
+- [x] 2.1 Run `make update-runtime-api` in `apps/frontend` and commit the
       regenerated client, then send the descriptor on the `runtime_context`
       the chat already builds in `useChatSse.ts`; verify the generated
       `RuntimeContext` type carries the field and a test asserts it reaches
       the request.
-- [ ] 2.2 Build the command component for the user bubble using design-system
+- [x] 2.2 Build the command component for the user bubble using design-system
       tokens only — no fill, `1px solid --outline-muted`, `--radius-xs`, hover
       via `--state-on-secondary-container-hover`; verify a test asserts it
       renders the command and the appended text, and a review confirms no raw
       colour or arbitrary pixel value.
-- [ ] 2.3 Make the component an activatable control with an accessible name
+- [x] 2.3 Make the component an activatable control with an accessible name
       naming the command; verify a test reaches and activates it by keyboard
       alone.
-- [ ] 2.4 Select the component over the text part when the turn carries a
+- [x] 2.4 Select the component over the text part when the turn carries a
       descriptor; verify tests cover a turn with a descriptor (component, and
       the prompt text absent from the chat body), a turn without one (plain
       text), and a turn whose descriptor is unknown to the renderer (plain
       text, no error).
-- [ ] 2.5 Open the side panel on the turn's own stored content when the
+- [x] 2.5 Open the side panel on the turn's own stored content when the
       component is activated; verify tests assert the panel shows the stored
       text, that it still does after the prompt has been rewritten, and that
       it still does once the prompt no longer exists.
-- [ ] 2.6 Add the `fr` and `en` translations for the component's label and
+- [x] 2.6 Add the `fr` and `en` translations for the component's label and
       accessible name; verify no key resolves to its own name in either
       locale.
 
 ## 3. Close-out
 
-- [ ] 3.1 Run `make code-quality` and `make test` in `apps/frontend`,
+- [x] 3.1 Run `make code-quality` and `make test` in `apps/frontend`,
       `libs/fred-core` and `libs/fred-runtime`; verify all pass with no new
       warnings.
 - [ ] 3.2 Run `/code-review` on the diff and address findings; verify no
@@ -63,7 +63,7 @@
 - [ ] 3.3 Run the `fred-performance-reviewer` skill: this touches the turn
       build path, which runs per request; verify no new per-turn allocation or
       lookup was introduced on the send path.
-- [ ] 3.4 Write the migration note under `docs/swift/ops/migrations/`,
+- [x] 3.4 Write the migration note under `docs/swift/ops/migrations/`,
       declaring the impact and stating that no data migration is needed and
       that older clients degrade to plain text; verify `make migration-check`
       passes from the repository root.
@@ -72,3 +72,31 @@
       longer specifies the turn shape.
 - [ ] 3.6 Archive the change once the implementation has merged; verify the
       `prompt-commands` capability spec carries the turn requirements.
+
+## Verification evidence
+
+Recorded 2026-09-28.
+
+**Backend.** `make code-quality` clean in `libs/fred-core`, `libs/fred-runtime`
+and `libs/fred-sdk`. `make test`: fred-core **977 passed**, fred-runtime
+**1627 passed** (11 skipped on missing optional deps, pre-existing), fred-sdk
+**487 passed**.
+
+**Frontend.** `make code-quality` clean (tsc, prettier, eslint). `make test` →
+**2923 passed, 7 skipped, 251 files**.
+
+`make migration-check` valid.
+
+**Correction to the plan, made while building.** The change was proposed on the
+belief that the descriptor could ride as an untyped key in
+`_AgentExecuteRequest.context`. That is the internal/dev path; the frontend
+uses `RuntimeExecuteRequest` with a **typed** `RuntimeContext`. So it is a
+typed field after all — but on `RuntimeContext`, which is explicitly the model
+the frontend fills per turn (`context_prompt_text`, `language`,
+`attachments_markdown` and a dozen more), and which is `model_dump()`ed into
+the internal context dict, so the runtime read still costs one key. The
+artifacts were corrected before implementation.
+
+**Not run.** `/code-review` (task 3.2) is a built-in CLI command the assistant
+cannot invoke — the developer runs it. `fred-performance-reviewer` (task 3.3)
+is still owed: this touches the per-turn history-write path.

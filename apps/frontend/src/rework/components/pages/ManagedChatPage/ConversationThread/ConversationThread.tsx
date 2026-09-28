@@ -37,6 +37,8 @@ interface ConversationThreadProps {
   maxChatInputChars?: number;
   hitlFreeText: string;
   onHitlFreeTextChange: (value: string) => void;
+  /** Opens the prompt a command turn sent. Omit to render those turns inert. */
+  onOpenCommandPrompt?: (turn: ThreadMessage) => void;
 }
 
 // Memoized: ManagedChatPage re-renders on every composer keystroke (the input
@@ -51,6 +53,7 @@ export const ConversationThread = memo(function ConversationThread({
   emptyState,
   scrollContainerRef,
   onHitlAnswer,
+  onOpenCommandPrompt,
   maxChatInputChars,
   hitlFreeText,
   onHitlFreeTextChange,
@@ -78,7 +81,13 @@ export const ConversationThread = memo(function ConversationThread({
           // renders through UserTurn but is a reply to the agent, not a turn
           // anyone navigates back to.
           return (
-            <UserTurn key={msg.id} turnId={msg.role === "user" ? msg.id : undefined} text={key ? t(key) : msg.text} />
+            <UserTurn
+              key={msg.id}
+              turnId={msg.role === "user" ? msg.id : undefined}
+              text={key ? t(key) : msg.text}
+              command={msg.command}
+              onOpenCommand={msg.command && onOpenCommandPrompt ? () => onOpenCommandPrompt(msg) : undefined}
+            />
           );
         }
         if (msg.role === "hitl_request") {

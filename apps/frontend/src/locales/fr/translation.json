@@ -387,6 +387,10 @@
       "downloadFailed": "Téléchargement de {{name}} impossible",
       "fallbackName": "Télécharger"
     },
+    "commandTurn": {
+      "open": "Ouvrir le prompt de la commande /{{command}}",
+      "panelTitle": "Prompt de la commande"
+    },
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",

@@ -13,16 +13,22 @@
 // limitations under the License.
 
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
+import { CommandTurn } from "@shared/molecules/CommandTurn/CommandTurn";
+import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import styles from "./UserMessage.module.css";
 
 interface UserMessageProps {
   text: string;
+  /** Present when the turn was launched by a prompt command. `text` is still
+   *  the full assembled text — it just does not belong in the chat body. */
+  command?: CommandDescriptor | null;
+  onOpenCommand?: () => void;
 }
 
-export function UserMessage({ text }: UserMessageProps) {
+export function UserMessage({ text, command, onOpenCommand }: UserMessageProps) {
   return (
     <MessageBubble role="user">
-      <p className={styles.text}>{text}</p>
+      {command ? <CommandTurn command={command} onOpen={onOpenCommand} /> : <p className={styles.text}>{text}</p>}
     </MessageBubble>
   );
 }

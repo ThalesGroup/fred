@@ -387,6 +387,10 @@
       "downloadFailed": "Could not download {{name}}",
       "fallbackName": "Download"
     },
+    "commandTurn": {
+      "open": "Open the prompt behind the /{{command}} command",
+      "panelTitle": "Command prompt"
+    },
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",

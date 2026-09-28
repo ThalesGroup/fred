@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
+import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import styles from "./UserTurn.module.css";
@@ -28,10 +29,14 @@ interface UserTurnProps {
   turnId?: string;
   /** Called when user clicks the edit action. If omitted, edit action is hidden. */
   onEdit?: (text: string) => void;
+  /** Present when the turn was launched by a prompt command: the bubble then
+   *  shows the command, and `onOpenCommand` reveals the text that was sent. */
+  command?: CommandDescriptor | null;
+  onOpenCommand?: () => void;
 }
 
 // Memoized alongside AssistantTurn — see #2221.
-export const UserTurn = memo(function UserTurn({ text, turnId, onEdit }: UserTurnProps) {
+export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, onOpenCommand }: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
 
@@ -63,7 +68,7 @@ export const UserTurn = memo(function UserTurn({ text, turnId, onEdit }: UserTur
     <div className={styles.turn} data-turn-id={turnId}>
       {/* Beside the bubble (user turns are right-aligned), revealed on hover. */}
       <ActionBar actions={actions} className={styles.actions} />
-      <UserMessage text={text} />
+      <UserMessage text={text} command={command} onOpenCommand={onOpenCommand} />
     </div>
   );
 });
