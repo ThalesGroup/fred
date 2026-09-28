@@ -129,7 +129,7 @@ export default function ImportPromptDialog({
           <span className={styles.rowLabel}>{t("rework.marketplace.prompts.import.personalSpace")}</span>
         </label>
 
-        {editableTeams.length > 0 && (
+        {editableTeams.length > 0 ? (
           <>
             <div className={styles.searchBar}>
               <SearchInput
@@ -158,6 +158,11 @@ export default function ImportPromptDialog({
               )}
             </div>
           </>
+        ) : (
+          // Editing a team's prompts needs `team_editor`; holding only
+          // `team_admin` leaves this list empty, so say why rather than
+          // showing the personal space alone with no explanation.
+          <p className={styles.empty}>{t("rework.marketplace.prompts.import.noEditableTeams")}</p>
         )}
       </div>
     </Dialog>
