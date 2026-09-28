@@ -534,6 +534,9 @@ export default function PromptsPage() {
               label={t("rework.teams.prompts.form.command")}
               explanation={t("rework.teams.prompts.form.commandHelp")}
               error={commandError ?? undefined}
+              // The `/` is shown, never stored: it is what the user types in the
+              // chat, so the field reads as the thing they will type.
+              prefix="/"
               value={form.command}
               onChange={(e) => {
                 setCommandError(null);
