@@ -4935,3 +4935,60 @@ only for documents whose original profile is unknown; in a mixed selection this
 choice applies only to those documents. Cancel submits nothing. Pending requests
 suppress repeated clicks. Completed relaunches supply a new terminal task outcome
 so an earlier failure does not outlive a successful retry.
+
+
+## Prompt commands in the composer — 2026-09-28
+
+### `RichInputField` — command trigger and placeholder
+
+The trigger is an opt-in prop, not a behaviour of the field: without it a
+leading `/` is ordinary text and the component is the plain textarea it has
+always been. It fires **only on a `/` at the first position of an empty value**,
+and stays open while the value is that `/` plus one unbroken token — so
+`cat /tmp`, "et/ou", and the trailing space a completion adds never leave a menu
+on screen.
+
+The composer is modelled as a combobox pointing at a listbox it never gives
+focus to: the caret stays in the textarea, which is what frees `Tab` to mean
+"complete". The focused entry reaches assistive technology through the
+textarea's active descendant. The consequence to know: while the menu is open
+`Tab` no longer moves focus, so `Esc` always closes it and the menu is never
+dismissable by pointer alone.
+
+The field carries a placeholder naming both what it is for and the `/` trigger,
+shown whenever it is empty — focused or not. The same sentence is repeated on
+the field's accessible description, because a placeholder is neither reliably
+announced nor durable past the first keystroke.
+
+### `CommandMenu`
+
+Sectioned from day one with a single section, titled for the prompt library:
+introducing a second kind of invocable object is then a new entry rather than a
+visual change. Only the active team's prompts that carry a command are offered.
+
+Dressed in the shared menu grammar (`MenuPopover`): `--shadow-m`, `1px solid
+--outline-muted`, `--radius-s`, `--surface-container-high` fill,
+`--on-surface-muted` heading, `--state-on-surface-hover` on the focused row.
+It is anchored above the composer field rather than floating free. Keyboard
+focus and hover share that one highlight, so a pointer never leaves two rows
+looking active.
+
+The focused entry's prompt detail is prefetched as the focus moves: the listing
+carries only a preview, so running a command needs the detail endpoint, and the
+prefetch keeps that round trip off the critical path without making it optional.
+
+### Running a command, and the turn it leaves
+
+Resolution happens on submit, whatever the menu is doing, so `Tab` then `Enter`
+and `Enter` from the open menu reach the same send. A token no prompt holds is
+sent as typed — the user may genuinely have meant to write it.
+
+What goes on the wire is the **prompt's text**, never the command: the text does
+not pass through the composer and the user never sees it there. Text typed after
+the command is appended as free-text continuation, nothing parsed or named.
+
+The turn itself renders as its command rather than as the assembled text
+(`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
+readable. A control on that turn opens the text that was actually sent, read
+from the turn's own stored copy: the prompt behind it may since have been
+edited or deleted, so it cannot be re-fetched by id.
