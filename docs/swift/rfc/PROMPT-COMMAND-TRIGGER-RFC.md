@@ -1,10 +1,12 @@
 # Prompt Command Trigger RFC — running a library prompt from the composer with `/`
 
-**Status:** Design agreed 2026-09-28; nothing left open. Slice 1 (the
-`command` field, §2.1 and §2.6) has shipped as `add-prompt-command-field`
-(issue #2828) and is summarised here rather than specified. What remains
-unbuilt: the `/` trigger and its menu (§2.2–§2.5, §2.7), and the transcript
-component (§2.8). This file thins as each slice leaves it, then is archived.
+**Status:** Design agreed 2026-09-28; nothing left open. Two slices have
+shipped and are summarised here rather than specified: the `command` field
+(§2.1, §2.6 — `add-prompt-command-field`, issue #2828) and the command turn's
+storage and rendering (§2.5 — `add-command-turn-rendering`, issue #2829). What
+remains unbuilt is the composer itself: the `/` trigger, its menu and keyboard
+model, the placeholder, and the Help Center pages (§2.2–§2.4, §2.7, §2.8).
+Once that lands, nothing is left and this file is archived.
 **ID:** `PROMPT-CMD-01` (informal label, no registry)
 **Author:** Maxime
 **Date:** 2026-09-28
@@ -146,47 +148,26 @@ validated, and the prompt author carries the burden of writing text that reads
 well when something is appended. Named arguments stay a non-goal (§5); this
 rule only says what the trailing words already mean.
 
-### 2.5 How the turn reads in the conversation
+### 2.5 How the turn reads in the conversation — shipped
 
-The prompt never passes through the composer, so the transcript needs its own
-answer: a dedicated component renders the turn as **the command**, with the
-appended text (§2.4) beside it. Clicking it opens the prompt that was actually
-sent, in a panel. The chat body never shows the prompt text.
+Delivered by the OpenSpec change `add-command-turn-rendering` (issue #2829):
+the turn keeps the full assembled text as its content, carries a command
+descriptor beside it, and the transcript renders the command with the prompt
+one click away in a side panel. Contract entry:
+`RUNTIME-EXECUTION-CONTRACT.md` §8.98.
 
-The mechanism follows the shape a turn already has. A stored user turn is:
+Two facts the trigger slice depends on:
 
-```
-parts_json     [{"type": "text", "text": "…"}]     the content
-metadata_json  {"sources": [], "ui_parts": []}     side data, not rendered
-```
+- **The turn's content is the assembled text**, prompt plus anything appended.
+  History is replayed to the model, so a turn holding only `/summary 33 lignes`
+  would leave the model reading a command it knows nothing about.
+- **The panel reads that same content, never the prompt by id.** `prompt.text`
+  is overwritten on edit, `prompt.version` is a counter with no history table,
+  and a prompt can be deleted — so the id is attribution, not a pointer.
 
-So:
-
-- **`parts_json` holds the full assembled text** — the prompt plus anything the
-  user appended. This is not a choice. That history is replayed to the model on
-  every later turn: a turn holding only `/summary 33 lignes` would leave the
-  model reading a command it knows nothing about, and the conversation would
-  stop making sense from the second turn on.
-- **`metadata_json` gains the command descriptor** — the command, the appended
-  text, the prompt id and its name. It is side data the renderer reads and no
-  one displays raw.
-- **The transcript renderer** sees that descriptor and draws the command
-  component *instead of* the text part. The panel then shows the text it
-  already holds in `parts_json`.
-
-Nothing is duplicated: the text is stored once, in the only place it had to be
-anyway, and the descriptor merely says "render this one differently". A client
-that does not know the new keys renders the turn as plain text — degraded, not
-broken.
-
-This also settles the staleness problem. `prompt.text` is overwritten on edit
-and the repository keeps no version history — `prompt.version` is a counter on
-the live row, there is no history table — so resolving `prompt_id` at display
-time would show a conversation asking something it never asked, and nothing at
-all once the prompt is deleted. Reading the turn's own content avoids that
-entirely. (`session_context_prompts` references prompts by id with no copy;
-that is a precedent for referencing live session state, not a model for a
-historical record.)
+What the trigger slice must do: set `command` on the `RuntimeContext` it
+already sends. Nothing else — the rendering is in place and dormant until
+then.
 
 ### 2.6 One namespace per team — decided and shipped
 

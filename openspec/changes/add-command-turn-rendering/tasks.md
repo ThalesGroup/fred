@@ -67,7 +67,7 @@
       declaring the impact and stating that no data migration is needed and
       that older clients degrade to plain text; verify `make migration-check`
       passes from the repository root.
-- [ ] 3.5 Record exact verification evidence in this change, then trim
+- [x] 3.5 Record exact verification evidence in this change, then trim
       `PROMPT-COMMAND-TRIGGER-RFC.md` §2.5 to a pointer; verify the RFC no
       longer specifies the turn shape.
 - [ ] 3.6 Archive the change once the implementation has merged; verify the
