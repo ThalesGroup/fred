@@ -2763,7 +2763,7 @@
         "form": {
           "command": "Commande",
           "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
-          "commandHelp": "Facultatif. Pour lancer ce prompt depuis le chat en tapant / suivi de cette commande. Lettres sans accent, chiffres, tirets et underscores.",
+          "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
           "text": "Texte du prompt"

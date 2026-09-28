@@ -2763,7 +2763,7 @@
         "form": {
           "command": "Command",
           "commandConflict": "This command label is already used by another team prompt",
-          "commandHelp": "Optional. Runs this prompt from the chat by typing / followed by this command. Unaccented letters, digits, hyphens and underscores.",
+          "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
           "text": "Prompt text"

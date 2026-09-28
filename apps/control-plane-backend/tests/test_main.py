@@ -9643,3 +9643,56 @@ async def test_prompt_payloads_carry_the_command(
     assert listing.json()[0]["command"] == "summary"
     assert detail.status_code == 200
     assert detail.json()["command"] == "summary"
+
+
+@pytest.mark.asyncio
+async def test_promote_prompt_carries_the_command_and_refuses_a_collision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promote keeps the source's identity, command included.
+
+    Unlike a marketplace import, which suffixes a collision, promote refuses
+    it — the same treatment the name already gets, so the two fields behave
+    alike on this path.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    source = _make_prompt_record(
+        prompt_id="p-src", team_id="personal", command="summary"
+    )
+    store = _FakePromptStore([source])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        carried = await client.post(
+            "/control-plane/v1/teams/personal/prompts/p-src/promote",
+            json={"target_team_id": "bid-team"},
+        )
+
+    assert carried.status_code == 201
+    assert carried.json()["command"] == "summary"
+    copy = next(r for r in store._records if str(r.team_id) == "bid-team")
+    assert copy.command == "summary"
+
+    # A second team already holding it is refused, naming the command.
+    store._records.append(
+        _make_prompt_record(
+            prompt_id="p-held", team_id="other-team", name="Held", command="summary"
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        refused = await client.post(
+            "/control-plane/v1/teams/personal/prompts/p-src/promote",
+            json={"target_team_id": "other-team"},
+        )
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "prompt_command_conflict"

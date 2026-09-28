@@ -220,10 +220,13 @@ instruction. It is not reliably announced, and it disappears on the first
 keystroke. Screen-reader users need the same hint on the field's accessible
 description, not only in the placeholder.
 
-The **Help Center pages (fr and en) are updated in the same change**. This is
-not specific to this feature: a user-visible feature that needs any learning
-at all ships with its Help Center entry, or it ships unusable for everyone who
-was not in the room when it was designed.
+The **Help Center pages (fr and en) ship with the last slice of this feature**
+— the one that makes a command actually runnable from the chat. Decided
+2026-09-28: the earlier slices expose a field that does nothing yet, so
+documenting them would teach a behaviour nobody can use. The rule itself is
+unchanged and not specific to this feature: a user-visible feature that needs
+any learning at all ships with its Help Center entry, or it ships unusable for
+everyone who was not in the room when it was designed.
 
 ### 2.8 Visual direction
 

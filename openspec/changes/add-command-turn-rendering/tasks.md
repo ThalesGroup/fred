@@ -73,6 +73,11 @@
 - [ ] 3.6 Archive the change once the implementation has merged; verify the
       `prompt-commands` capability spec carries the turn requirements.
 
+Not here, by decision (2026-09-28): the `fr`/`en` Help Center pages ship with
+the last slice of this feature, the one that makes a command runnable from the
+chat. Until then the field does nothing, so documenting it would teach a
+behaviour nobody can use. Carried in `PROMPT-COMMAND-TRIGGER-RFC.md` §2.7.
+
 ## Verification evidence
 
 Recorded 2026-09-28.

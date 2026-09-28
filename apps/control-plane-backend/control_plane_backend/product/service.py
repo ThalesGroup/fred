@@ -3839,6 +3839,10 @@ async def promote_prompt(
         team_id=target_team_id,
         name=source.name,
         description=source.description,
+        # Carried like the name, and refused the same way on a collision:
+        # promote keeps the source's identity rather than inventing a variant,
+        # unlike a marketplace import.
+        command=source.command,
         # category_id is deliberately NOT copied: prompt categories are
         # team-scoped rows (PROMPT-09), so the source category_id does not
         # exist in target_team_id — carrying it over would point the copy at
@@ -3851,6 +3855,14 @@ async def promote_prompt(
     )
     try:
         created = await store.create(record)
+    except PromptCommandAlreadyExistsError:
+        raise PromptRequestError(
+            f"Prompt command {source.command!r} already exists in team "
+            f"{request.target_team_id!r}. Change the command on the existing "
+            "prompt or on the source before promoting.",
+            http_status=409,
+            code=PROMPT_COMMAND_CONFLICT,
+        )
     except PromptAlreadyExistsError:
         raise PromptRequestError(
             f"Prompt name {source.name!r} already exists in team {request.target_team_id!r}. "
