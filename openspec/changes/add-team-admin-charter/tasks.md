@@ -4,6 +4,7 @@
 - [x] 1.2 Add generic templates `apps/frontend/public/team-admin-charter.md` and `team-admin-charter.fr.md`; verify the hook test resolves `team-admin-charter.fr.md` for a French language
 - [x] 1.3 List `team-admin-charter` in `build-theme-archive.sh` and the frontend README; verify the script warns when only `team-admin-charter.md` is present
 - [x] 1.4 Create the Helm `s3-credentials` Secret from the control-plane content-storage credentials and document the frontend references; verify Helm renders it only when both credentials are set
+- [x] 1.5 Gate `s3-credentials` on a configured frontend `FRONTEND_THEME_URL`; verify Helm renders the Secret only with the URL and both credentials, and omits it for an empty URL or disabled frontend
 
 ## 2. Model and storage
 

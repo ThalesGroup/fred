@@ -29,8 +29,16 @@ The frontend SHALL load the charter from `team-admin-charter.<lang>.md`, then `t
 - **THEN** the stock template is shown
 
 #### Scenario: Theme archive uses the content-storage credentials
-- **WHEN** the control-plane content storage has an access key and a MinIO secret key
+- **WHEN** the frontend is enabled, `applications.frontend.extraEnvVars` configures `FRONTEND_THEME_URL` with a nonempty literal value or a `valueFrom` source, and the control-plane content storage has an access key and a MinIO secret key
 - **THEN** the Helm chart creates `s3-credentials` with `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` for the frontend theme configuration to reference
+
+#### Scenario: Theme archive is not configured
+- **WHEN** `applications.frontend.extraEnvVars` omits `FRONTEND_THEME_URL` or sets it to an empty literal value
+- **THEN** the Helm chart omits `s3-credentials` even when both content-storage credentials are present
+
+#### Scenario: Frontend or content-storage credentials are unavailable
+- **WHEN** the frontend is disabled or either content-storage credential is empty
+- **THEN** the Helm chart omits `s3-credentials` even when `FRONTEND_THEME_URL` is configured
 
 ### Requirement: A nominated administrator is pending until they accept the configured version
 
