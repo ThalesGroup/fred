@@ -22,6 +22,7 @@ import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/Conv
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
 import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
+import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
@@ -47,6 +48,7 @@ import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
 import { useManagedChat } from "./useManagedChat";
+import { useComposerCommands } from "./useComposerCommands";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -506,12 +508,32 @@ export default function ManagedChatPage() {
   );
   const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory;
 
+  // `/` at the start of an empty composer. Owns the menu and resolves the
+  // first token on submit, so `Tab` then `Enter` and `Enter` from the open
+  // menu reach the same send.
+  const commands = useComposerCommands({
+    teamId,
+    input: chat.input,
+    setInput: chat.setInput,
+    onRunCommand: (run) => void chat.runCommand(run),
+    onSend: () => void chat.handleSend(),
+    onResolveError: () =>
+      showError({
+        summary: t("chatbot.commandMenu.runErrorSummary"),
+        detail: t("chatbot.commandMenu.runErrorDetail"),
+      }),
+  });
+
   const composer = (
     <RichInputField
       value={chat.input}
       onChange={chat.setInput}
-      onSend={chat.handleSend}
+      onSend={commands.submit}
       onInterrupt={chat.handleAbort}
+      placeholder={t("chatbot.composerPlaceholder")}
+      accessibleDescription={t("chatbot.composerPlaceholder")}
+      commandTrigger={commands.trigger}
+      aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
       disabled={chat.waitResponse || chat.isLoadingHistory}
       sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}

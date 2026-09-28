@@ -36,6 +36,9 @@ Un prompt sert à deux endroits :
 - **dans la configuration d'un agent**, attaché pour orienter durablement son
   comportement (voir [Les agents](/help/fr/features/agents)).
 
+Un prompt peut aussi porter une **commande**, pour le lancer depuis le champ de
+saisie en tapant `/` — voir [Les commandes](/help/fr/features/commands).
+
 > Un prompt d'équipe bien rédigé évite que chacun réinvente la même
 > formulation. Des catégories explicites permettent à un nouvel arrivant de
 > comprendre l'organisation sans assistance.

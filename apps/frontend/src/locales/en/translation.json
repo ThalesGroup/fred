@@ -392,6 +392,13 @@
       "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
       "panelTitle": "Command prompt"
     },
+    "commandMenu": {
+      "ariaLabel": "Available commands",
+      "promptsSection": "Prompt library",
+      "runErrorSummary": "Could not run the command",
+      "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
+    },
+    "composerPlaceholder": "Ask your question, or type / for a command",
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",

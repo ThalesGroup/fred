@@ -392,6 +392,13 @@
       "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
       "panelTitle": "Prompt de la commande"
     },
+    "commandMenu": {
+      "ariaLabel": "Commandes disponibles",
+      "promptsSection": "Prompts de la bibliothèque",
+      "runErrorSummary": "Commande impossible à lancer",
+      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
+    },
+    "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",

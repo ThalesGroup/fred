@@ -34,5 +34,8 @@ A prompt serves in two places:
 - **in an agent's configuration**, attached to steer its behaviour lastingly
   (see [Agents](/help/en/features/agents)).
 
+A prompt can also carry a **command**, to run it from the input field by typing
+`/` — see [Commands](/help/en/features/commands).
+
 > A well-written team prompt stops everyone reinventing the same wording.
 > Explicit categories let a newcomer understand the organization unaided.
