@@ -844,6 +844,20 @@ applications:
       default_profile_by_capability:
         chat: default.chat.openai.prod
       profiles:
+        # Select Medium only when OPENAI_API_KEY contains a Mistral API key.
+        - profile_id: chat.mistral.medium
+          capability: chat
+          model_display_name: "Mistral Medium 3.5"
+          supports_thinking: true
+          model:
+            provider: openai
+            name: mistral-medium-latest
+            settings:
+              base_url: https://api.mistral.ai/v1
+              max_retries: 2
+              reasoning_effort: high
+              # Greedy sampling at temperature 0 requires top_p=1 on Mistral Medium.
+              top_p: 1.0
         - profile_id: default.chat.openai.prod
           capability: chat
           model_display_name: "GPT-5.1"
