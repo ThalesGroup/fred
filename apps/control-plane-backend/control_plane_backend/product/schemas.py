@@ -75,6 +75,7 @@ class FrontendBootstrap(BaseModel):
     active_team: TeamWithPermissions
     available_teams: list[Team] = Field(default_factory=list)
     gcu_version: str | None = None
+    team_admin_charter_enabled: bool
     feature_flags: FrontendFeatureFlags
     permissions: PermissionSummary
     upload_warning: UploadWarning | None = Field(

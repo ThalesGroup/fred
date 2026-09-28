@@ -14,6 +14,7 @@
 
 import { Navigate, useParams } from "react-router-dom";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
 import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
@@ -34,6 +35,8 @@ import styles from "./TeamSettingsPage.module.scss";
 export default function TeamSettingsPage() {
   const { section } = useParams<{ section: string }>();
   const { teamId, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
+  const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
+  const charterEnabled = bootstrap?.team_admin_charter_enabled === true;
   const capabilities = useTeamCapabilities(selectedTeam);
   const { canUpdateInfo, canUpdateAgents, canUpdateResources } = capabilities;
   // The relations themselves: no permission belongs to team_admin alone.
@@ -46,7 +49,7 @@ export default function TeamSettingsPage() {
   // render nothing (the banner/chrome are already visible) rather than bounce
   // the user out before we actually know they lack access.
   const permissionsLoaded = !!selectedTeam && "permissions" in selectedTeam && Array.isArray(selectedTeam.permissions);
-  if (!selectedTeam || !permissionsLoaded) return null;
+  if (!selectedTeam || !permissionsLoaded || (section === "responsibilities" && bootstrapLoading)) return null;
 
   // Permissions are loaded and the user isn't even a team member: settings is
   // not for them. Guards direct navigation / refresh on a settings URL.
@@ -58,7 +61,7 @@ export default function TeamSettingsPage() {
   // sections the sidebar hides for them via a direct/refreshed URL.
   const sectionAllowed =
     section === "members" ||
-    (section === "responsibilities" && (isTeamAdmin || isPendingTeamAdmin)) ||
+    (section === "responsibilities" && charterEnabled && (isTeamAdmin || isPendingTeamAdmin)) ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
     (section === "evaluations" && canUpdateAgents) ||
     ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));

@@ -29,6 +29,7 @@ import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 import ChatList from "@shared/organisms/ChatList/ChatList.tsx";
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useSelectedTeam } from "../../../../../../hooks/useSelectedTeam.ts";
+import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { hasElevatedTeamRole } from "@hooks/teamCapabilities.ts";
@@ -61,6 +62,7 @@ export default function TeamContentNavbar() {
   const navigate = useNavigate();
 
   const { teamId, isPersonalTeam, selectedTeam, canOpenTeamSettings } = useSelectedTeam();
+  const { bootstrap } = useFrontendBootstrap();
 
   // Record every entry into a team so the Home nav-panel switcher can offer a
   // "recently viewed" sort. Client-only (localStorage), best-effort.
@@ -251,6 +253,7 @@ export default function TeamContentNavbar() {
   // From the relations, not the permissions: a pending admin accepts the charter
   // here, before holding any admin permission.
   if (
+    bootstrap?.team_admin_charter_enabled === true &&
     (selectedTeam?.my_relations ?? []).some(
       (relation) => relation === "team_admin" || relation === "pending_team_admin",
     )
