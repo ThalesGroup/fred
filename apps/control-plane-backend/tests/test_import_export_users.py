@@ -52,15 +52,17 @@ from __future__ import annotations
 
 import io
 import json
+import secrets
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
-from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from control_plane_backend.config.models import Configuration
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.importer import (
     BundleProvisioningError,
@@ -72,7 +74,6 @@ from control_plane_backend.import_export.importer import (
     run_import,
 )
 from control_plane_backend.import_export.schemas import BundleUserEntry
-from control_plane_backend.users.schemas import IdentityManagedByProviderError
 from control_plane_backend.models.base import Base as CPBase
 from control_plane_backend.models.task_models import TASK_TABLES
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -88,7 +89,10 @@ from control_plane_backend.users.dependencies import (
     KeycloakAdminFactory,
     UserServiceDependencies,
 )
-from control_plane_backend.users.schemas import KeycloakM2MUserOperationDisabledError
+from control_plane_backend.users.schemas import (
+    IdentityManagedByProviderError,
+    KeycloakM2MUserOperationDisabledError,
+)
 from control_plane_backend.users.service import (
     find_user_sub_by_username,
     find_user_subs_bulk,
@@ -1260,7 +1264,10 @@ async def test_provision_bundle_identities_creates_missing_user_with_password() 
 @pytest.mark.asyncio
 async def test_local_import_reuses_resolved_identity_even_with_password() -> None:
     deps = UserServiceDependencies(
-        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
         create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
             AssertionError("Keycloak Admin API must not be constructed")
         ),
@@ -1269,7 +1276,7 @@ async def test_local_import_reuses_resolved_identity_even_with_password() -> Non
     report = MigrationReport(import_id="local-existing", source_platform="swift")
 
     await _provision_bundle_identities(
-        [BundleUserEntry(username="alice", password="generated-test-value")],
+        [BundleUserEntry(username="alice", password=secrets.token_urlsafe(16))],
         resolver,
         deps,
         _admin_user(),
@@ -1288,15 +1295,18 @@ async def test_local_import_refuses_unknown_password_identities_before_role_writ
         raise AssertionError("Keycloak Admin API must not be constructed")
 
     deps = UserServiceDependencies(
-        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
         create_keycloak_admin_client=no_admin,
     )
     resolver = UserSubResolver({"known": "existing-id"})
     report = MigrationReport(import_id="local-import", source_platform="swift")
     entries = [
-        BundleUserEntry(username="known", password="generated-test-value"),
-        BundleUserEntry(username="alice", password="generated-test-value"),
-        BundleUserEntry(username="bob", password="generated-test-value"),
+        BundleUserEntry(username="known", password=secrets.token_urlsafe(16)),
+        BundleUserEntry(username="alice", password=secrets.token_urlsafe(16)),
+        BundleUserEntry(username="bob", password=secrets.token_urlsafe(16)),
     ]
 
     with pytest.raises(IdentityManagedByProviderError) as raised:

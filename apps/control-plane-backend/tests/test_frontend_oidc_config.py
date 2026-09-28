@@ -13,10 +13,11 @@
 # limitations under the License.
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
-
+from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.service import build_frontend_config
 
 
@@ -44,7 +45,7 @@ async def test_frontend_config_exposes_public_oidc_settings() -> None:
         team_dependencies=SimpleNamespace(rebac=SimpleNamespace(enabled=True)),
     )
 
-    payload = await build_frontend_config(deps)
+    payload = await build_frontend_config(cast(ProductServiceDependencies, deps))
 
     assert payload.user_auth.model_dump() == {
         "enabled": True,
