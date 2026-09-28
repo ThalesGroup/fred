@@ -1260,7 +1260,7 @@ describe("useManagedChat — session write reliability", () => {
     type: "awaiting_human",
     session_id: "session-1",
     exchange_id: "exch-1",
-    payload: { interrupt_id: "interrupt-a", checkpoint_id: null },
+    payload: { interrupt_id: "interrupt-a" },
   };
 
   // A HITL prompt always belongs to the ACTIVE session in production, and the
@@ -1304,7 +1304,7 @@ describe("useManagedChat — session write reliability", () => {
     await act(async () => {
       latest.handleHitlAnswer("proceed");
     });
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, "proceed", undefined);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, "proceed", undefined, expect.any(Object), undefined);
   });
 
   it("accepts HITL free text at the exact configured code-point limit", async () => {
@@ -1327,7 +1327,13 @@ describe("useManagedChat — session write reliability", () => {
       await Promise.resolve();
     });
 
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, undefined, "🙂🙂🙂🙂🙂");
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      freeTextEvent,
+      undefined,
+      "🙂🙂🙂🙂🙂",
+      expect.any(Object),
+      undefined,
+    );
   });
 
   it("restores the HITL prompt when the resume never reached the backend", async () => {
@@ -1348,7 +1354,13 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
 
     expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(awaitingHumanEvent, undefined, "  complete answer 🙂  ");
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      awaitingHumanEvent,
+      undefined,
+      "  complete answer 🙂  ",
+      expect.any(Object),
+      undefined,
+    );
     expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
     expect(latest.hitlFreeText).toBe("  complete answer 🙂  ");
   });

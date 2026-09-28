@@ -103,6 +103,11 @@ button falls back to its own content and a screen reader announces the current
 value ("Alphabetical") with no hint of what the control does. `ariaLabel` wins
 over `label`, so pass one or the other.
 
+**Long values (2026-09-25).** The trigger shows the selected label on one line,
+ellipsis-truncated, with the full label in a native `title` (the `DataTable`
+cell convention). The select sets `min-width: 0`, so it shrinks to its grid or
+flex track instead of wrapping or overflowing it.
+
 #### Open UX issues
 
 _(none)_
@@ -716,6 +721,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   take a `pendingToolCallIds: string[]` and every row in a batch reads "awaiting confirmation…"
   (same amber pulse as `pending`) simultaneously, not just the first. The trace header follows
   suit via `TraceSummary.awaitingConfirmation`.
+
+- **Refused tools retain their status after reload (2026-09-28)** — the thread view
+  reconstructs cancellation from each saved HITL request/response pair and its
+  pending call IDs, including successive refusals in one exchange. Existing tool
+  results take precedence. Rejected calls no longer revert to "running" or keep
+  the trace header thinking after completion.
 
 - **Step numbers + curated discriminator (2026-07-30, #2172)** — two calls to the same tool
   rendered as byte-identical rows ("READING QUERY" ×2), because the redaction rule from

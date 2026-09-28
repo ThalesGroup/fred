@@ -652,15 +652,6 @@ class GraphDefinition(FrozenModel):
     service path the business wants to guarantee: where a request is routed,
     where context is gathered, where a human is asked to choose, and where an
     action may safely happen.
-
-    Parallel groups:
-    - `parallel_groups` declares sets of nodes that execute concurrently after
-      a common fan-out node and converge before a common fan-in node
-    - each group is a tuple of (fan_out_node, fan_in_node, member1, member2, ...)
-    - the fan-out node must have no direct edge or conditional (the group
-      replaces it); the fan-in node receives execution after all members finish
-    - member nodes must not call invoke_model (no LLM streaming during parallel
-      execution); tool calls and IO operations are safe
     """
 
     state_model_name: str = Field(..., min_length=1)
@@ -668,15 +659,6 @@ class GraphDefinition(FrozenModel):
     nodes: tuple[GraphNodeDefinition, ...]
     edges: tuple[GraphEdgeDefinition, ...] = ()
     conditionals: tuple[GraphConditionalDefinition, ...] = ()
-    parallel_groups: tuple[tuple[str, ...], ...] = Field(
-        default=(),
-        description=(
-            "Each inner tuple declares one parallel fan-out/fan-in group as "
-            "(fan_out_node, fan_in_node, member1, member2, ...). "
-            "Member nodes run concurrently via asyncio.gather after fan_out "
-            "and their state updates are merged before fan_in starts."
-        ),
-    )
 
     @model_validator(mode="after")
     def validate_topology(self) -> "GraphDefinition":
@@ -713,28 +695,6 @@ class GraphDefinition(FrozenModel):
                     raise ValueError(
                         f"Graph conditional target={route.target!r} is not declared in nodes."
                     )
-
-        for group in self.parallel_groups:
-            if len(group) < 4:
-                raise ValueError(
-                    "Each parallel_group must have at least 4 entries: "
-                    "(fan_out_node, fan_in_node, member1, member2, ...)"
-                )
-            fan_out, fan_in = group[0], group[1]
-            members = group[2:]
-            for node in (fan_out, fan_in, *members):
-                if node not in unique_node_ids:
-                    raise ValueError(
-                        f"Parallel group references unknown node {node!r}."
-                    )
-            if len(set(members)) != len(members):
-                raise ValueError(
-                    f"Parallel group for fan_out={fan_out!r} has duplicate member nodes."
-                )
-            if fan_out in members or fan_in in members:
-                raise ValueError(
-                    "fan_out and fan_in nodes must not appear as members in the same parallel group."
-                )
 
         for node in self.nodes:
             if node.on_error is not None and node.on_error not in unique_node_ids:
@@ -815,16 +775,6 @@ class GraphDefinition(FrozenModel):
                 target = id_map[route.target]
                 label = (route.label or route.route_key).replace('"', '\\"')
                 lines.append(f"  {source} -->|{label}| {target};")
-
-        for group in self.parallel_groups:
-            fan_out, fan_in = group[0], group[1]
-            members = group[2:]
-            fo = id_map[fan_out]
-            fi = id_map[fan_in]
-            for member in members:
-                m = id_map[member]
-                lines.append(f"  {fo} --> {m};")
-                lines.append(f"  {m} --> {fi};")
 
         return "\n".join(lines) + "\n"
 

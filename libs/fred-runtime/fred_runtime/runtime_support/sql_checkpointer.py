@@ -72,12 +72,14 @@ from sqlalchemy import (
     case,
     delete,
     desc,
+    literal_column,
     or_,
     select,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
@@ -304,6 +306,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             f"{self.thread_owner_table.name}_activity_idx",
             self.thread_owner_table.c.last_activity_at,
         )
+        self._session_indexes = [
+            Index(
+                f"{table.name}_session_idx",
+                self._session_id_expression(table.c.thread_id),
+            ).ddl_if(dialect="postgresql")
+            for table in (self.checkpoints_table, self.writes_table)
+        ]
         self._metadata = metadata
         self._ddl_lock_id = advisory_lock_key(self.checkpoints_table.name)
         self._tables_ready = False
@@ -323,6 +332,18 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         async with phase_timer(self._kpi, phase_name):
             yield
 
+    @staticmethod
+    def _session_id_expression(column: Any) -> Any:
+        # Fixed literals let PostgreSQL match the expression index in generic plans.
+        return func.split_part(column, literal_column("':'"), literal_column("1"))
+
+    def _create_tables(self, connection: Connection) -> None:
+        self._metadata.create_all(connection)
+        if connection.dialect.name == "postgresql":
+            # create_all skips indexes on tables that already exist.
+            for index in self._session_indexes:
+                index.create(connection, checkfirst=True)
+
     async def _ensure_tables(self) -> None:
         if self._tables_ready:
             return
@@ -330,7 +351,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             await run_ddl_with_advisory_lock(
                 engine=self.store.engine,
                 lock_key=self._ddl_lock_id,
-                ddl_sync_fn=self._metadata.create_all,
+                ddl_sync_fn=self._create_tables,
                 logger=self._logger,
             )
         self._tables_ready = True
@@ -978,6 +999,77 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     def delete_thread(self, thread_id: str) -> None:  # type: ignore[override]
         raise _sync_checkpointer_error("delete_thread")
+
+    def session_threads(self, column: Any, session_id: str, derived_prefix: str) -> Any:
+        """
+        SQL filter on `column` for a session's thread and every thread derived
+        from it (ids starting with `derived_prefix`, e.g. LangGraph-native
+        graph threads — `graph_thread_prefix`).
+        """
+        if (
+            self.store.engine.dialect.name == "postgresql"
+            and ":" not in session_id
+            and derived_prefix == f"{session_id}:"
+        ):
+            return self._session_id_expression(column) == session_id
+        escaped = (
+            derived_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        )
+        return (column == session_id) | column.like(f"{escaped}%", escape="\\")
+
+    async def session_thread_owners(
+        self, session_id: str, *, derived_prefix: str
+    ) -> dict[str, str | None]:
+        """Recorded owner of each existing thread of a session (`session_threads`)."""
+        await self._ensure_tables()
+        column = self.checkpoints_table.c.thread_id
+        owner = self.thread_owner_table.c
+        async with self.store.begin() as conn:
+            threads = [
+                str(row[0])
+                for row in (
+                    await conn.execute(
+                        select(column)
+                        .where(self.session_threads(column, session_id, derived_prefix))
+                        .distinct()
+                    )
+                ).fetchall()
+            ]
+            if not threads:
+                return {}
+            rows = (
+                await conn.execute(
+                    select(owner.thread_id, owner.user_id).where(
+                        owner.thread_id.in_(threads)
+                    )
+                )
+            ).fetchall()
+        recorded = {str(row[0]): row[1] for row in rows}
+        return {
+            thread: (
+                str(recorded[thread]) if recorded.get(thread) is not None else None
+            )
+            for thread in threads
+        }
+
+    async def adelete_session_threads(
+        self, session_id: str, *, derived_prefix: str
+    ) -> int:
+        """Delete a session's threads (`session_threads`); returns the checkpoint count."""
+        await self._ensure_tables()
+        column = self.checkpoints_table.c.thread_id
+        async with self.store.begin() as conn:
+            rows = (
+                await conn.execute(
+                    select(column)
+                    .where(self.session_threads(column, session_id, derived_prefix))
+                    .distinct()
+                )
+            ).fetchall()
+        deleted = 0
+        for thread_id in {session_id, *(str(row[0]) for row in rows)}:
+            deleted += await self.adelete_thread(thread_id)
+        return deleted
 
     async def adelete_thread(self, thread_id: str) -> int:  # type: ignore[override]
         """

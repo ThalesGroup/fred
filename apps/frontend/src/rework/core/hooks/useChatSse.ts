@@ -40,12 +40,7 @@ import type {
   TurnPersistedEvent,
 } from "../../../slices/runtime/runtimeOpenApi";
 import { toolResultCallId, upsertOne } from "./chatSseUtils";
-import {
-  mergeContextPromptText,
-  mergeReasoningActivation,
-  mergeRoutingPolicy,
-  parseSseFrames,
-} from "../utils/runtimeStream";
+import { mergePreparation, parseSseFrames } from "../utils/runtimeStream";
 import { countUnicodeCodePoints } from "../utils/chatInput";
 import { personalTeamId } from "../../components/shared/utils/teamId";
 import { normalizeApiError } from "../errors/normalizeApiError";
@@ -228,9 +223,8 @@ async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
 // ── HITL event/payload (#2216) ──────────────────────────────────────────────
 //
 // Explicit types based on the generated runtime `HumanInputRequest` contract.
-// `checkpoint_id`/`interrupt_id` stay independently typed here, exactly one
-// populated per runtime (legacy Graph V2 vs ReAct V2) — never aliased for
-// each other.
+// `interrupt_id` (LangGraph's own Interrupt.id) is the resume identity for
+// ReAct and Graph agents alike.
 
 export type RuntimeHitlPayload = HumanInputRequest;
 
@@ -571,14 +565,11 @@ export function useChatSse(
               choices: event.request.choices ?? [],
               free_text: event.request.free_text ?? false,
               stage: event.request.stage ?? null,
-              // ReAct V2's occurrence identity (#2216) — LangGraph's own
+              // The pause's resume identity (#2216) — LangGraph's own
               // Interrupt.id, required back on resume so the backend can
-              // reject a stale/duplicate response. checkpoint_id is a
-              // DIFFERENT field (legacy Graph V2's real storage id); never
-              // aliased. Both are explicitly typed on `RuntimeHitlPayload`.
+              // reject a stale/duplicate response.
               interrupt_id: event.request.interrupt_id ?? null,
               occurrence_id: event.request.occurrence_id ?? null,
-              checkpoint_id: event.request.checkpoint_id ?? null,
               metadata: event.request.metadata,
               // Tool calls this prompt gates (#2177 batching — one combined
               // interrupt can cover several calls at once). Lets the trace
@@ -902,20 +893,13 @@ export function useChatSse(
         // (not memoized) so a mid-session language switch takes effect on the
         // very next turn, matching the existing pattern for voice transcription
         // (ManagedChatPage.tsx's handleTranscribeAudio).
-        effectiveContext = mergeReasoningActivation(
-          mergeRoutingPolicy(
-            mergeContextPromptText(
-              {
-                ...(runtimeContext ?? {}),
-                team_id: canonicalizeRuntimeTeamId(teamId),
-                language: i18n.language?.split("-")[0] || undefined,
-              },
-              prep.context_prompt_text,
-            ),
-            prep.chat_default_profile_id,
-            prep.agent_profile_overrides,
-          ),
-          prep.reasoning_enabled_model_ids,
+        effectiveContext = mergePreparation(
+          {
+            ...(runtimeContext ?? {}),
+            team_id: canonicalizeRuntimeTeamId(teamId),
+            language: i18n.language?.split("-")[0] || undefined,
+          },
+          prep,
         );
         exchangeId = uuidv4();
         effectiveSessionId = sessionId ?? "draft";
@@ -1068,6 +1052,8 @@ export function useChatSse(
       pending: RuntimeAwaitingHumanEvent,
       answer: string | boolean | undefined,
       freeText?: string,
+      runtimeContext?: RuntimeContext,
+      turnOptions?: RuntimeExecuteRequest["turn_options"],
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -1219,21 +1205,25 @@ export function useChatSse(
           {
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
-            // #2216: ReAct V2 resumes must echo interrupt_id (LangGraph's
-            // Interrupt.id, validated against the currently pending
-            // occurrence backend-side) — checkpoint_id is the unrelated
-            // legacy Graph V2 field and is forwarded only for that runtime.
+            // #2216: a resume echoes interrupt_id (LangGraph's Interrupt.id,
+            // validated against the currently pending occurrence backend-side).
             interrupt_id: hitlPayload?.interrupt_id ?? null,
             occurrence_id: hitlPayload?.occurrence_id ?? undefined,
-            checkpoint_id: hitlPayload?.checkpoint_id ?? null,
             // `language` matters here too: a resumed turn can reach a fresh
             // gated tool call of its own (the model replans and requests more
             // approval-needing tools within the same resumed stream) — see
             // the matching comment in send() above.
-            runtime_context: {
-              team_id: canonicalizeRuntimeTeamId(teamId),
-              language: i18n.language?.split("-")[0] || undefined,
-            },
+            // The same composer context and prepared routing as a send: the
+            // resumed turn keeps the session's model, prompt and search scope.
+            runtime_context: mergePreparation(
+              {
+                ...(runtimeContext ?? {}),
+                team_id: canonicalizeRuntimeTeamId(teamId),
+                language: i18n.language?.split("-")[0] || undefined,
+              },
+              prep,
+            ),
+            turn_options: turnOptions,
             resume_payload: {
               answer: answerValue,
               choice_id: hasChoices && typeof answer === "string" ? answer : undefined,

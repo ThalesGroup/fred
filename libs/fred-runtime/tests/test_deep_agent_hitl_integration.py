@@ -45,9 +45,9 @@ from deepagents.middleware.filesystem import FilesystemMiddleware
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
-from fred_runtime.react.middleware.hitl import CapabilityHitlBinding
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.react.react_tracing import active_agent_span
+from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_sdk.contracts.capability import HitlSpec, ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -84,6 +84,7 @@ class _RecordingModel(BaseChatModel):
     """Deterministic scripted model — same shape as the ReAct HITL fixtures."""
 
     script: list[AIMessage] = Field(default_factory=list)
+    calls: list[list[BaseMessage]] = Field(default_factory=list)
 
     @property
     def _llm_type(self) -> str:
@@ -99,6 +100,7 @@ class _RecordingModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
+        self.calls.append(list(messages))
         msg = self.script.pop(0) if self.script else AIMessage(content="done")
         return ChatResult(generations=[ChatGeneration(message=msg)])
 
@@ -313,7 +315,12 @@ async def test_deep_hitl_when_true_cancel_skips_the_tool() -> None:
         for message in value.get("messages") or []
         if getattr(message, "type", None) == "tool"
     ]
-    assert not tool_messages  # the gated call never executed
+    assert len(tool_messages) == 1
+    assert tool_messages[0].status == "error"
+    refusals = [m for m in model.calls[-1] if isinstance(m, ToolMessage)]
+    assert len(refusals) == 1
+    assert refusals[0].tool_call_id == "c-1"
+    assert "user rejected" in str(refusals[0].content)
 
 
 @pytest.mark.asyncio
@@ -460,7 +467,12 @@ async def test_deep_hitl_operator_policy_cancel_skips_the_tool() -> None:
         for message in value.get("messages") or []
         if getattr(message, "type", None) == "tool"
     ]
-    assert not tool_messages  # the gated call never executed
+    assert len(tool_messages) == 1
+    assert tool_messages[0].status == "error"
+    refusals = [m for m in model.calls[-1] if isinstance(m, ToolMessage)]
+    assert len(refusals) == 1
+    assert refusals[0].tool_call_id == "c-1"
+    assert "user rejected" in str(refusals[0].content)
 
 
 @pytest.mark.asyncio
@@ -634,6 +646,12 @@ async def test_deep_hitl_transport_level_cancel_executes_the_tool_zero_times() -
         e for e in resumed_events if type(e).__name__ == "ToolResultRuntimeEvent"
     ]
     assert len(tool_results) == 0
+    finals = [e for e in resumed_events if type(e).__name__ == "FinalRuntimeEvent"]
+    assert len(finals) == 1
+    assert finals[0].content == "cancelled, not sending"
+    refusals = [m for m in model.calls[-1] if isinstance(m, ToolMessage)]
+    assert len(refusals) == 1
+    assert "user rejected" in str(refusals[0].content)
 
 
 class _NativeModel(ToolFriendlyFakeChatModel):

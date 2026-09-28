@@ -86,14 +86,15 @@ How to use:
 
 from __future__ import annotations
 
+from fred_runtime.runtime_support.tool_approval import (
+    CapabilityHitlBinding,
+    build_tool_approval_request,
+)
+
 from .checkpoint_hygiene import CheckpointHygieneMiddleware
 from .dynamic_prompt import DynamicPromptMiddleware
 from .frame import build_react_platform_middleware_frame
-from .hitl import (
-    CapabilityHitlBinding,
-    FredHitlMiddleware,
-    build_tool_approval_request,
-)
+from .hitl import FredHitlMiddleware
 from .rate_limit_retry import ProviderRateLimitError, RateLimitRetryMiddleware
 from .tool_call_recovery import ToolCallTextRecoveryMiddleware
 from .tool_observability import ToolObservabilityMiddleware

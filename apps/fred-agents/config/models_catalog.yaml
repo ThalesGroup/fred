@@ -167,6 +167,17 @@ profiles:
       settings:
         base_url: "http://host.docker.internal:11434"
 
+  - profile_id: default.chat.fred-test-mock
+    capability: chat
+    model_display_name: "Fred test mock (in-process)"
+    model:
+      # Deterministic model served inside this pod (test_assistant/mock_llm.py):
+      # streamed text, schema-valid structured output, tool calls. No server.
+      provider: fred-test-mock
+      name: fred-test-mock
+      settings:
+        chunk_delay_s: 0.03
+
   - profile_id: default.chat.mock
     capability: chat
     model_display_name: "Mock OpenAI Chat"

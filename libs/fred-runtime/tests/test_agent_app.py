@@ -979,6 +979,53 @@ def test_delete_checkpoint_thread_returns_deleted_count(monkeypatch, tmp_path) -
         assert retry_response.json() == {"deleted": 0}
 
 
+def test_a_session_id_naming_a_graph_thread_is_refused_everywhere(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    Graph threads are named "{session_id}:{agent}". A caller choosing the
+    session id "S:N" must not reach session S's graph thread for agent N,
+    whether by running a turn, reading or purging checkpoints, or through
+    the OpenAI-compatible surface.
+    """
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="Hello.")])
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
+    stolen = "session-a:inst-1"
+
+    with TestClient(app) as client:
+        execute = client.post(
+            "/pod/v1/agents/execute",
+            json={
+                "agent_id": definition.agent_id,
+                "input": "hello",
+                "session_id": stolen,
+                "runtime_context": {"user_id": "bob"},
+            },
+        )
+        assert execute.status_code == 422, execute.text
+        checkpoints = client.get(f"/pod/v1/agents/checkpoints/{stolen}")
+        assert checkpoints.status_code == 422
+        deletion = client.delete(f"/pod/v1/agents/checkpoints/{stolen}")
+        assert deletion.status_code == 422
+        openai = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": definition.agent_id,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+            headers={"X-Fred-Session-Id": stolen},
+        )
+        assert openai.status_code == 422, openai.text
+
+
 def test_delete_session_filesystem_purges_both_runtime_namespaces(
     monkeypatch, tmp_path
 ) -> None:
@@ -2687,11 +2734,9 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
     assert turns[0]["session_id"] == "session-depth"
 
 
-def test_execute_route_propagates_checkpoint_and_observability_context(
-    monkeypatch, tmp_path
-) -> None:
+def test_execute_route_propagates_observability_context(monkeypatch, tmp_path) -> None:
     """
-    Ensure the pod bridges checkpoint and observability fields into internal execution.
+    Ensure the pod bridges observability fields into internal execution.
 
     Why this exists:
     - resume validation and observability enrichment both rely on the internal
@@ -2716,7 +2761,6 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
         exchange_id=None,
         **_kwargs,
     ):
-        seen["checkpoint_id"] = request.checkpoint_id
         seen["context"] = dict(request.context or {})
         yield {"kind": "final", "sequence": 0, "content": "ok"}
 
@@ -2726,11 +2770,9 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
         _fake_iterate_runtime_event_payloads,
     )
 
-    async def _fake_load_checkpoint(
-        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
-    ):
+    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
         _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": checkpoint_id or "cp-1", "channel_values": {}}, []
+        return {"id": "cp-1", "channel_values": {}}, []
 
     monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
@@ -2751,7 +2793,6 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
                 "agent_id": "rags.sample.echo",
                 "input": "hello",
                 "session_id": "session-1",
-                "checkpoint_id": "cp-1",
                 "runtime_context": {
                     "user_id": "alice",
                     "team_id": "fredlab",
@@ -2762,10 +2803,8 @@ def test_execute_route_propagates_checkpoint_and_observability_context(
         )
 
     assert response.status_code == 200
-    assert seen["checkpoint_id"] == "cp-1"
     assert seen["context"] == {
         "session_id": "session-1",
-        "checkpoint_id": "cp-1",
         "user_id": "alice",
         "team_id": "fredlab",
         "trace_id": "trace-1",
@@ -2804,7 +2843,6 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
         **_kwargs,
     ):
         _ = (definition, access_token, team_id, registry, exchange_id)
-        seen["checkpoint_id"] = request.checkpoint_id
         seen["context"] = dict(request.context or {})
         yield {"kind": "final", "sequence": 0, "content": "ok"}
 
@@ -2842,7 +2880,6 @@ def test_local_registry_invoker_reuses_runtime_execute_projection(monkeypatch) -
 
     assert result.content == "ok"
     assert result.is_error is False
-    assert seen["checkpoint_id"] is None
     context = seen["context"]
     assert isinstance(context, dict)
     assert context["request_id"] == "req-1"
@@ -3337,7 +3374,7 @@ def test_local_registry_invoker_propagates_trusted_platform_binding_through_a_re
     reaches a nested `context.invoke_agent(...)` child through REAL nested
     execution, not merely a constructor assertion.
 
-    `_GraphNodeExecutionContext.invoke_agent` (fred-sdk graph runtime) does
+    `NodeContext.invoke_agent` (fred-runtime graph runtime) does
     nothing more than call `services.agent_invoker.invoke(request)` — this
     test calls that identical seam directly, so it exercises the same code a
     real TeamAgent "route" node runs, all the way through
@@ -3474,73 +3511,6 @@ def test_local_registry_invoker_child_cannot_replace_binding_via_portable_contex
         )
 
 
-def test_resume_rejects_non_pending_checkpoint(monkeypatch, tmp_path) -> None:
-    """
-    Ensure resume requests fail fast when the checkpoint is not waiting for input.
-
-    Why this exists:
-    - stale or already-consumed checkpoints should not reach the agent runtime
-    - the backend completeness gate requires explicit local validation here
-
-    How to use it:
-    - run in the default offline `fred-runtime` test suite
-
-    Example:
-    - `pytest tests/test_agent_app.py -q`
-    """
-
-    async def _fake_load_checkpoint(
-        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
-    ):
-        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
-        return {
-            "id": "cp-1",
-            "channel_values": {
-                "runtime_kind": "graph_v2",
-                "pending": False,
-                "pending_checkpoint_id": "cp-1",
-            },
-        }, []
-
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
-    monkeypatch.setattr(
-        agent_app_module,
-        "get_runtime_context",
-        lambda: SimpleNamespace(
-            config=SimpleNamespace(
-                checkpointer=object(), audience=None, history_store=None
-            )
-        ),
-    )
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-
-    definition = _EchoAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    config = _build_test_config(tmp_path)
-    app = create_agent_app(registry=registry, config=config)
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-1",
-                "checkpoint_id": "cp-1",
-                "resume_payload": {"choice_id": "confirm"},
-                "runtime_context": {"user_id": "alice"},
-            },
-        )
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == "checkpoint is not waiting for resume."
-
-
 async def _write_react_v2_checkpoint(
     checkpointer,
     *,
@@ -3549,9 +3519,8 @@ async def _write_react_v2_checkpoint(
 ):
     """
     Write one ReAct-V2-shaped checkpoint through the real `FredSqlCheckpointer`
-    (the same `aput` production code uses, `graph_runtime.py::_store_pending_checkpoint`'s
-    non-legacy counterpart) — no `runtime_kind`/`pending` markers, since ReAct
-    V2's `create_agent()` never stamps those (#2179).
+    (the same `aput` production code uses) — a native `interrupt()` leaves only
+    a pending write on the `__interrupt__` channel (#2179).
 
     Always UNNAMESPACED, like production: LangGraph resets `checkpoint_ns` to
     `""` on every root-graph run, so a compiled ReAct agent's checkpoints can
@@ -3620,14 +3589,11 @@ def test_resume_accepts_react_v2_checkpoint_via_pending_interrupt_write(
     monkeypatch, tmp_path
 ) -> None:
     """
-    Regression for #2179: a ReAct V2 checkpoint never carries `runtime_kind:
-    graph_v2`, and the `checkpoint_id` its frontend echoes back on resume is
-    actually LangGraph's `Interrupt.id` — never a real stored checkpoint id,
-    so the primary exact-id lookup always misses. `_validate_session_checkpoint_access`
-    must fall back to the thread's latest checkpoint and accept the resume by
-    finding its pending `"__interrupt__"` write whose `Interrupt.id` matches
-    the client-supplied `checkpoint_id` (#2216 tightened this from "any
-    pending interrupt" to an exact id match).
+    Regression for #2179: `_validate_session_checkpoint_access` reads the
+    thread's latest checkpoint and accepts the resume by finding its pending
+    `"__interrupt__"` write whose `Interrupt.id` matches the client-supplied
+    `interrupt_id` (#2216 tightened this from "any pending interrupt" to an
+    exact id match).
 
     Written and read through the real `FredSqlCheckpointer` (SQLite), not a
     mock — #2179 flagged the missing coverage as exactly this gap: no test
@@ -3705,10 +3671,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
     request_occurrence_id,
     expected_detail,
 ) -> None:
-    async def _fake_load_checkpoint(
-        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
-    ):
-        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
+        _ = (checkpointer, thread_id, checkpoint_ns)
         return {"id": "cp-1", "channel_values": {"messages": []}}, [
             (
                 "task-1",
@@ -3743,10 +3707,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
 
 
 def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
-    async def _fake_load_checkpoint(
-        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
-    ):
-        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
+        _ = (checkpointer, thread_id, checkpoint_ns)
         return {"id": "cp-1", "channel_values": {"messages": []}}, [
             (
                 "task-1",
@@ -3777,10 +3739,8 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
 
 
 def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> None:
-    async def _fake_load_checkpoint(
-        checkpointer, *, thread_id, checkpoint_id=None, checkpoint_ns=""
-    ):
-        _ = (checkpointer, thread_id, checkpoint_id, checkpoint_ns)
+    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
+        _ = (checkpointer, thread_id, checkpoint_ns)
         return {"id": "cp-1", "channel_values": {"messages": []}}, [
             (
                 "task-legacy",
@@ -3825,8 +3785,8 @@ def test_resume_rejects_react_v2_checkpoint_without_pending_interrupt(
     """
     The mirror-negative of the acceptance test above: a ReAct V2 checkpoint
     with no pending `"__interrupt__"` write (turn simply finished, nothing
-    waiting for approval) must still 409 — the fallback lookup must not
-    turn into "always accept a non-graph_v2 checkpoint".
+    waiting for approval) must still 409 — a checkpoint that exists is not
+    a checkpoint that is waiting.
     """
 
     model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
@@ -4933,7 +4893,7 @@ def test_normal_react_turn_without_resume_is_unaffected(monkeypatch, tmp_path) -
 async def test_normal_turn_does_not_query_the_checkpointer(monkeypatch) -> None:
     """#2216 non-regression: `_validate_session_checkpoint_access` must
     return immediately (no checkpointer lookup at all) for a turn that sets
-    neither `checkpoint_id` nor `resume_payload` — matching the existing
+    no `resume_payload` — matching the existing
     fast-path contract this function has always had."""
 
     def _boom():
@@ -4950,46 +4910,6 @@ async def test_normal_turn_does_not_query_the_checkpointer(monkeypatch) -> None:
 
     monkeypatch.setattr(agent_app_module, "get_runtime_context", _boom)
     await agent_app_module._validate_session_checkpoint_access(request)
-
-
-def test_execute_rejects_checkpoint_id_and_interrupt_id_together(
-    monkeypatch, tmp_path
-) -> None:
-    """
-    #2216 — `checkpoint_id` (legacy Graph V2) and `interrupt_id` (ReAct V2)
-    are mutually exclusive on the wire contract itself
-    (`RuntimeExecuteRequest._validate_execution_target`), so a request
-    naming both fails FastAPI's request-body validation (422) before
-    `_validate_session_checkpoint_access` — or any checkpointer lookup — is
-    ever reached.
-    """
-
-    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
-    monkeypatch.setattr(
-        agent_app_module,
-        "_build_chat_model_factory",
-        lambda config: StaticChatModelFactory(model),
-    )
-
-    definition = _EchoAgent()
-    registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
-    app = create_agent_app(registry=registry, config=_build_test_config(tmp_path))
-
-    with TestClient(app) as client:
-        response = client.post(
-            "/pod/v1/agents/execute",
-            json={
-                "agent_id": "rags.sample.echo",
-                "input": "",
-                "session_id": "session-both-ids",
-                "checkpoint_id": "cp-1",
-                "interrupt_id": "interrupt-a",
-                "resume_payload": {"choice_id": "proceed"},
-                "runtime_context": {"user_id": "alice"},
-            },
-        )
-
-    assert response.status_code == 422
 
 
 def test_execute_rejects_managed_request_without_team_before_resolution(
@@ -5676,21 +5596,11 @@ def test_build_capability_block_rejects_react_only_capability_for_graph_agent() 
         )
 
 
-def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() -> None:
-    """
-    CAPAB-02 stopgap: `GraphRuntime` never consults `CapabilityAgentBlock.hitl`
-    (`invoke_runtime_tool` calls the tool directly) — a capability declaring a
-    `HitlSpec` approval gate would silently run ungated on a Graph agent. Full
-    Graph HITL enforcement is deferred (see AGENT-CAPABILITY-RFC.md §3.9);
-    until then, selecting such a capability on a Graph agent must fail loudly,
-    not run unapproved.
-
-    Example:
-    - `pytest tests/test_agent_app.py::test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent -q`
-    """
+def test_build_capability_block_accepts_hitl_gated_capability_for_graph_agent() -> None:
+    """Graph now consumes the same capability HITL declarations as ReAct/Deep."""
     from collections.abc import Mapping as _Mapping
 
-    from fred_runtime.app.agent_app import CapabilityError, _build_capability_block
+    from fred_runtime.app.agent_app import _build_capability_block
     from fred_runtime.capabilities import CapabilityRegistry
     from fred_sdk.contracts.capability import (
         AgentCapability,
@@ -5789,17 +5699,19 @@ def test_build_capability_block_rejects_hitl_gated_capability_for_graph_agent() 
         selected_capability_ids=["hitl_gated_cap"],
     )
 
-    with pytest.raises(CapabilityError, match="hitl_gated_cap"):
-        _build_capability_block(
-            registry,
-            tuning,
-            definition=definition,
-            services=RuntimeServices(),
-            user_id=None,
-            session_id=None,
-            team_id=None,
-            agent_instance_id=None,
-        )
+    block = _build_capability_block(
+        registry,
+        tuning,
+        definition=definition,
+        services=RuntimeServices(),
+        user_id=None,
+        session_id=None,
+        team_id=None,
+        agent_instance_id=None,
+    )
+
+    assert block is not None
+    assert block.hitl["gated_probe"].spec.require
 
 
 def test_build_capability_block_ignores_stale_selection_for_capability_unsupported_graph_agent() -> (

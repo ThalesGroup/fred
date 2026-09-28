@@ -85,7 +85,6 @@ def test_langfuse_tracer_adapter_preserves_managed_identity_metadata() -> None:
             baggage={
                 "agent_instance_id": "inst-1",
                 "template_agent_id": "template-1",
-                "checkpoint_id": "cp-1",
                 "execution_action": "resume",
             },
         ),
@@ -100,7 +99,7 @@ def test_langfuse_tracer_adapter_preserves_managed_identity_metadata() -> None:
 
     assert metadata["agent_instance_id"] == "inst-1"
     assert metadata["template_agent_id"] == "template-1"
-    assert metadata["checkpoint_id"] == "cp-1"
+    assert "checkpoint_id" not in metadata
     assert metadata["execution_action"] == "resume"
     assert metadata["trace_id"] == "trace-upstream"
     assert baggage["agent_instance_id"] == "inst-1"

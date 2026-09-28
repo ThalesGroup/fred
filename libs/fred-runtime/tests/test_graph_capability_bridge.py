@@ -12,23 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Graph agent <-> `AgentCapability` bridge (NOTES-GRAPH-CAPABILITY-BRIDGE.md
-Phase 4).
-
-Why this file exists:
-- Phase 1 (`test_capability_tool_return_convention.py`) proved that a
-  `content_and_artifact` capability tool's `ToolInvocationResult` artifact is
-  silently dropped when the tool is invoked with a plain args dict — exactly
-  the shape `GraphRuntime.invoke_runtime_tool` / `_GraphNodeExecutionContext`
-  use. Phase 4 closes that gap with `_adapt_capability_tool_for_graph`
-  (`graph_runtime.py`).
-- The single most important test here proves the fix against the REAL
-  `invoke_runtime_tool` code path (`_GraphNodeExecutionContext`, the exact
-  class `GraphNodeContext` is at runtime), not a hand-rolled mock of it.
-- Also covers the capability-vs-MCP tool name collision Phase 2 explicitly
-  deferred to Phase 4 (`_adapted_capability_tools`).
-"""
+"""Native capability tools retain content, artifacts and identity in Graph."""
 
 from __future__ import annotations
 
@@ -43,10 +27,9 @@ from fred_runtime.capabilities import (
 )
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.graph.graph_runtime import (
-    _adapt_capability_tool_for_graph,
-    _adapted_capability_tools,
-    _GraphNodeExecutionContext,
+    _capability_tools,
 )
+from fred_runtime.graph.node_context import NodeContext
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -58,6 +41,7 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.runtime import (
+    RuntimeEvent,
     RuntimeServices,
     RuntimeToolHandle,
     ToolProviderPort,
@@ -82,7 +66,7 @@ async def _corpus_search(question: str) -> tuple[str, ToolInvocationResult]:
         ),
     )
     # A JSON object, because `_normalize_runtime_tool_output` parses a content
-    # string back into a dict — what the unadapted control case asserts on.
+    # string back into a dict.
     content = json.dumps({"query": question, "hits": [{"uid": hits[0].uid}]})
     artifact = ToolInvocationResult(
         tool_ref="corpus_search",
@@ -115,9 +99,12 @@ def _binding() -> BoundRuntimeContext:
 
 
 def _node_context(
-    runtime_tools, *, services: RuntimeServices | None = None
-) -> _GraphNodeExecutionContext:
-    return _GraphNodeExecutionContext(
+    runtime_tools,
+    *,
+    services: RuntimeServices | None = None,
+    events: list[RuntimeEvent] | None = None,
+) -> NodeContext:
+    return NodeContext(
         binding=_binding(),
         services=services if services is not None else RuntimeServices(),
         model=None,
@@ -126,6 +113,7 @@ def _node_context(
         allowed_tool_refs=frozenset(),
         runtime_tools=runtime_tools,
         tuning_values={},
+        sink=events.append if events is not None else (lambda _event: None),
     )
 
 
@@ -134,20 +122,9 @@ def _node_context(
 # ---------------------------------------------------------------------------
 
 
-def test_adapted_capability_tool_sources_survive_invoke_runtime_tool() -> None:
-    """
-    Build a citing capability tool, adapt it with
-    `_adapt_capability_tool_for_graph` exactly as `GraphRuntime.build_executor`
-    would, register it on a real `_GraphNodeExecutionContext` (the class
-    `GraphNodeContext` actually is at runtime), and call
-    `invoke_runtime_tool` — its real, unmocked implementation. Without the
-    Phase 4 adapter this would return a bare content string with no sources
-    (Phase 1's finding); with it, `.sources` survives.
-    """
-
+def test_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     source_tool = _sourced_capability_tool()
-    adapted = _adapt_capability_tool_for_graph(source_tool)
-    ctx = _node_context({adapted.name: adapted})
+    ctx = _node_context({source_tool.name: source_tool})
 
     result = asyncio.run(
         ctx.invoke_runtime_tool("corpus_search", {"question": "what is fred?"})
@@ -161,37 +138,8 @@ def test_adapted_capability_tool_sources_survive_invoke_runtime_tool() -> None:
     assert result["is_error"] is False
 
 
-def test_unadapted_capability_tool_loses_sources_via_invoke_runtime_tool() -> None:
-    """
-    Control case: registering the RAW (unadapted) capability tool reproduces
-    Phase 1's finding through the real `invoke_runtime_tool` path — no
-    sources, proving the adapter in the test above is load-bearing, not
-    a no-op.
-    """
-
-    source_tool = _sourced_capability_tool()
-    ctx = _node_context({source_tool.name: source_tool})
-
-    result = asyncio.run(
-        ctx.invoke_runtime_tool("corpus_search", {"question": "what is fred?"})
-    )
-
-    assert isinstance(result, dict)
-    assert "sources" not in result
-
-
 def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:
-    """
-    PR #2067 review (Codex), end to end through a full capability — manifest,
-    context and `tools()`, not a bare tool object: `tracer_echo` puts its answer in
-    `content` and returns an artifact with only `ui_parts`, no `blocks`.
-    Before the content-folding fix, a Graph node calling it through
-    `invoke_runtime_tool` got back an artifact with no textual answer at
-    all — this proves the fix against the real adapter and the real
-    `invoke_runtime_tool` path. The capability itself is a test fixture: no
-    shipped capability has this artifact shape any more, so the shape is
-    pinned here rather than borrowed from whatever happens to be installed.
-    """
+    """A full capability keeps both textual content and its UI artifact."""
     from _tracer_capability import TracerEchoCapability
     from fred_runtime.capabilities import CapabilityRegistry
 
@@ -209,8 +157,7 @@ def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:
         config={"uppercase": True},
     )
     (source_tool,) = cap.tools(ctx_cap)
-    adapted = _adapt_capability_tool_for_graph(source_tool)
-    ctx = _node_context({adapted.name: adapted})
+    ctx = _node_context({source_tool.name: source_tool})
 
     result = asyncio.run(ctx.invoke_runtime_tool("tracer_echo", {"text": "hello"}))
 
@@ -219,15 +166,11 @@ def test_capability_tool_answer_survives_invoke_runtime_tool() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _adapt_capability_tool_for_graph — direct unit coverage
+# Native tool invocation — return shapes
 # ---------------------------------------------------------------------------
 
 
-def test_adapt_preserves_bare_tool_invocation_result_tools_unchanged() -> None:
-    """A capability tool that already returns a bare `ToolInvocationResult`
-    (no `response_format`) needs no unwrapping — the adapter must pass its
-    result through unchanged rather than mis-handling it as a 2-tuple."""
-
+def test_native_preserves_bare_tool_invocation_result_tools_unchanged() -> None:
     @lc_tool("bare_tool")
     async def _bare_tool(x: str) -> ToolInvocationResult:
         """A bare-result tool."""
@@ -237,43 +180,36 @@ def test_adapt_preserves_bare_tool_invocation_result_tools_unchanged() -> None:
             sources=(),
         )
 
-    adapted = _adapt_capability_tool_for_graph(_bare_tool)
-    result = asyncio.run(adapted.ainvoke({"x": "hello"}))
+    native_tool = _bare_tool
+    result = asyncio.run(
+        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+            native_tool.name, {"x": "hello"}
+        )
+    )
 
-    assert isinstance(result, ToolInvocationResult)
-    assert result.tool_ref == "probe"
+    assert isinstance(result, dict)
+    assert result["tool_ref"] == "probe"
 
 
-def test_adapt_folds_content_into_blocks_when_artifact_carries_none() -> None:
-    """
-    PR #2067 review (Codex): `document_access`'s tools duplicate their
-    answer into `artifact.blocks`, so keeping only the artifact is safe for
-    them — but a tool shaped like `tracer_echo` (the in-tree reference
-    capability) puts its real answer in `content` and returns an artifact
-    carrying only `ui_parts` (a UI card), no `blocks` at all. Discarding
-    `content` unconditionally would silently drop the answer for any such
-    tool. The adapter must fold `content` into `blocks` when the artifact
-    doesn't already carry any.
-    """
-
+def test_native_folds_content_into_blocks_when_artifact_carries_none() -> None:
     @lc_tool("tracer_echo_shaped", response_format="content_and_artifact")
     async def _tracer_echo_shaped(text: str) -> tuple[str, ToolInvocationResult]:
         """Mirrors tracer_echo's exact shape: answer in content, artifact has
         only ui_parts, no blocks."""
         return text.upper(), ToolInvocationResult(tool_ref="tracer_echo_shaped")
 
-    adapted = _adapt_capability_tool_for_graph(_tracer_echo_shaped)
-    result = asyncio.run(adapted.ainvoke({"text": "hello"}))
+    native_tool = _tracer_echo_shaped
+    result = asyncio.run(
+        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+            native_tool.name, {"text": "hello"}
+        )
+    )
 
-    assert isinstance(result, ToolInvocationResult)
-    assert result.blocks[0].text == "HELLO"
+    assert isinstance(result, dict)
+    assert result["blocks"][0]["text"] == "HELLO"
 
 
-def test_adapt_does_not_override_artifact_blocks_already_present() -> None:
-    """The content-folding safety net must not run when the artifact already
-    carries its own `blocks` (`document_access`'s pattern) — it only fills
-    the gap, never overrides deliberately-populated data."""
-
+def test_native_does_not_override_artifact_blocks_already_present() -> None:
     @lc_tool("has_blocks_tool", response_format="content_and_artifact")
     async def _has_blocks_tool(x: str) -> tuple[str, ToolInvocationResult]:
         """An artifact that already carries its own blocks."""
@@ -283,49 +219,47 @@ def test_adapt_does_not_override_artifact_blocks_already_present() -> None:
             blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text="real payload"),),
         )
 
-    adapted = _adapt_capability_tool_for_graph(_has_blocks_tool)
-    result = asyncio.run(adapted.ainvoke({"x": "y"}))
+    native_tool = _has_blocks_tool
+    result = asyncio.run(
+        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+            native_tool.name, {"x": "y"}
+        )
+    )
 
-    assert isinstance(result, ToolInvocationResult)
-    assert len(result.blocks) == 1
-    assert result.blocks[0].text == "real payload"
+    assert isinstance(result, dict)
+    assert len(result["blocks"]) == 1
+    assert result["blocks"][0]["text"] == "real payload"
 
 
-def test_adapt_only_unwraps_tuples_declared_content_and_artifact() -> None:
-    """
-    CAPAB-02 hardening: the 2-tuple unwrap must be gated on the tool's own
-    `response_format`, not fire for "any 2-tuple" — a plain tool whose normal
-    return value happens to be an unrelated 2-tuple must round-trip through
-    the adapter unchanged, not have its second element silently reinterpreted
-    as an artifact.
-    """
-
+def test_native_only_unwraps_tuples_declared_content_and_artifact() -> None:
     @lc_tool("plain_pair_tool")
     async def _plain_pair_tool(x: str) -> tuple[bool, str]:
         """Returns an ordinary (success, message) pair — NOT content_and_artifact."""
         return True, f"processed {x}"
 
-    adapted = _adapt_capability_tool_for_graph(_plain_pair_tool)
-    result = asyncio.run(adapted.ainvoke({"x": "hello"}))
+    native_tool = _plain_pair_tool
+    result = asyncio.run(
+        _node_context({native_tool.name: native_tool}).invoke_runtime_tool(
+            native_tool.name, {"x": "hello"}
+        )
+    )
 
-    assert result == (True, "processed hello")
+    assert result == [True, "processed hello"]
 
 
-def test_adapt_refuses_sync_tool_with_content_and_artifact() -> None:
-    """
-    CAPAB-02 hardening: a sync-only tool (`.func`, no `.coroutine`) with
-    `response_format="content_and_artifact"` cannot be adapted (there is no
-    coroutine to call) and would silently lose its artifact if passed
-    through unchanged — refuse loudly instead of guessing.
-    """
-
+def test_native_invocation_supports_sync_tool_with_content_and_artifact() -> None:
     @lc_tool("sync_artifact_tool", response_format="content_and_artifact")
     def _sync_artifact_tool(x: str) -> tuple[str, ToolInvocationResult]:
-        """A synchronous content_and_artifact tool — should never exist."""
+        """A synchronous tool using the native artifact convention."""
         return x, ToolInvocationResult(tool_ref="sync_artifact_tool")
 
-    with pytest.raises(CapabilityAssemblyError, match="sync_artifact_tool"):
-        _adapt_capability_tool_for_graph(_sync_artifact_tool)
+    result = asyncio.run(
+        _node_context(
+            {_sync_artifact_tool.name: _sync_artifact_tool}
+        ).invoke_runtime_tool(_sync_artifact_tool.name, {"x": "hello"})
+    )
+    assert isinstance(result, dict)
+    assert result["blocks"][0]["text"] == "hello"
 
 
 def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
@@ -342,47 +276,74 @@ def test_invoke_runtime_tool_event_reflects_tool_reported_is_error() -> None:
         del x
         return "boom", ToolInvocationResult(tool_ref="failing_probe", is_error=True)
 
-    adapted = _adapt_capability_tool_for_graph(_failing_probe)
-    ctx = _node_context({adapted.name: adapted})
+    native_tool = _failing_probe
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({native_tool.name: native_tool}, events=events)
 
     result = asyncio.run(ctx.invoke_runtime_tool("failing_probe", {"x": "y"}))
 
     assert isinstance(result, dict)
     assert result["is_error"] is True
-    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.tool_name == "failing_probe"
     assert event.is_error is True
 
 
-def test_invoke_runtime_tool_marks_kpi_status_error_for_reported_failure() -> None:
-    """
-    CAPAB-02: the span status was fixed to reflect `is_error` (prior round),
-    but the KPI timer's `status` dim was not — `_graph_phase_timer` defaults
-    it to "ok" whenever no exception propagates (`InMemoryMetricsProvider`'s
-    `setdefault("status", "ok")`), so a capability tool reporting failure via
-    `ToolInvocationResult(is_error=True)` (never raising, per RFC §3.9) was
-    recorded as a successful call. Mirrors the canonical `invoke_tool`
-    pattern (`kpi_dims["status"] = "error"`).
-    """
+@pytest.mark.parametrize("failure", ["execution", "validation"])
+@pytest.mark.parametrize("response_format", ["content", "content_and_artifact"])
+def test_native_handled_error_status_requires_artifact_format(
+    failure, response_format
+) -> None:
+    from langchain_core.tools import ToolException
 
-    from fred_core.portable import InMemoryMetricsProvider
+    @lc_tool("handled_probe", response_format=response_format)
+    async def probe(count: int) -> tuple[str, ToolInvocationResult]:
+        """A native tool with handled failures."""
+        raise ToolException("execution failed")
 
-    @lc_tool("kpi_failing_probe", response_format="content_and_artifact")
-    async def _kpi_failing_probe(x: str) -> tuple[str, ToolInvocationResult]:
-        """A tool that reports failure via is_error, never raises."""
-        del x
-        return "boom", ToolInvocationResult(tool_ref="kpi_failing_probe", is_error=True)
-
-    metrics = InMemoryMetricsProvider()
-    adapted = _adapt_capability_tool_for_graph(_kpi_failing_probe)
-    ctx = _node_context(
-        {adapted.name: adapted}, services=RuntimeServices(metrics=metrics)
+    probe.handle_tool_error = True
+    probe.handle_validation_error = True
+    events: list[RuntimeEvent] = []
+    context = _node_context({probe.name: probe}, events=events)
+    result = asyncio.run(
+        context.invoke_runtime_tool(
+            probe.name, {"count": "invalid" if failure == "validation" else 1}
+        )
     )
+    assert isinstance(result, str)
+    assert next(
+        e for e in events if isinstance(e, ToolResultRuntimeEvent)
+    ).is_error == (response_format == "content_and_artifact")
 
-    asyncio.run(ctx.invoke_runtime_tool("kpi_failing_probe", {"x": "y"}))
 
-    assert len(metrics.timers) == 1
-    assert metrics.timers[0].dims["status"] == "error"
+def test_native_tool_validates_and_supplies_defaults_before_execution() -> None:
+    @lc_tool("default_probe")
+    async def probe(count: int = 7) -> dict:
+        """Return the validated value and its type."""
+        return {"count": count, "type": type(count).__name__}
+
+    context = _node_context({probe.name: probe})
+    assert asyncio.run(context.invoke_runtime_tool(probe.name, {})) == {
+        "count": 7,
+        "type": "int",
+    }
+    assert asyncio.run(context.invoke_runtime_tool(probe.name, {"count": "3"})) == {
+        "count": 3,
+        "type": "int",
+    }
+
+
+@pytest.mark.parametrize("artifact", [{"payload": "kept"}, [1, 2]])
+def test_native_tool_preserves_non_fred_artifacts(artifact) -> None:
+    @lc_tool("artifact_probe", response_format="content_and_artifact")
+    async def probe() -> tuple[str, object]:
+        """Return a plain structured artifact."""
+        return "summary", artifact
+
+    result = asyncio.run(
+        _node_context({probe.name: probe}).invoke_runtime_tool(probe.name, {})
+    )
+    assert result == artifact
 
 
 def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None:
@@ -407,12 +368,15 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
         del x
         raise RuntimeError("boom")
 
-    ctx = _node_context({"slow_probe": _slow_probe, "raising_probe": _raising_probe})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context(
+        {"slow_probe": _slow_probe, "raising_probe": _raising_probe}, events=events
+    )
 
     asyncio.run(ctx.invoke_runtime_tool("slow_probe", {"x": "y"}))
     (success_event,) = [
         e
-        for e in ctx.events
+        for e in events
         if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "slow_probe"
     ]
     assert success_event.latency_ms is not None
@@ -422,7 +386,7 @@ def test_invoke_runtime_tool_populates_latency_ms_on_success_and_error() -> None
         asyncio.run(ctx.invoke_runtime_tool("raising_probe", {"x": "y"}))
     (error_event,) = [
         e
-        for e in ctx.events
+        for e in events
         if isinstance(e, ToolResultRuntimeEvent) and e.tool_name == "raising_probe"
     ]
     assert error_event.latency_ms is not None
@@ -444,12 +408,13 @@ def test_invoke_runtime_tool_reads_sources_and_ui_parts_from_typed_result() -> N
         del x
         return "ok", ToolInvocationResult(tool_ref="sourced_probe", sources=(hit,))
 
-    adapted = _adapt_capability_tool_for_graph(_sourced_probe)
-    ctx = _node_context({adapted.name: adapted})
+    native_tool = _sourced_probe
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({native_tool.name: native_tool}, events=events)
 
     asyncio.run(ctx.invoke_runtime_tool("sourced_probe", {"x": "y"}))
 
-    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.sources[0].uid == "d1"
 
 
@@ -468,17 +433,18 @@ def test_invoke_runtime_tool_does_not_misread_an_unrelated_dict_is_error_key() -
         del x
         return {"is_error": "not-a-bool-business-value", "answer": 42}
 
-    ctx = _node_context({"mcp_like_probe": _mcp_like_probe})
+    events: list[RuntimeEvent] = []
+    ctx = _node_context({"mcp_like_probe": _mcp_like_probe}, events=events)
 
     result = asyncio.run(ctx.invoke_runtime_tool("mcp_like_probe", {"x": "y"}))
 
     assert result == {"is_error": "not-a-bool-business-value", "answer": 42}
-    (event,) = [e for e in ctx.events if isinstance(e, ToolResultRuntimeEvent)]
+    (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.is_error is False
 
 
 # ---------------------------------------------------------------------------
-# _adapted_capability_tools — the capability-vs-MCP name collision guard
+# Capability-vs-MCP name collision guard
 # (deferred from Phase 2, resolved here).
 # ---------------------------------------------------------------------------
 
@@ -488,7 +454,7 @@ def test_capability_tool_colliding_with_mcp_tool_name_raises() -> None:
     block = CapabilityAgentBlock(middleware=(), hitl={}, tools=(source_tool,))
 
     with pytest.raises(CapabilityAssemblyError, match=source_tool.name):
-        _adapted_capability_tools(
+        _capability_tools(
             block, mcp_tool_names={source_tool.name, "some_other_mcp_tool"}
         )
 
@@ -497,13 +463,14 @@ def test_capability_tools_merge_cleanly_when_no_mcp_name_collision() -> None:
     source_tool = _sourced_capability_tool()
     block = CapabilityAgentBlock(middleware=(), hitl={}, tools=(source_tool,))
 
-    adapted = _adapted_capability_tools(block, mcp_tool_names={"unrelated_tool"})
+    native_tool = _capability_tools(block, mcp_tool_names={"unrelated_tool"})
 
-    assert [t.name for t in adapted] == [source_tool.name]
+    assert native_tool == (source_tool,)
+    assert native_tool[0] is source_tool
 
 
-def test_adapted_capability_tools_returns_empty_for_no_capability_block() -> None:
-    assert _adapted_capability_tools(None, mcp_tool_names=set()) == ()
+def test_capability_tools_returns_empty_for_no_capability_block() -> None:
+    assert _capability_tools(None, mcp_tool_names=set()) == ()
 
 
 # ---------------------------------------------------------------------------
@@ -589,11 +556,9 @@ def _min_graph_agent_definition():
     return _MinGraphAgent()
 
 
-def test_build_executor_merges_mcp_and_adapted_capability_tools() -> None:
-    from fred_runtime.graph.graph_runtime import (
-        GraphRuntime,
-        _DeterministicGraphExecutor,
-    )
+def test_build_executor_merges_mcp_and_capability_tools() -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
 
     @lc_tool("mcp_probe")
     def _mcp_probe(text: str) -> str:
@@ -609,16 +574,11 @@ def test_build_executor_merges_mcp_and_adapted_capability_tools() -> None:
     )
 
     executor = asyncio.run(runtime.build_executor(_binding()))
-    assert isinstance(executor, _DeterministicGraphExecutor)
+    assert isinstance(executor, GraphExecutor)
 
     runtime_tools = executor._runtime_tools  # pyright: ignore[reportPrivateUsage]
     assert set(runtime_tools) == {"mcp_probe", "corpus_search"}
-    # The capability tool object registered on the executor is the adapted
-    # wrapper, not the raw ReAct-shaped one — proven by response_format
-    # falling back to LangChain's "content" default (the raw tool is
-    # "content_and_artifact").
-    adapted_in_executor = runtime_tools["corpus_search"]
-    assert adapted_in_executor.response_format == "content"
+    assert runtime_tools["corpus_search"] is source_tool
 
 
 def test_build_executor_raises_on_capability_mcp_name_collision() -> None:

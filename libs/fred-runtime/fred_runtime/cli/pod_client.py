@@ -91,7 +91,6 @@ class AgentPodClient:
         user_id: str,
         team_id: str | None = None,
         agent_instance_id: str | None = None,
-        checkpoint_id: str | None = None,
         interrupt_id: str | None = None,
         occurrence_id: str | None = None,
         resume_payload: Any = None,
@@ -108,8 +107,6 @@ class AgentPodClient:
         }
         if agent_instance_id is not None:
             payload["agent_instance_id"] = agent_instance_id
-        if checkpoint_id is not None:
-            payload["checkpoint_id"] = checkpoint_id
         if interrupt_id is not None:
             payload["interrupt_id"] = interrupt_id
         if occurrence_id is not None:
@@ -138,7 +135,6 @@ class AgentPodClient:
         user_id: str,
         team_id: str | None = None,
         agent_instance_id: str | None = None,
-        checkpoint_id: str | None = None,
     ) -> dict[str, Any]:
         runtime_context: dict[str, Any] = {"user_id": user_id}
         if team_id:
@@ -151,8 +147,6 @@ class AgentPodClient:
         }
         if agent_instance_id is not None:
             payload["agent_instance_id"] = agent_instance_id
-        if checkpoint_id is not None:
-            payload["checkpoint_id"] = checkpoint_id
         response = self.http_client.post(
             f"{self.base_url}/agents/evaluate",
             json=payload,
@@ -173,7 +167,6 @@ class AgentPodClient:
         user_id: str,
         team_id: str | None = None,
         agent_instance_id: str | None = None,
-        checkpoint_id: str | None = None,
         interrupt_id: str | None = None,
         occurrence_id: str | None = None,
         resume_payload: Any = None,
@@ -187,7 +180,6 @@ class AgentPodClient:
             user_id=user_id,
             team_id=team_id,
             agent_instance_id=agent_instance_id,
-            checkpoint_id=checkpoint_id,
             interrupt_id=interrupt_id,
             occurrence_id=occurrence_id,
             resume_payload=resume_payload,
@@ -205,7 +197,6 @@ class AgentPodClient:
         user_id: str,
         team_id: str | None = None,
         agent_instance_id: str | None = None,
-        checkpoint_id: str | None = None,
         interrupt_id: str | None = None,
         occurrence_id: str | None = None,
         resume_payload: Any = None,
@@ -222,8 +213,6 @@ class AgentPodClient:
         }
         if agent_instance_id is not None:
             payload["agent_instance_id"] = agent_instance_id
-        if checkpoint_id is not None:
-            payload["checkpoint_id"] = checkpoint_id
         if interrupt_id is not None:
             payload["interrupt_id"] = interrupt_id
         if occurrence_id is not None:

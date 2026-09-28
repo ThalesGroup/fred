@@ -985,7 +985,6 @@ async def run_one_turn(
         message="hello",
         context=context,
         resume_payload=None,
-        checkpoint_id=None,
         interrupt_id=None,
         invocation_turns=(),
     )

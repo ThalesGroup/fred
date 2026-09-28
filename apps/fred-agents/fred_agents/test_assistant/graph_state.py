@@ -15,10 +15,10 @@
 """
 Input and state models for the test assistant graph agent.
 
-This agent needs no LLM — every branch is keyword-driven so developers
-can exercise every SSE event type (status, assistant_delta, HITL choice,
-HITL free-text, sources, error) from a running pod without configuring
-a model provider.
+Every branch is keyword-driven so developers can exercise every SSE event type
+(status, assistant_delta, HITL choice, HITL free-text, sources, error) from a
+running pod. Model-backed branches (model, assist) fall back to fixed text when
+no model is bound; tests bind `mock_llm.MockChatModel`.
 
 Trigger keywords (case-insensitive prefix match):
   echo          → simple echo reply with status events
@@ -33,27 +33,44 @@ Trigger keywords (case-insensitive prefix match):
                   (context.invoke_runtime_tool), then a HITL confirm/discard
                   gate on the top hit — degrades to a helpful message when the
                   capability isn't selected on this agent instance
+  assist        → a real agent's shape: structured routing, knowledge search,
+                  streamed model draft, two HITL gates, then a side effect
+  delegate      → invoke another agent (this one) through invoke_agent
+  crash         → a node error with no on_error route (turn-level failure)
   (anything else) → fallback with scenario list
 """
 
 from __future__ import annotations
 
+from fred_sdk.contracts.context import ConversationalState
 from pydantic import BaseModel, Field
+
+# Also the delegate scenario's target: the agent invokes itself one turn deeper.
+TEST_ASSISTANT_AGENT_ID = "fred.github.test_assistant"
 
 
 class TestInput(BaseModel):
     """User message that selects a test scenario."""
 
+    __test__ = False  # a domain model, not a pytest test class
+
     message: str = Field(..., min_length=1)
 
 
-class TestState(BaseModel):
-    """Minimal workflow state — only what the dispatcher and scenario steps need."""
+class TestState(ConversationalState, BaseModel):
+    """Workflow state; `conversation_history` is the only field kept across turns."""
+
+    __test__ = False  # a domain model, not a pytest test class
 
     latest_user_text: str
 
     # Written by dispatcher, read by scenario steps
     scenario: str = ""
+
+    # assist scenario: routing decision, retrieved hits, streamed draft
+    assist_intent: str = ""
+    assist_hits: list[dict[str, object]] = Field(default_factory=list)
+    assist_draft: str = ""
 
     # Accumulated free-text HITL reply (written by hitl_text step)
     human_text_reply: str = ""

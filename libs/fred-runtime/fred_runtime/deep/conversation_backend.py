@@ -177,6 +177,8 @@ class ConversationNamespaceBackend(BackendProtocol):
         pattern: str,
         path: str | None = None,
         glob: str | None = None,
+        *,
+        max_count: int | None = None,
     ) -> GrepResult:
         try:
             relative_directory = _relative_path(path or "/", allow_root=True)
@@ -202,6 +204,8 @@ class ConversationNamespaceBackend(BackendProtocol):
             matches = [
                 match for file_matches in per_file_matches for match in file_matches
             ]
+            if max_count is not None and len(matches) > max_count:
+                return GrepResult(matches=matches[:max_count], truncated=True)
             return GrepResult(matches=matches)
         except ConversationScratchpadError as exc:
             return GrepResult(error=_error_message(exc))

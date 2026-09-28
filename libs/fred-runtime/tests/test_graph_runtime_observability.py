@@ -15,8 +15,14 @@
 from collections.abc import Mapping
 from typing import cast
 
+import pytest
 from fred_core.portable import InMemoryMetricsProvider, Span, Tracer
-from fred_runtime.graph.graph_runtime import _graph_phase_timer, _start_runtime_span
+from fred_runtime.graph.node_context import (
+    NodeContext,
+    _graph_phase_timer,
+    _observe,
+    _start_runtime_span,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -68,7 +74,6 @@ def _binding() -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
             session_id="sess-1",
-            checkpoint_id="cp-1",
             user_id="alice",
             team_id="team-red",
             trace_id="trace-1",
@@ -92,7 +97,6 @@ def _binding() -> BoundRuntimeContext:
             baggage={
                 "agent_instance_id": "inst-1",
                 "template_agent_id": "template-1",
-                "checkpoint_id": "cp-1",
                 "execution_action": "resume",
             },
         ),
@@ -119,7 +123,7 @@ def test_graph_phase_timer_includes_managed_observability_dims() -> None:
     assert dims["session_id"] == "sess-1"
     assert dims["agent_instance_id"] == "inst-1"
     assert dims["template_agent_id"] == "template-1"
-    assert dims["checkpoint_id"] == "cp-1"
+    assert "checkpoint_id" not in dims
     assert dims["trace_id"] == "trace-1"
     assert dims["correlation_id"] == "corr-1"
     assert dims["execution_action"] == "resume"
@@ -145,7 +149,88 @@ def test_start_runtime_span_includes_managed_observability_attrs() -> None:
     assert attrs["session_id"] == "sess-1"
     assert attrs["agent_instance_id"] == "inst-1"
     assert attrs["template_agent_id"] == "template-1"
-    assert attrs["checkpoint_id"] == "cp-1"
+    assert "checkpoint_id" not in attrs
     assert attrs["trace_id"] == "trace-1"
     assert attrs["correlation_id"] == "corr-1"
     assert attrs["execution_action"] == "resume"
+
+
+def _observed_context() -> tuple[
+    NodeContext, _RecordingTracer, InMemoryMetricsProvider
+]:
+    tracer = _RecordingTracer()
+    metrics = InMemoryMetricsProvider()
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(tracer=tracer, metrics=metrics),
+        model=None,
+        graph_agent_id="template-1",
+        node_id="node-1",
+        allowed_tool_refs=frozenset(),
+        runtime_tools={},
+        tuning_values={},
+        sink=lambda _event: None,
+    )
+    return context, tracer, metrics
+
+
+def _only_span(tracer: _RecordingTracer) -> _RecordingSpan:
+    (call,) = tracer.calls
+    return cast(_RecordingSpan, call["span"])
+
+
+def test_observe_marks_a_completed_call_ok() -> None:
+    context, tracer, metrics = _observed_context()
+
+    with _observe(
+        context,
+        "v2.graph.tool",
+        {"tool_ref": "t"},
+        phase="v2_graph_tool",
+        dims={"tool_name": "t"},
+    ):
+        pass
+
+    span = _only_span(tracer)
+    assert span.ended and span.attributes["status"] == "ok"
+    (timer,) = metrics.timers
+    assert timer.dims["status"] == "ok"
+    assert timer.dims["phase"] == "v2_graph_tool"
+    assert timer.dims["agent_step"] == "node-1"
+    assert timer.dims["node_id"] == "node-1"
+    assert timer.dims["tool_name"] == "t"
+
+
+def test_observe_marks_an_error_result_without_an_exception() -> None:
+    context, tracer, metrics = _observed_context()
+
+    with _observe(context, "v2.graph.tool", {}, phase="v2_graph_tool") as obs:
+        obs.fail()
+
+    assert _only_span(tracer).attributes["status"] == "error"
+    assert metrics.timers[0].dims["status"] == "error"
+
+
+def test_observe_marks_a_raising_call_and_still_ends_its_span() -> None:
+    context, tracer, metrics = _observed_context()
+
+    def failing_call() -> None:
+        with _observe(context, "v2.graph.tool", {}, phase="v2_graph_tool"):
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        failing_call()
+
+    span = _only_span(tracer)
+    assert span.ended and span.attributes["status"] == "error"
+    assert metrics.timers[0].dims["status"] == "error"
+
+
+def test_observe_without_a_phase_records_a_span_only() -> None:
+    context, tracer, metrics = _observed_context()
+
+    with _observe(context, "v2.graph.fs_write", {"path": "a.md"}):
+        pass
+
+    assert _only_span(tracer).attributes["status"] == "ok"
+    assert metrics.timers == []

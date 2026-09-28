@@ -225,7 +225,7 @@ def test_awaiting_human_sets_stop_and_hitl_payload() -> None:
         "question": "Do you want to proceed?",
         "choices": [{"id": "yes", "label": "Yes"}, {"id": "no", "label": "No"}],
         "free_text": False,
-        "checkpoint_id": "cp-1",
+        "interrupt_id": "int-1",
     }
     event = {
         "kind": "awaiting_human",
@@ -243,7 +243,7 @@ def test_awaiting_human_sets_stop_and_hitl_payload() -> None:
     assert isinstance(chunk.fred.awaiting_human, HumanInputRequest)
     assert chunk.fred.awaiting_human.title == "Approve?"
     assert chunk.fred.awaiting_human.question == "Do you want to proceed?"
-    assert chunk.fred.awaiting_human.checkpoint_id == "cp-1"
+    assert chunk.fred.awaiting_human.interrupt_id == "int-1"
     assert len(chunk.fred.awaiting_human.choices) == 2
 
 
@@ -418,7 +418,7 @@ def test_awaiting_human_with_typed_hitl_object() -> None:
         title="Confirm?",
         question="Are you sure?",
         free_text=True,
-        checkpoint_id="cp-99",
+        interrupt_id="int-99",
     )
     event = {
         "kind": "awaiting_human",
@@ -431,4 +431,4 @@ def test_awaiting_human_with_typed_hitl_object() -> None:
     assert chunk.fred is not None
     assert isinstance(chunk.fred.awaiting_human, HumanInputRequest)
     assert chunk.fred.awaiting_human.title == "Confirm?"
-    assert chunk.fred.awaiting_human.checkpoint_id == "cp-99"
+    assert chunk.fred.awaiting_human.interrupt_id == "int-99"

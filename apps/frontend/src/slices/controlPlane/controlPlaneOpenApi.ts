@@ -3380,7 +3380,7 @@ export type SessionListItem = {
   updated_at?: string | null;
 };
 export type CreateSessionRequest = {
-  /** Frontend-generated UUID. */
+  /** Frontend-generated UUID. Must not contain ':', which pods reserve to name graph threads. */
   session_id: string;
   agent_instance_id?: string | null;
   title?: string | null;

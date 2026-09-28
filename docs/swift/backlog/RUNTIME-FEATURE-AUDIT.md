@@ -309,15 +309,15 @@ It is not:
 ### 7.1 Interrupt signaling
 
 **Status:** ✅
-**Files:** `fred_sdk/contracts/runtime.py:HitlInterruptEvent`
-**Event:** `{"kind": "hitl_interrupt", "question": "...", "checkpoint_id": "..."}`
+**Files:** `fred_sdk/contracts/runtime.py:AwaitingHumanRuntimeEvent`
+**Event:** `{"kind": "awaiting_human", "request": {"question": "...", "interrupt_id": "..."}}`
 
 ### 7.2 Resume request
 
 **Status:** ✅
 **Files:**
 
-- `agent_app.py:RuntimeExecuteRequest` — `checkpoint_id`, `resume_payload` fields
+- `agent_app.py:RuntimeExecuteRequest` — `interrupt_id`, `resume_payload` fields
 - `agent_app.py:_validate_session_checkpoint_access()` — consistency check
 
 ### 7.3 End-to-end HITL validation

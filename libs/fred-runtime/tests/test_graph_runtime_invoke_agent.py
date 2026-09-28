@@ -20,10 +20,10 @@ output + per-call scope + bounded-retry behaviour against a fake invoker.
 
 import asyncio
 
-from fred_runtime.graph.graph_runtime import (
+from fred_runtime.graph.node_context import (
+    NodeContext,
     _coerce_structured_payload,
     _extract_json_object,
-    _GraphNodeExecutionContext,
 )
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
@@ -58,7 +58,7 @@ class _FakeInvoker(AgentInvokerPort):
         )
 
 
-def _context(invoker: AgentInvokerPort) -> _GraphNodeExecutionContext:
+def _context(invoker: AgentInvokerPort) -> NodeContext:
     binding = BoundRuntimeContext(
         runtime_context=RuntimeContext(session_id="s", user_id="u", team_id="t"),
         portable_context=PortableContext(
@@ -72,7 +72,7 @@ def _context(invoker: AgentInvokerPort) -> _GraphNodeExecutionContext:
             team_id="t",
         ),
     )
-    return _GraphNodeExecutionContext(
+    return NodeContext(
         binding=binding,
         services=RuntimeServices(agent_invoker=invoker),
         model=None,
@@ -81,6 +81,7 @@ def _context(invoker: AgentInvokerPort) -> _GraphNodeExecutionContext:
         allowed_tool_refs=frozenset(),
         runtime_tools={},
         tuning_values={},
+        sink=lambda _event: None,
     )
 
 

@@ -33,7 +33,7 @@ Do not skip this. Open and skim:
   failures onto that typed error so capability tools can render `is_error`
   results without importing any HTTP stack).
   **Implement `tools()` — it is the primary authoring surface, execution-model-agnostic
-  (works on both ReAct and Graph agents).** `middleware()` has a default that wraps
+  (works on ReAct, Deep and Graph agents).** `middleware()` has a default that wraps
   `tools()`; only override it directly for a hook `tools()` cannot express (see Step 3).
 - **The canonical worked example** — `libs/capabilities/fred-capability-document-access/fred_capability_document_access/capability.py`
   (`DocumentAccessCapability`, #1906): a real tool wired to a platform service through a
@@ -113,13 +113,19 @@ do not fold tools into the `middleware()` override, or they vanish for Graph age
 
 | Need | Hook |
 | --- | --- |
-| Add tools | `tools(ctx)` — execution-model-agnostic, works on ReAct and Graph |
+| Add tools | `tools(ctx)` — execution-model-agnostic, works on ReAct, Deep and Graph |
 | Tool built at chat time | `middleware()` override, `wrap_model_call` editing `request.tools` `[T2]` — ReAct only |
 | Runtime context split from LLM args | `CapabilityContext` via the closure (either surface) |
 | Edit conversation state | `middleware()` override, `before_model` returning a state-update dict `[T2]` — ReAct only |
 | System-prompt fragment | `middleware()` override, `wrap_model_call` / `modify_model_request` — ReAct only |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free (ReAct only) |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
+
+Tools keep their original LangChain objects across runtimes. Use native `ainvoke`
+semantics and `content_and_artifact` for structured Fred results; no Graph wrapper
+or runtime-specific tool implementation is needed. `HitlSpec` works on all three
+parent runtimes; Deep children cannot open a human wait. See `AUTHORING.md` for
+Graph replay and idempotency constraints.
 
 Chat-time controls → return `ChatControlSpec`s from `chat_controls(config)` (computed at
 prep, never persisted). Stock widget params (`DocumentScopeControlParams`,

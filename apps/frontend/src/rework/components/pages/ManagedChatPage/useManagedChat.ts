@@ -469,6 +469,65 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [attachments.addFiles, ensureSessionForAttachments],
   );
 
+  // The composer's context for one turn, shared by send and HITL resume so a
+  // resumed turn keeps the user's search scope, attachments and reasoning choice.
+  const buildTurnContext = useCallback(() => {
+    // `document_scope`'s params carry the same `bound_library_ids` the retired
+    // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
+    // MCP-server-bound library scope the picker cannot override.
+    const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
+    const boundLibraryIds =
+      (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ?? null;
+    // The picker's per-turn selection reaches the OWNING capability's typed
+    // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
+    // `document_access` declares a TurnOptionsModel for it. The MCP
+    // capability's document_scope widget reads RuntimeContext (built below)
+    // and validates turn_options against EmptyModel, so sending it a slice
+    // is a typed 422.
+    const turnOptions =
+      documentScopeControl && documentScopeControl.capability_id === "document_access"
+        ? {
+            [documentScopeControl.capability_id]: {
+              library_tag_ids: composer.selectedLibraryIds,
+              document_uids: composer.selectedDocumentUids,
+            },
+          }
+        : undefined;
+    // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
+    // platform chat option, not a capability's turn_options slice — it travels
+    // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
+    // when the composer actually offers the control: its absence means the
+    // agent does not offer reasoning (or a gate upstream is closed, §8), and
+    // that must reach the runtime as "no choice made", never as an explicit
+    // `false` that would suppress reasoning the agent never offered to begin
+    // with.
+    const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
+    return {
+      runtimeContext: buildComposerRuntimeContext({
+        selectedLibraryIds: composer.selectedLibraryIds,
+        selectedDocumentUids: composer.selectedDocumentUids,
+        searchPolicy: composer.searchPolicy,
+        ragScope: composer.ragScope,
+        boundLibraryIds,
+        attachmentsMarkdown: attachments.attachmentsMarkdown,
+        ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
+      }),
+      turnOptions,
+    };
+  }, [
+    attachments.attachmentsMarkdown,
+    chatControls,
+    composer.selectedLibraryIds,
+    composer.selectedDocumentUids,
+    composer.searchPolicy,
+    composer.ragScope,
+    composer.reasoning,
+  ]);
+
+  // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
+  const buildTurnContextRef = useRef(buildTurnContext);
+  buildTurnContextRef.current = buildTurnContext;
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     const attachmentContext = attachments.attachmentsMarkdown;
@@ -527,55 +586,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       // wipe text the user still needs to retry with; see useChatSse.ts.
       setPendingHitl(null);
       console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
-      // `document_scope`'s params carry the same `bound_library_ids` the retired
-      // `EffectiveChatOptions.bound_library_ids` did (CAPAB-01 #1976) — an
-      // MCP-server-bound library scope the picker cannot override.
-      const documentScopeControl = chatControls.find((c) => c.widget === "document_scope");
-      const boundLibraryIds =
-        (documentScopeControl?.params as { bound_library_ids?: string[] | null } | undefined)?.bound_library_ids ??
-        null;
-      // The picker's per-turn selection reaches the OWNING capability's typed
-      // `turn_options[capability_id]` slice (RFC §3.5) — but ONLY
-      // `document_access` declares a TurnOptionsModel for it. The MCP
-      // capability's document_scope widget reads RuntimeContext (built below)
-      // and validates turn_options against EmptyModel, so sending it a slice
-      // is a typed 422.
-      const turnOptions =
-        documentScopeControl && documentScopeControl.capability_id === "document_access"
-          ? {
-              [documentScopeControl.capability_id]: {
-                library_tag_ids: composer.selectedLibraryIds,
-                document_uids: composer.selectedDocumentUids,
-              },
-            }
-          : undefined;
-      // REASON-01 level 4 (MODEL-REASONING-ENABLEMENT-RFC.md §7): reasoning is a
-      // platform chat option, not a capability's turn_options slice — it travels
-      // on RuntimeContext exactly like search policy and RAG scope. Sent ONLY
-      // when the composer actually offers the control: its absence means the
-      // agent does not offer reasoning (or a gate upstream is closed, §8), and
-      // that must reach the runtime as "no choice made", never as an explicit
-      // `false` that would suppress reasoning the agent never offered to begin
-      // with.
-      const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
+      const { runtimeContext, turnOptions } = buildTurnContext();
       touchSessionActivity(sid);
       // `send()` receives the trimmed wire value, but a backend rejection must
       // restore the complete editable draft, including surrounding whitespace.
       submittedDraftRef.current = { sessionId: sid, draft: input };
-      send(
-        text,
-        sid,
-        buildComposerRuntimeContext({
-          selectedLibraryIds: composer.selectedLibraryIds,
-          selectedDocumentUids: composer.selectedDocumentUids,
-          searchPolicy: composer.searchPolicy,
-          ragScope: composer.ragScope,
-          boundLibraryIds,
-          attachmentsMarkdown: attachmentContext,
-          ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
-        }),
-        turnOptions,
-      );
+      send(text, sid, runtimeContext, turnOptions);
     } finally {
       handleSendOwnerRef.current = false;
     }
@@ -587,13 +603,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     inputTooLong,
     waitResponse,
     sessionId,
-    chatControls,
+    buildTurnContext,
     composer.bindSession,
-    composer.selectedLibraryIds,
-    composer.selectedDocumentUids,
-    composer.searchPolicy,
-    composer.ragScope,
-    composer.reasoning,
     bindSessionId,
     createSessionRow,
     flushSessionWrites,
@@ -640,7 +651,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // the slot and must not be stomped.
         setPendingHitl((current) => current ?? prompt);
       };
-      void sendHitlResume(prompt, answer, freeText)
+      const { runtimeContext, turnOptions } = buildTurnContextRef.current();
+      void sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions)
         .then((reached) => {
           if (reached) {
             if (hitlDraftOwnerRef.current === draftOwner) setHitlFreeText("");

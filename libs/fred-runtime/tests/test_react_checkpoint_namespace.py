@@ -26,7 +26,7 @@ ReAct V2 HITL resume in a 409 until the reader was aligned back on `""`.
 from typing import Any, TypedDict, cast
 
 import pytest
-from fred_runtime.app.agent_app import _resume_checkpoint_namespaces
+from fred_runtime.app.agent_app import _resume_checkpoint_locations
 from fred_runtime.react.react_message_codec import to_runnable_config
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.runtime_support.checkpoints import checkpoint_namespace
@@ -145,11 +145,22 @@ def test_to_runnable_config_carries_only_the_thread_id() -> None:
     assert configurable == {"thread_id": "session-1"}
 
 
-def test_react_resume_probes_the_unnamespaced_checkpoint_first() -> None:
+def test_react_checkpoint_namespace_uses_managed_instance_when_available() -> None:
+    assert (
+        checkpoint_namespace(
+            agent_instance_id="managed-456",
+            agent_id="react.agent",
+        )
+        == "managed-456"
+    )
+
+
+def test_resume_probes_the_graph_thread_then_the_session_thread() -> None:
     """
-    A ReAct V2 resume (`interrupt_id`, never `checkpoint_id`) must look under
-    `""` — where its checkpoint really is — before the per-agent namespace,
-    even though the request carries a managed instance id.
+    A resume may target a graph agent, paused on its own thread
+    (`graph_thread_id`), or a ReAct agent, paused on the session thread. Both
+    live at namespace "" (LangGraph resets it on every root run); the graph
+    thread only exists for a graph agent, so ReAct falls through unchanged.
     """
 
     request = RuntimeExecuteRequest(
@@ -160,29 +171,13 @@ def test_react_resume_probes_the_unnamespaced_checkpoint_first() -> None:
         resume_payload={"choice_id": "proceed"},
     )
 
-    assert _resume_checkpoint_namespaces(request) == ("", "instance-123")
-
-
-def test_graph_resume_probes_only_the_agent_namespace() -> None:
-    """
-    The hand-rolled Graph runtime writes through `aput` itself, so its
-    per-agent namespace does reach storage — and its executor reads nowhere
-    else. A `checkpoint_id`-carrying resume must not be waved past the gate on
-    an unnamespaced checkpoint it would then fail to load mid-stream.
-    """
-
-    request = RuntimeExecuteRequest(
-        agent_instance_id="instance-123",
-        runtime_context=RuntimeContext(team_id="synthetic-team"),
-        session_id="session-1",
-        checkpoint_id="stored-checkpoint-id",
-        resume_payload={"choice_id": "proceed"},
+    assert _resume_checkpoint_locations(request, "session-1") == (
+        ("session-1:instance-123", ""),
+        ("session-1", ""),
     )
 
-    assert _resume_checkpoint_namespaces(request) == ("instance-123",)
 
-
-def test_resume_namespaces_fall_back_to_the_template_agent_id() -> None:
+def test_resume_locations_fall_back_to_the_template_agent_id() -> None:
     """An unmanaged (template) agent has no instance id to namespace on."""
 
     request = RuntimeExecuteRequest(
@@ -192,14 +187,7 @@ def test_resume_namespaces_fall_back_to_the_template_agent_id() -> None:
         resume_payload={"choice_id": "proceed"},
     )
 
-    assert _resume_checkpoint_namespaces(request) == ("", "react.agent")
-
-
-def test_react_checkpoint_namespace_uses_managed_instance_when_available() -> None:
-    assert (
-        checkpoint_namespace(
-            agent_instance_id="managed-456",
-            agent_id="react.agent",
-        )
-        == "managed-456"
+    assert _resume_checkpoint_locations(request, "session-1") == (
+        ("session-1:react.agent", ""),
+        ("session-1", ""),
     )

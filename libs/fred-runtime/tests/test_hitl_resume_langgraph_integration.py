@@ -57,7 +57,7 @@ from __future__ import annotations
 from typing import Annotated, Any, cast
 
 import pytest
-from fred_runtime.app.agent_app import _pending_react_v2_interrupt_occurrences
+from fred_runtime.app.agent_app import _pending_interrupt_occurrences
 from fred_runtime.react.react_message_codec import graph_input_from_react_input
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
 from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
@@ -363,7 +363,6 @@ async def test_hitl_resume_identity_model_against_real_langgraph_and_sql_checkpo
         request_a = extract_interrupt_request(interrupt_update_a)
         assert request_a is not None
         assert request_a.interrupt_id == interrupt_a.id
-        assert request_a.checkpoint_id is None  # never aliased
 
         assert effects == []  # nothing executed yet — still pending approval
 
@@ -519,7 +518,7 @@ async def test_paused_checkpoint_is_stored_unnamespaced_whatever_the_config_asks
         loaded = await load_checkpoint(reader, thread_id=thread_id)
         assert loaded is not None
         _, pending_writes = loaded
-        assert _pending_react_v2_interrupt_occurrences(pending_writes) == frozenset(
+        assert _pending_interrupt_occurrences(pending_writes) == frozenset(
             {(interrupt.id, None)}
         )
     finally:

@@ -20,8 +20,9 @@ from typing import Any, Literal
 from fred_core.common import TeamId
 from fred_sdk.contracts.capability import CapabilityCatalogEntry, ChatControlDescriptor
 from fred_sdk.contracts.context import ModelBinding
+from fred_sdk.contracts.execution import SESSION_ID_RESERVED_CHAR, check_session_id
 from fred_sdk.contracts.models import TuningValue
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from control_plane_backend.agent_instances.suspension import SuspensionReason
 from control_plane_backend.config.models import (
@@ -721,9 +722,23 @@ class UpdatePromptCategoryRequest(BaseModel):
 class CreateSessionRequest(BaseModel):
     """Register session metadata in control-plane at session creation time."""
 
-    session_id: str = Field(..., min_length=1, description="Frontend-generated UUID.")
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Frontend-generated UUID. Must not contain "
+            f"{SESSION_ID_RESERVED_CHAR!r}, which pods reserve to name graph threads."
+        ),
+    )
     agent_instance_id: str | None = Field(default=None)
     title: str | None = Field(default=None, max_length=500)
+
+    @field_validator("session_id")
+    @classmethod
+    def _session_id_is_runnable(cls, session_id: str) -> str:
+        # A session id no pod accepts would be registered but never runnable.
+        check_session_id(session_id)
+        return session_id
 
 
 class UpdateSessionRequest(BaseModel):

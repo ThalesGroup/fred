@@ -203,19 +203,18 @@ class TestExecute:
     def test_optional_fields_included_when_provided(self) -> None:
         body, _ = self._capture_execute(
             agent_instance_id="inst-1",
-            checkpoint_id="chk-1",
             resume_payload={"step": 2},
             inline_tuning={"prompts.system": "override"},
         )
         assert body["agent_instance_id"] == "inst-1"
-        assert body["checkpoint_id"] == "chk-1"
+        assert "checkpoint_id" not in body
         assert "interrupt_id" not in body
         assert body["resume_payload"] == {"step": 2}
         assert body["inline_tuning"] == {"prompts.system": "override"}
 
     def test_interrupt_and_occurrence_ids_included_when_provided(self) -> None:
         # #2216 — the ReAct V2 HITL resume identifier, forwarded
-        # independently of (never together with, in real use) checkpoint_id.
+        # on its own.
         body, _ = self._capture_execute(
             interrupt_id="interrupt-a",
             occurrence_id="call-a",

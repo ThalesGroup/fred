@@ -92,5 +92,5 @@ shapes or endpoints.
 
 - The estimation mechanism itself (shipped) — durable "what/why" lives with the
   code and the token-usage presets, not here.
-- Per-step (per-message) footprint attribution — see
-  `TRACE-TOKEN-USAGE-RFC.md` §5, deliberately out of scope there too.
+- Per-step (per-message) footprint attribution — deliberately out of scope,
+  as for token usage (`RUNTIME-EXECUTION-CONTRACT.md` §5 "Token accounting").

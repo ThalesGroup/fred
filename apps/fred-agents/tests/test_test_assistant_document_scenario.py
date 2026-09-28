@@ -41,6 +41,9 @@ import pytest
 from fred_agents.test_assistant.graph_agent import TestAssistantGraphAgent
 from fred_agents.test_assistant.graph_state import TestInput
 from fred_capability_document_access import DocumentAccessCapability
+from fred_capability_documents.document_summarize.capability import (
+    DocumentSummarizeCapability,
+)
 from fred_core.store import VectorSearchHit
 from fred_runtime.capabilities import (
     CapabilityRegistry,
@@ -59,9 +62,12 @@ from fred_sdk.contracts.runtime import (
     AwaitingHumanRuntimeEvent,
     DocumentSearchPort,
     DocumentSearchResult,
+    DocumentSummarizePort,
+    DocumentSummaryResult,
     ExecutionConfig,
     FinalRuntimeEvent,
     RuntimeServices,
+    ToolCallRuntimeEvent,
 )
 
 
@@ -106,16 +112,22 @@ def _binding() -> BoundRuntimeContext:
     )
 
 
-def _document_access_capability_block(services: RuntimeServices):
+def _document_access_capability_block(
+    services: RuntimeServices, *, summarize: bool = False
+):
     """Assemble a real `CapabilityAgentBlock` the way `agent_app.py` would
     for a managed instance with `tuning.selected_capability_ids =
     ["document_access"]` — never declared on `TestAssistantGraphAgent`."""
 
     registry = CapabilityRegistry()
     registry.register(DocumentAccessCapability())
+    selected = ["document_access"]
+    if summarize:
+        registry.register(DocumentSummarizeCapability())
+        selected.append("document_summarize")
     contexts = build_capability_contexts(
         registry,
-        selected_capability_ids=["document_access"],
+        selected_capability_ids=selected,
         capability_config={},
         identity=CapabilityIdentity(user_id="u1", session_id="s1", team_id="t1"),
         services=services,
@@ -183,3 +195,75 @@ async def test_document_scenario_without_capability_selected_degrades_gracefully
     final = next(e for e in events if isinstance(e, FinalRuntimeEvent))
     assert "Document access" in final.content
     assert "capability" in final.content.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("decision", ["proceed", "cancel"])
+async def test_document_summary_uses_capability_gate_without_replaying_search(
+    decision: str,
+) -> None:
+    """The actual scenario pauses before summarization and obeys the capability decision."""
+    searches: list[str] = []
+    summaries: list[str] = []
+
+    class Search(_FakeDocumentSearchPort):
+        async def search(self, query, **kwargs):
+            searches.append(query)
+            return await super().search(query, **kwargs)
+
+    class Summarize(DocumentSummarizePort):
+        async def summarize(self, document_uid, *, instruction=None, max_chars=2000):
+            summaries.append(document_uid)
+            assert instruction == "Résume ce document en cinq points clés."
+            assert max_chars == 1500
+            return DocumentSummaryResult(
+                document_uid=document_uid, summary="Five points about Fred."
+            )
+
+    services = RuntimeServices(document_search=Search(), document_summarize=Summarize())
+    runtime = GraphRuntime(
+        definition=TestAssistantGraphAgent(),
+        services=services,
+        capability_block=_document_access_capability_block(services, summarize=True),
+    )
+    runtime.bind(_binding())
+    executor = await runtime.get_executor()
+    events = [
+        event
+        async for event in executor.stream(
+            TestInput(message="document summarize what is fred"),
+            ExecutionConfig(session_id="s1"),
+        )
+    ]
+    pause = next(e for e in events if isinstance(e, AwaitingHumanRuntimeEvent))
+    assert pause.request.stage == "tool_approval"
+    assert pause.request.pending_calls[0].tool_name == "summarize_document"
+    assert summaries == []
+    assert searches == ["what is fred"]
+    resumed = [
+        event
+        async for event in executor.stream(
+            TestInput(message="document summarize what is fred"),
+            ExecutionConfig(
+                session_id="s1",
+                interrupt_id=pause.request.interrupt_id,
+                resume_payload={"choice_id": decision},
+            ),
+        )
+    ]
+    assert searches == ["what is fred"]
+    assert not any(isinstance(e, AwaitingHumanRuntimeEvent) for e in resumed)
+    assert not any(
+        isinstance(e, ToolCallRuntimeEvent)
+        and e.tool_name == "search_documents_using_vectorization"
+        for e in resumed
+    )
+    final = next(e for e in resumed if isinstance(e, FinalRuntimeEvent))
+    if decision == "proceed":
+        assert summaries == ["doc-fred-1"]
+        assert final.content == "Five points about Fred."
+        assert final.sources[0].uid == "doc-fred-1"
+    else:
+        assert summaries == []
+        assert "not approved" in final.content
+        assert not final.sources

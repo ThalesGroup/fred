@@ -22,7 +22,7 @@ Why this file exists:
   no scalar `Command(resume=payload)` fallback, because a scalar resume
   gives LangGraph no identity to match against at all
 - proves a normal (non-resume) turn is unaffected and never even looks at
-  `interrupt_id`/`checkpoint_id`
+  `interrupt_id`
 """
 
 from __future__ import annotations
@@ -63,24 +63,6 @@ def test_resume_without_interrupt_id_fails_closed() -> None:
     # an unscoped scalar resume — it must fail loudly instead.
     config = ExecutionConfig(
         session_id="s1",
-        resume_payload={"choice_id": "proceed"},
-    )
-
-    with pytest.raises(RuntimeError, match="interrupt_id"):
-        graph_input_from_react_input(
-            ReActInput.model_construct(messages=()),
-            config,
-            sanitize_tool_name=_sanitize,
-        )
-
-
-def test_resume_with_only_checkpoint_id_still_fails_closed() -> None:
-    # checkpoint_id is the legacy Graph V2 field — this codec is exclusively
-    # used by the ReAct V2 runtime, so a checkpoint_id with no interrupt_id
-    # must not be treated as an acceptable substitute.
-    config = ExecutionConfig(
-        session_id="s1",
-        checkpoint_id="cp-1",
         resume_payload={"choice_id": "proceed"},
     )
 

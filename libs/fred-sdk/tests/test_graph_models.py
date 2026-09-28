@@ -202,46 +202,6 @@ class TestGraphTopologyConditionals:
 
 
 # ---------------------------------------------------------------------------
-# GraphDefinition.validate_topology — parallel groups
-# ---------------------------------------------------------------------------
-
-
-class TestGraphTopologyParallelGroups:
-    def _graph_with_group(self, group: tuple[str, ...]) -> GraphDefinition:
-        return GraphDefinition(
-            state_model_name="State",
-            entry_node="fanout",
-            nodes=(
-                _node("fanout"),
-                _node("fanin"),
-                _node("worker_a"),
-                _node("worker_b"),
-            ),
-            parallel_groups=(group,),
-        )
-
-    def test_valid_parallel_group(self) -> None:
-        g = self._graph_with_group(("fanout", "fanin", "worker_a", "worker_b"))
-        assert len(g.parallel_groups) == 1
-
-    def test_too_few_entries_rejected(self) -> None:
-        with pytest.raises(Exception, match="at least 4"):
-            self._graph_with_group(("fanout", "fanin", "worker_a"))
-
-    def test_unknown_node_in_group_rejected(self) -> None:
-        with pytest.raises(Exception, match="unknown node"):
-            self._graph_with_group(("fanout", "fanin", "worker_a", "ghost"))
-
-    def test_duplicate_members_rejected(self) -> None:
-        with pytest.raises(Exception, match="duplicate member"):
-            self._graph_with_group(("fanout", "fanin", "worker_a", "worker_a"))
-
-    def test_fanout_as_member_rejected(self) -> None:
-        with pytest.raises(Exception, match="fan_out and fan_in"):
-            self._graph_with_group(("fanout", "fanin", "fanout", "worker_b"))
-
-
-# ---------------------------------------------------------------------------
 # GraphDefinition.validate_topology — on_error references
 # ---------------------------------------------------------------------------
 

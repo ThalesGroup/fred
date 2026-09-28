@@ -811,6 +811,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
 
                 for message in _extract_messages_from_update(update):
                     if isinstance(message, ToolMessage):
+                        # Approval feedback is model context, not an executed tool result.
+                        if message.additional_kwargs.get("fred_tool_approval_rejected"):
+                            continue
                         artifact = _normalize_tool_artifact(message.artifact)
                         sources = artifact.sources if artifact is not None else ()
                         ui_parts = artifact.ui_parts if artifact is not None else ()

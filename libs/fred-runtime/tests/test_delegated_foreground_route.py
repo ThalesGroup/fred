@@ -627,7 +627,7 @@ async def test_a_human_pause_ends_the_stream(monkeypatch, tmp_path) -> None:
 
     async def stream() -> AsyncGenerator[RuntimeEvent, None]:
         yield AwaitingHumanRuntimeEvent(
-            request=HumanInputRequest(question="Proceed?", checkpoint_id="cp-a")
+            request=HumanInputRequest(question="Proceed?", interrupt_id="interrupt-a")
         )
 
     app = _person_pod(monkeypatch, tmp_path)
@@ -664,7 +664,7 @@ async def test_repeated_cancellation_waits_for_disposal_and_child_cleanup(
         register_run_child(task)
         children.append(task)
         yield AwaitingHumanRuntimeEvent(
-            request=HumanInputRequest(question="Proceed?", checkpoint_id="cp-a")
+            request=HumanInputRequest(question="Proceed?", interrupt_id="interrupt-a")
         )
 
     async def dispose() -> None:

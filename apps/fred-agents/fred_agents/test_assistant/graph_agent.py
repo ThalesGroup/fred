@@ -38,6 +38,7 @@ Tool coverage:
                        artifacts.publish_text (required=False, toggleable)
 
 Capability coverage:
+  document summarize  Search then summarize through the capability approval gate.
   document scenario   AgentCapability tool invocation via
                        context.invoke_runtime_tool (NOTES-GRAPH-CAPABILITY-BRIDGE.md).
                        "document_access" is selected per-instance via
@@ -61,10 +62,18 @@ Workflow overview (keyword-routed by dispatch_step):
      ├─ files       ──► files_step        ──► finalize
      ├─ geo         ──► geo_step          ──► finalize
      ├─ document    ──► document_step     ──► finalize
+     ├─ assist      ──► assist_route ─┬─ search ─► assist_search ─► assist_draft
+     │                                └─ direct ─────────────────► assist_draft
+     │                  assist_draft ─► assist_review [HITL] ─► assist_confirm [HITL]
+     │                  ─► assist_commit ─► finalize  (discard / keep ─► finalize)
+     ├─ delegate    ──► delegate_step     ──► finalize
+     ├─ crash       ──► crash_step  (raises, no on_error: the turn fails)
+     ├─ graph check ──► graph_check_step ──► finalize  (live conformance run)
      └─ fallback    ──► fallback_step     ──► finalize
 
-No model provider is needed. No MCP servers are required.
-The agent can run in any fred-agents pod that has fred_sdk installed.
+No model provider is needed: model-backed branches fall back to fixed text.
+No MCP servers are required. The state is conversational: each completed turn
+is appended to `conversation_history` and carried into the next one.
 """
 
 from __future__ import annotations
@@ -79,12 +88,20 @@ from fred_sdk import (
     ToolRefRequirement,
     UIHints,
 )
-from fred_sdk.contracts.context import GeoPart, LinkPart
+from fred_sdk.contracts.context import ConversationTurn, GeoPart, LinkPart
 from fred_sdk.graph.runtime import GraphExecutionOutput
 from pydantic import BaseModel
 
-from .graph_state import TestInput, TestState
+from .graph_state import TEST_ASSISTANT_AGENT_ID, TestInput, TestState
 from .graph_steps import (
+    assist_commit_step,
+    assist_confirm_step,
+    assist_draft_step,
+    assist_review_step,
+    assist_route_step,
+    assist_search_step,
+    crash_step,
+    delegate_step,
     dispatch_step,
     document_step,
     echo_step,
@@ -93,6 +110,7 @@ from .graph_steps import (
     files_step,
     finalize_step,
     geo_step,
+    graph_check_step,
     hitl_choice_step,
     hitl_text_step,
     long_step,
@@ -141,7 +159,10 @@ class TestAssistantGraphAgent(GraphAgent):
     the corresponding workflow branch. Send anything else to see the help menu.
     """
 
-    agent_id: str = "fred.github.test_assistant"
+    __test__ = False  # an agent definition, not a pytest test class
+
+    agent_id: str = TEST_ASSISTANT_AGENT_ID
+    supports_capabilities: bool = True
     role: str = "Test Assistant (no LLM)"
     description: str = (
         "Graph agent for UI and form testing (no LLM by default). "
@@ -347,10 +368,24 @@ class TestAssistantGraphAgent(GraphAgent):
             "files": files_step,
             "geo": geo_step,
             "document": document_step,
+            "assist_route": assist_route_step,
+            "assist_search": assist_search_step,
+            "assist_draft": assist_draft_step,
+            "assist_review": assist_review_step,
+            "assist_confirm": assist_confirm_step,
+            "assist_commit": assist_commit_step,
+            "delegate": delegate_step,
+            "crash": crash_step,
+            "graph_check": graph_check_step,
             "fallback": fallback_step,
             "finalize": finalize_step,
         },
         edges={
+            "assist_search": "assist_draft",
+            "assist_draft": "assist_review",
+            "assist_commit": "finalize",
+            "delegate": "finalize",
+            "graph_check": "finalize",
             "echo": "finalize",
             "model_probe": "finalize",
             "hitl_choice": "finalize",
@@ -368,6 +403,8 @@ class TestAssistantGraphAgent(GraphAgent):
         error_routes={
             "error": "finalize",
             "dispatch": "finalize",
+            # A failed search degrades to a direct answer, as a real agent would.
+            "assist_search": "assist_draft",
         },
         routes={
             "dispatch": {
@@ -384,10 +421,37 @@ class TestAssistantGraphAgent(GraphAgent):
                 "files": "files",
                 "geo": "geo",
                 "document": "document",
+                "assist": "assist_route",
+                "delegate": "delegate",
+                "crash": "crash",
+                "graph_check": "graph_check",
                 "fallback": "fallback",
+            },
+            "assist_route": {
+                "search": "assist_search",
+                "direct": "assist_draft",
+            },
+            "assist_review": {
+                "approved": "assist_confirm",
+                "discarded": "finalize",
+            },
+            "assist_confirm": {
+                "publish": "assist_commit",
+                "keep": "finalize",
             },
         },
     )
+
+    def build_completed_state(self, state: BaseModel) -> BaseModel:
+        """Append this turn to `conversation_history` so the next turn sees it."""
+        assert isinstance(state, TestState)
+        turn = ConversationTurn(
+            user_message=state.latest_user_text,
+            agent_response=state.final_text or "",
+        )
+        return state.model_copy(
+            update={"conversation_history": (*state.conversation_history, turn)}
+        )
 
     def build_output(self, state: BaseModel) -> BaseModel:
         """

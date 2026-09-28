@@ -24,9 +24,6 @@ Why this file exists:
   `repl.py`'s interactive loop performs, exercised here through
   `run_single_turn` + `AgentPodClient` directly (no `input()` prompts to
   drive).
-- also proves checkpoint_id (the unrelated legacy Graph V2 field) keeps
-  round-tripping independently, and that a resume with neither id set
-  (a Graph V2 caller that never received one) still works.
 
 AgentPodClient accepts an injected httpx.Client, so the pod is a scripted
 httpx.MockTransport — no network traffic, no real pod.
@@ -74,10 +71,9 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
     """
     The exact sequence #2216 broke: (1) a turn pauses on a ReAct V2 HITL
     gate — the pod's response carries `request.interrupt_id`, LangGraph's
-    own `Interrupt.id`, and no `checkpoint_id` at all; (2) the CLI must
-    extract that `interrupt_id` (exactly like `repl.py`'s interactive loop:
-    `req.get("interrupt_id")`) and forward it — not `checkpoint_id` — on
-    the resume call; (3) the resume succeeds.
+    own `Interrupt.id`; (2) the CLI must extract that `interrupt_id`
+    (exactly like `repl.py`'s interactive loop: `req.get("interrupt_id")`)
+    and forward it on the resume call; (3) the resume succeeds.
     """
 
     pod = _ScriptedPod(
@@ -91,7 +87,6 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
                     {"id": "cancel", "label": "Cancel"},
                 ],
                 "free_text": True,
-                "checkpoint_id": None,
                 "interrupt_id": "9f3a7c2e4b1d6805af23c9de71b04f6a",
                 "occurrence_id": "call-update-ticket",
             },
@@ -116,10 +111,8 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
     assert hitl is not None
     req = hitl["request"]
     resume_interrupt_id = req.get("interrupt_id")
-    resume_checkpoint_id = req.get("checkpoint_id")
     resume_occurrence_id = req.get("occurrence_id")
     assert resume_interrupt_id == "9f3a7c2e4b1d6805af23c9de71b04f6a"
-    assert resume_checkpoint_id is None
 
     exit_code, hitl = run_single_turn(
         client=client,
@@ -131,7 +124,6 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
         verbose=False,
         stream=False,
         color_enabled=False,
-        checkpoint_id=resume_checkpoint_id,
         interrupt_id=resume_interrupt_id,
         occurrence_id=resume_occurrence_id,
         resume_payload={"choice_id": "proceed"},
@@ -143,7 +135,7 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds() -> None:
     resume_body = pod.request_bodies[1]
     assert resume_body["interrupt_id"] == "9f3a7c2e4b1d6805af23c9de71b04f6a"
     assert resume_body["occurrence_id"] == "call-update-ticket"
-    assert "checkpoint_id" not in resume_body  # None -> omitted, never aliased
+    assert "checkpoint_id" not in resume_body
     assert resume_body["resume_payload"] == {"choice_id": "proceed"}
 
 
@@ -175,7 +167,6 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds_streaming() -
                     "question": "Proceed?",
                     "choices": [],
                     "free_text": True,
-                    "checkpoint_id": None,
                     "interrupt_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
                     "occurrence_id": "call-streaming-update",
                 },
@@ -209,7 +200,6 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds_streaming() -
         verbose=False,
         stream=True,
         color_enabled=False,
-        checkpoint_id=req.get("checkpoint_id"),
         interrupt_id=req.get("interrupt_id"),
         occurrence_id=req.get("occurrence_id"),
         resume_payload={"choice_id": "proceed"},
@@ -221,59 +211,3 @@ def test_receive_real_hitl_event_echo_interrupt_id_resume_succeeds_streaming() -
     assert resume_body["interrupt_id"] == "a1b2c3d4e5f60718293a4b5c6d7e8f90"
     assert resume_body["occurrence_id"] == "call-streaming-update"
     assert "checkpoint_id" not in resume_body
-
-
-def test_legacy_graph_v2_resume_still_forwards_checkpoint_id_not_interrupt_id() -> None:
-    """Non-regression: a legacy Graph V2 pending request carries
-    `checkpoint_id`, never `interrupt_id` — the CLI must forward exactly
-    that field, unchanged from pre-#2216 behavior."""
-
-    pod = _ScriptedPod(
-        {
-            "kind": "awaiting_human",
-            "request": {
-                "title": "Confirm",
-                "question": "Proceed?",
-                "choices": [],
-                "free_text": True,
-                "checkpoint_id": "cp-legacy-123",
-                "interrupt_id": None,
-            },
-        },
-        {"kind": "final", "content": "done"},
-    )
-    client = _client(pod)
-
-    _, hitl = run_single_turn(
-        client=client,
-        agent_id="rags.sample.graph",
-        message="do the thing",
-        session_id="sess-cli-graph-v2",
-        user_id="u1",
-        team_id=None,
-        verbose=False,
-        stream=False,
-        color_enabled=False,
-    )
-    assert hitl is not None
-    req = hitl["request"]
-
-    run_single_turn(
-        client=client,
-        agent_id="rags.sample.graph",
-        message="",
-        session_id="sess-cli-graph-v2",
-        user_id="u1",
-        team_id=None,
-        verbose=False,
-        stream=False,
-        color_enabled=False,
-        checkpoint_id=req.get("checkpoint_id"),
-        interrupt_id=req.get("interrupt_id"),
-        resume_payload={"choice_id": "proceed"},
-    )
-
-    resume_body = pod.request_bodies[1]
-    assert resume_body["checkpoint_id"] == "cp-legacy-123"
-    assert "interrupt_id" not in resume_body
-    assert "occurrence_id" not in resume_body

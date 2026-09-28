@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 
+from fred_sdk.contracts.execution import check_session_id
 from fred_sdk.contracts.react_contract import (
     ReActInput,
     ReActMessage,
@@ -227,6 +228,7 @@ def to_runnable_config(config: ExecutionConfig) -> Mapping[str, object] | None:
 
     if config.session_id is not None:
         # session_id is Fred's public identity; thread_id is LangGraph's internal key.
+        check_session_id(config.session_id)
         configurable["thread_id"] = config.session_id
 
     if configurable:
@@ -265,8 +267,8 @@ def graph_input_from_react_input(
       cannot let a decision for interrupt A resume interrupt B.
     - `config.interrupt_id` is expected to already be the validated
       `Interrupt.id` for every ReAct V2 caller — this codec is exclusively
-      used by the ReAct V2 runtime (`react_runtime.py`), never the legacy
-      Graph V2 runtime. A resume without it fails closed: there is no
+      used by the ReAct V2 runtime (`react_runtime.py`). A resume without
+      it fails closed: there is no
       scalar fallback, because a scalar resume gives LangGraph no identity
       to match against at all.
 

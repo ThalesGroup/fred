@@ -91,7 +91,7 @@ function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Ma
  * `hitl_request` row for a still-open gate by the time any refresh could race
  * it. The gap was purely that nothing reconstructed the interactive prompt
  * from it, AND (fixed alongside this) `HitlRequestPart` didn't persist the
- * resume identity (`interrupt_id`/`checkpoint_id`/`pending_calls`) needed to
+ * resume identity (`interrupt_id`/`pending_calls`) needed to
  * actually answer it — only enough to display it read-only.
  *
  * Returns `null` when the last exchange's `hitl_request` (if any) already has
@@ -122,7 +122,6 @@ export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaiting
       stage: part.stage ?? null,
       interrupt_id: part.interrupt_id ?? null,
       occurrence_id: part.occurrence_id ?? null,
-      checkpoint_id: part.checkpoint_id ?? null,
       pending_calls: (part.pending_calls ?? []).map((c) => ({
         tool_call_id: c.tool_call_id ?? "",
         tool_name: c.tool_name ?? "",
@@ -261,6 +260,10 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       });
     }
 
+    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));
+    const resolvedCallIds = new Set(
+      traceMessages.flatMap((m) => m.parts.flatMap((p) => (p.type === "tool_result" ? [p.call_id] : []))),
+    );
     for (const { request: hitlReqMsg, response: hitlRespMsg } of pairHitlHistory(msgs)) {
       const requestPart = hitlRequestPart(hitlReqMsg);
       const pairId = requestPart?.occurrence_id ?? String(hitlReqMsg.rank);
@@ -282,6 +285,20 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
 
       if (hitlRespMsg) {
         const responsePart = hitlResponsePart(hitlRespMsg);
+        // Rebuild cancellations after reload; real or optimistic results take precedence.
+        if (responsePart?.choice_id === "cancel") {
+          for (const call of requestPart?.pending_calls ?? []) {
+            if (!call.tool_call_id || resolvedCallIds.has(call.tool_call_id)) continue;
+            traceMessages.push({
+              ...hitlRespMsg,
+              role: "tool",
+              channel: "tool_result",
+              parts: [{ type: "tool_result", call_id: call.tool_call_id, ok: false, content: "" }],
+              metadata: { extras: { cancelled_by_user: true } },
+            });
+            resolvedCallIds.add(call.tool_call_id);
+          }
+        }
         result.push({
           id: `${eid}:hitl_resp:${pairId}`,
           role: "hitl_response",
@@ -294,7 +311,6 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       }
     }
 
-    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));
     const finalMessages = msgs.filter((m) => {
       const ch = m.channel as string;
       return m.role !== "user" && ch !== "hitl_request" && ch !== "hitl_response" && !isTraceChannel(m.channel);

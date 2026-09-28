@@ -169,15 +169,11 @@ class ExecutionConfig(FrozenModel):
       public-facing conversation identity. Internally it is passed as
       LangGraph's `thread_id` — that mapping is an implementation detail and
       must not leak into any public API or CLI.
-    - `checkpoint_id`: a real checkpointer-storage identifier, used by the
-      legacy Graph V2 runtime to resume from a specific graph snapshot.
-      Never populated by ReAct V2 — see `interrupt_id`.
-    - `interrupt_id`: LangGraph's own `Interrupt.id` for the ReAct V2 HITL
-      occurrence being resumed (#2216). Threaded into
+    - `interrupt_id`: LangGraph's own `Interrupt.id` for the HITL occurrence
+      being resumed (ReAct and Graph agents). Threaded into
       `Command(resume={interrupt_id: resume_payload})` — LangGraph's native
       targeted resume form — so the graph itself only applies the decision
-      to the task whose `Interrupt.id` matches. Never populated for the
-      legacy Graph V2 runtime — see `checkpoint_id`.
+      to the task whose `Interrupt.id` matches.
     - `adapter_config`: optional adapter-specific config passthrough when one runtime
       bridge needs extra execution metadata.
     - `max_steps`: hard stop against runaway loops.
@@ -186,7 +182,6 @@ class ExecutionConfig(FrozenModel):
 
     checkpoint_strategy: CheckpointStrategy = CheckpointStrategy.SESSION
     session_id: str | None = None
-    checkpoint_id: str | None = None
     interrupt_id: str | None = None
     adapter_config: dict[str, object] = Field(default_factory=dict)
     max_steps: int = Field(default=100, ge=1)
@@ -247,23 +242,6 @@ class ThoughtEndEvent(RuntimeEventBase):
     duration_ms: int | None = None
 
 
-class ThoughtRecord(FrozenModel):
-    """
-    Durable record of one completed reasoning block, assembled by the runtime.
-
-    Accumulated into GraphExecutionOutput.thought_trace for evaluation harnesses
-    and session history replay. Not streamed — derived from THOUGHT_* events.
-    """
-
-    thought_id: str
-    phase: ThoughtKind
-    title: str | None = None
-    text: str = ""
-    conclusion: str | None = None
-    duration_ms: int | None = None
-    source: Literal["authored", "model_native"] = "authored"
-
-
 class ToolCallRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.TOOL_CALL] = RuntimeEventKind.TOOL_CALL
     tool_name: str = Field(..., min_length=1)
@@ -320,19 +298,16 @@ class HumanInputRequest(FrozenModel):
     Use this model to represent business questions (choice, free text, or
     both). The UI renders this object directly.
 
-    Resume identity uses three distinct fields, never aliases for each other:
-    - `checkpoint_id`: a real checkpointer-storage identifier. Populated
-      only by the legacy Graph V2 runtime (`graph_runtime.py`), which
-      validates it by exact lookup against a stored checkpoint.
-    - `interrupt_id`: LangGraph's own `Interrupt.id` for this HITL
-      task. Populated only by the ReAct V2 runtime
-      (`react_stream_adapter.py`). The frontend echoes it back verbatim on
+    Resume identity uses two distinct fields, never aliases for each other:
+    - `interrupt_id`: LangGraph's own `Interrupt.id` for this HITL task
+      (ReAct and Graph agents). The frontend echoes it back verbatim on
       resume; the backend requires an exact match against the currently
       pending interrupt and threads it into LangGraph's targeted
       `Command(resume={interrupt_id: ...})` form.
     - `occurrence_id`: one pause within an interrupt. A pause raised from a
-      tool call sets this to that call's `tool_call_id`, which is stable when
-      LangGraph replays the task on resume. Pauses outside tools omit it.
+      tool call sets this to that call's `tool_call_id`; a graph node's pause
+      to its rank in the node. Both are stable when LangGraph replays the task
+      on resume. Other pauses omit it.
     """
 
     stage: str | None = None
@@ -341,7 +316,6 @@ class HumanInputRequest(FrozenModel):
     choices: tuple[HumanChoiceOption, ...] = ()
     free_text: bool = False
     metadata: dict[str, JsonScalar] = Field(default_factory=dict)
-    checkpoint_id: str | None = None
     interrupt_id: str | None = None
     occurrence_id: str | None = Field(
         default=None,

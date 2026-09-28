@@ -18,6 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
+import { groupTraceEntries, isCancelledByUser, traceSummary } from "../../../utils/traceUtils";
 import { hitlResponseKey, reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
@@ -148,7 +149,6 @@ function hitlRequestMsg(eid: string, overrides: Record<string, unknown> = {}, ra
         ],
         free_text: false,
         interrupt_id: "int-1",
-        checkpoint_id: null,
         pending_calls: [{ tool_call_id: "call-1", tool_name: "extract_from_document", args_preview: "{}" }],
         ...overrides,
       } as never,
@@ -260,5 +260,89 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     const rows = toThreadMessages(messages, false);
 
     expect(rows.find((row) => row.role === "hitl_response")?.text).toBe("Because it is safer");
+  });
+});
+
+describe("persisted tool refusals", () => {
+  it.each([false, true])("restores every refusal after reload (occurrence IDs: %s)", (withOccurrences) => {
+    const messages: ChatMessage[] = [];
+    for (let i = 0; i < 5; i++) {
+      const callId = `call-${i}`;
+      const identity = withOccurrences ? { occurrence_id: `gate-${i}` } : {};
+      messages.push(
+        msg({
+          rank: i * 3,
+          channel: "tool_call",
+          parts: [{ type: "tool_call", name: "summarize_document", call_id: callId, args: {} }],
+        }),
+        hitlRequestMsg(
+          "e1",
+          {
+            ...identity,
+            pending_calls: [{ tool_call_id: callId, tool_name: "summarize_document", args_preview: "{}" }],
+          },
+          i * 3 + 1,
+        ),
+        hitlResponseMsg("e1", { ...identity, choice_id: "cancel" }, i * 3 + 2),
+      );
+    }
+    messages.push(msg({ rank: 15, parts: [{ type: "text", text: "Finished" }] }));
+    const before = JSON.stringify(messages);
+    const assistant = toThreadMessages(messages, false).find((row) => row.role === "assistant")!;
+    const entries = groupTraceEntries(assistant.traceMessages);
+    expect(entries).toHaveLength(5);
+    expect(entries.every(isCancelledByUser)).toBe(true);
+    expect(traceSummary(entries).running).toBe(false);
+    expect(assistant.text).toBe("Finished");
+    expect(JSON.stringify(messages)).toBe(before);
+  });
+
+  it("restores all calls of one refused batch without duplicating IDs", () => {
+    const assistant = toThreadMessages(
+      [
+        hitlRequestMsg("e1", {
+          pending_calls: ["c1", "c2", "c1", null].map((tool_call_id) => ({
+            tool_call_id,
+            tool_name: "summarize_document",
+            args_preview: "{}",
+          })),
+        }),
+        hitlResponseMsg("e1", { choice_id: "cancel" }, 1),
+      ],
+      false,
+    ).find((row) => row.role === "assistant")!;
+    expect(assistant.traceMessages.flatMap((m) => m.parts)).toEqual([
+      { type: "tool_result", call_id: "c1", ok: false, content: "" },
+      { type: "tool_result", call_id: "c2", ok: false, content: "" },
+    ]);
+  });
+
+  it.each([false, true])("preserves existing results without duplication (optimistic: %s)", (optimistic) => {
+    const result = msg({
+      role: "tool",
+      channel: "tool_result",
+      rank: 3,
+      parts: [{ type: "tool_result", call_id: "call-1", ok: !optimistic, content: "result" }],
+      metadata: optimistic ? { extras: { cancelled_by_user: true } } : {},
+    });
+    const assistant = toThreadMessages(
+      [hitlRequestMsg("e1"), hitlResponseMsg("e1", { choice_id: "cancel" }, 2), result],
+      false,
+    ).find((row) => row.role === "assistant")!;
+    expect(assistant.traceMessages).toEqual([result]);
+  });
+
+  it("does not cancel approved or pending calls, or matching IDs in another exchange", () => {
+    const messages = [
+      hitlRequestMsg("e1"),
+      hitlResponseMsg("e1", { choice_id: "cancel" }, 1),
+      hitlRequestMsg("e2", {}, 2),
+      hitlResponseMsg("e2", {}, 3),
+      hitlRequestMsg("e3", {}, 4),
+    ];
+    const assistants = toThreadMessages(messages, false).filter((row) => row.role === "assistant");
+    expect(assistants).toHaveLength(1);
+    expect(assistants[0].id).toBe("e1:assistant");
+    expect(reconstructPendingHitl(messages)?.payload.pending_calls?.[0].tool_call_id).toBe("call-1");
   });
 });

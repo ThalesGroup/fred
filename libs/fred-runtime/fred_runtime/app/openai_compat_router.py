@@ -52,6 +52,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from fred_core import AssertedUser, KeycloakUser, TeamPermission
+from fred_sdk.contracts.execution import check_session_id
 from fred_sdk.contracts.models import GraphAgentDefinition, ReActAgentDefinition
 from fred_sdk.contracts.openai_compat import (
     OpenAIChatRequest,
@@ -182,7 +183,7 @@ def create_openai_compat_router(
         user_messages = [m for m in request.messages if m.role == "user"]
         if not user_messages:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Request must contain at least one user message.",
             )
         message = user_messages[-1].content
@@ -203,6 +204,12 @@ def create_openai_compat_router(
             )
 
         session_id = http_request.headers.get("X-Fred-Session-Id") or uuid4().hex
+        try:
+            check_session_id(session_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+            ) from exc
         team_id = http_request.headers.get("X-Fred-Team-Id")
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None

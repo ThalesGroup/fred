@@ -7,9 +7,9 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Fredlab", email = "contact@fredlab.com" }]
 dependencies = [
-  "fred-core>=4.2.1",
-  "fred-sdk[agents]>=4.2.1",
-  "fred-runtime[app]>=4.2.1",
+  "fred-core>=4.3.0",
+  "fred-sdk[agents]>=4.3.0",
+  "fred-runtime[app]>=4.3.0",
   # First-party capabilities installed on this pod: installing the package IS
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=0.1.0",
@@ -28,6 +28,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
+  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
@@ -70,6 +71,7 @@ dev = [
   "basedpyright==1.31.0",
   "detect-secrets>=1.5.0",
   "pytest>=8.4.2",
+  "httpx2>=2.13.1",  # starlette TestClient transport (plain httpx is deprecated)
   "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",

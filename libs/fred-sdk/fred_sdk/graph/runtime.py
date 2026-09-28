@@ -46,7 +46,6 @@ from ..contracts.runtime import (
     HumanInputRequest,
     RuntimeServices,
     ThoughtKind,
-    ThoughtRecord,
 )
 
 
@@ -60,7 +59,6 @@ class GraphExecutionOutput(FrozenModel):
     content: str = ""
     sources: tuple[VectorSearchHit, ...] = ()
     ui_parts: tuple[UiPart, ...] = ()
-    thought_trace: tuple[ThoughtRecord, ...] = ()
     token_usage: dict[str, int] | None = None
 
 
@@ -302,6 +300,5 @@ __all__ = [
     "GraphExecutionOutput",
     "GraphNodeContext",
     "GraphNodeResult",
-    "ThoughtRecord",
     "ThoughtWriter",
 ]

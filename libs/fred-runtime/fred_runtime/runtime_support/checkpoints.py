@@ -29,6 +29,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Protocol, cast
 
+from fred_sdk.contracts.execution import SESSION_ID_RESERVED_CHAR, check_session_id
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 
@@ -54,16 +55,29 @@ class AsyncCheckpointWriter(AsyncCheckpointReader, Protocol):
         raise NotImplementedError()
 
 
-def checkpoint_config(
-    *, thread_id: str, checkpoint_id: str | None = None, checkpoint_ns: str = ""
-) -> RunnableConfig:
+def checkpoint_config(*, thread_id: str, checkpoint_ns: str = "") -> RunnableConfig:
     configurable: dict[str, object] = {
         "thread_id": thread_id,
         "checkpoint_ns": checkpoint_ns,
     }
-    if checkpoint_id is not None:
-        configurable["checkpoint_id"] = checkpoint_id
     return cast(RunnableConfig, {"configurable": configurable})
+
+
+def graph_thread_id(session_id: str, namespace: str) -> str:
+    """
+    Thread id of a LangGraph-native graph agent for one session.
+
+    LangGraph stores every root run at checkpoint_ns "", so the agent namespace
+    moves into the thread id; an in-process sub-agent sharing the session then
+    never shares the caller's thread. The session id stays the prefix so a
+    session purge finds these threads (`graph_thread_prefix`).
+    """
+    return f"{graph_thread_prefix(session_id)}{namespace}"
+
+
+def graph_thread_prefix(session_id: str) -> str:
+    check_session_id(session_id)
+    return f"{session_id}{SESSION_ID_RESERVED_CHAR}"
 
 
 def checkpoint_namespace(
@@ -77,10 +91,9 @@ def checkpoint_namespace(
     Managed agent instances are isolated by their concrete instance id.
     SDK-defined agents fall back to their stable agent id.
 
-    Only reaches storage for the hand-rolled Graph runtime, which calls `aput`
-    itself: LangGraph resets `checkpoint_ns` to `""` on every root-graph run
-    (`pregel/_loop.py::PregelLoop.__init__`), so a compiled graph's checkpoints
-    are always unnamespaced however its config is built.
+    LangGraph resets `checkpoint_ns` to `""` on every root-graph run
+    (`pregel/_loop.py::PregelLoop.__init__`), so this namespace is carried by
+    the graph agent's thread id instead (`graph_thread_id`).
     """
     return agent_instance_id or agent_id
 
@@ -89,26 +102,22 @@ async def load_checkpoint(
     checkpointer: AsyncCheckpointReader | None,
     *,
     thread_id: str,
-    checkpoint_id: str | None = None,
     checkpoint_ns: str = "",
 ) -> tuple[Checkpoint, list[PendingWrite]] | None:
     """
-    Load one checkpoint together with its pending (unresolved) writes.
+    Load a thread's latest checkpoint together with its pending writes.
 
     Why pending_writes is returned alongside the checkpoint:
-    - a LangGraph-native `interrupt()` (ReAct V2's `create_agent()` graphs)
-      never stamps Fred's hand-rolled `graph_v2` channel-value markers; the
-      only trace it leaves is a pending write on the fixed `"__interrupt__"`
-      channel for the task that paused. Callers that need to tell "waiting on
-      human input" apart from "turn is simply done" for a non-graph_v2
-      checkpoint must inspect this list.
+    - a LangGraph-native `interrupt()` leaves its only trace as a pending write
+      on the fixed `"__interrupt__"` channel for the task that paused. Callers
+      that need to tell "waiting on human input" apart from "turn is simply
+      done" must inspect this list.
     """
     if checkpointer is None:
         return None
     checkpoint_tuple = await checkpointer.aget_tuple(
         checkpoint_config(
             thread_id=thread_id,
-            checkpoint_id=checkpoint_id,
             checkpoint_ns=checkpoint_ns,
         )
     )

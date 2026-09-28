@@ -400,7 +400,6 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
                 # can show a card but never actually answer it (#refresh-hitl).
                 "interrupt_id": "int-42",
                 "occurrence_id": "call-1",
-                "checkpoint_id": None,
                 "pending_calls": [
                     {
                         "tool_call_id": "call-1",
@@ -455,7 +454,6 @@ def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     # can reconstruct a readable card after a reload but never resume it.
     assert hitl_part.interrupt_id == "int-42"
     assert hitl_part.occurrence_id == "call-1"
-    assert hitl_part.checkpoint_id is None
     assert len(hitl_part.pending_calls) == 1
     assert hitl_part.pending_calls[0].tool_call_id == "call-1"
     assert hitl_part.pending_calls[0].tool_name == "extract_from_document"

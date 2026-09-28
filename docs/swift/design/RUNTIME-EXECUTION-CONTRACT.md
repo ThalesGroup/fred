@@ -379,7 +379,7 @@ Every agent execution is:
   JWT; OpenFGA for regular collaborative teams, with the documented intrinsic
   personal/service-agent cases)
 - scoped to a `session_id` for multi-turn continuity
-- optionally resumable from a `checkpoint_id`
+- resumable from a pending human-input pause (`interrupt_id`)
 - observable through enriched trace/KPI/metrics metadata that preserves the
   same execution identity end-to-end
 
@@ -394,7 +394,7 @@ Every agent execution is:
 | `ActorContext`    | `user_id`, `principal`                                                    | User identity for audit/diagnostics |
 | `TeamContext`     | `team_id`, `team_type`                                                    | Team scope; always mandatory        |
 | `ExecutionTarget` | `agent_instance_id`, `underlying_agent_ref`                               | Managed instance reference          |
-| `TraceContext`    | `request_id`, `trace_id`, `correlation_id`, `session_id`, `checkpoint_id` | Observability across services       |
+| `TraceContext`    | `request_id`, `trace_id`, `correlation_id`, `session_id`                  | Observability across services       |
 
 ### 2.2 Authorization — pod-side Keycloak JWT + OpenFGA
 
@@ -459,8 +459,10 @@ Execution paths:
 
 Session/checkpoint semantics:
 
-- `session_id` — primary continuity key; keep stable across turns and HITL resumes
-- `checkpoint_id` — optional; enables precise resume from a graph snapshot
+- `session_id` — primary continuity key; keep stable across turns and HITL resumes.
+  It must not contain `:`, which names graph threads (§8.86); the pod refuses it with 422.
+- `interrupt_id` — the pending pause being answered (LangGraph's own
+  `Interrupt.id`, echoed from `awaiting_human.request.interrupt_id`)
 - `resume_payload` — HITL answer data; when set, `input` is ignored and the
   graph resumes from the checkpointed state
 
@@ -626,6 +628,22 @@ written fire-and-forget after the stream closes; no frame reaches the client.
 `final` is the only reliable end-of-turn signal. The type is kept for future
 use (e.g. a dedicated push channel).
 
+### Token accounting
+
+Every figure is the provider-reported `usage_metadata`. Fred never estimates
+tokens from character or word counts, because no client can reproduce a
+provider's tokenizer.
+
+| Where | Carries |
+| --- | --- |
+| `final.token_usage` | Billed usage of the whole turn: the sum of every model call, since each provider reports per call (§8.41) |
+| `final.context_tokens` | `input_tokens` of the turn's last model call, i.e. the context left at turn end. ReAct only; Graph agents leave it `None` and UIs fall back to `token_usage` (§8.57) |
+| `tool_call` / `tool_result` | No token figure: a tool call costs nothing by itself (§8.57) |
+
+The assistant-final history row persists both fields (`ChatMetadata`), so a
+reloaded conversation shows what the live stream showed. Rows written before
+a field existed are not backfilled.
+
 ### UI rendering parts (`UiPart`)
 
 Carried in `tool_result` and `final` events:
@@ -674,12 +692,11 @@ storage.
 Runtime must validate before resuming:
 
 - `session_id` ownership is enforced by the pod (it must belong to the authenticated caller)
-- `checkpoint_id` (when provided) belongs to the authorized `session_id`
-- `checkpoint_id` is in a resumable state (not already consumed)
-- For HITL resume: checkpoint is in a waiting state compatible with `resume_payload`
-- For ReAct V2 HITL resume specifically (#2216, see §8.39): `interrupt_id`
-  (a field distinct from `checkpoint_id` — see §8.39 for why) and the optional
-  `occurrence_id` must exactly match one currently pending occurrence. A
+- For HITL resume: a checkpoint of this session is in a waiting state
+  compatible with `resume_payload`
+- For HITL resume, ReAct and Graph alike (#2216, see §8.39 and §8.86):
+  `interrupt_id` and the optional `occurrence_id` must exactly match one
+  currently pending occurrence. A
   tool-raised pause declares `occurrence_id` from its stable `tool_call_id`;
   legacy and platform-gate pauses omit it and continue to match on
   `interrupt_id` alone. That exact occurrence is then atomically claimed
@@ -694,10 +711,6 @@ Separation of concerns:
 Persistence infrastructure details (connection strings, table names, credentials)
 MUST remain runtime-environment concerns and MUST NOT appear in frontend-facing
 contracts.
-
-Phase 1 deferred: runtime does not yet validate that `checkpoint_id` belongs to
-the authorized `session_id` — this requires control-plane integration and is
-tracked as a Phase 2–3 task.
 
 ---
 
@@ -1427,6 +1440,8 @@ the long-running summarize path. First consumer: `document_access`'s
 ---
 
 ### 8.22 ✅ `AgentCapability.tools()` — Graph agents can use capabilities (2026-07-22)
+
+The tool adapter described below was replaced by native invocation in §8.97.
 
 **What changed.** `AgentCapability` (`fred-sdk/contracts/capability/base.py`) gains
 `tools(ctx) -> Sequence[BaseTool]`, the primary, execution-model-agnostic runtime
@@ -2490,8 +2505,7 @@ the exchange (`_write_turn_history` → `make_tool_call`,
 is what a page refresh or session reopen reads (`useSessionHistory.ts`), a
 different path from the live SSE stream. Wiring only the live event would
 have made the figure vanish on refresh for a conversation created the same
-day — corrected during implementation, see
-`docs/swift/rfc/TRACE-TOKEN-USAGE-RFC.md` §2.1.
+day — corrected during implementation.
 
 **Out of scope (unchanged by this entry):** conversations whose history was
 already persisted *before* this shipped — no retroactive backfill; the
@@ -3797,7 +3811,6 @@ Required observability identity set:
 - `agent_instance_id`
 - `template_agent_id` when known
 - `session_id`
-- `checkpoint_id` when relevant
 - `trace_id`
 - `correlation_id`
 - runtime identity (`runtime_id` or equivalent service discriminator)
@@ -3807,7 +3820,7 @@ source contract/runtime instrumentation layer first, not in the frontend.
 
 Implemented runtime-side today:
 
-- `checkpoint_id` is propagated through the pod request bridge and enforced for
+- `interrupt_id` is propagated through the pod request bridge and enforced for
   resume-capable runtime requests
 - managed HITL resumes set `execution_action == "resume"` (the `ExecutionGrantAction` enum)
 - runtime span metadata, graph KPI dimensions, KF client KPI dimensions, MCP
@@ -3901,7 +3914,6 @@ contract first. Do not patch the generated TypeScript by hand.
 
 | Item                                                                                               | Phase     |
 | -------------------------------------------------------------------------------------------------- | --------- |
-| `checkpoint_id` authorization against the caller's `session_id` at resume                          | deferred  |
 | Backend completeness gate implementation for observability enrichment and managed-scope validation | Phase 3b  |
 | Frontend SSE transport migration (replace WebSocket)                                               | Phase 4   |
 | Control-plane product/session/admin API migration                                                  | Phase 3   |
@@ -6115,7 +6127,68 @@ statements:
   no migrations. A test fixture is what it always was; shipping it as a real
   entry point is what put a demo table in production databases.
 
-### 8.86 ✅ A stopped run is typed: `RuntimeErrorEvent.reason` (2026-09-17)
+### 8.86 ⚠️ One graph engine: native LangGraph; `checkpoint_id` and `parallel` are removed (2026-09-25)
+
+Graph agents now compile to a LangGraph `StateGraph` and run through `astream`.
+The hand-rolled executor is gone. The main authoring types (`GraphWorkflow`,
+`typed_node`, `GraphNodeContext`) remain; incompatible authoring removals and
+resume changes are listed below. This supersedes the Graph-specific parts of §8.39 and of the
+token-usage entry that cites `_GraphNodeExecutionContext` and
+`_DeterministicGraphExecutor`.
+
+- **Code layout** (`fred_runtime/graph/`): `graph_runtime.py` (lifecycle and
+  capability bridge), `graph_executor.py` (compilation, streaming, resume) and
+  `node_context.py` (the `GraphNodeContext` implementation).
+- **Thread identity**: one LangGraph thread per session and agent,
+  `thread_id = f"{session_id}:{agent_namespace}"` with `checkpoint_ns = ""`.
+  Deleting a session's checkpoints removes every `{session_id}:*` thread, and
+  the delete is idempotent (`{"deleted": 0}` once nothing remains).
+  A session id may therefore never contain `:`: a caller choosing `S:N` would
+  otherwise run on, read or purge session `S`'s graph thread for agent `N`,
+  and `S`'s purge would sweep the caller's threads. `RuntimeExecuteRequest`,
+  the `X-Fred-Session-Id` header and the checkpoint routes all refuse it with
+  422 (`fred_sdk.contracts.execution.check_session_id`).
+- **Final output**: use the completed-state update from the invocation's own
+  stream, never reread the shared thread head after streaming. Another replica
+  advancing that thread must not replace this invocation's final response.
+- **HITL**: a node pause is a LangGraph `interrupt()`. `awaiting_human`
+  carries `interrupt_id`, and a resume answers it with
+  `Command(resume={interrupt_id: payload})`, behind the same pending-occurrence
+  gate and atomic claim as ReAct. A stale or unknown `interrupt_id` is rejected.
+  Every pause of one node shares its `Interrupt.id`, so each also carries
+  `occurrence_id = "{node_id}#{rank}"` (its rank among the node's pauses,
+  stable across replays): without it, answering the first question would
+  consume the claim the second one needs.
+- **Removed from the wire**: `checkpoint_id` is gone from `TraceContext`,
+  `RuntimeExecuteRequest`, `RuntimeContext`, `ExecutionConfig`,
+  `HumanInputRequest` and `HitlRequestPart`. It is also gone from KPI and
+  Langfuse dimensions. `RuntimeExecuteRequest` and `HitlRequestPart` ignore
+  unknown keys, so older clients and stored history rows still parse.
+- **Removed from authoring**: `GraphWorkflow.parallel` and
+  `GraphDefinition.parallel_groups`. The previous runtime executed these
+  branches concurrently; their removal is an incompatible authoring change.
+  Agents using them must be adapted before upgrading. Native parallel
+  authoring remains unsupported (`apps/fred-agents/tests/test_graph_capabilities.py`).
+- **Upgrade boundary**: legacy Graph checkpoints cannot resume or supply
+  previous business state to the native executor. Parsing old chat history
+  does not migrate checkpoints. Complete pending Graph approvals before
+  rollout and start fresh Graph sessions afterward; see the
+  [migration procedure](../ops/migrations/native-graph-runtime.md).
+- **Node errors**: `on_error` routes are applied inside the node wrapper.
+  LangGraph's native `error_handler` still re-raises under `astream` when
+  `stream_mode` includes `custom` (langgraph 1.2.12). A strict xfail tracks this.
+- **Reference agent**: the Test Assistant runs every check through
+  `graph check`, live over the pod's HTTP API, and the same checks run offline
+  in `tests/test_test_assistant_reference.py`.
+
+### 8.87 ⚠️ `ThoughtRecord` and `GraphExecutionOutput.thought_trace` are removed (2026-09-26)
+
+Graph runs filled `thought_trace` with a record of each authored reasoning
+block, but nothing read it: the final event never carried it, and the
+evaluation collector reads the streamed events, not the run's output. The field,
+the `ThoughtRecord` model and its `fred_sdk` export are gone. `thinking()` and
+`emit_thought()` still emit the same `thought_*` events.
+### 8.88 ✅ A stopped run is typed: `RuntimeErrorEvent.reason` (2026-09-17)
 
 `RuntimeErrorEvent.reason` identifies `authority_lost`, `cancelled` or
 `delegation_unavailable`; ordinary crashes omit it. Stop messages contain only
@@ -6130,7 +6203,7 @@ existing per-call timeouts and engine step limits still apply.
 Detailed lifecycle, error-confinement and cancellation scenarios are maintained
 in the [delegated execution specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md).
 
-### 8.87 Managed execution names its team, and a streamed run ends with its response (2026-09-17)
+### 8.89 Managed execution names its team, and a streamed run ends with its response (2026-09-17)
 
 Managed requests require `runtime_context.team_id`; direct template requests
 retain optional team context. Native and OpenAI-compatible streaming responses
@@ -6141,27 +6214,6 @@ A human pause ends the response; the answer requires fresh admission. Disconnect
 cleanup begins when the transport detects the loss and cannot undo remote work
 already authorized. Disconnected turns write neither history nor turn KPIs.
 
-### 8.88 Workload identity and person authorization (2026-09-18)
-
-Receivers authenticate workload bearers and authorize the person named by the
-plain `person`, `run`, `agent` grant using current standing and permissions.
-Caller trust follows §8.90. Runtime history, checkpoints, diagnostics, capability
-configuration and OpenAI-compatible admission require the directly authenticated
-identity. Native execute, evaluate and stream admissions accept delegated people.
-
-The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
-maintains the endpoint policy inventory and deferred Graph-agent work.
-
-### 8.89 Execution under delegation is authorized on the person a grant names (2026-09-19)
-
-With outgoing delegation enabled, a caller-role holder must name a person to
-admit a run. Asserted people carry no bearer roles and receive no service-role
-shortcuts. Managed execution requires current standing and `CAN_USE_TEAM_AGENTS`
-on the requested team; direct execution checks standing and any supplied team.
-
-Ordinary service identities without the caller role retain their existing
-execution gates and own-bearer calls, including tools configured as `delegated`.
-They create no delegated run record.
 
 ### 8.90 Delegation callers are trusted by a role (2026-09-23)
 
@@ -6222,3 +6274,67 @@ behavior. This closes #2810 for sessions with history ownership records, without
 changing request or response schemas. Checkpoint-only conversations remain a
 known gap; #2812 tracks the compatibility surface's intended uses and required
 ownership guarantees.
+
+### 8.94 Workload identity and person authorization (2026-09-18)
+
+Receivers authenticate workload bearers and authorize the person named by the
+plain `person`, `run`, `agent` grant using current standing and permissions.
+Caller trust follows §8.90. Runtime history, checkpoints, diagnostics, capability
+configuration and OpenAI-compatible admission require the directly authenticated
+identity. Native execute, evaluate and stream admissions accept delegated people.
+
+The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
+maintains the endpoint policy inventory and deferred Graph-agent work.
+
+### 8.95 Execution under delegation is authorized on the person a grant names (2026-09-19)
+
+With outgoing delegation enabled, a caller-role holder must name a person to
+admit a run. Asserted people carry no bearer roles and receive no service-role
+shortcuts. Managed execution requires current standing and `CAN_USE_TEAM_AGENTS`
+on the requested team; direct execution checks standing and any supplied team.
+
+Ordinary service identities without the caller role retain their existing
+execution gates and own-bearer calls, including tools configured as `delegated`.
+They create no delegated run record.
+
+
+### 8.96 Capability tool approval across runtimes (2026-09-27)
+
+`runtime_support.tool_approval.ToolApproval` owns capability/operator approval
+rules and request rendering for ReAct, Deep and Graph. Graph capability assembly
+now accepts `HitlSpec`; this supersedes the rejection stopgap in §8.24. Public SDK
+contracts remain unchanged. Deep child agents retain their no-human-wait boundary.
+Only explicit `proceed` authorizes execution; Graph refusals return an error tool
+result to the author node before the shared tool execution boundary.
+
+ReAct and Deep refusals skip the entire proposed tool batch and checkpoint a
+paired refusal message for every call, including ungated siblings. The next
+model call receives the refusal and an instruction not to retry those actions
+without a new user request. This feedback is model context, not an executed
+tool result or a technical failure; it does not suppress the model's final
+acknowledgment. Model compliance still requires live validation.
+
+Graph mediated tool calls run in native LangGraph tasks. A completed child task
+persists the tool name, arguments and call ID before interruption, so node replay
+cannot substitute a different invocation for the approved one. Completed tool
+results are replayed without executing or auditing them again. Each pending tool
+has a distinct native interrupt and occurrence ID, visible to the existing HTTP
+resume admission and atomic claim mechanism. Authors must preserve call ordering;
+arbitrary node side effects, model calls and delegation are not memoized by this
+boundary. External effects still require idempotency across a crash before the
+result checkpoint is durable.
+
+
+### 8.97 Native capability tools on Graph (2026-09-27)
+
+Graph now keeps the original capability tool instances, as ReAct/Deep do, and
+invokes them through LangChain `ainvoke`. The former wrapper calling `.coroutine`
+directly is removed. Native validation, callbacks and synchronous-tool offloading
+are preserved. The runtime reads `ToolMessage.artifact` for structured results,
+keeps plain tuples as data, and fills empty Fred artifact blocks from textual
+content. Native `ToolMessage.status` reaches tool events. Plain-content handled-error
+strings carry no status under LangChain's raw invocation contract; capabilities
+requiring classified failures must use typed artifacts or propagated exceptions.
+Tool-name collision checks, authorization, audit and HITL are unchanged.
+Identity, services and typed capability options already use one assembly path;
+model middleware and MCP prompt injection remain specific to ReAct/Deep.

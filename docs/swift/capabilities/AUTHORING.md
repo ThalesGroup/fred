@@ -159,18 +159,43 @@ migrations described under "Registration, boot invariants, tables" below
 
 ## Requirement → hook (RFC §5.1)
 
-Map a runtime need to a primitive; do not invent a new hook. The first row runs on
-ReAct **and** Graph agents; every other row is `middleware()`-only — ReAct agents alone.
+Map a runtime need to a primitive; do not invent a new hook. Tools and declarative HITL work on ReAct, Deep and Graph agents. Model-loop hooks
+use LangChain middleware on ReAct/Deep.
 
 | Need | Hook |
 | --- | --- |
-| Add tools | `tools(ctx)` — works on ReAct and Graph agents |
+| Add tools | `tools(ctx)` — works on ReAct, Deep and Graph agents |
 | Tool built at chat time | `middleware()` override, `wrap_model_call` editing `request.tools` — ReAct only |
 | Runtime context split from LLM args | `CapabilityContext` via the middleware closure |
 | Edit conversation state (edit notice, attachment note) | `before_model` returning a state-update dict `[T2]` |
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
+
+All three runtimes build `CapabilityContext` through the same assembly path:
+identity, typed stored config, turn options, team settings and `RuntimeServices`
+reach `tools(ctx)` unchanged. Graph keeps those original tool objects and calls
+LangChain's `ainvoke`, including native argument validation and asynchronous
+execution of synchronous tools. `content_and_artifact` results preserve Fred
+sources/UI parts; content fills empty artifact blocks without replacing authored
+blocks. For reliable failure classification on Graph, return a typed
+`ToolInvocationResult(is_error=True)` artifact or let exceptions propagate. A
+plain-content tool using native `handle_tool_error` / `handle_validation_error`
+returns only its handled string on Graph, with no failure status; use
+`content_and_artifact` if configuring those handlers. Model middleware and MCP prompt-group injection remain specific to the
+ReAct/Deep model loop; Graph authors control their own model prompts.
+
+Graph capability approval uses the same `HitlSpec` predicate, question and choices
+as ReAct/Deep. Only an explicit `proceed` executes the tool. A refusal returns an
+`is_error` tool result to the graph node. Deep child agents still cannot open a
+human wait; approval belongs to their parent.
+
+Graph tool calls through `invoke_tool` and `invoke_runtime_tool` use native
+LangGraph tasks. Completed results and the exact invocation awaiting approval
+survive node replay. Keep call ordering deterministic across resume. This does
+not checkpoint arbitrary side effects in node code, model calls or delegation;
+external writes still need idempotency for crash recovery between the write and
+its checkpoint.
 
 Chat-time controls: return `ChatControlSpec`s from `chat_controls(config)` (computed at
 session-prep, never persisted — RFC §3.3, §3.7). A stock widget's params are SDK models

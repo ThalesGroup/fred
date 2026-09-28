@@ -125,7 +125,6 @@ if TYPE_CHECKING:
         ThoughtDeltaEvent,
         ThoughtEndEvent,
         ThoughtKind,
-        ThoughtRecord,
         ThoughtStartEvent,
         WorkspaceFileNotFound,
         WorkspaceFsPort,
@@ -254,7 +253,6 @@ _LAZY: dict[str, str] = {
     "ThoughtDeltaEvent": "fred_sdk.contracts.runtime",
     "ThoughtEndEvent": "fred_sdk.contracts.runtime",
     "ThoughtKind": "fred_sdk.contracts.runtime",
-    "ThoughtRecord": "fred_sdk.contracts.runtime",
     "ThoughtStartEvent": "fred_sdk.contracts.runtime",
     "WorkspaceFileNotFound": "fred_sdk.contracts.runtime",
     "WorkspaceFsPort": "fred_sdk.contracts.runtime",
@@ -363,7 +361,6 @@ __all__ = [
     "ThoughtStartEvent",
     "ThoughtDeltaEvent",
     "ThoughtEndEvent",
-    "ThoughtRecord",
     "ThoughtWriter",
     # Agent definition metadata and policies (used when subclassing GraphAgent/ReActAgent)
     "ExecutionCategory",

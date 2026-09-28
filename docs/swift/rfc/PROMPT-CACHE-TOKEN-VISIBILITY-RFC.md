@@ -9,16 +9,16 @@ unresolved — this RFC stays open until those close.
 **ID:** `CACHE-01` (informal)
 **Author:** CohenOdelia / Claude Code
 **Date:** 2026-08-10
-**Related:** `TRACE-TOKEN-USAGE-RFC.md` (per-step token usage, implemented
-2026-08-04 — this RFC extends the same `token_usage` pipeline with a
-breakdown LangChain already provides but Fred currently discards)
+**Related:** `RUNTIME-EXECUTION-CONTRACT.md` §5 "Token accounting" — this RFC
+extends the same `token_usage` pipeline with a breakdown LangChain already
+provides but Fred currently discards
 
 ---
 
 ## 1. Problem statement
 
 Fred already captures `token_usage` per LLM call and sums it per turn
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.38-8.41, `TRACE-TOKEN-USAGE-RFC.md`), and
+(`RUNTIME-EXECUTION-CONTRACT.md` §5 "Token accounting"), and
 estimates cost/CO2e/kWh from that total via
 `fred_core/kpi/model_impact_factors.py` → `GreenCostEstimate`, surfaced on
 `AnalyticsPage` as `TokenUsageImpact`.
@@ -73,11 +73,9 @@ at a fraction of fresh-token price). This makes two things impossible today:
    `sum_token_usage()` to sum them the same way it sums the existing three
    fields (`None` treated as zero on either side).
 
-3. **Runtime events.** No schema break needed — `ToolCallRuntimeEvent`/
-   `FinalRuntimeEvent.token_usage` are already a `dict[str, int] | None`
-   (`RUNTIME-EXECUTION-CONTRACT.md` §8.40-8.41). The two new keys ride the
-   same dict, exactly as `token_usage` itself rode in additively per
-   `TRACE-TOKEN-USAGE-RFC.md` §4.
+3. **Runtime events.** No schema break needed — `FinalRuntimeEvent.token_usage`
+   is already a `dict[str, int] | None` (`RUNTIME-EXECUTION-CONTRACT.md` §5
+   "Token accounting"). The two new keys ride the same dict additively.
 
 4. **Cost/green model.** Add a `cost_per_1k_cached_input_tokens` column to
    `model_impact_factors.yaml`, and bill `cache_read_tokens` at that reduced
@@ -113,8 +111,8 @@ at a fraction of fresh-token price). This makes two things impossible today:
   names.
 - **Estimate cache savings heuristically** (e.g. assume a fixed hit rate for
   repeated prefixes) instead of reading the provider-reported number.
-  Rejected for the same reason `TRACE-TOKEN-USAGE-RFC.md` §3 rejected
-  character-count token estimation: an estimate would misrepresent a number
+  Rejected for the same reason Fred never estimates token counts
+  (`RUNTIME-EXECUTION-CONTRACT.md` §5): an estimate would misrepresent a number
   users may reasonably expect to be exact, when the exact number is already
   available and simply being discarded today.
 - **Defer to the OTel Collector / vendor-neutral export path proposed in
@@ -135,9 +133,8 @@ at a fraction of fresh-token price). This makes two things impossible today:
 
 Additive on every layer (new dict keys / new optional model fields
 defaulting to `0`); no existing consumer of `token_usage` reads a fixed key
-set that would choke on unrecognized keys (same pattern verified for the
-`token_usage` field itself in `TRACE-TOKEN-USAGE-RFC.md` §4 — re-verify at
-implementation time rather than assume it still holds).
+set that would choke on unrecognized keys (re-verify at implementation time
+rather than assume it still holds).
 
 ---
 
@@ -152,18 +149,17 @@ implementation time rather than assume it still holds).
   all?** If not, this feature is cloud-provider-profile-only — worth being
   explicit about that in `models_catalog.yaml` rather than implying parity
   across all profiles.
-- **Granularity:** dashboard-level only (§2, point 5), or also a per-step
-  trace entry next to the per-step tokens `TRACE-TOKEN-USAGE-RFC.md` already
-  shipped in `TraceEntryRow`? The latter is a natural extension but adds UI
-  scope not yet confirmed as wanted.
+- **Granularity:** dashboard-level only (§2, point 5), or also per message?
+  Tool rows carry no token figure since §8.57 (#2403), so per-step display is
+  not an option; a per-message figure adds UI scope not yet confirmed as
+  wanted.
 
 ---
 
 ## 6. Out of scope
 
 - **Per-step/per-node cost/CO2e estimation in general.** Already explicitly
-  out of scope per `TRACE-TOKEN-USAGE-RFC.md` §5 (`TokenUsageImpact` stays
-  conversation/team-scoped); this RFC does not reopen that question, only
+  out of scope (`TokenUsageImpact` stays conversation/team-scoped); this RFC does not reopen that question, only
   adds a cache breakdown to whatever scope that estimation already has.
 - **Fred actively managing cache placement** (e.g. writing explicit
   `cache_control` breakpoints for providers that require them, such as

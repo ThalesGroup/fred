@@ -38,6 +38,7 @@ from fred_sdk.contracts.execution import (
     TraceContext,
 )
 from fred_sdk.contracts.runtime import RuntimeEventKind, TurnPersistedEvent
+from pydantic import ValidationError
 
 # ---------------------------------------------------------------------------
 # ActorContext
@@ -134,7 +135,6 @@ def test_trace_context_minimal() -> None:
     assert trace.correlation_id == "c-1"
     assert trace.trace_id is None
     assert trace.session_id is None
-    assert trace.checkpoint_id is None
 
 
 def test_trace_context_full() -> None:
@@ -143,11 +143,9 @@ def test_trace_context_full() -> None:
         correlation_id="c-1",
         trace_id="t-1",
         session_id="sess-abc",
-        checkpoint_id="cp-xyz",
     )
     assert trace.trace_id == "t-1"
     assert trace.session_id == "sess-abc"
-    assert trace.checkpoint_id == "cp-xyz"
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +293,6 @@ def test_to_legacy_context_merges_runtime_context_fields() -> None:
         agent_instance_id="inst-42",
         input="hello",
         session_id="sess-abc",
-        checkpoint_id="cp-1",
         runtime_context=RuntimeContext(
             user_id="u-ctx",
             team_id="t-ctx",
@@ -306,7 +303,6 @@ def test_to_legacy_context_merges_runtime_context_fields() -> None:
     )
     ctx = req.to_legacy_context()
     assert ctx["session_id"] == "sess-abc"
-    assert ctx["checkpoint_id"] == "cp-1"
     assert ctx["user_id"] == "u-ctx"
     assert ctx["team_id"] == "t-ctx"
     assert ctx["agent_instance_id"] == "inst-42"
@@ -321,42 +317,28 @@ def test_to_legacy_context_resume_action() -> None:
         agent_id="my-agent",
         input="hello",
         session_id="sess-xyz",
-        checkpoint_id="cp-ctx",
+        interrupt_id="int-ctx",
         resume_payload={"choice_id": "ok"},
         runtime_context=RuntimeContext(user_id="ctx-user"),
     )
     ctx = req.to_legacy_context()
     assert ctx["session_id"] == "sess-xyz"
-    assert ctx["checkpoint_id"] == "cp-ctx"
+    assert ctx["interrupt_id"] == "int-ctx"
     assert ctx["user_id"] == "ctx-user"
     assert ctx["execution_action"] == "resume"
 
 
 # ---------------------------------------------------------------------------
-# interrupt_id — distinct from checkpoint_id, never aliased (#2216)
+# interrupt_id — the only resume identity (#2216)
 # ---------------------------------------------------------------------------
 
 
-def test_interrupt_id_defaults_to_none_and_is_independent_of_checkpoint_id() -> None:
+def test_interrupt_id_defaults_to_none() -> None:
     req = RuntimeExecuteRequest(agent_id="my-agent", input="hello")
     assert req.interrupt_id is None
-    assert req.checkpoint_id is None
 
 
-def test_checkpoint_id_alone_is_accepted_graph_v2_shape() -> None:
-    # Legacy Graph V2 resume: checkpoint_id set, interrupt_id absent.
-    req = RuntimeExecuteRequest(
-        agent_id="my-agent",
-        input="",
-        resume_payload={"choice_id": "ok"},
-        checkpoint_id="cp-1",
-    )
-    assert req.checkpoint_id == "cp-1"
-    assert req.interrupt_id is None
-
-
-def test_interrupt_id_alone_is_accepted_react_v2_shape() -> None:
-    # ReAct V2 resume: interrupt_id set, checkpoint_id absent.
+def test_interrupt_id_identifies_the_resumed_pause() -> None:
     req = RuntimeExecuteRequest(
         agent_id="my-agent",
         input="",
@@ -364,21 +346,22 @@ def test_interrupt_id_alone_is_accepted_react_v2_shape() -> None:
         interrupt_id="interrupt-a",
     )
     assert req.interrupt_id == "interrupt-a"
-    assert req.checkpoint_id is None
 
 
-def test_checkpoint_id_and_interrupt_id_together_is_rejected() -> None:
-    # #2216: the two fields identify two different runtimes' resume — a
-    # request naming both is malformed, not "extra detail", and must be
-    # rejected at the wire boundary rather than silently prioritized.
-    with pytest.raises(Exception, match="mutually exclusive"):
-        RuntimeExecuteRequest(
-            agent_id="my-agent",
-            input="",
-            resume_payload={"choice_id": "ok"},
-            checkpoint_id="cp-1",
-            interrupt_id="interrupt-a",
-        )
+def test_a_stale_checkpoint_id_is_ignored() -> None:
+    # The hand-rolled graph runtime's checkpoint_id resume is gone: every agent
+    # resumes by interrupt_id. A stale client still sending the old field keeps
+    # working (the request ignores unknown keys) and the value means nothing.
+    req = RuntimeExecuteRequest.model_validate(
+        {
+            "agent_id": "my-agent",
+            "input": "",
+            "resume_payload": {"choice_id": "ok"},
+            "checkpoint_id": "cp-1",
+        }
+    )
+    assert "checkpoint_id" not in req.model_dump()
+    assert "checkpoint_id" not in req.to_legacy_context()
 
 
 def test_interrupt_id_without_resume_payload_is_rejected() -> None:
@@ -461,3 +444,19 @@ def test_turn_persisted_event_discriminator_roundtrip() -> None:
     event = ta.validate_python(raw)
     assert isinstance(event, TurnPersistedEvent)
     assert event.session_id == "sess-abc"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"session_id": "s1:inst-1"},
+        {"runtime_context": {"session_id": "s1:inst-1"}},
+    ],
+)
+def test_a_session_id_cannot_name_another_sessions_graph_thread(
+    fields: dict,
+) -> None:
+    # Graph threads are named "{session_id}:{agent}"; a session id holding
+    # ":" would address, list and purge another session's graph thread.
+    with pytest.raises(ValidationError, match="session_id"):
+        RuntimeExecuteRequest.model_validate({"agent_id": "a", "input": "x", **fields})

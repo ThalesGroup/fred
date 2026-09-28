@@ -39,9 +39,8 @@ How to use:
 - Prefer managed execution: set agent_instance_id (team comes from runtime_context).
 - Use agent_id (direct template) only for internal/dev compatibility.
 - session_id is the primary continuity key across normal turns and HITL resumes.
-- checkpoint_id enables precise resume from a specific graph snapshot (legacy
-  Graph V2 only); interrupt_id is the ReAct V2 equivalent — mutually
-  exclusive, never both set (see RuntimeExecuteRequest's own docstring).
+- interrupt_id identifies the HITL pause a resume answers (ReAct and Graph
+  agents alike), echoed from the awaiting_human event.
 
 Example::
 
@@ -156,14 +155,14 @@ class TraceContext(FrozenModel):
 
     Why this exists:
     - Every execution turn must be traceable for observability and audit.
-    - session_id and checkpoint_id are included here for correlation purposes;
-      they are also present in RuntimeExecuteRequest as first-class fields.
+    - session_id is included here for correlation purposes; it is also
+      present in RuntimeExecuteRequest as a first-class field.
 
     How to use:
     - Generate request_id and correlation_id at request ingress.
     - Propagate through all downstream calls and log entries.
-    - session_id and checkpoint_id mirror the request-level values for
-      structured log correlation.
+    - session_id mirrors the request-level value for structured log
+      correlation.
     """
 
     request_id: str = Field(
@@ -181,10 +180,6 @@ class TraceContext(FrozenModel):
         default=None,
         description="Session identifier for multi-turn continuity correlation.",
     )
-    checkpoint_id: str | None = Field(
-        default=None,
-        description="Checkpoint identifier for precise resume correlation.",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +195,19 @@ class ExecutionGrantAction(str, Enum):
 # ---------------------------------------------------------------------------
 # Runtime execution request
 # ---------------------------------------------------------------------------
+
+
+# The runtime names a graph agent's thread "{session_id}:{agent}". A session
+# id holding ":" could therefore address another session's graph thread.
+SESSION_ID_RESERVED_CHAR = ":"
+
+
+def check_session_id(session_id: str | None) -> None:
+    """Raise ValueError when a session id holds the reserved character."""
+    if session_id is not None and SESSION_ID_RESERVED_CHAR in session_id:
+        raise ValueError(
+            f"session_id must not contain {SESSION_ID_RESERVED_CHAR!r}: {session_id!r}"
+        )
 
 
 def _advertise_runtime_execution_modes(schema: dict[str, Any]) -> None:
@@ -252,11 +260,10 @@ class RuntimeExecuteRequest(BaseModel):
        - Set agent_id (the registered template agent_id)
        - Not suitable for production frontend calls
 
-    Session/checkpoint semantics:
+    Session/resume semantics:
     - session_id is the primary continuity key — keep stable across turns and resumes
-    - checkpoint_id enables precise resume from a specific graph snapshot (legacy
-      Graph V2 only) — interrupt_id is the ReAct V2 equivalent, mutually
-      exclusive with checkpoint_id and only meaningful with resume_payload set
+    - interrupt_id identifies the HITL pause being answered; only meaningful
+      with resume_payload set
     - resume_payload carries HITL answer data; when present, input is ignored
 
     Architectural constraint:
@@ -287,29 +294,19 @@ class RuntimeExecuteRequest(BaseModel):
         description="User turn input. Ignored when resume_payload is set (HITL resume).",
     )
 
-    # Session / checkpoint continuity
+    # Session continuity
     session_id: str | None = Field(
         default=None,
         description="Session identifier for multi-turn continuity. Keep stable across turns.",
     )
-    checkpoint_id: str | None = Field(
-        default=None,
-        description=(
-            "Real checkpointer-storage identifier for precise graph-state "
-            "resume. Legacy Graph V2 runtime only — see interrupt_id for "
-            "ReAct V2 HITL resume."
-        ),
-    )
     interrupt_id: str | None = Field(
         default=None,
         description=(
-            "LangGraph's own Interrupt.id for the ReAct V2 HITL occurrence "
-            "being resumed (#2216). Echoed back verbatim from the "
+            "LangGraph's own Interrupt.id for the HITL occurrence being "
+            "resumed (ReAct and Graph agents). Echoed back verbatim from the "
             "AwaitingHumanRuntimeEvent.request.interrupt_id the frontend "
-            "received. Required (and validated against the currently "
-            "pending interrupt) whenever resume_payload targets a ReAct V2 "
-            "agent — never used for the legacy Graph V2 runtime, which uses "
-            "checkpoint_id instead."
+            "received, and validated against the currently pending "
+            "interrupt."
         ),
     )
     occurrence_id: str | None = Field(
@@ -387,15 +384,6 @@ class RuntimeExecuteRequest(BaseModel):
         - When resume_payload is absent, input must have non-empty content.
         - Managed (agent_instance_id) execution requires a non-blank
           runtime_context.team_id before runtime resolution begins.
-        - checkpoint_id (legacy Graph V2) and interrupt_id (ReAct V2) are
-          mutually exclusive — never both set on the same request (#2216).
-          Rejecting this at the wire boundary closes the gap where a runtime
-          resume-validation lookup could otherwise be steered at a
-          client-chosen checkpoint_id instead of the thread's actual latest
-          checkpoint: with the two fields exclusive, a request carrying
-          interrupt_id can never also carry checkpoint_id, so the runtime's
-          checkpoint lookup always falls through to "the thread's latest
-          checkpoint" for a ReAct V2 resume.
         - interrupt_id and occurrence_id are only meaningful alongside
           resume_payload — they identify WHICH pending occurrence a resume
           answers, so they have no purpose without a resume in flight.
@@ -414,19 +402,15 @@ class RuntimeExecuteRequest(BaseModel):
             )
         if self.resume_payload is None and not self.input.strip():
             raise ValueError("input is required when resume_payload is not set.")
-        if self.checkpoint_id is not None and self.interrupt_id is not None:
-            raise ValueError(
-                "checkpoint_id and interrupt_id are mutually exclusive: "
-                "checkpoint_id identifies a legacy Graph V2 resume, "
-                "interrupt_id identifies a ReAct V2 resume — never both at "
-                "once."
-            )
         if self.interrupt_id is not None and self.resume_payload is None:
             raise ValueError("interrupt_id is only valid together with resume_payload.")
         if self.occurrence_id is not None and self.resume_payload is None:
             raise ValueError(
                 "occurrence_id is only valid together with resume_payload."
             )
+        check_session_id(self.session_id)
+        if self.runtime_context is not None:
+            check_session_id(self.runtime_context.session_id)
         return self
 
     # ------------------------------------------------------------------
@@ -472,8 +456,6 @@ class RuntimeExecuteRequest(BaseModel):
             ctx.update(self.runtime_context.model_dump(exclude_none=True))
         if self.session_id is not None:
             ctx["session_id"] = self.session_id
-        if self.checkpoint_id is not None:
-            ctx["checkpoint_id"] = self.checkpoint_id
         if self.interrupt_id is not None:
             ctx["interrupt_id"] = self.interrupt_id
         if self.occurrence_id is not None:
@@ -513,10 +495,7 @@ class RuntimeExecuteRequest(BaseModel):
 #
 # Runtime MUST validate before resuming:
 # - the caller is authorized for the session's team (Keycloak JWT + OpenFGA)
-# - checkpoint_id (when provided) belongs to the authorized session_id
-# - checkpoint_id is in a resumable state
-# - if resuming HITL, the checkpoint is in a waiting state compatible with
-#   the provided resume_payload
+# - if resuming HITL, the interrupt_id is pending on the session's thread
 #
 # Separation of concerns:
 # - checkpoint state  = runtime-facing graph persistence (LangGraph checkpointer)

@@ -117,6 +117,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         self._resolver = resolver
         self._provider = provider or FredCoreModelProvider()
 
+    def with_provider(self, provider: ModelProvider) -> RoutedChatModelFactory:
+        """Same routing, models built by `provider` (a pod serving extra providers)."""
+        return RoutedChatModelFactory(resolver=self._resolver, provider=provider)
+
     def build(  # type: ignore[override]
         self, definition: AgentDefinition, binding: BoundRuntimeContext
     ) -> BaseChatModel:

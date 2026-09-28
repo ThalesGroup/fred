@@ -247,7 +247,6 @@ _EXPECTED_PAYLOAD_EN: dict[str, Any] = {
     ],
     "free_text": False,
     "metadata": {},
-    "checkpoint_id": None,
     "interrupt_id": None,
     "pending_calls": [
         {
@@ -283,7 +282,6 @@ _EXPECTED_PAYLOAD_FR: dict[str, Any] = {
     ],
     "free_text": False,
     "metadata": {},
-    "checkpoint_id": None,
     "interrupt_id": None,
     "pending_calls": [
         {
@@ -453,7 +451,7 @@ def test_build_tool_approval_request_rejects_empty_calls() -> None:
     gated call — pin that as an explicit, loud precondition rather than
     letting a future caller violate it silently (found in PR review)."""
 
-    from fred_runtime.react.middleware.hitl import build_tool_approval_request
+    from fred_runtime.runtime_support.tool_approval import build_tool_approval_request
 
     with pytest.raises(ValueError, match="at least one"):
         build_tool_approval_request(binding=_binding(), calls=[])
@@ -466,6 +464,20 @@ async def test_hitl_cancel_on_a_batch_skips_every_call_not_just_one() -> None:
     the WHOLE batch even when it was asked about sequentially) — this pins it
     now that the batch is asked about once instead of N times."""
 
+    executed: list[str] = []
+
+    @tool("update_ticket")
+    def recorded_update(ticket_id: str) -> str:
+        """Record a write that must not run after refusal."""
+        executed.append(ticket_id)
+        return ticket_id
+
+    @tool("get_info")
+    def recorded_read(topic: str) -> str:
+        """Record an ungated call in the refused batch."""
+        executed.append(topic)
+        return topic
+
     model = RecordingModel(
         script=[
             AIMessage(
@@ -473,12 +485,17 @@ async def test_hitl_cancel_on_a_batch_skips_every_call_not_just_one() -> None:
                 tool_calls=[
                     _tool_call("update_ticket", {"ticket_id": "INC-4"}, "c-1"),
                     _tool_call("update_ticket", {"ticket_id": "INC-5"}, "c-2"),
+                    _tool_call("get_info", {"topic": "tickets"}, "c-3"),
                 ],
             ),
             AIMessage(content="okay, I will not touch either ticket"),
         ]
     )
-    agent = _compile_agent(model, always_require_tools=("update_ticket",))
+    agent = _compile_agent(
+        model,
+        tools=[recorded_update, recorded_read],
+        always_require_tools=("update_ticket",),
+    )
 
     await _drive(
         agent, {"messages": [HumanMessage("update INC-4 and INC-5")]}, "t-batch-cancel"
@@ -488,7 +505,12 @@ async def test_hitl_cancel_on_a_batch_skips_every_call_not_just_one() -> None:
     )
 
     messages = _update_messages(updates)
-    assert [m for m in messages if isinstance(m, ToolMessage)] == []
+    assert executed == []
+    refusals = [m for m in model.calls[-1] if isinstance(m, ToolMessage)]
+    assert {m.tool_call_id for m in refusals} == {"c-1", "c-2", "c-3"}
+    assert all(
+        m.status == "error" and "user rejected" in str(m.content) for m in refusals
+    )
     finals = [m for m in messages if isinstance(m, AIMessage) and m.content]
     assert [m.content for m in finals] == ["okay, I will not touch either ticket"]
 
@@ -550,14 +572,7 @@ async def test_hitl_operator_policy_gates_named_tool() -> None:
 
 @pytest.mark.asyncio
 async def test_hitl_resume_cancel_skips_tool_batch() -> None:
-    """Cancel must not execute the tool; the agent replans (RFC §5.4).
-
-    The legacy 4-node graph intended this via a `skip_tools` state key, but
-    LangGraph drops writes to undeclared `MessagesState` keys, so the tool ran
-    anyway (latent bug). The create_agent migration fixed it: `FredHitlMiddleware`
-    jumps back to the model on cancel, and checkpoint hygiene drops the dangling
-    assistant tool-call message from the replan input.
-    """
+    """Refusal reaches the next model call as a paired tool result."""
 
     model = RecordingModel(
         script=[
@@ -576,14 +591,16 @@ async def test_hitl_resume_cancel_skips_tool_batch() -> None:
     updates = await _drive(agent, Command(resume={"choice_id": "cancel"}), "t-cancel")
 
     messages = _update_messages(updates)
-    assert [m for m in messages if isinstance(m, ToolMessage)] == []
+
     finals = [m for m in messages if isinstance(m, AIMessage) and m.content]
     assert [m.content for m in finals] == ["okay, I will not touch the ticket"]
-    # The dangling assistant tool-call message is dropped from the replan
-    # model input (checkpoint hygiene), so the model never sees a half-open
-    # tool exchange.
     replan_input = model.calls[-1]
-    assert not any(getattr(m, "tool_calls", None) for m in replan_input)
+    refusals = [m for m in replan_input if isinstance(m, ToolMessage)]
+    assert len(refusals) == 1
+    assert refusals[0].tool_call_id == "c-1"
+    assert refusals[0].status == "error"
+    assert "user rejected" in str(refusals[0].content)
+    assert "Do not request these actions again" in str(refusals[0].content)
 
 
 # ---------------------------------------------------------------------------

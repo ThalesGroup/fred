@@ -272,6 +272,46 @@ async def test_adelete_thread_purges_all_checkpoint_namespaces(checkpointer):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("session", ["s_1", r"s%_\1"])
+async def test_adelete_session_threads_also_purges_derived_graph_threads(
+    checkpointer, session
+):
+    """A session purge reaches the LangGraph-native graph threads derived from
+    it (`session:<namespace>`), and nothing that merely shares a prefix."""
+    targets = (session, f"{session}:agent-a", f"{session}:dynamic:child")
+    neighbors = (f"{session}0", "sx1:agent-a")
+    for thread in (*targets, *neighbors):
+        await _put(checkpointer, thread)
+
+    deleted = await checkpointer.adelete_session_threads(
+        session, derived_prefix=f"{session}:"
+    )
+
+    assert deleted == len(targets)
+    for thread in targets:
+        assert await checkpointer.aget_tuple(_config(thread)) is None
+    for thread in neighbors:
+        assert await checkpointer.aget_tuple(_config(thread)) is not None
+
+
+@pytest.mark.asyncio
+async def test_session_thread_owners_lists_each_thread_and_its_recorded_owner(
+    checkpointer,
+):
+    await _put(checkpointer, "s1", __fred_user_id="alice")
+    await _put(checkpointer, "s1:agent-a", __fred_user_id="alice")
+    await _put(checkpointer, "s1:agent-b")
+    await _put(checkpointer, "s10", __fred_user_id="bob")
+
+    owners = await checkpointer.session_thread_owners("s1", derived_prefix="s1:")
+
+    assert owners == {"s1": "alice", "s1:agent-a": "alice", "s1:agent-b": None}
+    assert (
+        await checkpointer.session_thread_owners("gone", derived_prefix="gone:") == {}
+    )
+
+
+@pytest.mark.asyncio
 async def test_adelete_thread_returns_zero_for_unknown_thread(checkpointer):
     assert await checkpointer.adelete_thread("no-such-thread") == 0
 

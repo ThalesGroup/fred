@@ -12,101 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ToolObservabilityMiddleware — tool-call KPI timer + audit events for EVERY
-tool call the graph executes (#2011).
-
-Why this module exists:
-- `ContextAwareTool` (`fred_runtime.common.context_aware_tool`) used to be the
-  ONLY place emitting `agent.tool_latency_ms` / `agent.tool_failed_total` KPI
-  and `agent.tool.invocation.{started,completed}` audit events. It is only
-  ever instantiated by `mcp_toolkit.py`, i.e. only for MCP-catalog tools.
-  Native capability tools (e.g. `DocumentAccessCapability`'s
-  `search_documents_using_vectorization`, a plain `@tool`-decorated function
-  shipped on the capability's own `AgentMiddleware.tools`) never passed
-  through `ContextAwareTool` at all, so they produced zero KPI samples and
-  zero audit events — a real gap in the "every tool invocation is audited"
-  guarantee documented in `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`
-  §9.
-- `AgentMiddleware.awrap_tool_call` is the one chokepoint `create_agent`'s
-  `ToolNode` routes every tool call through, regardless of whether the tool
-  came from the MCP toolkit or a capability's own middleware. Centralizing
-  here fixes the gap for every tool at once, instead of patching each tool
-  source separately.
-
-Semantics preserved from `ContextAwareTool` (do not drift from these):
-- metric names `agent.tool_latency_ms` / `agent.tool_failed_total` are
-  unchanged — Grafana dashboards built against them keep working, just with
-  full coverage now
-- audit outcome is one of `"succeeded"` | `"failed"` | `"cancelled"` — never
-  `"refused"`. A HITL-refused proposal is turned back to the model by
-  `FredHitlMiddleware.aafter_model` (via `jump_to: "model"`) before the tool
-  node — and therefore this middleware — ever runs, so a refusal never
-  produces a `"started"` event (a proposal is not an action, see
-  `docs/swift/platform/OBSERVABILITY-AND-AUDIT.md`)
-- application and audit logs contain only bounded event, outcome and reason
-  fields; identifiers remain confined to the existing KPI contract
-
-MCP failures preserve the same no-orphan guarantee: `ContextAwareTool._run` /
-`_arun` returns formatted text for the model instead of re-raising, paired with
-an `is_error=True` artifact; only a run stop is re-raised, since it ends the
-run. The artifact is the structured signal this middleware, the runtime trace
-and KPI/audit use; raw provider text still cannot become generic user-facing
-error content. The one curated exception is Knowledge Flow `read_query` HTTP
-400: its already redacted engine detail crosses in a Fred artifact so the SQL
-trace can explain the failed query without exposing HTTP transport details.
-
-How to use:
-- always part of the frame, positioned next to `TracingKpiMiddleware` (see
-  `frame.py` for the exact slot and why)
-"""
+"""LangChain adapter for the shared tool execution boundary (ReAct and Deep)."""
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
-from typing import Any, Optional
+from typing import Any
 
-from fred_core.common.team_id import is_personal_team_id
-from fred_core.kpi import BaseKPIWriter, KPIActor
-from fred_core.logs.audit_log import emit_audit_log
-from fred_core.security.models import AuthorizationError, Resource
-from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
+from fred_core.kpi import BaseKPIWriter
 from fred_sdk.contracts.context import BoundRuntimeContext
-from fred_sdk.contracts.runtime import SpanPort, TracerPort
+from fred_sdk.contracts.runtime import TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages.tool import ToolMessage
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
-from fred_runtime.common.outbound_credentials import delegation_enabled
-from fred_runtime.runtime_context import get_runtime_context
-from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
-from fred_runtime.runtime_support.run_scope import RunScope
+from fred_runtime.runtime_support.tool_execution import ToolExecution
 
 from ..react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
 from ..react_tracing import RUNTIME_TOOL_SPAN_NAME, tool_span
 
-logger = logging.getLogger(__name__)
-
 
 class ToolObservabilityMiddleware(AgentMiddleware):
-    """
-    KPI timer + audit events around every tool call `create_agent`'s
-    `ToolNode` executes (#2011).
-
-    Why this exists:
-    - see the module docstring for the full rationale; in short, this is the
-      generic-tool-call equivalent of `TracingKpiMiddleware` (which does the
-      same job for model calls) — one middleware, one chokepoint, covering
-      MCP-catalog tools and capability-native tools alike
-
-    How to use:
-    - always part of the frame; KPI emission is a no-op when `kpi` is None
-      (mirrors `TracingKpiMiddleware`'s own `kpi is None` handling)
-    """
+    """Adapt the tool node without duplicating binder-owned trace spans."""
 
     def __init__(
         self,
@@ -116,35 +45,9 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         tracer: TracerPort | None = None,
     ) -> None:
         super().__init__()
-        self._kpi = kpi
+        self._execution = ToolExecution(kpi=kpi, binding=binding)
         self._binding = binding
         self._tracer = tracer
-
-    def _base_dims(self, *, tool_name: str, source: str) -> dict[str, Optional[str]]:
-        """
-        Identity/correlation dims shared by the KPI timer and both audit
-        events for one tool call. Only identifiers — never tool arguments or
-        results (mirrors `ContextAwareTool._kpi_base_dims`'s restraint).
-        """
-        portable = self._binding.portable_context
-        dims: dict[str, Optional[str]] = {"tool_name": tool_name, "source": source}
-        if portable.session_id:
-            dims["session_id"] = portable.session_id
-        if portable.user_id:
-            dims["user_id"] = portable.user_id
-        if portable.team_id:
-            dims["team_id"] = portable.team_id
-        agent_instance_id = portable.baggage.get("agent_instance_id")
-        if agent_instance_id:
-            dims["agent_instance_id"] = agent_instance_id
-        template_agent_id = portable.baggage.get("template_agent_id")
-        if template_agent_id:
-            dims["template_agent_id"] = template_agent_id
-        if portable.correlation_id:
-            dims["correlation_id"] = portable.correlation_id
-        if portable.trace_id:
-            dims["trace_id"] = portable.trace_id
-        return dims
 
     @staticmethod
     def _tool_name(request: ToolCallRequest) -> str:
@@ -153,68 +56,6 @@ class ToolObservabilityMiddleware(AgentMiddleware):
         if not name:
             name = getattr(request.tool, "name", None)
         return str(name) if name else "unknown"
-
-    @staticmethod
-    async def _reverify_team_authorization(
-        *, user_id: Optional[str], team_id: Optional[str], is_service_agent: bool
-    ) -> None:
-        """
-        Per-tool-call ReBAC re-check (RUNTIME least-privilege gap, see
-        docs/swift audit): `_authorize_execution_or_raise` (agent_app.py)
-        verifies CAN_USE_TEAM_AGENTS on the turn's team exactly once, at turn
-        start. Every tool call after that — potentially many, in a long ReAct
-        loop — ran unchecked, trusting that one decision for the rest of the
-        turn.
-        This re-runs the same OpenFGA check at the one chokepoint every tool
-        call already passes through, so a stale/dropped team membership (or a
-        tool call scoped to a different team than the one authorized at turn
-        start) is caught here instead of silently trusted.
-
-        Uses the low-level `check_permission_or_raise` primitive (subject/
-        resource references, no `KeycloakUser`) because only the portable
-        `user_id`/`team_id` strings are available at this layer — the
-        personal-team self-heal and org-team bootstrap already ran once at
-        turn start for this exact team_id, so skipping them here is safe.
-
-        `is_service_agent` mirrors the *other* branch `_authorize_execution_or_raise`
-        takes at turn start (RFC EVAL-AUTH, Solution A): the evaluation worker's
-        service identity is authorized without any OpenFGA tuple, so re-running
-        the ReBAC check here would reject an identity that was never meant to
-        hold one. The flag is computed once from the trusted JWT at turn start
-        and threaded through `PortableContext.baggage` — never re-derived from
-        anything caller-supplied at this layer.
-
-        Scope: authorizes the *team* a call is scoped to, not any specific
-        resource a tool argument may reference (e.g. a document_uid) — that
-        remains each downstream service's own responsibility (several already
-        do it, e.g. knowledge-flow-backend's per-document ReBAC checks).
-        """
-        try:
-            rebac = get_runtime_context().config.rebac_engine
-        except RuntimeError:
-            # No pod-wide RuntimeContext set up (e.g. a unit test exercising
-            # this middleware in isolation) — nothing to check against.
-            return
-        if rebac is None or not rebac.enabled:
-            return  # dev/local (identity-only) or Noop engine — mirrors turn start
-        if not user_id or is_service_agent:
-            return
-        try:
-            if not team_id or is_personal_team_id(team_id):
-                scope = RunScope.current()
-                if scope is not None and scope.delegated_credentials:
-                    await rebac.require_user_standing(user_id)
-                return
-            await rebac.check_permission_or_raise(
-                RebacReference(Resource.USER, user_id),
-                TeamPermission.CAN_USE_TEAM_AGENTS,
-                RebacReference(Resource.TEAM, team_id),
-            )
-        except AuthorizationError:
-            scope = RunScope.current()
-            if scope is not None and scope.delegated_credentials:
-                raise AuthorityLostError() from None
-            raise
 
     def _span_tracer(self, request: ToolCallRequest) -> TracerPort | None:
         """Skip binder-owned spans; middleware tools need their own span."""
@@ -240,7 +81,14 @@ class ToolObservabilityMiddleware(AgentMiddleware):
             if isinstance(tool_call, dict)
             else None,
         ) as span:
-            result = await self._observe_tool_call(request, handler, span=span)
+            result = await self._execution.run(
+                lambda: handler(request),
+                tool_name=self._tool_name(request),
+                source="mcp"
+                if isinstance(request.tool, ContextAwareTool)
+                else "capability",
+                span=span,
+            )
             if span is not None and tracer is not None and tracer.captures_content:
                 output = getattr(result, "content", None)
                 if isinstance(result, Command) and isinstance(result.update, dict):
@@ -254,236 +102,6 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                         ]
                 span.set_io(output=output)
             return result
-
-    async def _observe_tool_call(
-        self,
-        request: ToolCallRequest,
-        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
-        *,
-        span: SpanPort | None,
-    ) -> ToolMessage | Command[Any]:
-        tool_name = self._tool_name(request)
-        # `ContextAwareTool` wraps every MCP-catalog tool (`mcp_toolkit.py`);
-        # anything else reaching the tool node is a capability-native tool
-        # (or a platform-builtin tool bound directly, e.g. filesystem tools).
-        # A runtime `isinstance` check against a class from another module is
-        # a little coupled, but it's the cheapest correct signal available —
-        # no cleaner marker exists on `BaseTool` today.
-        source = "mcp" if isinstance(request.tool, ContextAwareTool) else "capability"
-        base_dims = self._base_dims(tool_name=tool_name, source=source)
-
-        kpi = self._kpi
-        # The timer carries `status` and nothing else about the outcome, by
-        # design. Two reasons, and both bite if a future change adds
-        # `error_code`/`exception_type` back onto `kpi_dims`:
-        # - `PrometheusKPIStore._resolve_labeling` freezes a metric's label-name
-        #   tuple on the FIRST sample it sees. The first tool call in any pod is
-        #   overwhelmingly a success, so a dim only written on the failure
-        #   branches is silently dropped for the rest of the process — present
-        #   in the code, absent from Grafana, with nothing anywhere to say so.
-        # - `agent.tool_latency_ms` is a histogram; every extra label multiplies
-        #   its bucket series. Latency split by success/failure is a real
-        #   question and `status` (always set by `_TimerImpl.__exit__`) answers
-        #   it. Latency split by error code is not.
-        # The failure taxonomy lives on `agent.tool_failed_total` — a counter,
-        # labelled identically on BOTH failure branches below — and on the
-        # audit event.
-        timer_ctx = (
-            kpi.timer(
-                "agent.tool_latency_ms", dims=base_dims, actor=KPIActor(type="system")
-            )
-            if kpi is not None
-            else nullcontext()
-        )
-
-        # A run that has already lost its authority makes no further outbound
-        # call, including the sibling calls of a round already in flight.
-        run_scope = RunScope.current()
-        if run_scope is not None:
-            run_scope.raise_if_stopped()
-
-        confined = delegation_enabled()
-        if confined:
-            emit_audit_log(
-                "agent.tool.invocation.started",
-                outcome="started",
-                reason="tool_invocation",
-            )
-        else:
-            emit_audit_log("agent.tool.invocation.started", **base_dims)
-        with timer_ctx as kpi_dims:
-            try:
-                await self._reverify_team_authorization(
-                    user_id=base_dims.get("user_id"),
-                    team_id=base_dims.get("team_id"),
-                    is_service_agent=self._binding.portable_context.baggage.get(
-                        "is_service_agent"
-                    )
-                    == "true",
-                )
-                result = await handler(request)
-            except asyncio.CancelledError:
-                # Never swallow cancellation — record it as its own terminal
-                # outcome (distinct from "failed", see
-                # docs/swift/platform/OBSERVABILITY-AND-AUDIT.md §5) and
-                # re-raise so asyncio's cancellation semantics stay intact.
-                if confined:
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="cancelled",
-                        reason="cancelled",
-                    )
-                else:
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="cancelled",
-                        **base_dims,
-                    )
-                raise
-            except Exception as e:
-                if kpi_dims is not None:
-                    # `status` only — see the timer comment above.
-                    kpi_dims["status"] = "error"
-                if kpi is not None:
-                    kpi.count(
-                        "agent.tool_failed_total",
-                        1,
-                        dims={
-                            **base_dims,
-                            "status": "error",
-                            "error_code": type(e).__name__,
-                            "exception_type": type(e).__name__,
-                        },
-                        actor=KPIActor(type="system"),
-                    )
-                if isinstance(e, RunStopError):
-                    # Reason only: `logger.exception` would print the traceback
-                    # and the chained upstream error with it, which is how a
-                    # receiver's response body ends up in the pod's logs.
-                    logger.warning(
-                        "[TOOL] event=tool_call outcome=stopped reason=%s", e.reason
-                    )
-                    reason = e.reason
-                elif confined:
-                    reason = type(e).__name__
-                    logger.error(
-                        "[TOOL] event=tool_call outcome=failed reason=%s", reason
-                    )
-                else:
-                    reason = type(e).__name__
-                    logger.exception(
-                        "[TOOL][%s] Tool execution failed (captured)", tool_name
-                    )
-                if confined:
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="failed",
-                        reason=reason,
-                    )
-                else:
-                    emit_audit_log(
-                        "agent.tool.invocation.completed",
-                        outcome="failed",
-                        error_code=type(e).__name__,
-                        exception_type=type(e).__name__,
-                        **base_dims,
-                    )
-                raise
-            else:
-                # A `Command` has no `.status` — LangGraph already ran the
-                # tool and chose to redirect graph state, which is not a
-                # failure signal, so it always counts as "succeeded".
-                #
-                # `status == "error"` only covers tools that RAISED and had the
-                # exception converted by LangChain. A tool that handles its own
-                # failure and returns an `is_error=True` artifact (the contract
-                # `_document_tool_failure` implements, and what `react_runtime`
-                # already reads to mark the trace step failed) returns a
-                # perfectly normal ToolMessage — so without the artifact check
-                # a handled failure was audited as "succeeded" and never
-                # counted in `agent.tool_failed_total`.
-                # Both artifact shapes must be read: `normalize_tool_artifact`
-                # (react_stream_adapter) accepts a dict as well as a typed
-                # `ToolInvocationResult`, so a dict-returning tool would show as
-                # failed in the user's trace while a getattr-only check here
-                # recorded it as a success — the exact divergence this closes.
-                artifact = getattr(result, "artifact", None)
-                artifact_is_error = (
-                    bool(artifact.get("is_error"))
-                    if isinstance(artifact, dict)
-                    else bool(getattr(artifact, "is_error", False))
-                )
-                status_is_error = (
-                    isinstance(result, ToolMessage) and result.status == "error"
-                )
-                failed = status_is_error or artifact_is_error
-                if failed:
-                    # Labelled like the `except` branch above. A tool that
-                    # HANDLES its own failure (the `_document_tool_failure`
-                    # contract) is now the dominant failure population, so
-                    # emitting it without `error_code` would make
-                    # `sum by (error_code) (agent.tool_failed_total)` — and any
-                    # audit query filtering on it — silently drop exactly the
-                    # failures #2073 Item 3 was raised about. There is no
-                    # exception type here, so the code names the SHAPE that
-                    # reported the failure.
-                    error_code = (
-                        "tool_error_status"
-                        if status_is_error
-                        else "tool_error_artifact"
-                    )
-                    if span is not None:
-                        span.set_attribute("status", "error")
-                        span.set_attribute("error_type", error_code)
-                    if kpi_dims is not None:
-                        # `status` only — see the timer comment above.
-                        kpi_dims["status"] = "error"
-                    if kpi is not None:
-                        kpi.count(
-                            "agent.tool_failed_total",
-                            1,
-                            # `exception_type` is emitted even though there is
-                            # no exception: PrometheusKPIStore freezes a
-                            # metric's label-name tuple on its FIRST sample, and
-                            # handled failures are the dominant population — so
-                            # omitting it here would drop `exception_type` from
-                            # every RAISED failure for the rest of the process.
-                            dims={
-                                **base_dims,
-                                "status": "error",
-                                "error_code": error_code,
-                                "exception_type": "none",
-                            },
-                            actor=KPIActor(type="system"),
-                        )
-                    if confined:
-                        emit_audit_log(
-                            "agent.tool.invocation.completed",
-                            outcome="failed",
-                            reason=error_code,
-                        )
-                    else:
-                        emit_audit_log(
-                            "agent.tool.invocation.completed",
-                            outcome="failed",
-                            error_code=error_code,
-                            exception_type="none",
-                            **base_dims,
-                        )
-                else:
-                    if confined:
-                        emit_audit_log(
-                            "agent.tool.invocation.completed",
-                            outcome="succeeded",
-                            reason="tool_completed",
-                        )
-                    else:
-                        emit_audit_log(
-                            "agent.tool.invocation.completed",
-                            outcome="succeeded",
-                            **base_dims,
-                        )
-                return result
 
 
 __all__ = ["ToolObservabilityMiddleware"]
