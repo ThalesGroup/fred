@@ -303,7 +303,11 @@ async def get_users_by_ids(
             except ValueError:
                 continue
         found = await get_user_store().get_identities(uuids)
-        summaries = {raw["id"]: UserSummary.from_raw_user(raw) for raw in found}
+        summaries = {
+            raw["id"]: UserSummary.from_raw_user(raw)
+            for raw in found
+            if isinstance(raw["id"], str)
+        }
         return {
             user_id: summaries.get(user_id, UserSummary(id=user_id))
             for user_id in unique_ids

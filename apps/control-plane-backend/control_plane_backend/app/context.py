@@ -27,7 +27,6 @@ from fred_core import (
     RebacEngine,
     rebac_factory,
 )
-from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
@@ -46,6 +45,7 @@ from fred_core.store import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 

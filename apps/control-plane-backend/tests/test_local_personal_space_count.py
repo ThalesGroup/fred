@@ -13,11 +13,12 @@
 # limitations under the License.
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
-
 from control_plane_backend.teams import service
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
 
 
 @pytest.mark.asyncio
@@ -35,4 +36,7 @@ async def test_local_personal_space_count_uses_store(monkeypatch):
         configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local"))
     )
 
-    assert await service.count_all_personal_spaces(deps) == 7
+    assert (
+        await service.count_all_personal_spaces(cast(TeamServiceDependencies, deps))
+        == 7
+    )

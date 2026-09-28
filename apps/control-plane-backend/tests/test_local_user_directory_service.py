@@ -14,20 +14,21 @@
 
 import secrets
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-
 import pytest
-
+from control_plane_backend.config.models import Configuration
 from control_plane_backend.users import api, service
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
     IdentityManagedByProviderError,
 )
+from fastapi import FastAPI
+from fred_core import KeycloakUser
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.mark.asyncio
@@ -53,11 +54,19 @@ async def test_local_user_reads_never_construct_admin(monkeypatch):
         raise AssertionError("Keycloak Admin API must not be constructed")
 
     deps = UserServiceDependencies(
-        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
         create_keycloak_admin_client=no_admin,
     )
 
-    assert [user.id for user in await service.list_users(None, deps)] == [str(user_id)]
+    assert [
+        user.id
+        for user in await service.list_users(
+            KeycloakUser(uid=str(user_id), username="alice", roles=[]), deps
+        )
+    ] == [str(user_id)]
     assert [user.id for user in await service.search_users("ALI", deps)] == [
         str(user_id)
     ]
@@ -73,7 +82,10 @@ async def test_local_user_reads_never_construct_admin(monkeypatch):
 @pytest.mark.asyncio
 async def test_local_user_creation_is_refused_before_admin_client() -> None:
     deps = UserServiceDependencies(
-        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
         create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
             AssertionError("Keycloak Admin API must not be constructed")
         ),
@@ -83,7 +95,9 @@ async def test_local_user_creation_is_refused_before_admin_client() -> None:
     )
 
     with pytest.raises(IdentityManagedByProviderError, match="alice"):
-        await service.create_user(None, request, deps)
+        await service.create_user(
+            KeycloakUser(uid=str(uuid4()), username="admin", roles=[]), request, deps
+        )
 
 
 @pytest.mark.asyncio

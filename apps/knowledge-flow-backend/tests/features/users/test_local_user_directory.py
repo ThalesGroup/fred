@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fred_core import KeycloakUser
 
 from knowledge_flow_backend.features.users import users_service
 
@@ -40,12 +41,10 @@ async def test_local_directory_reads_keep_permission_check_and_avoid_admin(monke
     monkeypatch.setattr(
         users_service,
         "create_keycloak_admin",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("Keycloak Admin API must not be constructed")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("Keycloak Admin API must not be constructed")),
     )
 
-    assert [user.id for user in await users_service.list_users(None)] == [str(user_id)]
+    assert [user.id for user in await users_service.list_users(KeycloakUser(uid=str(user_id), username="alice", roles=[]))] == [str(user_id)]
     rebac.check_user_permission_or_raise.assert_awaited_once()
     by_id = await users_service.get_users_by_ids([str(user_id), "missing"])
     assert by_id[str(user_id)].username == "alice"

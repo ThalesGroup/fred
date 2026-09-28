@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from control_plane_backend.config.models import Configuration
 from control_plane_backend.users import service as users_service
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.platform_roles import (
@@ -351,7 +352,10 @@ async def test_local_grant_refuses_unknown_identity_without_writing(monkeypatch)
     store = SimpleNamespace(identity_exists=AsyncMock(return_value=False))
     monkeypatch.setattr(users_service, "get_user_store", lambda: store)
     deps = UserServiceDependencies(
-        configuration=SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
         create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
             AssertionError("Keycloak Admin API must not be constructed")
         ),

@@ -34,13 +34,13 @@ async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
     await get_rebac_engine().check_user_permission_or_raise(_curent_user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
     if get_configuration().security.user_directory == "local":
         store = get_user_store()
-        summaries: list[UserSummary] = []
+        local_summaries: list[UserSummary] = []
         offset = 0
         while True:
             page = await store.list_identities(offset, _USER_PAGE_SIZE)
-            summaries.extend(UserSummary.from_raw_user(raw) for raw in page)
+            local_summaries.extend(UserSummary.from_raw_user(raw) for raw in page)
             if len(page) < _USER_PAGE_SIZE:
-                return summaries
+                return local_summaries
             offset += _USER_PAGE_SIZE
 
     admin = create_keycloak_admin(
@@ -80,7 +80,7 @@ async def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
             except ValueError:
                 continue
         found = await get_user_store().get_identities(uuids)
-        summaries = {raw["id"]: UserSummary.from_raw_user(raw) for raw in found}
+        summaries = {raw["id"]: UserSummary.from_raw_user(raw) for raw in found if isinstance(raw["id"], str)}
         return {user_id: summaries.get(user_id, UserSummary(id=user_id)) for user_id in unique_ids}
 
     admin = create_keycloak_admin(
