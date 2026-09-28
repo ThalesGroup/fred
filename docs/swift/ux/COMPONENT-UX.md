@@ -722,6 +722,12 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   (same amber pulse as `pending`) simultaneously, not just the first. The trace header follows
   suit via `TraceSummary.awaitingConfirmation`.
 
+- **Refused tools retain their status after reload (2026-09-28)** — the thread view
+  reconstructs cancellation from each saved HITL request/response pair and its
+  pending call IDs, including successive refusals in one exchange. Existing tool
+  results take precedence. Rejected calls no longer revert to "running" or keep
+  the trace header thinking after completion.
+
 - **Step numbers + curated discriminator (2026-07-30, #2172)** — two calls to the same tool
   rendered as byte-identical rows ("READING QUERY" ×2), because the redaction rule from
   #1774/CHAT-13 shows neither the raw tool name nor the arguments. Rows now carry a permanent
