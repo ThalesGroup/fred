@@ -182,6 +182,14 @@ Testing uses the sibling `fred-deployment-factory` repository on its branch matc
 - **Example overlays** in `fred`: `apps/*/config/configuration_generic_oidc.example.yaml` and `configuration_mock_oidc.example.yaml`, holding only the `security` differences.
 - `docs/LOCAL-DEVELOPMENT.md` (factory) gains an "Identity provider portability" section with the four levels: Keycloak baseline, Keycloak in generic shape, mock OIDC with Keycloak stopped, real Entra tenant.
 
+The local configuration preparation command derives full host-run YAMLs for
+Keycloak, generic OIDC and the mock from the canonical production files and
+existing security overlays. Generated files live outside tracked baselines and
+are schema-validated before publication. OIDC launch commands disable stale
+local delegation files and set the required mock token lifetime; the baseline
+retains its usual environment. Entra uses the existing Helm example with the
+customer registrations.
+
 ## Risks / Trade-offs
 
 - **Discovery at startup adds a network dependency** for `oidc` deployments. It is bounded and fails closed with an explicit message.
