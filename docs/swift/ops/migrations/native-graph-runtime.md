@@ -52,6 +52,27 @@ are not a production model or observability recommendation.
    is not automatically restored on a new turn. Reconstruct required business
    state explicitly and check previous side effects before rerunning work.
 
+PostgreSQL checkpoint initialization also installs two session lookup indexes on
+existing tables. Their equality lookup covers both ReAct/Deep session threads
+and every `session:agent` Graph thread, including dynamic children, under
+non-C collations and generic prepared plans. SQLite keeps its existing lookup.
+
+For large live checkpoint tables, prebuild these indexes **before rollout** to
+avoid the write-blocking build during the first checkpoint request. Run each
+statement outside a transaction; adjust `v2_` if using a custom table prefix:
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS v2_langgraph_checkpoint_session_idx
+    ON v2_langgraph_checkpoint (split_part(thread_id, ':', 1));
+CREATE INDEX CONCURRENTLY IF NOT EXISTS v2_langgraph_checkpoint_write_session_idx
+    ON v2_langgraph_checkpoint_write (split_part(thread_id, ':', 1));
+```
+
+Confirm both indexes are valid before upgrading; a failed concurrent build can
+leave an invalid index that must be dropped and rebuilt. Otherwise, allow the
+runtime to create them during a maintenance window. Existing indexes and data
+are retained; rollback can leave these additional indexes in place.
+
 ## Validation
 
 Verify pod template discovery and external agent imports. In a new Graph session,

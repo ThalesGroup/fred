@@ -72,12 +72,14 @@ from sqlalchemy import (
     case,
     delete,
     desc,
+    literal_column,
     or_,
     select,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
@@ -304,6 +306,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             f"{self.thread_owner_table.name}_activity_idx",
             self.thread_owner_table.c.last_activity_at,
         )
+        self._session_indexes = [
+            Index(
+                f"{table.name}_session_idx",
+                self._session_id_expression(table.c.thread_id),
+            ).ddl_if(dialect="postgresql")
+            for table in (self.checkpoints_table, self.writes_table)
+        ]
         self._metadata = metadata
         self._ddl_lock_id = advisory_lock_key(self.checkpoints_table.name)
         self._tables_ready = False
@@ -323,6 +332,18 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         async with phase_timer(self._kpi, phase_name):
             yield
 
+    @staticmethod
+    def _session_id_expression(column: Any) -> Any:
+        # Fixed literals let PostgreSQL match the expression index in generic plans.
+        return func.split_part(column, literal_column("':'"), literal_column("1"))
+
+    def _create_tables(self, connection: Connection) -> None:
+        self._metadata.create_all(connection)
+        if connection.dialect.name == "postgresql":
+            # create_all skips indexes on tables that already exist.
+            for index in self._session_indexes:
+                index.create(connection, checkfirst=True)
+
     async def _ensure_tables(self) -> None:
         if self._tables_ready:
             return
@@ -330,7 +351,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             await run_ddl_with_advisory_lock(
                 engine=self.store.engine,
                 lock_key=self._ddl_lock_id,
-                ddl_sync_fn=self._metadata.create_all,
+                ddl_sync_fn=self._create_tables,
                 logger=self._logger,
             )
         self._tables_ready = True
@@ -985,6 +1006,12 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         from it (ids starting with `derived_prefix`, e.g. LangGraph-native
         graph threads — `graph_thread_prefix`).
         """
+        if (
+            self.store.engine.dialect.name == "postgresql"
+            and ":" not in session_id
+            and derived_prefix == f"{session_id}:"
+        ):
+            return self._session_id_expression(column) == session_id
         escaped = (
             derived_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         )
