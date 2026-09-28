@@ -15,6 +15,7 @@
 import httpx
 import pytest
 from fred_pod.security.oidc_endpoints import resolve_endpoints
+from pydantic import AnyHttpUrl, AnyUrl
 
 from fred_core import get_token_endpoint
 from fred_core.security import oidc
@@ -23,7 +24,7 @@ from fred_core.security.structure import UserSecurity
 REALM = "http://localhost:8080/realms/app"
 ISSUER = "https://identity.example/tenant/v2.0"
 JWKS = "https://identity.example/keys"
-TOKEN = "https://identity.example/token"
+ENDPOINT_URL = "https://identity.example/token"
 
 
 @pytest.fixture(autouse=True)
@@ -50,7 +51,9 @@ def test_keycloak_initialization_keeps_existing_urls(
         pytest.fail("Keycloak startup must not discover endpoints")
 
     monkeypatch.setattr(httpx, "get", unexpected_request)
-    oidc.initialize_user_security(UserSecurity(realm_url=REALM, client_id="app"))
+    oidc.initialize_user_security(
+        UserSecurity(realm_url=AnyUrl(REALM), client_id="app")
+    )
 
     assert oidc.KEYCLOAK_URL == REALM
     assert oidc.KEYCLOAK_JWKS_URL == f"{REALM}/protocol/openid-connect/certs"
@@ -68,7 +71,7 @@ def test_oidc_initialization_discovers_endpoints_without_parsing_a_realm(
         requests.append((url, timeout))
         return httpx.Response(
             200,
-            json={"issuer": ISSUER, "jwks_uri": JWKS, "token_endpoint": TOKEN},
+            json={"issuer": ISSUER, "jwks_uri": JWKS, "token_endpoint": ENDPOINT_URL},
             request=httpx.Request("GET", url),
         )
 
@@ -77,7 +80,7 @@ def test_oidc_initialization_discovers_endpoints_without_parsing_a_realm(
         oidc, "split_realm_url", lambda url: pytest.fail("OIDC is not a Keycloak realm")
     )
     config = UserSecurity(
-        realm_url=ISSUER,
+        realm_url=AnyUrl(ISSUER),
         client_id="app",
         provider="oidc",
         audience="fred-api",
@@ -90,7 +93,7 @@ def test_oidc_initialization_discovers_endpoints_without_parsing_a_realm(
     assert oidc.USER_ISSUER == ISSUER
     assert oidc.USER_AUDIENCE == "fred-api"
     assert oidc.USER_SECURITY_CONFIG is config
-    assert get_token_endpoint() == TOKEN
+    assert get_token_endpoint() == ENDPOINT_URL
 
 
 def test_oidc_initialization_passes_explicit_endpoint_overrides(
@@ -101,17 +104,18 @@ def test_oidc_initialization_passes_explicit_endpoint_overrides(
         "get",
         lambda url, timeout: httpx.Response(
             200,
-            json={"issuer": ISSUER, "jwks_uri": JWKS, "token_endpoint": TOKEN},
+            json={"issuer": ISSUER, "jwks_uri": JWKS, "token_endpoint": ENDPOINT_URL},
             request=httpx.Request("GET", url),
         ),
     )
+    override_url = "https://override.example/token"
     oidc.initialize_user_security(
         UserSecurity(
-            realm_url=ISSUER,
+            realm_url=AnyUrl(ISSUER),
             client_id="app",
             provider="oidc",
-            jwks_url="https://override.example/keys",
-            token_url="https://override.example/token",
+            jwks_url=AnyHttpUrl("https://override.example/keys"),
+            token_url=AnyHttpUrl(override_url),
         )
     )
 

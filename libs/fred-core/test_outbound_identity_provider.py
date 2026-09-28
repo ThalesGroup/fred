@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import secrets
+
 import pytest
 from fred_core.security.outbound import ClientCredentialsProvider
 
@@ -33,7 +35,7 @@ def test_client_credentials_token_url_override(
         keycloak_base="https://identity.example",
         realm="fred",
         client_id="service",
-        client_secret="generated-test-secret",
+        client_secret=secrets.token_urlsafe(16),
         token_url=override,
     )
 

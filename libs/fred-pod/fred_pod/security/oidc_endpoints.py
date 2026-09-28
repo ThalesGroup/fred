@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from typing import cast
 
 import httpx
 from pydantic import AnyHttpUrl, ValidationError
@@ -95,6 +96,6 @@ def resolve_endpoints(
             ) from exc
     return OidcEndpoints(
         issuer=issuer,
-        jwks_uri=jwks_uri,
-        token_endpoint=token_endpoint,
+        jwks_uri=cast(str, jwks_uri),
+        token_endpoint=cast(str, token_endpoint),
     )
