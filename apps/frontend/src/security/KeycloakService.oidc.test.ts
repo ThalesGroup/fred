@@ -29,11 +29,19 @@ const state = vi.hoisted(() => ({
   keycloakConstructor: vi.fn(),
 }));
 
-vi.mock("keycloak-js", () => ({ default: class { constructor(...args: unknown[]) { state.keycloakConstructor(...args); } } }));
+vi.mock("keycloak-js", () => ({
+  default: class {
+    constructor(...args: unknown[]) {
+      state.keycloakConstructor(...args);
+    }
+  },
+}));
 vi.mock("oidc-client-ts", () => ({
   UserManager: class {
     events = { addAccessTokenExpiring: vi.fn(), addUserLoaded: vi.fn(), addUserUnloaded: vi.fn() };
-    constructor(settings: Record<string, unknown>) { state.settings = settings; }
+    constructor(settings: Record<string, unknown>) {
+      state.settings = settings;
+    }
     getUser = async () => state.user;
     signinRedirect = state.signinRedirect;
     signinRedirectCallback = state.signinRedirectCallback;
@@ -49,10 +57,20 @@ function token(claims: Record<string, unknown>): string {
 }
 
 function user(claims: Record<string, unknown>, seconds = 300) {
-  return { access_token: token({ exp: Math.floor(Date.now() / 1000) + seconds, ...claims }), refresh_token: "refresh", expires_in: seconds, expired: false };
+  return {
+    access_token: token({ exp: Math.floor(Date.now() / 1000) + seconds, ...claims }),
+    refresh_token: "refresh",
+    expires_in: seconds,
+    expired: false,
+  };
 }
 
-const options = { provider: "oidc" as const, scope: "api://fred-api/access_as_user", uid_claim: "oid", roles_claim: ["roles"] };
+const options = {
+  provider: "oidc" as const,
+  scope: "api://fred-api/access_as_user",
+  uid_claim: "oid",
+  roles_claim: ["roles"],
+};
 
 beforeEach(() => {
   vi.resetModules();
@@ -161,7 +179,10 @@ describe("generic OIDC browser authentication", () => {
   it("reads a nested roles claim from the access token", async () => {
     state.user = user({ sub: "person", access: { roles: ["admin"] } });
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc", roles_claim: ["access", "roles"] });
+    createKeycloakInstance("https://identity.example/tenant", "ui", {
+      provider: "oidc",
+      roles_claim: ["access", "roles"],
+    });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
@@ -194,7 +215,12 @@ describe("generic OIDC browser authentication", () => {
   it("refreshes the access token and never republishes a late refresh after logout", async () => {
     state.user = user({ sub: "person" }, 5);
     let settleRefresh!: (value: any) => void;
-    state.signinSilent.mockImplementation(() => new Promise((resolve) => { settleRefresh = resolve; }));
+    state.signinSilent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settleRefresh = resolve;
+        }),
+    );
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
     createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
     const authenticated = vi.fn();

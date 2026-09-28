@@ -34,7 +34,6 @@ export interface BrowserAuthOptions {
   redirect_uri?: string;
 }
 
-
 // keycloak-js's own floor: `updateToken` does `minValidity = minValidity || 5`,
 // so 0 does NOT mean "don't check" — it means five seconds. `isTokenExpired`
 // disagrees (0 is falsy there and subtracts nothing), so any threshold we test
@@ -190,7 +189,11 @@ function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
   return { url: match[1] + "/", realm: match[2] };
 }
 
-export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string, options: BrowserAuthOptions = {}) {
+export function createKeycloakInstance(
+  keycloak_url: string,
+  keycloak_client_id: string,
+  options: BrowserAuthOptions = {},
+) {
   if (!keycloakInstance && !oidcSession) {
     isSecurityEnabled = true;
     identityProvider = options.provider ?? "keycloak";
@@ -250,10 +253,12 @@ const Login = (onAuthenticatedCallback: Function) => {
   }
 
   if (identityProvider === "oidc") {
-    void oidcSession!.login(() => {
-      sessionInvalidated = false;
-      onAuthenticatedCallback();
-    }).catch((error) => console.error("[OIDC] login error:", error));
+    void oidcSession!
+      .login(() => {
+        sessionInvalidated = false;
+        onAuthenticatedCallback();
+      })
+      .catch((error) => console.error("[OIDC] login error:", error));
     return;
   }
 
@@ -435,7 +440,10 @@ export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
 // ========================= Getters =========================
 
 const claimPath = (payload: Record<string, any>, path: string[]): unknown =>
-  path.reduce<unknown>((value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : null), payload);
+  path.reduce<unknown>(
+    (value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : null),
+    payload,
+  );
 
 const GetRealmRoles = (): string[] => {
   if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return ["admin"];
@@ -447,9 +455,7 @@ const GetUserRoles = (): string[] => {
   if (!isSecurityEnabled) return ["admin"];
   const payload = GetTokenParsed();
   if (!payload) return ["admin"];
-  const value = rolesClaim
-    ? claimPath(payload, rolesClaim)
-    : payload.resource_access?.[identityClientId]?.roles;
+  const value = rolesClaim ? claimPath(payload, rolesClaim) : payload.resource_access?.[identityClientId]?.roles;
   return Array.isArray(value) ? [...value] : [];
 };
 
@@ -469,21 +475,25 @@ const GetUserGivenName = (): string | null => {
 };
 
 const GetUserMail = (): string | null => {
-  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return `${DEV_USERNAME}@localhost`;
+  if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed))
+    return `${DEV_USERNAME}@localhost`;
   return GetTokenParsed()?.email || null;
 };
 
 // Match Python uuid.UUID() acceptance, including hyphenless and braced UUIDs.
 const isPythonUuid = (value: string): boolean =>
-  /^[0-9a-fA-F]{32}$/.test(value.replace(/^urn:uuid:/i, "").replace(/^\{|\}$/g, "").replace(/-/g, ""));
+  /^[0-9a-fA-F]{32}$/.test(
+    value
+      .replace(/^urn:uuid:/i, "")
+      .replace(/^\{|\}$/g, "")
+      .replace(/-/g, ""),
+  );
 
 const GetUserId = (): string | null => {
   if (!isSecurityEnabled || (identityProvider === "keycloak" && !keycloakInstance?.tokenParsed)) return DEV_USERNAME;
   const value = GetTokenParsed()?.[uidClaim];
   if (typeof value !== "string" || !value) return null;
-  return identityProvider === "oidc" && !isPythonUuid(value)
-    ? v5(`${identityIssuer}#${value}`, v5.URL)
-    : value;
+  return identityProvider === "oidc" && !isPythonUuid(value) ? v5(`${identityIssuer}#${value}`, v5.URL) : value;
 };
 
 /**
