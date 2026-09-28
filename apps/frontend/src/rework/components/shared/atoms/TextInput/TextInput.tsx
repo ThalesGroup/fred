@@ -28,7 +28,8 @@ export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "si
   suffix?: string;
   /** Fixed, non-editable text shown before the input's own text (e.g. the `/`
    *  a prompt command is typed with). Same contract as `suffix`: presentational
-   *  only, never part of the value, and it cannot be deleted. */
+   *  only, never part of the value, and it cannot be deleted. Mutually
+   *  exclusive with `icon` — both sit at the field's left edge. */
   prefix?: string;
   compact?: boolean;
   /** Shrinks the input's own height (shared ComponentSize scale). Omit to

@@ -231,6 +231,25 @@ describe("the command menu", () => {
     expect(textarea().value).toBe("/su");
   });
 
+  // The list scrolls past 40vh and the caret never moves, so nothing brings the
+  // focused row into view on its own — the arrows would walk over entries the
+  // user cannot see.
+  it("brings the focused entry into view as the focus moves", () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      value: scrollIntoView,
+      configurable: true,
+      writable: true,
+    });
+
+    type("/");
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+
+    const callsAfterOpen = scrollIntoView.mock.calls.length;
+    press("ArrowDown");
+    expect(scrollIntoView.mock.calls.length).toBeGreaterThan(callsAfterOpen);
+  });
+
   it("prefetches the focused entry once, and not again on the way back", () => {
     type("/");
     expect(fetchPrompt.mock.calls.map(([arg]) => arg.promptId)).toEqual(["p-search"]);

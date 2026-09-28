@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { memo, useId, type MouseEvent } from "react";
+import { memo, useEffect, useId, useRef, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./CommandMenu.module.css";
 
@@ -51,6 +51,16 @@ export const CommandMenu = memo(function CommandMenu({
 }: CommandMenuProps) {
   const { t } = useTranslation();
   const headingId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // The list scrolls past 40vh, and the focus is conveyed by id rather than by
+  // moving the caret — so nothing brings the focused row into view on its own.
+  // Instant rather than smooth (unlike `Menu`): a held arrow key would queue
+  // animations behind the focus it is already past.
+  useEffect(() => {
+    const focused = listRef.current?.querySelector(`[data-active="true"]`);
+    focused?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, entries]);
 
   // Activating on mousedown, with the default suppressed: a click that first
   // blurred the textarea would take the caret out of the composer.
@@ -60,7 +70,7 @@ export const CommandMenu = memo(function CommandMenu({
   };
 
   return (
-    <div id={id} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
+    <div id={id} ref={listRef} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
       <div className={styles.group} role="group" aria-labelledby={headingId}>
         <div id={headingId} className={styles.groupTitle}>
           {t("chatbot.commandMenu.promptsSection")}
