@@ -20,11 +20,11 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy Fred normally. The Simple agent form offers one resource pack that enables both team corpus access and conversation attachments. Existing agents retain their selected capabilities and document-access settings. A partial legacy selection may leave the new pack switch off while its selected capabilities remain active in Advanced. Enabling the pack and saving selects the full available bundle.
+Deploy Fred normally. The Simple agent form offers one resource pack that enables both team corpus access and conversation attachments. Existing agents retain their selected capabilities and document-access settings. A switch below library scoping narrows the pack to conversation attachments only and withdraws corpus-only tools. A complete former attachments-pack selection reads on with that scope selected; an incomplete legacy selection may leave the pack off while its selected capabilities remain active in Advanced. Enabling an off pack and saving selects the full available bundle.
 
 ## Validation
 
-Create an agent, enable the resource pack, and confirm team corpus access and conversation attachments are available. For an existing attachments-only agent, confirm Advanced still permits attachments without corpus search and an unrelated save does not broaden its access.
+Create an agent, enable the resource pack, and confirm team corpus access and conversation attachments are available. Select the attachments-only switch and confirm corpus search, tabular access, and similarity search are unavailable. For an existing attachments-only agent, confirm the Simple pack reflects the stored scope and an unrelated save does not broaden its access.
 
 ## Rollback
 
@@ -32,4 +32,4 @@ Use the normal rollback procedure. There is no data migration. A full bundle del
 
 ## Limitations
 
-Advanced can retain a narrower document-access selection than the Simple pack offers. The Simple pack switch reads off for such partial selections.
+Advanced can retain a narrower document-access selection than either complete Simple profile. The Simple pack switch reads off for such partial selections.

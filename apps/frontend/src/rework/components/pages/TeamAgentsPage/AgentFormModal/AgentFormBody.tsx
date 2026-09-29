@@ -33,8 +33,14 @@ import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
-import type { CapabilitySelectionState } from "./toolPackLogic.ts";
-import { CAP_DOCUMENT_ACCESS, CAP_PPT_FILLER, CAP_TEAM_WIKI, type ToolPack } from "./toolPacks.ts";
+import { applyResourceSearchScope, type CapabilitySelectionState } from "./toolPackLogic.ts";
+import {
+  CAP_DOCUMENT_ACCESS,
+  CAP_PPT_FILLER,
+  CAP_TEAM_WIKI,
+  DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
+  type ToolPack,
+} from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
@@ -277,8 +283,21 @@ export function AgentFormBody({
       return (
         <DocumentAccessPackOptions
           configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
-          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
+          onConfigChange={(key, value) => {
+            if (key === DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY) {
+              onCapabilitySelectionReplace(
+                applyResourceSearchScope(
+                  Boolean(value),
+                  { selectedCapabilityIds, capabilityConfigValues, reasoningEnabled },
+                  availableCapabilityIds,
+                ),
+              );
+            } else {
+              onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value);
+            }
+          }}
           teamId={teamId}
+          disabled={isSubmitting}
         />
       );
     }

@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPackToggle,
+  applyResourceSearchScope,
   derivePackChecked,
   includedCapabilityStatus,
   isPackSelectable,
@@ -127,7 +128,7 @@ describe("combined resource pack", () => {
     expect(derivePackChecked(RESOURCES, off, ALL_IDS)).toBe(false);
   });
 
-  it("shows a legacy attachments-only selection as partial and preserves its members", () => {
+  it("shows a complete legacy attachments-only selection as an active pack", () => {
     const legacy: CapabilitySelectionState = {
       ...empty(),
       selectedCapabilityIds: [CAP_DOCUMENT_ACCESS, CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
@@ -139,7 +140,7 @@ describe("combined resource pack", () => {
       },
     };
 
-    expect(derivePackChecked(RESOURCES, legacy, ALL_IDS)).toBe(false);
+    expect(derivePackChecked(RESOURCES, legacy, ALL_IDS)).toBe(true);
     expect(includedCapabilityStatus(CAP_DOCUMENT_VERBATIM, ALL_IDS, new Set(legacy.selectedCapabilityIds))).toBe(
       "active",
     );
@@ -175,7 +176,65 @@ describe("combined resource pack", () => {
     expect(derivePackChecked(RESOURCES, missingReader, ALL_IDS)).toBe(false);
   });
 
-  it("leaves an Advanced attachments-only selection independent of corpus tools", () => {
+  it("switches an active pack to attachments only without corpus-only tools", () => {
+    const full = applyPackToggle(
+      RESOURCES,
+      true,
+      {
+        ...empty(),
+        selectedCapabilityIds: [CAP_TEAM_WIKI],
+        capabilityConfigValues: {
+          [CAP_DOCUMENT_ACCESS]: { bind_libraries: true, library_tag_ids: ["folder-1"] },
+          [CAP_TEAM_WIKI]: { mode: "read" },
+        },
+      },
+      ALL_IDS,
+    );
+    const attachmentsOnly = applyResourceSearchScope(true, full, ALL_IDS);
+
+    expect(derivePackChecked(RESOURCES, attachmentsOnly, ALL_IDS)).toBe(true);
+    expect(attachmentsOnly.selectedCapabilityIds).toEqual(
+      expect.arrayContaining([
+        CAP_DOCUMENT_ACCESS,
+        CAP_DOCUMENT_SUMMARIZE,
+        CAP_DOCUMENT_VERBATIM,
+        CAP_DOCUMENT_EXTRACT,
+        CAP_TEAM_WIKI,
+      ]),
+    );
+    expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+    expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
+    expect(attachmentsOnly.capabilityConfigValues[CAP_TEAM_WIKI]).toEqual({ mode: "read" });
+    expect(docConfig(attachmentsOnly)).toEqual({
+      bind_libraries: true,
+      library_tag_ids: ["folder-1"],
+      [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: true,
+      [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+    });
+
+    const restored = applyResourceSearchScope(false, attachmentsOnly, ALL_IDS);
+    expect(restored.selectedCapabilityIds).toEqual(expect.arrayContaining(RESOURCE_IDS));
+    expect(restored.selectedCapabilityIds).toContain(CAP_TEAM_WIKI);
+    expect(docConfig(restored)).toEqual({
+      bind_libraries: true,
+      library_tag_ids: ["folder-1"],
+      [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: false,
+      [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+    });
+    expect(derivePackChecked(RESOURCES, restored, ALL_IDS)).toBe(true);
+  });
+
+  it("does not reselect corpus-only capabilities unavailable to the team", () => {
+    const available = new Set([...ALL_IDS].filter((id) => id !== CAP_TABULAR));
+    const full = applyPackToggle(RESOURCES, true, empty(), available);
+    const restored = applyResourceSearchScope(false, applyResourceSearchScope(true, full, available), available);
+
+    expect(restored.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+    expect(restored.selectedCapabilityIds).toContain(CAP_DOCUMENT_SIMILARITY);
+    expect(derivePackChecked(RESOURCES, restored, available)).toBe(true);
+  });
+
+  it("keeps an incomplete Advanced attachments-only selection separate", () => {
     const attachmentsOnly: CapabilitySelectionState = {
       ...empty(),
       selectedCapabilityIds: [CAP_DOCUMENT_ACCESS],
@@ -193,6 +252,12 @@ describe("combined resource pack", () => {
     expect(afterUnrelatedToggle.selectedCapabilityIds).not.toContain(CAP_TABULAR);
     expect(docConfig(afterUnrelatedToggle)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
     expect(derivePackChecked(RESOURCES, afterUnrelatedToggle, ALL_IDS)).toBe(false);
+
+    const incompleteWithCorpusTool = {
+      ...attachmentsOnly,
+      selectedCapabilityIds: [CAP_DOCUMENT_ACCESS, CAP_TABULAR],
+    };
+    expect(derivePackChecked(RESOURCES, incompleteWithCorpusTool, ALL_IDS)).toBe(false);
   });
 });
 

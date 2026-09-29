@@ -48,11 +48,13 @@ Cette capacité en regroupe plusieurs, que la vue **Avancé** sépare :
 | Verbatim document                 | Restitue le texte exact, page par page                | Les pages renvoyées ont une longueur limitée                                           |
 | Extraction d'information          | Parcourt le document entier sans rien omettre         | La plus lente et la plus coûteuse ; confirmation demandée par défaut                   |
 
-En mode **Simple**, ce pack active ensemble les ressources de l'équipe et les
-pièces jointes des conversations. En mode **Avancé**, on peut activer les pièces
-jointes sans activer la recherche dans le corpus ni les outils qui lui sont
-réservés. Les agents existants conservent leur sélection tant qu'elle n'est
-pas modifiée.
+En mode **Simple**, ce pack active d'abord ensemble les ressources de l'équipe
+et les pièces jointes des conversations. Sous le réglage des bibliothèques,
+activez **Rechercher uniquement dans les pièces jointes** pour arrêter la
+recherche dans le corpus et désactiver les outils tabulaires et de comparaison.
+Désactivez cette option pour retrouver les deux sources. En mode **Avancé**, on
+peut activer les pièces jointes sans ajouter les autres outils de ressources.
+Les agents existants conservent leur sélection tant qu'elle n'est pas modifiée.
 
 ### Accès au Wiki de l'équipe
 

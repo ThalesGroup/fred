@@ -47,10 +47,12 @@ This capability groups several functions, which the **Advanced** view separates:
 | Read a document verbatim  | Returns the exact text, page by page                 | The pages returned have a limited length                               |
 | Extract information       | Goes through the whole document, omitting nothing    | The slowest and most expensive; confirmation asked by default          |
 
-In **Simple**, this one pack enables team resources and conversation
-attachments together. In **Advanced**, you can select attachments without
-corpus search or its corpus-only tools. Existing agents with a narrower
-selection keep it until you change their capabilities.
+In **Simple**, this one pack initially enables team resources and conversation
+attachments together. Below the library scope, switch on **Search in attachments
+only** to stop corpus search and turn off the tabular and comparison tools.
+Switch it off to restore both sources. In **Advanced**, you can select attachments
+without enabling the other resource tools. Existing agents keep their selected
+capabilities until you change them.
 
 ### Access to the team wiki
 

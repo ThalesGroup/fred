@@ -16,6 +16,8 @@
 
 import {
   CAP_DOCUMENT_ACCESS,
+  CAP_DOCUMENT_SIMILARITY,
+  CAP_TABULAR,
   DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
   DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL,
   type ToolPack,
@@ -27,6 +29,8 @@ export interface CapabilitySelectionState {
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   reasoningEnabled: boolean;
 }
+
+const CORPUS_ONLY_IDS = [CAP_TABULAR, CAP_DOCUMENT_SIMILARITY];
 
 /** Hide a pack if its switch cannot enable anything for this team. */
 export function isPackSelectable(pack: ToolPack, availableIds: ReadonlySet<string>): boolean {
@@ -48,11 +52,14 @@ export function derivePackChecked(
   if (!pack.resourceBundle) return membersSelected;
 
   const config = state.capabilityConfigValues[CAP_DOCUMENT_ACCESS];
+  if (!availableIds.has(CAP_DOCUMENT_ACCESS) || config?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL] !== true) return false;
+
+  const searchAttachmentsOnly = config?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY] === true;
+  if (!searchAttachmentsOnly) return membersSelected;
+
   return (
-    availableIds.has(CAP_DOCUMENT_ACCESS) &&
-    membersSelected &&
-    config?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY] !== true &&
-    config?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL] === true
+    selectable.filter((id) => !CORPUS_ONLY_IDS.includes(id)).every((id) => state.selectedCapabilityIds.includes(id)) &&
+    CORPUS_ONLY_IDS.every((id) => !state.selectedCapabilityIds.includes(id))
   );
 }
 
@@ -92,6 +99,31 @@ export function applyPackToggle(
     };
   }
   return { ...state, selectedCapabilityIds: [...ids] };
+}
+
+/** Switch the active Simple pack between corpus plus attachments and attachments only. */
+export function applyResourceSearchScope(
+  searchAttachmentsOnly: boolean,
+  state: CapabilitySelectionState,
+  availableIds: ReadonlySet<string>,
+): CapabilitySelectionState {
+  const ids = new Set(state.selectedCapabilityIds);
+  for (const id of CORPUS_ONLY_IDS) {
+    if (searchAttachmentsOnly) ids.delete(id);
+    else if (availableIds.has(id)) ids.add(id);
+  }
+  return {
+    ...state,
+    selectedCapabilityIds: [...ids],
+    capabilityConfigValues: {
+      ...state.capabilityConfigValues,
+      [CAP_DOCUMENT_ACCESS]: {
+        ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS],
+        [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: searchAttachmentsOnly,
+        [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+      },
+    },
+  };
 }
 
 /** Tri-state of an included capability, driving its badge in the pack card. */

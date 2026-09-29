@@ -10,7 +10,7 @@ The implemented but unarchived `retire-document-reading-pack` delta describes th
 
 - Keep the existing Team resources capability set and add the attachments pack's abilities to its Simple switch.
 - Preserve Advanced attachment-only selection without implicitly enabling corpus search or corpus-only tools.
-- Preserve stored selections for existing agents and derive the new card's state from the full bundle.
+- Preserve stored selections for existing agents and derive the new card's state from either complete Simple profile.
 
 **Non-Goals:**
 
@@ -25,24 +25,30 @@ Remove the standalone attachments registry entry and its two-intent pack logic. 
 
 A plain merge of card labels while retaining the old corpus-only toggle would leave attachment upload disabled when a member enables the new pack. The combined on action must set both document-access options.
 
-### Derive checked state from the complete selected bundle
+### Offer an attachments-only scope within the active pack
 
-The one pack is checked only when `document_access` is selected, both document-access options match the combined mode, and every admin-available member is selected. An unavailable member does not prevent the pack from reading on. Advanced can still create a partial selection; the included-capability statuses show which members remain active while the Simple switch reads off.
+Place a small switch below library scoping in the Simple Team resources card. It writes the existing `search_attachments_only` document-access option and keeps attachment upload enabled. When selected, it withdraws the corpus-only tabular and similarity capabilities while retaining document access and the shared summarization, verbatim, and extraction capabilities. Clearing it reselects the admin-available corpus-only members and restores corpus plus attachment search. Keep library scoping values stored so switching back does not erase a member's folder choices.
 
-The old two-pack derivation uses `document_access` mode alone because capabilities are shared between independent switches. Keeping that derivation after merging would show the combined pack on for an attachment-only agent, although corpus search and corpus-only tools are off.
+Changing `search_attachments_only` alone would leave tabular and similarity tools able to access the corpus, contrary to the switch label. The Simple option therefore updates the selection and document-access config atomically. The Advanced option continues to edit only document access and does not add other capabilities.
+
+### Derive checked state from either complete Simple profile
+
+The one pack is checked when `document_access` and every admin-available shared member are selected, attachment upload is enabled, and the selected corpus-only members match the search scope. With corpus search, all available corpus-only members must be selected. With attachments-only search, tabular and similarity must be absent. An unavailable member does not prevent either profile from reading on. The included-capability statuses continue to show each actual selection.
+
+A complete legacy attachments-pack agent naturally reads on in the attachments-only profile without rewriting stored data. An incomplete Advanced selection remains off. A member who enables the main pack from a partial selection gets the full corpus plus attachments profile.
 
 ### Do not normalize form state on load or unrelated save
 
-New template defaults and existing agent selections enter the form unchanged. Simple pack activation applies the union; Advanced edits change only the chosen capability or option. An existing attachment-only agent therefore retains its mode and capabilities until a member deliberately turns on the combined pack. The same rule preserves an Advanced attachment override across later edits.
+New template defaults and existing agent selections enter the form unchanged. Simple pack activation applies the union; Advanced edits change only the chosen capability or option. An existing attachment-only agent therefore retains its mode and capabilities; a complete former attachments-pack selection reads on with the attachments-only switch selected. The same rule preserves an Advanced attachment override across later edits.
 
 Normalizing on form load or submit would turn Advanced attachment-only into corpus access without the member choosing the Simple bundle.
 
 ## Risks / Trade-offs
 
-- **Existing agents may show a resource pack switched off while some included capabilities are active:** This accurately represents a partial selection. The included list reflects each active member, and the Help Center explains that Advanced choices can be narrower than the Simple bundle.
+- **Incomplete agents may show a resource pack switched off while some included capabilities are active:** This accurately represents a partial selection. The included list reflects each active member, and the Help Center explains that Advanced choices can be narrower than the Simple bundle.
 - **The prior unarchived delta describes two packs:** Reconcile and archive the earlier change before archiving this one so the durable `agent-capability-packs` spec contains the one-pack rule.
 - **Newly enabling the bundle broadens access to both sources:** This is the requested Simple behavior. The updated card copy must name both team resources and attachments.
 
 ## Migration Plan
 
-Deploy the frontend without a database migration or stored-agent rewrite. Existing agents keep their selected capabilities and document-access settings. The Simple card may read off for a partial legacy selection; enabling it and saving persists the full bundle. Rolling back the frontend does not undo a member's saved selection. Keep the English migration note aligned with this behavior.
+Deploy the frontend without a database migration or stored-agent rewrite. Existing agents keep their selected capabilities and document-access settings. The Simple card reads on for a complete former attachments-pack selection and off for an incomplete legacy selection; enabling an off pack and saving persists the full bundle. Rolling back the frontend does not undo a member's saved selection. Keep the English migration note aligned with this behavior.
