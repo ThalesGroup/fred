@@ -59,6 +59,12 @@ def prepare(profile: str, output_dir: Path) -> list[Path]:
         jsonschema.validate(config, schema)
         output = output_dir.resolve() / profile / f"configuration_{application}.yaml"
         pending.append((output, yaml.safe_dump(config, sort_keys=False)))
+        if application == "control-plane-backend":
+            catalog = Path(config["policies"]["purge_catalog_path"])
+            if not catalog.is_absolute():
+                pending.append(
+                    (output.parent / catalog, (config_dir / catalog).read_text())
+                )
     # Validate all applications before publishing any configuration.
     for output, payload in pending:
         output.parent.mkdir(parents=True, exist_ok=True)
