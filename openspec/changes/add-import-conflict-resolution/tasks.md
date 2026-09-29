@@ -35,6 +35,6 @@
 ## 6. Verify and close out
 
 - [x] 6.1 `make code-quality` and `make test` in knowledge-flow-backend and frontend. 1484 backend tests, 2991 frontend tests, all green.
-- [ ] 6.2 Run `/code-review` on the diff; the overwrite path is correctness-sensitive shared code. (Developer-invoked.)
+- [x] 6.2 Run `/code-review` on the diff; the overwrite path is correctness-sensitive shared code. Four defects found and fixed in a dedicated commit: replacing dropped the document's other libraries, an interrupted replacement left the row claiming a purged index, two files of one name in one folder silently lost one, and a replacement was charged as a net-new upload.
 - [x] 6.3 Migration note covering the refused-without-decision behaviour change: `docs/swift/ops/migrations/import-name-conflict-resolution.md`, impact `minor` (new Alembic revision).
 - [x] 6.4 Record measured before/after cost of the name check against the seeded corpus — see 1.3.
