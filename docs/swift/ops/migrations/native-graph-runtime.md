@@ -13,7 +13,7 @@ Graph, ReAct and Deep now share capability tool authorization, observability
 and approval handling. This change does not enable token delegation.
 
 The four Python libraries (`fred-pod`, `fred-core`, `fred-sdk`, `fred-runtime`)
-are prepared for coordinated publication as 4.3.0, with aligned internal
+are prepared for coordinated publication as 4.4.0, with aligned internal
 dependency minimums. This package version does not remove the incompatible
 SDK and checkpoint changes below. Publish in the documented order: pod,
 core, SDK, then runtime.

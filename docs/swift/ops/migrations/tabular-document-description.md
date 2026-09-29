@@ -20,9 +20,10 @@ No configuration changes are required for the bundled Fred integration.
 
 ## Upgrade
 
-Deploy Fred normally. Users must re-ingest existing Excel or CSV files
-to benefit from richer column metadata and improved Excel boolean typing.
-These improvements are applied during ingestion, without automatic backfill.
+Deploy Fred normally. Category values and numeric bounds are computed when
+the description is requested, so existing files gain them without re-ingestion.
+Re-ingest an existing Excel file only to type its native boolean columns as
+booleans; this is applied during ingestion, without automatic backfill.
 
 ## Validation
 

@@ -1,8 +1,39 @@
-**Unreleased**
+**v3.0.0** — 2026-09-29
 
-- **Security Fixes**
+- **Summary**
 
-  - The OpenAI-compatible chat endpoint now rejects access to another user's session recorded in conversation history, even when both users belong to the same team (#2810).
+  Platform admins can now publish announcements to every user, and failed
+  documents can be relaunched straight from Resources. Graph agents run on the
+  same engine as other agents, so approvals behave the same everywhere.
+
+- **Features**
+
+  - Platform admins write announcements, in French and English, shown as dismissible banners at the top of the app (#2805, #2807)
+  - Raw or failed documents can be relaunched from Resources, one by one or in bulk, with progress tracked and no duplicate ingestion (#2783, #2784)
+  - Agents understand an Excel workbook in one step: its sheets, column types, category values and number ranges (#2791, #2806, #2819, #2821)
+  - Agents can optionally act strictly with the permissions of the person who started them; off by default (#2808, #2831)
+
+- **Improvements**
+
+  - Graph, ReAct and Deep agents share the same tool approvals, permissions and trace (#2816)
+  - Mistral Medium can be used as a reasoning model (#2818, #2820)
+
+- **Security**
+
+  - The OpenAI-compatible chat endpoint rejects access to another user's conversation, even within the same team (#2810)
+
+- **Bug Fixes**
+
+  - Dialogs taller than the screen keep their action buttons within reach (#2807)
+  - A refused tool call keeps its status after reloading the conversation (#2816)
+  - The team administrator charter no longer appears when it is disabled (#2824)
+
+- **Deployment note**
+
+  Major release: follow the operator migration guide. Paused Graph agent runs
+  cannot resume after the upgrade, and custom Graph agents using parallel
+  branches must be adapted. Configured info banners are removed: recreate them
+  as announcements. Ingestion must be drained before the database migration.
 
 **v2.2.3** — 2026-09-25
 
