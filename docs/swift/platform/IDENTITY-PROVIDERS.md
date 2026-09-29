@@ -97,6 +97,24 @@ explain the Entra-side setup.
   create refusal, and deletion suspension. People absent from the local table
   cannot be found until they sign in.
 
+## Terms of use before platform access
+
+The three reference `configuration_prod.yaml` files require `app.gcu_version: v1`.
+Generated Keycloak, generic OIDC, mock OIDC and ZITADEL profiles use that version.
+Keep the same version in all three backends; restart them after changing it.
+
+After sign-in, `GcuGuard` displays the terms before the platform-admin bootstrap
+and the application. The acceptance button becomes available after scrolling to
+the end of the text. `POST /control-plane/v1/gcu` stores the current version in
+Fred's shared user database. Human endpoints using `get_current_user` return
+HTTP 403 (`user_not_accept_gcu`) until that version has been accepted.
+This applies to administrators too. Previously accepted `v1` is retained.
+
+Public configuration and the authenticated user-details/acceptance endpoints
+remain reachable to complete this flow. Service endpoints using
+`get_current_user_or_service` admit service identities without interactive
+acceptance; delegated calls rely on the person's acceptance at run admission.
+
 ## Complete local test configurations
 
 The existing `configuration_generic_oidc.example.yaml` and
@@ -123,6 +141,8 @@ The script preserves non-security settings and never reads `.env` files.
 Each directory contains `configuration_control-plane-backend.yaml`,
 `configuration_knowledge-flow-backend.yaml`, and `configuration_fred-agents.yaml`.
 These are complete local configurations selected directly with `CONFIG_FILE`.
+Each profile also includes `conversation_policy_catalog.yaml`, resolved relative
+to the Control Plane YAML by both its API and worker.
 They retain the baseline Postgres, OpenFGA, Temporal, storage and model settings;
 those services and the normal application `.env` credentials must be available.
 Regenerate the files after changing a baseline configuration. These localhost
@@ -131,60 +151,112 @@ For Kubernetes with Entra, use
 [`values-entra.example.yaml`](../../../deploy/charts/fred/values-entra.example.yaml)
 and replace the tenant/application IDs with the customer's registrations.
 
-### Select the identity setup
+### Quick launch from VS Code
 
-From the Fred root, with the sibling factory checkout:
+Docker infrastructure must already be running. Stop previously launched
+applications before selecting another profile.
+
+Open **Terminal → Run Task** and choose one task:
+
+| Task | Profile |
+| --- | --- |
+| `IDP keycloak — launch all` | Existing Keycloak behavior |
+| `IDP generic_oidc — launch all` | Keycloak as a strict generic OIDC provider |
+| `IDP mock_oidc — launch all` | Separate mock provider on 8090 |
+| `IDP zitadel — launch all` | Real independent provider on 8091; factory provisions the SPA and workloads |
+
+Preparation adds the installed Control Plane venv binaries to PATH so the root
+`make delegation` command can find `uv` without a global installation.
+
+Each task first prepares the full configurations and matching provider setup,
+then starts three APIs, two workers and the frontend in separate VS Code terminals. Preparation restores Keycloak plus delegation, applies strict generic
+OIDC, or starts the mock provider, respectively. It also creates the Fred
+bootstrap secret if absent. Existing Docker infrastructure is otherwise left
+running. Make targets may prepare dependencies and models during startup.
+
+The worker Control Plane is launched explicitly with the selected YAML because
+its existing `run-worker` target hardcodes a different configuration. Fred
+Agents and frontend proxies use **8000**. No background launcher script is
+needed; stdout/stderr are visible directly in the task terminals.
+
+To stop even orphaned application processes, run **Terminal → Run Task →
+Fred — kill all**. It checks Fred API/frontend/metrics ports and optional runtime
+ports (8010, 8013, 8020, 8336), includes Fred workers without listeners, and stops
+only processes belonging to this checkout. It prints their identities, sends
+SIGTERM, then SIGKILL if needed, and verifies ports are free. Docker infrastructure
+and processes outside this checkout are preserved.
+
+Alternatively: **Terminal → Terminate Task**, select the running component tasks
+(or all tasks if this workspace is only running Fred). Changing a profile
+requires stopping the previous six components first. The tasks do not kill
+unrelated processes occupying their ports. Only the complete profile launch tasks appear in Run Task; their
+preparation and component tasks are hidden. Each service opens its own terminal,
+without split panes.
+
+Open http://localhost:5173/ when Vite is ready and verify that all three APIs
+and both workers have completed startup. Follow the immediate checks below.
+
+### Manual launch (optional)
+
+Select one profile in each of six terminals, from the Fred root:
 
 ```bash
-# generic_oidc: change the local realm to flat roles and a fred-api audience.
-make -C ../fred-deployment-factory keycloak-generic-oidc STRICT=1
-
-# mock_oidc: start the separate provider instead.
-make -C ../fred-deployment-factory mock-oidc-up
-
-# Restore the Keycloak token shape when returning to the keycloak profile.
-make -C ../fred-deployment-factory keycloak-generic-oidc-revert
+cd /home/thomas/Documents/fred
+export FRED_TEST_PROFILE=keycloak
+# Or: export FRED_TEST_PROFILE=generic_oidc
+# Or: export FRED_TEST_PROFILE=mock_oidc
 ```
 
-Run the command matching the chosen profile. The mock provider is a local test
-server with an interactive login page, not a production identity provider.
-
-### Launch Fred
-
-Set these variables in each terminal, from the Fred root:
+Prepare the matching provider using the commands in the preceding section.
+Stop the six applications before switching profiles; keep the infrastructure
+running. Then set these variables in each terminal:
 
 ```bash
 export FRED_TEST_ROOT="$PWD"
-export FRED_TEST_PROFILE=mock_oidc # or generic_oidc / keycloak
 export FRED_TEST_CONFIG_DIR="/tmp/fred-idp-tests/$FRED_TEST_PROFILE"
 export FRED_TEST_UV="$FRED_TEST_ROOT/apps/control-plane-backend/.venv/bin/uv"
 # OIDC profiles: allow the mock lifetime and ignore a stale Keycloak policy.
 if [ "$FRED_TEST_PROFILE" != keycloak ]; then
   export FRED_JWT_MAX_LIFETIME_SECONDS=5400
   export FRED_LOCAL_DELEGATION_FILE=
+else
+  unset FRED_JWT_MAX_LIFETIME_SECONDS
+  export FRED_LOCAL_DELEGATION_FILE="$FRED_TEST_ROOT/apps/control-plane-backend/config/.delegation.local.json"
 fi
 ```
 
-For the Keycloak baseline, use fresh terminals with the usual environment,
-without the OIDC overrides above. Start each process in a separate terminal
-using the same profile:
+For Keycloak, the delegation file must already exist (`make delegation` at
+Fred's root prepares the local files). The two other backends automatically
+select their own local delegation file when running the Keycloak profile:
+use the per-component override shown below. Start each process in its own
+terminal using the same profile:
 
 ```bash
-make -C apps/control-plane-backend run UV="$FRED_TEST_UV" \
+make -C apps/control-plane-backend run PORT=8222 UV="$FRED_TEST_UV" \
   CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_control-plane-backend.yaml"
 
-make -C apps/knowledge-flow-backend run UV="$FRED_TEST_UV" \
+make -C apps/knowledge-flow-backend run PORT=8111 UV="$FRED_TEST_UV" \
+  FRED_LOCAL_DELEGATION_FILE="${FRED_LOCAL_DELEGATION_FILE/control-plane-backend/knowledge-flow-backend}" \
   CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_knowledge-flow-backend.yaml"
 
-make -C apps/fred-agents run UV="$FRED_TEST_UV" \
+make -C apps/fred-agents run PORT=8000 UV="$FRED_TEST_UV" \
+  FRED_LOCAL_DELEGATION_FILE="${FRED_LOCAL_DELEGATION_FILE/control-plane-backend/fred-agents}" \
   CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_fred-agents.yaml"
 
-make -C apps/control-plane-backend run-worker UV="$FRED_TEST_UV" \
-  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_control-plane-backend.yaml"
+# This Makefile's run-worker recipe hardcodes configuration_worker.yaml.
+# Prepare dependencies with make, then select the worker profile explicitly.
+make -C apps/control-plane-backend dev UV="$FRED_TEST_UV"
+(cd apps/control-plane-backend && \
+  ENV_FILE="$FRED_TEST_ROOT/apps/control-plane-backend/config/.env" \
+  CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_control-plane-backend.yaml" \
+  "$FRED_TEST_UV" run python -m control_plane_backend.main_worker)
 
 make -C apps/knowledge-flow-backend run-worker UV="$FRED_TEST_UV" \
+  FRED_LOCAL_DELEGATION_FILE="${FRED_LOCAL_DELEGATION_FILE/control-plane-backend/knowledge-flow-backend}" \
   CONFIG_FILE="$FRED_TEST_CONFIG_DIR/configuration_knowledge-flow-backend.yaml"
 
+VITE_BACKEND_URL=http://localhost:8000 \
+VITE_BACKEND_URL_FRED_AGENTS=http://localhost:8000 \
 make -C apps/frontend run
 ```
 
@@ -202,6 +274,52 @@ after the API is running and before importing the demo bundle. With the mock,
 people must first sign in through the mock page; importing accounts from the
 Keycloak demo does not create matching mock identities automatically.
 
+### Immediate checks after startup
+
+1. Check listeners (the default Fred runtime uses **8000**, not 8020):
+
+   ```bash
+   ss -ltnp | rg ':(5173|8000|8111|8222)\b'
+   ```
+
+   Expect frontend 5173, Fred Agents 8000, Knowledge Flow 8111, Control Plane
+   8222. In the baseline catalog, 8020 belongs to the separate `/dt/agents/v2`
+   runtime. Do not point `/fred` at that port.
+2. Check logs: all three APIs remain alive; Fred Agents reports
+   `runtime_startup outcome=completed reason=ready`. Control Plane worker reports
+   `Control-plane Temporal worker running`; Knowledge Flow worker reports
+   `ready to receive ingestion jobs`. Both workers connect to localhost:7233.
+   The Control Plane worker's `Configuration file` must name the selected
+   generated YAML, not `configuration_worker.yaml`.
+3. Open http://localhost:5173/ in a fresh browser session. Keycloak and generic
+   OIDC use accounts in realm **app**, not master; mock OIDC uses its own login
+   page. Confirm login completes and reload keeps the session.
+4. On a fresh platform, prepare the root administrator secret:
+
+   ```bash
+   make -C apps/control-plane-backend bootstrap-token
+   cat apps/control-plane-backend/target/bootstrap-token
+   ```
+
+   Enter it in Fred's bootstrap screen while logged in as the intended root
+   administrator. This is a one-time operation; never paste the secret into
+   logs or a shared report.
+5. Check the personal space, team list, libraries and an authorized document.
+   A new ordinary account may have no team permissions yet. Give it the intended
+   membership, then confirm it can access permitted documents and cannot access
+   a private document belonging to another account.
+6. Run a conversation using an accessible document. With delegation enabled,
+   look for `delegated_run_admitted` in Fred Agents and
+   `delegation.grant.accepted` in the receiving backend. Record any 401/403 and
+   its reason before changing settings.
+7. Sign out and sign back in with the second user. Check account separation.
+   In generic/mock mode, confirm both authenticated people appear in the local
+   user lookup, while service accounts do not.
+8. `/evaluation/v1/tasks` returning `ECONNREFUSED` on 8336 means the optional
+   evaluator is absent. Missing samples on 8010, RAG runtime on 8013 or DT
+   runtime on 8020 likewise require their separate services; these six commands
+   do not start them. A conversation assigned to an absent runtime cannot run.
+
 ### Functional changes and checks
 
 | Area | Behavior to test |
@@ -216,7 +334,7 @@ Keycloak demo does not create matching mock identities automatically.
 | Documents and agent tools | Permissions and OpenFGA rules are unchanged. With delegation enabled, the runtime sends its workload bearer and the person/run/agent grant; document access remains limited by the person's permissions. Test both permitted and forbidden documents. |
 | Workload accounts | Each backend has its own M2M provider/client/scope configuration; it obtains tokens from the resolved endpoint. |
 | Bundle import | Known usernames resolve from the local directory. Unknown entries requiring account creation fail before authorization writes, including entries with a password. |
-| Admin self-test | The Keycloak password/profile probe and credential-expiry scenario are unavailable in OIDC mode. |
+| Admin self-test | The password/profile probe remains Keycloak-only. The credential-expiry scenario now uses the current session for both Keycloak and OIDC. |
 | Startup | An OIDC issuer need not have a `/realms/` path. Discovery failure or inconsistent provider/delegation/directory settings stop startup. |
 
 Verification on 2026-09-28: all nine generated configurations passed their JSON
@@ -224,3 +342,37 @@ schemas and the backend provider-configuration checks. The baseline profile has 
 production YAMLs, and the OIDC profiles retain all non-security values. This is
 configuration verification; the complete browser and document-access walkthroughs
 in tasks 10.2–10.5 remain pending.
+
+### Admin JWT diagnostic
+
+In **Administration → Self-test**, choose **Check JWT authentication (three APIs)**.
+The existing step report checks session refresh, representative protected GETs
+on Control Plane, Knowledge Flow and Fred Agents, and their rejection of missing,
+malformed and signature-altered tokens. Only HTTP 401 passes rejection checks;
+a 403, 404 or unavailable service fails. Public Control Plane configuration and
+health must work without a bearer. Explicit probes omit cookies and have a
+15-second timeout; tokens are never included in report details.
+
+The diagnostic also compares browser/backend user IDs, opens the matching
+personal space, and checks that the current person appears in the OIDC local
+directory. This samples each API's authentication boundary; it does not enumerate
+all endpoints. Run the existing functional document/agent scenario to exercise
+delegated calls and document scoping, and the expiration scenario for a real
+protected call after the captured session credential expires. Expiration is
+available in OIDC mode too, with the existing bounded wait and confirmation.
+
+Account isolation needs a second session; workload JWT claims, wrong issuer or
+audience, and crafted delegation grants remain covered by backend tests. These
+are explicitly reported as additional coverage, not claimed as a browser pass.
+
+### ZITADEL local profile
+
+`IDP zitadel — launch all` calls deployment-factory's `make zitadel-configure`.
+This starts an isolated provider on localhost:8091 and generates configs plus
+private service credentials under `/tmp/fred-idp-tests/zitadel/`. Backend tasks
+source those credentials; the frontend uses the provider settings from Control
+Plane. See the factory's `docs/LOCAL-DEVELOPMENT.md` for console credentials and
+user creation. Stop Fred before switching profiles. Provider identities and
+platform bootstrap state follow the same rules as the separate mock; existing
+Fred data is preserved. Use a fresh browser session and test CGU, personal space,
+JWT rejection, local user lookup and document delegation.
