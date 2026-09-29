@@ -76,7 +76,7 @@
   display: flex;
   flex: 1;
   align-items: baseline;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-s);
   min-width: 0;
 }
 
