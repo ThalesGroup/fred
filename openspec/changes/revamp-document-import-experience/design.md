@@ -48,6 +48,15 @@ longer needs to.
 A team-wide panel fills with other people's work on an active team. Team
 activity stays where it is already visible: on the rows of the folder concerned.
 
+### Leave room for a state that is neither running nor failed
+
+`add-import-conflict-resolution` depends on this change: once the dialog closes
+on acceptance, a conflict detected at write time has nowhere else to surface.
+Nothing here needs to understand conflicts, but the panel's item model must not
+assume every item is running, done or failed — one can be waiting on the user.
+Baking in a three-state assumption now would force that change to either rework
+the panel or invent a second surface.
+
 ### Cancellation stops at the upload stage
 
 Stopping files not yet sent covers the common case — a wrong destination folder.

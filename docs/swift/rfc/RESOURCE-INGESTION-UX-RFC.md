@@ -269,6 +269,14 @@ the import feel slow from the browser.
 
 ## 9. Next step
 
-Sign-off on §3, then split into OpenSpec changes — conflict resolution, the
-import panel, and the data migration — each linking its own GitHub issue. Both
-remaining questions in §7 can be settled inside the slice that hits them.
+Sign-off on §3. The work is sliced into three OpenSpec changes, in this order:
+
+1. `revamp-document-import-experience` — frontend only, depends on nothing.
+2. `add-import-conflict-resolution` — depends on the panel above, because a
+   conflict detected at write time surfaces after the dialog has closed and has
+   nowhere else to go.
+3. `retire-document-versioning` — depends on conflicts being handled first, then
+   migrates existing alternate versions and removes the mechanism.
+
+Each links its own GitHub issue. Both remaining questions in §7 can be settled
+inside the slice that hits them.

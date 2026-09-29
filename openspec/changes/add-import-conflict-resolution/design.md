@@ -22,7 +22,8 @@ which depends on this one.
 **Non-Goals**
 
 - Removing `canonical_name` / `version` and `_promote_alternate_version`.
-- The import panel, progress and wording (`revamp-document-import-experience`).
+- The import panel, progress and wording (`revamp-document-import-experience`),
+  which this change builds on rather than duplicates.
 - The remaining import latency: the blocking content-store write (#2370), the
   redundant disk copy and the double hashing (RFC §8).
 
@@ -39,6 +40,17 @@ transfer starts.
 The trade-off is that the answer can go stale, so the write path re-checks.
 Correctness lives in the write-time check; the pre-check only spares the user a
 pointless upload.
+
+### The two questions live in two different places
+
+The pre-check question is asked while the user is still in the import dialog,
+before any transfer begins — it belongs there, and needs nothing else.
+
+The write-time conflict is different: it surfaces after the dialog has closed,
+so it belongs in the import panel. That is why this change depends on
+`revamp-document-import-experience` rather than running beside it. The
+dependency is narrow — one case, one surface — but building around it would
+produce work thrown away a week later.
 
 ### Overwrite reuses the existing `document_uid` deliberately
 

@@ -30,6 +30,13 @@ Deliberately unchanged here: `canonical_name` and `version` still exist and are
 still written. Retiring them is a separate change that depends on this one, so
 that duplicates are already handled before the old mechanism is removed.
 
+Depends on `revamp-document-import-experience`. The main question is asked
+before the upload starts, while the import dialog is still open, so it needs no
+panel. But a conflict detected at write time arrives after the dialog has
+closed, and its only possible home is the import panel that change mounts.
+Building this one first would mean surfacing that case in the dialog and
+redoing it immediately afterwards.
+
 ## Capabilities
 
 ### New Capabilities
