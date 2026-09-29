@@ -111,6 +111,20 @@ describe("ImportPanel", () => {
     expect(container.querySelectorAll("button")).toHaveLength(1);
   });
 
+  it("keeps the toggle on the right edge, the edge that does not move", () => {
+    // The panel widens leftwards from a fixed right edge, so a right-aligned
+    // toggle sits in the same place in both forms. Its icon is what changes:
+    // an arrow pointing back the way it folds once open.
+    const head = container.querySelector("aside > div")!;
+    expect(head.lastElementChild!.querySelector("button")).toBe(toggle());
+    expect(container.querySelector(".material-symbols-outlined")?.textContent).toBe("download");
+
+    click(toggle());
+
+    expect(head.lastElementChild!.querySelector("button")).toBe(toggle());
+    expect(container.querySelector(".material-symbols-outlined")?.textContent).toBe("keyboard_arrow_right");
+  });
+
   it("shows nothing but the button while collapsed", () => {
     act(() => {
       store.dispatch(importOf("task-1", "report.pdf"));

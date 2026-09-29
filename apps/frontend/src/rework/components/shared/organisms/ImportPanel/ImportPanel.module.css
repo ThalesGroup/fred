@@ -33,17 +33,20 @@
   width: min(360px, 40vw);
 }
 
-/* The toggle keeps the same place in both forms — top-left — so it is the one
-   thing that does not move when the panel grows. */
+/* Pinned to the right edge: that edge holds still while the panel widens
+   leftwards, so the toggle is the one thing that does not move between the two
+   forms. */
 .head {
   display: flex;
   flex-shrink: 0;
+  justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
   padding-bottom: var(--spacing-xs);
 }
 
 .title {
+  margin-right: auto;
   color: var(--on-surface);
   font: var(--font-label-medium);
   white-space: nowrap;

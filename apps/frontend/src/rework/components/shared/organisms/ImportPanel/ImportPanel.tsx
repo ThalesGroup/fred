@@ -69,19 +69,23 @@ export function ImportPanel() {
       // reachable, and announcing an empty landmark would be noise.
       role={expanded ? "region" : undefined}
     >
+      {/* The toggle hugs the right edge, which is the edge that does not move
+          when the panel widens — so the button stays exactly where it was and
+          everything else grows away from it. */}
       <div className={styles.head}>
+        {expanded && <span className={styles.title}>{t("rework.imports.panel.title")}</span>}
         <Tooltip text={toggleLabel} placement="left">
           <IconButton
             variant={expanded ? "tonal" : "icon"}
             size="small"
-            icon={{ category: "outlined", type: "upload" }}
+            // Open, the arrow points back the way the panel folds.
+            icon={{ category: "outlined", type: expanded ? "keyboard_arrow_right" : "download" }}
             aria-label={toggleLabel}
             aria-expanded={expanded}
             badgeCount={runningCount}
             onClick={() => setExpanded((open) => !open)}
           />
         </Tooltip>
-        {expanded && <span className={styles.title}>{t("rework.imports.panel.title")}</span>}
       </div>
 
       {expanded && (
