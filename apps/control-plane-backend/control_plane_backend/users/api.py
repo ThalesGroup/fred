@@ -27,8 +27,8 @@ from fred_core import (
     OrganizationPermission,
     RebacEngine,
     get_current_user,
-    get_current_user_without_gcu,
 )
+from fred_core.security.oidc import get_current_user_before_gcu
 from fred_core.common import personal_team_id
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
@@ -434,7 +434,7 @@ class UserDetails(BaseModel):
 )
 async def get_user_details(
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     """Return the personal team through the shared team resolver.
@@ -464,7 +464,7 @@ async def get_user_details(
 async def validate_gcu(
     deps: UserDependencies,
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
     """
