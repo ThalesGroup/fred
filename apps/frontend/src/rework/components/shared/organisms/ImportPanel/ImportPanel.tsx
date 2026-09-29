@@ -27,6 +27,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
+import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
@@ -60,15 +61,42 @@ export function ImportPanel() {
 
   const toggleLabel = expanded ? t("rework.imports.panel.collapse") : t("rework.imports.panel.expand");
 
+  // Drag the open panel wider or narrower from its left edge, exactly as the
+  // chat's viewers do — same hook, same clamping, same per-key persistence, so
+  // the width survives closing the panel and reloading the page.
+  const panelRef = useRef<HTMLElement>(null);
+  const resize = usePaneResize({
+    storageKey: "import-panel:width",
+    initialWidth: 360,
+    minWidth: 280,
+    maxWidth: 720,
+    paneRef: panelRef,
+  });
+
   return (
     <aside
+      ref={panelRef}
       className={styles.panel}
       data-expanded={expanded}
+      data-dragging={expanded && resize.dragging ? "true" : undefined}
+      // The collapsed rail is the button's own width; only the open panel
+      // carries a chosen one.
+      style={expanded ? ({ "--import-panel-width": `${resize.width}px` } as React.CSSProperties) : undefined}
       aria-label={t("rework.imports.panel.title")}
       // Collapsed it is a launcher, not a region: nothing inside it is
       // reachable, and announcing an empty landmark would be noise.
       role={expanded ? "region" : undefined}
     >
+      {expanded && (
+        <div
+          className={styles.resizeHandle}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("rework.imports.panel.resize")}
+          {...resize.handleProps}
+        />
+      )}
+
       {/* The toggle hugs the right edge, which is the edge that does not move
           when the panel widens — so the button stays exactly where it was and
           everything else grows away from it. */}

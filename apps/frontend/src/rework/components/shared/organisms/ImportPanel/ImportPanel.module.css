@@ -18,6 +18,7 @@
    than a second one arriving. */
 .panel {
   display: flex;
+  position: relative; /* anchors the resize handle */
   flex-shrink: 0;
   flex-direction: column;
   transition: width var(--duration-medium-1, 250ms) ease;
@@ -30,7 +31,44 @@
 }
 
 .panel[data-expanded="true"] {
-  width: min(360px, 40vw);
+  width: min(var(--import-panel-width, 360px), 45vw);
+}
+
+/* No transition while dragging: the width already follows the pointer, and
+   easing it turns a 1:1 drag into a lag. */
+.panel[data-dragging="true"] {
+  transition: none;
+}
+
+/* Same grab affordance as the chat's resizable panes. */
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: var(--spacing-s);
+  touch-action: none;
+}
+
+.resizeHandle::before {
+  transition:
+    background-color 0.15s,
+    height 0.15s;
+  border-radius: var(--radius-s);
+  background: var(--outline-variant);
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before,
+.panel[data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
 }
 
 /* Pinned to the right edge: that edge holds still while the panel widens

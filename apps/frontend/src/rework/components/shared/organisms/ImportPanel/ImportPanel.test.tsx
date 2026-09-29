@@ -125,6 +125,17 @@ describe("ImportPanel", () => {
     expect(container.querySelector(".material-symbols-outlined")?.textContent).toBe("keyboard_arrow_right");
   });
 
+  it("can be dragged wider only once it is open", () => {
+    const handle = () => container.querySelector('[role="separator"]');
+    // A rail the width of its button has nothing to resize.
+    expect(handle()).toBeNull();
+
+    click(toggle());
+
+    expect(handle()).not.toBeNull();
+    expect(panel().style.getPropertyValue("--import-panel-width")).toBe("360px");
+  });
+
   it("shows nothing but the button while collapsed", () => {
     act(() => {
       store.dispatch(importOf("task-1", "report.pdf"));

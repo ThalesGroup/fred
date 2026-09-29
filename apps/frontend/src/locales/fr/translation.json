@@ -2171,6 +2171,7 @@
         "collapse": "Masquer les imports",
         "empty": "Aucun import en cours. Les fichiers que vous ajoutez apparaissent ici pendant leur traitement.",
         "expand": "Afficher les imports",
+        "resize": "Redimensionner le panneau des imports",
         "title": "Imports"
       }
     },

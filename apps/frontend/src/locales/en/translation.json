@@ -2171,6 +2171,7 @@
         "collapse": "Hide imports",
         "empty": "Nothing being imported. Files you add show up here while they are processed.",
         "expand": "Show imports",
+        "resize": "Resize the imports panel",
         "title": "Imports"
       }
     },
