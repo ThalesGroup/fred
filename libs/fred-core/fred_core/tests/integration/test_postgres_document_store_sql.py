@@ -264,3 +264,80 @@ async def test_browse_pages_a_tied_sort_without_repeating_on_postgres(
         seen.extend(doc.identity.document_uid for doc in docs)
 
     assert seen == ["a", "b", "c"]
+
+
+def _named(uid: str, name: str, tag_ids: list[str]) -> DocumentMetadata:
+    doc = _doc(uid)
+    doc.identity.document_name = name
+    doc.tags = Tagging(tag_ids=tag_ids)
+    return doc
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_finds_only_names_in_that_tag(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+    await pg_store.save_metadata(_named("d2", "notes.md", ["folder-a"]))
+    await pg_store.save_metadata(_named("d3", "report.pdf", ["folder-b"]))
+
+    found = await pg_store.document_uids_by_name_in_tag(
+        "folder-a", ["report.pdf", "absent.pdf"]
+    )
+
+    assert found == {"report.pdf": ["d1"]}
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_reports_every_document_sharing_a_name(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    # A folder can already hold a base document and its alternate version under
+    # the same display name, so a name does not identify a single document.
+    await pg_store.save_metadata(_named("base", "report.pdf", ["folder-a"]))
+    await pg_store.save_metadata(_named("alternate", "report.pdf", ["folder-a"]))
+
+    found = await pg_store.document_uids_by_name_in_tag("folder-a", ["report.pdf"])
+
+    assert sorted(found["report.pdf"]) == ["alternate", "base"]
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_with_no_names_touches_nothing(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+
+    assert await pg_store.document_uids_by_name_in_tag("folder-a", []) == {}
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_uses_the_document_name_index(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    """The point of the query is that it is answered by index, not by a scan.
+
+    Without the index this still returns the right answer, so only the plan can
+    tell the two apart. It also pins the index to the model: it is declared in
+    `__table_args__` because an expression index has no column to hang off, and
+    a module-level declaration would silently never reach the table.
+    """
+    from sqlalchemy import text as _text
+
+    await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+    async with pg_store._sessions() as s:  # pyright: ignore[reportPrivateUsage]
+        await s.execute(_text("SET enable_seqscan = off"))
+        plan = (
+            (
+                await s.execute(
+                    _text(
+                        "EXPLAIN SELECT document_uid FROM metadata WHERE "
+                        "(doc -> 'identity' ->> 'document_name') = 'report.pdf'"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert any("idx_metadata_document_name" in line for line in plan), plan

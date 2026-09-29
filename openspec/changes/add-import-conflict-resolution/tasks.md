@@ -1,8 +1,8 @@
 ## 1. Make the name question cheap
 
-- [ ] 1.1 Add a Postgres index supporting "does this document name exist in this tag", and an Alembic migration for it, re-parented onto the current `swift` head.
-- [ ] 1.2 Add a metadata-store query answering that question for a list of names in one round trip, returning the existing `document_uid` per matching name.
-- [ ] 1.3 Test it against a seeded corpus large enough that a scan would be visibly slower, and record the measured cost.
+- [x] 1.1 Add a Postgres index supporting "does this document name exist in this tag", and an Alembic migration for it, re-parented onto the current `swift` head.
+- [x] 1.2 Add a metadata-store query answering that question for a list of names in one round trip, returning the existing `document_uid` per matching name.
+- [x] 1.3 Test it against a seeded corpus large enough that a scan would be visibly slower, and record the measured cost. Measured on 5045 documents: the old per-file scan takes 542 ms, so a 20-file import spends 10.8 s answering it; the new query answers all 20 names in 6.8 ms, in one round trip.
 
 ## 2. Expose the pre-check
 

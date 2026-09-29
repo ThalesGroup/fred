@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, List, Optional, cast
+from typing import Any, List, Optional, Sequence, cast
 
 from pydantic import ValidationError
 from sqlalchemy import (
@@ -317,6 +317,39 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         # SQLite: load all and filter in Python (get_all_metadata already hydrates)
         docs = await self.get_all_metadata(filters={}, session=session)
         return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
+
+    async def document_uids_by_name_in_tag(
+        self,
+        tag_id: str,
+        names: Sequence[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, list[str]]:
+        """Answer by index instead of loading the folder.
+
+        `idx_metadata_document_name` covers the extracted name and the GIN index
+        covers the tag, so the cost follows the number of names asked about
+        rather than the size of the folder or of the corpus.
+        """
+
+        if not names:
+            return {}
+        if not self._is_postgres:
+            return await super().document_uids_by_name_in_tag(
+                tag_id, names, session=session
+            )
+
+        name_expr = DocumentMetadataRow.doc["identity"]["document_name"].astext
+        cond: ColumnElement[bool] = cast(
+            ColumnElement[bool], DocumentMetadataRow.tag_ids.contains([tag_id])
+        )
+        query = select(name_expr, DocumentMetadataRow.document_uid).where(
+            cond, name_expr.in_(list(dict.fromkeys(names)))
+        )
+        found: dict[str, list[str]] = {}
+        async with use_session(self._sessions, session) as s:
+            for name, uid in (await s.execute(query)).all():
+                found.setdefault(name, []).append(uid)
+        return found
 
     def _browse_order_by(self, sort_by: DocumentSortField, sort_order: SortOrder):
         """ORDER BY terms for a paginated tag browse.
