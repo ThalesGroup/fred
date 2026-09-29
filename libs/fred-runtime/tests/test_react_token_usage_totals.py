@@ -376,6 +376,64 @@ async def test_split_tool_name_is_held_without_streaming_recovered_syntax() -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "tool_name", "args"),
+    [
+        (
+            [
+                {"type": "text", "text": "read"},
+                "_query",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"sql":"'},
+                'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]}',
+            ],
+            "read_query",
+            {"sql": "SELECT COUNT(*) FROM fake_fleet", "dataset_uids": ["fake"]},
+        ),
+        (
+            [
+                {"type": "text", "text": "search"},
+                "_documents_using_vectorization",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"question":"'},
+                'fleet size","top_k":5}',
+            ],
+            "search_documents_using_vectorization",
+            {"question": "fleet size", "top_k": 5},
+        ),
+    ],
+    ids=["mixed_tabular_query", "mixed_vector_search"],
+)
+async def test_mixed_reference_chunk_is_withheld_from_react_stream(
+    content: list[str | dict[str, object]],
+    tool_name: str,
+    args: dict[str, object],
+) -> None:
+    recovered = AIMessage(
+        content="",
+        tool_calls=[{"id": "recovered-1", "name": tool_name, "args": args}],
+        response_metadata={RECOVERED_TOOL_CALL_TEXT_METADATA_KEY: True},
+    )
+    events = [
+        ("messages", (AIMessageChunk(content=content), {})),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events, available_tool_names={tool_name})
+
+    assert not [
+        event.delta
+        for event in collected
+        if isinstance(event, (AssistantDeltaRuntimeEvent, ThoughtDeltaEvent))
+    ]
+    assert [
+        (event.tool_name, event.arguments)
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == [(tool_name, args)]
+
+
+@pytest.mark.asyncio
 async def test_capability_only_tool_name_is_withheld_from_react_stream() -> None:
     recovered = AIMessage(
         content="",
@@ -507,6 +565,32 @@ async def test_non_mistral_mixed_reference_chunk_loses_no_text() -> None:
     )
     assert "before " in streamed
     assert "after" in streamed
+
+
+@pytest.mark.asyncio
+async def test_mixed_reference_with_unknown_block_remains_visible() -> None:
+    content: list[str | dict[str, object]] = [
+        {"type": "text", "text": "read"},
+        "_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "metadata", "value": "keep this block"},
+    ]
+    events = [
+        ("messages", (AIMessageChunk(content=content), {})),
+        ("updates", {"agent": {"messages": [AIMessage(content=content)]}}),
+    ]
+
+    collected = await _run_stream(events, available_tool_names={"read_query"})
+
+    streamed = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    assert "read" in streamed
+    assert "reference_ids" in streamed
+    assert "keep this block" in streamed
+    assert not [event for event in collected if isinstance(event, ToolCallRuntimeEvent)]
 
 
 @pytest.mark.asyncio

@@ -85,6 +85,18 @@ def is_tool_call_recovery_reference_block(block: object) -> bool:
     return block == {"type": "reference", "reference_ids": []}
 
 
+def recovery_text_fragment(block: object) -> str | None:
+    """Read text from a typed block or a plain LangChain content fragment."""
+
+    if isinstance(block, str):
+        return block
+    if isinstance(block, dict) and block.get("type") == "text":
+        value = block.get("text")
+        if isinstance(value, str):
+            return value
+    return None
+
+
 def _anchored_text(
     content: object, tools_by_name: dict[str, BaseTool]
 ) -> tuple[str, str, str] | None:
@@ -98,16 +110,17 @@ def _anchored_text(
     seen_reference = False
     text_chars = 0
     for block in content:
-        if not isinstance(block, dict):
-            return None
-        block_type = block.get("type")
-        if block_type == "text" and isinstance(block.get("text"), str):
-            text = block["text"]
+        text = recovery_text_fragment(block)
+        if text is not None:
             text_chars += len(text)
             if text_chars > MAX_TOOL_CALL_RECOVERY_CHARS:
                 return None
             (after if seen_reference else before).append(text)
-        elif block_type == "thinking" and not seen_reference:
+        elif (
+            isinstance(block, dict)
+            and block.get("type") == "thinking"
+            and not seen_reference
+        ):
             continue
         elif is_tool_call_recovery_reference_block(block) and not seen_reference:
             seen_reference = True
