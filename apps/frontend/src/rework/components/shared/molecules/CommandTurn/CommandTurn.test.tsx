@@ -66,8 +66,9 @@ describe("UserMessage with a command descriptor", () => {
       />,
     );
 
-    expect(container.textContent).toContain("/summary");
-    expect(container.textContent).toContain("33 lignes");
+    // One string, separated by a real space rather than by a flex gap: the two
+    // parts are one sentence and have to reflow as one when the bubble narrows.
+    expect(container.textContent).toContain("/summary 33 lignes");
     expect(container.textContent).not.toContain("Résume le document");
   });
 

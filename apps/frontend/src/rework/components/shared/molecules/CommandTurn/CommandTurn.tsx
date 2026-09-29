@@ -42,7 +42,7 @@ export function CommandTurn({ command, onOpen }: CommandTurnProps) {
       }
     >
       <span className={styles.slug}>/{command.command}</span>
-      {appended && <span className={styles.appended}>{appended}</span>}
+      {appended && <span className={styles.appended}> {appended}</span>}
     </button>
   );
 }

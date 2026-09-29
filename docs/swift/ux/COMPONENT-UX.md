@@ -5010,7 +5010,10 @@ the command is appended as free-text continuation, nothing parsed or named.
 
 The turn itself renders as its command rather than as the assembled text
 (`UserMessage` + `CommandTurn`), which keeps a transcript of long prompts
-readable. A control on that turn opens the text that was actually sent, read
+readable. The command and the text typed after it are laid out as one inline
+sentence, not as a flex row: they are one string and have to reflow as one when
+the bubble narrows (opening a side panel), where flex items would each wrap on
+their own and read as two unrelated texts. A control on that turn opens the text that was actually sent, read
 from the turn's own stored copy: the prompt behind it may since have been
 edited or deleted, so it cannot be re-fetched by id.
 
