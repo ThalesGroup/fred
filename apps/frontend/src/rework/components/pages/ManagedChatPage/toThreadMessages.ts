@@ -303,7 +303,11 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         result.push({
           id: `${eid}:hitl_resp:${pairId}`,
           role: "hitl_response",
-          text: responsePart?.label ?? responsePart?.choice_id ?? responsePart?.text ?? "",
+          text:
+            responsePart?.choice_id && responsePart?.text
+              ? `${responsePart.label ?? responsePart.choice_id}: ${responsePart.text}`
+              : (responsePart?.label ?? responsePart?.choice_id ?? responsePart?.text ?? ""),
+          hitlSkipped: responsePart?.skipped === true,
           isStreaming: false,
           traceMessages: [],
           sources: [],

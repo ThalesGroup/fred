@@ -50,6 +50,7 @@ export interface ThreadMessage {
   marginalTokenUsage?: TokenUsage | null;
   hitlChoices?: Array<{ id: string; label: string }>;
   hitlTitle?: string | null;
+  hitlSkipped?: boolean;
   /** Set when the turn was launched by a prompt command. The transcript then
    *  renders the command instead of `text` — which stays the full assembled
    *  text, since that is what replays to the model. */

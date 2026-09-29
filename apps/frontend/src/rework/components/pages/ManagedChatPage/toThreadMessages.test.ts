@@ -251,6 +251,24 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     expect(reconstructPendingHitl(messages)).toBeNull();
   });
 
+  it("resolves and renders a skipped agent question after reload", () => {
+    const messages = [
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-skip" }, 1),
+      hitlResponseMsg("e1", { occurrence_id: "call-skip", choice_id: null, skipped: true }, 2),
+    ];
+    expect(reconstructPendingHitl(messages)).toBeNull();
+    const response = toThreadMessages(messages, false).find((row) => row.role === "hitl_response");
+    expect(response?.hitlSkipped).toBe(true);
+  });
+
+  it("renders a selected option with its optional comment", () => {
+    const messages = [
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-comment" }, 1),
+      hitlResponseMsg("e1", { occurrence_id: "call-comment", choice_id: "yes", text: "Please" }, 2),
+    ];
+    expect(toThreadMessages(messages, false).find((row) => row.role === "hitl_response")?.text).toBe("yes: Please");
+  });
+
   it("renders a pure free-text response from its dedicated text field", () => {
     const messages = [
       hitlRequestMsg("e1", { occurrence_id: "call-text", question: "Explain" }, 1),

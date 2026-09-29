@@ -120,6 +120,7 @@ if TYPE_CHECKING:
     )
     from fred_sdk.contracts.runtime import (
         HumanChoiceOption,
+        HumanInputAnswer,
         HumanInputRequest,
         PendingToolCall,
         ThoughtDeltaEvent,
@@ -139,6 +140,7 @@ if TYPE_CHECKING:
         StepResult,
         WorkflowNode,
         choice_step,
+        choice_step_response,
         finalize_step,
         intent_router_step,
         model_text_step,
@@ -248,6 +250,7 @@ _LAZY: dict[str, str] = {
     "TuningValue": "fred_sdk.contracts.models",
     # Human-in-the-loop, thoughts, workspace filesystem port
     "HumanChoiceOption": "fred_sdk.contracts.runtime",
+    "HumanInputAnswer": "fred_sdk.contracts.runtime",
     "HumanInputRequest": "fred_sdk.contracts.runtime",
     "PendingToolCall": "fred_sdk.contracts.runtime",
     "ThoughtDeltaEvent": "fred_sdk.contracts.runtime",
@@ -262,6 +265,7 @@ _LAZY: dict[str, str] = {
     "StepResult": "fred_sdk.graph.authoring.api",
     "WorkflowNode": "fred_sdk.graph.authoring.api",
     "choice_step": "fred_sdk.graph.authoring.api",
+    "choice_step_response": "fred_sdk.graph.authoring.api",
     "finalize_step": "fred_sdk.graph.authoring.api",
     "intent_router_step": "fred_sdk.graph.authoring.api",
     "model_text_step": "fred_sdk.graph.authoring.api",
@@ -334,6 +338,7 @@ __all__ = [
     "WorkflowNode",
     "typed_node",
     "choice_step",
+    "choice_step_response",
     "finalize_step",
     "intent_router_step",
     "model_text_step",
@@ -355,6 +360,7 @@ __all__ = [
     "WorkspaceFsPort",
     "WorkspaceFileNotFound",
     "HumanInputRequest",
+    "HumanInputAnswer",
     "HumanChoiceOption",
     "PendingToolCall",
     "ThoughtKind",

@@ -612,7 +612,14 @@ def agent_pod(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[httpx.Request]]:
                 ("/agents/templates", None),
                 ("/agents/capabilities/chat-controls", f"Bearer {_PERSON_TOKEN}"),
             ],
-            [{"capability_id": _CAPABILITY, "widget": "rag_scope"}],
+            [
+                {"capability_id": _CAPABILITY, "widget": "rag_scope"},
+                {
+                    "capability_id": "platform",
+                    "widget": "ask_user_toggle",
+                    "params": {"default": True},
+                },
+            ],
             id="person-own-bearer",
         ),
     ],
@@ -623,7 +630,7 @@ def test_managed_preparation_presents_only_the_callers_own_bearer_to_the_pod(
     token: str,
     grant: dict[str, str] | None,
     pod_requests: list[tuple[str, str | None]],
-    chat_controls: list[dict[str, str]],
+    chat_controls: list[dict[str, object]],
 ) -> None:
     response = _client(_RecordingRebac()).post(
         f"/teams/{_TEAM}/agent-instances/{_INSTANCE}/prepare-execution",

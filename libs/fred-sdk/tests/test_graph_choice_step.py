@@ -88,3 +88,56 @@ def test_choice_step_keeps_backward_compatibility_with_string_resume() -> None:
     )
 
     assert result == "confirm"
+
+
+def test_choice_step_response_preserves_comment() -> None:
+    from fred_sdk.graph.authoring.api import choice_step_response
+
+    result = asyncio.run(
+        choice_step_response(
+            cast(
+                GraphNodeContext,
+                _ChoiceContext({"choice_id": "confirm", "text": "Soon"}),
+            ),
+            stage="transfer_confirmation",
+            title="Confirm Transfer",
+            question="Proceed?",
+            choices=(HumanChoiceOption(id="confirm", label="Confirm"),),
+            free_text=True,
+        )
+    )
+
+    assert result is not None
+    assert result.choice_id == "confirm"
+    assert result.text == "Soon"
+
+
+def test_choice_step_response_accepts_skip_without_fabricating_choice() -> None:
+    from fred_sdk.graph.authoring.api import choice_step_response
+
+    result = asyncio.run(
+        choice_step_response(
+            cast(GraphNodeContext, _ChoiceContext({"skipped": True})),
+            stage="scope_selection",
+            title=None,
+            question="Which scope?",
+            choices=(HumanChoiceOption(id="a", label="A"),),
+        )
+    )
+
+    assert result is not None
+    assert result.skipped
+    assert result.choice_id is None
+
+
+def test_choice_step_keeps_legacy_free_text_carried_as_choice_id() -> None:
+    result = asyncio.run(
+        choice_step(
+            cast(GraphNodeContext, _ChoiceContext({"choice_id": "A free-text reply"})),
+            stage="test_free_text",
+            title="Free text",
+            question="Type a reply",
+            choices=(HumanChoiceOption(id="__free_text__", label="Your reply"),),
+        )
+    )
+    assert result == "A free-text reply"

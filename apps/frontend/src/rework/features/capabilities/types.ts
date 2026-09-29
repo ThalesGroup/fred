@@ -118,6 +118,8 @@ export interface ChatTurnControlComposerState {
    */
   reasoning: boolean;
   onReasoningChange: (value: boolean) => void;
+  askUser: boolean;
+  onAskUserChange: (value: boolean) => void;
 }
 
 export interface CapabilityChatTurnControlProps<TParams = Record<string, unknown>> {

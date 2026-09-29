@@ -5036,3 +5036,13 @@ Fixed, non-editable text before the input's own text, mirroring the existing
 deleted. `--on-surface-retreat`, with the input padded out of its way. Its first
 use is the `/` on the prompt library's command field, so the field reads as the
 thing the user will type in the chat.
+
+### Agent questions in managed chat (2026-09-29)
+
+The tune menu contains a platform-owned on/off row for agent questions. It
+starts enabled, persists by conversation, and affects new turns. A pending
+question stays answerable after the row is switched off. The existing HITL
+card shows a single-choice list, a free-text field, or both. A choice may carry
+the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. The card
+shows Skip only when `stage="agent_question"`, never for tool approval. A
+skipped answer is shown as a localized response after history reload.

@@ -1370,7 +1370,14 @@ describe("useManagedChat — session write reliability", () => {
     await act(async () => {
       latest.handleHitlAnswer("proceed");
     });
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, "proceed", undefined, expect.any(Object), undefined);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      freeTextEvent,
+      "proceed",
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+    );
   });
 
   it("accepts HITL free text at the exact configured code-point limit", async () => {
@@ -1399,6 +1406,7 @@ describe("useManagedChat — session write reliability", () => {
       "🙂🙂🙂🙂🙂",
       expect.any(Object),
       undefined,
+      false,
     );
   });
 
@@ -1426,6 +1434,7 @@ describe("useManagedChat — session write reliability", () => {
       "  complete answer 🙂  ",
       expect.any(Object),
       undefined,
+      false,
     );
     expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
     expect(latest.hitlFreeText).toBe("  complete answer 🙂  ");

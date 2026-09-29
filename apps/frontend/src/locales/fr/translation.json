@@ -469,6 +469,10 @@
       "resetTooltip": "Réinitialiser"
     },
     "composerSettings": {
+      "askUserLabel": "Autoriser les questions de l’agent",
+      "askUserTitle": "Questions de l’agent",
+      "askUserOn": "Activées",
+      "askUserOff": "Désactivées",
       "attachFile": "Joindre un fichier",
       "boundLibrariesTitle": "Bibliothèques liées",
       "documentPickerTitle": "Sélecteur de documents",
@@ -530,6 +534,7 @@
     },
     "recordAudio": "Enregistrer de l'audio",
     "sendHitlAnswer": "Envoyer",
+    "skipHitlQuestion": "Passer",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
@@ -1669,6 +1674,7 @@
       "validate": "Accepter les CGU"
     },
     "hitlPrompt": {
+      "skipped": "Passé",
       "accepted": "Accepté",
       "refused": "Refusé"
     },

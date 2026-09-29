@@ -1706,8 +1706,13 @@ async def test_prepare_execution_returns_ingress_relative_urls(
     )
     assert payload["supports_streaming"] is True
     assert payload["supports_hitl"] is True
-    # #1976: no selected capabilities → no computed chat controls.
-    assert payload["chat_controls"] == []
+    assert payload["chat_controls"] == [
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        }
+    ]
     # RUNTIME-07 rev. 2: no signed grant in the response — the control-plane issues
     # no capability; the pod authenticates via Keycloak and authorizes via OpenFGA.
     assert "execution_grant" not in payload
@@ -7825,6 +7830,11 @@ async def test_prepare_execution_attaches_computed_chat_controls(
             "params": {"default": "semantic"},
         },
         {"capability_id": _MCP_SEARCH_ID, "widget": "rag_scope"},
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        },
     ]
 
 
@@ -7903,7 +7913,10 @@ async def test_prepare_execution_chat_controls_are_cache_aside(
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["chat_controls"] == second.json()["chat_controls"]
-    assert [c["widget"] for c in first.json()["chat_controls"]] == ["attach_files"]
+    assert [c["widget"] for c in first.json()["chat_controls"]] == [
+        "attach_files",
+        "ask_user_toggle",
+    ]
     assert calls[0] == 1  # second prep hit the cache
 
 
@@ -7939,7 +7952,13 @@ async def test_prepare_execution_skips_capability_chat_controls_on_error(
         )
 
     assert resp.status_code == 200
-    assert resp.json()["chat_controls"] == []
+    assert resp.json()["chat_controls"] == [
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -7963,7 +7982,13 @@ async def test_prepare_execution_chat_controls_empty_when_pod_unreachable(
         )
 
     assert resp.status_code == 200
-    assert resp.json()["chat_controls"] == []
+    assert resp.json()["chat_controls"] == [
+        {
+            "capability_id": "platform",
+            "widget": "ask_user_toggle",
+            "params": {"default": True},
+        }
+    ]
 
 
 @pytest.mark.asyncio

@@ -496,6 +496,8 @@ export default function ManagedChatPage() {
     onRagScopeChange: chat.setRagScope,
     reasoning: chat.reasoning,
     onReasoningChange: chat.setReasoning,
+    askUser: chat.askUser,
+    onAskUserChange: chat.setAskUser,
   };
   // The "tune" button only appears when the agent exposes tool controls the
   // tune popover actually renders — i.e. any chat control that isn't the

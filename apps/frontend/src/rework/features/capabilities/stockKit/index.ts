@@ -23,6 +23,7 @@
 
 import type { CapabilityChatTurnControl } from "../types";
 import { AttachFilesControl } from "./AttachFilesControl";
+import { AskUserToggleControl } from "./AskUserToggleControl";
 import { DocumentScopeControl } from "./DocumentScopeControl";
 import { RagScopeControl } from "./RagScopeControl";
 import { SearchPolicyControl } from "./SearchPolicyControl";
@@ -32,6 +33,7 @@ export const stockChatTurnControlKit: Record<string, CapabilityChatTurnControl> 
   document_scope: DocumentScopeControl,
   search_policy: SearchPolicyControl,
   rag_scope: RagScopeControl,
+  ask_user_toggle: AskUserToggleControl,
   // REASON-01 level 4: `reasoning_toggle` deliberately has NO stock row —
   // it is promoted to the composer's right-edge effort picker (ReasoningChip,
   // COMPOSER_CHIP_WIDGETS) and the resolver's silent-skip keeps the popover

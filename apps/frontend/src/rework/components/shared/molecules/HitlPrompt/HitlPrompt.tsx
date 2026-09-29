@@ -25,7 +25,7 @@ import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
   event: RuntimeAwaitingHumanEvent;
-  onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  onAnswer: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
   readonly?: boolean;
   maxChatInputChars?: number;
   freeTextValue?: string;
@@ -104,7 +104,8 @@ export function HitlPrompt({
                 variant={variant}
                 size="small"
                 style={{ order: c.default ? 2 : 1 }}
-                onClick={() => onAnswer(c.id)}
+                disabled={isOverLimit}
+                onClick={() => onAnswer(c.id, freeText.trim() ? freeText : undefined)}
               >
                 {c.label}
               </Button>
@@ -113,12 +114,29 @@ export function HitlPrompt({
         </div>
       )}
 
+      {payload.stage === "agent_question" && !readonly && (
+        <Button
+          color="on-surface-retreat"
+          variant="text"
+          size="small"
+          onClick={() => onAnswer(undefined, undefined, true)}
+        >
+          {t("chatbot.skipHitlQuestion")}
+        </Button>
+      )}
+
       {payload.free_text && !readonly && (
         <div className={styles.freeText}>
           <TextArea
             label={t("chatbot.hitlFreeTextLabel")}
             value={freeText}
             onChange={(e) => setFreeText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && freeText.trim() && !isOverLimit) {
+                e.preventDefault();
+                onAnswer(undefined, freeText);
+              }
+            }}
             rows={2}
             aria-invalid={isOverLimit || undefined}
             aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}

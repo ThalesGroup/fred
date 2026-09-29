@@ -548,6 +548,14 @@ class RuntimeContext(BaseModel):
             "guarantee: level 2 remains a ceiling this cannot raise (§5.3)."
         ),
     )
+    ask_user: bool | None = Field(
+        default=None,
+        description=(
+            "Whether this interactive conversation offers the agent's ask_user tool. "
+            "True mounts it, False disables it for new turns, and None means no "
+            "interactive control was offered."
+        ),
+    )
     # NOTE (2026-08-12): a per-question `reasoning_effort` override was built
     # and withdrawn the same day — providers disagree on accepted values
     # (Mistral small 400s on low/medium), and the declaration machinery it

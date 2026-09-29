@@ -61,6 +61,20 @@ def test_legacy_hitl_response_shape_remains_readable() -> None:
     assert response.choice_id == "legacy free text"
     assert response.text is None
     assert response.occurrence_id is None
+    assert response.skipped is False
+
+
+def test_skipped_hitl_response_round_trips_without_fabricated_answer() -> None:
+    response = make_hitl_response(
+        "session-1", "exchange-1", 2, skipped=True, occurrence_id="tool-call-1"
+    )
+    restored = ChatMessage.model_validate(response.model_dump(mode="json"))
+    part = restored.parts[0]
+    assert isinstance(part, HitlResponsePart)
+    assert part.skipped is True
+    assert part.choice_id is None
+    assert part.text is None
+    assert part.occurrence_id == "tool-call-1"
 
 
 def test_a_command_descriptor_changes_metadata_only() -> None:

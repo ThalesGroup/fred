@@ -502,6 +502,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // `false` that would suppress reasoning the agent never offered to begin
     // with.
     const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
+    const offersAskUser = chatControls.some((c) => c.widget === "ask_user_toggle");
     return {
       runtimeContext: buildComposerRuntimeContext({
         selectedLibraryIds: composer.selectedLibraryIds,
@@ -511,6 +512,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         boundLibraryIds,
         attachmentsMarkdown: attachments.attachmentsMarkdown,
         ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
+        ...(offersAskUser ? { askUser: composer.askUser } : {}),
       }),
       turnOptions,
     };
@@ -522,6 +524,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     composer.searchPolicy,
     composer.ragScope,
     composer.reasoning,
+    composer.askUser,
   ]);
 
   // Read at answer time so handleHitlAnswer keeps its identity across keystrokes.
@@ -663,7 +666,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   );
 
   const handleHitlAnswer = useCallback(
-    (answer: string | boolean | undefined, freeText?: string) => {
+    (answer: string | boolean | undefined, freeText?: string, skipped = false) => {
       if (!pendingHitl) return;
       if (
         freeText !== undefined &&
@@ -702,7 +705,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         setPendingHitl((current) => current ?? prompt);
       };
       const { runtimeContext, turnOptions } = buildTurnContextRef.current();
-      void sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions)
+      void sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped)
         .then((reached) => {
           if (reached) {
             if (hitlDraftOwnerRef.current === draftOwner) setHitlFreeText("");
@@ -835,6 +838,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     setRagScope: composer.setRagScope,
     reasoning: composer.reasoning,
     setReasoning: composer.setReasoning,
+    askUser: composer.askUser,
+    setAskUser: composer.setAskUser,
     contextPromptIds,
     setContextPrompts,
     threadMessages,

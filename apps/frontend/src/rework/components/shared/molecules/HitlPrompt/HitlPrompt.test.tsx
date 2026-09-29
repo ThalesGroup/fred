@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +13,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { HitlPrompt } from "./HitlPrompt";
@@ -39,7 +42,7 @@ const event = {
 };
 
 describe("HitlPrompt chat-input limit", () => {
-  it("counts the exact free-text value and blocks only its send action", () => {
+  it("counts the exact free-text value and blocks answers carrying it", () => {
     const html = renderToStaticMarkup(
       <HitlPrompt
         event={event}
@@ -54,7 +57,7 @@ describe("HitlPrompt chat-input limit", () => {
     expect(html).toContain("chatbot.errors.chatInputTooLong::5");
     expect(html).toContain('aria-live="polite"');
     expect(html).not.toContain("maxLength=");
-    expect(buttonTag(html, "Proceed")).not.toContain("disabled");
+    expect(buttonTag(html, "Proceed")).toContain('disabled=""');
     expect(buttonTag(html, "chatbot\\.sendHitlAnswer")).toContain('disabled=""');
   });
 
@@ -81,5 +84,45 @@ describe("HitlPrompt chat-input limit", () => {
 
     expect(html).not.toContain("chatbot.characterCounter");
     expect(html).toContain("🙂🙂🙂🙂🙂🙂");
+  });
+});
+
+describe("HitlPrompt agent questions", () => {
+  it("shows skip only for an agent question", () => {
+    const question = { ...event, payload: { ...event.payload, stage: "agent_question" } };
+    expect(renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />)).toContain(
+      "chatbot.skipHitlQuestion",
+    );
+    expect(renderToStaticMarkup(<HitlPrompt event={event} onAnswer={() => undefined} />)).not.toContain(
+      "chatbot.skipHitlQuestion",
+    );
+  });
+});
+
+describe("HitlPrompt answer actions", () => {
+  it("sends a choice with its comment, supports Ctrl+Enter, and skips explicitly", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const question = { ...event, payload: { ...event.payload, stage: "agent_question" } };
+    act(() => root.render(<HitlPrompt event={question} onAnswer={onAnswer} freeTextValue=" note " />));
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const choice = buttons.find((button) => button.textContent?.includes("Proceed"));
+    const skip = buttons.find((button) => button.textContent?.includes("chatbot.skipHitlQuestion"));
+    expect(choice).toBeDefined();
+    expect(skip).toBeDefined();
+    act(() => choice?.click());
+    expect(onAnswer).toHaveBeenLastCalledWith("proceed", " note ");
+    act(() =>
+      container
+        .querySelector("textarea")
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true })),
+    );
+    expect(onAnswer).toHaveBeenLastCalledWith(undefined, " note ");
+    act(() => skip?.click());
+    expect(onAnswer).toHaveBeenLastCalledWith(undefined, undefined, true);
+    act(() => root.unmount());
+    container.remove();
   });
 });

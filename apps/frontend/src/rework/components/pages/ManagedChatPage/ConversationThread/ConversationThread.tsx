@@ -78,7 +78,11 @@ export const ConversationThread = memo(function ConversationThread({
           // "cancel") — the backend never localizes it (see hitlResponseKey's
           // docstring) — so translate it here; an unrecognized id falls back
           // to showing the raw text rather than nothing.
-          const key = msg.role === "hitl_response" ? hitlResponseKey(msg.text) : null;
+          const key = msg.hitlSkipped
+            ? "rework.hitlPrompt.skipped"
+            : msg.role === "hitl_response"
+              ? hitlResponseKey(msg.text)
+              : null;
           // Only a real user turn anchors the outline rail — a hitl_response
           // renders through UserTurn but is a reply to the agent, not a turn
           // anyone navigates back to.

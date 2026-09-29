@@ -1128,6 +1128,28 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("sends agent-question answers and skip while keeping the pending tool mounted", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ detail: "runtime unavailable" }), { status: 503 });
+    });
+    mount();
+    const question = {
+      ...hitlEvent,
+      payload: { ...hitlEvent.payload, stage: "agent_question", choices: [{ id: "yes", label: "Yes" }] },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(question, "yes", " Please ", { ask_user: false });
+      await latest.sendHitlResume(question, undefined, undefined, { ask_user: false }, undefined, true);
+    });
+    expect(bodies[0].resume_payload).toEqual({ choice_id: "yes", text: " Please " });
+    expect(bodies[1].resume_payload).toEqual({ skipped: true });
+    expect((bodies[0].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    expect((bodies[1].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
   it("preserves exact HITL free text and canonical choice fields on the wire", async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {

@@ -1060,6 +1060,7 @@ export function useChatSse(
       freeText?: string,
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
+      skipped = false,
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -1197,6 +1198,7 @@ export function useChatSse(
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
       const answerValue = !hasChoices && exactFreeText ? exactFreeText : answer;
+      const agentQuestion = hitlPayload?.stage === "agent_question";
 
       setWaitResponse(true);
 
@@ -1224,17 +1226,25 @@ export function useChatSse(
             runtime_context: mergePreparation(
               {
                 ...(runtimeContext ?? {}),
+                ...(agentQuestion ? { ask_user: true } : {}),
                 team_id: canonicalizeRuntimeTeamId(teamId),
                 language: i18n.language?.split("-")[0] || undefined,
               },
               prep,
             ),
             turn_options: turnOptions,
-            resume_payload: {
-              answer: answerValue,
-              choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
-              text: hasChoices ? exactFreeText : undefined,
-            },
+            resume_payload: agentQuestion
+              ? skipped
+                ? { skipped: true }
+                : {
+                    choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
+                    text: exactFreeText,
+                  }
+              : {
+                  answer: answerValue,
+                  choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
+                  text: hasChoices ? exactFreeText : undefined,
+                },
           },
           prep.execute_stream_url,
           token,
