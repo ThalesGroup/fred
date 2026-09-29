@@ -63,11 +63,101 @@ export const taskSlice = createSlice({
         step: null,
         error: null,
         lastSeq: -1,
+        // A document ingestion known to the server is past its transfer by
+        // definition — including one rehydrated after a reload, whose bytes
+        // went up in a browser session that may no longer exist.
+        stage: kind === "ingestion" && target?.type === "document" ? "analysis" : null,
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
       };
+    },
+
+    /** A file whose bytes are on their way, before the server has named a task
+     *  for it.
+     *
+     *  Without this the file is invisible for the whole transfer — the panel
+     *  only ever learns of it once the upload is over, which for a large import
+     *  is most of the wait. `localId` is the browser's own handle on it; the
+     *  real task id replaces it at handoff. */
+    uploadStarted(state, action: PayloadAction<{ localId: string; filename: string }>) {
+      const { localId, filename } = action.payload;
+      if (state.byId[localId]) return;
+      state.byId[localId] = {
+        taskId: localId,
+        kind: "ingestion",
+        // No document uid until the server has written one. The label is what
+        // the panel shows; an empty id keeps this entry out of every selector
+        // that resolves a task back to a real document row.
+        target: { type: "document", id: "", label: filename },
+        owner: null,
+        // Nothing server-side to subscribe to or acknowledge yet.
+        localOnly: true,
+        state: "running",
+        progress: null,
+        step: null,
+        error: null,
+        lastSeq: -1,
+        stage: "upload",
+        registeredAt: Date.now(),
+        terminalAt: null,
+        acknowledgedAt: null,
+        warnings: null,
+      };
+    },
+
+    /** The server took the file and named the ingestion task that owns it now.
+     *
+     *  Re-keyed rather than replaced: the entry keeps its start time, so the
+     *  panel's list does not reshuffle as each file crosses over. The state
+     *  goes back to `pending` because the analysis has not started — the
+     *  transfer being done says nothing about the document being usable. */
+    uploadHandedOff(
+      state,
+      action: PayloadAction<{ localId: string; taskId: string; documentUid: string | null; filename: string }>,
+    ) {
+      const { localId, taskId, documentUid, filename } = action.payload;
+      const vm = state.byId[localId];
+      delete state.byId[localId];
+      if (state.byId[taskId]) return;
+      state.byId[taskId] = {
+        ...(vm ?? { registeredAt: Date.now() }),
+        taskId,
+        kind: "ingestion",
+        target: documentUid ? { type: "document", id: documentUid, label: filename } : null,
+        owner: vm?.owner ?? null,
+        localOnly: false,
+        state: "pending",
+        progress: null,
+        step: null,
+        error: null,
+        lastSeq: -1,
+        stage: "analysis",
+        terminalAt: null,
+        acknowledgedAt: null,
+        warnings: null,
+      };
+    },
+
+    /** The transfer ended with nothing left to wait for: upload-only mode, or a
+     *  file the user chose to skip. A file that was handed off is already gone
+     *  from here and its task owns the rest. */
+    uploadFinished(state, action: PayloadAction<{ localId: string }>) {
+      const vm = state.byId[action.payload.localId];
+      if (!vm || vm.stage !== "upload") return;
+      vm.state = "succeeded";
+      vm.terminalAt = Date.now();
+    },
+
+    /** The transfer itself failed — the file never reached a task, so no task
+     *  will ever report this. */
+    uploadFailed(state, action: PayloadAction<{ localId: string; error: string }>) {
+      const vm = state.byId[action.payload.localId];
+      if (!vm || vm.stage !== "upload") return;
+      vm.state = "failed";
+      vm.error = action.payload.error;
+      vm.terminalAt = Date.now();
     },
 
     taskEventReceived(state, action: PayloadAction<AnyTaskEvent>) {
@@ -148,6 +238,10 @@ export const taskSlice = createSlice({
 
 export const {
   taskRegistered,
+  uploadStarted,
+  uploadHandedOff,
+  uploadFinished,
+  uploadFailed,
   taskEventReceived,
   taskEvicted,
   trayClockTicked,
@@ -197,7 +291,9 @@ export const selectVisibleTasks = createSelector([selectById, selectTick], (byId
  *  belong to the conversation, not to a team's resources. */
 export const selectImportTasks = createSelector(selectVisibleTasks, (tasks) =>
   tasks
-    .filter((vm) => vm.kind === "ingestion" && !vm.localOnly && vm.target?.type === "document")
+    // `target.type` is what separates the two, not `localOnly`: a file still
+    // being transferred has no server task either, and it belongs here.
+    .filter((vm) => vm.kind === "ingestion" && vm.target?.type === "document")
     // Oldest first, unlike the tray: these are the files of one import, and
     // reading them in the order they were sent beats having the list reshuffle
     // under the eye as each new one registers.

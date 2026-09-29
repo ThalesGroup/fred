@@ -60,10 +60,6 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({
-  taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
-  importPanelOpenRequested: () => ({ type: "tasks/importPanelOpenRequested" }),
-}));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 

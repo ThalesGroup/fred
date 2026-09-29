@@ -2893,10 +2893,17 @@
         "terminalCount": "Terminées ({{count}})",
         "title": "Tâches"
       },
+      "importStage": {
+        "upload": "Envoi du fichier",
+        "analysis": "Analyse du document"
+      },
       "ingestionStep": {
         "uploading": "Préparation du document",
         "processing": "Extraction du contenu",
         "indexing": "Indexation",
+        "listed": "Préparation du document",
+        "vectorized": "Contenu indexé",
+        "skip": "Déjà à jour",
         "done": "Traitement terminé"
       },
       "popover": {

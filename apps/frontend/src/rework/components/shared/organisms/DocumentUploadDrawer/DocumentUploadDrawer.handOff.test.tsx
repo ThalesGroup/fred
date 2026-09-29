@@ -80,10 +80,6 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
 }));
-vi.mock("../../../../features/tasks/taskSlice", () => ({
-  taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
-  importPanelOpenRequested: () => ({ type: "tasks/importPanelOpenRequested" }),
-}));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
 
@@ -162,6 +158,15 @@ describe("DocumentUploadDrawer hands the import off", () => {
     expect(probe.dispatched.map((action) => action.type)).toContain("tasks/importPanelOpenRequested");
   });
 
+  it("lists every file in the panel before a byte moves", async () => {
+    await saveFifty();
+
+    // Waiting for each file's own transfer would leave most of the import
+    // invisible: batches run a few at a time, so the last files sit queued
+    // with nothing on screen saying they exist.
+    expect(probe.dispatched.filter((a) => a.type === "tasks/uploadStarted").length).toBe(50);
+  });
+
   it("keeps reporting each file to the panel after the dialog is gone", async () => {
     await saveFifty();
     expect(probe.registeredTasks).toEqual([]);
@@ -169,7 +174,10 @@ describe("DocumentUploadDrawer hands the import off", () => {
     await finishTheTransfer();
 
     expect(probe.registeredTasks.length).toBe(50);
-    expect(probe.dispatched.filter((a) => a.type === "tasks/taskRegistered").length).toBe(probe.registeredTasks.length);
+    // Each file's entry switches over to its real task as the server names it.
+    expect(probe.dispatched.filter((a) => a.type === "tasks/uploadHandedOff").length).toBe(
+      probe.registeredTasks.length,
+    );
   });
 
   it("refreshes the folder only once the import is through", async () => {

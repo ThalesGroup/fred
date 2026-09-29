@@ -72,9 +72,24 @@ describe("relativeTime", () => {
 });
 
 describe("ingestion support labels", () => {
+  it("names the stage instead of leaking a pipeline identifier into the page", () => {
+    // Nothing describes the transfer on the task feed — it is over before the
+    // first event arrives.
+    expect(stepLabel({ kind: "ingestion", step: null, stage: "upload" }, t)).toBe("rework.tasks.importStage.upload");
+    // A step the pipeline reports and we have no wording for must not print
+    // its English identifier into a French page.
+    expect(stepLabel({ kind: "ingestion", step: "resolving scope", stage: "analysis" }, t)).toBe(
+      "rework.tasks.importStage.analysis",
+    );
+    // A chat attachment carries its own already-translated step and no stage.
+    expect(stepLabel({ kind: "ingestion", step: "Préparation…", stage: null }, t)).toBe("Préparation…");
+  });
+
   it("translates known ingestion steps without changing other task kinds", () => {
-    expect(stepLabel({ kind: "ingestion", step: "indexing" }, t)).toBe("rework.tasks.ingestionStep.indexing");
-    expect(stepLabel({ kind: "migration", step: "indexing" }, t)).toBe("indexing");
+    expect(stepLabel({ kind: "ingestion", step: "indexing", stage: "analysis" }, t)).toBe(
+      "rework.tasks.ingestionStep.indexing",
+    );
+    expect(stepLabel({ kind: "migration", step: "indexing", stage: null }, t)).toBe("indexing");
   });
 
   it("copies the document, task reference, stage and failure together", () => {
@@ -86,6 +101,7 @@ describe("ingestion support labels", () => {
         kind: "ingestion",
         target: { type: "document", id: "doc-456", label: "report.pdf" },
         step: "indexing",
+        stage: "analysis",
         error: "Configured attempts exhausted.",
         owner: null,
         localOnly: false,

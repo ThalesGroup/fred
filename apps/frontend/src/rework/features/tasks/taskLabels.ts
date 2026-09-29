@@ -35,12 +35,19 @@ export const STATE_COLOR: Record<TaskState, string> = {
 /** Localized task-state label (e.g. "Pending" / "En attente"). */
 export const stateLabel = (state: TaskState, t: TFunction): string => t(`rework.tasks.state.${state}`);
 
+/** Every ingestion step the backend actually emits on the task feed. Anything
+ *  outside this set is a pipeline internal we have no wording for — naming the
+ *  stage beats printing an English identifier into a French page. */
+const INGESTION_STEPS = new Set(["uploading", "processing", "indexing", "listed", "vectorized", "skip", "done"]);
+
 /** Keep backend stage keys in the payload, translate only their presentation. */
-export function stepLabel(task: Pick<TaskViewModel, "kind" | "step">, t: TFunction): string {
+export function stepLabel(task: Pick<TaskViewModel, "kind" | "step" | "stage">, t: TFunction): string {
+  // The transfer is the browser's own half of the work: no backend step
+  // describes it, and none will arrive until it is over.
+  if (task.stage === "upload") return t("rework.tasks.importStage.upload");
   const step = task.step ?? "";
-  if (task.kind === "ingestion" && ["uploading", "processing", "indexing", "done"].includes(step)) {
-    return t(`rework.tasks.ingestionStep.${step}`);
-  }
+  if (task.kind === "ingestion" && INGESTION_STEPS.has(step)) return t(`rework.tasks.ingestionStep.${step}`);
+  if (task.stage === "analysis") return t("rework.tasks.importStage.analysis");
   return step;
 }
 

@@ -23,7 +23,13 @@ import { Provider } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { importPanelOpenRequested, taskRegistered, taskSlice } from "../../../../features/tasks/taskSlice";
+import {
+  importPanelOpenRequested,
+  taskRegistered,
+  taskSlice,
+  uploadHandedOff,
+  uploadStarted,
+} from "../../../../features/tasks/taskSlice";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -181,6 +187,57 @@ describe("ImportPanel", () => {
 
     expect(container.textContent).toContain("report.pdf");
     expect(container.textContent).not.toContain("pasted.png");
+  });
+
+  it("lists a file while its bytes are still going up", () => {
+    click(toggle());
+
+    act(() => {
+      store.dispatch(uploadStarted({ localId: "local-1", filename: "report.pdf" }));
+    });
+
+    // The transfer is most of the wait on a large import; a panel that only
+    // learns of a file once it is over shows an empty list for that whole time.
+    expect(container.textContent).toContain("report.pdf");
+  });
+
+  it("keeps a file in its place when it crosses over to its ingestion task", () => {
+    click(toggle());
+    act(() => {
+      store.dispatch(uploadStarted({ localId: "local-1", filename: "report.pdf" }));
+      store.dispatch(uploadStarted({ localId: "local-2", filename: "notes.md" }));
+      store.dispatch(
+        uploadHandedOff({ localId: "local-2", taskId: "task-2", documentUid: "doc-2", filename: "notes.md" }),
+      );
+    });
+
+    // Still second: it was sent second, and the list must not reshuffle as
+    // each file is accepted.
+    expect([...container.querySelectorAll("[data-testid=task-card]")].map((n) => n.textContent)).toEqual([
+      "report.pdf",
+      "notes.md",
+    ]);
+  });
+
+  it("still lists the import after leaving the page and coming back", () => {
+    act(() => {
+      store.dispatch(importOf("task-1", "report.pdf"));
+    });
+
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <Provider store={store}>
+          <ImportPanel />
+        </Provider>,
+      );
+    });
+    click(toggle());
+
+    expect(container.textContent).toContain("report.pdf");
   });
 
   it("opens itself when an import hands off", () => {
