@@ -148,6 +148,25 @@ documents with a distinct name. Nothing is deleted, nothing stays hidden, and
 the user can then decide for themselves. One-off data migration, with an
 operator note.
 
+### 3.6 What the panel requires of the task lifecycle
+
+The panel is only as truthful as the states it renders. Two guarantees are
+requirements of this design, not nice-to-haves:
+
+- **A task must never stay non-terminal forever.** Today a stuck task is not
+  cosmetic: a unique partial index treats it as an ingestion still in flight
+  (`models/task_models.py:62-70`), so the document can never be re-imported.
+  The user can neither watch it finish nor retry it. Showing that faithfully in
+  a panel makes the dead end more visible, not less.
+- **A failure must say why, in the user's terms.** "Execution failed" is not a
+  reason. Section 3.3 promises a readable cause and a retry action; that
+  promise is only keepable if the pipeline distinguishes a genuinely unusable
+  file from an internal problem that would succeed on a second attempt.
+
+Both are properties of the ingestion task lifecycle, which this RFC does not
+own (§6). They are stated here so the panel is not built on top of them
+silently.
+
 ## 4. Alternatives considered
 
 **Keep versioning and build the missing UI.** Rejected: it would add a version
@@ -196,8 +215,12 @@ already carry team activity.
   by the `isolate-ingestion-extraction-queues` OpenSpec change; no user-facing
   route exists today. §3.3 deliberately stops at the upload stage.
 - **Server-side latency** beyond the scans the versioning mechanism causes. The
-  blocking content-store write is #2370; the second full disk copy of every
-  uploaded file and the remaining scan costs are #2844.
+  blocking content-store write is #2370; the remaining scan costs are #2844.
+  Two further findings are not filed anywhere yet — see §8.
+- **The ingestion task lifecycle.** Stuck tasks and misclassified failures are a
+  distinct mechanism with its own defects, agreed (2026-09-29) as the piece of
+  work to take up immediately after this one. Bundling it here would make both
+  unreviewable. §3.6 states only what the import experience requires of it.
 
 ## 7. Open questions
 
@@ -221,7 +244,30 @@ Still open:
 2. **How long do finished entries stay in the panel?** `TaskTray` already
    evicts on a timer; whether import entries should persist across a reload
    until dismissed needs confirming against OPS-04's acknowledgement model.
-## 8. Next step
+## 8. Unfiled findings on import latency
+
+Surfaced while mapping this path, on the same code the conflict work touches.
+Neither has an issue yet; both are independent of the design above and should be
+filed rather than folded in.
+
+- **Every uploaded file is read twice to compute two fingerprints, and one of
+  them is never used.** `_probe_file_info` computes sha256 and md5 in two
+  separate full passes (`base_input_processor.py:117-118`). `md5` is declared on
+  the metadata model (`document_structures.py:257`) and read nowhere in the
+  repository. Dropping it removes a full read per file; the remaining hash can
+  be computed in one pass rather than two.
+- **Every uploaded file is copied on disk one more time than necessary, on the
+  event loop.** The upload is already spooled to disk by the framework, then
+  `_preload_uploaded_files` copies it again
+  (`ingestion_controller.py:466-473` → `:294-317`). The copy is synchronous, so
+  it stalls the whole Knowledge Flow API — including the sibling batches of the
+  same import — for its duration.
+
+Both are the same shape as #2370: work done on the event loop that blocks every
+other request while it runs. That shape, not the individual call, is what makes
+the import feel slow from the browser.
+
+## 9. Next step
 
 Sign-off on §3, then split into OpenSpec changes — conflict resolution, the
 import panel, and the data migration — each linking its own GitHub issue. Both
