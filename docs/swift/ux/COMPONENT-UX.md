@@ -4973,6 +4973,12 @@ It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
+A row is one line: the command, then its description beside it on the same
+baseline, so the list shows more of the library before it has to scroll. The
+command never truncates — it is what the user is about to type — and the
+description gives up the width instead. The emoji container is sized to that
+single line rather than to the two it used to hold.
+
 The focused entry's prompt detail is prefetched as the focus moves: the listing
 carries only a preview, so running a command needs the detail endpoint, and the
 prefetch keeps that round trip off the critical path without making it optional.

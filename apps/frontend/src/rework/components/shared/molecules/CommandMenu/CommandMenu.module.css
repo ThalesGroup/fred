@@ -50,7 +50,7 @@
   gap: var(--spacing-s);
   cursor: pointer;
   border-radius: var(--radius-s);
-  padding: var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-s);
   text-align: left;
 }
 
@@ -64,25 +64,28 @@
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-xs);
   background: var(--secondary-container);
-  width: 2rem;
-  height: 2rem;
+  width: 1.5rem;
+  height: 1.5rem;
   color: var(--on-secondary-container);
-  font-size: 1.125rem;
+  font-size: 0.875rem;
 }
 
 .rowText {
   display: flex;
-  flex-direction: column;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--spacing-xs);
   min-width: 0;
 }
 
+/* The command never truncates — it is what the user is about to type. The
+ * description beside it gives up the width instead. */
 .rowLabel {
-  overflow: hidden;
+  flex-shrink: 0;
   color: var(--on-surface);
   font: var(--font-body-medium);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -95,6 +98,8 @@
 }
 
 .rowSublabel {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
