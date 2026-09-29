@@ -1376,6 +1376,64 @@ function DocumentWorkspace({
     return options;
   };
 
+  // Two of the tracks after "Auteur" hold nothing most of the time: a settled
+  // document shows no chip at all, and the search-exclusion icon is rare. They
+  // still reserved their full width on every row, which is what made the table
+  // refuse to narrow. Both grids read the same track list, so deciding this
+  // once here keeps the header and the rows in step.
+  const showsStatus = filteredRows.some((row) => {
+    if (row.kind === "folder") {
+      const rollup = folderRollups.get(row.node.full);
+      return Boolean(rollup?.processing || rollup?.failed.length || rollup?.justDone);
+    }
+    return getDocStatus(row.doc) !== "ready" || justCompletedDocUids.has(row.doc.identity.document_uid);
+  });
+  const showsExclusion = filteredRows.some(
+    (row) =>
+      row.kind === "document" &&
+      getDocStatus(row.doc) === "ready" &&
+      row.doc.source.retrievable === false &&
+      !isTabularOnlyDoc(row.doc),
+  );
+
+  // Only present when some row actually has a state to report — a folder of
+  // settled documents shows nothing here, and an always-there track would just
+  // be 8rem of blank on every row. Fixed rather than "auto" for the same
+  // dual-grid reason as the actions column below; sized for the widest chip,
+  // FR "Traitement..." with its spinner, which 6rem clipped.
+  const statusColumn: DataTableColumn<Row> = {
+    label: "",
+    size: "8rem",
+    cellRenderer: (row) => {
+      // Folder rollup (#2384). Precedence is processing > failures > done:
+      // while anything is still running the folder is not settled yet, and
+      // once it is, an unresolved failure is more actionable than a "your
+      // upload landed" marker. `raw` is never rolled up — a folder holding
+      // never-processed documents is a normal steady state, not news.
+      if (row.kind === "folder") {
+        const rollup = folderRollups.get(row.node.full);
+        if (rollup?.processing) return <StatusChip status="processing" />;
+        if (rollup?.failed.length) return <StatusChip status="warning" failedDocuments={rollup.failed} />;
+        return rollup?.justDone ? <StatusChip status="ready" justCompleted /> : null;
+      }
+      return (
+        <StatusChip
+          status={getDocStatus(row.doc)}
+          errors={row.doc.processing?.errors}
+          documentUid={row.doc.identity.document_uid}
+          // The failure a Temporal child job reported: for a run that died
+          // before any stage started, this is the ONLY account of it —
+          // `processing.errors` is keyed by stage and stays empty. Already in
+          // hand from the task feed, so the Resources tab stops being the one
+          // surface that shows "Erreur" with nothing behind it (#2315 put the
+          // message on the task; it only ever reached the task popover).
+          taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
+          justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
+        />
+      );
+    },
+  };
+
   const columns: DataTableColumn<Row>[] = [
     {
       label: columnLabel("name"),
@@ -1454,43 +1512,7 @@ function DocumentWorkspace({
         return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
       },
     },
-    {
-      // Fixed for the same header/body dual-grid reason as the actions column
-      // below. Sized for the widest chip — FR "Traitement..." with its spinner
-      // (~100px) — which 6rem clipped; the shorter Erreur/En attente chips
-      // masked that until the live-task wiring (#2315) made "processing"
-      // actually render here.
-      label: "",
-      size: "8rem",
-      cellRenderer: (row) => {
-        // Folder rollup (#2384). Precedence is processing > failures > done:
-        // while anything is still running the folder is not settled yet, and
-        // once it is, an unresolved failure is more actionable than a "your
-        // upload landed" marker. `raw` is never rolled up — a folder holding
-        // never-processed documents is a normal steady state, not news.
-        if (row.kind === "folder") {
-          const rollup = folderRollups.get(row.node.full);
-          if (rollup?.processing) return <StatusChip status="processing" />;
-          if (rollup?.failed.length) return <StatusChip status="warning" failedDocuments={rollup.failed} />;
-          return rollup?.justDone ? <StatusChip status="ready" justCompleted /> : null;
-        }
-        return (
-          <StatusChip
-            status={getDocStatus(row.doc)}
-            errors={row.doc.processing?.errors}
-            documentUid={row.doc.identity.document_uid}
-            // The failure a Temporal child job reported: for a run that died
-            // before any stage started, this is the ONLY account of it —
-            // `processing.errors` is keyed by stage and stays empty. Already in
-            // hand from the task feed, so the Resources tab stops being the one
-            // surface that shows "Erreur" with nothing behind it (#2315 put the
-            // message on the task; it only ever reached the task popover).
-            taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
-            justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
-          />
-        );
-      },
-    },
+    ...(showsStatus ? [statusColumn] : []),
     {
       // Fixed, not "auto": DataTable renders the header and body as two
       // independent grids (RFC-tracked, for the scroll-starts-below-header
@@ -1499,13 +1521,12 @@ function DocumentWorkspace({
       // the two grids disagree on this column's width. That leftover space
       // then gets absorbed differently by the flexible Name (2fr) column in
       // each grid, shifting every column after it out of alignment. A fixed
-      // width both grids agree on avoids the whole class of drift. Sized for
-      // up to three 2rem elements (the excluded-from-search indicator +
-      // preview + the "more" trigger, the indicator only present on an
-      // excluded document) + their gaps + the cell's own horizontal padding,
-      // plus headroom.
+      // width both grids agree on avoids the whole class of drift. Two 2rem
+      // buttons plus their gap and the cell's padding is the normal case; the
+      // third slot is only reserved when a document on the page is actually
+      // excluded from search.
       label: "",
-      size: "8rem",
+      size: showsExclusion ? "8rem" : "5.75rem",
       cellRenderer: (row) => {
         // retrievable stays false for the entire ingestion window (it only
         // flips true once vectorization completes), not just for a deliberate
