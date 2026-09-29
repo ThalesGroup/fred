@@ -32,6 +32,10 @@ export interface PromptViewDetail {
   description?: string | null;
   text: string;
   category_id?: string | null;
+  /** Shown ahead of the description when set — in the team library and on the
+   *  marketplace alike. On the marketplace it is the author team's command: an
+   *  import into a team already holding it gets the first free `-N` suffix. */
+  command?: string | null;
 }
 
 interface PromptViewDialogProps {
@@ -126,7 +130,12 @@ export default function PromptViewDialog({
               />
             </div>
 
-            {detail.description && <p className={styles.description}>{detail.description}</p>}
+            {(detail.command || detail.description) && (
+              <div className={styles.summary}>
+                {detail.command && <span className={styles.commandSlug}>/{detail.command}</span>}
+                {detail.description && <p className={styles.description}>{detail.description}</p>}
+              </div>
+            )}
 
             {resolvedChipLabel && <span className={styles.categoryChip}>{resolvedChipLabel}</span>}
 

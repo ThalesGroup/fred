@@ -19,6 +19,7 @@ import { memo, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
+import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
@@ -37,6 +38,9 @@ interface ConversationThreadProps {
   maxChatInputChars?: number;
   hitlFreeText: string;
   onHitlFreeTextChange: (value: string) => void;
+  /** Opens the prompt a command turn sent. Omit to render those turns inert.
+   *  Must keep a stable identity: it is handed to every memoized row. */
+  onOpenCommandPrompt?: (turn: { text: string; command: CommandDescriptor }) => void;
 }
 
 // Memoized: ManagedChatPage re-renders on every composer keystroke (the input
@@ -51,6 +55,7 @@ export const ConversationThread = memo(function ConversationThread({
   emptyState,
   scrollContainerRef,
   onHitlAnswer,
+  onOpenCommandPrompt,
   maxChatInputChars,
   hitlFreeText,
   onHitlFreeTextChange,
@@ -78,7 +83,13 @@ export const ConversationThread = memo(function ConversationThread({
           // renders through UserTurn but is a reply to the agent, not a turn
           // anyone navigates back to.
           return (
-            <UserTurn key={msg.id} turnId={msg.role === "user" ? msg.id : undefined} text={key ? t(key) : msg.text} />
+            <UserTurn
+              key={msg.id}
+              turnId={msg.role === "user" ? msg.id : undefined}
+              text={key ? t(key) : msg.text}
+              command={msg.command}
+              onOpenCommand={onOpenCommandPrompt}
+            />
           );
         }
         if (msg.role === "hitl_request") {

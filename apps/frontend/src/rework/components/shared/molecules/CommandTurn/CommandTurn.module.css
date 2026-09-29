@@ -1,0 +1,56 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Sits inside the user bubble, which is --secondary-container over
+   --on-secondary-container. No fill and no border of its own so the bubble
+   shows through: this reads as part of the bubble, not as a card dropped onto
+   it. The hover state layer is what marks it actionable. The radius is well
+   inside the bubble's own --radius-m, so it reads as nested rather than as a
+   second bubble.
+
+   Inline formatting, not flex: the command and the text typed after it are one
+   sentence, so they must reflow as one when the bubble narrows. Flex items
+   would each wrap on their own and read as two separate texts. */
+.command {
+  display: inline-block;
+  cursor: pointer;
+  margin: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  color: inherit;
+  font: var(--font-body-large);
+  text-align: left;
+}
+
+/* Mixed from the bubble's own content colour — a state layer belongs to the
+   majority content colour of the surface it sits on, not to a generic tone. */
+.command:hover:not(:disabled) {
+  background: var(--state-on-secondary-container-hover);
+}
+
+.command:disabled {
+  cursor: default;
+}
+
+.slug {
+  font-weight: 500;
+}
+
+.appended {
+  opacity: 0.8;
+}

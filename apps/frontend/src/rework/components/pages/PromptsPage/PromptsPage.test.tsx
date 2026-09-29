@@ -72,7 +72,10 @@ const PROMPT_DETAIL = {
   description: "Real description",
   category_id: null,
   tags: ["greeting"],
+  // A command, so the view dialog has one to show ahead of the description.
+  // Prompt B below deliberately has none: `command: null` keeps them one shape.
   text: "Real prompt text",
+  command: "summary" as string | null,
 };
 
 // A second prompt used only by the cross-prompt-leak test below. Its detail
@@ -93,8 +96,11 @@ const PROMPT_B_DETAIL = {
   category_id: null,
   tags: [],
   text: "Other prompt text",
+  command: null,
 };
 let promptBReady = false;
+const createCalls: unknown[] = [];
+let createRejectsWith: unknown = null;
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery: () => ({
@@ -134,7 +140,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     return { data: lastData.current };
   },
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation: () => [
-    async () => ({ unwrap: async () => undefined }),
+    (arg: unknown) => {
+      createCalls.push(arg);
+      return {
+        unwrap: async () => {
+          if (createRejectsWith) throw createRejectsWith;
+          return undefined;
+        },
+      };
+    },
     { isLoading: false },
   ],
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation: () => [
@@ -173,16 +187,30 @@ import PromptsPage from "./PromptsPage";
 // directly to `document.body` (see Portal.tsx) — it is NOT a descendant of
 // the `container` the page itself is mounted into, so form fields must be
 // queried from the dialog, not from `container`.
+// Fields are read by their label rather than by position: the form has
+// gained inputs before (the command), and an index-based reader silently
+// starts asserting about the wrong box when that happens.
+function fieldByLabel(label: string): HTMLInputElement | null {
+  const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null;
+  if (!dialog) return null;
+  for (const wrapper of Array.from(dialog.querySelectorAll("label"))) {
+    if (wrapper.textContent?.includes(label)) {
+      const input = wrapper.querySelector("input") ?? wrapper.parentElement?.querySelector("input");
+      if (input) return input as HTMLInputElement;
+    }
+  }
+  return null;
+}
+
 function formValues() {
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null;
   if (!dialog) return { name: "", description: "", text: "" };
-  const inputs = dialog.querySelectorAll("input");
   // The prompt text is a CodeMirror document, not a form control: read it from
   // the editor's own state rather than off the DOM.
   const editor = dialog.querySelector(".cm-editor");
   return {
-    name: (inputs[0] as HTMLInputElement | undefined)?.value ?? "",
-    description: (inputs[1] as HTMLInputElement | undefined)?.value ?? "",
+    name: fieldByLabel("form.name")?.value ?? "",
+    description: fieldByLabel("form.description")?.value ?? "",
     text: editor ? (EditorView.findFromDOM(editor as HTMLElement)?.state.doc.toString() ?? "") : "",
   };
 }
@@ -386,5 +414,150 @@ describe("PromptsPage card click", () => {
     });
     dialog = document.querySelector('[role="dialog"]') as HTMLElement;
     expect(dialog.textContent).toContain("Other prompt text");
+  });
+});
+
+describe("PromptsPage view dialog", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const openCard = (index: number) => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+    const card = container.querySelectorAll('[role="button"]')[index] as HTMLElement;
+    act(() => {
+      card.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    return document.querySelector('[role="dialog"]') as HTMLElement;
+  };
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("shows the command ahead of the description", () => {
+    const dialog = openCard(0);
+
+    // The order is the point: the same reading as the composer's command menu
+    // and the panel a command turn opens.
+    expect(dialog.textContent).toContain("/summary");
+    expect(dialog.textContent!.indexOf("/summary")).toBeLessThan(dialog.textContent!.indexOf("Real description"));
+  });
+
+  it("shows nothing of the sort on a prompt that carries no command", () => {
+    promptBReady = true;
+    const dialog = openCard(1);
+
+    expect(dialog.textContent).toContain("Other prompt text");
+    expect(dialog.textContent).not.toContain("/summary");
+    promptBReady = false;
+  });
+});
+
+describe("PromptsPage command field", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const openCreateForm = () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<PromptsPage />);
+    });
+    const newButton = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("teams.prompts.create"),
+    );
+    act(() => {
+      newButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+  };
+
+  const typeInto = (input: HTMLInputElement, value: string) => {
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+    createCalls.length = 0;
+    createRejectsWith = null;
+  });
+
+  it("folds an uppercase keystroke to lowercase", () => {
+    openCreateForm();
+    const command = fieldByLabel("form.command")!;
+    typeInto(command, "S");
+    expect(fieldByLabel("form.command")!.value).toBe("s");
+  });
+
+  it("refuses a space, an accented letter and a punctuation mark", () => {
+    openCreateForm();
+    const command = fieldByLabel("form.command")!;
+    typeInto(command, "abc");
+    for (const keystroke of ["abc ", "abcé", "abc!"]) {
+      typeInto(fieldByLabel("form.command")!, keystroke);
+      expect(fieldByLabel("form.command")!.value).toBe("abc");
+    }
+  });
+
+  it("keeps digits, hyphens and underscores", () => {
+    openCreateForm();
+    typeInto(fieldByLabel("form.command")!, "synthese_v2-bis");
+    expect(fieldByLabel("form.command")!.value).toBe("synthese_v2-bis");
+  });
+
+  it("sends the command with the create payload", async () => {
+    openCreateForm();
+    typeInto(fieldByLabel("form.name")!, "Weekly");
+    typeInto(fieldByLabel("form.command")!, "weekly");
+    const editor = document.querySelector('[role="dialog"] .cm-editor');
+    act(() => {
+      const view = EditorView.findFromDOM(editor as HTMLElement);
+      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
+    });
+    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (b) => b.textContent?.trim() === "rework.create",
+    );
+    await act(async () => {
+      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    expect(createCalls).toHaveLength(1);
+    expect((createCalls[0] as { createPromptRequest: { command: string } }).createPromptRequest.command).toBe("weekly");
+  });
+
+  it("marks the command field, not a toast, when the backend reports a command conflict", async () => {
+    // A name conflict and a command conflict are both 409 here; only the
+    // code says which input to mark.
+    createRejectsWith = { data: { detail: { code: "prompt_command_conflict", message: "taken" } } };
+    openCreateForm();
+    typeInto(fieldByLabel("form.name")!, "Weekly");
+    typeInto(fieldByLabel("form.command")!, "weekly");
+    const editor = document.querySelector('[role="dialog"] .cm-editor');
+    act(() => {
+      const view = EditorView.findFromDOM(editor as HTMLElement);
+      view?.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: "body" } });
+    });
+    const save = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (b) => b.textContent?.trim() === "rework.create",
+    );
+    await act(async () => {
+      save?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+    // The form stays open on the conflict so the value can be corrected.
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(dialogText).toContain("form.commandConflict");
   });
 });

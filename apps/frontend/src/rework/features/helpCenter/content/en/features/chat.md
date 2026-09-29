@@ -40,6 +40,9 @@ Rather than retyping a recurring request, insert a saved prompt into the input
 field, then edit it before sending. It is a shortcut for that message, not a
 lasting setting of the conversation.
 
+A prompt carrying a command runs shorter still: type `/` in an empty field —
+see [Commands](/help/en/features/commands).
+
 ## Collecting a produced document
 
 Some agents produce a file — a written document, a deck, a web page. It appears

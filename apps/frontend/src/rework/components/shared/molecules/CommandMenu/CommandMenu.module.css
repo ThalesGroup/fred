@@ -1,0 +1,108 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* The shared menu grammar (see MenuPopover): mid-level shadow, `--radius-s`,
+ * neutral border from an outline token. Anchored above the composer field,
+ * which is this element's positioning context. */
+.menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--spacing-2xs));
+  left: 0;
+  z-index: 20;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-high);
+  padding: var(--spacing-2xs);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.group:not(:first-child) {
+  margin-top: var(--spacing-2xs);
+}
+
+.groupTitle {
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border-radius: var(--radius-s);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  text-align: left;
+}
+
+/* Keyboard focus and hover share one highlight — activeIndex tracks both. */
+.row[data-active="true"] {
+  background: var(--state-on-surface-hover);
+}
+
+.rowIcon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-xs);
+  background: var(--secondary-container);
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--on-secondary-container);
+  font-size: 0.875rem;
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--spacing-s);
+  min-width: 0;
+}
+
+/* The command never truncates — it is what the user is about to type. The
+ * description beside it gives up the width instead. */
+.rowLabel {
+  flex-shrink: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  white-space: nowrap;
+}
+
+/* Shown in place of the list when there is nothing to offer. */
+.empty {
+  margin: 0;
+  padding: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.rowSublabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

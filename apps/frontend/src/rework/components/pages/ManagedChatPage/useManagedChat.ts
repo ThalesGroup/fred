@@ -32,7 +32,7 @@ import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
-import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import type { AttachmentSource } from "@rework/types/attachments";
 
@@ -528,89 +528,139 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const buildTurnContextRef = useRef(buildTurnContext);
   buildTurnContextRef.current = buildTurnContext;
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
-    const attachmentContext = attachments.attachmentsMarkdown;
-    console.debug(
-      `[useManagedChat] handleSend() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
-    );
-    if ((!text && !attachmentContext) || waitResponse || attachments.hasUploadingAttachments || inputTooLong) {
+  // One send path for both entry points: the composer's own draft, and a
+  // command whose text comes from the prompt behind it and never passed
+  // through the composer. `turnCommand` only adds the descriptor to the
+  // context; every guard, session write and restore below is shared.
+  const sendTurn = useCallback(
+    async (text: string, turnCommand?: TurnCommand) => {
+      const attachmentContext = attachments.attachmentsMarkdown;
       console.debug(
-        `[useManagedChat] handleSend() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
+        `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
-      return;
-    }
-    if (handleSendOwnerRef.current) {
-      console.debug("[useManagedChat] handleSend() IGNORED — a handleSend() is already in flight");
-      return;
-    }
-    handleSendOwnerRef.current = true;
-    try {
-      // Composer input is left untouched until the session write barrier below
-      // confirms success — clearing it eagerly would lose the user's message if
-      // session creation fails, forcing a retype on retry.
-      let sid = sessionId;
-      const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
-      if (!sid) {
-        sid = uuidv4();
-        console.debug(`[useManagedChat] handleSend() — no session, creating new sid=${sid}, calling bindSessionId`);
-        skipResetOnSessionBindRef.current = true;
-        // See ensureSessionForAttachments: makes this turn's composer settings
-        // durable under the id they were picked for (#2369).
-        composer.bindSession(sid);
-        bindSessionId(sid);
-      }
-      if (needsCreate) {
-        // Tracked so the barrier below (flushSessionWrites) waits for the
-        // session row before prepare-execution runs, and surfaces a toast +
-        // aborts the send if the row was never actually created. Re-fires on a
-        // retry against the same (already URL-bound) sid whose prior creation
-        // failed — see `sessionCreateFailedIdRef`.
-        createSessionRow(sid, text ? text.slice(0, 120) : "Attached files");
-      }
-
-      // Block the send entirely on any pending or just-failed session write —
-      // including a context-prompt PATCH fired earlier that hasn't committed
-      // yet. A failure already triggered its own toast (via the write's
-      // onError above); nothing further to show here, just don't proceed —
-      // the message stays in the composer for an explicit retry.
-      const writesOk = await flushSessionWrites(sid);
-      if (!writesOk) {
-        console.debug("[useManagedChat] handleSend() ABORTED — a pending session write failed");
+      if ((!text && !attachmentContext) || waitResponse || attachments.hasUploadingAttachments || inputTooLong) {
+        console.debug(
+          `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
+        );
         return;
       }
+      if (handleSendOwnerRef.current) {
+        console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
+        return;
+      }
+      // `inputTooLong` above measures the composer draft, which on a command
+      // is the short command line — not what goes on the wire. The runtime
+      // rejects an oversized turn either way; checking here spares the round
+      // trip and says so before the send rather than after.
+      if (
+        turnCommand !== undefined &&
+        maxChatInputChars !== undefined &&
+        countUnicodeCodePoints(text) > maxChatInputChars
+      ) {
+        showError({
+          summary: t("chatbot.commandMenu.runErrorSummary"),
+          detail: t("chatbot.errors.chatInputTooLong", { limit: maxChatInputChars }),
+        });
+        return;
+      }
+      handleSendOwnerRef.current = true;
+      try {
+        // Composer input is left untouched until the session write barrier below
+        // confirms success — clearing it eagerly would lose the user's message if
+        // session creation fails, forcing a retype on retry.
+        let sid = sessionId;
+        const needsCreate = !sid || sessionCreateFailedIdRef.current.has(sid);
+        if (!sid) {
+          sid = uuidv4();
+          console.debug(`[useManagedChat] sendTurn() — no session, creating new sid=${sid}, calling bindSessionId`);
+          skipResetOnSessionBindRef.current = true;
+          // See ensureSessionForAttachments: makes this turn's composer settings
+          // durable under the id they were picked for.
+          composer.bindSession(sid);
+          bindSessionId(sid);
+        }
+        if (needsCreate) {
+          // Tracked so the barrier below (flushSessionWrites) waits for the
+          // session row before prepare-execution runs, and surfaces a toast +
+          // aborts the send if the row was never actually created. Re-fires on a
+          // retry against the same (already URL-bound) sid whose prior creation
+          // failed — see `sessionCreateFailedIdRef`.
+          // A command turn titles itself from what was RUN, not from the
+          // composer (which may hold only the partial query `Enter` matched)
+          // and not from the prompt body (which would give every run of one
+          // command the same name). The prompt's name reads best; any text
+          // typed after the command is what makes this conversation its own.
+          // Nothing retitles a session afterwards, so this is the only shot.
+          const titleSource = turnCommand
+            ? [turnCommand.prompt_name || `/${turnCommand.command}`, turnCommand.appended_text]
+                .filter(Boolean)
+                .join(" — ")
+            : text;
+          createSessionRow(sid, titleSource ? titleSource.slice(0, 120) : "Attached files");
+        }
 
-      // Input/attachments stay untouched here too — cleared only from
-      // onTurnStarted, once prepare-execution inside send() has actually
-      // succeeded. A prepare-execution failure (404/503/network) must never
-      // wipe text the user still needs to retry with; see useChatSse.ts.
-      setPendingHitl(null);
-      console.debug(`[useManagedChat] handleSend() — calling send() with sid=${sid}`);
-      const { runtimeContext, turnOptions } = buildTurnContext();
-      touchSessionActivity(sid);
-      // `send()` receives the trimmed wire value, but a backend rejection must
-      // restore the complete editable draft, including surrounding whitespace.
-      submittedDraftRef.current = { sessionId: sid, draft: input };
-      send(text, sid, runtimeContext, turnOptions);
-    } finally {
-      handleSendOwnerRef.current = false;
-    }
-  }, [
-    attachments.attachmentsMarkdown,
-    attachments.hasUploadingAttachments,
-    input,
-    inputCharacterCount,
-    inputTooLong,
-    waitResponse,
-    sessionId,
-    buildTurnContext,
-    composer.bindSession,
-    bindSessionId,
-    createSessionRow,
-    flushSessionWrites,
-    touchSessionActivity,
-    send,
-  ]);
+        // Block the send entirely on any pending or just-failed session write —
+        // including a context-prompt PATCH fired earlier that hasn't committed
+        // yet. A failure already triggered its own toast (via the write's
+        // onError above); nothing further to show here, just don't proceed —
+        // the message stays in the composer for an explicit retry.
+        const writesOk = await flushSessionWrites(sid);
+        if (!writesOk) {
+          console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
+          return;
+        }
+
+        // Input/attachments stay untouched here too — cleared only from
+        // onTurnStarted, once prepare-execution inside send() has actually
+        // succeeded. A prepare-execution failure (404/503/network) must never
+        // wipe text the user still needs to retry with; see useChatSse.ts.
+        setPendingHitl(null);
+        console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
+        const { runtimeContext, turnOptions } = buildTurnContext();
+        touchSessionActivity(sid);
+        // `send()` receives the trimmed wire value, but a backend rejection must
+        // restore the complete editable draft, including surrounding whitespace —
+        // for a command, the command line the user actually typed.
+        submittedDraftRef.current = { sessionId: sid, draft: input };
+        send(text, sid, turnCommand ? { ...runtimeContext, command: turnCommand } : runtimeContext, turnOptions);
+      } finally {
+        handleSendOwnerRef.current = false;
+      }
+    },
+    [
+      attachments.attachmentsMarkdown,
+      attachments.hasUploadingAttachments,
+      input,
+      inputCharacterCount,
+      inputTooLong,
+      waitResponse,
+      sessionId,
+      buildTurnContext,
+      composer.bindSession,
+      bindSessionId,
+      createSessionRow,
+      flushSessionWrites,
+      touchSessionActivity,
+      send,
+      maxChatInputChars,
+      showError,
+      t,
+    ],
+  );
+
+  const handleSend = useCallback(async () => {
+    await sendTurn(input.trim());
+  }, [sendTurn, input]);
+
+  // Runs a prompt command: the assembled text goes on the wire, the descriptor
+  // on the turn's context, and the composer keeps the short command line the
+  // user typed until the turn actually starts.
+  const runCommand = useCallback(
+    async (run: { text: string; command: TurnCommand }) => {
+      await sendTurn(run.text, run.command);
+    },
+    [sendTurn],
+  );
 
   const handleHitlAnswer = useCallback(
     (answer: string | boolean | undefined, freeText?: string) => {
@@ -793,6 +843,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     isLoadingHistory,
     isHistorySettled,
     handleSend,
+    runCommand,
     handleHitlAnswer,
     handleAbort: abort,
     startNewConversation,

@@ -118,6 +118,7 @@ export default function MarketplaceTopPrompts({ period }: MarketplaceTopPromptsP
                 name: viewDetail.name,
                 description: viewDetail.description,
                 text: viewDetail.text,
+                command: viewDetail.command,
               }
             : null
         }

@@ -955,7 +955,13 @@ export function useChatSse(
         role: "user",
         channel: "final",
         parts: [{ type: "text", text: input }],
-        metadata: { extras: { optimistic_user: true } },
+        // The descriptor the caller put on the context also labels the
+        // optimistic row, so the turn renders as its command from the first
+        // frame rather than flashing the assembled prompt text.
+        metadata: {
+          extras: { optimistic_user: true },
+          ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
+        },
       };
       messagesRef.current = upsertOne(messagesRef.current, userMsg);
       setMessages([...messagesRef.current]);

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, literal, select, update
+from sqlalchemy import delete, func, literal, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -47,6 +47,34 @@ class PromptAlreadyExistsError(Exception):
     """Raised when one prompt name is already used inside the same team."""
 
 
+class PromptCommandAlreadyExistsError(Exception):
+    """Raised when one prompt command is already used inside the same team."""
+
+
+class PromptCommandRecord:
+    """One invocable prompt of a team: its command and what a menu shows.
+
+    Deliberately not a `PromptRecord`: the caller lists every command a team
+    holds, and carrying `text` for each would make an unbounded listing
+    expensive for no reader.
+    """
+
+    def __init__(
+        self,
+        *,
+        prompt_id: str,
+        command: str,
+        name: str,
+        description: str | None,
+        emoji: str | None,
+    ) -> None:
+        self.prompt_id = prompt_id
+        self.command = command
+        self.name = name
+        self.description = description
+        self.emoji = emoji
+
+
 class PromptRecord:
     """In-memory projection of one DB prompt row."""
 
@@ -57,6 +85,7 @@ class PromptRecord:
         team_id: TeamId,
         name: str,
         description: str | None,
+        command: str | None = None,
         category_id: str | None = None,
         emoji: str | None = None,
         tags: list[str] | None = None,
@@ -76,6 +105,7 @@ class PromptRecord:
         self.team_id = team_id
         self.name = name
         self.description = description
+        self.command = command
         self.category_id = category_id
         self.emoji = emoji
         self.tags = tags or []
@@ -123,6 +153,7 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
         team_id=TeamId(row.team_id),
         name=row.name,
         description=row.description,
+        command=row.command,
         category_id=row.category_id,
         emoji=row.emoji,
         tags=row.tags or [],
@@ -143,6 +174,38 @@ def _row_to_record(row: PromptRow) -> PromptRecord:
 class PromptStore:
     def __init__(self, engine: AsyncEngine) -> None:
         self._sessions = make_session_factory(engine)
+
+    async def _conflicting_field(
+        self,
+        team_id: TeamId,
+        *,
+        name: str,
+        command: str | None,
+        exclude_prompt_id: str | None = None,
+    ) -> str | None:
+        """Say which of `name` or `command` a sibling row already holds.
+
+        Asking the database keeps the two unique constraints apart without
+        parsing a constraint name out of the driver's message. `name` wins
+        when both collide: it is the older conflict and the one callers
+        already handle.
+        """
+
+        predicates = [PromptRow.name == name]
+        if command is not None:
+            predicates.append(PromptRow.command == command)
+        stmt = select(PromptRow.name, PromptRow.command).where(
+            PromptRow.team_id == str(team_id), or_(*predicates)
+        )
+        if exclude_prompt_id is not None:
+            stmt = stmt.where(PromptRow.prompt_id != exclude_prompt_id)
+        async with use_session(self._sessions, None) as s:
+            rows = (await s.execute(stmt)).all()
+        if any(row.name == name for row in rows):
+            return "name"
+        if command is not None and any(row.command == command for row in rows):
+            return "command"
+        return None
 
     async def create(
         self,
@@ -172,6 +235,7 @@ class PromptStore:
             team_id=str(record.team_id),
             name=record.name,
             description=record.description,
+            command=record.command,
             category_id=record.category_id,
             emoji=record.emoji,
             tags=record.tags,
@@ -191,6 +255,14 @@ class PromptStore:
             async with use_session(self._sessions, session) as s:
                 s.add(row)
         except IntegrityError as exc:
+            conflict = await self._conflicting_field(
+                record.team_id,
+                name=record.name,
+                command=record.command,
+                exclude_prompt_id=record.prompt_id,
+            )
+            if conflict == "command":
+                raise PromptCommandAlreadyExistsError(record.command) from exc
             raise PromptAlreadyExistsError(record.name) from exc
         result = await self.get(record.prompt_id)
         assert result is not None
@@ -252,6 +324,72 @@ class PromptStore:
             )
         return [_row_to_record(row) for row in rows]
 
+    async def list_commands_by_team(
+        self,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> set[str]:
+        """Every command held in one team.
+
+        A targeted read rather than a slice of `list_by_team`: the import
+        suffixer must see every command a team holds, and a row limit would
+        let it pick one the unique index then refuses.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(PromptRow.command).where(
+                        PromptRow.team_id == str(team_id),
+                        PromptRow.command.is_not(None),
+                    )
+                )
+            ).all()
+        return {row.command for row in rows if row.command is not None}
+
+    async def list_commanded_by_team(
+        self,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> list[PromptCommandRecord]:
+        """Every invocable prompt of one team, with no row limit.
+
+        The composer resolves a typed command against this list, so a limit
+        would make a real command unresolvable — and silently, since an
+        unmatched token is sent as ordinary text. `list_by_team` is capped
+        (it carries whole rows, `text` included); this selects the five
+        columns a command menu needs.
+        """
+
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                await s.execute(
+                    select(
+                        PromptRow.prompt_id,
+                        PromptRow.command,
+                        PromptRow.name,
+                        PromptRow.description,
+                        PromptRow.emoji,
+                    )
+                    .where(
+                        PromptRow.team_id == str(team_id),
+                        PromptRow.command.is_not(None),
+                    )
+                    .order_by(PromptRow.command.asc())
+                )
+            ).all()
+        return [
+            PromptCommandRecord(
+                prompt_id=row.prompt_id,
+                command=row.command,
+                name=row.name,
+                description=row.description,
+                emoji=row.emoji,
+            )
+            for row in rows
+            if row.command is not None
+        ]
+
     async def update(
         self,
         prompt_id: str,
@@ -259,6 +397,7 @@ class PromptStore:
         *,
         name: str,
         description: str | None,
+        command: str | None,
         category_id: str | None,
         emoji: str | None,
         tags: list[str],
@@ -276,7 +415,8 @@ class PromptStore:
         - pass the full replacement values for the prompt
         - returns `None` when the prompt does not belong to `team_id`
         - catches duplicate `(team_id, name)` conflicts as
-          `PromptAlreadyExistsError`
+          `PromptAlreadyExistsError`, and duplicate `(team_id, command)` ones
+          as `PromptCommandAlreadyExistsError`
 
         Example:
         - `updated = await store.update(prompt_id, team_id, name="Ops", description=None, text="...")`
@@ -293,6 +433,7 @@ class PromptStore:
                     .values(
                         name=name,
                         description=description,
+                        command=command,
                         category_id=category_id,
                         emoji=emoji,
                         tags=tags,
@@ -304,6 +445,11 @@ class PromptStore:
                 if result.rowcount == 0:
                     return None
         except IntegrityError as exc:
+            conflict = await self._conflicting_field(
+                team_id, name=name, command=command, exclude_prompt_id=prompt_id
+            )
+            if conflict == "command":
+                raise PromptCommandAlreadyExistsError(command) from exc
             raise PromptAlreadyExistsError(name) from exc
         return await self.get(prompt_id, session)
 

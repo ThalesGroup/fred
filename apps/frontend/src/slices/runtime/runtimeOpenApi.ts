@@ -421,6 +421,12 @@ export type ConversationTurn = {
   agent_response: string;
   user_message: string;
 };
+export type TurnCommand = {
+  appended_text?: string;
+  command: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+};
 export type RuntimeContext = {
   access_token?: string | null;
   access_token_expires_at?: number | null;
@@ -432,6 +438,7 @@ export type RuntimeContext = {
   attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
+  command?: TurnCommand | null;
   context_prompt_text?: string | null;
   correlation_id?: string | null;
   deep_search?: boolean | null;
@@ -802,6 +809,13 @@ export type Channel =
   | "system_note"
   | "hitl_request"
   | "hitl_response";
+export type CommandDescriptor = {
+  appended_text?: string;
+  command: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  [key: string]: any;
+};
 export type ChatTokenUsage = {
   cache_creation_tokens?: number;
   cache_read_tokens?: number;
@@ -811,6 +825,7 @@ export type ChatTokenUsage = {
 };
 export type ChatMetadata = {
   agent_id?: string | null;
+  command?: CommandDescriptor | null;
   context_tokens?: number | null;
   finish_reason?: FinishReason | null;
   latency_ms?: number | null;

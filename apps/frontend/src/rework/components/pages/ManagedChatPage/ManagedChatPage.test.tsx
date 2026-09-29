@@ -104,6 +104,9 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     isLoading: false,
   }),
   useGetTeamPromptCategoriesControlPlaneV1TeamsTeamIdPromptCategoriesGetQuery: () => ({ data: [] }),
+  // The composer's command list — no prompt carries a command here, so the
+  // trigger stays closed and the composer behaves as it did before.
+  useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => ({ data: [] }),
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canAdministerAdmins: false }),

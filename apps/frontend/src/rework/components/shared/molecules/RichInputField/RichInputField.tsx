@@ -23,6 +23,31 @@ import styles from "./RichInputField.module.css";
 // as a plain auto-growing textarea, a search bar with filters, or a full
 // chat input with context pickers and attachment chips.
 
+/** The host's side of the command trigger — see `commandTrigger`. */
+export interface CommandTriggerBinding {
+  /** The text after a leading `/`, or `null` when the value opens no command. */
+  onQueryChange: (query: string | null) => void;
+  /** Return true to consume the key: the field then neither sends nor types. */
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /** The menu belongs to the focused field: it closes when focus leaves and
+   *  comes back when focus returns, so it never floats over the thread. */
+  onFocusChange: (focused: boolean) => void;
+  /** Combobox wiring for the menu the host renders in `aboveFieldSlot`. */
+  listboxId: string;
+  open: boolean;
+  activeDescendantId: string | null;
+}
+
+/**
+ * A command opens only on a leading `/` still unbroken by whitespace. That
+ * keeps `cat /tmp` and "et/ou" out of it, and makes the trailing space a
+ * completion adds close the menu on its own.
+ */
+export function commandQueryOf(value: string): string | null {
+  const match = /^\/(\S*)$/.exec(value);
+  return match ? match[1] : null;
+}
+
 interface RichInputFieldProps {
   value: string;
   onChange: (value: string) => void;
@@ -37,8 +62,21 @@ interface RichInputFieldProps {
   /** Runtime-published code-point limit; omitted for older runtime pods. */
   characterLimit?: number;
   placeholder?: string;
+  /**
+   * Durable instruction for assistive technology. A placeholder is neither
+   * reliably announced nor does it survive the first keystroke, so a hint the
+   * user must be able to come back to belongs here as well.
+   */
+  accessibleDescription?: string;
   /** Rendered above the textarea — typically attachment chips that should stay close to the cursor. */
   aboveTextSlot?: ReactNode;
+  /** Rendered floating just above the field — the command menu. */
+  aboveFieldSlot?: ReactNode;
+  /**
+   * Opt-in command trigger. Absent — the default — a leading `/` is ordinary
+   * text and the field behaves exactly as it always has.
+   */
+  commandTrigger?: CommandTriggerBinding;
   /** Rendered in the bottom-left area — context pickers, scope selectors, attachment chips. */
   topSlot?: ReactNode;
   /** Rendered next to the textarea controls — one compact command such as attach-file. */
@@ -88,7 +126,10 @@ export function RichInputField({
   characterCount,
   characterLimit,
   placeholder,
+  accessibleDescription,
   aboveTextSlot,
+  aboveFieldSlot,
+  commandTrigger,
   topSlot,
   leftSlot,
   rightSlot,
@@ -103,6 +144,7 @@ export function RichInputField({
 }: RichInputFieldProps) {
   const { t } = useTranslation();
   const characterInfoId = useId();
+  const accessibleDescriptionId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -111,6 +153,19 @@ export function RichInputField({
   const [voiceInputState, setVoiceInputState] = useState<VoiceInputState>("idle");
 
   valueRef.current = value;
+
+  // Reported from the value itself rather than from the keystroke, so a paste
+  // or a programmatic insert is seen the same way. Through a ref so a host
+  // that rebuilds the binding every render does not re-report on every render.
+  const commandQuery = commandTrigger ? commandQueryOf(value) : null;
+  const onCommandQueryChangeRef = useRef(commandTrigger?.onQueryChange);
+  onCommandQueryChangeRef.current = commandTrigger?.onQueryChange;
+  const lastCommandQueryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastCommandQueryRef.current === commandQuery) return;
+    lastCommandQueryRef.current = commandQuery;
+    onCommandQueryChangeRef.current?.(commandQuery);
+  }, [commandQuery]);
 
   const resize = useCallback(() => {
     const el = textareaRef.current;
@@ -184,12 +239,19 @@ export function RichInputField({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // The menu owns Enter, Tab, the arrows and Esc while it is open, and says
+      // so by returning true — it has already called preventDefault. Enter is
+      // withheld while sending is blocked: running a command IS sending, so it
+      // must obey the same gate as the send button, and the menu has no reason
+      // to know about uploads or an over-limit draft.
+      const sendBlocked = disabled || sendDisabled;
+      if (!(e.key === "Enter" && sendBlocked) && commandTrigger?.onKeyDown(e)) return;
       if (e.key === "Enter" && !e.shiftKey && !disabled && !sendDisabled && !e.nativeEvent.isComposing) {
         e.preventDefault();
         onSend();
       }
     },
-    [disabled, sendDisabled, onSend],
+    [disabled, sendDisabled, onSend, commandTrigger],
   );
 
   const hasText = value.trim().length > 0;
@@ -201,6 +263,10 @@ export function RichInputField({
   const voiceControlDisabled = disabled || voiceInputDisabled || voiceInputState === "transcribing";
   const hasCharacterLimit = characterLimit !== undefined && characterCount !== undefined;
   const isOverCharacterLimit = hasCharacterLimit && characterCount > characterLimit;
+  const describedBy =
+    [accessibleDescription ? accessibleDescriptionId : null, hasCharacterLimit ? characterInfoId : null]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   const reportVoiceError = useCallback(
     (message: string) => {
@@ -347,6 +413,7 @@ export function RichInputField({
   return (
     <div className={styles.bar}>
       <div className={styles.field}>
+        {aboveFieldSlot}
         {aboveTextSlot && <div className={styles.aboveTextSlot}>{aboveTextSlot}</div>}
         <textarea
           ref={textareaRef}
@@ -356,13 +423,32 @@ export function RichInputField({
           disabled={disabled}
           placeholder={placeholder}
           aria-invalid={isOverCharacterLimit || undefined}
-          aria-describedby={hasCharacterLimit ? characterInfoId : undefined}
+          aria-describedby={describedBy}
+          {...(commandTrigger
+            ? {
+                role: "combobox",
+                "aria-autocomplete": "list" as const,
+                "aria-expanded": commandTrigger.open,
+                ...(commandTrigger.open ? { "aria-controls": commandTrigger.listboxId } : {}),
+                ...(commandTrigger.activeDescendantId
+                  ? { "aria-activedescendant": commandTrigger.activeDescendantId }
+                  : {}),
+              }
+            : {})}
           onChange={(e) => {
             onChange(e.target.value);
             resize();
           }}
           onKeyDown={handleKeyDown}
+          onFocus={commandTrigger ? () => commandTrigger.onFocusChange(true) : undefined}
+          onBlur={commandTrigger ? () => commandTrigger.onFocusChange(false) : undefined}
         />
+
+        {accessibleDescription && (
+          <span id={accessibleDescriptionId} className={styles.accessibleDescription}>
+            {accessibleDescription}
+          </span>
+        )}
 
         <CharacterLimitNotice
           id={characterInfoId}

@@ -359,11 +359,11 @@
     },
     "document_triage": {
       "name": "Tri de documents",
-      "description": "Passer en revue un dossier de documents et consigner les d\u00e9cisions."
+      "description": "Passer en revue un dossier de documents et consigner les décisions."
     },
     "progress_tracker": {
       "name": "Suivi d'avancement",
-      "description": "Suivre un travail de longue haleine et les d\u00e9cisions prises en chemin."
+      "description": "Suivre un travail de longue haleine et les décisions prises en chemin."
     },
     "team_wiki": {
       "name": "Wiki d'équipe",
@@ -387,6 +387,20 @@
       "downloadFailed": "Téléchargement de {{name}} impossible",
       "fallbackName": "Télécharger"
     },
+    "commandTurn": {
+      "open": "Ouvrir le prompt de la commande /{{command}}",
+      "openWithText": "Ouvrir le prompt de la commande /{{command}}, suivie de « {{appended}} »",
+      "panelTitle": "Prompt de la commande"
+    },
+    "commandMenu": {
+      "ariaLabel": "Commandes disponibles",
+      "promptsSection": "Prompts de la bibliothèque",
+      "noneInTeam": "Aucune commande dans cette équipe. Un éditeur peut en attribuer une à un prompt depuis la page Prompts.",
+      "noMatch": "Aucune commande ne correspond.",
+      "runErrorSummary": "Commande impossible à lancer",
+      "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
+    },
+    "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",
@@ -2756,6 +2770,9 @@
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "firstCreate": "Créer un prompt",
         "form": {
+          "command": "Commande",
+          "commandConflict": "Label de commande déjà pris par un autre prompt d'équipe",
+          "commandHelp": "Raccourcis de lancement dans le chat",
           "description": "Description",
           "name": "Nom",
           "text": "Texte du prompt"

@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
+import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import styles from "./UserTurn.module.css";
@@ -28,12 +29,23 @@ interface UserTurnProps {
   turnId?: string;
   /** Called when user clicks the edit action. If omitted, edit action is hidden. */
   onEdit?: (text: string) => void;
+  /** Present when the turn was launched by a prompt command: the bubble then
+   *  shows the command, and `onOpenCommand` reveals the text that was sent. */
+  command?: CommandDescriptor | null;
+  /** Takes the turn's own values rather than a closure, so the caller can
+   *  hand down one stable callback for every row — an arrow built per message
+   *  would defeat this component's memo on every streamed frame. */
+  onOpenCommand?: (turn: { text: string; command: CommandDescriptor }) => void;
 }
 
 // Memoized alongside AssistantTurn — see #2221.
-export const UserTurn = memo(function UserTurn({ text, turnId, onEdit }: UserTurnProps) {
+export const UserTurn = memo(function UserTurn({ text, turnId, onEdit, command, onOpenCommand }: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
+
+  const openCommand = useCallback(() => {
+    if (command && onOpenCommand) onOpenCommand({ text, command });
+  }, [command, onOpenCommand, text]);
 
   const copyAction = useCallback(() => {
     // Same call AssistantTurn makes when it has no rendered node to serialise:
@@ -63,7 +75,7 @@ export const UserTurn = memo(function UserTurn({ text, turnId, onEdit }: UserTur
     <div className={styles.turn} data-turn-id={turnId}>
       {/* Beside the bubble (user turns are right-aligned), revealed on hover. */}
       <ActionBar actions={actions} className={styles.actions} />
-      <UserMessage text={text} />
+      <UserMessage text={text} command={command} onOpenCommand={command && onOpenCommand ? openCommand : undefined} />
     </div>
   );
 });

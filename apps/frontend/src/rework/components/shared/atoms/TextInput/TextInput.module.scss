@@ -31,6 +31,10 @@
     &:has(.suffix) input {
       padding-right: var(--spacing-2xl);
     }
+
+    &:has(.prefix) input {
+      padding-left: calc(var(--spacing-s) + 1ch + var(--spacing-2xs));
+    }
   }
 
   input {
@@ -160,6 +164,20 @@
   font: var(--font-body-large);
 }
 
+/* Pinned to the input's left edge, which the rule above pads out of the way.
+ * Retreat colour so it reads as part of the field rather than as typed text. */
+.prefix {
+  display: flex;
+  position: absolute;
+  top: 0;
+  left: var(--spacing-s);
+  align-items: center;
+  height: 3rem;
+  pointer-events: none;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-large);
+}
+
 /* Opt-in shrink, default (no data-size) keeps every other TextInput call
  * site unchanged. "small" here is 2.5rem/40px — deliberately taller than
  * Button/IconButton/Select's own "small" (2rem/32px), a per-field choice,
@@ -174,7 +192,8 @@
     font-size: 1.25rem;
   }
 
-  .suffix {
+  .suffix,
+  .prefix {
     height: 2.5rem;
   }
 }
@@ -207,7 +226,8 @@
     font-size: 1.125rem;
   }
 
-  .suffix {
+  .suffix,
+  .prefix {
     height: 2rem;
   }
 }
@@ -222,7 +242,8 @@
     font-size: 1rem;
   }
 
-  .suffix {
+  .suffix,
+  .prefix {
     height: 1.5rem;
   }
 }

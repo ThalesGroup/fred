@@ -21,6 +21,8 @@ import { ConversationOutlineRail } from "@shared/molecules/ConversationOutlineRa
 import { sameTurnIds, toOutlinePreview, toTurnIds } from "@shared/molecules/ConversationOutlineRail/outlineItems";
 import { RichInputField } from "@shared/molecules/RichInputField/RichInputField";
 import { SessionTitleEditor } from "@shared/molecules/SessionTitleEditor/SessionTitleEditor";
+import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandPromptPanel";
+import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
@@ -40,11 +42,13 @@ import { COMPOSER_CHIP_WIDGETS, ReasoningChip } from "../../../features/capabili
 import { ChatLauncherRail } from "../../../features/capabilities/ChatLauncherRail";
 import { selectSidePanelOpenRequest } from "../../../features/capabilities/sidePanelOpenRequestSlice";
 import PromptSelectionChatPanel from "@shared/molecules/PromptSelectionChatPanel/PromptSelectionChatPanel.tsx";
+import type { CommandDescriptor } from "../../../../slices/runtime/runtimeOpenApi";
 import { conversationTokenTotals } from "./toThreadMessages";
 import { useChatAutoScroll } from "../../../core/hooks/useChatAutoScroll";
 import { useConversationJump } from "../../../core/hooks/useConversationJump";
 import { useOutlineScrollSpy } from "../../../core/hooks/useOutlineScrollSpy";
 import { useManagedChat } from "./useManagedChat";
+import { useComposerCommands } from "./useComposerCommands";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -99,6 +103,9 @@ type ActivePushDrawer =
   | { kind: "prompt-library" }
   | { kind: "debug" }
   | { kind: "full-reasoning" }
+  // Carries the turn's own stored text: the prompt is overwritten on edit
+  // and gone once deleted, so it cannot be re-fetched by id.
+  | { kind: "command-prompt"; text: string; command: string | null; promptName: string | null }
   | null;
 
 export default function ManagedChatPage() {
@@ -501,12 +508,32 @@ export default function ManagedChatPage() {
   );
   const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory;
 
+  // `/` at the start of an empty composer. Owns the menu and resolves the
+  // first token on submit, so `Tab` then `Enter` and `Enter` from the open
+  // menu reach the same send.
+  const commands = useComposerCommands({
+    teamId,
+    input: chat.input,
+    setInput: chat.setInput,
+    onRunCommand: (run) => void chat.runCommand(run),
+    onSend: () => void chat.handleSend(),
+    onResolveError: () =>
+      showError({
+        summary: t("chatbot.commandMenu.runErrorSummary"),
+        detail: t("chatbot.commandMenu.runErrorDetail"),
+      }),
+  });
+
   const composer = (
     <RichInputField
       value={chat.input}
       onChange={chat.setInput}
-      onSend={chat.handleSend}
+      onSend={commands.submit}
       onInterrupt={chat.handleAbort}
+      placeholder={t("chatbot.composerPlaceholder")}
+      accessibleDescription={t("chatbot.composerPlaceholder")}
+      commandTrigger={commands.trigger}
+      aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
       disabled={chat.waitResponse || chat.isLoadingHistory}
       sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
@@ -568,6 +595,17 @@ export default function ManagedChatPage() {
   // Expert tooling, so it sits at the rail's foot rather than among the
   // conversation's own panels. The full reasoning is for everyone — each block is
   // already readable in the trace drawer — the raw message dump for admins only.
+  // Stable identity: an inline arrow here would defeat ConversationThread's
+  // memo and re-render the whole transcript on every composer keystroke.
+  const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor }) => {
+    setActivePushDrawer({
+      kind: "command-prompt",
+      text: turn.text,
+      command: turn.command.command,
+      promptName: turn.command.prompt_name ?? null,
+    });
+  }, []);
+
   const footerLaunchers = [
     {
       key: "full-reasoning",
@@ -691,6 +729,7 @@ export default function ManagedChatPage() {
                         maxChatInputChars={chat.maxChatInputChars}
                         hitlFreeText={chat.hitlFreeText}
                         onHitlFreeTextChange={chat.setHitlFreeText}
+                        onOpenCommandPrompt={openCommandPrompt}
                       />
                     )}
                   </div>
@@ -731,6 +770,14 @@ export default function ManagedChatPage() {
             capabilityIds={chat.capabilityIds}
             activeKey={activeCapabilityKey}
             onActiveKeyChange={handleCapabilityPanelChange}
+          />
+
+          <CommandPromptPanel
+            open={activePushDrawer?.kind === "command-prompt"}
+            onClose={() => setActivePushDrawer((v) => (v?.kind === "command-prompt" ? null : v))}
+            text={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.text : ""}
+            command={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.command : null}
+            promptName={activePushDrawer?.kind === "command-prompt" ? activePushDrawer.promptName : null}
           />
 
           <FullReasoningPanel

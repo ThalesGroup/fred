@@ -401,6 +401,20 @@ class ModelBinding(FrozenModel):
         return self
 
 
+class TurnCommand(BaseModel):
+    """The prompt command a user turn was launched from.
+
+    `prompt_id` is attribution, not a pointer to resolve at display time: a
+    prompt is overwritten on edit and can be deleted, so the turn's own text
+    is the record of what was sent.
+    """
+
+    command: str
+    appended_text: str = ""
+    prompt_id: Optional[str] = None
+    prompt_name: Optional[str] = None
+
+
 class RuntimeContext(BaseModel):
     """
     Runtime-scoped context passed with a request.
@@ -544,6 +558,11 @@ class RuntimeContext(BaseModel):
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None
     attachments_markdown: Optional[str] = None
+    # Set when the turn was launched by a prompt command. Side data only: the
+    # turn's text is still the full assembled text, and the agent never sees
+    # this. It travels to the stored turn's metadata so the transcript can
+    # render the command instead of the prompt it ran.
+    command: Optional[TurnCommand] = None
 
 
 class ChatProfileOrigin(str, Enum):

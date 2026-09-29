@@ -6340,3 +6340,23 @@ requiring classified failures must use typed artifacts or propagated exceptions.
 Tool-name collision checks, authorization, audit and HITL are unchanged.
 Identity, services and typed capability options already use one assembly path;
 model middleware and MCP prompt injection remain specific to ReAct/Deep.
+
+
+### 8.98 Prompt command descriptor on a user turn (2026-09-28)
+
+`RuntimeContext` gains an optional `command` — the prompt command a turn was
+launched from, carrying the command string, the text the user appended after
+it, and the prompt's id and name. `ChatMetadata` gains the matching optional
+`command` on the stored turn. Both are optional and purely presentational: a
+turn's parts still hold the full assembled text, which is what replays to the
+model, and the agent never sees the descriptor. A client that omits it and a
+reader that ignores it both behave exactly as before, so an unaware transcript
+renders the turn as plain text.
+
+The descriptor reaches the turn through the existing `model_dump()` of
+`RuntimeContext` into the internal execute-request context, read by key where
+`session_id` already is. It is client-supplied and therefore untrusted: it
+selects a renderer and nothing more, and a malformed value is dropped rather
+than failing the turn. `prompt_id` is attribution, never resolved at display
+time — a prompt is overwritten on edit and can be deleted, so the turn's own
+text is the record of what was sent.

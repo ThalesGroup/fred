@@ -104,7 +104,13 @@ export default function HomeSearch() {
         const detail = await fetchPromptDetail({ promptId: hit.id }).unwrap();
         setPromptDialog({
           mode: "marketplace",
-          detail: { id: detail.id, name: detail.name, description: detail.description, text: detail.text },
+          detail: {
+            id: detail.id,
+            name: detail.name,
+            description: detail.description,
+            text: detail.text,
+            command: detail.command,
+          },
           chipLabel: hit.teamName ?? null,
         });
       } catch {

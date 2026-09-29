@@ -387,6 +387,20 @@
       "downloadFailed": "Could not download {{name}}",
       "fallbackName": "Download"
     },
+    "commandTurn": {
+      "open": "Open the prompt behind the /{{command}} command",
+      "openWithText": "Open the prompt behind the /{{command}} command, followed by “{{appended}}”",
+      "panelTitle": "Command prompt"
+    },
+    "commandMenu": {
+      "ariaLabel": "Available commands",
+      "promptsSection": "Prompt library",
+      "noneInTeam": "No command in this team yet. An editor can give one to a prompt from the Prompts page.",
+      "noMatch": "No command matches.",
+      "runErrorSummary": "Could not run the command",
+      "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
+    },
+    "composerPlaceholder": "Ask your question, or type / for a command",
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
@@ -2756,6 +2770,9 @@
         "emptySearch": "No prompts match this search.",
         "firstCreate": "Create prompt",
         "form": {
+          "command": "Command",
+          "commandConflict": "This command label is already used by another team prompt",
+          "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
           "text": "Prompt text"

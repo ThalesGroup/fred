@@ -58,7 +58,7 @@ from control_plane_backend.product.service import (
     _RuntimeTemplatePayload,
 )
 from control_plane_backend.prompts.category_store import PromptCategoryRecord
-from control_plane_backend.prompts.store import PromptRecord
+from control_plane_backend.prompts.store import PromptCommandRecord, PromptRecord
 from control_plane_backend.sessions.attachment_store import SessionAttachmentRecord
 from control_plane_backend.sessions.store import SessionMetadataRecord
 from control_plane_backend.teams.schemas import Team
@@ -133,6 +133,7 @@ def _make_prompt_record(
     team_id: str = "personal",
     name: str = "Daily brief",
     description: str | None = "Ops baseline",
+    command: str | None = None,
     category_id: str | None = None,
     emoji: str | None = None,
     tags: list[str] | None = None,
@@ -144,6 +145,7 @@ def _make_prompt_record(
         team_id=TeamId(team_id),
         name=name,
         description=description,
+        command=command,
         category_id=category_id,
         emoji=emoji,
         tags=tags,
@@ -451,6 +453,15 @@ class _FakePromptStore:
             from control_plane_backend.prompts.store import PromptAlreadyExistsError
 
             raise PromptAlreadyExistsError(record.name)
+        if record.command is not None and any(
+            existing.team_id == record.team_id and existing.command == record.command
+            for existing in self._records
+        ):
+            from control_plane_backend.prompts.store import (
+                PromptCommandAlreadyExistsError,
+            )
+
+            raise PromptCommandAlreadyExistsError(record.command)
         self._records.append(record)
         return record
 
@@ -462,6 +473,29 @@ class _FakePromptStore:
     ) -> list[PromptRecord]:
         records = [record for record in self._records if record.team_id == team_id]
         return records[:limit]
+
+    async def list_commanded_by_team(
+        self,
+        team_id: TeamId,
+    ) -> list[PromptCommandRecord]:
+        return [
+            PromptCommandRecord(
+                prompt_id=record.prompt_id,
+                command=record.command,
+                name=record.name,
+                description=record.description,
+                emoji=record.emoji,
+            )
+            for record in sorted(
+                (
+                    r
+                    for r in self._records
+                    if r.team_id == team_id and r.command is not None
+                ),
+                key=lambda r: r.command or "",
+            )
+            if record.command is not None
+        ]
 
     async def get(self, prompt_id: str) -> PromptRecord | None:
         return next((r for r in self._records if r.prompt_id == prompt_id), None)
@@ -487,6 +521,7 @@ class _FakePromptStore:
         *,
         name: str,
         description: str | None,
+        command: str | None = None,
         category_id: str | None = None,
         emoji: str | None = None,
         tags: list[str] | None = None,
@@ -495,17 +530,26 @@ class _FakePromptStore:
         record = await self.get_for_team(prompt_id, team_id)
         if record is None:
             return None
-        if any(
-            existing.prompt_id != prompt_id
-            and existing.team_id == team_id
-            and existing.name == name
+        siblings = [
+            existing
             for existing in self._records
-        ):
+            if existing.prompt_id != prompt_id and existing.team_id == team_id
+        ]
+        if any(existing.name == name for existing in siblings):
             from control_plane_backend.prompts.store import PromptAlreadyExistsError
 
             raise PromptAlreadyExistsError(name)
+        if command is not None and any(
+            existing.command == command for existing in siblings
+        ):
+            from control_plane_backend.prompts.store import (
+                PromptCommandAlreadyExistsError,
+            )
+
+            raise PromptCommandAlreadyExistsError(command)
         record.name = name
         record.description = description
+        record.command = command
         record.text = text
         record.version += 1
         return record
@@ -9526,3 +9570,195 @@ async def test_compute_platform_stats_lists_all_teams_for_admin_without_personal
     assert thales_row.admins == 1
     assert thales_row.agents == 2
     assert thales_row.prompts == 3
+
+
+@pytest.mark.asyncio
+async def test_create_prompt_reports_a_command_conflict_apart_from_a_name_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both conflicts are 409 on the same route, so the body must tell them apart.
+
+    The form marks a different input for each; without a stable code it would
+    have to match on prose.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    existing = _make_prompt_record(
+        prompt_id="p-held", team_id="personal", name="Held", command="summary"
+    )
+    store = _FakePromptStore([existing])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        on_command = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={"name": "Another", "text": "t", "command": "summary"},
+        )
+        on_name = await client.post(
+            "/control-plane/v1/teams/personal/prompts",
+            json={"name": "Held", "text": "t"},
+        )
+
+    assert on_command.status_code == 409
+    assert on_command.json()["detail"]["code"] == "prompt_command_conflict"
+
+    assert on_name.status_code == 409
+    # The name conflict keeps the plain-string shape callers already handle.
+    assert isinstance(on_name.json()["detail"], str)
+
+
+@pytest.mark.asyncio
+async def test_create_prompt_rejects_a_malformed_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The API rejects rather than repairs: `Résumé` is an error, not `resume`."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore([])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        for bad in ["résumé", "mon resume", "Summary", "a" * 65]:
+            resp = await client.post(
+                "/control-plane/v1/teams/personal/prompts",
+                json={"name": f"n-{bad[:4]}", "text": "t", "command": bad},
+            )
+            assert resp.status_code == 422, bad
+            assert any("command" in error["loc"] for error in resp.json()["detail"]), (
+                bad
+            )
+    assert store._records == []
+
+
+@pytest.mark.asyncio
+async def test_prompt_payloads_carry_the_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Listing and detail both expose it — the import reads it from there."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore([_make_prompt_record(command="summary")])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        listing = await client.get("/control-plane/v1/teams/personal/prompts")
+        detail = await client.get("/control-plane/v1/teams/personal/prompts/prompt-1")
+
+    assert listing.status_code == 200
+    assert listing.json()[0]["command"] == "summary"
+    assert detail.status_code == 200
+    assert detail.json()["command"] == "summary"
+
+
+@pytest.mark.asyncio
+async def test_prompt_commands_endpoint_lists_only_invocable_prompts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The composer's resolution source: every command, and nothing else.
+
+    Separate from the prompt listing because that one is capped, and a command
+    the composer cannot see is sent to the agent as literal text.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore(
+        [
+            _make_prompt_record(
+                prompt_id="p-summary", name="Résumé", command="summary"
+            ),
+            _make_prompt_record(prompt_id="p-plain", name="No command"),
+            _make_prompt_record(
+                prompt_id="p-search", name="Recherche", command="search"
+            ),
+        ]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get("/control-plane/v1/teams/personal/prompt-commands")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [entry["command"] for entry in body] == ["search", "summary"]
+    assert [entry["prompt_id"] for entry in body] == ["p-search", "p-summary"]
+    assert body[1]["name"] == "Résumé"
+    # No prompt text on this surface: it stays cheap enough to be uncapped.
+    assert "text" not in body[0]
+    assert "text_preview" not in body[0]
+
+
+@pytest.mark.asyncio
+async def test_promote_prompt_carries_the_command_and_refuses_a_collision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Promote keeps the source's identity, command included.
+
+    Unlike a marketplace import, which suffixes a collision, promote refuses
+    it — the same treatment the name already gets, so the two fields behave
+    alike on this path.
+    """
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    source = _make_prompt_record(
+        prompt_id="p-src", team_id="personal", command="summary"
+    )
+    store = _FakePromptStore([source])
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        carried = await client.post(
+            "/control-plane/v1/teams/personal/prompts/p-src/promote",
+            json={"target_team_id": "bid-team"},
+        )
+
+    assert carried.status_code == 201
+    assert carried.json()["command"] == "summary"
+    copy = next(r for r in store._records if str(r.team_id) == "bid-team")
+    assert copy.command == "summary"
+
+    # A second team already holding it is refused, naming the command.
+    store._records.append(
+        _make_prompt_record(
+            prompt_id="p-held", team_id="other-team", name="Held", command="summary"
+        )
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        refused = await client.post(
+            "/control-plane/v1/teams/personal/prompts/p-src/promote",
+            json={"target_team_id": "other-team"},
+        )
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "prompt_command_conflict"

@@ -53,12 +53,34 @@ import styles from "./PromptsPage.module.scss";
 
 type FormState = {
   name: string;
+  command: string;
   description: string;
   category_id: string | null;
   tags: string[];
   text: string;
 };
-const emptyForm: FormState = { name: "", description: "", category_id: null, tags: [], text: "" };
+const emptyForm: FormState = { name: "", command: "", description: "", category_id: null, tags: [], text: "" };
+
+/** Matches `COMMAND_MAX_LENGTH` and the column in the control-plane backend. */
+const COMMAND_MAX_LENGTH = 64;
+/** Returned by the API on a 409 that is about the command, not the name. */
+const COMMAND_CONFLICT_CODE = "prompt_command_conflict";
+
+/** Keep only what a command may contain, folding case as the user types.
+ *  Uppercase becomes lowercase — visible and immediate; anything else is
+ *  refused outright rather than repaired into something never chosen. */
+const toCommand = (raw: string) =>
+  raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "")
+    .slice(0, COMMAND_MAX_LENGTH);
+
+const asErrorBody = (detail: unknown): { code?: string; message?: string } | null =>
+  typeof detail === "object" && detail !== null ? (detail as { code?: string; message?: string }) : null;
+
+const isCommandConflict = (detail: unknown) => asErrorBody(detail)?.code === COMMAND_CONFLICT_CODE;
+
+const detailMessage = (detail: unknown) => (typeof detail === "string" ? detail : asErrorBody(detail)?.message);
 
 export default function PromptsPage() {
   const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
@@ -69,6 +91,7 @@ export default function PromptsPage() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptSummary | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
   const [viewingPrompt, setViewingPrompt] = useState<PromptSummary | null>(null);
   const [duplicatingPrompt, setDuplicatingPrompt] = useState<PromptSummary | null>(null);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
@@ -134,6 +157,7 @@ export default function PromptsPage() {
     if (editingPrompt && editDetail && editDetail.id === editingPrompt.id && seededForId !== editDetail.id) {
       setForm({
         name: editDetail.name,
+        command: editDetail.command ?? "",
         description: editDetail.description ?? "",
         category_id: editDetail.category_id ?? null,
         tags: editDetail.tags ?? [],
@@ -187,6 +211,7 @@ export default function PromptsPage() {
     setEditingPrompt(null);
     setForm(emptyForm);
     setSeededForId(null);
+    setCommandError(null);
   };
 
   const performSave = async () => {
@@ -198,6 +223,7 @@ export default function PromptsPage() {
           promptId: editingPrompt.id,
           updatePromptRequest: {
             name: form.name,
+            command: form.command || null,
             description: form.description || undefined,
             category_id: form.category_id,
             tags: form.tags,
@@ -210,6 +236,7 @@ export default function PromptsPage() {
           teamId,
           createPromptRequest: {
             name: form.name,
+            command: form.command || null,
             description: form.description || undefined,
             category_id: form.category_id,
             tags: form.tags,
@@ -220,10 +247,17 @@ export default function PromptsPage() {
       }
       closeModal();
     } catch (error: unknown) {
-      const err = error as { data?: { detail?: string }; message?: string };
+      const err = error as { data?: { detail?: unknown }; message?: string };
+      const detail = err?.data?.detail;
+      // A name conflict and a command conflict are both 409 on this route, so
+      // the code — not the prose — decides which input to mark.
+      if (isCommandConflict(detail)) {
+        setCommandError(t("rework.teams.prompts.form.commandConflict"));
+        return;
+      }
       showError({
         summary: "Failed to save prompt",
-        detail: err?.data?.detail || err?.message || String(error),
+        detail: detailMessage(detail) || err?.message || String(error),
       });
     }
   };
@@ -494,6 +528,21 @@ export default function PromptsPage() {
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               maxLength={120}
+            />
+
+            <TextInput
+              label={t("rework.teams.prompts.form.command")}
+              explanation={t("rework.teams.prompts.form.commandHelp")}
+              error={commandError ?? undefined}
+              // The `/` is shown, never stored: it is what the user types in the
+              // chat, so the field reads as the thing they will type.
+              prefix="/"
+              value={form.command}
+              onChange={(e) => {
+                setCommandError(null);
+                setForm((f) => ({ ...f, command: toCommand(e.target.value) }));
+              }}
+              maxLength={COMMAND_MAX_LENGTH}
             />
 
             <TextInput

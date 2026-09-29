@@ -33,6 +33,9 @@
 
 .field {
   display: flex;
+  /* Anchors `aboveFieldSlot` (the command menu), which floats over the thread
+     rather than pushing the composer down. */
+  position: relative;
   flex-direction: column;
   gap: var(--spacing-xs);
   transition:
@@ -70,6 +73,19 @@
   background: var(--state-surface-main-disabled);
 }
 
+/* Off-screen but announced: the durable form of the placeholder's hint. */
+.accessibleDescription {
+  position: absolute;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .aboveTextSlot {
   display: flex;
   flex-wrap: wrap;
@@ -95,6 +111,10 @@
   color: var(--on-surface);
   font: var(--font-body-large);
   line-height: 1.5;
+}
+
+.textarea::placeholder {
+  color: var(--on-surface-muted);
 }
 
 .textarea:disabled {

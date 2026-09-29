@@ -57,6 +57,20 @@
   font: var(--font-title-large);
 }
 
+/* The command heads the description, as it does in the composer's command menu
+ * and in the panel a command turn opens. */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+}
+
+.commandSlug {
+  color: var(--on-surface);
+  font: var(--font-label-large);
+}
+
 .description {
   margin: 0;
   color: var(--on-surface-retreat);

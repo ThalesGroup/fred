@@ -77,6 +77,7 @@ Stored prompts use the `prompt` table and `PromptRow` ORM model.
 Core fields:
 
 - `prompt_id`, `team_id`, `name`, `description`, `text`, `created_by`
+- `command` (nullable — see §3.2)
 - `category_id`, `emoji`, `tags`
 - `version`, `published`, `import_count`, `session_count`, `score`
 - `avg_input_tokens`, `avg_output_tokens`
@@ -121,6 +122,54 @@ a nullable reference into this table, scoped to the same team.
 
 No icon/color field: category pills use the same hash-based fallback palette
 already used for uncategorized prompts (`hashColorIndex`, frontend).
+
+### 3.2 Prompt commands (PROMPT-CMD-01)
+
+A prompt may carry an optional `command`: a lowercase unaccented slug
+(`^[a-z0-9_-]+$`, at most 64 characters) that runs it from the chat composer by
+typing `/` plus that slug. Authoring it takes `team_editor`, like any other
+write to a prompt; any member of the team can then run it.
+
+**One namespace per team.** Uniqueness is guaranteed by the database, not by
+the application: a *partial* unique index on `(team_id, command)` restricted to
+`command IS NOT NULL`, so any number of prompts may carry none while a present
+one stays unique within its team. The namespace is the team rather than the
+prompt library specifically, which leaves room for a future team-scoped
+invocable object to share it.
+
+Two distinct 409s can come out of a write, and the API distinguishes them so
+the form can point at the right field: the store asks the database which
+constraint fired rather than parsing the driver's message (the name wins when
+both collide), and a command conflict carries an object detail
+`{"code": "prompt_command_conflict", "message": ...}`. A plain string detail
+remains the shape for every other prompt error.
+
+Copying a prompt carries the command with it. Importing a published prompt into
+a team that already holds that command appends the first free `-N` suffix from
+`-2` (`summary` → `summary-2`), the same treatment the name already receives;
+`promote` copies the command and returns 409 on a collision, matching how it
+already treats the name.
+
+The prompt's read-only view dialog shows the command ahead of the description,
+the same reading as the composer's command menu and the panel a command turn
+opens. It appears in the team library and on the marketplace alike — on the
+marketplace it is the author team's, which an import may have to suffix.
+
+The composer resolves a typed command against
+`GET /control-plane/v1/teams/{team_id}/prompt-commands`
+(`list[PromptCommandSummary]`: `prompt_id`, `command`, `name`, `description?`,
+`emoji?`), **not** against the prompt listing above — that one is capped at 100
+rows, and a command past the cap would resolve to nothing while the typed token
+went to the agent as ordinary text. Carrying no prompt text is what lets this
+listing be uncapped.
+
+Running a command sends the **prompt's text**, not the command, and the turn
+records a descriptor of what was run (`RuntimeContext.command`, and the stored
+turn's metadata) so the transcript can render it as its command. The runtime
+knows nothing about prompts: resolution is entirely a composer action, and the
+turn that follows is an ordinary turn. The trigger, its menu and the keyboard
+model are specified in
+[`COMPONENT-UX.md`](../ux/COMPONENT-UX.md#prompt-commands-in-the-composer--2026-09-28).
 
 ## 4. Scope And Access
 

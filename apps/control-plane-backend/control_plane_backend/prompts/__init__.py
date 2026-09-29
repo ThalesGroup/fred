@@ -12,6 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .store import PromptAlreadyExistsError, PromptRecord, PromptStore
+from .store import (
+    PromptAlreadyExistsError,
+    PromptCommandAlreadyExistsError,
+    PromptCommandRecord,
+    PromptRecord,
+    PromptStore,
+)
 
-__all__ = ["PromptAlreadyExistsError", "PromptRecord", "PromptStore"]
+__all__ = [
+    "PromptAlreadyExistsError",
+    "PromptCommandAlreadyExistsError",
+    "PromptCommandRecord",
+    "PromptRecord",
+    "PromptStore",
+]

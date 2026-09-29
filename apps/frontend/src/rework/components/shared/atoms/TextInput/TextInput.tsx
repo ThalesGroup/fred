@@ -26,6 +26,11 @@ export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "si
    *  locked file extension). Purely presentational — callers own splitting
    *  the editable value from this suffix and recombining them on submit. */
   suffix?: string;
+  /** Fixed, non-editable text shown before the input's own text (e.g. the `/`
+   *  a prompt command is typed with). Same contract as `suffix`: presentational
+   *  only, never part of the value, and it cannot be deleted. Mutually
+   *  exclusive with `icon` — both sit at the field's left edge. */
+  prefix?: string;
   compact?: boolean;
   /** Shrinks the input's own height (shared ComponentSize scale). Omit to
    *  keep the existing default height — every other TextInput call site is
@@ -40,6 +45,7 @@ export default function TextInput({
   error,
   icon,
   suffix,
+  prefix,
   compact = false,
   size,
   maxLength,
@@ -133,6 +139,7 @@ export default function TextInput({
             <Icon {...icon} />
           </span>
         )}
+        {prefix && <span className={styles.prefix}>{prefix}</span>}
         <input
           id={id}
           ref={setInputRef}

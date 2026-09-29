@@ -211,6 +211,42 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("forwards a caller-supplied prompt command descriptor on runtime_context", async () => {
+    // The trigger slice sets `command` on the context it already passes; the
+    // send path must carry it through untouched, and leave it absent for an
+    // ordinary turn.
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("Résume le document : 33 lignes", "session-1", {
+        command: { command: "summary", appended_text: "33 lignes", prompt_id: "p-1", prompt_name: "Revue" },
+      });
+    });
+
+    const bodyOf = (call: Parameters<typeof fetch>) => JSON.parse(String((call[1] as RequestInit).body));
+    expect(fetchSpy).toHaveBeenCalled();
+    const withCommand = bodyOf(fetchSpy.mock.calls[0] as Parameters<typeof fetch>);
+    expect(withCommand.runtime_context.command).toEqual({
+      command: "summary",
+      appended_text: "33 lignes",
+      prompt_id: "p-1",
+      prompt_name: "Revue",
+    });
+    // The turn's own input is the assembled text, never the command.
+    expect(withCommand.input).toBe("Résume le document : 33 lignes");
+
+    fetchSpy.mockClear();
+    await act(async () => {
+      await latest.send("plain question", "session-1");
+    });
+    const plain = bodyOf(fetchSpy.mock.calls[0] as Parameters<typeof fetch>);
+    expect(plain.runtime_context.command).toBeUndefined();
+
+    fetchSpy.mockRestore();
+  });
+
   it("calls prepare-execution and fires onTurnStarted exactly once when the write barrier reports success", async () => {
     flushPendingWrites = async () => true;
     // The stream fetch itself is irrelevant to this assertion — let it fail
