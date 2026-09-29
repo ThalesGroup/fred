@@ -47,7 +47,9 @@ None.
   exist and already carry what the panel needs.
 - Depends on the task lifecycle for its truthfulness — see `design.md`. This
   change surfaces existing lifecycle defects rather than causing them.
-- `add-import-conflict-resolution` depends on this change: once the dialog
-  closes immediately, a conflict detected at write time has no home but this
-  panel. Nothing here needs to know about conflicts, but the panel must be able
-  to carry an item that is neither running nor failed but awaiting a decision.
+- Document rows keep their own per-document status. The panel aggregates it and
+  makes it reachable from anywhere; it does not replace it, and no row indicator
+  is removed by this change.
+- `add-import-conflict-resolution` proceeds in parallel. Nothing here needs to
+  know about conflicts, but the panel must be able to carry an item that is
+  neither running nor failed but awaiting a decision.

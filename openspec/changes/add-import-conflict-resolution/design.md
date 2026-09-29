@@ -22,8 +22,7 @@ which depends on this one.
 **Non-Goals**
 
 - Removing `canonical_name` / `version` and `_promote_alternate_version`.
-- The import panel, progress and wording (`revamp-document-import-experience`),
-  which this change builds on rather than duplicates.
+- The import panel, progress and wording (`revamp-document-import-experience`).
 - The remaining import latency: the blocking content-store write (#2370), the
   redundant disk copy and the double hashing (RFC §8).
 
@@ -46,11 +45,15 @@ pointless upload.
 The pre-check question is asked while the user is still in the import dialog,
 before any transfer begins — it belongs there, and needs nothing else.
 
-The write-time conflict is different: it surfaces after the dialog has closed,
-so it belongs in the import panel. That is why this change depends on
-`revamp-document-import-experience` rather than running beside it. The
-dependency is narrow — one case, one surface — but building around it would
-produce work thrown away a week later.
+The write-time conflict surfaces after the dialog has closed, on the affected
+document's row in the folder. Rows carry their own status permanently; the
+import panel aggregates that state rather than replacing it. So this case has a
+home whether or not `revamp-document-import-experience` has shipped, and the two
+changes can proceed in parallel.
+
+The residual gap until the panel exists: a user who has navigated away from the
+folder can miss a late conflict. That is the same exposure as the transient
+notifications used today, so it is not a regression, and the panel closes it.
 
 ### Overwrite reuses the existing `document_uid` deliberately
 

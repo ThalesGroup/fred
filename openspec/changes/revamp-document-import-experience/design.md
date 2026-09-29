@@ -48,14 +48,20 @@ longer needs to.
 A team-wide panel fills with other people's work on an active team. Team
 activity stays where it is already visible: on the rows of the folder concerned.
 
+### The panel adds to the rows, it does not replace them
+
+A document row is the permanent home of that document's status. The panel is an
+aggregated, always-reachable view of the same state, and a place to offer
+actions later. No row indicator is removed by this change, and progress must not
+be moved out of the table.
+
 ### Leave room for a state that is neither running nor failed
 
-`add-import-conflict-resolution` depends on this change: once the dialog closes
-on acceptance, a conflict detected at write time has nowhere else to surface.
-Nothing here needs to understand conflicts, but the panel's item model must not
-assume every item is running, done or failed — one can be waiting on the user.
-Baking in a three-state assumption now would force that change to either rework
-the panel or invent a second surface.
+The panel's item model must not assume every item is running, done or failed —
+one can be waiting on the user, as `add-import-conflict-resolution` will need
+for a conflict detected at write time. Nothing here needs to understand
+conflicts, but baking in a three-state assumption now would force that change to
+rework the panel or invent a second surface.
 
 ### Cancellation stops at the upload stage
 

@@ -88,9 +88,14 @@ folder?" — answerable by an indexed lookup instead of a corpus scan.
 
 ### 3.2 The import panel
 
-The dialog closes as soon as the files are accepted. Progress moves to a panel
-reachable from anywhere in the application, so leaving the Resources page does
-not hide a running import.
+The dialog closes as soon as the files are accepted. Progress becomes reachable
+from anywhere in the application through a panel, so leaving the Resources page
+no longer hides a running import.
+
+The panel **adds to** the per-document status already shown on folder rows; it
+does not replace it. A row stays the permanent home of its document's state, and
+the panel is the aggregated view of the same thing — plus, later, a place to
+offer actions.
 
 **This is the existing `TaskTray` component, which is built and mounted
 nowhere.** It already provides a trigger with an aggregate progress ring, an
@@ -269,14 +274,15 @@ the import feel slow from the browser.
 
 ## 9. Next step
 
-Sign-off on §3. The work is sliced into three OpenSpec changes, in this order:
+Sign-off on §3. The work is sliced into three OpenSpec changes:
 
-1. `revamp-document-import-experience` — frontend only, depends on nothing.
-2. `add-import-conflict-resolution` — depends on the panel above, because a
-   conflict detected at write time surfaces after the dialog has closed and has
-   nowhere else to go.
-3. `retire-document-versioning` — depends on conflicts being handled first, then
-   migrates existing alternate versions and removes the mechanism.
+- `revamp-document-import-experience` — frontend only, depends on nothing.
+- `add-import-conflict-resolution` — independent of the panel; a conflict
+  detected at write time surfaces on the affected document's row, which carries
+  its status whether or not the panel exists.
+- `retire-document-versioning` — depends on conflicts being handled first, then
+  migrates existing alternate versions and removes the mechanism.
 
-Each links its own GitHub issue. Both remaining questions in §7 can be settled
-inside the slice that hits them.
+The first two can proceed in parallel; the third follows the second. Each links
+its own GitHub issue. Both remaining questions in §7 can be settled inside the
+slice that hits them.

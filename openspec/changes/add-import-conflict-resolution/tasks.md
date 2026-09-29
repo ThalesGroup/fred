@@ -29,7 +29,7 @@
 
 - [ ] 5.1 Run the pre-check in `DocumentUploadDrawer` when the selection is complete, before any upload starts.
 - [ ] 5.2 Present all conflicts as one list with overwrite-all, skip-all and per-file choice; do not block the non-conflicting files on that decision.
-- [ ] 5.3 Surface a conflict returned at write time in the import panel, as a file still to be resolved rather than a failure. The panel is mounted by `revamp-document-import-experience`; do not add a second surface for this case.
+- [ ] 5.3 Surface a conflict returned at write time on the affected document's row, as awaiting a decision rather than as a failure. Do not build a dedicated surface for it: the import panel aggregates row state once it ships.
 - [ ] 5.4 Component tests for: no conflict (no prompt at all), some conflicts, all conflicts, a conflict appearing late.
 
 ## 6. Verify and close out
