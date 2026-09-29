@@ -37,6 +37,7 @@ const probe = vi.hoisted(() => ({
   lateConflicts: [] as string[],
   showError: vi.fn(),
   showInfo: vi.fn(),
+  quotaPrecheck: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -75,9 +76,7 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [probe.nameCheck],
-  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
-    () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
-  ],
+  useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [probe.quotaPrecheck],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
@@ -95,6 +94,8 @@ beforeEach(() => {
   probe.sent.length = 0;
   probe.lateConflicts.length = 0;
   probe.nameCheck.mockReset();
+  probe.quotaPrecheck.mockReset();
+  probe.quotaPrecheck.mockReturnValue({ unwrap: () => Promise.resolve({ allowed: true }) });
   probe.showError.mockClear();
   probe.showInfo.mockClear();
   container = document.createElement("div");
@@ -246,6 +247,56 @@ describe("DocumentUploadDrawer name conflicts", () => {
     expect(sentNames()).toEqual(["a.pdf", "b.pdf"]);
     expect(probe.showError).not.toHaveBeenCalled();
     expect(probe.showInfo).toHaveBeenCalledWith(expect.objectContaining({ detail: "documentLibrary.conflictLate" }));
+  });
+
+  it("two files of the same name into one folder are refused, not silently merged", async () => {
+    // One decision cannot mean two things: replacing would let one file take
+    // the other's place with nothing said.
+    answering([]);
+    act(() => {
+      root.render(
+        <DocumentUploadDrawer
+          isOpen
+          onClose={() => {}}
+          teamId="team-a"
+          metadata={{ tags: ["tag-base"] }}
+          initialFiles={[new File(["x"], "jan/report.pdf"), new File(["y"], "feb/report.pdf")]}
+        />,
+      );
+    });
+
+    await click(button("documentLibrary.save"));
+
+    expect(probe.sent).toEqual([]);
+    expect(probe.showError).toHaveBeenCalledWith(expect.objectContaining({ detail: "documentLibrary.sameNameTwice" }));
+  });
+
+  it("a quota denial is not final when the folder may already hold these names", async () => {
+    // The declared total charges a replacement at full size; only the server
+    // can net it out, so the import goes on and the server answers.
+    probe.quotaPrecheck.mockReturnValue({
+      unwrap: () => Promise.resolve({ allowed: false, scope: "team", owner_id: "team-a", current: 950, limit: 1000 }),
+    });
+    answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
+    renderDrawer(["a.pdf"]);
+
+    await click(button("documentLibrary.save"));
+
+    expect(container.textContent).not.toContain("documentLibrary.storageQuotaExceededTitle");
+    expect(container.textContent).toContain("documentLibrary.conflictsTitle");
+  });
+
+  it("a quota denial stands when nothing would be replaced", async () => {
+    probe.quotaPrecheck.mockReturnValue({
+      unwrap: () => Promise.resolve({ allowed: false, scope: "team", owner_id: "team-a", current: 950, limit: 1000 }),
+    });
+    answering([]);
+    renderDrawer(["a.pdf"]);
+
+    await click(button("documentLibrary.save"));
+
+    expect(container.textContent).toContain("documentLibrary.storageQuotaExceededTitle");
+    expect(probe.sent).toEqual([]);
   });
 
   it("a name-check transport error does not block the import", async () => {

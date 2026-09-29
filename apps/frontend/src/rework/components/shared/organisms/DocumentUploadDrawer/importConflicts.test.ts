@@ -23,6 +23,7 @@ import {
   conflictsToAsk,
   decisionsForGroup,
   destinationsToCheck,
+  namesArrivingTwice,
   splitByDecision,
   type ConflictDecision,
   type UploadGroup,
@@ -94,5 +95,25 @@ describe("splitByDecision and decisionsForGroup", () => {
     expect(decisionsForGroup(groups[1], decisions)).toEqual({ "report.pdf": "skip" });
     // A destination with no folder can hold no conflict, so it carries none.
     expect(decisionsForGroup(groups[2], decisions)).toEqual({});
+  });
+});
+
+describe("namesArrivingTwice", () => {
+  it("reports a name one folder would receive twice", () => {
+    const colliding: UploadGroup[] = [{ tagId: "tag-jan", files: [file("a/report.pdf"), file("b/report.pdf")] }];
+    expect(namesArrivingTwice(colliding)).toEqual(["report.pdf"]);
+  });
+
+  it("says nothing when the two land in different folders", () => {
+    // groups already carries report.pdf into tag-jan and tag-feb.
+    expect(namesArrivingTwice(groups)).toEqual([]);
+  });
+
+  it("groups destinations with no folder together", () => {
+    const rootless: UploadGroup[] = [
+      { tagId: null, files: [file("x.pdf")] },
+      { tagId: null, files: [file("x.pdf")] },
+    ];
+    expect(namesArrivingTwice(rootless)).toEqual(["x.pdf"]);
   });
 });

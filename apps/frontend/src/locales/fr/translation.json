@@ -725,6 +725,8 @@
     "removeSuccess": "Documents supprimés",
     "removedManyDocuments": "Documents supprimés de la bibliothèque.",
     "removedOneDocument": "Document supprimé de la bibliothèque.",
+    "sameNameTwice_one": "Deux fichiers arriveraient dans ce dossier sous le nom {{names}}. Retirez-en un : un dossier ne peut pas contenir deux documents du même nom.",
+    "sameNameTwice_other": "Plusieurs fichiers arriveraient dans ce dossier sous des noms déjà pris par un autre fichier sélectionné : {{names}}. Retirez les doublons : un dossier ne peut pas contenir deux documents du même nom.",
     "save": "Enregistrer",
     "saving": "Enregistrement en cours...",
     "searchOff": "Recherche désactivée",

@@ -44,8 +44,9 @@ class _File:
     """Stands in for `UploadFile`; `size` may be absent, which the guard handles
     by seeking to the end of the stream."""
 
-    def __init__(self, size: int | None, *, stream_size: int | None = None):
+    def __init__(self, size: int | None, *, stream_size: int | None = None, filename: str = "uploaded.pdf"):
         self.size = size
+        self.filename = filename
         self._stream_size = stream_size if stream_size is not None else (size or 0)
         self.file = _Stream(self._stream_size)
 

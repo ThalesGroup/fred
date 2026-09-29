@@ -110,20 +110,63 @@ that object by hand today. Accepted as-is rather than reshaping the upload
 routes in this change; the field is validated server-side by Pydantic, so a
 malformed decision is rejected rather than ignored.
 
-### Overwrite drops the index first and the bytes last
+### Replacing drops the index first and the bytes last
 
-The order is: point the metadata at the existing uid, drop that document's
-vectors and tabular artifacts, write the new content over the old, save the row.
+The order is: point the metadata at the existing uid, mark the row as having
+nothing processed, drop that document's vectors and tabular artifacts, write
+the new content over the old, save the row.
 
-Dropping the index first is what makes an interrupted overwrite safe. Writing
+Dropping the index first is what makes an interrupted replacement safe. Writing
 the content first would leave the previous index answering for content that is
 no longer the one it describes — the exact disagreement to avoid. This way an
 interruption leaves the document unindexed, never wrongly indexed, and never
 without content.
 
-Charging the difference needs no new code: the save path already loads the
+Clearing the row's stages *before* the purge, rather than only in the metadata
+saved at the end, is the other half of that. Otherwise a failure between the
+purge and the final save leaves a row claiming vectors the document no longer
+has: silently unsearchable, with nothing saying so and nothing to retry.
+
+The stage reset goes through the conditional update, so it doubles as the fence
+against a document deleted since the import was planned: if the row is gone,
+nothing is purged and the file imports as a new document.
+
+Charging the difference needs no new code in the save path: it already loads the
 previous metadata by uid and moves the quota by `new_size - old_size`. Reusing
-the uid is what makes that fall out.
+the uid is what makes that fall out. The *admission* check is separate and did
+need it — see below.
+
+### Replacing is not moving
+
+A document can sit in several libraries. The metadata a fresh extraction
+produces carries only the folder being imported into, so adopting it wholesale
+would quietly take the document out of every other library it was in, releasing
+their quota and leaving their ReBAC grants behind. The tags are unioned: the
+document keeps where it was, plus where it is being imported.
+
+### What an import costs is not what it carries
+
+The admission check summed every uploaded file at full size. Two ways that is
+wrong once a plan exists: a skipped or unanswered file is never stored, and a
+file replacing a document costs the difference. A team near its limit was
+refused outright for a replacement that frees space — the case where replacing
+matters most. The check now takes the plan, ignores what will not be written,
+and credits what will be replaced.
+
+The client-declared precheck cannot do that arithmetic: it does not know the
+existing sizes. Rather than teach it, a denial is no longer final when the
+destination already holds one of the names — the drawer defers to the upload
+endpoint, which nets it out for real. Scoped to the destination folder alone, so
+no folder is created to answer a question that may end in a refusal.
+
+### One name, one file, one decision
+
+Two files of one import cannot land in the same folder under the same name. A
+decision keyed by name would mean two things at once, and "replace" would let
+one file take the other's place unremarked. The dialog refuses the selection and
+names the collision, instead of importing something the user did not ask for.
+Previously the second file became an alternate version of the first, which is
+the mechanism this whole change exists to retire.
 
 ### A name held twice cannot be overwritten
 

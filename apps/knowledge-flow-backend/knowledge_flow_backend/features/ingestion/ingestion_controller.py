@@ -915,14 +915,39 @@ class IngestionController:
 
         return QuotaPrecheckResponse(allowed=True)
 
-    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
+    @staticmethod
+    async def _replaced_bytes(plan: ImportPlan) -> int:
+        """How much the documents this import replaces already occupy.
+
+        Read at the same moment as the rest of the check, so a document deleted
+        since the plan was drawn simply credits nothing.
+        """
+        if not plan.overwrite_uid:
+            return 0
+        store = ApplicationContext.get_instance().get_metadata_store()
+        total = 0
+        for document_uid in plan.overwrite_uid.values():
+            replaced = await store.get_metadata_by_uid(document_uid)
+            if replaced and replaced.file:
+                total += replaced.file.file_size_bytes or 0
+        return total
+
+    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser, plan: ImportPlan = EMPTY_IMPORT_PLAN) -> None:
         """Reject (400) an upload that would exceed the owning team's or user's
         quota. Post-receive enforcement point — the sizes are read from the
         actually-received files, unlike the client-declared precheck. Kept even
         with the precheck in place: declared sizes can lie.
+
+        What the import costs is not what it carries: a file the plan leaves out
+        is never stored, and one replacing a document costs the difference
+        between the two. Charging the whole batch refused replacements that free
+        space, on exactly the teams closest to their limit.
         """
+        excluded = set(plan.skipped) | set(plan.undecided) | set(plan.ambiguous)
         total_upload_size = 0
         for f in files:
+            if upload_basename(f.filename) in excluded:
+                continue
             file_size = getattr(f, "size", None)
             if file_size is not None:
                 total_upload_size += file_size
@@ -930,6 +955,8 @@ class IngestionController:
                 f.file.seek(0, 2)
                 total_upload_size += f.file.tell()
                 f.file.seek(0)
+
+        total_upload_size = max(0, total_upload_size - await self._replaced_bytes(plan))
 
         verdict = await self._evaluate_quota(total_upload_size, tags, user)
         if not verdict.allowed:
@@ -981,7 +1008,7 @@ class IngestionController:
                     apply_versioning=overwrites is None,
                 )
                 if overwrites:
-                    metadata = await self.service.adopt_existing_document(metadata, overwrites)
+                    metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
                 self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
@@ -1171,10 +1198,10 @@ class IngestionController:
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             await _authorize_upload_targets(user, tags)
-            await self._check_quota_before_upload(files, tags, user)
+            plan = await _plan_import([upload_basename(f.filename) for f in files], tags, parsed_input.conflict_decisions)
+            await self._check_quota_before_upload(files, tags, user, plan)
 
             preloaded_files = self._preload_uploaded_files(files)
-            plan = await _plan_import([name for name, _ in preloaded_files], tags, parsed_input.conflict_decisions)
             plan_events = self._plan_events(plan)
             preloaded_files = self._files_to_import(preloaded_files, plan)
 
@@ -1198,7 +1225,7 @@ class IngestionController:
                             apply_versioning=overwrites is None,
                         )
                         if overwrites:
-                            metadata = await self.service.adopt_existing_document(metadata, overwrites)
+                            metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
                         output_temp_dir = input_temp_file.parent.parent
                         self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
                         await self.service.save_metadata(user, metadata=metadata)
@@ -1253,10 +1280,10 @@ class IngestionController:
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             await _authorize_upload_targets(user, tags)
-            await self._check_quota_before_upload(files, tags, user)
+            plan = await _plan_import([upload_basename(f.filename) for f in files], tags, parsed_input.conflict_decisions)
+            await self._check_quota_before_upload(files, tags, user, plan)
 
             preloaded_files = self._preload_uploaded_files(files)
-            plan = await _plan_import([name for name, _ in preloaded_files], tags, parsed_input.conflict_decisions)
             event_stream = self._stream_upload_process(
                 preloaded_files=self._files_to_import(preloaded_files, plan),
                 plan=plan,

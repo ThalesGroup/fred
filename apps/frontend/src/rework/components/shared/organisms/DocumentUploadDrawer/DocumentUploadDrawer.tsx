@@ -52,6 +52,7 @@ import {
   conflictsToAsk,
   decisionsForGroup,
   destinationsToCheck,
+  namesArrivingTwice,
   splitByDecision,
   type ConflictDecision,
   type ImportConflict,
@@ -321,6 +322,23 @@ export function DocumentUploadDrawer({
       return next;
     });
 
+  /** Whether the destination folder already holds any of the selected names,
+   * so an import into it may be replacing rather than adding. Scoped to that
+   * one folder: a dropped subdirectory's folder may not exist yet, and finding
+   * out would mean creating it before the quota question is settled. */
+  const destinationMayHoldTheseNames = async (): Promise<boolean> => {
+    const destination = ((metadata?.tags as string[] | undefined) ?? [])[0];
+    if (!destination) return false;
+    try {
+      const answer = await checkNames({
+        importNameCheckRequest: { destinations: [{ tag_id: destination, names: files.map(leafFileName) }] },
+      }).unwrap();
+      return (answer.conflicts ?? []).some((entry) => entry.names.length > 0);
+    } catch {
+      return false;
+    }
+  };
+
   /** Which of these files the destination folders already hold and the user
    * has not answered about yet. Advisory: a transport failure returns nothing
    * to ask, because the upload re-checks and reports what it finds — the
@@ -393,7 +411,13 @@ export function DocumentUploadDrawer({
           total_size: newFilesSize,
         },
       }).unwrap();
-      if (!verdict.allowed) {
+      // A denial counts every file at full size, but a file replacing an
+      // existing document only costs the difference — which only the server
+      // can work out. So a denial is not final while the destination may
+      // already hold one of these names: the upload endpoint nets it out and
+      // answers for real. Asked against the destination folder alone, which
+      // needs no folder created to answer.
+      if (!verdict.allowed && !(await destinationMayHoldTheseNames())) {
         setQuotaDenial(verdict);
         setIsLoading(false);
         return;
@@ -452,11 +476,26 @@ export function DocumentUploadDrawer({
       else groups.set(groupKey, { requestMetadata, group: { tagId: dirTagId ?? destinationTag, files: [file] } });
     }
 
+    const uploadGroups = Array.from(groups.values(), (entry) => entry.group);
+
+    // Two files of the same name into the same folder have no answer: one
+    // decision cannot mean two things, and replacing would let one take the
+    // other's place unnoticed. Refuse before anything is sent or created.
+    const arrivingTwice = namesArrivingTwice(uploadGroups);
+    if (arrivingTwice.length) {
+      showError?.({
+        summary: t("documentLibrary.uploadDrawerTitle"),
+        detail: t("documentLibrary.sameNameTwice", { count: arrivingTwice.length, names: arrivingTwice.join(", ") }),
+      });
+      setIsLoading(false);
+      return;
+    }
+
     // Ask about the names before sending any byte, and outside the block below
     // whose `finally` closes the drawer: an unanswered conflict must leave it
     // open on the question, since resolving it either way would be resolving
     // it for the user.
-    const unanswered = await askAboutConflicts(Array.from(groups.values(), (entry) => entry.group));
+    const unanswered = await askAboutConflicts(uploadGroups);
     if (unanswered.length) {
       setConflicts(unanswered);
       setIsLoading(false);

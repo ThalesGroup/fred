@@ -81,12 +81,58 @@ async def existing(app_context, metadata_store, content_store, tmp_path):
 async def test_the_replacement_becomes_the_existing_document(existing) -> None:
     fresh = _doc("uid-freshly-generated", "report.pdf", size=3_000_000)
 
-    adopted = await get_ingestion_service().adopt_existing_document(fresh, EXISTING_UID)
+    adopted = await get_ingestion_service().adopt_existing_document(USER, fresh, EXISTING_UID)
 
     assert adopted.document_uid == EXISTING_UID
     # A fresh extraction has produced nothing yet; carrying the replaced
     # document's stages would report it as indexed while it is not.
     assert adopted.processing.stages == {}
+
+
+@pytest.mark.asyncio
+async def test_the_document_keeps_every_library_it_was_in(app_context, metadata_store, content_store, tmp_path) -> None:
+    # Replacing content is not moving the document. Keeping only the importing
+    # folder's tag would remove it from the others — quota and access with it.
+    shared = _doc(EXISTING_UID, "report.pdf", size=2_000_000)
+    shared.tags.tag_ids = [DESTINATION, "folder-elsewhere"]
+    await metadata_store.save_metadata(shared)
+    _write_content(content_store, EXISTING_UID, "report.pdf", b"the old report", tmp_path)
+
+    adopted = await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+
+    assert sorted(adopted.tags.tag_ids) == sorted([DESTINATION, "folder-elsewhere"])
+
+
+@pytest.mark.asyncio
+async def test_the_row_stops_claiming_an_index_before_the_index_goes(existing, metadata_store, monkeypatch) -> None:
+    # An interrupted replacement must not leave a document advertising vectors
+    # it no longer has: unsearchable, with nothing saying so. The row is marked
+    # unprocessed first, so whatever fails next, the row tells the truth.
+    seen: list[dict] = []
+
+    async def _record(self, document_uid, *, metadata=None, include_content=True):
+        row = await metadata_store.get_metadata_by_uid(document_uid)
+        seen.append({"stages_at_purge": dict(row.processing.stages)})
+
+    monkeypatch.setattr(MetadataService, "purge_document_artifacts", _record)
+
+    await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+
+    assert seen == [{"stages_at_purge": {}}]
+
+
+@pytest.mark.asyncio
+async def test_a_document_deleted_meanwhile_is_not_purged(existing, metadata_store, monkeypatch) -> None:
+    # The conditional update is the fence: if the row went while the import was
+    # in flight, nothing of that document is ours to delete any more.
+    purged: list[str] = []
+    monkeypatch.setattr(MetadataService, "purge_document_artifacts", lambda *a, **k: purged.append("called"))
+    await metadata_store.delete_metadata(EXISTING_UID)
+
+    adopted = await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+
+    assert purged == []
+    assert adopted.document_uid == "uid-freshly-generated"
 
 
 @pytest.mark.asyncio
@@ -102,7 +148,7 @@ async def test_the_index_goes_but_the_content_stays_until_it_is_replaced(existin
 
     monkeypatch.setattr(MetadataService, "purge_document_artifacts", _record)
 
-    await get_ingestion_service().adopt_existing_document(_doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+    await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
 
     assert purged == [{"uid": EXISTING_UID, "include_content": False}]
 
@@ -118,7 +164,7 @@ async def test_purging_without_the_content_really_leaves_it_readable(existing, c
 async def test_a_reference_to_the_document_resolves_to_the_new_content(existing, content_store, tmp_path) -> None:
     # Whatever already cites this document cites its uid. Preserving the uid
     # is what keeps that citation resolving — now to what replaced it.
-    await get_ingestion_service().adopt_existing_document(_doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+    await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
     _write_content(content_store, EXISTING_UID, "report.pdf", b"the new report", tmp_path / "new")
 
     assert content_store.get_content(EXISTING_UID).read() == b"the new report"
@@ -134,8 +180,9 @@ async def test_the_quota_moves_by_the_difference_not_the_whole_file(existing, mo
     monkeypatch.setattr(MetadataService, "_adjust_team_storage", _record)
 
     service = MetadataService()
-    adopted = await get_ingestion_service().adopt_existing_document(_doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+    adopted = await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
     await service._persist_metadata_and_follow_up(USER, adopted)
 
-    # 2 MB replaced by 3 MB is 1 MB more, not 3 MB more.
-    assert charged == [{"old_size": 2_000_000, "new_size": 3_000_000}]
+    # 2 MB replaced by 3 MB is 1 MB more, not 3 MB more — across every write
+    # the replacement makes, marking the row unprocessed included.
+    assert sum(call["new_size"] - call["old_size"] for call in charged) == 1_000_000

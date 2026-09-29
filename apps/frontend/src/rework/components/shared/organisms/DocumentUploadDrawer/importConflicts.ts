@@ -44,6 +44,28 @@ export function conflictKey(tagId: string, name: string): string {
   return JSON.stringify([tagId, name]);
 }
 
+/** Leaf names a single destination would receive more than once.
+ *
+ * A folder cannot hold two documents under one name, and a decision about that
+ * name cannot mean two things at once — replace would let one file silently
+ * take the other's place. The user has to drop one of them first.
+ */
+export function namesArrivingTwice(groups: UploadGroup[]): string[] {
+  const seenByTag = new Map<string, Set<string>>();
+  const duplicates = new Set<string>();
+  for (const group of groups) {
+    const key = group.tagId ?? "";
+    const seen = seenByTag.get(key) ?? new Set<string>();
+    for (const file of group.files) {
+      const name = leafFileName(file);
+      if (seen.has(name)) duplicates.add(name);
+      seen.add(name);
+    }
+    seenByTag.set(key, seen);
+  }
+  return [...duplicates];
+}
+
 /** What to ask the name-check route about: one entry per destination that has
  * a folder to conflict with. */
 export function destinationsToCheck(groups: UploadGroup[]): ImportDestinationNames[] {

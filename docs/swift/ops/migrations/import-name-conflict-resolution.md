@@ -56,6 +56,11 @@ with the new content.
 Use the normal rollback procedure. Downgrading the knowledge-flow Alembic
 revision drops the index; no document data is affected either way.
 
+Also user-visible, needing no operator action: two files of one import can no
+longer land in the same folder under the same name. The import dialog refuses
+the selection and names the collision. Previously the second file became an
+alternate version of the first.
+
 ## Limitations
 
 Two documents can still share a display name in one folder while alternate
