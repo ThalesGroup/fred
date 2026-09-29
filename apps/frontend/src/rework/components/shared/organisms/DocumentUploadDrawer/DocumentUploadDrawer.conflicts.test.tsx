@@ -15,7 +15,7 @@
 
 // The name question at Save: the drawer asks the destination folder what it
 // already holds, before a single byte leaves. Nothing is sent until every
-// conflict has an answer; a file the user chooses to keep is never uploaded at
+// conflict has an answer; a file the user chooses to skip is never uploaded at
 // all; and a conflict the server finds anyway, after the drawer asked, is
 // reported as a question rather than as a failure.
 
@@ -177,19 +177,19 @@ describe("DocumentUploadDrawer name conflicts", () => {
     expect(probe.sent).toEqual([]);
     expect(button("documentLibrary.save").hasAttribute("disabled")).toBe(true);
 
-    await click(button("documentLibrary.conflictOverwriteAll"));
+    await click(button("documentLibrary.conflictReplaceAll"));
     await click(button("documentLibrary.save"));
 
     expect(sentNames()).toEqual(["a.pdf", "b.pdf"]);
     expect(probe.sent[0].metadata.conflict_decisions).toEqual({ "a.pdf": "overwrite" });
   });
 
-  it("a file the user keeps is never uploaded", async () => {
+  it("a file the user skips is never uploaded", async () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
     await click(button("documentLibrary.save"));
-    await click(button("documentLibrary.conflictKeepAll"));
+    await click(button("documentLibrary.conflictSkipAll"));
     await click(button("documentLibrary.save"));
 
     // Sending its bytes for the server to refuse is exactly the transfer the
@@ -197,16 +197,16 @@ describe("DocumentUploadDrawer name conflicts", () => {
     expect(sentNames()).toEqual(["b.pdf"]);
     expect(probe.sent[0].metadata.conflict_decisions).toBeUndefined();
     expect(probe.showInfo).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: "documentLibrary.conflictKeptSummary" }),
+      expect.objectContaining({ detail: "documentLibrary.conflictSkippedSummary" }),
     );
   });
 
-  it("all conflicts kept: the import sends nothing", async () => {
+  it("every conflict skipped: the import sends nothing", async () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf", "b.pdf"] }]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
     await click(button("documentLibrary.save"));
-    await click(button("documentLibrary.conflictKeepAll"));
+    await click(button("documentLibrary.conflictSkipAll"));
     await click(button("documentLibrary.save"));
 
     expect(probe.sent).toEqual([]);
@@ -225,11 +225,11 @@ describe("DocumentUploadDrawer name conflicts", () => {
     const rowButton = (name: string, label: string) =>
       [...rowFor(name).querySelectorAll("button")].find((b) => b.textContent?.includes(label))!;
 
-    await click(rowButton("a.pdf", "documentLibrary.conflictOverwrite"));
+    await click(rowButton("a.pdf", "documentLibrary.conflictReplace"));
     // One answered, one still open: Save stays out of reach.
     expect(button("documentLibrary.save").hasAttribute("disabled")).toBe(true);
 
-    await click(rowButton("b.pdf", "documentLibrary.conflictKeep"));
+    await click(rowButton("b.pdf", "documentLibrary.conflictSkip"));
     await click(button("documentLibrary.save"));
 
     expect(sentNames()).toEqual(["a.pdf"]);

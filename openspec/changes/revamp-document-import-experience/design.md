@@ -23,7 +23,7 @@ This change connects them. It is deliberately frontend-only.
 - A new activity surface. RFC OPS-04 requires reusing existing components rather
   than one activity UI per feature; this change mounts and completes `TaskTray`.
 - Fixing the task lifecycle (see Risks).
-- Conflict handling (`add-import-conflict-resolution`).
+- Detecting conflicts and applying a decision (`add-import-conflict-resolution`); this change owns only where the user answers a conflict raised at write time.
 - Server-side import latency (#2370, #2844, RFC §8).
 
 ## Decisions

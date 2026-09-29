@@ -45,15 +45,17 @@ pointless upload.
 The pre-check question is asked while the user is still in the import dialog,
 before any transfer begins — it belongs there, and needs nothing else.
 
-The write-time conflict surfaces after the dialog has closed, on the affected
-document's row in the folder. Rows carry their own status permanently; the
-import panel aggregates that state rather than replacing it. So this case has a
-home whether or not `revamp-document-import-experience` has shipped, and the two
-changes can proceed in parallel.
+The write-time conflict surfaces after the dialog has closed. Answering it is
+the import panel's job, not the table's: the panel is where an import's files
+and their outcomes live, and where actions on them belong. A document row may
+carry an indicator that something needs attention and open the panel on click,
+but the decision is never taken from the row.
 
-The residual gap until the panel exists: a user who has navigated away from the
-folder can miss a late conflict. That is the same exposure as the transient
-notifications used today, so it is not a regression, and the panel closes it.
+Until the panel ships, this change reports a late conflict as a notice saying
+how many files need importing again — enough not to lose the information, and
+deliberately not a second, throwaway surface for resolving it. That is the same
+exposure as the transient notifications used today, so it is not a regression,
+and the panel closes it.
 
 ### Overwrite reuses the existing `document_uid` deliberately
 

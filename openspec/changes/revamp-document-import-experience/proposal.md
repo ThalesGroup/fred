@@ -50,6 +50,8 @@ None.
 - Document rows keep their own per-document status. The panel aggregates it and
   makes it reachable from anywhere; it does not replace it, and no row indicator
   is removed by this change.
-- `add-import-conflict-resolution` proceeds in parallel. Nothing here needs to
-  know about conflicts, but the panel must be able to carry an item that is
-  neither running nor failed but awaiting a decision.
+- `add-import-conflict-resolution` has shipped the decision itself: the upload
+  stream now carries a `conflict` status, and an import can be re-sent with the
+  answer. This change owns where that question is answered — in the panel, on
+  the item, never in the document table, which carries at most an indicator
+  that opens the panel.

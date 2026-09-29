@@ -36,8 +36,8 @@ If the target library already holds a document of the same name, Fred says so
 - **Replace**: the existing document keeps its place and its links, only its
   content changes. Everything that cited it keeps working, and now points at the
   new version.
-- **Keep**: your file is not uploaded, and the document already there is left
-  untouched.
+- **Skip**: your file is left out of the import, and the document already there
+  is untouched.
 
 You can answer once for every file concerned, or file by file. The same name in
 **another** library is not a duplicate: those are two independent documents.

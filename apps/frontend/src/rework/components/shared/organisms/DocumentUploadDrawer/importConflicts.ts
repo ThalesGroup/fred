@@ -18,7 +18,7 @@ import type {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { leafFileName } from "../../../../../slices/streamDocumentUpload";
 
-/** Overwrite the document already there, or keep it and import nothing. */
+/** Replace the document already there, or skip the file and import nothing. */
 export type ConflictDecision = "overwrite" | "skip";
 
 /** One batch of files sharing a destination — what the drawer sends per request. */
@@ -83,20 +83,20 @@ export function conflictsToAsk(
 }
 
 /** Split one group by what the user decided: what still goes up, and what they
- * chose to keep as it is. A kept file is never uploaded — sending its bytes for
- * the server to refuse is the transfer this whole check exists to avoid. */
+ * chose to skip. A skipped file is never uploaded — sending its bytes for the
+ * server to refuse is the transfer this whole check exists to avoid. */
 export function splitByDecision(
   group: UploadGroup,
   decisions: Map<string, ConflictDecision>,
-): { toUpload: File[]; kept: File[] } {
+): { toUpload: File[]; skipped: File[] } {
   const toUpload: File[] = [];
-  const kept: File[] = [];
+  const skipped: File[] = [];
   for (const file of group.files) {
     const decision = group.tagId ? decisions.get(conflictKey(group.tagId, leafFileName(file))) : undefined;
-    if (decision === "skip") kept.push(file);
+    if (decision === "skip") skipped.push(file);
     else toUpload.push(file);
   }
-  return { toUpload, kept };
+  return { toUpload, skipped };
 }
 
 /** The decisions one request carries, keyed the way the server reads them: by

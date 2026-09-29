@@ -84,9 +84,9 @@ describe("splitByDecision and decisionsForGroup", () => {
     const feb = splitByDecision(groups[1], decisions);
 
     expect(jan.toUpload.map(leaf)).toEqual(["report.pdf", "notes.md"]);
-    expect(jan.kept).toEqual([]);
+    expect(jan.skipped).toEqual([]);
     expect(feb.toUpload).toEqual([]);
-    expect(feb.kept.map(leaf)).toEqual(["report.pdf"]);
+    expect(feb.skipped.map(leaf)).toEqual(["report.pdf"]);
   });
 
   it("gives each request only the decisions about its own destination", () => {

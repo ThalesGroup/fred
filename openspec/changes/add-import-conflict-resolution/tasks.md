@@ -29,7 +29,7 @@
 
 - [x] 5.1 Run the pre-check in `DocumentUploadDrawer` when the selection is complete, before any upload starts — on Save, after the quota check and after the dropped folders are resolved, so every destination is known.
 - [x] 5.2 Present all conflicts as one list with overwrite-all, skip-all and per-file choice; do not block the non-conflicting files on that decision. Read as: one question for the whole import, and the answer governs only the files it names — nothing is uploaded before it, so nothing is waiting on it. A file the user keeps is never uploaded at all.
-- [x] 5.3 Surface a conflict returned at write time as awaiting a decision rather than as a failure — reported as an information notice naming how many files need re-importing, never as an error. **Divergence:** not carried on the document's row. A refused file has no document and no task, and its bytes are gone, so there is no durable state a row could show; a row indicator would need a store of pending conflicts, which nothing in this change provides. Left to `revamp-document-import-experience`, which owns the panel and the per-row aggregation.
+- [x] 5.3 Surface a conflict returned at write time as awaiting a decision rather than as a failure — reported as an information notice naming how many files need importing again, never as an error. Resolving it is the import panel's job (`revamp-document-import-experience`): the interactions live there, and a row carries at most an indicator that opens the panel. Nothing was added to the table here.
 - [x] 5.4 Component tests for: no conflict (no prompt at all), some conflicts, all conflicts, a conflict appearing late, plus per-file answers and an unavailable pre-check.
 
 ## 6. Verify and close out

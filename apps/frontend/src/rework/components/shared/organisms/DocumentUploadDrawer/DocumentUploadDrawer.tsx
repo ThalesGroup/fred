@@ -465,10 +465,10 @@ export function DocumentUploadDrawer({
 
     try {
       const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
-      let keptCount = 0;
+      let skippedCount = 0;
       for (const { requestMetadata, group } of groups.values()) {
-        const { toUpload, kept } = splitByDecision(group, decisions);
-        keptCount += kept.length;
+        const { toUpload, skipped } = splitByDecision(group, decisions);
+        skippedCount += skipped.length;
         if (!toUpload.length) continue;
         const decided = decisionsForGroup({ ...group, files: toUpload }, decisions);
         const metadataWithDecisions = Object.keys(decided).length
@@ -482,12 +482,12 @@ export function DocumentUploadDrawer({
       // Register each task the instant the server first reports its id (its own
       // line in the stream), not after the whole batch finishes — so the tray
       // lights up and starts its SSE subscription while the upload streams.
-      if (keptCount) {
-        // Kept files are never sent: the whole point of asking first is not to
-        // transfer bytes the answer makes useless.
+      if (skippedCount) {
+        // A skipped file is never sent: the whole point of asking first is not
+        // to transfer bytes the answer makes useless.
         showInfo?.({
           summary: t("documentLibrary.uploadDrawerTitle"),
-          detail: t("documentLibrary.conflictKeptSummary", { count: keptCount }),
+          detail: t("documentLibrary.conflictSkippedSummary", { count: skippedCount }),
         });
       }
 
@@ -653,10 +653,10 @@ export function DocumentUploadDrawer({
                 <p className={styles.conflictsMessage}>{t("documentLibrary.conflictsMessage")}</p>
                 <div className={styles.conflictsBulk}>
                   <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("overwrite")}>
-                    {t("documentLibrary.conflictOverwriteAll")}
+                    {t("documentLibrary.conflictReplaceAll")}
                   </Button>
                   <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("skip")}>
-                    {t("documentLibrary.conflictKeepAll")}
+                    {t("documentLibrary.conflictSkipAll")}
                   </Button>
                 </div>
                 <ul className={styles.conflictList}>
@@ -674,7 +674,7 @@ export function DocumentUploadDrawer({
                           aria-pressed={decision === "overwrite"}
                           onClick={() => decideOne(conflict, "overwrite")}
                         >
-                          {t("documentLibrary.conflictOverwrite")}
+                          {t("documentLibrary.conflictReplace")}
                         </Button>
                         <Button
                           color="on-surface"
@@ -683,7 +683,7 @@ export function DocumentUploadDrawer({
                           aria-pressed={decision === "skip"}
                           onClick={() => decideOne(conflict, "skip")}
                         >
-                          {t("documentLibrary.conflictKeep")}
+                          {t("documentLibrary.conflictSkip")}
                         </Button>
                       </li>
                     );
