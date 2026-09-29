@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import Request
 
 from fred_core.security import oidc
 from fred_core.security.structure import KeycloakUser
@@ -69,11 +70,13 @@ async def test_person_snapshot_is_throttled_and_service_identity_is_ignored(
 
 
 @pytest.mark.asyncio
-async def test_snapshot_failure_does_not_fail_authentication(monkeypatch):
+async def test_snapshot_failure_does_not_fail_authentication(monkeypatch, caplog):
     oidc._IDENTITY_SNAPSHOT_DEADLINES.clear()
     monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", True)
     store = SimpleNamespace(
-        upsert_identity=AsyncMock(side_effect=RuntimeError("db down"))
+        upsert_identity=AsyncMock(
+            side_effect=RuntimeError("SQL parameters contain alice@example.test")
+        )
     )
     config = SimpleNamespace(security=SimpleNamespace(user_directory="local"))
     user = KeycloakUser(uid=str(uuid4()), username="alice", roles=[])
@@ -81,6 +84,14 @@ async def test_snapshot_failure_does_not_fail_authentication(monkeypatch):
     await oidc._snapshot_local_identity(user, cast(BaseUserStore, store), config)
 
     assert not oidc._IDENTITY_SNAPSHOT_DEADLINES
+    record = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "[AUTH] Local identity snapshot failed"
+    )
+    assert record.exc_info is None
+    assert record.exc_text is None
+    assert "alice@example.test" not in caplog.text
 
 
 @pytest.mark.asyncio
@@ -113,10 +124,15 @@ async def test_pre_gcu_profile_is_written_but_acceptance_is_not_granted(monkeypa
         security=SimpleNamespace(user_directory="local"),
         app=SimpleNamespace(gcu_version="v1"),
     )
-    assert await oidc.get_current_user_before_gcu(None, "token", store, config) is user
+    assert (
+        await oidc.get_current_user_before_gcu(
+            Request({"type": "http"}), "token", cast(BaseUserStore, store), config
+        )
+        is user
+    )
     store.upsert_identity.assert_awaited_once()
     with pytest.raises(HTTPException) as failure:
-        await oidc._enforce_gcu(user, store, config)
+        await oidc._enforce_gcu(user, cast(BaseUserStore, store), config)
     assert failure.value.status_code == 403
     assert failure.value.detail == "user_not_accept_gcu"
 
@@ -131,7 +147,10 @@ async def test_invalid_pre_gcu_request_does_not_write_identity(monkeypatch):
     store = SimpleNamespace(upsert_identity=AsyncMock())
     with pytest.raises(HTTPException):
         await oidc.get_current_user_before_gcu(
-            None, "invalid", store, SimpleNamespace()
+            Request({"type": "http"}),
+            "invalid",
+            cast(BaseUserStore, store),
+            SimpleNamespace(),
         )
     store.upsert_identity.assert_not_awaited()
 
@@ -156,5 +175,10 @@ async def test_pre_gcu_workloads_and_delegated_subjects_are_not_recorded(
     )
     store = SimpleNamespace(upsert_identity=AsyncMock())
     config = SimpleNamespace(security=SimpleNamespace(user_directory="local"))
-    assert await oidc.get_current_user_before_gcu(None, "token", store, config) is user
+    assert (
+        await oidc.get_current_user_before_gcu(
+            Request({"type": "http"}), "token", cast(BaseUserStore, store), config
+        )
+        is user
+    )
     store.upsert_identity.assert_not_awaited()

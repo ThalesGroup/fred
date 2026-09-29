@@ -692,7 +692,7 @@ async def _snapshot_local_identity(
         )
     except Exception:
         _IDENTITY_SNAPSHOT_DEADLINES.pop(user_id, None)
-        logger.warning("[AUTH] Local identity snapshot failed", exc_info=True)
+        logger.warning("[AUTH] Local identity snapshot failed")
 
 
 async def get_current_user(
