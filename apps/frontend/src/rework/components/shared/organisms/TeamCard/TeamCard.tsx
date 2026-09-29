@@ -77,6 +77,9 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               src={team.avatar_image_url}
               alt=""
               aria-hidden="true"
+              width={48}
+              height={48}
+              decoding="async"
             />
           ) : avatarFile ? (
             <img
@@ -85,6 +88,9 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
               src={`/images/${avatarFile}`}
               alt=""
               aria-hidden="true"
+              width={48}
+              height={48}
+              decoding="async"
             />
           ) : (
             <TeamInitials

@@ -162,9 +162,25 @@ export default function TeamContentNavbar() {
   const teamAvatar = isPersonalTeam ? (
     <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
   ) : selectedTeam?.avatar_image_url ? (
-    <img className={styles.teamPanelAvatar} src={selectedTeam.avatar_image_url} alt="" aria-hidden="true" />
+    <img
+      className={styles.teamPanelAvatar}
+      src={selectedTeam.avatar_image_url}
+      alt=""
+      aria-hidden="true"
+      width={28}
+      height={28}
+      decoding="async"
+    />
   ) : defaultTeamAvatarFile ? (
-    <img className={styles.teamPanelAvatar} src={`/images/${defaultTeamAvatarFile}`} alt="" aria-hidden="true" />
+    <img
+      className={styles.teamPanelAvatar}
+      src={`/images/${defaultTeamAvatarFile}`}
+      alt=""
+      aria-hidden="true"
+      width={28}
+      height={28}
+      decoding="async"
+    />
   ) : (
     <TeamInitials
       className={styles.teamPanelAvatar}
