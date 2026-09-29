@@ -1,12 +1,12 @@
 ## 1. Give the application back
 
-- [ ] 1.1 Close the dialog as soon as the selection is accepted, instead of awaiting every batch outcome.
-- [ ] 1.2 Keep the upload running after the dialog unmounts, and make sure its per-file outcomes still reach the panel.
-- [ ] 1.3 Test: confirming an import of 50 files returns control without a perceptible wait.
+- [x] 1.1 Close the dialog as soon as the selection is accepted, instead of awaiting every batch outcome. What must be settled first (quota, folders, the name question) stays awaited; the transfer does not.
+- [x] 1.2 Keep the upload running after the dialog unmounts, and make sure its per-file outcomes still reach the panel — `runImport` is detached and holds only the store and the toast provider, both of which outlive the dialog.
+- [x] 1.3 Test: confirming an import of 50 files returns control without a perceptible wait — the dialog is closed while the transfer is deliberately held open, every file still reaches the panel afterwards, and the folder refreshes only at the end.
 
 ## 2. Mount the panel
 
-- [ ] 2.1 Mount `TaskTray` in the main layout so it is reachable from every page.
+- [x] 2.1 Mount `TaskTray` in the main layout so it is reachable from every page — in the sidebar above the user profile, outside the per-mode panels. It also opens itself when an import hands off (`trayOpenRequested`), so the work is visible instead of hidden behind a collapsed trigger.
 - [ ] 2.2 Check what it renders for an import task today, and list what is missing for the two stages.
 - [ ] 2.3 Test: an import started on Resources stays visible after navigating away and after a reload.
 

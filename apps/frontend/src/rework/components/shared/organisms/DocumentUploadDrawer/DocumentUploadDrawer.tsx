@@ -39,7 +39,7 @@ import {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
-import { taskRegistered } from "../../../../features/tasks/taskSlice";
+import { taskRegistered, trayOpenRequested } from "../../../../features/tasks/taskSlice";
 import {
   MAX_FOLDER_DEPTH,
   displayPath,
@@ -502,40 +502,59 @@ export function DocumentUploadDrawer({
       return;
     }
 
+    const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
+    let skippedCount = 0;
+    for (const { requestMetadata, group } of groups.values()) {
+      const { toUpload, skipped } = splitByDecision(group, decisions);
+      skippedCount += skipped.length;
+      if (!toUpload.length) continue;
+      const decided = decisionsForGroup({ ...group, files: toUpload }, decisions);
+      const metadataWithDecisions = Object.keys(decided).length
+        ? { ...requestMetadata, conflict_decisions: decided }
+        : requestMetadata;
+      for (const batchFiles of chunkFilesByLeafName(toUpload, UPLOAD_BATCH_SIZE)) {
+        batches.push({ requestMetadata: metadataWithDecisions, files: batchFiles });
+      }
+    }
+
+    if (skippedCount) {
+      // A skipped file is never sent: the whole point of asking first is not
+      // to transfer bytes the answer makes useless.
+      showInfo?.({
+        summary: t("documentLibrary.uploadDrawerTitle"),
+        detail: t("documentLibrary.conflictSkippedSummary", { count: skippedCount }),
+      });
+    }
+
+    // Everything that had to be settled before sending is settled. Give the
+    // application back now: the transfer is the long part, and the panel is
+    // where it is followed from here. `runImport` deliberately runs detached —
+    // it holds no reference to this component, only to the store and the toast
+    // provider, both of which outlive the dialog.
+    setIsLoading(false);
+    handleClose();
+    dispatch(trayOpenRequested());
+    void runImport(batches);
+  };
+
+  /** Carry out an import after the dialog is gone.
+   *
+   * Every outcome reaches the panel through the store, so nothing here depends
+   * on the dialog still being mounted. Kept out of `handleSave` so that the
+   * part which must finish before the dialog closes, and the part which must
+   * not, cannot be confused for one another.
+   */
+  const runImport = async (batches: { requestMetadata: Record<string, unknown>; files: File[] }[]) => {
+    // Conflicts the server found at write time, after the drawer asked: a
+    // teammate took the name meanwhile. Reported together at the end rather
+    // than one notification per file, and as a question, not an error.
+    const lateConflicts: string[] = [];
+
     try {
-      const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
-      let skippedCount = 0;
-      for (const { requestMetadata, group } of groups.values()) {
-        const { toUpload, skipped } = splitByDecision(group, decisions);
-        skippedCount += skipped.length;
-        if (!toUpload.length) continue;
-        const decided = decisionsForGroup({ ...group, files: toUpload }, decisions);
-        const metadataWithDecisions = Object.keys(decided).length
-          ? { ...requestMetadata, conflict_decisions: decided }
-          : requestMetadata;
-        for (const batchFiles of chunkFilesByLeafName(toUpload, UPLOAD_BATCH_SIZE)) {
-          batches.push({ requestMetadata: metadataWithDecisions, files: batchFiles });
-        }
-      }
-
-      // Register each task the instant the server first reports its id (its own
-      // line in the stream), not after the whole batch finishes — so the tray
-      // lights up and starts its SSE subscription while the upload streams.
-      if (skippedCount) {
-        // A skipped file is never sent: the whole point of asking first is not
-        // to transfer bytes the answer makes useless.
-        showInfo?.({
-          summary: t("documentLibrary.uploadDrawerTitle"),
-          detail: t("documentLibrary.conflictSkippedSummary", { count: skippedCount }),
-        });
-      }
-
-      // Conflicts the server found at write time, after the drawer asked: a
-      // teammate took the name meanwhile. Reported together at the end rather
-      // than one notification per file, and as a question, not an error.
-      const lateConflicts: string[] = [];
-
       await runWithConcurrencyLimit(batches, UPLOAD_CONCURRENCY, (batch) =>
+        // Each task is registered the instant the server first reports its id
+        // (its own line in the stream), not after the whole batch finishes — so
+        // the panel lights up and starts its live updates while files transfer.
         scheduleFiles(
           batch.files,
           uploadMode,
@@ -553,7 +572,7 @@ export function DocumentUploadDrawer({
           (filename) => lateConflicts.push(filename),
         ),
       );
-
+    } finally {
       if (lateConflicts.length) {
         showInfo?.({
           summary: t("documentLibrary.uploadDrawerTitle"),
@@ -561,9 +580,6 @@ export function DocumentUploadDrawer({
         });
       }
       onUploadComplete?.();
-    } finally {
-      setIsLoading(false);
-      handleClose();
     }
   };
 

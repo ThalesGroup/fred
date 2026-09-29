@@ -21,6 +21,7 @@ import { Portal } from "../../utils/Portal";
 import { viewportHeight, viewportWidth } from "../../utils/viewport";
 import {
   EVICTION_DELAY_MS,
+  selectTrayOpenRequest,
   selectVisibleTasks,
   taskEvicted,
   trayClockTicked,
@@ -36,6 +37,7 @@ export function TaskTray() {
   const [panelPos, setPanelPos] = useState<{ bottom: number; left: number } | null>(null);
 
   const visibleTasks = useSelector(selectVisibleTasks);
+  const openRequest = useSelector(selectTrayOpenRequest);
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -44,16 +46,31 @@ export function TaskTray() {
   const close = useCallback(() => setIsOpen(false), []);
   useClickOutside(panelRef, close, triggerRef);
 
+  const anchorToTrigger = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    setPanelPos({
+      bottom: viewportHeight() - rect.top + 8,
+      left: Math.min(rect.left, viewportWidth() - 296),
+    });
+  }, []);
+
   const handleToggle = useCallback(() => {
-    if (!isOpen && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setPanelPos({
-        bottom: viewportHeight() - rect.top + 8,
-        left: Math.min(rect.left, viewportWidth() - 296),
-      });
-    }
+    if (!isOpen) anchorToTrigger();
     setIsOpen((v) => !v);
-  }, [isOpen]);
+  }, [isOpen, anchorToTrigger]);
+
+  // Someone handed work off and expects to watch it continue — an import whose
+  // dialog has just closed. Show the panel rather than leaving the work behind
+  // a collapsed trigger, which reads as nothing happening. Skips the first
+  // render: the counter starts at 0 and only a real request moves it.
+  const lastHandledRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === lastHandledRequest.current) return;
+    lastHandledRequest.current = openRequest;
+    anchorToTrigger();
+    setIsOpen(true);
+  }, [openRequest, anchorToTrigger]);
 
   // Age terminal tasks out of the tray. `selectVisibleTasks` filters by elapsed
   // wall-clock, which no store change reflects on its own, so without these timers a

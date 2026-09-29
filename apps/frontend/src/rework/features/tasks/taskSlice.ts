@@ -21,6 +21,8 @@ export interface TasksState {
   // tasks age out of the tray purely by elapsed wall-clock, which `byId` does not
   // reflect; this gives `selectVisibleTasks` an input to recompute on.
   tick?: number;
+  // Bumped when something asks the tray to show itself (see `trayOpenRequested`).
+  openRequest?: number;
 }
 
 // Local root-state shape — avoids circular import with store.tsx.
@@ -29,7 +31,7 @@ interface TasksRootState {
   tasks: TasksState;
 }
 
-const initialState: TasksState = { byId: {}, tick: 0 };
+const initialState: TasksState = { byId: {}, tick: 0, openRequest: 0 };
 
 export const EVICTION_DELAY_MS = 5 * 60 * 1000;
 
@@ -98,6 +100,19 @@ export const taskSlice = createSlice({
       delete state.byId[action.payload];
     },
 
+    /** Ask the tray to open itself.
+     *
+     *  For work the user has just handed off and expects to see continue
+     *  somewhere — an import, once its dialog closes. Without this the work
+     *  would carry on behind a collapsed trigger, which reads as nothing
+     *  happening: the very complaint that put the panel there.
+     *
+     *  A counter rather than a boolean, so a second import reopens a tray the
+     *  user closed in between, and so no one has to reset a flag. */
+    trayOpenRequested(state) {
+      state.openRequest = (state.openRequest ?? 0) + 1;
+    },
+
     /** Advance the tray clock so time-based selectors (`selectVisibleTasks`)
      *  recompute. Dispatched by a timer when a succeeded task crosses its
      *  eviction window — it must drop out of the floating tray without being
@@ -135,6 +150,7 @@ export const {
   taskEventReceived,
   taskEvicted,
   trayClockTicked,
+  trayOpenRequested,
   taskAcknowledged,
   completedTasksCleared,
 } = taskSlice.actions;
@@ -143,6 +159,9 @@ export const {
 
 const selectById = (state: TasksRootState) => state.tasks.byId;
 const selectTick = (state: TasksRootState) => state.tasks.tick;
+
+/** Bumped every time something asks the tray to open; the tray watches it. */
+export const selectTrayOpenRequest = (state: TasksRootState) => state.tasks.openRequest ?? 0;
 
 export const selectActiveTasks = createSelector(selectById, (byId) =>
   Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)),
