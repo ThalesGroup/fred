@@ -12,6 +12,7 @@
 # limitations under the License.
 
 app:
+  gcu_version: v1
   name: "Knowledge Flow Backend"
   base_url: "/knowledge-flow/v1"
   address: "127.0.0.1"
