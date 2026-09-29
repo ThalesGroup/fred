@@ -10,7 +10,7 @@ resource and no network access.
 See "JavaScript posture" below.
 
 Design: `docs/swift/rfc/HTML-ARTIFACT-CAPABILITY-RFC.md` (issue #2478), per-team
-gating in `openspec/specs/html-artifact-javascript-policy/spec.md` (issue #2798).
+gating in `openspec/specs/html-artifact-javascript-policy/spec.md`.
 
 ## What it ships
 

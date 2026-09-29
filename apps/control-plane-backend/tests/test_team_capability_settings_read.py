@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Reading a team's effective capability settings (#2798).
+"""Reading a team's effective capability settings.
 
 The store has always been readable; nothing exposed it. Two surfaces now do —
 the admin form seeding an already-enabled team, and a team's own members, who
