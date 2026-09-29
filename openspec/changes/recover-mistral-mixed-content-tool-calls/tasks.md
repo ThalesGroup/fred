@@ -12,4 +12,4 @@
 
 - [x] 3.1 Add targeted negative tests for a non-Mistral response, modified reference, invalid JSON/schema, ordinary text, and an existing native call; verify no accidental execution or duplicate call.
 - [x] 3.2 Reconcile the execution contract and this change with the final behavior, record the checkpoint evidence and trace limitation in the existing design/task artifacts, and verify `openspec validate recover-mistral-mixed-content-tool-calls --strict` passes.
-- [ ] 3.3 Run the root `make code-quality` once for the completed series, then push and open a draft PR linked to #2746; verify its checks and reviewable diff.
+- [x] 3.3 Run the root `make code-quality` once for the completed series, then push and open a draft PR linked to #2746; verify its checks and reviewable diff.
