@@ -163,6 +163,10 @@ class GcsContentStore:
         `storage.objects.get` on this bucket, and the caller's Workload
         Identity service account to hold `iam.serviceAccounts.signBlob` on it.
 
+        Unlike the MinIO store, the URL is not cacheable: the GCS V4 signer takes
+        no request timestamp, so every call stamps the current clock and mints a
+        different URL. Fixing that needs a different browser-facing URL strategy.
+
         Raises:
             RuntimeError: no `signing_service_account_email` was configured.
             FileNotFoundError: object does not exist.
