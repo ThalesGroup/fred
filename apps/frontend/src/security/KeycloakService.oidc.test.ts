@@ -26,16 +26,8 @@ const state = vi.hoisted(() => ({
   signoutRedirect: vi.fn(async () => {}),
   signoutRedirectCallback: vi.fn(async () => {}),
   removeUser: vi.fn(async () => {}),
-  keycloakConstructor: vi.fn(),
 }));
 
-vi.mock("keycloak-js", () => ({
-  default: class {
-    constructor(...args: unknown[]) {
-      state.keycloakConstructor(...args);
-    }
-  },
-}));
 vi.mock("oidc-client-ts", () => ({
   UserManager: class {
     events = { addAccessTokenExpiring: vi.fn(), addUserLoaded: vi.fn(), addUserUnloaded: vi.fn() };
@@ -65,7 +57,7 @@ function user(claims: Record<string, unknown>, seconds = 300) {
   };
 }
 
-const options = {
+const genericOptions = {
   provider: "oidc" as const,
   scope: "api://fred-api/access_as_user",
   uid_claim: "oid",
@@ -81,15 +73,16 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", { setItem: vi.fn(), getItem: vi.fn(), removeItem: vi.fn() });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   window.history.replaceState({}, "", "/");
 });
 
-describe("generic OIDC browser authentication", () => {
+describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provider) => {
+  const options = { ...genericOptions, provider };
   it("constructs a PKCE OIDC client with the API scope and no Keycloak realm parser", async () => {
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
     createKeycloakInstance("https://identity.example/tenant/v2.0/", "ui", options);
-    expect(state.keycloakConstructor).not.toHaveBeenCalled();
     expect(state.settings).toMatchObject({
       authority: "https://identity.example/tenant/v2.0",
       client_id: "ui",
@@ -97,7 +90,7 @@ describe("generic OIDC browser authentication", () => {
       disablePKCE: false,
       scope: "openid profile offline_access api://fred-api/access_as_user",
     });
-    expect(KeyCloakService.GetKeycloakRealmConfig()).toBeNull();
+    if (provider === "oidc") expect(KeyCloakService.GetKeycloakRealmConfig()).toBeNull();
   });
 
   it("uses the API access token and configured identity/roles after a login callback", async () => {
@@ -120,11 +113,11 @@ describe("generic OIDC browser authentication", () => {
   it("derives the same UUIDv5 as the Python validator for a non-UUID subject", async () => {
     state.user = user({ sub: uidVector.value, roles: ["reader"] });
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance(uidVector.issuer + "/", "ui", { provider: "oidc", roles_claim: ["roles"] });
+    createKeycloakInstance(uidVector.issuer + "/", "ui", { provider, roles_claim: ["roles"] });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
-    expect(KeyCloakService.GetUserId()).toBe(uidVector.expected_uuid);
+    expect(KeyCloakService.GetUserId()).toBe(provider === "oidc" ? uidVector.expected_uuid : uidVector.value);
     expect(KeyCloakService.GetUserRoles()).toEqual(["reader"]);
   });
 
@@ -132,7 +125,7 @@ describe("generic OIDC browser authentication", () => {
     const uid = "91E9B9D43EE34F8AAF9333C9C7BF52A0";
     state.user = user({ sub: uid });
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
@@ -143,7 +136,7 @@ describe("generic OIDC browser authentication", () => {
     const restored = user({ sub: "person", roles: ["viewer"] });
     state.user = restored;
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc", roles_claim: ["roles"] });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider, roles_claim: ["roles"] });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
@@ -153,7 +146,7 @@ describe("generic OIDC browser authentication", () => {
 
   it("redirects to the provider when no valid session exists", async () => {
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(state.signinRedirect).toHaveBeenCalledOnce());
@@ -166,21 +159,23 @@ describe("generic OIDC browser authentication", () => {
     state.user = original;
     state.signinSilent.mockResolvedValue(renewed);
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
     await expect(KeyCloakService.ensureFreshToken(30)).resolves.toBe(true);
     expect(state.signinSilent).toHaveBeenCalledOnce();
     expect(KeyCloakService.GetToken()).toBe(renewed.access_token);
-    expect(KeyCloakService.GetUserId()).toBe(v5("https://identity.example/tenant#person", v5.URL));
+    expect(KeyCloakService.GetUserId()).toBe(
+      provider === "oidc" ? v5("https://identity.example/tenant#person", v5.URL) : "person",
+    );
   });
 
   it("reads a nested roles claim from the access token", async () => {
     state.user = user({ sub: "person", access: { roles: ["admin"] } });
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
     createKeycloakInstance("https://identity.example/tenant", "ui", {
-      provider: "oidc",
+      provider,
       roles_claim: ["access", "roles"],
     });
     const authenticated = vi.fn();
@@ -192,7 +187,7 @@ describe("generic OIDC browser authentication", () => {
   it("processes the provider logout callback before attempting a new sign-in", async () => {
     window.history.replaceState({}, "", "/?state=logout-state");
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
     KeyCloakService.CallLogin(vi.fn());
     await vi.waitFor(() => expect(state.signinRedirect).toHaveBeenCalledOnce());
     expect(state.signoutRedirectCallback).toHaveBeenCalledOnce();
@@ -204,7 +199,7 @@ describe("generic OIDC browser authentication", () => {
     state.user = original;
     state.signinSilent.mockRejectedValue(new Error("provider unavailable"));
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
@@ -222,7 +217,7 @@ describe("generic OIDC browser authentication", () => {
         }),
     );
     const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
-    createKeycloakInstance("https://identity.example/tenant", "ui", { provider: "oidc" });
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
     const authenticated = vi.fn();
     KeyCloakService.CallLogin(authenticated);
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
@@ -233,5 +228,68 @@ describe("generic OIDC browser authentication", () => {
     await expect(refreshing).resolves.toBe(false);
     expect(KeyCloakService.GetToken()).toBeNull();
     expect(state.signoutRedirect).toHaveBeenCalledOnce();
+  });
+
+  it("preserves Keycloak realm configuration and default claims", async () => {
+    state.user = user({ sub: "91e9b9d4-3ee3-4f8a-af93-33c9c7bf52a0", resource_access: { app: { roles: ["reader"] } } });
+    const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
+    createKeycloakInstance("http://localhost:8080/realms/app", "app");
+    KeyCloakService.CallLogin(vi.fn());
+    await vi.waitFor(() => expect(KeyCloakService.GetToken()).not.toBeNull());
+    expect(KeyCloakService.GetKeycloakRealmConfig()).toEqual({
+      url: "http://localhost:8080/",
+      realm: "app",
+      clientId: "app",
+    });
+    expect(KeyCloakService.GetUserRoles()).toEqual(["reader"]);
+  });
+
+  it("bounds a hung refresh and never publishes its late response", async () => {
+    state.user = user({ sub: "person" }, 5);
+    let settle!: (value: any) => void;
+    state.signinSilent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
+    const authenticated = vi.fn();
+    KeyCloakService.CallLogin(authenticated);
+    await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
+    vi.useFakeTimers();
+    const refresh = KeyCloakService.ensureFreshToken(30);
+    await vi.advanceTimersByTimeAsync(8001);
+    await expect(refresh).resolves.toBe(false);
+    const oldToken = KeyCloakService.GetToken();
+    settle(user({ sub: "other" }, 300));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(KeyCloakService.GetToken()).toBe(oldToken);
+    vi.useRealTimers();
+  });
+
+  it("coalesces renewal while checking each caller's required headroom", async () => {
+    state.user = user({ sub: "person" }, 5);
+    let settle!: (value: any) => void;
+    state.signinSilent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
+    createKeycloakInstance("https://identity.example/tenant", "ui", { provider });
+    const authenticated = vi.fn();
+    KeyCloakService.CallLogin(authenticated);
+    await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
+    const strict = KeyCloakService.ensureFreshToken(120);
+    const ordinary = KeyCloakService.ensureFreshToken(30);
+    const forced = KeyCloakService.ensureFreshToken(0);
+    settle(user({ sub: "person" }, 60));
+    await expect(strict).resolves.toBe(false);
+    await expect(ordinary).resolves.toBe(true);
+    await expect(forced).resolves.toBe(true);
+    expect(state.signinSilent).toHaveBeenCalledOnce();
   });
 });

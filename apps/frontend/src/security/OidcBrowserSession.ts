@@ -44,9 +44,6 @@ export class OidcBrowserSession {
     this.manager.events.addAccessTokenExpiring(() => {
       void this.ensureFreshToken(60);
     });
-    this.manager.events.addUserLoaded((user) => {
-      if (!this.invalidated) this.user = user;
-    });
     this.manager.events.addUserUnloaded(() => {
       this.user = null;
     });
@@ -81,19 +78,27 @@ export class OidcBrowserSession {
   }
 
   async login(onAuthenticated: () => void): Promise<void> {
+    const generation = this.generation;
     const query = new URLSearchParams(window.location.search);
     if (query.has("state") && (query.has("code") || query.has("error"))) {
       if (window.self !== window.top) {
         await this.manager.signinSilentCallback();
         return;
       }
-      this.user = await this.manager.signinRedirectCallback();
+      const user = await this.manager.signinRedirectCallback();
+      if (generation !== this.generation || this.invalidated) {
+        await this.manager.removeUser();
+        return;
+      }
+      this.user = user;
       window.history.replaceState({}, "", this.redirectUri);
     } else if (query.has("state")) {
       await this.manager.signoutRedirectCallback();
       window.history.replaceState({}, "", this.redirectUri);
     }
-    this.user ??= await this.manager.getUser();
+    const restored = this.user ?? (await this.manager.getUser());
+    if (generation !== this.generation || this.invalidated) return;
+    this.user = restored;
     if (this.user?.expired && this.user.refresh_token) {
       await this.ensureFreshToken(0);
     }
@@ -127,9 +132,18 @@ export class OidcBrowserSession {
     const generation = this.generation;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const refresh = Promise.race([
-      this.manager.signinSilent(),
+      this.manager.signinSilent().then((user) => {
+        if (this.invalidated || generation !== this.generation) {
+          void this.manager.removeUser();
+          return null;
+        }
+        return user;
+      }),
       new Promise<null>((resolve) => {
-        timeout = setTimeout(() => resolve(null), REFRESH_TIMEOUT_MS);
+        timeout = setTimeout(() => {
+          this.generation += 1;
+          resolve(null);
+        }, REFRESH_TIMEOUT_MS);
       }),
     ])
       .then((user) => {
@@ -139,7 +153,7 @@ export class OidcBrowserSession {
         }
         if (!user) return false;
         this.user = user;
-        return minValidity <= 0 || (user.expires_in ?? 0) > minValidity;
+        return true;
       })
       .catch(() => false)
       .finally(() => {
@@ -147,6 +161,7 @@ export class OidcBrowserSession {
         if (this.refreshInFlight === refresh) this.refreshInFlight = null;
       });
     this.refreshInFlight = refresh;
-    return refresh;
+    const refreshed = await refresh;
+    return refreshed && (minValidity <= 0 || (this.user?.expires_in ?? 0) > minValidity);
   }
 }
