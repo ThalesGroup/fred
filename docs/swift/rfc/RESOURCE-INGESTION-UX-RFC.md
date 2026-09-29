@@ -64,6 +64,20 @@ an explicit question.
   and its content is replaced, so existing links, citations and agent answers
   keep resolving and point at the new content. Re-extraction and re-indexing
   follow, as for any content change.
+
+  This has to be done deliberately. `_generate_file_unique_id` returns a random
+  UUID per ingestion, so nothing reuses an existing uid by default. It used to
+  be derived from name and folder, and was changed precisely because "later
+  ingests overwrite earlier versions" (`base_input_processor.py:61-67`). This
+  RFC does not revert that: a deterministic uid overwrote silently, whereas here
+  an overwrite only ever happens because the user asked for it on a named file.
+
+- **Conflicts are scoped to the destination folder**, matching how users reason
+  about their documents. The consequence is accepted rather than hidden: the
+  same file imported into two folders becomes two independent documents, charged
+  twice against the team quota and analysed twice. That is often legitimate, so
+  it must not raise a second blocking prompt — a non-blocking mention ("this
+  file already exists in another folder") is enough.
 - **The server re-checks at write time.** The pre-check is an optimisation, not
   a guarantee: a teammate may add the same name in between. A conflict found at
   write time returns that file to the panel as a conflict to resolve, rather
@@ -161,8 +175,8 @@ already carry team activity.
 ## 5. Impact on existing contracts
 
 - `fred_core.documents.document_structures.Identity`: `canonical_name` and
-  `version` become unused by ingestion. Removal versus deprecation is open
-  (§7.1).
+  `version` are removed, and the generated frontend client is regenerated in
+  the same change (§7).
 - Knowledge Flow ingestion API: a new name-check endpoint for the destination
   folder, and a per-file decision carried on the upload request.
 - `MetadataService._promote_alternate_version` disappears with the mechanism it
@@ -187,23 +201,28 @@ already carry team activity.
 
 ## 7. Open questions
 
-1. **Are `canonical_name` and `version` removed or deprecated?** Removal is
-   cleaner and matches the consolidation phase; keeping them leaves a stale
-   field in a shared contract. Check for external consumers first.
-2. **What does overwrite do to an in-flight ingestion of the same document?**
+Two earlier questions are now settled (2026-09-29).
+
+**`canonical_name` and `version` are removed, not deprecated.** They are confined
+to `ingestion_service.py`, `metadata/service.py` and `document_structures.py`,
+and no capability, CLI or export path consumes them. They are exposed in the
+generated frontend client (`knowledgeFlowOpenApi.ts:2940-2942`), so that client
+must be regenerated in the same change.
+
+**The conflict check stays scoped to the destination folder**, with the
+cross-folder consequence recorded in §3.1.
+
+Still open:
+
+1. **What does overwrite do to an in-flight ingestion of the same document?**
    Cancelling the running workflow is likely correct, but it depends on the
    cancellation capability referenced in §6 and on the reconciliation rules
    OPS-04 describes.
-3. **How long do finished entries stay in the panel?** `TaskTray` already
+2. **How long do finished entries stay in the panel?** `TaskTray` already
    evicts on a timer; whether import entries should persist across a reload
    until dismissed needs confirming against OPS-04's acknowledgement model.
-4. **Is the conflict check scoped to the destination folder only?** That is
-   today's scope and the assumption here. It should be confirmed as the
-   intended product rule rather than inherited by accident.
-
 ## 8. Next step
 
 Sign-off on §3, then split into OpenSpec changes — conflict resolution, the
-import panel, and the data migration — each linking its own GitHub issue. §7.1
-and §7.4 should be settled before the first slice is scoped; §7.2 and §7.3 can
-be settled inside their slice.
+import panel, and the data migration — each linking its own GitHub issue. Both
+remaining questions in §7 can be settled inside the slice that hits them.
