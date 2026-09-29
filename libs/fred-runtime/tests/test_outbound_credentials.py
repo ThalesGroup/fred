@@ -559,7 +559,6 @@ def test_workload_oidc_endpoint_and_scope_reach_token_provider(
     assert runtime._token_provider.cfg.token_url == "https://identity.example/token"  # noqa: SLF001
 
 
-
 def test_no_security_configuration_at_all_is_an_inert_runtime():
     assert (
         build_delegation_runtime(None, user_authentication_enabled=False).enabled

@@ -28,8 +28,8 @@ from fred_core import (
     RebacEngine,
     get_current_user,
 )
-from fred_core.security.oidc import get_current_user_before_gcu
 from fred_core.common import personal_team_id
+from fred_core.security.oidc import get_current_user_before_gcu
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 

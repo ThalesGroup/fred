@@ -92,7 +92,6 @@ def test_service_token_provider_uses_oidc_endpoint_and_scope(
     assert provider.cfg.token_url == "https://identity.example/token"
 
 
-
 @pytest.mark.asyncio
 async def test_get_service_bearer_formats_bearer(
     monkeypatch: pytest.MonkeyPatch,
