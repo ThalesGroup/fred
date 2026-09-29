@@ -401,8 +401,8 @@ async def delete_user(
     if user_id == "*" or "#" in user_id:
         raise UserNotFoundError(user_id)
     if deps.configuration.security.user_directory == "local":
-        if rebac.enforces_standing:
-            await rebac.remove_user_standing(user_id)
+        if rebac.requires_active_accounts:
+            await rebac.suspend_account(user_id)
         return
 
     admin = _get_keycloak_admin_for_user_operations(deps)
