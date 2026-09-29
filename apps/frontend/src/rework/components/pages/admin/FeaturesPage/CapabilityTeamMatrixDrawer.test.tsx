@@ -383,3 +383,60 @@ describe("CapabilityTeamMatrixDrawer active-option dot", () => {
     expect(html).not.toContain(ACTIVE_ARIA);
   });
 });
+
+describe("CapabilityTeamMatrixDrawer personal-class settings", () => {
+  const JS_FIELD = {
+    key: "allow_javascript",
+    type: "boolean" as const,
+    title: "cap.html_artifact.teamSettings.allow_javascript.title",
+    default: false,
+  };
+
+  const PERSONAL_LABEL = "rework.admin.capabilities.matrix.personal.label";
+  const OPTIONS_ARIA = `rework.admin.capabilities.matrix.editSettingsAria:${PERSONAL_LABEL}`;
+  const ACTIVE_ARIA = `rework.admin.capabilities.matrix.editSettingsActiveAria:${PERSONAL_LABEL}`;
+
+  const rows = (html: string) => html.split("<li ").slice(1);
+  const personalRow = (html: string) => rows(html).find((row) => row.includes("_personalRow_")) ?? "";
+
+  const renderPersonal = (over: Partial<CapabilityEnablementItem> = {}) =>
+    render({
+      capability: capability({ kind: "agent", team_settings_fields: [JS_FIELD], ...over }),
+      teams: [team("t1", "Alpha")],
+    });
+
+  afterEach(() => {
+    settingsMapData = undefined;
+  });
+
+  it("offers one options control for the whole personal class", () => {
+    // Personal access is granted as a class, so its options are one decision:
+    // there is no per-space row to carry a second one.
+    const html = renderPersonal({ personal_scope: "enabled" });
+
+    expect(personalRow(html)).toContain(OPTIONS_ARIA);
+  });
+
+  it("offers it when the class merely inherits a default-on capability", () => {
+    const html = renderPersonal({ personal_scope: "default", default_on: true });
+
+    expect(personalRow(html)).toContain(OPTIONS_ARIA);
+  });
+
+  it("offers nothing while the class does not have the capability", () => {
+    const html = renderPersonal({ personal_scope: "default", default_on: false });
+
+    expect(personalRow(html)).not.toContain(OPTIONS_ARIA);
+  });
+
+  it("marks the class from the shared record, not from any one space", () => {
+    settingsMapData = {
+      capability_id: "web_search",
+      by_team: { __personal_scope__: { allow_javascript: true } },
+    };
+
+    const html = renderPersonal({ personal_scope: "enabled" });
+
+    expect(personalRow(html)).toContain(ACTIVE_ARIA);
+  });
+});

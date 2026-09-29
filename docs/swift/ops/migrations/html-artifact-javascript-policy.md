@@ -36,7 +36,9 @@ decision, not an upgrade step. It is optional, and it is what makes this note
 `minor` rather than `none`.
 
 To grant it: administration → the capability's team matrix → the team's
-settings → enable **Allow JavaScript**. The decision is read at display time,
+settings → enable **Allow JavaScript**. The pinned **All personal spaces** row
+carries the same control for every personal space at once. The decision is read
+at display time,
 so revoking it immediately renders already-generated interactive artifacts
 inert, including those in conversation history.
 
@@ -65,5 +67,6 @@ for this capability.
 
 ## Limitations
 
-Personal spaces cannot be granted the setting: the personal scope has no
-settings form, so they stay restricted.
+Personal spaces are governed as one class: granting the option turns it on for
+every personal space at once, and there is no way to grant it to one person
+only. This mirrors how personal access itself is granted.

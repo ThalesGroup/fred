@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from fred_core.common import TeamId
+from fred_core.common import TeamId, is_personal_team_id
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -30,6 +30,23 @@ from control_plane_backend.models.capability_settings_models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Every personal space shares ONE settings record, stored under this reserved
+# id. Personal access is granted as a class — a single org-level tuple covering
+# all of them — so its options are one platform-wide decision too, never a
+# per-user one. Not a team id and never mistakable for one: a real personal
+# space is `personal-<uuid>`.
+PERSONAL_SCOPE_SETTINGS_ID = TeamId("__personal_scope__")
+
+
+def settings_scope_id(team_id: TeamId) -> TeamId:
+    """The id `team_id`'s capability settings are stored under.
+
+    Identity for an ordinary team; the shared class record for every personal
+    space, so reading and writing one reads and writes them all.
+    """
+
+    return PERSONAL_SCOPE_SETTINGS_ID if is_personal_team_id(team_id) else team_id
 
 
 @dataclass(frozen=True)

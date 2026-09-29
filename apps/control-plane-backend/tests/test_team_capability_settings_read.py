@@ -32,7 +32,10 @@ import pytest
 from conftest import no_knowledge_base_store
 from control_plane_backend.capabilities import service as capability_service
 from control_plane_backend.capabilities.service import _effective_team_settings
-from control_plane_backend.capabilities.settings_store import TeamCapabilitySettings
+from control_plane_backend.capabilities.settings_store import (
+    PERSONAL_SCOPE_SETTINGS_ID,
+    TeamCapabilitySettings,
+)
 from control_plane_backend.product import service as product_service
 from control_plane_backend.product.service import PodModelCatalog
 from fred_sdk.contracts.capability import CapabilityCatalogEntry
@@ -157,7 +160,10 @@ def test_stored_false_is_not_mistaken_for_absent():
 def test_undeclared_stored_key_is_dropped():
     """A row left by an older manifest cannot leak a field that no longer exists."""
 
-    stored = {"allow_javascript": True, "retired_secret": "s3cret"}  # pragma: allowlist secret
+    stored = {
+        "allow_javascript": True,
+        "retired_secret": "s3cret",  # pragma: allowlist secret
+    }
 
     assert _effective_team_settings(_entry(), stored) == {"allow_javascript": True}
 
@@ -440,3 +446,94 @@ def _noop_gate():
     from unittest.mock import AsyncMock
 
     return AsyncMock(return_value=None)
+
+
+# --- personal spaces share ONE record ---
+#
+# Personal access is granted as a class: a single org-level tuple covering
+# every personal space. Its options follow the same rule — one platform-wide
+# decision, never a per-user one.
+
+
+@pytest.mark.asyncio
+async def test_a_personal_space_reads_the_shared_class_record(_pod_catalog):
+    _pod_catalog.append(_entry())
+    store = _SettingsStore({"allow_javascript": True})
+
+    view = await capability_service.read_team_capability_settings(
+        capability_id=CAPABILITY_ID,
+        team_id="personal-alice",
+        deps=_deps(store, _entry()),
+    )
+
+    assert store.seen == [(PERSONAL_SCOPE_SETTINGS_ID, CAPABILITY_ID)]
+    assert view.team_id == PERSONAL_SCOPE_SETTINGS_ID
+    assert view.settings == {"allow_javascript": True}
+
+
+@pytest.mark.asyncio
+async def test_two_personal_spaces_cannot_diverge(_pod_catalog):
+    """The read every personal space makes is byte-for-byte the same one."""
+
+    _pod_catalog.append(_entry())
+    store = _SettingsStore({"allow_javascript": True})
+
+    for uid in ("personal-alice", "personal-bob"):
+        view = await capability_service.read_team_capability_settings(
+            capability_id=CAPABILITY_ID,
+            team_id=uid,
+            deps=_deps(store, _entry()),
+        )
+        assert view.settings == {"allow_javascript": True}
+
+    assert store.seen == [(PERSONAL_SCOPE_SETTINGS_ID, CAPABILITY_ID)] * 2
+
+
+@pytest.mark.asyncio
+async def test_a_write_addressed_to_one_personal_space_lands_on_the_class(
+    _pod_catalog, monkeypatch
+):
+    """Enforced in the service, not only in the admin form.
+
+    A write naming a single personal space must not be able to give that one
+    user a posture the others do not have.
+    """
+
+    _pod_catalog.append(_entry())
+    store = _SettingsStore(None)
+    monkeypatch.setattr(
+        capability_service, "require_can_manage_capability", _noop_gate()
+    )
+
+    view = await capability_service.write_team_capability_settings(
+        user=_user(),
+        capability_id=CAPABILITY_ID,
+        team_id="personal-alice",
+        settings={"allow_javascript": True},
+        deps=_deps(store, _entry()),
+    )
+
+    assert store.upserts == [
+        (PERSONAL_SCOPE_SETTINGS_ID, CAPABILITY_ID, {"allow_javascript": True}, "u-1")
+    ]
+    assert view.team_id == PERSONAL_SCOPE_SETTINGS_ID
+
+
+@pytest.mark.asyncio
+async def test_an_ordinary_team_is_untouched_by_the_class_mapping(_pod_catalog):
+    """A team id is a Keycloak group id, so it never wears the personal prefix.
+
+    The mapping keys off `is_personal_team_id`, the platform-wide predicate —
+    it is not a second, looser rule invented here.
+    """
+
+    _pod_catalog.append(_entry())
+    store = _SettingsStore(None)
+
+    await capability_service.read_team_capability_settings(
+        capability_id=CAPABILITY_ID,
+        team_id="7f3c1a92-0b44-4d21-9e88-2c5a7e11b430",
+        deps=_deps(store, _entry()),
+    )
+
+    assert store.seen == [("7f3c1a92-0b44-4d21-9e88-2c5a7e11b430", CAPABILITY_ID)]

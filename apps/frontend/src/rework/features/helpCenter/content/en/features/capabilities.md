@@ -114,7 +114,9 @@ preview beside the conversation. The preview downloads as HTML, PDF or an image.
 
 **Interactive pages are granted team by team.** Tabs, accordions, animations and
 charts that react to a click need JavaScript, and a platform administrator decides
-which teams may run it. Without it your agents still produce pages — they are
+which teams may run it. Personal spaces are decided in one go: the permission is
+either on for everyone's personal space or off for all of them. Without it your
+agents still produce pages — they are
 simply static, and the agent lays the content out so it reads without interaction.
 If a page you produced earlier was interactive and no longer reacts, that
 permission has been withdrawn from your team; the preview says so above the page.

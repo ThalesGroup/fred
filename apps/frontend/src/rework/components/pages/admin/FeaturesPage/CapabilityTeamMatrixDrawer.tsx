@@ -259,7 +259,10 @@ export function CapabilityTeamMatrixDrawer({
   });
 
   // Toasts name the team; ids are opaque (Keycloak group ids), so resolve.
-  const teamLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
+  const teamLabel = (teamId: string) =>
+    teamId === PERSONAL_SCOPE_ROW_ID
+      ? t("rework.admin.capabilities.matrix.personal.label")
+      : (teams.find((team) => team.id === teamId)?.name ?? teamId);
 
   const [loadStoredSettings] = useLazyAdminTeamCapabilitySettingsQuery();
 
@@ -644,6 +647,14 @@ export function CapabilityTeamMatrixDrawer({
                         // team settings still hard-block, because this synthetic
                         // class row has no form to fill them in with.
                         const enableBlocked = displayChoice !== "enabled" && requiresSettings;
+                        // One record for the whole class: personal access is
+                        // granted as a class, so its options are one decision
+                        // too, never per user. The form shows once the class
+                        // actually has the capability — explicitly, or by
+                        // inheriting the platform default.
+                        const personalOn =
+                          displayChoice === "enabled" || (displayChoice === "default" && !!capability?.default_on);
+                        const isEditingPersonal = editingTeamId === PERSONAL_SCOPE_ROW_ID;
                         return (
                           <li
                             key={PERSONAL_SCOPE_ROW_ID}
@@ -665,6 +676,24 @@ export function CapabilityTeamMatrixDrawer({
                             </div>
                             <div className={styles.teamActions}>
                               {isPending && <span className={styles.spinner} aria-hidden="true" />}
+                              {hasSettings && personalOn && !isEditingPersonal && (
+                                <Tooltip text={t("rework.admin.capabilities.matrix.editSettings")}>
+                                  <IconButton
+                                    variant="icon"
+                                    size="medium"
+                                    icon={{ category: "outlined", type: "tune" }}
+                                    onClick={() => void openSettingsForm(PERSONAL_SCOPE_ROW_ID, true)}
+                                    disabled={busy}
+                                    badgeDot={hasActiveOption(PERSONAL_SCOPE_ROW_ID)}
+                                    aria-label={t(
+                                      hasActiveOption(PERSONAL_SCOPE_ROW_ID)
+                                        ? "rework.admin.capabilities.matrix.editSettingsActiveAria"
+                                        : "rework.admin.capabilities.matrix.editSettingsAria",
+                                      { team: personalLabel },
+                                    )}
+                                  />
+                                </Tooltip>
+                              )}
                               <ButtonGroup
                                 size="small"
                                 color="secondary"
@@ -680,6 +709,41 @@ export function CapabilityTeamMatrixDrawer({
                                 }))}
                               />
                             </div>
+                            {isEditingPersonal && (
+                              <form
+                                className={styles.settingsForm}
+                                onSubmit={(e) => {
+                                  e.preventDefault();
+                                  // Always settings-only: the class tri-state is
+                                  // the ButtonGroup's job, and this form must not
+                                  // move it.
+                                  void submitSettingsOnly(PERSONAL_SCOPE_ROW_ID, formValues);
+                                }}
+                              >
+                                {fields.map((field) => (
+                                  <TuningFieldRenderer
+                                    key={field.key}
+                                    field={field as ManagedAgentFieldSpec}
+                                    value={formValues[field.key]}
+                                    onChange={(key, value) => setFormValues((prev) => ({ ...prev, [key]: value }))}
+                                    disabled={busy}
+                                  />
+                                ))}
+                                <div className={styles.settingsActions}>
+                                  <Button
+                                    color="on-surface"
+                                    variant="text"
+                                    size="small"
+                                    onClick={() => setEditingTeamId(null)}
+                                  >
+                                    {t("rework.admin.capabilities.matrix.cancel")}
+                                  </Button>
+                                  <Button color="primary" variant="filled" size="small" type="submit" disabled={busy}>
+                                    {t("rework.admin.capabilities.matrix.saveEnable")}
+                                  </Button>
+                                </div>
+                              </form>
+                            )}
                           </li>
                         );
                       })()}

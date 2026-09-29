@@ -88,6 +88,7 @@ from control_plane_backend.capabilities.schemas import (
     TeamCapabilityEnablementResult,
     TeamCapabilitySettingsView,
 )
+from control_plane_backend.capabilities.settings_store import settings_scope_id
 from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
@@ -560,15 +561,16 @@ async def read_team_capability_settings(
 
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
+    scope_id = settings_scope_id(team_id)
     stored = None
     if not is_projected_product_object(entry):
         record = await deps.get_team_capability_settings_store().get(
-            team_id=team_id, capability_id=capability_id
+            team_id=scope_id, capability_id=capability_id
         )
         stored = record.settings if record is not None else None
     return TeamCapabilitySettingsView(
         capability_id=capability_id,
-        team_id=str(team_id),
+        team_id=str(scope_id),
         settings=_effective_team_settings(entry, stored),
     )
 
@@ -629,7 +631,7 @@ async def write_team_capability_settings(
         raise CapabilityNotFound(
             f"Capability {capability_id!r} has no per-team settings."
         )
-    team_id = _canonical_team_id_for_entry(user, entry, team_id)
+    team_id = settings_scope_id(_canonical_team_id_for_entry(user, entry, team_id))
     validated = validate_team_settings(entry.team_settings_fields, settings)
     await deps.get_team_capability_settings_store().upsert(
         team_id=team_id,

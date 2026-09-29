@@ -155,3 +155,37 @@ re-enable the capability for that team.
 - **WHEN** an administrator disables the capability for a team and later
   re-enables it
 - **THEN** the JavaScript option returns to the value it had before the disable
+
+### Requirement: Personal spaces are governed as one class, never per user
+
+Personal spaces SHALL be able to run JavaScript, and the decision SHALL apply
+to all of them at once: the platform SHALL hold ONE setting for the whole
+class, with no way to give one person a posture another does not have.
+
+This follows how personal access itself is granted — a single org-level tuple
+covering every personal space — so the option is a platform-wide decision, not
+a per-user one. It SHALL be enforced where the setting is read and written, not
+only in the administration screen.
+
+#### Scenario: One control for the whole class
+
+- **WHEN** an administrator opens the settings of the personal-space class row
+- **THEN** one JavaScript option is shown for every personal space at once
+- **AND** no per-space row offers a second one
+
+#### Scenario: Every personal space reads the same answer
+
+- **GIVEN** the class has been granted the JavaScript option
+- **WHEN** two different people open an artifact in their own personal space
+- **THEN** both are told script is allowed
+
+#### Scenario: A write naming one space governs them all
+
+- **WHEN** the setting is written for a single personal space
+- **THEN** it is stored on the shared class record
+- **AND** every other personal space reads the new value
+
+#### Scenario: An ordinary team is unaffected
+
+- **WHEN** the setting is read for an ordinary team
+- **THEN** that team's own record answers, not the personal class record

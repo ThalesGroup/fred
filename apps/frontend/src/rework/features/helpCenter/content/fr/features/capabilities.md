@@ -121,7 +121,9 @@ PDF ou image.
 
 **Les pages interactives s'autorisent équipe par équipe.** Les onglets, accordéons,
 animations et graphiques qui réagissent au clic reposent sur du JavaScript, et un
-administrateur de la plateforme décide quelles équipes peuvent l'exécuter. Sans
+administrateur de la plateforme décide quelles équipes peuvent l'exécuter. Les
+espaces personnels se décident d'un bloc : l'autorisation est active pour
+l'espace personnel de tout le monde, ou pour aucun. Sans
 cette autorisation, vos agents produisent toujours des pages : elles sont
 simplement statiques, et l'agent organise le contenu pour qu'il se lise sans
 interaction. Si une page que vous aviez produite était interactive et ne réagit
