@@ -854,7 +854,6 @@ def test_pod_m2m_uses_oidc_endpoint_and_scope(
     resolve_endpoints.cache_clear()
 
 
-
 def test_a_missing_configuration_file_is_its_own_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
