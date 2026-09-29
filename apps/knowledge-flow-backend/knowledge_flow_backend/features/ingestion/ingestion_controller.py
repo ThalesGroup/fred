@@ -823,7 +823,7 @@ class IngestionController:
                 )
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
-                self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                await asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input")
 
                 if scheduler_task_service is None:
                     yield (
@@ -1030,7 +1030,7 @@ class IngestionController:
                             profile=profile,
                         )
                         output_temp_dir = input_temp_file.parent.parent
-                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                        await asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input")
                         await self.service.save_metadata(user, metadata=metadata)
                         yield self._progress_event(
                             step=current_step,
