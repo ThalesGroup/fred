@@ -29,6 +29,25 @@ Les formats courants passent : PDF, texte, Word, OpenDocument, PowerPoint,
 Excel, CSV, Markdown, images et fichiers audio. Un format inhabituel peut être
 refusé ; convertissez-le dans un format courant.
 
+## Un document du même nom existe déjà
+
+Si un document porte déjà le même nom dans la bibliothèque visée, Fred vous le
+dit **avant** d'envoyer quoi que ce soit, et vous laisse choisir :
+
+- **Remplacer** : le document existant garde sa place et ses liens, seul son
+  contenu change. Tout ce qui le citait continue de fonctionner et renvoie
+  désormais vers la nouvelle version.
+- **Conserver** : votre fichier n'est pas déposé, le document déjà présent ne
+  bouge pas.
+
+Vous pouvez répondre en une fois pour tous les fichiers concernés, ou fichier
+par fichier. Le même nom dans une **autre** bibliothèque n'est pas un doublon :
+ce sont deux documents indépendants.
+
+> Si quelqu'un d'autre dépose ce nom pendant votre import, Fred ne tranche pas
+> à votre place : le fichier n'est pas déposé et vous êtes prévenu. Réimportez-le
+> pour choisir.
+
 ## Après le dépôt
 
 Un document a besoin d'un court moment de **préparation** avant d'être

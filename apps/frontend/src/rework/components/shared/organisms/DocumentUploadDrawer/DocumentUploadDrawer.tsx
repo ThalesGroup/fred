@@ -32,7 +32,9 @@ import {
 } from "../../../../../slices/streamDocumentUpload";
 import {
   IngestionProcessingProfile,
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation,
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
+  type ImportNameConflicts,
   type QuotaPrecheckResponse,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -45,6 +47,16 @@ import {
   folderPathDepth,
   relativeDirSegments,
 } from "./droppedPaths";
+import {
+  conflictKey,
+  conflictsToAsk,
+  decisionsForGroup,
+  destinationsToCheck,
+  splitByDecision,
+  type ConflictDecision,
+  type ImportConflict,
+  type UploadGroup,
+} from "./importConflicts";
 import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
@@ -86,6 +98,7 @@ export function scheduleFiles(
   requestMetadata: Record<string, unknown>,
   onDiscovered: (task: ScheduledTask) => void,
   onBackgroundError: (message: string) => void,
+  onConflicted?: (filename: string) => void,
 ): Promise<void> {
   return new Promise<void>((resolve) => {
     let settled = false;
@@ -113,6 +126,10 @@ export function scheduleFiles(
         markDone(filename);
       },
       markDone,
+      (filename) => {
+        onConflicted?.(filename);
+        markDone(filename);
+      },
     )
       .then(() => settle())
       .catch((err) => {
@@ -196,7 +213,7 @@ export function DocumentUploadDrawer({
   requireFolderPerFile,
 }: DocumentUploadDrawerProps) {
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showInfo } = useToast();
 
   const dispatch = useDispatch();
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
@@ -278,6 +295,49 @@ export function DocumentUploadDrawer({
   const [quotaDenial, setQuotaDenial] = useState<QuotaPrecheckResponse | null>(null);
   const [quotaPrecheck] = useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation();
   useEffect(() => setQuotaDenial(null), [files]);
+
+  // Names the destination folder already holds. Asked once, on Save, before
+  // any byte leaves: until every one has an answer, nothing is sent. Editing
+  // the list drops the answers with it — they were about that selection.
+  const [conflicts, setConflicts] = useState<ImportConflict[]>([]);
+  const [decisions, setDecisions] = useState<Map<string, ConflictDecision>>(new Map());
+  const [checkNames] = useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation();
+  useEffect(() => {
+    setConflicts([]);
+    setDecisions(new Map());
+  }, [files]);
+
+  const unansweredCount = conflicts.filter(
+    (conflict) => !decisions.has(conflictKey(conflict.tagId, conflict.name)),
+  ).length;
+
+  const decideOne = (conflict: ImportConflict, decision: ConflictDecision) =>
+    setDecisions((prev) => new Map(prev).set(conflictKey(conflict.tagId, conflict.name), decision));
+
+  const decideAll = (decision: ConflictDecision) =>
+    setDecisions((prev) => {
+      const next = new Map(prev);
+      for (const conflict of conflicts) next.set(conflictKey(conflict.tagId, conflict.name), decision);
+      return next;
+    });
+
+  /** Which of these files the destination folders already hold and the user
+   * has not answered about yet. Advisory: a transport failure returns nothing
+   * to ask, because the upload re-checks and reports what it finds — the
+   * import must not be blocked by a check that only exists to save a transfer. */
+  const askAboutConflicts = async (groups: UploadGroup[]): Promise<ImportConflict[]> => {
+    const destinations = destinationsToCheck(groups);
+    if (!destinations.length) return [];
+    let answer: ImportNameConflicts[] = [];
+    try {
+      answer = (await checkNames({ importNameCheckRequest: { destinations } }).unwrap()).conflicts ?? [];
+    } catch {
+      return [];
+    }
+    return conflictsToAsk(groups, answer, displayPath).filter(
+      (conflict) => !decisions.has(conflictKey(conflict.tagId, conflict.name)),
+    );
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     // Keyboard-accessible: the dropzone root becomes focusable (tabIndex) and
@@ -374,34 +434,68 @@ export function DocumentUploadDrawer({
         return;
       }
     }
-    try {
-      // Group files that share the same destination tags into batches (same
-      // request metadata => one request can carry several files, see
-      // scheduleFiles' doc comment), then run those batches through a bounded
-      // pool rather than firing one request per file unbounded.
-      const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-      const groups = new Map<string, { requestMetadata: Record<string, unknown>; files: File[] }>();
-      for (const file of files) {
-        // A file inside a dropped subdirectory attaches to that subdirectory's
-        // tag instead of the destination folder's (`base` keeps the latter).
-        const dirTagId = tagIdByDir.get(dirKeyByFile.get(file)!);
-        const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
-        const groupKey = dirTagId ?? "";
-        const group = groups.get(groupKey);
-        if (group) group.files.push(file);
-        else groups.set(groupKey, { requestMetadata, files: [file] });
-      }
+    // Group files that share the same destination tags into batches (same
+    // request metadata => one request can carry several files, see
+    // scheduleFiles' doc comment), then run those batches through a bounded
+    // pool rather than firing one request per file unbounded.
+    const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
+    const destinationTag = ((metadata?.tags as string[] | undefined) ?? [])[0] ?? null;
+    const groups = new Map<string, { requestMetadata: Record<string, unknown>; group: UploadGroup }>();
+    for (const file of files) {
+      // A file inside a dropped subdirectory attaches to that subdirectory's
+      // tag instead of the destination folder's (`base` keeps the latter).
+      const dirTagId = tagIdByDir.get(dirKeyByFile.get(file)!);
+      const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
+      const groupKey = dirTagId ?? "";
+      const existing = groups.get(groupKey);
+      if (existing) existing.group.files.push(file);
+      else groups.set(groupKey, { requestMetadata, group: { tagId: dirTagId ?? destinationTag, files: [file] } });
+    }
 
+    // Ask about the names before sending any byte, and outside the block below
+    // whose `finally` closes the drawer: an unanswered conflict must leave it
+    // open on the question, since resolving it either way would be resolving
+    // it for the user.
+    const unanswered = await askAboutConflicts(Array.from(groups.values(), (entry) => entry.group));
+    if (unanswered.length) {
+      setConflicts(unanswered);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
       const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
-      for (const group of groups.values()) {
-        for (const batchFiles of chunkFilesByLeafName(group.files, UPLOAD_BATCH_SIZE)) {
-          batches.push({ requestMetadata: group.requestMetadata, files: batchFiles });
+      let keptCount = 0;
+      for (const { requestMetadata, group } of groups.values()) {
+        const { toUpload, kept } = splitByDecision(group, decisions);
+        keptCount += kept.length;
+        if (!toUpload.length) continue;
+        const decided = decisionsForGroup({ ...group, files: toUpload }, decisions);
+        const metadataWithDecisions = Object.keys(decided).length
+          ? { ...requestMetadata, conflict_decisions: decided }
+          : requestMetadata;
+        for (const batchFiles of chunkFilesByLeafName(toUpload, UPLOAD_BATCH_SIZE)) {
+          batches.push({ requestMetadata: metadataWithDecisions, files: batchFiles });
         }
       }
 
       // Register each task the instant the server first reports its id (its own
       // line in the stream), not after the whole batch finishes — so the tray
       // lights up and starts its SSE subscription while the upload streams.
+      if (keptCount) {
+        // Kept files are never sent: the whole point of asking first is not to
+        // transfer bytes the answer makes useless.
+        showInfo?.({
+          summary: t("documentLibrary.uploadDrawerTitle"),
+          detail: t("documentLibrary.conflictKeptSummary", { count: keptCount }),
+        });
+      }
+
+      // Conflicts the server found at write time, after the drawer asked: a
+      // teammate took the name meanwhile. Reported together at the end rather
+      // than one notification per file, and as a question, not an error.
+      const lateConflicts: string[] = [];
+
       await runWithConcurrencyLimit(batches, UPLOAD_CONCURRENCY, (batch) =>
         scheduleFiles(
           batch.files,
@@ -417,8 +511,16 @@ export function DocumentUploadDrawer({
             );
           },
           (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
+          (filename) => lateConflicts.push(filename),
         ),
       );
+
+      if (lateConflicts.length) {
+        showInfo?.({
+          summary: t("documentLibrary.uploadDrawerTitle"),
+          detail: t("documentLibrary.conflictLate", { count: lateConflicts.length }),
+        });
+      }
       onUploadComplete?.();
     } finally {
       setIsLoading(false);
@@ -543,6 +645,53 @@ export function DocumentUploadDrawer({
 
             <p className={styles.formatsCaption}>{t("documentLibrary.supportedFormats")}</p>
 
+            {conflicts.length > 0 && (
+              <div className={styles.conflicts} role="group" aria-labelledby="upload-conflicts-title">
+                <strong id="upload-conflicts-title" className={styles.conflictsTitle}>
+                  {t("documentLibrary.conflictsTitle", { count: conflicts.length })}
+                </strong>
+                <p className={styles.conflictsMessage}>{t("documentLibrary.conflictsMessage")}</p>
+                <div className={styles.conflictsBulk}>
+                  <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("overwrite")}>
+                    {t("documentLibrary.conflictOverwriteAll")}
+                  </Button>
+                  <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("skip")}>
+                    {t("documentLibrary.conflictKeepAll")}
+                  </Button>
+                </div>
+                <ul className={styles.conflictList}>
+                  {conflicts.map((conflict) => {
+                    const decision = decisions.get(conflictKey(conflict.tagId, conflict.name));
+                    return (
+                      <li key={conflictKey(conflict.tagId, conflict.name)} className={styles.conflictRow}>
+                        <span className={styles.fileName} title={conflict.label}>
+                          {conflict.label}
+                        </span>
+                        <Button
+                          color="on-surface"
+                          variant={decision === "overwrite" ? "filled" : "outlined"}
+                          size="small"
+                          aria-pressed={decision === "overwrite"}
+                          onClick={() => decideOne(conflict, "overwrite")}
+                        >
+                          {t("documentLibrary.conflictOverwrite")}
+                        </Button>
+                        <Button
+                          color="on-surface"
+                          variant={decision === "skip" ? "filled" : "outlined"}
+                          size="small"
+                          aria-pressed={decision === "skip"}
+                          onClick={() => decideOne(conflict, "skip")}
+                        >
+                          {t("documentLibrary.conflictKeep")}
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
             {quotaDenial && (
               <div className={styles.quotaWarning} role="alert">
                 <strong className={styles.quotaTitle}>{t("documentLibrary.storageQuotaExceededTitle")}</strong>
@@ -576,7 +725,7 @@ export function DocumentUploadDrawer({
               variant="filled"
               size="small"
               onClick={handleSave}
-              disabled={!files.length || isLoading || !!quotaDenial}
+              disabled={!files.length || isLoading || !!quotaDenial || unansweredCount > 0}
             >
               {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
             </Button>

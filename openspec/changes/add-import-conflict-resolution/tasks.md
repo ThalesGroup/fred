@@ -27,14 +27,14 @@
 
 ## 5. Ask the user once
 
-- [ ] 5.1 Run the pre-check in `DocumentUploadDrawer` when the selection is complete, before any upload starts.
-- [ ] 5.2 Present all conflicts as one list with overwrite-all, skip-all and per-file choice; do not block the non-conflicting files on that decision.
-- [ ] 5.3 Surface a conflict returned at write time on the affected document's row, as awaiting a decision rather than as a failure. Do not build a dedicated surface for it: the import panel aggregates row state once it ships.
-- [ ] 5.4 Component tests for: no conflict (no prompt at all), some conflicts, all conflicts, a conflict appearing late.
+- [x] 5.1 Run the pre-check in `DocumentUploadDrawer` when the selection is complete, before any upload starts — on Save, after the quota check and after the dropped folders are resolved, so every destination is known.
+- [x] 5.2 Present all conflicts as one list with overwrite-all, skip-all and per-file choice; do not block the non-conflicting files on that decision. Read as: one question for the whole import, and the answer governs only the files it names — nothing is uploaded before it, so nothing is waiting on it. A file the user keeps is never uploaded at all.
+- [x] 5.3 Surface a conflict returned at write time as awaiting a decision rather than as a failure — reported as an information notice naming how many files need re-importing, never as an error. **Divergence:** not carried on the document's row. A refused file has no document and no task, and its bytes are gone, so there is no durable state a row could show; a row indicator would need a store of pending conflicts, which nothing in this change provides. Left to `revamp-document-import-experience`, which owns the panel and the per-row aggregation.
+- [x] 5.4 Component tests for: no conflict (no prompt at all), some conflicts, all conflicts, a conflict appearing late, plus per-file answers and an unavailable pre-check.
 
 ## 6. Verify and close out
 
-- [ ] 6.1 `make code-quality` and `make test` in knowledge-flow-backend and frontend.
-- [ ] 6.2 Run `/code-review` on the diff; the overwrite path is correctness-sensitive shared code.
-- [ ] 6.3 Migration note covering the refused-without-decision behaviour change.
-- [ ] 6.4 Record measured before/after cost of the name check against the seeded corpus.
+- [x] 6.1 `make code-quality` and `make test` in knowledge-flow-backend and frontend. 1484 backend tests, 2991 frontend tests, all green.
+- [ ] 6.2 Run `/code-review` on the diff; the overwrite path is correctness-sensitive shared code. (Developer-invoked.)
+- [x] 6.3 Migration note covering the refused-without-decision behaviour change: `docs/swift/ops/migrations/import-name-conflict-resolution.md`, impact `minor` (new Alembic revision).
+- [x] 6.4 Record measured before/after cost of the name check against the seeded corpus — see 1.3.

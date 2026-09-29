@@ -54,6 +54,9 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
   streamUploadOrProcessDocument: () => Promise.resolve([]),
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
+    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
+  ],
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [vi.fn()],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({

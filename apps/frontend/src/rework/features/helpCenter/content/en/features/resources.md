@@ -28,6 +28,24 @@ Common formats work: PDF, text, Word, OpenDocument, PowerPoint, Excel, CSV,
 Markdown, images and audio files. An unusual format may be refused; convert it
 to a common one.
 
+## A document of the same name already exists
+
+If the target library already holds a document of the same name, Fred says so
+**before** sending anything, and lets you choose:
+
+- **Replace**: the existing document keeps its place and its links, only its
+  content changes. Everything that cited it keeps working, and now points at the
+  new version.
+- **Keep**: your file is not uploaded, and the document already there is left
+  untouched.
+
+You can answer once for every file concerned, or file by file. The same name in
+**another** library is not a duplicate: those are two independent documents.
+
+> If someone else uploads that name while your import is under way, Fred does
+> not decide for you: the file is not uploaded and you are told. Import it again
+> to choose.
+
 ## After the upload
 
 A document needs a short **preparation** before it can be used. A **Processing**
