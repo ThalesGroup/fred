@@ -3,8 +3,8 @@
 Fred keeps Keycloak as the default identity provider. A deployment can select an
 OIDC issuer in its security configuration. OIDC mode uses the issuer's discovery
 document at startup for the JWKS and token endpoint; explicit endpoint overrides
-are available. In the browser, Keycloak uses `keycloak-js` and other OIDC
-providers use `oidc-client-ts` behind the same authentication service. A new
+are available. In the browser, Keycloak and other OIDC providers use the same
+`oidc-client-ts` lifecycle behind the existing authentication service. A new
 provider still needs a live sign-in, refresh and logout check before rollout.
 
 ## Settings
@@ -324,7 +324,7 @@ Keycloak demo does not create matching mock identities automatically.
 
 | Area | Behavior to test |
 | --- | --- |
-| Login | `keycloak` retains its existing adapter; `oidc` uses the provider login page, Authorization Code + PKCE, API access tokens, session reload, refresh and provider logout. |
+| Login | Both provider settings use the common OIDC adapter and provider login page, Authorization Code + PKCE, API access tokens, session reload, refresh and provider logout. |
 | User management | No additional admin page was added. Existing user searches and member/name displays use the selected directory. |
 | Local directory | Only people who have authenticated are listed; usernames, email and names are stored in Postgres. Workload identities are excluded. |
 | Account creation | Local mode refuses the create API with HTTP 409 and reason `managed_by_identity_provider`; accounts belong to the provider. |
@@ -376,3 +376,24 @@ user creation. Stop Fred before switching profiles. Provider identities and
 platform bootstrap state follow the same rules as the separate mock; existing
 Fred data is preserved. Use a fresh browser session and test CGU, personal space,
 JWT rejection, local user lookup and document delegation.
+
+## Agreed follow-up: one OIDC browser flow and pre-CGU profiles
+
+Implemented on 2026-09-29 in
+[`add-identity-provider-portability`](../../../openspec/changes/add-identity-provider-portability/tasks.md),
+section 11; automated checks pass, browser verification remains pending:
+
+- Use `OidcBrowserSession` for Keycloak and other OIDC providers, preserving
+  existing configuration and identity defaults. Keep Keycloak administration
+  and directory functions separate from browser authentication.
+- With `user_directory: local`, record the human profile on the first
+  authenticated control-plane request, including `/user` shown before CGU
+  acceptance. Leaving the CGU page must not prevent that profile from appearing.
+- Recording a profile does not accept terms or grant access: CGU-protected
+  requests remain HTTP 403 until acceptance, including for administrators.
+  Service/delegated identities do not create human profiles through this path.
+
+`/user` and `/gcu` use `get_current_user_before_gcu` to snapshot a human profile
+without accepting terms. The old `keycloak-js` browser lifecycle and dependency
+have been removed. An existing browser session may need a fresh login after
+this change because the old adapter used a different token store.
