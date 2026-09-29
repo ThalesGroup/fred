@@ -1,3 +1,5 @@
+**Tracking:** #2847
+
 ## Why
 
 Importing a document whose name already exists in the destination folder
