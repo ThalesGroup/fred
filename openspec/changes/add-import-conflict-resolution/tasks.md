@@ -6,9 +6,9 @@
 
 ## 2. Expose the pre-check
 
-- [ ] 2.1 Add the name-check route: destination folder plus a list of names in, conflicting names out. Authorize it exactly like an import into that folder.
-- [ ] 2.2 Test: names present, names absent, a name present only in another folder, a caller without write access to the folder.
-- [ ] 2.3 Regenerate the Knowledge Flow OpenAPI and the frontend client in this change.
+- [x] 2.1 Add the name-check route: destination folder plus a list of names in, conflicting names out. Authorize it exactly like an import into that folder. `POST /documents/name-check` takes several destinations per request, because a dropped directory targets one folder per subdirectory.
+- [x] 2.2 Test: names present, names absent, a name present only in another folder, a caller without write access to the folder.
+- [x] 2.3 Regenerate the Knowledge Flow OpenAPI and the frontend client in this change.
 
 ## 3. Carry the decision on the import
 

@@ -221,6 +221,35 @@ class QuotaPrecheckResponse(BaseModel):
     limit: Optional[int] = None
 
 
+class ImportDestinationNames(BaseModel):
+    """The names one import wants to write into one destination folder.
+
+    An import can target several folders at once (a dropped directory becomes
+    one folder per subdirectory), so the check is asked per destination.
+    """
+
+    tag_id: str
+    names: List[str] = []
+
+
+class ImportNameConflicts(BaseModel):
+    """The subset of `names` that folder `tag_id` already holds."""
+
+    tag_id: str
+    names: List[str]
+
+
+class ImportNameCheckRequest(BaseModel):
+    destinations: List[ImportDestinationNames] = []
+
+
+class ImportNameCheckResponse(BaseModel):
+    """Only the destinations with at least one conflict are listed; an import
+    with nothing to resolve gets an empty list."""
+
+    conflicts: List[ImportNameConflicts] = []
+
+
 class FastIngestResponse(BaseModel):
     """Result of one fast-ingested chat attachment (`POST /fast/ingest`).
 
@@ -1131,6 +1160,39 @@ class IngestionController:
                 user,
                 extra_team_ids={team_id} if team_id else None,
             )
+
+        @router.post(
+            "/documents/name-check",
+            tags=["Processing"],
+            summary="Which of these names does each destination folder already hold?",
+            description=(
+                "Answers, before any byte is sent, which of the given file names already "
+                "identify a document in each destination folder, so the user can decide to "
+                "overwrite or skip once for the whole import. Advisory only: the upload "
+                "endpoints re-check at write time, since a teammate can create the same "
+                "name in between."
+            ),
+        )
+        async def import_name_check(
+            request: ImportNameCheckRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ImportNameCheckResponse:
+            # Same authorization as an import into those folders: a caller who
+            # could not write there learns nothing about what they contain.
+            await _authorize_upload_targets(user, [destination.tag_id for destination in request.destinations])
+
+            store = ApplicationContext.get_instance().get_metadata_store()
+            conflicts: List[ImportNameConflicts] = []
+            for destination in request.destinations:
+                if not destination.names:
+                    continue
+                held = await store.document_uids_by_name_in_tag(destination.tag_id, destination.names)
+                # Keep the caller's order rather than the store's, and drop the
+                # duplicates a single import can legitimately carry.
+                names = list(dict.fromkeys(name for name in destination.names if name in held))
+                if names:
+                    conflicts.append(ImportNameConflicts(tag_id=destination.tag_id, names=names))
+            return ImportNameCheckResponse(conflicts=conflicts)
 
         @router.post(
             "/fast/text",
