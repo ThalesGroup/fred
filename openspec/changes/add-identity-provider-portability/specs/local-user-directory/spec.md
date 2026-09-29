@@ -117,3 +117,30 @@ With `local`, creating a user SHALL be refused with HTTP 409 and the reason `man
 - **GIVEN** `user_directory: local`
 - **WHEN** an administrator deletes the bootstrap root or the wildcard subject
 - **THEN** the existing refusals are returned unchanged
+
+### Requirement: Recording a human identity precedes CGU acceptance
+
+With `user_directory: local`, the first authenticated human control-plane request,
+including `GET /user`, SHALL upsert the profile before CGU acceptance. The upsert
+SHALL NOT accept CGU, change suspension status, grant permissions or join teams.
+Existing throttling and logged non-fatal write failures SHALL be retained.
+
+#### Scenario: Person leaves without accepting terms
+
+- **GIVEN** a new authenticated person and required CGU version `v1`
+- **WHEN** Fred loads `/user` and the person leaves without accepting
+- **THEN** their profile exists in the local directory when storage is available
+- **AND** the accepted CGU version remains unset
+- **AND** subsequent CGU-protected API access returns HTTP 403 `user_not_accept_gcu`
+
+#### Scenario: Profile refresh preserves acceptance
+
+- **GIVEN** a person who already accepted the required version
+- **WHEN** an authenticated request updates their identity snapshot
+- **THEN** their acceptance and suspension state remain unchanged
+
+#### Scenario: Untrusted and workload requests
+
+- **GIVEN** a missing or invalid JWT, a workload or a delegated asserted person
+- **WHEN** a request reaches the pre-CGU authentication path
+- **THEN** no human profile is created by this snapshot mechanism

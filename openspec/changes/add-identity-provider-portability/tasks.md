@@ -115,3 +115,25 @@ Corrections verified: the local identity snapshot preserves the Keycloak default
 Levels 10.2–10.5 remain unverified: the complete baseline/generic/mock UI walkthroughs and a real Entra tenant are still required. The requested grouped human review of the commits remains pending. The change is not ready to archive.
 
 Configuration preparation verification (2026-09-28): `/usr/bin/python3 scripts/prepare_identity_provider_configs.py` generated all nine complete files under `/tmp/fred-idp-tests`. JSON-schema and provider-configuration validation passed for each file; baseline values were identical and OIDC profiles preserved non-security values. Ruff and diff whitespace checks passed. No service was started and no complete browser walkthrough was run as part of this configuration-only addition.
+
+## 11. Agreed follow-up: common browser OIDC and pre-CGU profiles (2026-09-29)
+
+Earlier checked tasks document the delivered baseline; they do not imply these
+new acceptance criteria are implemented.
+
+- [x] 11.1 Route Keycloak and generic providers through `OidcBrowserSession`; preserve endpoint/claim defaults and the existing `KeyCloakService` facade, remove the alternate browser lifecycle and unused `keycloak-js` dependency.
+- [x] 11.2 Verify Keycloak and generic login, PKCE callback, reload, refresh, logout, failed refresh and late callback after logout; preserve user ids, roles and personal-space ids. Keep password probes gated by explicit Keycloak configuration and expiry checks provider-independent.
+- [x] 11.3 Reuse local identity upsert on the first authenticated human control-plane request, including `/user` before CGU acceptance; keep workload/delegated exclusions, throttle and failure handling.
+- [x] 11.4 Verify a new person who leaves the CGU page still appears in the directory with no acceptance; protected requests remain 403. Verify profile updates preserve acceptance/suspension and invalid/workload tokens create no human row.
+- [ ] 11.5 Update current-behavior documentation after implementation and manually verify the pre-CGU profile and common browser flow with Keycloak and a non-Keycloak provider.
+
+Follow-up verification (2026-09-29): common OIDC, self-test and expiry checks
+passed (72 frontend tests); TypeScript `tsc --noEmit` passed. The shared browser
+suite exercises both provider settings, callback/reload/refresh/logout, timeout
+and late refresh, concurrent callers and preserved Keycloak defaults. Snapshot,
+CGU admission and local-store checks passed (16 backend tests), including missing
+acceptance, invalid credentials, service/delegated exclusions and preservation
+of accepted CGU on profile updates. Suspension remains in OpenFGA, which the
+identity upsert does not modify. Targeted Ruff and whitespace checks passed.
+Task 11.5 remains pending for manual Keycloak/ZITADEL browser checks. OpenSpec
+CLI is unavailable in this environment; the change is not archived.

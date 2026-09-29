@@ -12,11 +12,11 @@ Defines how the Fred frontend signs people in, keeps their session alive and sig
 
 - **GIVEN** a backend without the new settings
 - **WHEN** the frontend loads its configuration
-- **THEN** it behaves exactly as before this change
+- **THEN** it keeps the existing Keycloak configuration defaults and uses the common OIDC browser lifecycle
 
 ### Requirement: Sign-in uses the configured provider
 
-With `provider: oidc`, the frontend SHALL create an `oidc-client-ts` browser client from the issuer behind `KeyCloakService`, SHALL NOT require a `…/realms/<realm>` URL, SHALL use Authorization Code with PKCE (S256), and SHALL request `openid profile offline_access` plus the configured API scope. The API bearer SHALL be the access token, not the ID token. Sign-in SHALL redirect to the provider's own login page.
+For both `provider: keycloak` and `provider: oidc`, the frontend SHALL create an `oidc-client-ts` browser client from the issuer behind `KeyCloakService`, SHALL NOT require a `…/realms/<realm>` URL, SHALL use Authorization Code with PKCE (S256), and SHALL request `openid profile offline_access` plus the configured API scope. The API bearer SHALL be the access token, not the ID token. Sign-in SHALL redirect to the provider's own login page.
 
 #### Scenario: Entra sign-in
 
@@ -27,7 +27,7 @@ With `provider: oidc`, the frontend SHALL create an `oidc-client-ts` browser cli
 
 ### Requirement: Session renewal and sign-out work with the provider
 
-With `provider: oidc`, the frontend SHALL restore a valid session on reload, renew the access token in the browser before expiry (using a refresh token or silent authorization), reject a failed refresh without replaying an invalidated token, and sign out through the provider's `end_session_endpoint`, returning to Fred. With the default `keycloak` provider, the existing `keycloak-js` flow SHALL be unchanged.
+For either provider, the frontend SHALL restore a valid session on reload, renew the access token in the browser before expiry (using a refresh token or silent authorization), reject a failed refresh without replaying an invalidated token, and sign out through the provider's `end_session_endpoint`, returning to Fred. There SHALL be no parallel `keycloak-js` browser lifecycle. Keycloak endpoint and claim defaults SHALL remain compatible.
 
 #### Scenario: Long session
 
@@ -65,10 +65,18 @@ The frontend SHALL derive the user id from the configured identity claim and, fo
 
 ### Requirement: Keycloak-only features are hidden
 
-With `provider: oidc`, the password-grant probe of the admin self-test and the credential-expiry self-test scenario SHALL be unavailable without an error. With `user_directory: local`, the user administration page SHALL NOT offer user creation.
+Without an explicit Keycloak realm configuration, the password-grant probe of the admin self-test SHALL be unavailable without an error. The credential-expiry scenario SHALL remain available for any authenticated OIDC session. With `user_directory: local`, the user administration page SHALL NOT offer user creation.
 
 #### Scenario: Self-test on Entra
 
 - **GIVEN** `provider: oidc`
 - **WHEN** an administrator opens the self-test page
 - **THEN** the "test another profile" probe is not offered and no Keycloak URL is called
+
+#### Scenario: Keycloak uses the common OIDC implementation
+
+- **GIVEN** the existing Keycloak realm and UI client configuration
+- **WHEN** a person signs in, reloads Fred, renews their session and signs out
+- **THEN** all operations use the same OIDC browser implementation as other providers
+- **AND** their user id, roles and personal-space id remain unchanged
+- **AND** a late refresh after logout cannot restore the invalidated session
