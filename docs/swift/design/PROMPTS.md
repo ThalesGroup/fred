@@ -150,9 +150,10 @@ a team that already holds that command appends the first free `-N` suffix from
 `promote` copies the command and returns 409 on a collision, matching how it
 already treats the name.
 
-The prompt's read-only view dialog shows the command as a chip beside the
-category, in the team library and on the marketplace alike — on the marketplace
-it is the author team's, which an import may have to suffix.
+The prompt's read-only view dialog shows the command ahead of the description,
+the same reading as the composer's command menu and the panel a command turn
+opens. It appears in the team library and on the marketplace alike — on the
+marketplace it is the author team's, which an import may have to suffix.
 
 The composer resolves a typed command against
 `GET /control-plane/v1/teams/{team_id}/prompt-commands`

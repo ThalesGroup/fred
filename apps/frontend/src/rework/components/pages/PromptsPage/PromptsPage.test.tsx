@@ -72,8 +72,8 @@ const PROMPT_DETAIL = {
   description: "Real description",
   category_id: null,
   tags: ["greeting"],
-  // A command, so the view dialog's chip has something to show. Prompt B below
-  // deliberately has none: `command: null` keeps the two details one shape.
+  // A command, so the view dialog has one to show ahead of the description.
+  // Prompt B below deliberately has none: `command: null` keeps them one shape.
   text: "Real prompt text",
   command: "summary" as string | null,
 };
@@ -440,13 +440,16 @@ describe("PromptsPage view dialog", () => {
     container.remove();
   });
 
-  it("shows the command as a chip beside the category", () => {
+  it("shows the command ahead of the description", () => {
     const dialog = openCard(0);
 
+    // The order is the point: the same reading as the composer's command menu
+    // and the panel a command turn opens.
     expect(dialog.textContent).toContain("/summary");
+    expect(dialog.textContent!.indexOf("/summary")).toBeLessThan(dialog.textContent!.indexOf("Real description"));
   });
 
-  it("shows no command chip on a prompt that carries none", () => {
+  it("shows nothing of the sort on a prompt that carries no command", () => {
     promptBReady = true;
     const dialog = openCard(1);
 
