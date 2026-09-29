@@ -272,11 +272,8 @@ export function AgentFormBody({
   // capability config/asset state the Advanced view writes, so the two stay in
   // sync. Only offered when the team can actually use the backing capability.
   const renderPackOptions = (pack: ToolPack) => {
-    // Team resources → document_access folder scoping: the "restrict to specific
-    // folders" switch + the folder tree, same labels as Advanced but a leaner
-    // visual (see DocumentAccessPackOptions). The corpus intent uniquely
-    // identifies the team-resources pack.
-    if (pack.documentAccessIntent === "corpus" && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
+    // Keep folder scoping available when the full resource bundle is on.
+    if (pack.resourceBundle && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
       return (
         <DocumentAccessPackOptions
           configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
