@@ -157,7 +157,7 @@ def test_stored_false_is_not_mistaken_for_absent():
 def test_undeclared_stored_key_is_dropped():
     """A row left by an older manifest cannot leak a field that no longer exists."""
 
-    stored = {"allow_javascript": True, "retired_secret": "s3cret"}
+    stored = {"allow_javascript": True, "retired_secret": "s3cret"}  # pragma: allowlist secret
 
     assert _effective_team_settings(_entry(), stored) == {"allow_javascript": True}
 
