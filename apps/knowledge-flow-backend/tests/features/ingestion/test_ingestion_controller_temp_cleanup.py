@@ -104,3 +104,50 @@ async def test_stream_upload_process_cleans_preloaded_upload_workdir(tmp_path, m
 
     assert any(f'"status":"{Status.FINISHED.value}"' in event for event in events)
     assert not workdir.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [(b"", "empty (0 bytes)"), (b"%PDF-1.4\ntruncated", "PDF could not be read")],
+)
+async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tmp_path, content, expected):
+    """Exercise the real PDF validator through the progress stream consumed by the UI."""
+    import json
+
+    from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
+
+    class InvalidPdfService(_FakeService):
+        async def extract_metadata(self, user, file_path, tags, source_tag, profile):
+            processor = PdfMarkdownProcessor.__new__(PdfMarkdownProcessor)
+            return processor.process_metadata(file_path, tags, source_tag)
+
+    workdir = tmp_path / "upload-workdir"
+    input_dir = workdir / "input"
+    input_dir.mkdir(parents=True)
+    path = input_dir / "document.pdf"
+    path.write_bytes(content)
+    controller = IngestionController.__new__(IngestionController)
+    controller.service = InvalidPdfService()
+    stream = controller._stream_upload_process(
+        preloaded_files=[(path.name, path)],
+        user=KeycloakUser(uid="user-1", username="user1", email="user1@localhost", roles=["admin"]),
+        tags=[],
+        source_tag="uploads",
+        profile=IngestionProcessingProfile.medium,
+        scheduler_task_service=None,
+        background_tasks=None,
+        kpi=_FakeKpi(),
+        kpi_actor=SimpleNamespace(type="human"),
+    )
+    events = [json.loads(event) async for event in stream]
+    failure = next(event for event in events if event.get("error"))
+    assert failure["status"] == Status.FAILED.value
+    assert failure["filename"] == "document.pdf"
+    assert expected in failure["error"]
+    assert "download" in failure["error"].lower()
+    assert str(tmp_path) not in failure["error"]
+    assert "ValueError" not in failure["error"]
+    assert "InputValidationError" not in failure["error"]
+    assert events[-1]["status"] == Status.FAILED.value
+    assert not workdir.exists()

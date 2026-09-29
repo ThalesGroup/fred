@@ -38,6 +38,10 @@ from knowledge_flow_backend.core.processors.input.common.enrichment import norma
 logger = logging.getLogger(__name__)
 
 
+class InputValidationError(ValueError):
+    """A file validation failure whose message can be displayed to the user."""
+
+
 class InputConversionError(RuntimeError):
     """
     Raised when an input processor cannot generate a usable preview artifact.
@@ -210,7 +214,11 @@ class BaseInputProcessor(ABC):
 
     def process_metadata(self, file_path: Path, tags: list[str], source_tag: str) -> DocumentMetadata:
         if not self.check_file_validity(file_path):
-            raise ValueError(f"File {file_path} is not valid for processing.")
+            if file_path.is_file() and file_path.stat().st_size == 0:
+                raise InputValidationError("The uploaded file is empty (0 bytes). Download or export it again, then retry the upload.")
+            if file_path.suffix.lower() == ".pdf":
+                raise InputValidationError("The PDF could not be read or contains no pages. Check that it opens in a PDF reader and is not password-protected, then download or export it again.")
+            raise InputValidationError("The uploaded file could not be read in its expected format. Check that it opens correctly, then download or export it again.")
 
         # 1) Create initial v2 metadata
         base_metadata = self._add_common_metadata(file_path, tags, source_tag)
