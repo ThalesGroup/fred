@@ -17,7 +17,7 @@ from uuid import uuid4
 
 import pytest
 from fred_core.users.store.postgres_user_store import PostgresUserStore
-from fred_core.users.user_models import UserRow
+from fred_core.users.user_models import GcuVersionsType, UserRow
 from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -56,18 +56,23 @@ async def test_identity_store_preserves_local_state_and_searches_each_field(tmp_
                 cast(Table, UserRow.__table__)
                 .update()
                 .where(UserRow.id == user_id)
-                .values(current_resources_storage_size=123)
+                .values(
+                    current_resources_storage_size=123,
+                    gcuVersionAccepted=GcuVersionsType.V1,
+                )
             )
         await store.upsert_identity(user_id, "Alice", "new@example.test", None, None)
         async with engine.connect() as connection:
             row = (
                 await connection.execute(
-                    select(UserRow.current_resources_storage_size).where(
-                        UserRow.id == user_id
-                    )
+                    select(
+                        UserRow.current_resources_storage_size,
+                        UserRow.gcuVersionAccepted,
+                    ).where(UserRow.id == user_id)
                 )
             ).one()
         assert row.current_resources_storage_size == 123
+        assert row.gcuVersionAccepted == GcuVersionsType.V1
         assert await store.count_identities() == 1
     finally:
         await engine.dispose()

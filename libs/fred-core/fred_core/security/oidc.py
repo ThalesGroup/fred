@@ -744,6 +744,19 @@ async def get_current_user_or_service(
     return await _enforce_gcu(user, user_store, configuration)
 
 
+async def get_current_user_before_gcu(
+    request: Request,
+    token: str = Security(oauth2_scheme),
+    user_store: BaseUserStore = Depends(get_user_store),
+    configuration=Depends(get_config),
+) -> KeycloakUser | AssertedUser:
+    """Record a human profile before terms acceptance without granting access."""
+    user = await get_current_user_without_gcu(request, token)
+    if not isinstance(user, AssertedUser):
+        await _snapshot_local_identity(user, user_store, configuration)
+    return user
+
+
 async def get_current_user_without_gcu(
     request: Request,
     token: str = Security(oauth2_scheme),

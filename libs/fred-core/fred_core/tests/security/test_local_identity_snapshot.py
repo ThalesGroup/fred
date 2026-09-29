@@ -94,3 +94,67 @@ async def test_no_security_mock_is_not_snapshotted(monkeypatch):
     await oidc._snapshot_local_identity(user, cast(BaseUserStore, store), config)
 
     store.upsert_identity.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pre_gcu_profile_is_written_but_acceptance_is_not_granted(monkeypatch):
+    from fastapi import HTTPException
+
+    oidc._IDENTITY_SNAPSHOT_DEADLINES.clear()
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", True)
+    user = KeycloakUser(uid=str(uuid4()), username="alice", roles=[])
+    monkeypatch.setattr(
+        oidc, "get_current_user_without_gcu", AsyncMock(return_value=user)
+    )
+    store = SimpleNamespace(
+        upsert_identity=AsyncMock(), find_user_by_id=AsyncMock(return_value=None)
+    )
+    config = SimpleNamespace(
+        security=SimpleNamespace(user_directory="local"),
+        app=SimpleNamespace(gcu_version="v1"),
+    )
+    assert await oidc.get_current_user_before_gcu(None, "token", store, config) is user
+    store.upsert_identity.assert_awaited_once()
+    with pytest.raises(HTTPException) as failure:
+        await oidc._enforce_gcu(user, store, config)
+    assert failure.value.status_code == 403
+    assert failure.value.detail == "user_not_accept_gcu"
+
+
+@pytest.mark.asyncio
+async def test_invalid_pre_gcu_request_does_not_write_identity(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        oidc, "get_current_user_without_gcu", AsyncMock(side_effect=HTTPException(401))
+    )
+    store = SimpleNamespace(upsert_identity=AsyncMock())
+    with pytest.raises(HTTPException):
+        await oidc.get_current_user_before_gcu(
+            None, "invalid", store, SimpleNamespace()
+        )
+    store.upsert_identity.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delegated", [False, True])
+async def test_pre_gcu_workloads_and_delegated_subjects_are_not_recorded(
+    monkeypatch, delegated
+):
+    from fred_core.security.delegation import AssertedUser
+
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", True)
+    user = (
+        AssertedUser(
+            uid=str(uuid4()), client_id="agentic", run_id="run", agent_id="agent"
+        )
+        if delegated
+        else KeycloakUser(uid=str(uuid4()), username="service", roles=["service_agent"])
+    )
+    monkeypatch.setattr(
+        oidc, "get_current_user_without_gcu", AsyncMock(return_value=user)
+    )
+    store = SimpleNamespace(upsert_identity=AsyncMock())
+    config = SimpleNamespace(security=SimpleNamespace(user_directory="local"))
+    assert await oidc.get_current_user_before_gcu(None, "token", store, config) is user
+    store.upsert_identity.assert_not_awaited()
