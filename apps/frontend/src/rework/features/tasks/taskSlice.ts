@@ -21,8 +21,9 @@ export interface TasksState {
   // tasks age out of the tray purely by elapsed wall-clock, which `byId` does not
   // reflect; this gives `selectVisibleTasks` an input to recompute on.
   tick?: number;
-  // Bumped when something asks the tray to show itself (see `trayOpenRequested`).
-  openRequest?: number;
+  // Bumped when something asks the import panel to show itself
+  // (see `importPanelOpenRequested`).
+  importPanelOpenRequest?: number;
 }
 
 // Local root-state shape — avoids circular import with store.tsx.
@@ -31,7 +32,7 @@ interface TasksRootState {
   tasks: TasksState;
 }
 
-const initialState: TasksState = { byId: {}, tick: 0, openRequest: 0 };
+const initialState: TasksState = { byId: {}, tick: 0, importPanelOpenRequest: 0 };
 
 export const EVICTION_DELAY_MS = 5 * 60 * 1000;
 
@@ -100,17 +101,17 @@ export const taskSlice = createSlice({
       delete state.byId[action.payload];
     },
 
-    /** Ask the tray to open itself.
+    /** Ask the import panel to open itself.
      *
      *  For work the user has just handed off and expects to see continue
      *  somewhere — an import, once its dialog closes. Without this the work
-     *  would carry on behind a collapsed trigger, which reads as nothing
-     *  happening: the very complaint that put the panel there.
+     *  would carry on behind a closed panel, which reads as nothing happening:
+     *  the very complaint that put the panel there.
      *
-     *  A counter rather than a boolean, so a second import reopens a tray the
+     *  A counter rather than a boolean, so a second import reopens a panel the
      *  user closed in between, and so no one has to reset a flag. */
-    trayOpenRequested(state) {
-      state.openRequest = (state.openRequest ?? 0) + 1;
+    importPanelOpenRequested(state) {
+      state.importPanelOpenRequest = (state.importPanelOpenRequest ?? 0) + 1;
     },
 
     /** Advance the tray clock so time-based selectors (`selectVisibleTasks`)
@@ -150,7 +151,7 @@ export const {
   taskEventReceived,
   taskEvicted,
   trayClockTicked,
-  trayOpenRequested,
+  importPanelOpenRequested,
   taskAcknowledged,
   completedTasksCleared,
 } = taskSlice.actions;
@@ -160,8 +161,8 @@ export const {
 const selectById = (state: TasksRootState) => state.tasks.byId;
 const selectTick = (state: TasksRootState) => state.tasks.tick;
 
-/** Bumped every time something asks the tray to open; the tray watches it. */
-export const selectTrayOpenRequest = (state: TasksRootState) => state.tasks.openRequest ?? 0;
+/** Bumped every time something asks the import panel to open; it watches this. */
+export const selectImportPanelOpenRequest = (state: TasksRootState) => state.tasks.importPanelOpenRequest ?? 0;
 
 export const selectActiveTasks = createSelector(selectById, (byId) =>
   Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)),
@@ -190,6 +191,24 @@ export const selectVisibleTasks = createSelector([selectById, selectTick], (byId
       return b.registeredAt - a.registeredAt;
     });
 });
+
+/** The imports this user has running or just finished — what the import panel
+ *  lists. Chat attachments are ingestions too, but they are their own thing and
+ *  belong to the conversation, not to a team's resources. */
+export const selectImportTasks = createSelector(selectVisibleTasks, (tasks) =>
+  tasks
+    .filter((vm) => vm.kind === "ingestion" && !vm.localOnly && vm.target?.type === "document")
+    // Oldest first, unlike the tray: these are the files of one import, and
+    // reading them in the order they were sent beats having the list reshuffle
+    // under the eye as each new one registers.
+    .sort((a, b) => a.registeredAt - b.registeredAt),
+);
+
+/** How many imports are still going — the rail launcher's badge. */
+export const selectRunningImportCount = createSelector(
+  selectImportTasks,
+  (tasks) => tasks.filter((vm) => !TERMINAL_STATES.has(vm.state)).length,
+);
 
 /**
  * All tasks in the store, active first then most-recently-finished, with NO age

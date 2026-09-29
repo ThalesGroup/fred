@@ -70,7 +70,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 }));
 vi.mock("../../../../features/tasks/taskSlice", () => ({
   taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
-  trayOpenRequested: () => ({ type: "tasks/trayOpenRequested" }),
+  importPanelOpenRequested: () => ({ type: "tasks/importPanelOpenRequested" }),
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";

@@ -82,7 +82,7 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
 }));
 vi.mock("../../../../features/tasks/taskSlice", () => ({
   taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
-  trayOpenRequested: () => ({ type: "tasks/trayOpenRequested" }),
+  importPanelOpenRequested: () => ({ type: "tasks/importPanelOpenRequested" }),
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -159,7 +159,7 @@ describe("DocumentUploadDrawer hands the import off", () => {
 
     // Otherwise the work carries on behind a collapsed trigger, which reads
     // as nothing happening — the complaint the panel exists to answer.
-    expect(probe.dispatched.map((action) => action.type)).toContain("tasks/trayOpenRequested");
+    expect(probe.dispatched.map((action) => action.type)).toContain("tasks/importPanelOpenRequested");
   });
 
   it("keeps reporting each file to the panel after the dialog is gone", async () => {

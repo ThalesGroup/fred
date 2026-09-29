@@ -39,7 +39,7 @@ import {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
-import { taskRegistered, trayOpenRequested } from "../../../../features/tasks/taskSlice";
+import { importPanelOpenRequested, taskRegistered } from "../../../../features/tasks/taskSlice";
 import {
   MAX_FOLDER_DEPTH,
   displayPath,
@@ -533,7 +533,7 @@ export function DocumentUploadDrawer({
     // provider, both of which outlive the dialog.
     setIsLoading(false);
     handleClose();
-    dispatch(trayOpenRequested());
+    dispatch(importPanelOpenRequested());
     void runImport(batches);
   };
 

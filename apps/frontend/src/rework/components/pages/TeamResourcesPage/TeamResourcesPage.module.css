@@ -80,13 +80,20 @@
 }
 
 .tree,
+/* A row, not a column: the workspace holds the left and the import rail keeps
+   the right, widening in place when it is opened. */
 .panel {
   display: flex;
-  flex-direction: column;
+  flex: 1;
+  gap: var(--spacing-s);
+  min-height: 0;
 }
 
-.panel {
+.workspace {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-width: 0;
   min-height: 0;
 }
 

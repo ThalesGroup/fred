@@ -1,0 +1,105 @@
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Where an import is followed once its dialog has closed.
+//
+// One element with two widths, not a rail plus a drawer: collapsed it is a
+// narrow rail beside the documents card, expanded it is the panel itself. The
+// button that opens it stays exactly where it was, and closes it again — so
+// there is one thing on screen that grows and shrinks, rather than two that
+// appear and disappear.
+//
+// It adds to the document rows, it does not replace them. A row stays the
+// permanent home of its document's status; this is the same state gathered in
+// one place, and later where actions on it are offered.
+
+import { useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
+import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
+import {
+  selectImportPanelOpenRequest,
+  selectImportTasks,
+  selectRunningImportCount,
+} from "../../../../features/tasks/taskSlice";
+import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
+import styles from "./ImportPanel.module.css";
+
+export function ImportPanel() {
+  const { t } = useTranslation();
+  const imports = useSelector(selectImportTasks);
+  const runningCount = useSelector(selectRunningImportCount);
+  const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
+  const [expanded, setExpanded] = useState(false);
+
+  // An import that has just handed off opens the panel itself. Otherwise the
+  // work carries on behind a closed rail, which reads as nothing happening —
+  // the complaint the panel exists to answer. The counter starts where it
+  // stands, so mounting the page does not reopen it for an import already under
+  // way.
+  const openRequest = useSelector(selectImportPanelOpenRequest);
+  const lastHandledRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === lastHandledRequest.current) return;
+    lastHandledRequest.current = openRequest;
+    setExpanded(true);
+  }, [openRequest]);
+
+  const toggleLabel = expanded ? t("rework.imports.panel.collapse") : t("rework.imports.panel.expand");
+
+  return (
+    <aside
+      className={styles.panel}
+      data-expanded={expanded}
+      aria-label={t("rework.imports.panel.title")}
+      // Collapsed it is a launcher, not a region: nothing inside it is
+      // reachable, and announcing an empty landmark would be noise.
+      role={expanded ? "region" : undefined}
+    >
+      <div className={styles.head}>
+        <Tooltip text={toggleLabel} placement="left">
+          <IconButton
+            variant={expanded ? "tonal" : "icon"}
+            size="small"
+            icon={{ category: "outlined", type: "upload" }}
+            aria-label={toggleLabel}
+            aria-expanded={expanded}
+            badgeCount={runningCount}
+            onClick={() => setExpanded((open) => !open)}
+          />
+        </Tooltip>
+        {expanded && <span className={styles.title}>{t("rework.imports.panel.title")}</span>}
+      </div>
+
+      {expanded && (
+        <div className={styles.body}>
+          {imports.length === 0 ? (
+            <p className={styles.empty}>{t("rework.imports.panel.empty")}</p>
+          ) : (
+            imports.map((task) => (
+              <TaskCard
+                key={task.taskId}
+                task={task}
+                onAcknowledge={() => acknowledge(task.taskId, task.kind, task.localOnly)}
+                acknowledging={isAcknowledging(task.taskId)}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}

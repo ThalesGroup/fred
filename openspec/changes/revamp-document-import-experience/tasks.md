@@ -6,7 +6,7 @@
 
 ## 2. Mount the panel
 
-- [x] 2.1 Mount `TaskTray` in the main layout so it is reachable from every page — in the sidebar above the user profile, outside the per-mode panels. It also opens itself when an import hands off (`trayOpenRequested`), so the work is visible instead of hidden behind a collapsed trigger.
+- [x] 2.1 Mount the panel beside the documents card on the resources page, as a dedicated rail that widens in place into the panel — one element with two widths, the same button opening and closing it, carrying the card's surface, radius and full height. `TaskTray` was not reused: it is a floating popover anchored to a trigger, a different object. It also opens itself when an import hands off (`importPanelOpenRequested`), so the work is visible instead of hidden behind a closed rail.
 - [ ] 2.2 Check what it renders for an import task today, and list what is missing for the two stages.
 - [ ] 2.3 Test: an import started on Resources stays visible after navigating away and after a reload.
 

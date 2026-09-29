@@ -1,0 +1,208 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// One element with two widths. These pin that it is the same element either
+// way — the collapsed rail and the open panel are one node, and the button that
+// grows it is the button that shrinks it back, in the same place.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { importPanelOpenRequested, taskRegistered, taskSlice } from "../../../../features/tasks/taskSlice";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+}));
+vi.mock("@shared/molecules/TaskCard/TaskCard", () => ({
+  TaskCard: ({ task }: { task: { taskId: string; target?: { label?: string } | null } }) => (
+    <div data-testid="task-card">{task.target?.label ?? task.taskId}</div>
+  ),
+}));
+vi.mock("../../../../features/tasks/useTaskAcknowledgement", () => ({
+  useTaskAcknowledgement: () => ({ acknowledge: vi.fn(), isAcknowledging: () => false }),
+}));
+
+import { ImportPanel } from "./ImportPanel";
+
+let container: HTMLDivElement;
+let root: Root;
+let store: ReturnType<typeof makeStore>;
+
+const makeStore = () => configureStore({ reducer: { tasks: taskSlice.reducer } });
+
+beforeEach(() => {
+  store = makeStore();
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+  act(() => {
+    root.render(
+      <Provider store={store}>
+        <ImportPanel />
+      </Provider>,
+    );
+  });
+});
+
+afterEach(() => {
+  act(() => {
+    root.unmount();
+  });
+  container.remove();
+});
+
+const panel = () => container.querySelector("aside")!;
+const toggle = () => container.querySelector("button")!;
+const click = (element: HTMLElement) =>
+  act(() => {
+    element.click();
+  });
+
+function importOf(taskId: string, label: string) {
+  return taskRegistered({
+    taskId,
+    kind: "ingestion",
+    target: { type: "document", id: `uid-${taskId}`, label },
+  });
+}
+
+describe("ImportPanel", () => {
+  it("is the same element collapsed and open", () => {
+    const collapsed = panel();
+    expect(collapsed.dataset.expanded).toBe("false");
+
+    click(toggle());
+
+    // Not a second node appearing beside the rail: the rail itself widened.
+    expect(panel()).toBe(collapsed);
+    expect(collapsed.dataset.expanded).toBe("true");
+  });
+
+  it("opens and closes from the one button", () => {
+    const button = toggle();
+    click(button);
+    expect(panel().dataset.expanded).toBe("true");
+
+    click(toggle());
+
+    expect(panel().dataset.expanded).toBe("false");
+    // Same button, still there, still the only one.
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+  });
+
+  it("shows nothing but the button while collapsed", () => {
+    act(() => {
+      store.dispatch(importOf("task-1", "report.pdf"));
+    });
+
+    expect(container.textContent).not.toContain("report.pdf");
+
+    click(toggle());
+
+    expect(container.textContent).toContain("report.pdf");
+  });
+
+  it("lists the imports, and says so when there are none", () => {
+    click(toggle());
+    expect(container.textContent).toContain("rework.imports.panel.empty");
+
+    act(() => {
+      store.dispatch(importOf("task-1", "report.pdf"));
+      store.dispatch(importOf("task-2", "notes.md"));
+    });
+
+    // In the order they were sent, so the list does not reshuffle as each
+    // new file registers.
+    expect([...container.querySelectorAll("[data-testid=task-card]")].map((n) => n.textContent)).toEqual([
+      "report.pdf",
+      "notes.md",
+    ]);
+  });
+
+  it("leaves chat attachments out — they belong to the conversation", () => {
+    act(() => {
+      store.dispatch(
+        taskRegistered({
+          taskId: "chat-attachment-1",
+          kind: "ingestion",
+          target: { type: "attachment", id: "a1", label: "pasted.png" },
+          localOnly: true,
+        }),
+      );
+      store.dispatch(importOf("task-1", "report.pdf"));
+    });
+    click(toggle());
+
+    expect(container.textContent).toContain("report.pdf");
+    expect(container.textContent).not.toContain("pasted.png");
+  });
+
+  it("opens itself when an import hands off", () => {
+    expect(panel().dataset.expanded).toBe("false");
+
+    act(() => {
+      store.dispatch(importPanelOpenRequested());
+    });
+
+    expect(panel().dataset.expanded).toBe("true");
+  });
+
+  it("reopens for a second import after the user closed it", () => {
+    act(() => {
+      store.dispatch(importPanelOpenRequested());
+    });
+    click(toggle());
+    expect(panel().dataset.expanded).toBe("false");
+
+    act(() => {
+      store.dispatch(importPanelOpenRequested());
+    });
+
+    expect(panel().dataset.expanded).toBe("true");
+  });
+
+  it("does not reopen for an import already under way when the page mounts", () => {
+    // Arriving on Resources with something importing should not take the page
+    // over; the badge says it is there.
+    act(() => {
+      store.dispatch(importPanelOpenRequested());
+    });
+    click(toggle());
+
+    // A real remount, as navigating back to the page would do.
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    act(() => {
+      root.render(
+        <Provider store={store}>
+          <ImportPanel />
+        </Provider>,
+      );
+    });
+
+    expect(panel().dataset.expanded).toBe("false");
+  });
+});
