@@ -12,18 +12,18 @@
 
 ## 3. Carry the decision on the import
 
-- [ ] 3.1 Accept a per-file decision (overwrite or skip) on `/upload-documents` and `/upload-process-documents`.
-- [ ] 3.2 Refuse a conflicting file carrying no decision, with an error naming the file, before anything is written.
-- [ ] 3.3 Re-check conflicts at write time; return a newly-conflicting file as a conflict to resolve, not as a failure.
-- [ ] 3.4 Find every non-UI caller of the upload routes and update it, or confirm there is none.
+- [x] 3.1 Accept a per-file decision (overwrite or skip) on `/upload-documents` and `/upload-process-documents`, as `conflict_decisions` on the `metadata_json` payload, keyed by file name.
+- [x] 3.2 Refuse a conflicting file carrying no decision, with an error naming the file, before anything is written. Refused per file rather than per request, on the stream with status `conflict`; see design.md.
+- [x] 3.3 Re-check conflicts at write time; return a newly-conflicting file as a conflict to resolve, not as a failure. One check per request, before the first write; the window still open inside a request needs a unique constraint and belongs to `retire-document-versioning`.
+- [x] 3.4 Find every non-UI caller of the upload routes and update it, or confirm there is none. Only `tests/scripts/temporal_ingestion_load_test.py`: documented that a re-run against an already-filled folder now imports nothing.
 
 ## 4. Apply the decisions
 
-- [ ] 4.1 Skip: import nothing for that file, leave the existing document untouched, report it as skipped and not as failed.
-- [ ] 4.2 Overwrite: reuse the existing `document_uid` explicitly, replace the content, drop the previous extraction and vectors, re-index.
-- [ ] 4.3 Charge the quota the size difference, not the full size.
-- [ ] 4.4 Test the interrupted overwrite: content and index must not be left disagreeing.
-- [ ] 4.5 Test that a reference to an overwritten document still resolves, and resolves to the new content.
+- [x] 4.1 Skip: import nothing for that file, leave the existing document untouched, report it as skipped and not as failed (status `ignored`).
+- [x] 4.2 Overwrite: reuse the existing `document_uid` explicitly, replace the content, drop the previous extraction and vectors, re-index (`IngestionService.adopt_existing_document`).
+- [x] 4.3 Charge the quota the size difference, not the full size — reusing the uid makes the existing save path do it; pinned by a test.
+- [x] 4.4 Test the interrupted overwrite: content and index must not be left disagreeing. The index is dropped before the new content lands, so an interruption leaves the document unindexed, never wrongly indexed.
+- [x] 4.5 Test that a reference to an overwritten document still resolves, and resolves to the new content.
 
 ## 5. Ask the user once
 

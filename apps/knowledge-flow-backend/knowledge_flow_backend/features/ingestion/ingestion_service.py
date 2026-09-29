@@ -109,6 +109,28 @@ class IngestionService:
         metadata.identity.document_name = display_name
         return metadata
 
+    async def adopt_existing_document(self, metadata: DocumentMetadata, existing_uid: str) -> DocumentMetadata:
+        """Make a freshly-extracted document *be* the one it overwrites.
+
+        Keeping the uid is the whole reason to prefer overwriting to
+        delete-then-create: every citation and link already pointing at that
+        document keeps resolving, and now resolves to the new content.
+
+        The previous index goes first, so nothing can answer from content that
+        is being replaced; the bytes themselves stay until `save_input`
+        overwrites them, so the document is never left without content.
+        Returns the metadata unchanged when the document has been deleted since
+        the import was planned — there is then nothing to overwrite.
+        """
+        previous = await self.metadata_service.metadata_store.get_metadata_by_uid(existing_uid)
+        if previous is None:
+            return metadata
+
+        metadata.identity.document_uid = existing_uid
+        metadata.processing.stages = {}
+        await self.metadata_service.purge_document_artifacts(existing_uid, metadata=previous, include_content=False)
+        return metadata
+
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
         self.content_store.save_input(metadata.document_uid, input_dir)
         metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)

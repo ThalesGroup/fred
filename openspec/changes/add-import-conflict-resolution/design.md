@@ -75,6 +75,61 @@ charged and analysed twice. That is often legitimate, so it must not raise a
 second blocking prompt. A non-blocking mention ("this file already exists in
 another folder") is in scope for the panel change, not here.
 
+### One decision per import, taken before the first write
+
+The plan — overwrite, skip, or still unanswered — is resolved once per request,
+from one query covering every name in the batch, before any file is touched.
+Re-asking per file would cost a query each and buy nothing: a decision taken at
+file 20 is as stale as one taken at file 1.
+
+What that leaves open: a name taken *during* the request is still imported as a
+new document. Closing that needs a unique constraint on (folder, name), which
+cannot exist while alternate versions deliberately let two documents share a
+display name. It belongs to `retire-document-versioning`, which can add it.
+
+### An unanswered conflict stops its own file, not the batch
+
+A file that conflicts and carries no decision is reported on the stream as
+awaiting an answer, and the rest of the import proceeds. Refusing the whole
+request would punish the files that are fine, and the common cause of a late
+conflict — a teammate importing the same name meanwhile — affects one file, not
+the batch.
+
+That is a deliberate reading of "the request is refused": the *file* is refused,
+nothing is created, modified or deleted for it, and the error names it. The
+status is `conflict`, distinct from `failed`: the user has something to answer,
+not something that went wrong.
+
+### The decision travels outside the typed contract
+
+`IngestionInput` arrives as a `metadata_json` form field, so it never reaches
+the OpenAPI schema and the generated client cannot type it. The client builds
+that object by hand today. Accepted as-is rather than reshaping the upload
+routes in this change; the field is validated server-side by Pydantic, so a
+malformed decision is rejected rather than ignored.
+
+### Overwrite drops the index first and the bytes last
+
+The order is: point the metadata at the existing uid, drop that document's
+vectors and tabular artifacts, write the new content over the old, save the row.
+
+Dropping the index first is what makes an interrupted overwrite safe. Writing
+the content first would leave the previous index answering for content that is
+no longer the one it describes — the exact disagreement to avoid. This way an
+interruption leaves the document unindexed, never wrongly indexed, and never
+without content.
+
+Charging the difference needs no new code: the save path already loads the
+previous metadata by uid and moves the quota by `new_size - old_size`. Reusing
+the uid is what makes that fall out.
+
+### A name held twice cannot be overwritten
+
+While alternate versions exist, a folder can hold two documents under one
+display name, and "the existing document" then names neither. That file is
+refused with an error saying so, rather than overwriting an arbitrary one. The
+case disappears with `retire-document-versioning`.
+
 ### An index, not a scan
 
 The `metadata` table indexes `document_uid`, `tag_ids` (GIN) and `source_tag`.

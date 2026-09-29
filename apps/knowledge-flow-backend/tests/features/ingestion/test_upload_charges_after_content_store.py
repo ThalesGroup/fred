@@ -52,7 +52,7 @@ class _RecordingService:
         self.calls: list[str] = []
         self._save_input_raises = save_input_raises
 
-    async def extract_metadata(self, user, file_path, tags, source_tag, profile):
+    async def extract_metadata(self, user, file_path, tags, source_tag, profile, *, apply_versioning=True):
         self.calls.append("extract_metadata")
         return SimpleNamespace(document_uid="doc-1", document_name=file_path.name, file_type=file_path.suffix.lstrip("."))
 

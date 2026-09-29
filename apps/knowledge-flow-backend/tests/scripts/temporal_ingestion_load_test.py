@@ -24,6 +24,10 @@ How:
     an async HTTP client with a configurable semaphore for request concurrency.
     It parses the NDJSON event stream of each request and aggregates success,
     latency, throughput, and workflow identifiers.
+    Re-running with `--tags` against a folder the previous run already filled
+    reports every file as a conflict and imports nothing: the same names are
+    already there, and the script sends no overwrite decision. Point each run
+    at a fresh folder, or leave `--tags` empty.
 Usage example:
     uv run python tests/scripts/temporal_ingestion_load_test.py \
       --base-url http://127.0.0.1:8111/knowledge-flow/v1 \
