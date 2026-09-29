@@ -308,7 +308,7 @@ async def test_local_delete_bans_person_without_calling_identity_provider() -> N
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 204
-        assert deployment.calls == ["remove_user_standing"]
+        assert deployment.calls == ["suspend_account"]
         assert deployment.identity.accounts == {_PERSON, _BYSTANDER}
         await _assert_banned(deployment.rebac)
 
