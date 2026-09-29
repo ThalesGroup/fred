@@ -18,9 +18,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from fred_core.security.models import (
+    AccountStatusError,
     AuthorizationError,
     Resource,
-    StandingAuthorizationError,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,19 +37,19 @@ _TEAM_PERMISSION_MESSAGES: dict[str, str] = {
 }
 
 
-# Standing decides whether a person may act at all, so a refusal on it belongs
-# beside the delegation decisions on the same audit surface.
-AUDIT_STANDING_REFUSED = "authorization.standing.refused"
+# Account status decides whether a person may act at all, so a refusal on it
+# belongs beside the delegation decisions on the same audit surface.
+AUDIT_ACCOUNT_REFUSED = "authorization.account.refused"
 
-# Bounded on purpose: the caller learns the cause is its own account standing,
+# Bounded on purpose: the caller learns the cause is its own account status,
 # never who was denied, which team was consulted, or what exists.
-_STANDING_REFUSED_DETAIL = (
-    "Your account standing does not currently permit this request."
+_ACCOUNT_SUSPENDED_DETAIL = (
+    "Your account status does not currently permit this request."
 )
-_STANDING_UNAVAILABLE_DETAIL = (
-    "Account standing could not be checked. Try again shortly."
+_ACCOUNT_STATUS_UNAVAILABLE_DETAIL = (
+    "Account status could not be checked. Try again shortly."
 )
-STANDING_UNAVAILABLE_CAUSE = "standing_unavailable"
+ACCOUNT_STATUS_UNAVAILABLE_CAUSE = "account_status_unavailable"
 DENIAL_CAUSE_HEADER = "X-Fred-Denial-Cause"
 
 
@@ -58,8 +58,10 @@ def _humanize_action(action: str) -> str:
 
 
 def _denial_cause(exc: AuthorizationError) -> str:
-    if isinstance(exc, StandingAuthorizationError):
-        return "standing_unavailable" if exc.unavailable else "standing_refused"
+    if isinstance(exc, AccountStatusError):
+        return (
+            ACCOUNT_STATUS_UNAVAILABLE_CAUSE if exc.unavailable else "account_suspended"
+        )
     return "permission_refused"
 
 
@@ -68,7 +70,7 @@ def _denial_fields(exc: AuthorizationError) -> dict[str, object]:
     cause = _denial_cause(exc)
     return {
         "denial_cause": cause,
-        "decision_reached": cause != "standing_unavailable",
+        "decision_reached": cause != ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
         "subject_type": exc.subject_type.value if exc.subject_type else "unspecified",
         "action": str(exc.action),
         "resource_type": exc.resource.value,
@@ -76,11 +78,11 @@ def _denial_fields(exc: AuthorizationError) -> dict[str, object]:
 
 
 def _authorization_detail_for_client(exc: AuthorizationError) -> str:
-    if isinstance(exc, StandingAuthorizationError):
+    if isinstance(exc, AccountStatusError):
         return (
-            _STANDING_UNAVAILABLE_DETAIL
+            _ACCOUNT_STATUS_UNAVAILABLE_DETAIL
             if exc.unavailable
-            else _STANDING_REFUSED_DETAIL
+            else _ACCOUNT_SUSPENDED_DETAIL
         )
 
     action = str(exc.action)
@@ -101,31 +103,21 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         """Report a denial, preserving whether a decision was actually reached."""
         logger.warning("Authorization denied", extra=_denial_fields(exc))
-        if isinstance(exc, StandingAuthorizationError):
+        cause = _denial_cause(exc)
+        if isinstance(exc, AccountStatusError):
             # Imported here: the logging package reaches back into this one,
             # so a module-level import closes a cycle at startup.
             from fred_core.logs.audit_log import emit_audit_log
 
             emit_audit_log(
-                AUDIT_STANDING_REFUSED,
-                "warning",
-                outcome="refused",
-                reason=(
-                    "standing_unavailable" if exc.unavailable else "standing_not_active"
-                ),
+                AUDIT_ACCOUNT_REFUSED, "warning", outcome="refused", reason=cause
             )
-            if exc.unavailable:
-                # The dependency never decided, so this is an outage, not a
-                # statement about the caller.
-                return JSONResponse(
-                    status_code=503,
-                    content={"detail": _authorization_detail_for_client(exc)},
-                    headers={DENIAL_CAUSE_HEADER: STANDING_UNAVAILABLE_CAUSE},
-                )
+        # An unavailable account status was never decided, so it is an outage,
+        # not a statement about the caller.
         return JSONResponse(
-            status_code=403,
+            status_code=503 if cause == ACCOUNT_STATUS_UNAVAILABLE_CAUSE else 403,
             content={"detail": _authorization_detail_for_client(exc)},
-            headers={DENIAL_CAUSE_HEADER: _denial_cause(exc)},
+            headers={DENIAL_CAUSE_HEADER: cause},
         )
 
     @app.exception_handler(Exception)

@@ -1,119 +1,157 @@
+import asyncio
+import json
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
-from fred_core.security.delegation import DelegationConfig, preserved_delegation
+from fred_core import AccountStatusError
+from fred_core.security.delegation import DelegationConfig, enforce_account_status, initialize_delegation, preserved_delegation, require_active_subject
+from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
+from fred_core.security.rebac.openfga_schema import DEFAULT_SCHEMA
+from fred_core.security.structure import KeycloakUser, OpenFgaRebacConfig
+from openfga_sdk.api_client import ApiClient
+from openfga_sdk.configuration import Configuration
 
 from knowledge_flow_backend import main as main_module
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.main import _require_delegation_standing, create_app
+from knowledge_flow_backend.main import create_app
+
+_PERSON = KeycloakUser(uid="synthetic-person", username="synthetic", roles=[])
 
 
-class _Context:
-    def __init__(self, rebac: Any = None, *, error: Exception | None = None) -> None:
-        self.rebac = rebac
-        self.error = error
+class _ModelOnlyOpenFga:
+    """OpenFGA client that serves one authorization model, answers account status Checks
+    with "not suspended", records tuple writes and offers nothing else."""
 
-    def get_rebac_engine(self) -> Any:
-        if self.error is not None:
-            raise self.error
-        return self.rebac
+    def __init__(self, model: dict) -> None:
+        self.model = model
+        self.writes: list[Any] = []
+        self.checks: list[tuple[str, str, str]] = []
+
+    async def read_latest_authorization_model(self):
+        payload = {"authorization_model": {"id": "synthetic-latest", **self.model}}
+        async with ApiClient(Configuration(api_url="http://fake-openfga:8080")) as api:
+            return api.deserialize(SimpleNamespace(data=json.dumps(payload)), "ReadAuthorizationModelResponse")
+
+    async def check(self, body, options):
+        self.checks.append((body.user, body.relation, body.object))
+        return SimpleNamespace(allowed=False)
+
+    async def write(self, body, options):
+        self.writes.append(body)
+        return SimpleNamespace()
 
 
-class _StandingChecked(Exception):
+def _engine(client: _ModelOnlyOpenFga) -> OpenFgaRebacEngine:
+    engine = OpenFgaRebacEngine(
+        OpenFgaRebacConfig(api_url="http://fake-openfga:8080"),  # pyright: ignore[reportArgumentType]
+        token="synthetic-test-token",  # nosec B106
+        requires_active_accounts=True,
+    )
+    engine._cached_client = client  # pyright: ignore[reportAttributeAccessIssue]
+    return engine
+
+
+def _allow_list_model() -> dict:
+    """An organization that lists active people and defines no `suspended` relation."""
+    model = json.loads(DEFAULT_SCHEMA)
+    organization = next(t for t in model["type_definitions"] if t["type"] == "organization")
+    del organization["relations"]["suspended"]
+    del organization["metadata"]["relations"]["suspended"]
+    organization["relations"]["active"] = {"this": {}}
+    organization["metadata"]["relations"]["active"] = {"directly_related_user_types": [{"type": "user"}]}
+    return model
+
+
+class _StartupCheckRan(Exception):
     pass
 
 
 @pytest.mark.asyncio
-async def test_delegation_startup_validates_model_and_readiness() -> None:
-    rebac = SimpleNamespace(
-        enforces_standing=True,
-        validate_standing_model=AsyncMock(),
-        is_standing_seed_ready=AsyncMock(return_value=True),
-    )
-    context = _Context(rebac)
+async def test_delegation_startup_validates_the_shipped_model_and_writes_nothing() -> None:
+    client = _ModelOnlyOpenFga(json.loads(DEFAULT_SCHEMA))
 
-    await _require_delegation_standing(context, enabled=True)
+    with preserved_delegation():
+        initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+        await enforce_account_status(_engine(client))
 
-    rebac.validate_standing_model.assert_awaited_once_with()
-    rebac.is_standing_seed_ready.assert_awaited_once_with()
+    assert client.writes == []
 
 
 @pytest.mark.asyncio
-async def test_delegation_startup_requires_ready_standing() -> None:
-    rebac = SimpleNamespace(
-        enforces_standing=True,
-        validate_standing_model=AsyncMock(),
-        is_standing_seed_ready=AsyncMock(return_value=False),
-    )
-    context = _Context(rebac)
+async def test_delegation_startup_refuses_a_model_without_suspended() -> None:
+    client = _ModelOnlyOpenFga(_allow_list_model())
 
-    with pytest.raises(ValueError, match="not ready"):
-        await _require_delegation_standing(context, enabled=True)
+    with preserved_delegation():
+        initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+        with pytest.raises(RuntimeError, match=r"^Account status authorization model is not available\.$"):
+            await enforce_account_status(_engine(client))
 
-
-@pytest.mark.asyncio
-async def test_disabled_delegation_does_not_require_rebac() -> None:
-    context = _Context(error=AssertionError("must not resolve ReBAC"))
-
-    await _require_delegation_standing(context, enabled=False)
+    assert client.writes == []
 
 
 @pytest.mark.parametrize(
-    ("delegation", "expected"),
-    [
-        (DelegationConfig(act_for_people=True), True),
-        (DelegationConfig(accept_delegated_calls=True), True),
-        (DelegationConfig(), False),
-    ],
+    "delegation",
+    [DelegationConfig(act_for_people=True), DelegationConfig(accept_delegated_calls=True), DelegationConfig()],
     ids=["act_for_people", "accept_delegated_calls", "off"],
 )
-def test_app_startup_checks_standing_when_either_switch_is_on(
+def test_app_startup_installs_the_engine_when_either_switch_is_on(
     app_context: ApplicationContext,
     monkeypatch,
     delegation: DelegationConfig,
-    expected: bool,
 ) -> None:
     config = app_context.configuration.model_copy(deep=True)
     config.security.delegation = delegation
-    recorded: list[bool] = []
+    client = _ModelOnlyOpenFga(json.loads(DEFAULT_SCHEMA))
+    built: list[OpenFgaRebacEngine] = []
 
-    # Stop startup right after the check: the rest of the lifespan needs a database.
-    async def record_standing(_context: Any, *, enabled: bool) -> None:
-        recorded.append(enabled)
-        raise _StandingChecked
+    def build_engine(_context: Any) -> OpenFgaRebacEngine:
+        built.append(_engine(client))
+        return built[-1]
+
+    # Stop startup right after the account status step: the rest of the lifespan needs a database.
+    def stop(_context: Any) -> None:
+        raise _StartupCheckRan
 
     monkeypatch.setattr(main_module, "load_configuration", lambda: config)
-    monkeypatch.setattr(main_module, "_require_delegation_standing", record_standing)
+    monkeypatch.setattr(ApplicationContext, "get_pg_async_engine", stop)
+    monkeypatch.setattr(ApplicationContext, "get_rebac_engine", build_engine)
     monkeypatch.setattr(main_module, "start_http_server", lambda *args, **kwargs: None)
-    for attr_name in [
-        "MonitoringController",
-        "TasksController",
-        "MetadataController",
-        "ContentController",
-        "IngestionController",
-        "LibrarySyncController",
-        "TagController",
-        "VectorSearchController",
-        "CorpusTreeController",
-        "SummarizeController",
-        "ExtractController",
-        "ResourceController",
-        "McpFilesystemController",
-        "CorpusManagerController",
-        "TabularController",
-        "OpenSearchOpsController",
-        "SchedulerController",
-    ]:
+    for attr_name in [name for name in vars(main_module) if name.endswith("Controller")]:
         monkeypatch.setattr(main_module, attr_name, lambda *args, **kwargs: None)
     # create_app builds its own context and installs the delegation block
     # process-wide; both are put back when the test ends.
     monkeypatch.setattr(ApplicationContext, "_instance", None)
     with preserved_delegation():
         app = create_app()
-        with pytest.raises(_StandingChecked), TestClient(app):
+        with pytest.raises(_StartupCheckRan), TestClient(app):
             pass
+        # The request's account status check reaches the engine startup installed.
+        asyncio.run(require_active_subject(_PERSON))
 
-    assert recorded == [expected]
+    assert len(built) == (1 if delegation.in_use else 0)
+    assert client.checks == ([("user:synthetic-person", "suspended", "organization:fred")] if delegation.in_use else [])
+    assert client.writes == []
+
+
+def test_app_startup_refuses_a_model_without_suspended(app_context: ApplicationContext, monkeypatch) -> None:
+    config = app_context.configuration.model_copy(deep=True)
+    config.security.delegation = DelegationConfig(accept_delegated_calls=True)
+    client = _ModelOnlyOpenFga(_allow_list_model())
+
+    monkeypatch.setattr(main_module, "load_configuration", lambda: config)
+    monkeypatch.setattr(ApplicationContext, "get_rebac_engine", lambda _context: _engine(client))
+    monkeypatch.setattr(main_module, "start_http_server", lambda *args, **kwargs: None)
+    for attr_name in [name for name in vars(main_module) if name.endswith("Controller")]:
+        monkeypatch.setattr(main_module, attr_name, lambda *args, **kwargs: None)
+    monkeypatch.setattr(ApplicationContext, "_instance", None)
+    with preserved_delegation():
+        app = create_app()
+        with pytest.raises(RuntimeError, match=r"^Account status authorization model is not available\.$"), TestClient(app):
+            pass
+        with pytest.raises(AccountStatusError) as refused:
+            asyncio.run(require_active_subject(_PERSON))
+
+    assert refused.value.unavailable is True
+    assert client.writes == []

@@ -104,6 +104,9 @@ the endpoint.
 
 A tool call resolves to an ordinary route. The grant verified at the mount SHALL
 reach that route, so the route authorizes the same person the mount verified.
+With a delegation switch on, the request's account status check SHALL run once for a
+mounted tool call, where the serving route establishes its subject. The mount
+itself SHALL only authenticate.
 
 #### Scenario: The route acts for the person the mount verified
 
@@ -126,10 +129,23 @@ reach that route, so the route authorizes the same person the mount verified.
 - **THEN** the inner route applies that service identity's own authorization and
   eligible service-role shortcuts
 
+#### Scenario: One account status check per mounted tool call
+
+- **GIVEN** a receiver with a delegation switch on
+- **WHEN** a mounted tool call is served, with or without a verified grant
+- **THEN** its subject's account status is checked exactly once, by the route that
+  serves the call
+
+#### Scenario: The mount makes no account status check
+
+- **GIVEN** a receiver with a delegation switch on
+- **WHEN** the mount receives initialization or a tool listing
+- **THEN** it authenticates the caller and makes no account status check
+
 ### Requirement: Tool results preserve inner-route authority refusals
 
 An inner route's authentication or permission refusal, or its structured
-standing-unavailable failure, SHALL retain a bounded machine-readable authority
+`account_status_unavailable` failure, SHALL retain a bounded machine-readable authority
 refusal through the tool protocol. A successful outer HTTP transport SHALL NOT
 erase that refusal. A delegated client SHALL convert it into `authority_lost`
 before ordinary tool-error handling, without parsing or surfacing upstream text.
@@ -141,9 +157,9 @@ before ordinary tool-error handling, without parsing or surfacing upstream text.
 - **THEN** the tool result preserves the authority refusal even over successful HTTP
 - **AND** the delegated client stops the run and awaits descendant termination
 
-#### Scenario: An inner standing check is unavailable
+#### Scenario: An inner account status check is unavailable
 
-- **WHEN** an inner route returns the structured standing-unavailable HTTP 503
+- **WHEN** an inner route returns the structured `account_status_unavailable` HTTP 503
 - **THEN** the tool protocol preserves that cause and the delegated client stops the run
 - **AND** an unrelated HTTP 503 retains ordinary tool-error behavior
 
@@ -165,7 +181,7 @@ This behavior SHALL apply with and without delegation.
 
 - **WHEN** another tool fails, `read_query` returns a different error status, or its HTTP 400 body has no non-empty string `detail`
 - **THEN** no SQL diagnostic is exposed
-- **AND** authentication and standing refusals retain their typed authority handling
+- **AND** authentication and account status refusals retain their typed authority handling
 
 ### Requirement: A model cannot name the person a tool call acts for
 

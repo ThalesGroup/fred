@@ -26,8 +26,12 @@ from pydantic import AnyHttpUrl, AnyUrl
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.security import oidc
-from fred_core.security.delegation import DelegationConfig, preserved_delegation
-from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.delegation import (
+    DelegationConfig,
+    preserved_delegation,
+    require_active_subject,
+)
+from fred_core.security.models import AccountStatusError, AuthorizationError, Resource
 from fred_core.security.rebac import rebac_sdk as rebac_sdk_module
 from fred_core.security.rebac.noop_engine import NoopRebacEngine
 from fred_core.security.rebac.rebac_engine import (
@@ -35,6 +39,7 @@ from fred_core.security.rebac.rebac_engine import (
     CapabilityPermission,
     RebacEngine,
     RebacReference,
+    Relation,
     TeamPermission,
 )
 from fred_core.security.rebac.rebac_sdk import RebacSdk, rebac_sdk_factory
@@ -73,22 +78,38 @@ class _FailingInitializationFakeRebacEngine(_ClosingFakeRebacEngine):
         raise RuntimeError("OpenFGA unavailable")
 
 
-class _StandingFakeRebacEngine(_ClosingFakeRebacEngine):
-    def __init__(self, *, model_ok: bool = True, seed_ready: bool = True) -> None:
+class _AccountStatusFakeRebacEngine(_ClosingFakeRebacEngine):
+    def __init__(self, *, model_ok: bool = True) -> None:
         super().__init__()
         self.model_ok = model_ok
-        self.seed_ready = seed_ready
         self.model_checks = 0
-        self.seed_checks = 0
+        self.account_status_checks: list[str] = []
+        self.writes: list[object] = []
 
-    async def validate_standing_model(self) -> None:
+    @property
+    def requires_active_accounts(self) -> bool:
+        # The factory builds an enforcing engine whenever a switch is on.
+        return True
+
+    async def validate_account_status_model(self) -> None:
         self.model_checks += 1
         if not self.model_ok:
-            raise RuntimeError("Standing authorization model is not available.")
+            raise RuntimeError("Account status authorization model is not available.")
 
-    async def is_standing_seed_ready(self) -> bool:
-        self.seed_checks += 1
-        return self.seed_ready
+    async def require_active_account(self, user_id: str) -> None:
+        self.account_status_checks.append(user_id)
+
+    async def _persist_relation(self, relation: Relation) -> str | None:
+        self.writes.append(relation)
+        return None
+
+    async def delete_relation(self, relation: Relation) -> str | None:
+        self.writes.append(relation)
+        return None
+
+    async def suspend_account(self, user_id: str) -> str | None:
+        self.writes.append(user_id)
+        return None
 
 
 @pytest.fixture(autouse=True)
@@ -409,46 +430,32 @@ _IN_USE = pytest.mark.parametrize(
 
 @pytest.mark.asyncio
 @_IN_USE
-async def test_factory_refuses_to_start_under_delegation_until_standing_is_ready(
+async def test_factory_refuses_to_start_under_delegation_when_the_model_lacks_account_status(
     monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig
 ) -> None:
-    """A backend using delegation refuses to start rather than refusing every
-    person: with no standing marker, every person decision would be a 403."""
-    engine = _StandingFakeRebacEngine(seed_ready=False)
+    engine = _AccountStatusFakeRebacEngine(model_ok=False)
     _install_engine(monkeypatch, engine)
 
-    with pytest.raises(ValueError, match="Account standing is not ready"):
+    with pytest.raises(RuntimeError, match="Account status authorization model"):
         await rebac_sdk_factory(
             _security(delegation=delegation), kpi_writer=NoOpKPIWriter()
         )
 
     assert engine.model_checks == 1
-    assert engine.seed_checks == 1
+    assert engine.writes == []
+    with pytest.raises(AccountStatusError) as refused:
+        await require_active_subject(_USER)
+    assert refused.value.unavailable is True
 
 
 @pytest.mark.asyncio
 @_IN_USE
-async def test_factory_refuses_to_start_under_delegation_when_the_model_lacks_standing(
+async def test_factory_under_delegation_validates_the_model_and_writes_nothing(
     monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig
 ) -> None:
-    engine = _StandingFakeRebacEngine(model_ok=False)
-    _install_engine(monkeypatch, engine)
-
-    with pytest.raises(RuntimeError, match="Standing authorization model"):
-        await rebac_sdk_factory(
-            _security(delegation=delegation), kpi_writer=NoOpKPIWriter()
-        )
-
-    assert engine.model_checks == 1
-    assert engine.seed_checks == 0
-
-
-@pytest.mark.asyncio
-@_IN_USE
-async def test_factory_admits_a_ready_store_under_delegation(
-    monkeypatch: pytest.MonkeyPatch, delegation: DelegationConfig
-) -> None:
-    engine = _StandingFakeRebacEngine()
+    """Every person Fred has not suspended has an active account with no stored
+    entry, so a valid model is all a backend needs to start."""
+    engine = _AccountStatusFakeRebacEngine()
     _install_engine(monkeypatch, engine)
 
     sdk = await rebac_sdk_factory(
@@ -457,22 +464,25 @@ async def test_factory_admits_a_ready_store_under_delegation(
 
     assert sdk is not None
     assert engine.model_checks == 1
-    assert engine.seed_checks == 1
+    assert engine.writes == []
+    # Installed for the account status check of each authenticated request.
+    await require_active_subject(_USER)
+    assert engine.account_status_checks == [_USER.uid]
 
 
 @pytest.mark.asyncio
-async def test_factory_skips_the_standing_preflight_without_delegation(
+async def test_factory_skips_the_account_status_preflight_without_delegation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An application that enforces no standing has nothing to preflight, and
-    must not be blocked by a store that was never seeded."""
-    engine = _StandingFakeRebacEngine(model_ok=False, seed_ready=False)
+    """An application that enforces no account status has nothing to preflight, and
+    must not be blocked by a model that cannot suspend accounts."""
+    engine = _AccountStatusFakeRebacEngine(model_ok=False)
     _install_engine(monkeypatch, engine)
 
     await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())
 
     assert engine.model_checks == 0
-    assert engine.seed_checks == 0
+    assert engine.writes == []
 
 
 def test_private_implementation_rejects_noop_engine() -> None:

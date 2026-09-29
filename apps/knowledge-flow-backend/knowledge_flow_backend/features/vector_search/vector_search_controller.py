@@ -20,7 +20,6 @@ from fastapi.concurrency import run_in_threadpool
 from fred_core import (
     DocumentPermission,
     KeycloakUser,
-    StandingAuthorizationError,
     TagPermission,
     get_current_user,
 )
@@ -98,8 +97,6 @@ class VectorSearchController:
                         include_corpus_scope=request.include_corpus_scope,
                     )
                 return hits
-            except StandingAuthorizationError:
-                raise
             except Exception as e:
                 logger.exception("[VECTOR][SEARCH] Unexpected error during vector search")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -143,8 +140,6 @@ class VectorSearchController:
                     )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-            except StandingAuthorizationError:
-                raise
             except Exception as e:
                 logger.exception("[VECTOR][SIMILARITY] Unexpected error during similarity search")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

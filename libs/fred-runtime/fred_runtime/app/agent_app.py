@@ -43,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import (
     AsyncGenerator,
@@ -64,8 +65,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fred_core.common.config_loader import get_config
 from fred_core.common.fastapi_handlers import (
+    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
-    STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
@@ -79,7 +80,13 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
-from fred_core.security.delegation import AssertedUser, holds_caller_role
+from fred_core.security.delegation import (
+    AssertedUser,
+    DelegationGrant,
+    enforce_account_status,
+    holds_caller_role,
+)
+from fred_core.security.models import AuthorizationError
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -251,6 +258,13 @@ from .observability_factory import bootstrap_observability
 
 logger = logging.getLogger(__name__)
 
+# Under delegation an audit event keeps codes only: free text can name a person.
+_BOUNDED_AUDIT_CODE = re.compile(r"[a-z_]+")
+
+
+def _is_bounded_audit_code(value: object) -> bool:
+    return isinstance(value, str) and _BOUNDED_AUDIT_CODE.fullmatch(value) is not None
+
 
 def _emit_audit_event(
     container: PodApplicationContext,
@@ -266,11 +280,12 @@ def _emit_audit_event(
     so every audit-worthy event across the runtime (this one, and tool-call
     invocations in ContextAwareTool) lands identically shaped.
     """
-    delegation = get_delegation_runtime()
-    if delegation is not None and delegation.enabled:
+    if delegation_enabled():
+        outcome, reason = fields.get("outcome"), fields.get("reason")
+        derived = "rejected" if level in {"warning", "error"} else "accepted"
         fields = {
-            "outcome": "rejected" if level in {"warning", "error"} else "accepted",
-            "reason": name,
+            "outcome": outcome if _is_bounded_audit_code(outcome) else derived,
+            "reason": reason if _is_bounded_audit_code(reason) else name,
         }
     event = cast(
         AuditEventRecord,
@@ -1752,12 +1767,13 @@ async def _resolve_agent_instance(
     response = await http_client.get(url, **request_kwargs)
     if (
         response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        and response.headers.get(DENIAL_CAUSE_HEADER) == STANDING_UNAVAILABLE_CAUSE
+        and response.headers.get(DENIAL_CAUSE_HEADER)
+        == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
     ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Account standing could not be checked. Try again shortly.",
-            headers={DENIAL_CAUSE_HEADER: STANDING_UNAVAILABLE_CAUSE},
+            detail="Account status could not be checked. Try again shortly.",
+            headers={DENIAL_CAUSE_HEADER: ACCOUNT_STATUS_UNAVAILABLE_CAUSE},
         )
     if response.status_code == status.HTTP_404_NOT_FOUND:
         raise HTTPException(
@@ -1939,16 +1955,12 @@ async def _authorize_execution_or_raise(
                 ),
             )
         # A service identity runs as itself, identity-only, as with delegation off.
-        if delegated and not is_service_agent(authenticated_user):
+        team_id = request.effective_team_id()
+        if delegated and team_id and not is_service_agent(authenticated_user):
             rebac = get_runtime_context().config.rebac_engine
-            if rebac is None or not rebac.enabled:
-                raise HTTPException(status_code=503, detail="standing_unavailable")
-            await rebac.require_user_standing(authenticated_user.uid)
-            if request.effective_team_id():
+            if rebac is not None:
                 await rebac.check_user_team_permission_or_raise(
-                    authenticated_user,
-                    TeamPermission.CAN_USE_TEAM_AGENTS,
-                    request.effective_team_id(),
+                    authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
                 )
         return
 
@@ -2000,9 +2012,19 @@ async def _authorize_execution_or_raise(
     # already authorizes the owner and denies everyone else — no special-
     # casing needed here (the bare "personal" alias also denies normally,
     # since no tuple is ever provisioned for that literal string).
-    await rebac.check_user_team_permission_or_raise(
-        authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
-    )
+    try:
+        await rebac.check_user_team_permission_or_raise(
+            authenticated_user, TeamPermission.CAN_USE_TEAM_AGENTS, team_id
+        )
+    except AuthorizationError:
+        _emit_audit_event(
+            container,
+            "warning",
+            "rebac_denied",
+            outcome="rejected",
+            reason="permission_refused",
+        )
+        raise
     _emit_audit_event(
         container,
         "info",
@@ -2147,19 +2169,28 @@ def _admit_run_credentials(
         agent_instance_id or agent_id
     ):
         raise HTTPException(status_code=403, detail="delegation_target_mismatch")
-    record = delegation.records.admit(
-        RunRecord(
-            run_id=(
-                authenticated_user.run_id
-                if isinstance(authenticated_user, AssertedUser)
-                else str(uuid4())
-            ),
-            person_id=authenticated_user.uid,
-            agent_id=(agent_instance_id or agent_id or "unknown_agent"),
-        )
+    run_id = (
+        authenticated_user.run_id
+        if isinstance(authenticated_user, AssertedUser)
+        else str(uuid4())
     )
-    # Both halves of what a delegated call presents — the program that speaks and
-    # the person it speaks for — and neither of the credentials behind them.
+    agent = agent_instance_id or agent_id or "unknown_agent"
+    try:
+        # A receiver rejects a grant its rule refuses, so such a run would act
+        # for nobody; refuse it before a record exists.
+        DelegationGrant(person=authenticated_user.uid, run=run_id, agent=agent)
+    except ValidationError:
+        _emit_audit_event(
+            container,
+            "warning",
+            "delegation_unavailable",
+            outcome="rejected",
+            reason="invalid_parameters",
+        )
+        raise HTTPException(status_code=403, detail="delegation_unavailable") from None
+    record = delegation.records.admit(
+        RunRecord(run_id=run_id, person_id=authenticated_user.uid, agent_id=agent)
+    )
     _emit_audit_event(
         container,
         "info",
@@ -5858,13 +5889,8 @@ def create_agent_app(
                 if security is not None
                 else None
             )
-            # The engine enforces standing in either direction; check its seed here.
-            if security is not None and security.delegation.in_use:
-                if rebac_engine is None:
-                    raise ValueError("Delegation requires a relationship engine.")
-                await rebac_engine.validate_standing_model()
-                if not await rebac_engine.is_standing_seed_ready():
-                    raise ValueError("Account standing is not ready.")
+            if rebac_engine is not None:
+                await enforce_account_status(rebac_engine)
             chat_factory = _build_chat_model_factory(config)
             if model_provider is not None and isinstance(
                 chat_factory, RoutedChatModelFactory

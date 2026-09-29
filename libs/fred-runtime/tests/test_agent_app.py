@@ -421,8 +421,8 @@ def _secured_pod(
     tmp_path,
     *,
     caller_client_id: str,
-    enforces_standing: bool = True,
-    standing_seed_ready: bool = True,
+    requires_active_accounts: bool = True,
+    account_status_model_error: Exception | None = None,
     accept_delegated_calls: bool = True,
     **token: object,
 ):
@@ -451,11 +451,12 @@ def _secured_pod(
         agent_app_module,
         "rebac_factory",
         lambda *args, **kwargs: SimpleNamespace(
-            enforces_standing=enforces_standing,
+            requires_active_accounts=requires_active_accounts,
             enabled=True,
-            validate_standing_model=AsyncMock(),
-            is_standing_seed_ready=AsyncMock(return_value=standing_seed_ready),
-            require_user_standing=AsyncMock(),
+            validate_account_status_model=AsyncMock(
+                side_effect=account_status_model_error
+            ),
+            require_active_account=AsyncMock(),
         ),
     )
     app = create_agent_app(
@@ -507,8 +508,9 @@ def test_a_role_holder_whose_token_is_not_addressed_to_delegation_is_refused(
 def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegation(
     monkeypatch, tmp_path, _pod_inbound_security
 ) -> None:
-    """The evaluator names no person: it runs on its own bearer, and a direct
-    target skips the person's standing and team checks, as with delegation off."""
+    """The evaluator names no person: it runs on its own bearer. Its request's
+    account status check passes, and a direct target skips the team check, as with
+    delegation off."""
     app, delegation = _secured_pod(
         monkeypatch, tmp_path, caller_client_id="caller-1", accept_delegated_calls=False
     )
@@ -516,7 +518,7 @@ def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegatio
     with TestClient(app) as client:
         engine = get_runtime_context().config.rebac_engine
         assert engine is not None
-        engine.require_user_standing = AsyncMock(side_effect=AssertionError)
+        engine.require_active_account = AsyncMock()
         engine.check_user_team_permission_or_raise = AsyncMock(
             side_effect=AssertionError
         )
@@ -538,6 +540,7 @@ def test_a_service_bearer_without_the_caller_role_runs_as_itself_under_delegatio
         ]
 
     assert response.status_code == 200
+    engine.require_active_account.assert_awaited_once_with("workload-caller")
     assert admitted == []
     assert len(delegation.records) == 0
 
@@ -6677,19 +6680,51 @@ async def test_authorize_and_resolve_times_pod_authz_and_runtime_binding_phases(
 @pytest.mark.parametrize(
     "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
 )
-def test_delegation_refuses_to_start_before_standing_is_ready(
+def test_delegation_startup_validates_the_account_status_model_and_writes_nothing(
     monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
 ) -> None:
-    """Before default standing is granted the store answers "not active" for
-    everyone, which would refuse every person rather than enforce anything."""
+    """Every person without a suspension has an active account, so startup only
+    reads the model: the engine exposes no write, and nothing else is awaited."""
     app, _ = _secured_pod(
         monkeypatch,
         tmp_path,
         caller_client_id="caller-1",
-        standing_seed_ready=False,
         accept_delegated_calls=accept_delegated_calls,
     )
 
-    with pytest.raises(ValueError, match="not ready"):
+    with TestClient(app):
+        engine = get_runtime_context().config.rebac_engine
+        assert engine is not None
+        awaited = {
+            name
+            for name, value in vars(engine).items()
+            if isinstance(value, AsyncMock) and value.await_count
+        }
+
+    assert awaited == {"validate_account_status_model"}
+    engine.validate_account_status_model.assert_awaited_once_with()
+
+
+@pytest.mark.parametrize(
+    "accept_delegated_calls", [False, True], ids=["acting-only", "also-accepting"]
+)
+def test_delegation_refuses_to_start_on_a_model_without_the_suspended_relation(
+    monkeypatch, tmp_path, _pod_inbound_security, accept_delegated_calls: bool
+) -> None:
+    """A model that cannot record a suspension cannot refuse anyone, so the pod
+    stops before serving instead of admitting every person."""
+    app, _ = _secured_pod(
+        monkeypatch,
+        tmp_path,
+        caller_client_id="caller-1",
+        account_status_model_error=RuntimeError(
+            "Account status authorization model is not available."
+        ),
+        accept_delegated_calls=accept_delegated_calls,
+    )
+
+    with pytest.raises(
+        RuntimeError, match="^Account status authorization model is not available.$"
+    ):
         with TestClient(app):
             pass

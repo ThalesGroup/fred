@@ -29,8 +29,10 @@ from uuid import uuid4
 import httpx
 from fred_core import (
     ORGANIZATION_ID,
+    AssertedUser,
     KeycloakUser,
     OrganizationPermission,
+    Principal,
     RebacEngine,
     holds_caller_role,
     is_service_agent,
@@ -3153,7 +3155,7 @@ def _session_usable_for_execution(
 
 async def prepare_execution(
     *,
-    user: KeycloakUser,
+    user: Principal,
     team_id: TeamId,
     agent_instance_id: str,
     session_id: str | None = None,
@@ -3296,13 +3298,16 @@ async def prepare_execution(
         available_capabilities,
         max_chat_input_chars,
     ) = await _runtime_execution_metadata_for_source(source.base_url)
-    chat_controls = await _resolve_chat_controls(
-        instance.tuning,
-        available_capabilities,
-        source.base_url,
-        # The pod's chat-controls route authenticates the caller; forward the
-        # acting user's bearer like the validate-config round-trip.
-        authorization=authorization,
+    # Only a caller's own bearer is ever presented to the pod.
+    chat_controls = (
+        []
+        if isinstance(user, AssertedUser)
+        else await _resolve_chat_controls(
+            instance.tuning,
+            available_capabilities,
+            source.base_url,
+            authorization=authorization,
+        )
     )
 
     # Team routing policy snapshot (TEAM-ROUTING-POLICY-RFC.md §8.2, TEAM-05,

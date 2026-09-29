@@ -37,7 +37,7 @@ Existing user-token recovery stays in its client-specific owners: knowledge-flow
 
 For service-account calls, only the shared HTTP auth flow owns the authentication retry. Existing client and MCP retry wrappers must not retry a terminal service-token 401/403 again. Delegated terminal-error mapping follows the allowed retry; grants, selected identity and local cancellation checks remain intact. `no_token` connections receive no adapter.
 
-Keep request construction and delegation in their existing owners. Auth integration preserves methods, destinations, query parameters, bodies and non-authentication headers. Delegation switches, grant values, receiver permission and standing checks, timeouts, connection pools and response streaming remain unchanged. A retry reuses the original request with the replacement bearer and rechecks local run liveness after waiting for refresh. It never adds a grant to a non-delegated call or substitutes a service identity for a person.
+Keep request construction and delegation in their existing owners. Auth integration preserves methods, destinations, query parameters, bodies and non-authentication headers. Delegation switches, grant values, receiver permission and account status checks, timeouts, connection pools and response streaming remain unchanged. A retry reuses the original request with the replacement bearer and rechecks local run liveness after waiting for refresh. It never adds a grant to a non-delegated call or substitutes a service identity for a person.
 
 ### Make reuse explicit for library consumers
 

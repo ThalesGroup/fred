@@ -27,9 +27,10 @@ import { SELF_TEST_AGENT_ID } from "./corpus";
 
 const MARGIN_SECONDS = 15;
 const TOLERANCE_MS = 5_000;
-const BASELINE_STEP = { id: "baseline-access", title: "Check authenticated access before expiry" };
-const EXPIRY_STEP = { id: "expiry-turn", title: "Check authenticated access after expiry" };
-const EXPIRY_REFUSAL = "the credential expired during the protected call and the turn did not recover";
+const BASELINE_STEP = { id: "baseline-access", title: "Access before your session expires" };
+const EXPIRY_STEP = { id: "expiry-turn", title: "Access after your session expires" };
+const EXPIRY_REFUSAL =
+  "your session expired during the run and the agent's next call was refused; delegated execution keeps long runs working";
 const CALL_REFUSED = "the protected call after the hold was refused, but not because the credential expired";
 const CALL_UNREACHABLE = "the protected call after the hold did not reach the service";
 
@@ -144,7 +145,7 @@ export function credentialExpiryScenario(input: CredentialExpiryInput = {}): Sce
                 report({
                   ...BASELINE_STEP,
                   status: "passed",
-                  detail: "the credential was accepted before the wait began",
+                  detail: "access was granted before the wait began",
                   durationMs: baselineMs(),
                 });
               }
@@ -179,15 +180,19 @@ export function credentialExpiryScenario(input: CredentialExpiryInput = {}): Sce
         if (!statuses.protected_call_succeeded || statuses.protected_call_succeeded < holdSeenAt) {
           throw new Error("the protected call did not succeed after the hold");
         }
-        if (!statuses.credential_renewed) {
-          throw new Error(
-            "inconclusive: the protected call succeeded, but renewal was not observed; the original token may still be accepted",
-          );
+        const seenAfterHold = (status: string) => (statuses[status] ?? -Infinity) >= holdSeenAt;
+        if (seenAfterHold("person_credential_absent")) {
+          return { value: true, detail: "access survived the session's expiry without the person's token" };
         }
-        return {
-          value: true,
-          detail: "authenticated metadata access succeeded after expiry and credential renewal was observed",
-        };
+        if (seenAfterHold("credential_renewed")) {
+          return {
+            value: true,
+            detail: "authenticated access survived the session's expiry and credential renewal was observed",
+          };
+        }
+        throw new Error(
+          "inconclusive: the protected call succeeded, but neither renewal nor a turn without the person's token was observed; the original token may still be accepted",
+        );
       });
 
       if (!baselineSettled) {

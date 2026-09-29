@@ -109,8 +109,8 @@ class AuthorizationError(PermissionError):
         super().__init__(message or default_message)
 
 
-class StandingAuthorizationError(AuthorizationError):
-    """Bounded denial raised when current person standing cannot be established."""
+class AccountStatusError(AuthorizationError):
+    """Bounded denial: the person's account is not active, or its status cannot be checked."""
 
     def __init__(self, *, unavailable: bool = False) -> None:
         self.unavailable = unavailable
@@ -118,6 +118,6 @@ class StandingAuthorizationError(AuthorizationError):
             "",
             "access protected resources",
             Resource.ORGANIZATION,
-            "Current account standing could not be established.",
+            "Current account status could not be established.",
             subject_type=Resource.USER,
         )

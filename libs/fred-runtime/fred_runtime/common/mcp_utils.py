@@ -41,8 +41,8 @@ from typing import Dict, Final, List, Tuple
 
 import httpx
 from fred_core.common.fastapi_handlers import (
+    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
-    STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import scrub_grant_text
@@ -171,7 +171,7 @@ def _refusal_status(error: BaseException) -> int | None:
             if response.status_code in _REFUSAL_STATUSES or (
                 response.status_code == 503
                 and response.headers.get(DENIAL_CAUSE_HEADER)
-                == STANDING_UNAVAILABLE_CAUSE
+                == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
             ):
                 return response.status_code
         pending.extend(
@@ -365,7 +365,7 @@ async def get_connected_mcp_client_for_agent(
 
     # --- Ask the provider ONCE for this connection attempt ---
     # With act_for_people off it answers with the person's bearer, on with the
-    # runtime's own workload bearer plus the grant this run acts under.
+    # grant this run acts under; M2MBearerAuth sets the workload bearer per request.
     needs_credentials = any(
         _normalize_auth_mode(server.auth_mode) != AUTH_MODE_NO_TOKEN
         for server in mcp_servers
@@ -376,18 +376,14 @@ async def get_connected_mcp_client_for_agent(
         call_credentials = OutboundCredentials()
     # --------------------------------------------------
 
-    if not call_credentials.authorization:
-        if confined:
-            logger.warning("[MCP] event=credential_resolution outcome=empty")
-        else:
-            logger.warning("MCP connect init: no outbound credential was supplied.")
+    if not call_credentials.authorization and not confined:
+        logger.warning("MCP connect init: no outbound credential was supplied.")
 
     auth_label = _mask_auth_value(call_credentials.authorization)
     # 🟢 LOG 5: Auth status
     if confined:
         logger.info(
-            "[MCP] event=credential_resolution outcome=completed auth=%s delegated=%s",
-            auth_label,
+            "[MCP] event=credential_resolution outcome=completed delegated=%s",
             call_credentials.delegated,
         )
     else:

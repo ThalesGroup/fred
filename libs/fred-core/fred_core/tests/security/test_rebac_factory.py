@@ -69,10 +69,10 @@ def test_delegation_with_both_halves_builds_the_enforcing_engine(
     )  # pragma: allowlist secret
     engine = rebac_factory(_security(delegation=delegation))
     assert isinstance(engine, OpenFgaRebacEngine)
-    assert engine.enforces_standing is True
+    assert engine.requires_active_accounts is True
 
 
-def test_without_delegation_the_engine_does_not_enforce_standing(
+def test_without_delegation_the_engine_does_not_enforce_account_status(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
@@ -80,4 +80,4 @@ def test_without_delegation_the_engine_does_not_enforce_standing(
     )  # pragma: allowlist secret
     engine = rebac_factory(_security(delegation=DelegationConfig()))
     assert isinstance(engine, OpenFgaRebacEngine)
-    assert engine.enforces_standing is False
+    assert engine.requires_active_accounts is False

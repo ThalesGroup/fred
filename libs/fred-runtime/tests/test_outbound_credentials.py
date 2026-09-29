@@ -16,23 +16,27 @@
 
 The provider is the only thing that answers "which credential, and on whose
 behalf", so these tests pin both halves: the person's bearer and nothing else
-with the flag off, and the workload bearer plus a grant composed solely from the
-run record with it on.
+with the flag off, and with it on a grant composed solely from the run record,
+beside a workload token the provider releases only to a live run.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import httpx
 import pytest
-from conftest import StaticWorkloadTokens
-from fred_core.security.backend_to_backend_auth import (
-    M2MAuthConfig,
-    M2MTokenProvider,
-    TokenLease,
+from conftest import (
+    IAM_MARKER,
+    WORKLOAD_SECRET_ENV,
+    MockIdentityProvider,
+    StaticWorkloadTokens,
+    admitted_provider,
 )
+from fred_core.security.backend_to_backend_auth import TokenLease
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
@@ -46,6 +50,7 @@ from fred_core.security.structure import (
 )
 from fred_runtime.common import kf_vectorsearch_client
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     DelegationConfigurationError,
     DelegationRuntime,
     PersonCredentialProvider,
@@ -61,10 +66,6 @@ from fred_runtime.common.outbound_credentials import (
 from fred_runtime.runtime_support.authority import DelegationUnavailableError
 from fred_runtime.runtime_support.run_scope import RunScope
 from pydantic import AnyUrl
-
-# Env var name used only to point the real token provider at a secret that does
-# not exist, so its failure path runs without any network.
-ABSENT_SECRET_ENV = "FRED_TEST_ABSENT_WORKLOAD_SECRET"  # pragma: allowlist secret
 
 
 class FakeWorkloadTokens(StaticWorkloadTokens):
@@ -115,6 +116,14 @@ def admitted(runtime: DelegationRuntime, **overrides) -> RunRecord:
     return runtime.records.admit(record)
 
 
+def delegated(runtime: DelegationRuntime, **names: str) -> DelegatedCredentialProvider:
+    provider = runtime.provider_for(
+        run_id=names.get("run_id", "run-1"), agent_id=names.get("agent_id", "agent-1")
+    )
+    assert isinstance(provider, DelegatedCredentialProvider)
+    return provider
+
+
 # ---------------------------------------------------------------------------
 # Flag off — today's behaviour, unchanged
 # ---------------------------------------------------------------------------
@@ -158,20 +167,25 @@ async def test_no_credential_at_all_yields_no_authorization_header():
 
 
 @pytest.mark.asyncio
-async def test_a_delegated_call_carries_the_workload_bearer_and_the_grant():
-    runtime = enabled_runtime(FakeWorkloadTokens("workload-1"))
-    admitted(runtime, person_id="alice", run_id="run-7", agent_id="agent-a")
-    provider = runtime.provider_for(run_id="run-7", agent_id="agent-a")
+async def test_resolving_a_delegated_grant_acquires_no_token(monkeypatch):
+    """The grant comes from the record alone; the workload bearer is the HTTP
+    authentication adapter's to obtain, once per request."""
+    identity = MockIdentityProvider(monkeypatch, "workload-1")
+    provider = admitted_provider(identity.provider)
 
     credentials = await provider.credentials()
 
-    assert credentials.authorization == "Bearer workload-1"
     assert credentials.parameters == {
         GRANT_PARAM_PERSON: "alice",
         GRANT_PARAM_RUN: "run-7",
         GRANT_PARAM_AGENT: "agent-a",
     }
     assert credentials.delegated is True
+    assert credentials.authorization is None
+    assert identity.events == []
+    assert identity.issued == []
+    assert (await provider.get_token_lease()).token == "workload-1"
+    assert identity.acquisitions == 1
 
 
 @pytest.mark.asyncio
@@ -180,11 +194,12 @@ async def test_a_caller_supplied_token_never_becomes_the_delegated_bearer():
     fallback the once-only rule forbids."""
     runtime = enabled_runtime(FakeWorkloadTokens("workload-1"))
     admitted(runtime)
-    provider = runtime.provider_for(run_id="run-1", agent_id="agent-1")
+    provider = delegated(runtime)
 
     credentials = await provider.credentials(override_token="someone-elses-bearer")
 
-    assert credentials.authorization == "Bearer workload-1"
+    assert "someone-elses-bearer" not in repr(credentials)
+    assert (await provider.get_token_lease()).token == "workload-1"
 
 
 @pytest.mark.asyncio
@@ -196,8 +211,11 @@ async def test_a_run_without_a_record_makes_no_delegated_call():
         await provider.credentials()
 
 
+@pytest.mark.parametrize("acquisition", ["lease", "renewal"])
 @pytest.mark.asyncio
-async def test_a_record_removed_during_token_renewal_cannot_supply_credentials():
+async def test_a_record_removed_during_token_acquisition_releases_no_token(
+    acquisition: str,
+):
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -209,8 +227,12 @@ async def test_a_record_removed_during_token_renewal_cannot_supply_credentials()
 
     runtime = enabled_runtime(_DelayedTokens())
     admitted(runtime)
-    provider = runtime.provider_for(run_id="run-1", agent_id="agent-1")
-    call = asyncio.create_task(provider.credentials())
+    provider = delegated(runtime)
+    call = asyncio.create_task(
+        provider.get_token_lease()
+        if acquisition == "lease"
+        else provider.refresh_rejected(TokenLease("rejected", 0))
+    )
     await started.wait()
     runtime.records.discard("run-1")
     release.set()
@@ -267,11 +289,12 @@ async def test_a_child_observes_a_provider_change_made_after_it_was_spawned():
     tokens = FakeWorkloadTokens("workload-1", "workload-2")
     runtime = enabled_runtime(tokens)
     admitted(runtime, run_id="run-7", agent_id="parent")
-    child = runtime.provider_for(run_id="run-7", agent_id="parent").for_agent("child")
+    child = delegated(runtime, run_id="run-7", agent_id="parent").for_agent("child")
 
-    assert (await child.credentials()).authorization == "Bearer workload-1"
+    assert (await child.get_token_lease()).token == "workload-1"
     tokens.rotate()
-    assert (await child.credentials()).authorization == "Bearer workload-2"
+    assert (await child.get_token_lease()).token == "workload-2"
+    assert (await child.credentials()).parameters[GRANT_PARAM_AGENT] == "child"
 
 
 @pytest.mark.asyncio
@@ -282,23 +305,22 @@ async def test_a_retried_call_asks_again_and_keeps_the_same_grant(monkeypatch):
     monkeypatch.setattr(kf_vectorsearch_client.asyncio, "sleep", _instant)
     tokens = FakeWorkloadTokens("workload-1", "workload-2")
     runtime = enabled_runtime(tokens)
-    record = admitted(runtime)
-    provider = runtime.provider_for(run_id=record.run_id, agent_id=record.agent_id)
-    attempts: list[tuple[str | None, dict[str, str]]] = []
+    admitted(runtime)
+    provider = delegated(runtime)
+    attempts: list[tuple[str, dict[str, str]]] = []
 
     async def request() -> str:
+        # One attempt as a client makes it: the grant, then the adapter's lease.
         credentials = await provider.credentials()
-        attempts.append((credentials.authorization, dict(credentials.parameters)))
+        lease = await provider.get_token_lease()
+        attempts.append((lease.token, dict(credentials.parameters)))
         if len(attempts) == 1:
             tokens.rotate()
             raise httpx.ConnectError("synthetic disconnect")
         return "ok"
 
     assert await kf_vectorsearch_client._with_transient_retry(request) == "ok"
-    assert [authorization for authorization, _ in attempts] == [
-        "Bearer workload-1",
-        "Bearer workload-2",
-    ]
+    assert [token for token, _ in attempts] == ["workload-1", "workload-2"]
     assert attempts[0][1] == attempts[1][1]
 
 
@@ -314,9 +336,12 @@ async def test_a_missing_workload_client_refuses_instead_of_falling_back():
         token_provider=None,
     )
     admitted(runtime)
+    provider = delegated(runtime)
 
     with pytest.raises(DelegationUnavailableError):
-        await runtime.provider_for(run_id="run-1", agent_id="agent-1").credentials()
+        await provider.get_token_lease()
+    with pytest.raises(DelegationUnavailableError):
+        await provider.refresh_rejected(TokenLease("rejected", 0))
 
 
 @pytest.mark.asyncio
@@ -356,32 +381,69 @@ def test_outgoing_delegation_follows_act_for_people_alone(
 # ---------------------------------------------------------------------------
 
 
+class _RecordingHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@contextmanager
+def recorded_logs() -> Iterator[_RecordingHandler]:
+    """Read every line from the root, which `caplog` stops seeing once a pod
+    has installed its logging setup."""
+    handler = _RecordingHandler()
+    root = logging.getLogger()
+    level = root.level
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+    try:
+        yield handler
+    finally:
+        root.setLevel(level)
+        root.removeHandler(handler)
+
+
+@pytest.mark.parametrize(
+    ("cause", "error_type"),
+    [
+        ("missing_secret", "RuntimeError"),
+        ("refused", "RuntimeError"),
+        ("unreachable", "ConnectError"),
+    ],
+)
+@pytest.mark.parametrize("acquisition", ["lease", "renewal"])
 @pytest.mark.asyncio
-async def test_a_failing_workload_fetch_never_reports_what_it_was_looking_for(
-    caplog, monkeypatch
+async def test_a_failed_workload_acquisition_logs_its_error_type_only(
+    monkeypatch, acquisition: str, cause: str, error_type: str
 ):
-    """A missing workload secret must name neither its setting nor upstream
-    detail in the provider, run failure, or log line."""
-    monkeypatch.delenv(ABSENT_SECRET_ENV, raising=False)
-    real = M2MTokenProvider(
-        M2MAuthConfig(
-            keycloak_realm_url="https://realm.invalid/realms/fred",
-            client_id="agent-backend",
-            secret_env=ABSENT_SECRET_ENV,
-        )
-    )
-    runtime = DelegationRuntime(
-        config=DelegationConfig(act_for_people=True),
-        token_provider=real,
-    )
+    """One line names the failure's type: never the secret's setting, never
+    what the identity provider answered."""
+    identity = MockIdentityProvider(monkeypatch, secret=cause != "missing_secret")
+    identity.failure = cause if cause != "missing_secret" else None
+    provider = admitted_provider(identity.provider)
 
-    caplog.clear()
-    with caplog.at_level(logging.ERROR):
+    with recorded_logs() as logs:
         with pytest.raises(DelegationUnavailableError) as raised:
-            await runtime.workload_token()
+            if acquisition == "lease":
+                await provider.get_token_lease()
+            else:
+                await provider.refresh_rejected(TokenLease("rejected", 0))
 
-    assert ABSENT_SECRET_ENV not in str(raised.value)
-    assert ABSENT_SECRET_ENV not in caplog.text
+    lines = [
+        (record.name, record.levelno, record.getMessage()) for record in logs.records
+    ]
+    assert lines == [
+        (
+            "fred_runtime.common.outbound_credentials",
+            logging.ERROR,
+            f"The workload credential could not be obtained ({error_type}).",
+        )
+    ]
+    for secret_or_upstream in (WORKLOAD_SECRET_ENV, IAM_MARKER):
+        assert secret_or_upstream not in str(raised.value)
     assert raised.value.__cause__ is None
     assert raised.value.reason == "delegation_unavailable"
 
@@ -568,9 +630,11 @@ async def test_a_terminal_record_stops_the_provider_before_workload_token():
     tokens = FakeWorkloadTokens()
     runtime = enabled_runtime(tokens)
     local = admitted(runtime)
-    provider = runtime.provider_for(run_id=local.run_id, agent_id=local.agent_id)
+    provider = delegated(runtime)
     runtime.records.mark_terminal(local.run_id)
 
     with pytest.raises(DelegationUnavailableError):
         await provider.credentials()
+    with pytest.raises(DelegationUnavailableError):
+        await provider.get_token_lease()
     assert tokens.calls == 0

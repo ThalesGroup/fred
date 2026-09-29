@@ -33,6 +33,7 @@ from fred_core import (
     KeycloakUser,
     get_current_user,
     get_current_user_without_gcu,
+    require_own_credential,
 )
 from fred_core.security.models import AuthorizationError
 from fred_sdk.knowledge_base import (
@@ -214,7 +215,7 @@ async def create_knowledge_base_instance(
     body: KnowledgeBaseInstanceCreate,
     request: Request,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> KnowledgeBaseInstanceSummary:
     """One gesture, four effects, or none.
 
@@ -259,7 +260,7 @@ async def delete_knowledge_base_instance(
     instance_id: str,
     request: Request,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> None:
     """Stopping a synchronization while keeping what it brought is deliberately
     not offered: deleting the folder deletes its documents."""

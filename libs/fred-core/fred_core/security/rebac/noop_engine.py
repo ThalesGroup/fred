@@ -43,8 +43,8 @@ class NoopRebacEngine(RebacEngine):
     async def _persist_relation(self, relation: Relation) -> str | None:
         return None
 
-    async def validate_standing_model(self) -> None:
-        raise RuntimeError("Standing authorization model is not available.")
+    async def validate_account_status_model(self) -> None:
+        raise RuntimeError("Account status authorization model is not available.")
 
     async def delete_relation(self, relation: Relation) -> str | None:
         return None

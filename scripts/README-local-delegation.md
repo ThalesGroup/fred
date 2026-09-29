@@ -30,8 +30,8 @@ Flow, which believe those calls. Every other delegation setting is read from the
 selected YAML. A file whose issuer is not a realm address of the selected
 configuration, or whose token lacked the delegation audience, is rejected.
 
-Start Control Plane first (`make run` in `apps/control-plane-backend`), then the
-remaining APIs, workers and frontend using their usual make commands. The Knowledge
+Start the APIs, workers and frontend with their usual make commands, in any order;
+each backend validates the authorization model on its own at startup. The Knowledge
 Flow worker respects `CONFIG_FILE`, and its local metrics port defaults to 9112 to
 avoid the API's port 9111. Control Plane's `run-worker` selects its dedicated
 `configuration_worker.yaml`.

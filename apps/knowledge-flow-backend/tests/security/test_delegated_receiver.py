@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator
 from datetime import datetime, timezone
-from typing import Any, cast
+from types import SimpleNamespace
 
 import jwt
 import pytest
@@ -10,9 +11,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core import StandingAuthorizationError
+from fred_core.common import get_config, register_exception_handlers
+from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
 from fred_core.security import oidc
-from fred_core.security.delegation import DelegationConfig, initialize_delegation
+from fred_core.security.delegation import DelegationConfig, enforce_account_status, initialize_delegation
 from fred_core.security.mcp_delegation import (
     declare_delegation_parameters,
     mcp_mount_auth,
@@ -20,11 +22,16 @@ from fred_core.security.mcp_delegation import (
 )
 from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
 from fred_core.security.oidc import get_current_user_without_gcu
+from fred_core.security.rebac.openfga_engine import OpenFgaRebacEngine
 from fred_core.security.structure import KeycloakUser
+from fred_core.tests.security.rebac_fakes import AccountStatusStore, account_status_engine
+from fred_core.users.store.postgres_user_store import get_user_store
 
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
-from knowledge_flow_backend.features.content.content_service import ContentService
 from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.tag.structure import Tag, TagType
+from knowledge_flow_backend.features.tag.tag_controller import TagController
 
 _HEADERS = {
     "authorization": "Bearer synthetic-workload-token",
@@ -32,6 +39,7 @@ _HEADERS = {
     "content-type": "application/json",
 }
 _GRANT = {"person": "person-a", "run": "run-a", "agent": "agent-a"}
+_PERSON = "user:person-a"
 _NOW = 2_000_000_000
 _REAL_DECODE_JWT = oidc.decode_jwt
 
@@ -75,16 +83,17 @@ def _delegation_globals(monkeypatch) -> Iterator[None]:
     initialize_delegation(DelegationConfig())
 
 
-def _configure() -> None:
-    initialize_delegation(
-        DelegationConfig(accept_delegated_calls=True),
-        issuers=["https://issuer.test/realms/fred"],
-        user_clients=["app"],
-    )
+def _configure(store: AccountStatusStore | None = None, *, issuer: str = "https://issuer.test/realms/fred", login_client: str = "app") -> OpenFgaRebacEngine:
+    """Start as the backend does: the delegation block, then the engine for the account status check."""
+    initialize_delegation(DelegationConfig(accept_delegated_calls=True), issuers=[issuer], user_clients=[login_client])
+    engine = account_status_engine(store or AccountStatusStore())
+    asyncio.run(enforce_account_status(engine))
+    return engine
 
 
 def _app_with_mcp() -> tuple[FastAPI, FastApiMCP]:
     app = FastAPI()
+    register_exception_handlers(app)
     router = APIRouter(dependencies=[Depends(declare_delegation_parameters)])
 
     @router.get("/documents", tags=["Documents"], operation_id="list_documents")
@@ -101,6 +110,17 @@ def _app_with_mcp() -> tuple[FastAPI, FastApiMCP]:
     )
     mcp.mount_http(mount_path="/mcp")
     return app, mcp
+
+
+_INITIALIZE = {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {},
+    "clientInfo": {"name": "test", "version": "1"},
+}
+
+
+def _mcp_post(client: TestClient, method: str, params: dict, *, grant: dict[str, str] | None = _GRANT):
+    return client.post("/mcp", params=grant, headers=_HEADERS, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 
 
 def _mcp_call(
@@ -189,7 +209,7 @@ def test_signed_receiver_keeps_rest_and_mcp_available_after_person_expiry(
     signed_tokens,
 ) -> None:
     token, issuer, login_client = signed_tokens
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True), issuers=[issuer], user_clients=[login_client])
+    _configure(issuer=issuer, login_client=login_client)
     expired_person = token(subject="person-a", client="browser", expires_at=_NOW - 1, caller=False)
     workload = token(subject="workload-subject", client="agent-runtime", expires_at=_NOW + 300)
     expired_workload = token(subject="workload-subject", client="agent-runtime", expires_at=_NOW - 1)
@@ -357,31 +377,109 @@ def test_mcp_tool_schema_does_not_offer_grant_fields() -> None:
     assert not set(_GRANT).intersection(schema.get("properties", {}))
 
 
-@pytest.mark.asyncio
-async def test_metadata_preserves_standing_denial() -> None:
-    class _Rebac:
-        async def lookup_user_resources(self, user, permission):
-            raise StandingAuthorizationError()
+@pytest.mark.parametrize(("grant", "subject"), [(_GRANT, "person-a"), (None, "workload-subject")], ids=["with-grant", "caller-only"])
+def test_a_mounted_tool_call_checks_account_status_once_in_the_route_serving_it(grant: dict[str, str] | None, subject: str) -> None:
+    store = AccountStatusStore()
+    _configure(store)
+    app, _ = _app_with_mcp()
 
-    service = MetadataService.__new__(MetadataService)
-    service.rebac = cast(Any, _Rebac())
+    with TestClient(app) as client:
+        assert _mcp_post(client, "initialize", _INITIALIZE, grant=grant).status_code == 200
+        assert _mcp_post(client, "tools/list", {}, grant=grant).status_code == 200
+        response = _mcp_post(client, "tools/call", {"name": "list_documents", "arguments": {}}, grant=grant)
 
-    with pytest.raises(StandingAuthorizationError):
-        await service.get_documents_metadata(KeycloakUser(uid="person-a", username="person", roles=[], email=None), {})
+    assert response.json()["result"]["isError"] is False
+    # The mount only authenticates; the route serving the call makes the one check.
+    assert store.account_status_checks() == [(f"user:{subject}", "HIGHER_CONSISTENCY")]
 
 
-@pytest.mark.asyncio
-async def test_content_does_not_fallback_after_standing_denial() -> None:
-    service = ContentService.__new__(ContentService)
+def test_a_tool_call_after_a_suspension_is_refused_by_its_serving_route() -> None:
+    store = AccountStatusStore()
+    _configure(store)
+    app, _ = _app_with_mcp()
 
-    async def _denied(user, document_uid):
-        raise StandingAuthorizationError()
+    with TestClient(app) as client:
+        assert _mcp_post(client, "initialize", _INITIALIZE).status_code == 200
+        store.suspended.add("person-a")
+        response = _mcp_post(client, "tools/call", {"name": "list_documents", "arguments": {}})
 
-    service.get_document_metadata = _denied
-    service._session_attachment_text = lambda user, document_uid: (_ for _ in ()).throw(AssertionError("standing denial reached attachment fallback"))
+    assert response.status_code == 200
+    assert response.json()["result"]["structuredContent"] == {"cause": "authority_lost"}
 
-    with pytest.raises(StandingAuthorizationError):
-        await service.get_markdown_preview(
-            KeycloakUser(uid="person-a", username="person", roles=[], email=None),
-            "document-a",
-        )
+
+_LIBRARY = "library-a"
+
+
+class _TagStore:
+    def __init__(self, tags: list[Tag]) -> None:
+        self._tags = tags
+
+    async def list_all_tags(self) -> list[Tag]:
+        return list(self._tags)
+
+
+def _personal_library(app_context: ApplicationContext, store: AccountStatusStore) -> TestClient:
+    """The real tag listing over one document library the person owns."""
+    now = datetime.now(timezone.utc)
+    library = Tag(id=_LIBRARY, created_at=now, updated_at=now, owner_id="person-a", name="Library", type=TagType.DOCUMENT)
+    app_context._rebac_engine = _configure(store)
+    app_context._tag_store_instance = _TagStore([library])  # pyright: ignore[reportAttributeAccessIssue]
+    app_context._resource_store_instance = SimpleNamespace()  # pyright: ignore[reportAttributeAccessIssue] - holds no document library item
+    app = FastAPI()
+    register_exception_handlers(app)
+    router = APIRouter()
+    TagController(app, router)
+    app.include_router(router)
+    app.dependency_overrides[get_user_store] = lambda: None
+    app.dependency_overrides[get_config] = lambda: SimpleNamespace(app=SimpleNamespace(gcu_version=None))
+    return TestClient(app)
+
+
+def test_a_personal_library_listing_checks_account_status_once(app_context: ApplicationContext) -> None:
+    owned = [f"tag:{_LIBRARY}"]
+    store = AccountStatusStore(objects={(_PERSON, relation, "tag"): owned for relation in ("read", "owner", "update", "delete", "share")})
+
+    response = _personal_library(app_context, store).get("/tags", params={"team_id": "personal", **_GRANT}, headers={"authorization": _HEADERS["authorization"]})
+
+    assert response.status_code == 200
+    assert [tag["id"] for tag in response.json()] == [_LIBRARY]
+    assert store.account_status_checks() == [(_PERSON, "HIGHER_CONSISTENCY")]
+    assert len(store.checks) == 1
+    # Each lookup keeps its caller's consistency; only the account status check asks for more.
+    assert [consistency for *_, consistency in store.list_objects_calls] == [None] * 9
+
+
+def test_a_suspended_person_lists_no_library(app_context: ApplicationContext) -> None:
+    store = AccountStatusStore(suspended={"person-a"}, objects={(_PERSON, "read", "tag"): [f"tag:{_LIBRARY}"]})
+
+    response = _personal_library(app_context, store).get("/tags", params={"team_id": "personal", **_GRANT}, headers={"authorization": _HEADERS["authorization"]})
+
+    assert response.status_code == 403
+    assert response.headers["X-Fred-Denial-Cause"] == "account_suspended"
+    assert _LIBRARY not in response.text
+    assert store.account_status_checks() == [(_PERSON, "HIGHER_CONSISTENCY")]
+    assert store.list_objects_calls == []
+
+
+def test_ingestion_admitted_before_a_suspension_still_saves_its_output(app_context: ApplicationContext) -> None:
+    """The ingestion activity's save checks the submitter's tag permission and
+    makes no account status check of its own, so work admitted earlier finishes."""
+    store = AccountStatusStore(suspended={"person-a"})
+    service = MetadataService()
+    service.rebac = _configure(store)
+    saved: list[str] = []
+
+    async def persist(user: KeycloakUser, metadata: DocumentMetadata, *, update_only: bool = False) -> bool:
+        saved.append(metadata.document_uid)
+        return True
+
+    service._persist_metadata_and_follow_up = persist  # pyright: ignore[reportAttributeAccessIssue]
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="report.pdf", document_uid="document-a", title="report"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
+        tags=Tagging(tag_ids=[_LIBRARY]),
+    )
+
+    assert asyncio.run(service.update_document_metadata(KeycloakUser(uid="person-a", username="person", roles=[]), metadata)) is True
+    assert saved == ["document-a"]
+    assert [(user, relation, obj) for user, relation, obj, _ in store.checks] == [(_PERSON, "update", f"tag:{_LIBRARY}")]

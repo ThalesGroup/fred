@@ -27,7 +27,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_core.security import oidc as oidc_module
 from fred_core.security.delegation import DelegationConfig, initialize_delegation
-from fred_core.security.models import StandingAuthorizationError
+from fred_core.security.models import AccountStatusError
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app.agent_app import _write_turn_history, create_agent_app
 from fred_runtime.app.dependencies import get_pod_container_from_app
@@ -116,11 +116,10 @@ def _person_pod(
         ),
     )
     rebac = SimpleNamespace(
-        enforces_standing=True,
+        requires_active_accounts=True,
         enabled=True,
-        validate_standing_model=AsyncMock(),
-        is_standing_seed_ready=AsyncMock(return_value=True),
-        require_user_standing=AsyncMock(),
+        validate_account_status_model=AsyncMock(),
+        require_active_account=AsyncMock(),
         check_user_team_permission_or_raise=AsyncMock(),
     )
     monkeypatch.setattr(
@@ -299,9 +298,9 @@ _DIRECT_TURN = {"agent_id": "rags.sample.echo", "input": "hello"}
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("unavailable", "expected_status", "cause"),
-    [(True, 503, "standing_unavailable"), (False, 403, "standing_refused")],
+    [(True, 503, "account_status_unavailable"), (False, 403, "account_suspended")],
 )
-async def test_direct_stream_preserves_standing_decision_at_http_boundary(
+async def test_direct_stream_preserves_account_status_decision_at_http_boundary(
     monkeypatch, tmp_path, unavailable, expected_status, cause
 ) -> None:
     app = _person_pod(monkeypatch, tmp_path)
@@ -310,13 +309,14 @@ async def test_direct_stream_preserves_standing_decision_at_http_boundary(
         _install_delegation()
         rebac = get_runtime_context().config.rebac_engine
         assert rebac is not None
-        rebac.require_user_standing.side_effect = StandingAuthorizationError(
+        rebac.require_active_account.side_effect = AccountStatusError(
             unavailable=unavailable
         )
         response = await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
 
     assert response.status_code == expected_status
     assert response.headers["X-Fred-Denial-Cause"] == cause
+    rebac.require_active_account.assert_awaited_once_with("owner-a")
     assert "owner-a" not in response.text
     assert PERSON_TOKEN not in response.text
 
@@ -324,9 +324,9 @@ async def test_direct_stream_preserves_standing_decision_at_http_boundary(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("unavailable", "expected_status", "cause"),
-    [(True, 503, "standing_unavailable"), (False, 403, "standing_refused")],
+    [(True, 503, "account_status_unavailable"), (False, 403, "account_suspended")],
 )
-async def test_managed_stream_preserves_standing_decision_at_http_boundary(
+async def test_managed_stream_preserves_account_status_decision_at_http_boundary(
     monkeypatch, tmp_path, unavailable, expected_status, cause
 ) -> None:
     app = _person_pod(monkeypatch, tmp_path)
@@ -335,8 +335,8 @@ async def test_managed_stream_preserves_standing_decision_at_http_boundary(
         _install_delegation()
         rebac = get_runtime_context().config.rebac_engine
         assert rebac is not None
-        rebac.check_user_team_permission_or_raise.side_effect = (
-            StandingAuthorizationError(unavailable=unavailable)
+        rebac.require_active_account.side_effect = AccountStatusError(
+            unavailable=unavailable
         )
         response = await asyncio.wait_for(
             _post(
@@ -352,6 +352,8 @@ async def test_managed_stream_preserves_standing_decision_at_http_boundary(
 
     assert response.status_code == expected_status
     assert response.headers["X-Fred-Denial-Cause"] == cause
+    rebac.require_active_account.assert_awaited_once_with("owner-a")
+    rebac.check_user_team_permission_or_raise.assert_not_awaited()
     assert "owner-a" not in response.text
     assert PERSON_TOKEN not in response.text
 
@@ -410,10 +412,14 @@ async def test_a_delegated_stream_runs_once_and_carries_no_run_handle(
     connection = _Connection(app)
     async with _serving(connection) as client:
         runtime = _install_delegation()
+        rebac = get_runtime_context().config.rebac_engine
+        assert rebac is not None
         await _install_control_plane_transport(app, httpx.MockTransport(control_plane))
         response = await asyncio.wait_for(_post(client, _DIRECT_TURN), TIMEOUT)
 
     assert response.status_code == 200
+    # The request's own account status check is the run's only one at admission.
+    rebac.require_active_account.assert_awaited_once_with("owner-a")
     assert "x-fred-run-id" not in response.headers
     assert not any(line.startswith("id:") for line in response.text.splitlines())
     assert _payloads(response.text)[-1]["kind"] == expected_kind

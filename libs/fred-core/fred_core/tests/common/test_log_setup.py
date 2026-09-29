@@ -14,8 +14,12 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 from fred_core.logs.base_log_store import LogEventDTO
@@ -90,7 +94,7 @@ def test_delegation_access_record_is_bounded_and_drops_encoded_grant_pairs() -> 
 
     assert UvicornSensitiveQueryFilter().filter(record) is True
     assert record.getMessage() == (
-        "access event=delegated_request outcome=completed method=POST status=200"
+        "access event=request outcome=responded method=POST status=200"
     )
     assert "CANARY" not in repr(record.__dict__)
     assert "ordinary" not in record.getMessage()
@@ -142,7 +146,7 @@ def test_delegation_access_string_url_is_bounded_without_identifiers() -> None:
 
     assert UvicornSensitiveQueryFilter().filter(record) is True
     assert record.getMessage() == (
-        "access event=delegated_request outcome=completed method=OTHER status=None"
+        "access event=request outcome=responded method=OTHER status=None"
     )
     assert "CANARY" not in repr(record.__dict__)
 
@@ -182,9 +186,127 @@ def test_acting_for_people_alone_still_keeps_grant_values_out_of_the_log() -> No
     UvicornSensitiveQueryFilter().filter(record)
 
     assert record.getMessage() == (
-        "access event=delegated_request outcome=completed method=OTHER status=None"
+        "access event=request outcome=responded method=OTHER status=None"
     )
     assert "synthetic-person" not in repr(record.__dict__)
+
+
+class _Sink(logging.Handler):
+    def __init__(self, level: int) -> None:
+        super().__init__(level)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@contextmanager
+def _wired_uvicorn_logging() -> Iterator[tuple[_Sink, _Sink]]:
+    """Wire uvicorn through `log_setup`; yield an INFO sink and an all-levels sink."""
+    root = logging.getLogger()
+    saved_root = (root.level, list(root.handlers))
+    saved_uvicorn = [
+        (lg, list(lg.filters), list(lg.handlers), lg.level, lg.propagate)
+        for lg in map(logging.getLogger, ("uvicorn", "uvicorn.error", "uvicorn.access"))
+    ]
+    service_name = f"test-uvicorn-wiring-{uuid.uuid4().hex}"
+    # Uvicorn's default config gives the access logger its own non-propagating handler.
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.addHandler(logging.StreamHandler(io.StringIO()))
+    access_logger.propagate = False
+    log_setup(
+        service_name=service_name,
+        log_level="INFO",
+        store=_StubLogStore(),
+        use_rich=False,
+    )
+    info_sink, all_sink = _Sink(logging.INFO), _Sink(logging.NOTSET)
+    root.addHandler(info_sink)
+    root.addHandler(all_sink)
+    try:
+        yield info_sink, all_sink
+    finally:
+        root.setLevel(saved_root[0])
+        root.handlers[:] = saved_root[1]
+        delattr(root, f"_fred_handlers_{service_name}")
+        for lg, filters, handlers, level, propagate in saved_uvicorn:
+            lg.filters[:] = filters
+            lg.handlers[:] = handlers
+            lg.setLevel(level)
+            lg.propagate = propagate
+
+
+def _log_uvicorn_access(path: str) -> None:
+    # Same call shape as uvicorn's HTTP protocol implementations.
+    logging.getLogger("uvicorn.access").info(
+        '%s - "%s %s HTTP/%s" %d', "127.0.0.1:5000", "GET", path, "1.1", 200
+    )
+
+
+_DELEGATION_SWITCHES = [
+    pytest.param(
+        DelegationConfig(accept_delegated_calls=True), id="accept-delegated-calls"
+    ),
+    pytest.param(DelegationConfig(act_for_people=True), id="act-for-people"),
+]
+
+
+@pytest.mark.parametrize("config", _DELEGATION_SWITCHES)
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/documents", id="no-grant"),
+        pytest.param(
+            "/documents?person=SYNTHETIC-PERSON-CANARY&run=SYNTHETIC-RUN-CANARY"
+            "&agent=SYNTHETIC-AGENT-CANARY",
+            id="query-grant",
+        ),
+        pytest.param(
+            "/teams/SYNTHETIC-TEAM-CANARY/documents/SYNTHETIC-DOCUMENT-CANARY",
+            id="path-parameters",
+        ),
+    ],
+)
+def test_delegation_access_line_is_neutral_for_every_request(
+    config: DelegationConfig, path: str
+) -> None:
+    initialize_delegation(config)
+    with _wired_uvicorn_logging() as (info_sink, _):
+        _log_uvicorn_access(path)
+        assert logging.getLogger("uvicorn.access").handlers == []
+
+    assert [record.getMessage() for record in info_sink.records] == [
+        "access event=request outcome=responded method=GET status=200"
+    ]
+    assert "CANARY" not in repr(info_sink.records[0].__dict__)
+
+
+@pytest.mark.parametrize(
+    "config",
+    [pytest.param(DelegationConfig(), id="delegation-off"), *_DELEGATION_SWITCHES],
+)
+@pytest.mark.parametrize(
+    "path", ["/knowledge-flow/v1/healthz", "/control-plane/v1/ready"]
+)
+def test_health_probes_stay_below_the_default_level(
+    config: DelegationConfig, path: str
+) -> None:
+    initialize_delegation(config)
+    with _wired_uvicorn_logging() as (info_sink, all_sink):
+        _log_uvicorn_access(path)
+
+    assert info_sink.records == []
+    assert [record.levelno for record in all_sink.records] == [logging.DEBUG]
+
+
+def test_without_delegation_access_line_keeps_request_details() -> None:
+    with _wired_uvicorn_logging() as (info_sink, _):
+        _log_uvicorn_access("/documents?token=synthetic-token&ordinary=visible")
+
+    assert [record.getMessage() for record in info_sink.records] == [
+        '127.0.0.1:5000 - "GET /documents?token=<redacted>&ordinary=visible '
+        'HTTP/1.1" 200'
+    ]
 
 
 def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:

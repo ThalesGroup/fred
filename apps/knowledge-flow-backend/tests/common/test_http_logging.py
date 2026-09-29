@@ -13,6 +13,9 @@ from starlette.responses import RedirectResponse
 
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
 
+# The test client logs its own outgoing URL; that is not a server-side record.
+_CLIENT_LOGGERS = ("httpx", "httpcore")
+
 
 @pytest.fixture(autouse=True)
 def _reset_delegation() -> Iterator[None]:
@@ -21,67 +24,67 @@ def _reset_delegation() -> Iterator[None]:
         yield
 
 
-def test_access_log_removes_delegation_query_parameters(caplog) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+@pytest.fixture(
+    params=[
+        pytest.param(DelegationConfig(accept_delegated_calls=True), id="accept-delegated-calls"),
+        pytest.param(DelegationConfig(act_for_people=True), id="act-for-people"),
+    ]
+)
+def delegation_on(request: pytest.FixtureRequest) -> None:
+    initialize_delegation(request.param)
+
+
+def _logged_app() -> FastAPI:
     app = FastAPI()
     app.add_middleware(RequestResponseLogger)
+    return app
 
-    @app.get("/probe")
-    async def probe() -> dict[str, bool]:
+
+def _middleware_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [record for record in caplog.records if record.name == "http"]
+
+
+def _server_side_log(caplog: pytest.LogCaptureFixture) -> str:
+    formatter = logging.Formatter()
+    return "\n".join(formatter.format(record) for record in caplog.records if not record.name.startswith(_CLIENT_LOGGERS))
+
+
+@pytest.mark.usefixtures("delegation_on")
+def test_delegation_writes_no_middleware_line_for_query_grant_and_path_parameter(caplog) -> None:
+    app = _logged_app()
+
+    @app.get("/probe/{item}")
+    async def probe(item: str) -> dict[str, bool]:
         return {"ok": True}
 
-    caplog.set_level(logging.DEBUG, logger="http")
+    caplog.set_level(logging.DEBUG)
     with TestClient(app) as client:
         response = client.get(
-            "/probe",
+            "/probe/path-canary",
             params={
                 "person": "person-canary",
                 "run": "run-canary",
                 "agent": "agent-canary",
-                "ordinary": "visible",
+                "ordinary": "query-canary",
             },
+            headers={"Authorization": "Bearer claim-canary"},
         )
 
     assert response.status_code == 200
-    payload = " ".join(record.getMessage() for record in caplog.records if record.name == "http")
-    assert "event=delegated_request outcome=started method=GET" in payload
-    assert "event=delegated_request outcome=completed method=GET status=200" in payload
-    assert "person=" not in payload
-    assert "run=" not in payload
-    assert "agent=" not in payload
-    assert "canary" not in payload
-    assert "127.0.0.1" not in payload
+    assert _middleware_records(caplog) == []
+    assert "canary" not in _server_side_log(caplog)
 
 
-def test_access_log_flag_off_preserves_ordinary_request_details(caplog) -> None:
-    app = FastAPI()
-    app.add_middleware(RequestResponseLogger)
+@pytest.mark.usefixtures("delegation_on")
+def test_delegation_writes_no_middleware_line_for_json_body_grant(caplog) -> None:
+    app = _logged_app()
 
-    @app.get("/probe")
-    async def probe() -> dict[str, bool]:
-        return {"ok": True}
-
-    caplog.set_level(logging.DEBUG, logger="http")
-    with TestClient(app) as client:
-        response = client.get("/probe", params={"person": "synthetic-person", "ordinary": "visible"})
-
-    assert response.status_code == 200
-    request_log = next(record.getMessage() for record in caplog.records if ">>>" in record.getMessage())
-    assert "person=" not in request_log
-    assert "ordinary=visible" in request_log
-
-
-def test_delegation_confines_body_grant_before_request_logging(caplog) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
-    app = FastAPI()
-    app.add_middleware(RequestResponseLogger)
-
-    @app.post("/probe/path-canary")
-    async def probe(payload: dict[str, str] = Body()) -> dict[str, bool]:
+    @app.post("/probe/{item}")
+    async def probe(item: str, payload: dict[str, str] = Body()) -> dict[str, bool]:
         assert payload["person"] == "person-canary"
         return {"ok": True}
 
-    caplog.set_level(logging.DEBUG, logger="http")
+    caplog.set_level(logging.DEBUG)
     with TestClient(app) as client:
         response = client.post(
             "/probe/path-canary?ordinary=query-canary",
@@ -95,32 +98,19 @@ def test_delegation_confines_body_grant_before_request_logging(caplog) -> None:
         )
 
     assert response.status_code == 200
-    payload = " ".join(record.getMessage() for record in caplog.records if record.name == "http")
-    assert "event=delegated_request outcome=started method=POST" in payload
-    assert "event=delegated_request outcome=completed method=POST status=200" in payload
-    for canary in (
-        "path-canary",
-        "query-canary",
-        "person-canary",
-        "run-canary",
-        "agent-canary",
-        "body-canary",
-        "claim-canary",
-        "testclient",
-    ):
-        assert canary not in payload
+    assert _middleware_records(caplog) == []
+    assert "canary" not in _server_side_log(caplog)
 
 
-def test_delegation_confines_malformed_request_logging(caplog) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
-    app = FastAPI()
-    app.add_middleware(RequestResponseLogger)
+@pytest.mark.usefixtures("delegation_on")
+def test_delegation_writes_no_middleware_line_for_malformed_request(caplog) -> None:
+    app = _logged_app()
 
     @app.post("/malformed-path-canary")
     async def probe(payload: dict[str, str] = Body()) -> dict[str, str]:
         return payload
 
-    caplog.set_level(logging.DEBUG, logger="http")
+    caplog.set_level(logging.DEBUG)
     with TestClient(app) as client:
         response = client.post(
             "/malformed-path-canary",
@@ -132,21 +122,19 @@ def test_delegation_confines_malformed_request_logging(caplog) -> None:
         )
 
     assert response.status_code == 422
-    payload = " ".join(record.getMessage() for record in caplog.records if record.name == "http")
-    assert "event=delegated_request outcome=completed method=POST status=422" in payload
-    assert "canary" not in payload
+    assert _middleware_records(caplog) == []
+    assert "canary" not in _server_side_log(caplog)
 
 
-def test_delegation_confines_failure_detail_logging(caplog) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
-    app = FastAPI()
-    app.add_middleware(RequestResponseLogger)
+@pytest.mark.usefixtures("delegation_on")
+def test_delegation_writes_no_middleware_line_for_failure(caplog) -> None:
+    app = _logged_app()
 
     @app.get("/failure-path-canary")
     async def probe() -> None:
         raise RuntimeError("upstream-detail-canary")
 
-    caplog.set_level(logging.DEBUG, logger="http")
+    caplog.set_level(logging.DEBUG)
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get(
             "/failure-path-canary",
@@ -154,25 +142,43 @@ def test_delegation_confines_failure_detail_logging(caplog) -> None:
         )
 
     assert response.status_code == 500
-    payload = " ".join(record.getMessage() for record in caplog.records if record.name == "http")
-    assert "event=delegated_request outcome=failed method=GET" in payload
-    assert "canary" not in payload
+    assert _middleware_records(caplog) == []
+    assert "canary" not in _server_side_log(caplog)
 
 
-def test_delegation_confines_redirect_location_logging(caplog) -> None:
-    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
-    app = FastAPI()
-    app.add_middleware(RequestResponseLogger)
+@pytest.mark.usefixtures("delegation_on")
+def test_delegation_writes_no_middleware_line_for_redirect(caplog) -> None:
+    app = _logged_app()
 
     @app.get("/redirect-path-canary")
     async def probe() -> RedirectResponse:
         return RedirectResponse("https://redirect.invalid/location-canary")
 
-    caplog.set_level(logging.DEBUG, logger="http")
+    caplog.set_level(logging.DEBUG)
     with TestClient(app, follow_redirects=False) as client:
         response = client.get("/redirect-path-canary")
 
     assert response.status_code == 307
-    payload = " ".join(record.getMessage() for record in caplog.records if record.name == "http")
-    assert "event=delegated_request outcome=completed method=GET status=307" in payload
-    assert "canary" not in payload
+    assert _middleware_records(caplog) == []
+    assert "canary" not in _server_side_log(caplog)
+
+
+def test_without_delegation_request_diagnostics_remain(caplog) -> None:
+    app = _logged_app()
+
+    @app.get("/probe")
+    async def probe() -> dict[str, bool]:
+        return {"ok": True}
+
+    caplog.set_level(logging.DEBUG, logger="http")
+    with TestClient(app) as client:
+        response = client.get("/probe", params={"person": "synthetic-person", "ordinary": "visible"})
+
+    assert response.status_code == 200
+    request_line, response_line = _middleware_records(caplog)
+    assert request_line.levelno == logging.DEBUG
+    assert request_line.getMessage().startswith(">>> GET /probe ")
+    assert "ordinary=visible" in request_line.getMessage()
+    assert "person=" not in request_line.getMessage()
+    assert response_line.levelno == logging.INFO
+    assert response_line.getMessage().startswith("<<< GET /probe status=200 ")

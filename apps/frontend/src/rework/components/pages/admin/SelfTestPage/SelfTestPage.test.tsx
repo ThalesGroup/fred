@@ -111,6 +111,8 @@ vi.mock("../../../../../security/KeycloakService", () => ({
 }));
 
 import SelfTestPage from "./SelfTestPage";
+import en from "../../../../../locales/en/translation.json";
+import fr from "../../../../../locales/fr/translation.json";
 
 let container: HTMLDivElement;
 let root: Root;
@@ -264,6 +266,11 @@ describe("SelfTestPage credential-expiry check", () => {
     expect(container.textContent).toContain("AUTHZ_STEP");
     expect(container.textContent).toContain("EXPIRY_STEP");
     expect(container.textContent).toContain("rework.selftest.authz.expiry.title");
+  });
+
+  it("is titled by what it proves, in English and French", () => {
+    expect(en.rework.selftest.authz.expiry.title).toBe("Agent access after your session expires");
+    expect(fr.rework.selftest.authz.expiry.title).toBe("Accès de l'agent après l'expiration de votre session");
   });
 
   it("offers nothing of the check on a deployment with no realm", () => {

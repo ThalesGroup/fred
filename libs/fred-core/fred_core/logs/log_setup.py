@@ -251,9 +251,9 @@ class UvicornSensitiveQueryFilter(logging.Filter):
                     method = "OTHER"
                 if not isinstance(status, int) or not 100 <= status <= 599:
                     status = None
+                # Uvicorn writes the access line when the response starts.
                 record.msg = (
-                    "access event=delegated_request outcome=completed "
-                    "method=%s status=%s"
+                    "access event=request outcome=responded method=%s status=%s"
                 )
                 record.args = (method, status)
             else:
@@ -391,13 +391,11 @@ def log_setup(
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
             lg.handlers.clear()  # remove uvicorn’s own console handlers
-            lg.addFilter(UvicornSensitiveQueryFilter())
-            # Access logs are particularly chatty; keep only warnings+
             if name == "uvicorn.access":
+                # Reads the raw request path, which the sensitive filter below can drop.
                 lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))
-                lg.setLevel(log_level.upper())
-            else:
-                lg.setLevel(log_level.upper())
+            lg.addFilter(UvicornSensitiveQueryFilter())
+            lg.setLevel(log_level.upper())
             lg.propagate = True  # forward to our root handlers
         logging.getLogger("uvicorn.error").addFilter(UvicornWebsocketNoiseFilter())
 

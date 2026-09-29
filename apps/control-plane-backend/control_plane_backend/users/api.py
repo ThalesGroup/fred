@@ -391,8 +391,8 @@ async def delete_user(
     # The ban alone ends access, so the person's other relations stay. It comes before
     # the identity-provider account: a failure after it leaves the person refused, and
     # a retry rewrites the same ban.
-    if rebac.enforces_standing:
-        await rebac.remove_user_standing(user_id)
+    if rebac.requires_active_accounts:
+        await rebac.suspend_account(user_id)
     await delete_user_from_service(admin, user_id)
 
 

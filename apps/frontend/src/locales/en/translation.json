@@ -2200,8 +2200,8 @@
         "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
         "runSelf": "Run for myself",
         "expiry": {
-          "title": "Credential renewal self-test",
-          "run": "Run credential expiry",
+          "title": "Agent access after your session expires",
+          "run": "Run session-expiry check",
           "warning": {
             "title": "Keep this page open until the check finishes",
             "message": "This check waits for your current sign-in credential to expire, so it runs for about {{minutes}} minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",

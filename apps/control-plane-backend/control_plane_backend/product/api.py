@@ -37,6 +37,7 @@ from fred_core import (
     TeamPermission,
     get_current_user,
     get_principal_context,
+    require_own_credential,
     require_workload_caller,
 )
 from fred_core.common import TeamId
@@ -298,7 +299,7 @@ async def post_team_agent_instance(
     body: CreateAgentInstanceRequest,
     deps: ProductDependencies,
     http_request: Request,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> ManagedAgentInstanceSummary:
     """
     Enroll one discovered template for the given team.
@@ -349,7 +350,7 @@ async def patch_team_agent_instance(
     body: UpdateAgentInstanceRequest,
     deps: ProductDependencies,
     http_request: Request,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> ManagedAgentInstanceSummary:
     """
     Update display_name, description, or tuning field values for one managed instance.
@@ -462,7 +463,7 @@ async def post_team_agent_instance_with_assets(
         ),
     ] = [],
     asset_files: Annotated[list[UploadFile], File()] = [],
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> ManagedAgentInstanceSummary:
     """
     Multipart companion of `POST /teams/{team_id}/agent-instances` (#1903,
@@ -525,7 +526,7 @@ async def patch_team_agent_instance_with_assets(
         ),
     ] = [],
     asset_files: Annotated[list[UploadFile], File()] = [],
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> ManagedAgentInstanceSummary:
     """
     Multipart companion of `PATCH /teams/{team_id}/agent-instances/{id}` (#1903)
@@ -1486,7 +1487,7 @@ async def post_bulk_delete_my_sessions(
     body: BulkDeleteSessionsRequest,
     request: Request,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> BulkDeleteSessionsResponse:
     """Delete a batch of the caller's conversations across their spaces. Reuses
     the governed single-session delete per item, so each follows the same
@@ -1648,7 +1649,7 @@ async def delete_team_session_attachment(
     session_id: Annotated[str, Path(min_length=1)],
     attachment_id: Annotated[str, Path(min_length=1)],
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> Response:
     """
     Delete one persisted attachment for future turns.
@@ -1683,7 +1684,7 @@ async def delete_team_session(
     session_id: Annotated[str, Path(min_length=1)],
     request: Request,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser = Depends(require_own_credential),
 ) -> Response:
     """
     Delete one team-scoped conversation (CTRLP-12 A5).
@@ -1815,7 +1816,7 @@ async def post_prepare_execution(
         require_workload_caller(principal_context.caller)
     try:
         return await prepare_execution(
-            user=cast(KeycloakUser, user),
+            user=user,
             team_id=team_id,
             agent_instance_id=agent_instance_id,
             session_id=session_id,

@@ -2,8 +2,11 @@
 
 See [proposal.md](proposal.md) for scope. Verified constraints:
 
-- A turn runs on the credential its execution request carried, and nothing in
-  the runtime replaces that credential while the turn is in flight.
+- With delegated execution off, a turn runs on the credential its execution
+  request carried, and nothing in the runtime replaces that credential while the
+  turn is in flight. With it on, that credential authenticates admission only;
+  the turn holds no person credential and every call carries the platform's
+  workload credential and a grant naming the person.
 - The page can read the signed-in session's current access token and its
   remaining lifetime. Reading the value does not pin the session to it: the
   browser keeps refreshing the session on its own schedule, so a captured value
@@ -15,16 +18,10 @@ See [proposal.md](proposal.md) for scope. Verified constraints:
 - A refused call inside a graph node does not surface as an error event: the
   turn ends with a final answer carrying the error text, so the check
   classifies that answer without ever echoing it.
-- Status events from a node are buffered until the node finishes; only thought
-  and assistant events stream live. The hold therefore keeps the stream alive
-  through the thought channel and emits one status at its end, whose arrival
-  marks when the post-hold call began.
-- A node that raises loses every status it had buffered, while its thoughts
-  survive because they already streamed. Every status the verdict reads is
-  therefore emitted by a node that completes — which is why the first
-  authenticated call and its status belong to a node separate from the one
-  making the post-hold call, so a refusal there cannot erase the evidence that
-  access worked to begin with.
+- Status and thought events stream live as a node emits them, and a node that
+  raises keeps what it already emitted. The hold keeps the stream alive with
+  periodic thoughts and emits one status at its end, whose arrival marks when
+  the post-hold call began.
 - Enrolling an agent instance grants no access of its own, and an instance is
   addressable only by its owner, so a run-scoped instance is a safe fixture.
 
@@ -88,11 +85,22 @@ renewal and the check reads inconclusive rather than green. Any mechanism that
 renews a delegated credential must therefore make the replacement observable to
 the harness.
 
+### Absent-credential marker
+
+In access-check mode the harness also reports when the post-hold call succeeded
+while it held no person credential on either side of that call. In the runtime a
+turn without a person credential is a delegated turn: without delegation the
+request's credential is always stamped into the turn, and a call with neither a
+person credential nor a delegated provider is refused before it is sent. The
+marker states only what was observed — no person token was held — so the page's
+wording claims no more than that.
+
 ### Verdict
 
 Pass requires all of: the first authenticated call observed, the hold observed
 to end at least a tolerance after the captured expiry, the post-hold call
-reported as succeeded after that, and renewal observed. Anything short of that
+reported as succeeded after that, and either renewal or the absent-credential
+marker observed. Anything short of that
 fails — as inconclusive where the run proved nothing, so a misconfigured hold,
 an older agent build or a credential that outlived the wait cannot pass. A
 refusal fails with one fixed explanation whether it arrives as an execution

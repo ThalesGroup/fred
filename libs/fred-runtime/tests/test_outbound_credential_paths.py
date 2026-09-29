@@ -15,22 +15,25 @@
 """Every way out of the runtime, and what happens when one is refused.
 
 The first half enumerates the outbound paths and proves each one takes its
-credentials from the provider — a new path that forgets to is what the source
-check at the end is for. The second half pins the refusal: no retry, no
-fallback, no upstream text, and a run-stopping error that reaches the engine
-instead of the model.
+grant from the provider and its bearer from the shared authentication adapter,
+through the real workload-token provider — a new path that forgets to is what
+the source check at the end is for. The second half pins the refusal: one
+renewal after a first 401 and nothing more, no fallback, no upstream text, and a
+run-stopping error that reaches the engine instead of the model.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import pathlib
-from collections.abc import Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
 import httpx
 import pytest
+from conftest import MockIdentityProvider, admitted_provider
 from fastapi import HTTPException
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
@@ -38,12 +41,11 @@ from fred_core.security.delegation import (
     GRANT_PARAM_RUN,
 )
 from fred_runtime.app import agent_app as agent_app_module
-from fred_runtime.common import mcp_utils
 from fred_runtime.common.context_aware_tool import ContextAwareTool, _log_http_error
 from fred_runtime.common.kf_base_client import KfBaseClient
 from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
     OutboundCredentialProvider,
-    OutboundCredentials,
     PersonCredentialProvider,
     static_person_provider,
 )
@@ -59,7 +61,11 @@ from fred_runtime.integrations.v2_runtime.adapters import (
 )
 from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
-from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
+from fred_runtime.runtime_support.authority import (
+    AuthorityLostError,
+    DelegationUnavailableError,
+    RunStopError,
+)
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -68,10 +74,9 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import (
     AgentTuning,
-    MCPServerConfiguration,
     MCPServerRef,
 )
-from fred_sdk.contracts.runtime import TeamWikiPortError
+from fred_sdk.contracts.runtime import TeamWikiPortError, unwrap_run_stop_error
 from langchain_core.messages import AIMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -81,7 +86,7 @@ from pydantic import BaseModel
 # owns: not an exception message, not an event, not the transcript.
 UPSTREAM_MARKER = "upstream-detail-marker"
 
-WORKLOAD_BEARER = "Bearer workload-token"
+PERSON_TOKEN = "unused-person-token"
 GRANT = {
     GRANT_PARAM_PERSON: "alice",
     GRANT_PARAM_RUN: "run-7",
@@ -89,26 +94,17 @@ GRANT = {
 }
 
 
-class RecordingProvider(OutboundCredentialProvider):
-    """A delegated provider that counts how often it is asked."""
+def grant_of(request: httpx.Request) -> dict[str, str]:
+    fields = dict(request.url.params)
+    if request.headers.get("Content-Type") == "application/json":
+        body = json.loads(request.content)
+        if isinstance(body, dict):
+            fields.update(body)
+    return {key: fields[key] for key in GRANT if key in fields}
 
-    delegated = True
 
-    def __init__(self, authorization: str = WORKLOAD_BEARER) -> None:
-        self._authorization = authorization
-        self.asked = 0
-
-    def set_authorization(self, authorization: str) -> None:
-        self._authorization = authorization
-
-    async def credentials(self, *, override_token: str | None = None):
-        self.asked += 1
-        return OutboundCredentials(
-            authorization=self._authorization, parameters=dict(GRANT), delegated=True
-        )
-
-    def for_agent(self, agent_id: str) -> "RecordingProvider":
-        return self
+def bearers(requests: list[httpx.Request]) -> list[str]:
+    return [request.headers.get("Authorization", "") for request in requests]
 
 
 class FakeAgentSettings:
@@ -128,7 +124,7 @@ def _runtime_context():
 
 
 def kf_client(
-    handler, *, credentials: OutboundCredentialProvider | None = None
+    handler, *, credentials: OutboundCredentialProvider
 ) -> tuple[KfBaseClient, list[httpx.Request]]:
     """A Knowledge Flow client whose transport answers locally.
 
@@ -143,8 +139,8 @@ def kf_client(
 
     client = KfBaseClient(
         frozenset({"GET", "POST"}),
-        credentials=credentials or RecordingProvider(),
-        access_token="unused-person-token",
+        credentials=credentials,
+        access_token=PERSON_TOKEN,
     )
     client.client = httpx.AsyncClient(transport=httpx.MockTransport(_handle))
     return client, seen
@@ -154,14 +150,14 @@ def ok(_request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json={"ok": True})
 
 
-def refused(status_code: int, *, standing_unavailable: bool = False):
+def refused(status_code: int, *, account_status_unavailable: bool = False):
     def _handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             status_code,
             text=UPSTREAM_MARKER,
             headers=(
-                {"X-Fred-Denial-Cause": "standing_unavailable"}
-                if standing_unavailable
+                {"X-Fred-Denial-Cause": "account_status_unavailable"}
+                if account_status_unavailable
                 else {}
             ),
         )
@@ -195,101 +191,171 @@ def binding(token: str | None = "person-bearer") -> BoundRuntimeContext:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_the_knowledge_flow_client_asks_the_provider():
-    provider = RecordingProvider()
-    client, seen = kf_client(ok, credentials=provider)
+Receiver = Callable[[httpx.Request], httpx.Response]
+Path = Callable[[DelegatedCredentialProvider, Receiver], Awaitable[None]]
 
+
+async def knowledge_call(provider: DelegatedCredentialProvider, receiver: Receiver):
+    client, _ = kf_client(receiver, credentials=provider)
     await client._request_with_token_refresh("GET", "/documents", phase_name="test")
 
-    assert provider.asked == 1
-    assert seen[0].headers["Authorization"] == WORKLOAD_BEARER
-    assert seen[0].url.params[GRANT_PARAM_PERSON] == "alice"
 
-
-@pytest.mark.asyncio
-async def test_the_mcp_connection_asks_the_provider(monkeypatch):
-    provider = RecordingProvider()
-    connections: dict[str, Any] = {}
-
-    class _FakeMultiServerClient:
-        def __init__(self, conns, tool_interceptors=None) -> None:
-            connections.update(conns)
-            self.tool_interceptors = list(tool_interceptors or [])
-
-        async def get_tools(self, server_name: str):
-            return []
-
-    monkeypatch.setattr(mcp_utils, "MultiServerMCPClient", _FakeMultiServerClient)
-    server = MCPServerConfiguration.model_validate(
-        {
-            "id": "kf-mcp",
-            "name": "kf",
-            "transport": "streamable_http",
-            "url": "http://kf.invalid/mcp",
-            "enabled": True,
-            "auth_mode": "delegated",
-        }
-    )
-
-    await mcp_utils.get_connected_mcp_client_for_agent(
-        agent_id="agent-a",
-        mcp_servers=[server],
-        runtime_context=RuntimeContext(),
-        credentials=provider,
-    )
-
-    assert provider.asked == 1
-    assert connections["kf-mcp"]["headers"]["Authorization"] == WORKLOAD_BEARER
-
-
-@pytest.mark.asyncio
-async def test_the_team_wiki_client_asks_the_provider():
-    provider = RecordingProvider()
-    seen: list[dict[str, Any]] = []
-
-    class _FakeControlPlaneClient:
-        async def request(self, method, url, headers=None, **kwargs):
-            seen.append({"method": method, "url": url, "headers": headers, **kwargs})
-            return httpx.Response(
-                200, json={"pages": []}, request=httpx.Request(method, url)
-            )
-
-    adapter = TeamWikiAdapter(
-        binding=binding(),
-        control_plane_url="http://control-plane.invalid/v1",
-        http_client=_FakeControlPlaneClient(),
-        credentials=provider,
-    )
-
-    await adapter.list_pages()
-
-    assert provider.asked == 1
-    assert seen[0]["headers"]["Authorization"] == WORKLOAD_BEARER
-    assert seen[0]["params"][GRANT_PARAM_RUN] == "run-7"
-
-
-@pytest.mark.asyncio
-async def test_the_workspace_client_asks_the_provider():
-    provider = RecordingProvider()
+async def workspace_call(provider: DelegatedCredentialProvider, receiver: Receiver):
     workspace = FredWorkspaceFs(
         binding=binding(), settings=FakeAgentSettings(), credentials=provider
     )
-    seen: list[httpx.Request] = []
-
-    def _handle(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(200, content=b"file-bytes")
-
     workspace._workspace_client.client = httpx.AsyncClient(
-        transport=httpx.MockTransport(_handle)
+        transport=httpx.MockTransport(receiver)
     )
-
     await workspace.read_bytes("notes.md")
 
-    assert provider.asked == 1
-    assert seen[0].headers["Authorization"] == WORKLOAD_BEARER
-    assert seen[0].url.params[GRANT_PARAM_AGENT] == "agent-a"
+
+async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver):
+    request = agent_app_module._AgentExecuteRequest.model_construct(
+        agent_id=None, agent_instance_id="instance-1", message="hi"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receiver)) as client:
+        # An unknown instance ends the lookup right after its one request,
+        # which is the step being pinned.
+        with pytest.raises(HTTPException) as raised:
+            await agent_app_module._resolve_agent_instance(
+                request=request,
+                registry={},
+                access_token=PERSON_TOKEN,
+                control_plane_url="http://control-plane.invalid/v1",
+                http_client=client,
+                team_id="team-1",
+                credentials=provider,
+            )
+    assert raised.value.status_code == 404
+
+
+async def team_wiki_call(provider: DelegatedCredentialProvider, receiver: Receiver):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receiver)) as client:
+        await TeamWikiAdapter(
+            binding=binding(),
+            control_plane_url="http://control-plane.invalid/v1",
+            http_client=client,
+            credentials=provider,
+        ).list_pages()
+
+
+def answering(path: str) -> Receiver:
+    """What each receiver answers a successful call with."""
+
+    def _answer(_request: httpx.Request) -> httpx.Response:
+        if path == "binding":
+            return httpx.Response(404, text="unknown instance")
+        if path == "team-wiki":
+            return httpx.Response(200, json={"pages": []})
+        if path == "workspace":
+            return httpx.Response(200, content=b"file-bytes")
+        return httpx.Response(200, json={"ok": True})
+
+    return _answer
+
+
+PATHS: dict[str, Path] = {
+    "knowledge": knowledge_call,
+    "workspace": workspace_call,
+    "binding": binding_call,
+    "team-wiki": team_wiki_call,
+}
+RUN_PATHS = ("knowledge", "workspace", "team-wiki")
+
+
+def recording(receiver: Receiver) -> tuple[Receiver, list[httpx.Request]]:
+    """A retry re-sends the same request object, so each arrival is copied."""
+    seen: list[httpx.Request] = []
+
+    def _record(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            httpx.Request(
+                request.method,
+                request.url,
+                headers=request.headers,
+                content=request.content,
+            )
+        )
+        return receiver(request)
+
+    return _record, seen
+
+
+@pytest.mark.parametrize("path", PATHS)
+@pytest.mark.asyncio
+async def test_each_delegated_request_acquires_its_bearer_once(monkeypatch, path):
+    """Grant resolution acquires nothing; the request's authentication adapter
+    acquires the one bearer it carries, beside the record's grant."""
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1")
+    receiver, seen = recording(answering(path))
+
+    await PATHS[path](admitted_provider(identity.provider), receiver)
+
+    assert len(seen) == 1
+    assert identity.acquisitions == 1
+    assert identity.token_requests == ["request_initial"]
+    assert bearers(seen) == ["Bearer workload-token-1"]
+    assert grant_of(seen[0]) == GRANT
+
+
+@pytest.mark.parametrize("path", RUN_PATHS)
+@pytest.mark.asyncio
+async def test_a_first_401_renews_the_bearer_once_and_keeps_the_grant(
+    monkeypatch, path
+):
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1", "workload-token-2")
+    answer = answering(path)
+
+    def _expired_then_accepted(request: httpx.Request) -> httpx.Response:
+        if len(seen) == 1:
+            return httpx.Response(401, text=UPSTREAM_MARKER)
+        return answer(request)
+
+    receiver, seen = recording(_expired_then_accepted)
+
+    await PATHS[path](admitted_provider(identity.provider), receiver)
+
+    assert bearers(seen) == ["Bearer workload-token-1", "Bearer workload-token-2"]
+    assert [grant_of(request) for request in seen] == [GRANT, GRANT]
+    assert identity.acquisitions == 2
+    assert identity.token_requests == ["request_initial", "request_renewal"]
+
+
+@pytest.mark.parametrize("path", RUN_PATHS)
+@pytest.mark.asyncio
+async def test_a_second_401_ends_the_run_without_the_persons_bearer(monkeypatch, path):
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1", "workload-token-2")
+    receiver, seen = recording(refused(401))
+
+    # The workspace client wraps what it raises; the stop is still in its chain.
+    with pytest.raises(Exception) as raised:
+        await PATHS[path](admitted_provider(identity.provider), receiver)
+
+    stop = unwrap_run_stop_error(raised.value)
+    assert isinstance(stop, AuthorityLostError)
+    assert UPSTREAM_MARKER not in str(stop)
+    assert bearers(seen) == ["Bearer workload-token-1", "Bearer workload-token-2"]
+    assert [grant_of(request) for request in seen] == [GRANT, GRANT]
+    assert identity.acquisitions == 2
+
+
+@pytest.mark.parametrize("path", ("knowledge", "binding"))
+@pytest.mark.asyncio
+async def test_a_failed_acquisition_stops_the_run_before_any_request(monkeypatch, path):
+    identity = MockIdentityProvider(monkeypatch)
+    identity.failure = "refused"
+    receiver, seen = recording(answering(path))
+
+    with recorded_logs() as logs:
+        with pytest.raises(DelegationUnavailableError) as raised:
+            await PATHS[path](admitted_provider(identity.provider), receiver)
+
+    assert raised.value.reason == "delegation_unavailable"
+    assert seen == []
+    assert [line for line in logs.lines if "workload credential" in line] == [
+        "The workload credential could not be obtained (RuntimeError)."
+    ]
 
 
 @pytest.mark.asyncio
@@ -323,39 +389,6 @@ async def test_workspace_child_uses_live_person_bearer_without_grant():
     assert all(GRANT_PARAM_PERSON not in request.url.params for request in seen)
 
 
-@pytest.mark.asyncio
-async def test_the_control_plane_binding_call_asks_the_provider():
-    provider = RecordingProvider()
-    seen: list[dict[str, Any]] = []
-
-    class _FakeBindingClient:
-        async def get(self, url, headers=None, **kwargs):
-            seen.append({"url": url, "headers": headers, **kwargs})
-            # What the instance resolves to is not this test's subject; an
-            # unknown instance ends the call right after the credentials were
-            # taken, which is the step being pinned.
-            return httpx.Response(404, text="unknown instance")
-
-    request = agent_app_module._AgentExecuteRequest.model_construct(
-        agent_id=None, agent_instance_id="instance-1", message="hi"
-    )
-
-    with pytest.raises(HTTPException) as raised:
-        await agent_app_module._resolve_agent_instance(
-            request=request,
-            registry={},
-            access_token="person-bearer",
-            control_plane_url="http://control-plane.invalid/v1",
-            http_client=_FakeBindingClient(),  # type: ignore[arg-type]
-            team_id="team-1",
-            credentials=provider,
-        )
-
-    assert raised.value.status_code == 404
-    assert provider.asked == 1
-    assert seen[0]["headers"]["Authorization"] == WORKLOAD_BEARER
-
-
 def test_no_outbound_path_builds_an_authorization_header_of_its_own():
     """The enumeration above covers the paths that exist today; this covers the
     one added tomorrow. A module that sets an Authorization header must be a
@@ -383,25 +416,29 @@ def test_no_outbound_path_builds_an_authorization_header_of_its_own():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("status_code", [401, 403])
 @pytest.mark.asyncio
-async def test_a_refused_delegated_call_raises_and_is_not_retried(status_code: int):
-    provider = RecordingProvider()
-    client, seen = kf_client(refused(status_code), credentials=provider)
+async def test_a_refused_delegated_call_raises_and_is_not_retried(monkeypatch):
+    identity = MockIdentityProvider(monkeypatch)
+    client, seen = kf_client(
+        refused(403), credentials=admitted_provider(identity.provider)
+    )
 
     with pytest.raises(AuthorityLostError) as raised:
         await client._request_with_token_refresh("GET", "/documents", phase_name="test")
 
     assert len(seen) == 1
+    assert identity.acquisitions == 1
     assert UPSTREAM_MARKER not in str(raised.value)
     assert raised.value.reason == "authority_lost"
 
 
 @pytest.mark.asyncio
-async def test_only_structured_standing_unavailable_503_ends_authority():
-    provider = RecordingProvider()
+async def test_only_structured_account_status_unavailable_503_ends_authority(
+    monkeypatch,
+):
+    provider = admitted_provider(MockIdentityProvider(monkeypatch).provider)
     denied, denied_seen = kf_client(
-        refused(503, standing_unavailable=True), credentials=provider
+        refused(503, account_status_unavailable=True), credentials=provider
     )
     with pytest.raises(AuthorityLostError):
         await denied._request_with_token_refresh("GET", "/documents", phase_name="test")
@@ -416,17 +453,6 @@ async def test_only_structured_standing_unavailable_503_ends_authority():
 
 
 @pytest.mark.asyncio
-async def test_a_refused_delegated_call_never_falls_back_to_the_persons_bearer():
-    provider = RecordingProvider()
-    client, seen = kf_client(refused(401), credentials=provider)
-
-    with pytest.raises(AuthorityLostError):
-        await client._request_with_token_refresh("GET", "/documents", phase_name="test")
-
-    assert [request.headers["Authorization"] for request in seen] == [WORKLOAD_BEARER]
-
-
-@pytest.mark.asyncio
 async def test_with_the_flag_off_a_401_keeps_its_refresh_and_retry():
     """The person path is untouched: a 401 is still an expiry to recover from,
     not a lost authority."""
@@ -438,32 +464,31 @@ async def test_with_the_flag_off_a_401_keeps_its_refresh_and_retry():
     assert seen[0].headers["Authorization"] == "Bearer person"
 
 
+@pytest.mark.parametrize(
+    ("failure", "stop_type", "requests"),
+    [(None, AuthorityLostError, 1), ("refused", DelegationUnavailableError, 0)],
+    ids=["refused-call", "failed-acquisition"],
+)
 @pytest.mark.asyncio
-async def test_a_refused_team_wiki_call_ends_the_run_instead_of_becoming_a_port_error():
-    provider = RecordingProvider()
+async def test_a_team_wiki_stop_stays_in_the_chain_of_the_port_error(
+    monkeypatch, failure, stop_type, requests
+):
+    """The team-wiki capability finds the stop there and ends the run with it."""
+    identity = MockIdentityProvider(monkeypatch)
+    identity.failure = failure
+    receiver, seen = recording(refused(403))
 
-    class _RefusingClient:
-        async def request(self, method, url, headers=None, **kwargs):
-            return httpx.Response(
-                403, text=UPSTREAM_MARKER, request=httpx.Request(method, url)
-            )
+    with pytest.raises(TeamWikiPortError) as raised:
+        await team_wiki_call(admitted_provider(identity.provider), receiver)
 
-    adapter = TeamWikiAdapter(
-        binding=binding(),
-        control_plane_url="http://control-plane.invalid/v1",
-        http_client=_RefusingClient(),
-        credentials=provider,
-    )
-
-    with pytest.raises(AuthorityLostError) as raised:
-        await adapter.list_pages()
-
+    assert isinstance(unwrap_run_stop_error(raised.value), stop_type)
     assert UPSTREAM_MARKER not in str(raised.value)
+    assert len(seen) == requests
 
 
 @pytest.mark.asyncio
-async def test_document_similarity_403_stops_the_run_without_retry():
-    provider = RecordingProvider()
+async def test_document_similarity_403_stops_the_run_without_retry(monkeypatch):
+    identity = MockIdentityProvider(monkeypatch)
     seen: list[httpx.Request] = []
 
     def _refuse(request: httpx.Request) -> httpx.Response:
@@ -471,7 +496,9 @@ async def test_document_similarity_403_stops_the_run_without_retry():
         return httpx.Response(403, text=UPSTREAM_MARKER)
 
     adapter = DocumentSimilarityAdapter(
-        binding=binding(), settings=FakeAgentSettings(), credentials=provider
+        binding=binding(),
+        settings=FakeAgentSettings(),
+        credentials=admitted_provider(identity.provider),
     )
     adapter._search_client.client = httpx.AsyncClient(  # type: ignore[attr-defined]
         transport=httpx.MockTransport(_refuse)
@@ -481,15 +508,19 @@ async def test_document_similarity_403_stops_the_run_without_retry():
         await adapter.find_similar("synthetic", document_uids=["doc-a"])
 
     assert len(seen) == 1
-    assert provider.asked == 1
+    assert identity.acquisitions == 1
     assert UPSTREAM_MARKER not in str(raised.value)
 
 
 @pytest.mark.asyncio
-async def test_builtin_similarity_keeps_delegated_credentials_after_rebind():
-    provider = RecordingProvider()
+async def test_builtin_similarity_keeps_delegated_credentials_after_rebind(
+    monkeypatch,
+):
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1")
     invoker = FredKnowledgeSearchToolInvoker(
-        binding=binding(), settings=FakeAgentSettings(), credentials=provider
+        binding=binding(),
+        settings=FakeAgentSettings(),
+        credentials=admitted_provider(identity.provider),
     )
     seen: list[httpx.Request] = []
 
@@ -506,29 +537,23 @@ async def test_builtin_similarity_keeps_delegated_credentials_after_rebind():
             "synthetic", document_uids=["doc-a"]
         )
 
-    assert provider.asked == 2
-    assert len(seen) == 2
-    assert all(request.headers["Authorization"] == WORKLOAD_BEARER for request in seen)
+    assert identity.acquisitions == 2
+    assert bearers(seen) == ["Bearer workload-token-1"] * 2
+    assert [grant_of(request) for request in seen] == [GRANT, GRANT]
 
 
 @pytest.mark.asyncio
-async def test_a_team_wiki_transport_failure_is_still_a_port_error():
+async def test_a_team_wiki_transport_failure_is_still_a_port_error(monkeypatch):
     """Only a refusal ends the run; everything else keeps the behaviour the
     capability already handles."""
 
-    class _FailingClient:
-        async def request(self, method, url, headers=None, **kwargs):
-            raise httpx.ConnectError("unreachable")
+    def _unreachable(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable", request=request)
 
-    adapter = TeamWikiAdapter(
-        binding=binding(),
-        control_plane_url="http://control-plane.invalid/v1",
-        http_client=_FailingClient(),
-        credentials=RecordingProvider(),
-    )
+    provider = admitted_provider(MockIdentityProvider(monkeypatch).provider)
 
     with pytest.raises(TeamWikiPortError):
-        await adapter.list_pages()
+        await team_wiki_call(provider, _unreachable)
 
 
 # ---------------------------------------------------------------------------
@@ -667,40 +692,44 @@ async def test_the_context_aware_wrapper_finds_a_wrapped_run_stopping_error():
 
 
 @pytest.mark.asyncio
-async def test_a_call_completes_even_though_its_bearer_expired_in_flight():
+async def test_a_call_completes_even_though_its_bearer_expired_in_flight(
+    monkeypatch,
+):
     """Acceptance happens once, at the receiver. The runtime neither re-checks
     nor retries a call that is already under way."""
-    provider = RecordingProvider()
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1", "workload-token-2")
 
-    def _rotate_then_answer(_request: httpx.Request) -> httpx.Response:
-        provider.set_authorization("Bearer workload-token-2")
+    def _expire_then_answer(_request: httpx.Request) -> httpx.Response:
+        identity.expire()
         return httpx.Response(200, json={"ok": True})
 
-    client, seen = kf_client(_rotate_then_answer, credentials=provider)
+    client, seen = kf_client(
+        _expire_then_answer, credentials=admitted_provider(identity.provider)
+    )
 
     response = await client._request_with_token_refresh(
         "GET", "/documents", phase_name="test"
     )
 
     assert response.status_code == 200
-    assert provider.asked == 1
     assert len(seen) == 1
+    assert identity.acquisitions == 1
+    assert identity.issued == ["workload-token-1"]
 
 
 @pytest.mark.asyncio
-async def test_a_later_call_carries_the_current_bearer_and_the_same_grant():
-    provider = RecordingProvider()
-    client, seen = kf_client(ok, credentials=provider)
+async def test_a_later_call_carries_the_current_bearer_and_the_same_grant(
+    monkeypatch,
+):
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1", "workload-token-2")
+    client, seen = kf_client(ok, credentials=admitted_provider(identity.provider))
 
     await client._request_with_token_refresh("GET", "/documents", phase_name="test")
-    provider.set_authorization("Bearer workload-token-2")
+    identity.expire()
     await client._request_with_token_refresh("GET", "/documents", phase_name="test")
 
-    assert [request.headers["Authorization"] for request in seen] == [
-        WORKLOAD_BEARER,
-        "Bearer workload-token-2",
-    ]
-    assert all(request.url.params[GRANT_PARAM_RUN] == "run-7" for request in seen)
+    assert bearers(seen) == ["Bearer workload-token-1", "Bearer workload-token-2"]
+    assert [grant_of(request) for request in seen] == [GRANT, GRANT]
 
 
 # ---------------------------------------------------------------------------
@@ -754,8 +783,10 @@ def test_a_failed_tool_call_reports_its_endpoint_without_the_grant():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cause", ["standing_unavailable", "other", None])
-async def test_binding_lookup_preserves_only_bounded_standing_unavailable(cause):
+@pytest.mark.parametrize("cause", ["account_status_unavailable", "other", None])
+async def test_binding_lookup_preserves_only_bounded_account_status_unavailable(
+    monkeypatch, cause
+):
     def endpoint(request):
         return httpx.Response(
             503,
@@ -775,9 +806,11 @@ async def test_binding_lookup_preserves_only_bounded_standing_unavailable(cause)
                 control_plane_url="http://control-plane.invalid/v1",
                 http_client=client,
                 team_id="team-1",
-                credentials=RecordingProvider(),
+                credentials=admitted_provider(
+                    MockIdentityProvider(monkeypatch).provider
+                ),
             )
-    if cause == "standing_unavailable":
+    if cause == "account_status_unavailable":
         assert raised.value.status_code == 503
         assert raised.value.headers == {"X-Fred-Denial-Cause": cause}
         assert UPSTREAM_MARKER not in raised.value.detail

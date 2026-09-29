@@ -21,6 +21,7 @@ as its subject, what is audited, and that an endpoint's own body still parses.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from types import SimpleNamespace
 from typing import Any, Iterator
@@ -28,6 +29,7 @@ from typing import Any, Iterator
 import pytest
 from fastapi import Depends, FastAPI, Request, Security
 from fastapi.testclient import TestClient
+from prometheus_client import REGISTRY
 from pydantic import BaseModel
 
 from fred_core.common import get_config
@@ -37,6 +39,7 @@ from fred_core.security.delegation import (
     AUDIT_GRANT_ACCEPTED,
     AUDIT_GRANT_REJECTED,
     DelegationConfig,
+    enforce_account_status,
 )
 from fred_core.security.structure import (
     SERVICE_AGENT_ROLE,
@@ -45,6 +48,10 @@ from fred_core.security.structure import (
     is_service_agent,
 )
 from fred_core.security.whitelist_access_control import access_control as whitelist
+from fred_core.tests.security.rebac_fakes import (
+    AccountStatusStore,
+    account_status_engine,
+)
 from fred_core.users.store.postgres_user_store import get_user_store
 
 _CALLER = "agent-backend"
@@ -126,12 +133,16 @@ def audit() -> Iterator[_AuditSink]:
     audit_logger.setLevel(previous_level)
 
 
-def _accept_delegated_calls() -> None:
+def _switch_on(config: DelegationConfig) -> None:
+    """Start as a service does: the block, then the engine for the account status check."""
     delegation.initialize_delegation(
-        DelegationConfig(accept_delegated_calls=True),
-        issuers=[_ISSUER],
-        user_clients=[_LOGIN_CLIENT],
+        config, issuers=[_ISSUER], user_clients=[_LOGIN_CLIENT]
     )
+    asyncio.run(enforce_account_status(account_status_engine(AccountStatusStore())))
+
+
+def _accept_delegated_calls() -> None:
+    _switch_on(DelegationConfig(accept_delegated_calls=True))
 
 
 def _without_the_role(monkeypatch: pytest.MonkeyPatch, caller: KeycloakUser) -> None:
@@ -451,6 +462,65 @@ def test_a_non_string_parameter_in_the_body_names_nobody(
     assert _one(audit)["reason"] == "invalid_parameters"
 
 
+def _invalid_parameter_decisions() -> float:
+    return (
+        REGISTRY.get_sample_value(
+            "fred_auth_delegation_decisions_total",
+            {"outcome": "rejected", "reason": "invalid_parameters"},
+        )
+        or 0.0
+    )
+
+
+@pytest.mark.parametrize("char", ["*", "#"])
+@pytest.mark.parametrize("field", ["person", "run", "agent"])
+def test_a_grant_value_naming_a_wildcard_or_userset_names_nobody(
+    client: TestClient, audit: _AuditSink, field: str, char: str
+) -> None:
+    _accept_delegated_calls()
+    canary = f"{field}-canary"
+    before = _invalid_parameter_decisions()
+
+    body = client.get(
+        "/who", params={**_GRANT, field: f"{canary}{char}x"}, headers=_HEADERS
+    ).json()
+
+    assert body["kind"] == "KeycloakUser"
+    assert body["uid"] == "svc-1"
+    audited = _one(audit)
+    assert audited["audit_event"] == AUDIT_GRANT_REJECTED
+    assert audited["outcome"] == "rejected"
+    assert audited["reason"] == "invalid_parameters"
+    assert canary not in str(audited)
+    assert _invalid_parameter_decisions() == before + 1
+
+
+@pytest.mark.parametrize(
+    "person",
+    ["f47ac10b-58cc-4372-a567-0e02b2c3d479", "f:3b0c7e1a-directory:jdoe"],
+    ids=["imported-subject", "federated-subject"],
+)
+def test_ordinary_identifiers_still_name_the_person(
+    client: TestClient, audit: _AuditSink, person: str
+) -> None:
+    _accept_delegated_calls()
+    grant = {
+        "person": person,
+        "run": "9c5b94b1-35ad-49bb-b118-8e8fc24abf80",
+        "agent": "fred.agents.document_assistant",
+    }
+
+    body = client.get("/who", params=grant, headers=_HEADERS).json()
+
+    assert body["kind"] == "AssertedUser"
+    assert (body["uid"], body["run_id"], body["agent_id"]) == (
+        grant["person"],
+        grant["run"],
+        grant["agent"],
+    )
+    assert _one(audit)["reason"] == "grant_validated"
+
+
 def test_a_person_without_the_role_never_has_its_body_read(
     client: TestClient,
     audit: _AuditSink,
@@ -652,9 +722,7 @@ def test_without_accepting_delegated_calls_the_dependency_behaves_as_before(
     client: TestClient, audit: _AuditSink, config: DelegationConfig
 ) -> None:
     # Same trusted caller and whole grant as the accepted case: only the switch differs.
-    delegation.initialize_delegation(
-        config, issuers=[_ISSUER], user_clients=[_LOGIN_CLIENT]
-    )
+    _switch_on(config)
 
     body = client.get("/who", params=_GRANT, headers=_HEADERS).json()
 

@@ -22,8 +22,8 @@ from typing import AbstractSet, Awaitable, Callable
 
 import httpx
 from fred_core.common.fastapi_handlers import (
+    ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
-    STANDING_UNAVAILABLE_CAUSE,
 )
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
 from langchain_mcp_adapters.interceptors import MCPToolCallRequest
@@ -47,9 +47,9 @@ AUTHORITY_REFUSED_STATUSES = (401, 403)
 class DelegatedAuthorityInterceptor:
     """Intercepts MCP tool calls made under delegation.
 
-    Two jobs: put a current workload bearer on every call, so a connection that
-    outlives one token keeps working; and end the run when a receiver refuses
-    this run's authority, rather than asking again with another credential.
+    Two jobs: refuse a tool call for a run that has ended; and end the run when
+    a receiver refuses this run's authority, rather than asking again with
+    another credential.
     """
 
     def __init__(
@@ -69,14 +69,9 @@ class DelegatedAuthorityInterceptor:
         if request.server_name not in self._delegated_server_ids:
             return await handler(request)
 
-        credentials = await self._provider.credentials()
-        headers = dict(request.headers or {})
-        if credentials.authorization:
-            headers["Authorization"] = credentials.authorization
-        call = request.override(headers=headers)
-
+        await self._provider.credentials()
         try:
-            result = await handler(call)
+            result = await handler(request)
             if (
                 isinstance(result, CallToolResult)
                 and result.isError
@@ -100,7 +95,7 @@ class DelegatedAuthorityInterceptor:
                 status == 503
                 and http_err is not None
                 and http_err.response.headers.get(DENIAL_CAUSE_HEADER)
-                == STANDING_UNAVAILABLE_CAUSE
+                == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
             ):
                 raise
             logger.error(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 import httpx
@@ -10,8 +11,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, FastAPI, Response
 from fastapi.testclient import TestClient
 from fred_core.security import oidc
-from fred_core.security.delegation import DelegationConfig, initialize_delegation
+from fred_core.security.delegation import (
+    DelegationConfig,
+    enforce_account_status,
+    initialize_delegation,
+)
 from fred_core.security.oidc import get_current_user_without_gcu
+from fred_core.tests.security.rebac_fakes import (
+    AccountStatusStore,
+    account_status_engine,
+)
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_interceptors import DelegatedAuthorityInterceptor
 from fred_runtime.common.outbound_credentials import static_person_provider
@@ -47,6 +56,13 @@ class _Jwks:
 
     def get_signing_key_from_jwt(self, token: str) -> _SigningKey:
         return _SigningKey(self._key)
+
+
+@asynccontextmanager
+async def _serving(_app: FastAPI) -> AsyncIterator[None]:
+    # A receiver installs the engine for the account status check once it is configured.
+    await enforce_account_status(account_status_engine(AccountStatusStore()))
+    yield
 
 
 @pytest.fixture
@@ -101,7 +117,7 @@ def signed_receiver(monkeypatch):
             headers={"kid": "synthetic"},
         )
 
-    app = FastAPI()
+    app = FastAPI(lifespan=_serving)
 
     @app.get("/documents", operation_id="read_documents")
     async def documents(user=Depends(get_current_user_without_gcu)):
@@ -157,7 +173,9 @@ async def test_mounted_mcp_inner_refusal_stops_before_adapter_conversion(
         raise HTTPException(
             status_code=status_code,
             detail="synthetic-identifier",
-            headers={"X-Fred-Denial-Cause": "standing_unavailable"} if marked else None,
+            headers={"X-Fred-Denial-Cause": "account_status_unavailable"}
+            if marked
+            else None,
         )
 
     inner_client = httpx.AsyncClient(

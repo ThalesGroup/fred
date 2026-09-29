@@ -2,7 +2,7 @@
 
 See [proposal.md](proposal.md) for the objective and the capability specifications for the behavior contract. The runtime authenticates the incoming caller, establishes the person represented by a run and supplies credentials through shared service clients. ReAct and DeepAgent execution use the same credential boundary.
 
-The workload credential is renewable through the identity provider. A run's local record establishes its person and root agent. Receiver authorization applies current permissions and account standing independently of the lifetime of the person's login token.
+The workload credential is renewable through the identity provider. A run's local record establishes its person and root agent. Receiver authorization applies current permissions and account status independently of the lifetime of the person's login token.
 
 ## Goals / Non-Goals
 
@@ -31,15 +31,15 @@ The workload credential is renewable through the identity provider. A run's loca
 
 Receivers validate the bearer before interpreting a grant: signature, permitted algorithm, trusted issuer/key source, validity, access-token purpose and intended audience. Delegation additionally requires the configured caller role and excludes tokens issued to login clients. `azp`, with `client_id` as fallback, identifies the verified caller but does not itself establish delegation trust.
 
-The grant contains `person`, `run` and `agent`. It occupies fields of a JSON object body or query parameters for other requests. Grant fields from different transports are not combined. Tool mounts accept the grant only from the outer endpoint, outside tool arguments.
+The grant contains `person`, `run` and `agent`. A value containing `*` or `#` makes the grant malformed, so no grant names the wildcard subject or a userset. A value may contain `:`, as the subject identifier of a user federated without import does. It occupies fields of a JSON object body or query parameters for other requests. Grant fields from different transports are not combined. Tool mounts accept the grant only from the outer endpoint, outside tool arguments.
 
 A complete grant from a caller without the delegation role receives 403 when delegated calls are accepted. Query inspection applies to every caller; body inspection for this refusal applies to service identities outside tool mounts. Without a verified grant, the bearer retains its ordinary caller identity and no person is asserted. The caller role remains recognizable when both switches are off.
 
 ### 2. Local admission and credential providers
 
-`RunRecordStore` holds the admitted person, run, root agent and relevant execution context. Only admission establishes those values. The runtime checks current standing and direct-target team permission or the managed target's standing-gated team-agent permission. Managed requests require a non-blank team identifier. Managed binding resolution uses one read-only request carrying the workload bearer and record-derived grant.
+`RunRecordStore` holds the admitted person, run, root agent and relevant execution context. Only admission establishes those values. The request's account status check (Decision 6) has already run for the person; admission then checks the direct target's team permission, when it names a team, or the managed target's team-agent permission. Managed requests require a non-blank team identifier. Managed binding resolution uses one read-only request carrying the workload bearer and record-derived grant.
 
-`DelegatedCredentialProvider` supplies both the authorization header and grant parameters. Knowledge, document, workspace, team-wiki, binding and tool clients ask it immediately before a request. Subagents derive a provider with their own agent identity and the same run. A missing or terminal record prevents credential acquisition. Liveness must still hold after any awaited token acquisition.
+`DelegatedCredentialProvider` checks run liveness and supplies the grant parameters; it acquires no token. The shared HTTP authentication adapter is the only source of the workload bearer: it takes a token from the same provider for each request and owns the single 401 renewal, whose retry carries the renewed token. Knowledge, document, workspace, team-wiki, binding and tool clients ask the provider for the grant immediately before a request and send the request through that adapter. Subagents derive a provider with their own agent identity and the same run. A missing or terminal record prevents a token or its renewal from being released, and liveness must still hold after the awaited acquisition. A failed acquisition writes one log line naming only the error type.
 
 `M2MTokenProvider` caches one service-account token per provider in runtime-process memory. Callers reuse it while more than 30 seconds remain. Renewal uses client credentials and one shared in-flight task. The shared HTTP authentication adapter refreshes after the first 401 and retries the same request once. Concurrent and delayed 401 responses for the same cache generation share the replacement. A first 403 or a retry returning 401/403 is terminal. Transport failures preserve their exception class with bounded text so existing polling callers can retry. After a failed acquisition, the next caller may retry immediately.
 
@@ -61,7 +61,7 @@ Credential acquisition rechecks the record and captured run scope after token ac
 
 ### 4. Tool authentication and application integration
 
-For a run using delegated credentials, authenticated tool servers must use `delegated` mode on a supported HTTP transport. Calls carry a current workload bearer and an endpoint grant. `no_token` servers remain unauthenticated. A grant-bearing connection is scoped to one run. Connection, listing and invocation use the shared HTTP authentication adapter. A first 403, a 401/403 after the single authentication retry, or a structured standing-unavailable refusal produces `authority_lost`; unsupported authentication produces `delegation_unavailable`.
+For a run using delegated credentials, authenticated tool servers must use `delegated` mode on a supported HTTP transport. Calls carry a current workload bearer and an endpoint grant. `no_token` servers remain unauthenticated. A grant-bearing connection is scoped to one run. Connection, listing and invocation use the shared HTTP authentication adapter. A first 403, a 401/403 after the single authentication retry, or a structured `account_status_unavailable` refusal produces `authority_lost`; unsupported authentication produces `delegation_unavailable`.
 
 Ordinary service identities retain their own bearer and send no grant, including to catalog entries declared `delegated`. Their behavior depends on the credential provider of that execution, not merely on the process-wide delegation switch.
 
@@ -88,28 +88,31 @@ Caller-only operations retain explicit workload and ownership checks, including 
 | Runtime diagnostics | Turn KPIs and audit events |
 | Capability configuration | Configuration validation and chat controls |
 | OpenAI-compatible execution | `/v1/chat/completions` |
+| Agent configuration (control plane) | Agent-instance enrollment and update, with or without asset uploads |
+| Conversation deletion (control plane) | Session deletion, bulk session deletion and attachment deletion |
+| Synchronized folders (control plane) | Knowledge-base instance creation and deletion |
 
-These runtime operations require the directly authenticated identity and reject an asserted person. Authenticated-person compatibility execution can still admit a local delegated run. Native execution, evaluation and streaming also accept a trusted caller's grant where receiver delegation is enabled.
+These operations require the directly authenticated identity and reject an asserted person. The control-plane operations present their caller's bearer to another service, and a service that does not act for people presents no delegated caller's bearer onward; they therefore refuse an asserted person with 403 `requires_own_credential`. Managed execution preparation still accepts an asserted person but makes no call presenting the caller's bearer: it returns no capability composer controls for that person. Authenticated-person compatibility execution can still admit a local delegated run. Native execution, evaluation and streaming also accept a trusted caller's grant where receiver delegation is enabled.
 
-### 6. Account standing and deletion
+### 6. Account status and deletion
 
-The authorization model defines organization standing as `active: [user:*] but not suspended`, plus a `standing_ready` marker. Control-plane startup validates the selected model, writes default standing and the marker, and verifies readiness before serving. Receivers enforcing standing validate their model and marker; a non-enforcing engine is incompatible with either delegation switch being enabled.
+The authorization model defines account status through `suspended: [user]` on the organization: a person has an active account unless suspended, so no entry is stored for anyone else and startup writes nothing. Every service enforcing account status validates that its selected model defines `suspended` before it starts and installs its engine for the request's account status check, and services start in any order. A non-enforcing engine is incompatible with either delegation switch being enabled.
 
-The authorization engine checks standing for person subjects alongside permissions at higher consistency; list lookups check standing before listing. Typed standing failures propagate through batch/filtering helpers. Generic relation mutation and cleanup cannot change lifecycle-owned standing tuples.
+With either delegation switch on, account status is checked once per authenticated request where the request's subject is established, after the bearer and any grant are resolved and before the route runs: one check at higher consistency that the subject — a signed-in person, a person named by a grant or a service identity — does not hold `organization#suspended`. On a tool mount, the route that serves a mounted tool call performs that check; the mount itself only authenticates. Checks, batch checks and list lookups do not repeat that check and keep the consistency their caller asks for. With a switch on and no engine installed for the check, or during an authorization-store outage, every authenticated request is refused with 503 `account_status_unavailable`, without exemptions. For a delegated run, the per-tool recheck checks account status before every tool call in every team, concurrently with the team permission check in a collaborative team; a run without delegated credentials makes no per-tool account status check. Background work admitted by a request before a suspension finishes without an account status check of its own. Generic relation mutation and cleanup cannot change lifecycle-owned suspension tuples.
 
-A receiver's structured standing-unavailable refusal uses HTTP 503 and `X-Fred-Denial-Cause: standing_unavailable`. Delegated REST and tool clients preserve that cause and raise `authority_lost`, stopping the run and its descendants. Local per-tool permission and standing refusals use the same typed stop during delegated execution. Generic service-unavailable errors retain ordinary error handling.
+A receiver's structured `account_status_unavailable` refusal uses HTTP 503 and `X-Fred-Denial-Cause: account_status_unavailable`. Delegated REST and tool clients preserve that cause and raise `authority_lost`, stopping the run and its descendants. Local per-tool permission and account status refusals use the same typed stop during delegated execution. Generic service-unavailable errors retain ordinary error handling.
 
-Platform deletion preserves permission checks and protected-account rules, rejects wildcard/userset identifiers, and resolves identity administration before mutation. When standing is enforced, it writes suspension before deleting the identity-provider account. Other relations remain. A failed identity deletion leaves the suspension effective; a retry is safe. With standing disabled, deletion writes no suspension.
+Platform deletion preserves permission checks and protected-account rules, rejects wildcard/userset identifiers, and resolves identity administration before mutation. When account status is enforced, it writes suspension before deleting the identity-provider account. Other relations remain. A failed identity deletion leaves the suspension effective; a retry is safe. With account status disabled, deletion writes no suspension.
 
-Suspension applies at the next authorization decision. Existing authorized remote work can finish. Identity-provider account changes do not independently change platform standing. Whitelists evaluate the asserted subject by its immutable subject entry; authenticated people can also match email entries.
+Suspension applies at the person's next request at every receiver and at the next tool call of a delegated run acting for them. A request that has passed its account status check completes, and background work admitted before the suspension finishes. Identity-provider account changes do not independently change platform account status. Whitelists evaluate the asserted subject by its immutable subject entry; authenticated people can also match email entries.
 
 ### 7. Diagnostics and operational compatibility
 
-The shared handler returns 403 for ordinary permission and decided standing refusals, and 503 for a standing decision marked unavailable. Runtime admission and control-plane handlers preserve this classification. The `X-Fred-Denial-Cause` header distinguishes `permission_refused`, `standing_refused` and `standing_unavailable`. The handler logs bounded cause, decision availability, subject type, action and resource type. Grant acceptance/refusal and standing refusal produce bounded audit events. Ordinary permission denials are not reported as standing audit events.
+The shared handler returns 403 for ordinary permission and decided account status refusals, and 503 for an account status decision marked unavailable. Runtime admission and control-plane handlers preserve this classification. The `X-Fred-Denial-Cause` header distinguishes `permission_refused`, `account_suspended` and `account_status_unavailable`. The handler logs bounded cause, decision availability, subject type, action and resource type. Grant acceptance/refusal and account status refusal (`authorization.account.refused`, reason `account_suspended` or `account_status_unavailable`) produce bounded audit events. Managed runtime admission records a refused team permission as a `rebac_denied` audit event carrying only outcome `rejected` and reason `permission_refused`, whatever the switches; other services' permission denials stay in the bounded denial log. Ordinary permission denials are not reported as account status audit events.
 
-Execution diagnostics emit a platform-owned sentence and an independent random support reference. Corresponding logs contain bounded exception types and code locations, without exception messages, request data, variable values or source-line text. Request and delegation logs exclude grants, credentials, secret names and identity-bearing details before parsing or authentication, including requests with grants in JSON bodies.
+Execution diagnostics emit a platform-owned sentence and an independent random support reference. Corresponding logs contain bounded exception types and code locations, without exception messages, request data, variable values or source-line text. With either delegation switch on, request and delegation logs exclude grants, credentials, secret names and identity-bearing details before parsing or authentication, including requests with grants in JSON bodies. With either switch on, each request is logged once, by the access log; a backend's own request/response logging middleware writes nothing.
 
-A process-local optional observer exposes initial token acquisition, renewal, latency, caller wait, cache events and delegation decisions with bounded labels. Observer failure does not break authentication. Frontend token-refresh diagnostics contain outcome and duration only.
+A process-local optional observer exposes initial token acquisition, renewal, latency, caller wait, cache events and delegation decisions with bounded labels. A delegated request makes one acquisition, plus one per 401 renewal; the retry reuses the renewed token. Observer failure does not break authentication.
 
 The control-plane worker command selects its worker configuration. The knowledge backend validates its required authentication secret during startup. Shared task persistence, cancellation, event replay and scheduler behavior retain their established contracts. The control-plane scheduler's connection log excludes host and namespace identifiers.
 
@@ -117,20 +120,23 @@ Local run targets load an overlay only when named explicitly. The overlay can en
 
 ## Risks / Trade-offs
 
-- Trusted workload credentials permit assertions for people; current person permissions and standing remain the authorization boundary. The grant is not independently signed or sender-bound.
+- Trusted workload credentials permit assertions for people; current person permissions and account status remain the authorization boundary. The grant is not independently signed or sender-bound.
 - A service identity can retain broad service-role access. Correct caller-role provisioning and explicit endpoint policies are required.
 - Provider renewal permits a long attended run to continue while its response stays open. Response ownership and descendant cancellation are required independently of token expiry.
 - Connection-loss detection depends on the server and transport. Cancellation cannot reverse an already authorized remote side effect.
 - Per-run authenticated tool connections isolate grants and incur connection/listing overhead.
 - The workload secret is captured at provider construction; rotation requires restarting participating processes with the updated secret.
+- With a delegation switch on, every authenticated request makes one account status check, and an authorization-store outage refuses every authenticated request with 503; a tool mount's initialization and tool listing make none. A collaborative-team tool call makes its account status and permission checks concurrently.
+- Background work admitted before a suspension completes for the suspended person.
+- With both delegation switches off, runtime audit events other than `rebac_denied` still carry identifiers such as the acting principal and team.
 - Focused and end-to-end acceptance verification remain open in [tasks.md](tasks.md); source inspection is not evidence that executable checks passed.
 
 ## Migration Plan
 
 1. Require database schema and task records compatible with the shipped migrations and task model, preserving unrelated business data. Confirm scheduled workloads match deployed workers.
-2. Publish and select the standing-capable authorization model for all readers and writers, including pinned models.
+2. Publish and select the authorization model carrying `suspended` for all readers and writers, including pinned models.
 3. Provision trusted workload clients, caller roles and audiences separately from login clients and ordinary service identities. Protect transport, secret storage and external ingress.
-4. Start the control plane with standing enforcement before the participating receivers and agent runtimes. Enable receiving delegation wherever an enabled runtime calls on behalf of people.
+4. Enable receiving delegation wherever an enabled runtime calls on behalf of people. Each service with a switch on then checks account status on every authenticated request, a tool mount's initialization and tool listing excepted, and needs its authorization store reachable to serve.
 5. Run the deployment acceptance matrix and secret-rotation drill. Rotation uses the identity provider's overlap period and a controlled workload restart.
 
 Both delegation switches can be disabled together. The authorization model and existing business data remain valid; caller-role holders still receive no service-role shortcuts.

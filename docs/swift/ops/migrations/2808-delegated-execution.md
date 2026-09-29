@@ -65,14 +65,13 @@ chart/image versions and effective values available for rollback.
 2. Provision workload credentials and the configured caller role and audience
    (defaults: `delegation_caller` on `fred-delegation`). Verify issuer trust and
    login-client exclusions. See [Keycloak](../../platform/KEYCLOAK.md).
-3. Use OpenFGA 1.10 or later. Publish/select a compatible model with `active`,
-   `suspended` and `standing_ready` on every participant; reconcile any pinned
-   model identifiers. See [account standing](../../platform/REBAC.md#account-standing--active-suspended-and-standing_ready).
+3. Use OpenFGA 1.10 or later. Publish/select a compatible model with
+   `suspended` on every participant; reconcile any pinned model identifiers.
+   See [suspended accounts](../../platform/REBAC.md#suspended-accounts--suspended).
 4. Stop admission of new agent work and drain or explicitly cancel existing runs
    for this coordinated activation. Do not assume a mixed on/off rollout is safe.
-5. Set `accept_delegated_calls: true` on Control Plane and restart it first. Wait
-   for successful startup: it validates the model and establishes standing
-   readiness. Leave its `act_for_people` false.
+5. Set `accept_delegated_calls: true` on Control Plane and restart it. Wait for
+   successful startup: it validates the model. Leave its `act_for_people` false.
 6. Enable `accept_delegated_calls` on Knowledge Flow and other receiving services;
    restart affected readers, including workers sharing their configuration, and
    verify readiness. Leave outgoing delegation false on non-agent backends.
@@ -97,7 +96,7 @@ and incoming delegation on affected services, restart them and verify ordinary
 access before resuming traffic. Disable delegation everywhere before selecting
 an older OpenFGA model or rolling back to binaries without delegation support.
 
-**Disabling delegation also stops the new account-standing enforcement.** Retained
+**Disabling delegation also stops the new account status enforcement.** Retained
 suspension tuples alone no longer block access: establish the required fallback
 access controls before admitting traffic. This is not a security-equivalent
 rollback for deployments relying on suspension enforcement.
@@ -109,6 +108,14 @@ OpenFGA tuples/model selection or database state. Retain compatible model/tuples
 unless an explicitly verified recovery procedure requires changing them.
 
 ## Limitations
+
+With a delegation switch on, a service checks account status on every
+authenticated request, login bootstrap and profile included, so it serves only
+while its OpenFGA store is reachable: during an OpenFGA outage every
+authenticated request to it returns 503 `account_status_unavailable`.
+
+With `act_for_people` on, a person whose identity-provider subject identifier
+contains `*` or `#` cannot start an agent run: admission refuses it with 403.
 
 Configuration defaults and chart changes were checked against the implementation.
 Automated authentication/runtime tests and CI cover code behavior; a production

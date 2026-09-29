@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
+import httpx
 import pytest
 from fred_capability_team_wiki.wiki import capability as cap_module
 from fred_capability_team_wiki.wiki.capability import (
@@ -35,12 +37,27 @@ from fred_capability_team_wiki.wiki.capability import (
     _format_page_batch,
     _TeamWikiPromptMiddleware,
 )
+from fred_core.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_core.security.delegation import DelegationConfig
+from fred_runtime.common.outbound_credentials import DelegationRuntime, RunRecord
+from fred_runtime.integrations.v2_runtime.adapters import TeamWikiAdapter
+from fred_runtime.runtime_support.authority import (
+    AuthorityLostError,
+    DelegationUnavailableError,
+)
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
     EmptyModel,
 )
+from fred_sdk.contracts.context import (
+    BoundRuntimeContext,
+    PortableContext,
+    PortableEnvironment,
+    RuntimeContext,
+)
 from fred_sdk.contracts.runtime import (
+    RunStopError,
     RuntimeServices,
     TeamWikiPort,
     TeamWikiPortError,
@@ -48,6 +65,8 @@ from fred_sdk.contracts.runtime import (
     WikiPageRef,
     WikiProposalRef,
 )
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 
 
 class _FakePort(TeamWikiPort):
@@ -1013,3 +1032,240 @@ def test_the_write_mode_prompt_describes_the_two_steps() -> None:
     # The read-only wording must NOT survive into write mode: it would tell an
     # agent that can write that it cannot.
     assert "You cannot change it" not in block
+
+
+# ---------------------------------------------------------------------------
+# A run stop is not a wiki failure: it ends the run instead of becoming text
+# ---------------------------------------------------------------------------
+
+UPSTREAM_MARKER = "upstream-detail-marker"
+WORKLOAD_SECRET_ENV = "FRED_TEST_WORKLOAD_SECRET"  # pragma: allowlist secret
+
+
+def _chained(stop: RunStopError) -> TeamWikiPortError:
+    """The runtime adapter's shape: its port error, raised from the stop."""
+
+    try:
+        raise TeamWikiPortError(str(stop)) from stop
+    except TeamWikiPortError as wrapper:
+        return wrapper
+
+
+def _failing(error: Exception) -> Callable[..., Awaitable[Any]]:
+    async def _raise(*_args: Any, **_kwargs: Any) -> Any:
+        raise error
+
+    return _raise
+
+
+Scenario = Callable[[_FakePort, Exception, pytest.MonkeyPatch], Any]
+
+
+def _listing(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) -> Any:
+    port.raise_on_list = error
+    return _call(port, "wiki_list_pages", {})
+
+
+def _resolving(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) -> Any:
+    port.raise_on_list = error
+    return _call(port, "wiki_read_page", {"path": "S"})
+
+
+def _reading(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -> Any:
+    mp.setattr(port, "read_page", _failing(error))
+    return _call(port, "wiki_read_page", {"path": "S"})
+
+
+def _proposing_text(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) -> Any:
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
+    port.raise_on_propose_edit = error
+    return _call(
+        port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn
+    )
+
+
+def _proposing_page(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -> Any:
+    mp.setattr(port, "propose_page", _failing(error))
+    return _call(port, "wiki_propose_page", {"title": "T", "content_md": "x"})
+
+
+def _before_publishing(
+    port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch
+) -> Any:
+    port.raise_on_list = error
+    return _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+
+
+def _publishing(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -> Any:
+    mp.setattr(port, "publish_proposal", _failing(error))
+    return _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+
+
+def _reading_back(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) -> Any:
+    # The read caches the tree, so only the read-back after the publish lists.
+    turn = _tools(port, "read_write")
+    _call(port, "wiki_read_page", {"path": "S"}, turn)
+    port.raise_on_list = error
+    return _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
+
+
+STOP_SCENARIOS: dict[str, Scenario] = {
+    "listing": _listing,
+    "resolving": _resolving,
+    "reading": _reading,
+    "proposing-text": _proposing_text,
+    "proposing-page": _proposing_page,
+    "before-publishing": _before_publishing,
+    "publishing": _publishing,
+    "reading-back": _reading_back,
+}
+
+
+@pytest.mark.parametrize("chained", [False, True], ids=["direct", "chained"])
+@pytest.mark.parametrize(
+    "stop_type",
+    [AuthorityLostError, DelegationUnavailableError],
+    ids=["authority_lost", "delegation_unavailable"],
+)
+@pytest.mark.parametrize("scenario", STOP_SCENARIOS)
+def test_a_run_stop_escapes_every_tool_path(
+    monkeypatch: pytest.MonkeyPatch,
+    scenario: str,
+    stop_type: type[RunStopError],
+    chained: bool,
+) -> None:
+    """Text would let the model carry on for a run that lost its authority."""
+
+    port = _FakePort(pages=(_page("s1", "S"),), content="body")
+    port.publish_slug = "s1"
+    stop = stop_type()
+
+    with pytest.raises(stop_type) as raised:
+        STOP_SCENARIOS[scenario](port, _chained(stop) if chained else stop, monkeypatch)
+
+    assert raised.value is stop
+
+
+@pytest.mark.parametrize("chained", [False, True], ids=["direct", "chained"])
+@pytest.mark.parametrize(
+    "stop_type",
+    [AuthorityLostError, DelegationUnavailableError],
+    ids=["authority_lost", "delegation_unavailable"],
+)
+def test_a_run_stop_escapes_the_prompt_composition(
+    stop_type: type[RunStopError], chained: bool
+) -> None:
+    stop = stop_type()
+    port = _FakePort(raises=_chained(stop) if chained else stop)
+    middleware = _TeamWikiPromptMiddleware(port, can_write=False)
+    request = ModelRequest(model=FakeMessagesListChatModel(responses=[]), messages=[])
+
+    async def _model(_request: ModelRequest) -> ModelResponse:
+        raise AssertionError("the model must not be called")
+
+    with pytest.raises(stop_type) as raised:
+        asyncio.run(middleware.awrap_model_call(request, _model))
+
+    assert raised.value is stop
+
+
+def test_a_run_stop_in_prompt_composition_cancels_the_other_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stop = AuthorityLostError()
+    port = _FakePort()
+    listing = {"cancelled": False, "finished": False}
+
+    async def read_rules() -> str:
+        await asyncio.sleep(0)
+        raise stop
+
+    async def list_pages() -> tuple[WikiPageRef, ...]:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            listing["cancelled"] = True
+            raise
+        listing["finished"] = True
+        return ()
+
+    monkeypatch.setattr(port, "read_rules", read_rules)
+    monkeypatch.setattr(port, "list_pages", list_pages)
+
+    async def compose() -> list[asyncio.Task[Any]]:
+        with pytest.raises(AuthorityLostError):
+            await _TeamWikiPromptMiddleware(port, can_write=False)._compose()
+        return [
+            task for task in asyncio.all_tasks() if task is not asyncio.current_task()
+        ]
+
+    assert asyncio.run(compose()) == []
+    assert listing == {"cancelled": True, "finished": False}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("token_status", "wiki_status", "stop_type"),
+    [(200, 403, AuthorityLostError), (503, 200, DelegationUnavailableError)],
+    ids=["refused", "acquisition-failed"],
+)
+async def test_the_runtime_adapter_stop_ends_the_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+    token_status: int,
+    wiki_status: int,
+    stop_type: type[RunStopError],
+) -> None:
+    """The runtime's own adapter over a real delegated provider; only the
+    identity provider and the control plane answer locally."""
+
+    monkeypatch.setenv(WORKLOAD_SECRET_ENV, "synthetic")
+    tokens = M2MTokenProvider(
+        M2MAuthConfig(
+            keycloak_realm_url="https://iam.invalid/realms/test",
+            client_id="test-workload",
+            secret_env=WORKLOAD_SECRET_ENV,
+        ),
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                token_status, json={"access_token": "workload", "expires_in": 300}
+            )
+        ),
+    )
+    runtime = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True), token_provider=tokens
+    )
+    runtime.records.admit(RunRecord(run_id="run-1", person_id="p-1", agent_id="a-1"))
+    binding = BoundRuntimeContext(
+        runtime_context=RuntimeContext(session_id="s", user_id="p-1", team_id="t-1"),
+        portable_context=PortableContext(
+            request_id="r",
+            correlation_id="c",
+            actor="p-1",
+            tenant="default",
+            environment=PortableEnvironment.DEV,
+        ),
+    )
+    received: list[httpx.Request] = []
+
+    def _control_plane(request: httpx.Request) -> httpx.Response:
+        received.append(request)
+        return httpx.Response(wiki_status, text=UPSTREAM_MARKER)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(_control_plane)
+    ) as client:
+        adapter = TeamWikiAdapter(
+            binding=binding,
+            control_plane_url="http://control-plane.invalid/v1",
+            http_client=client,
+            credentials=runtime.provider_for(run_id="run-1", agent_id="a-1"),
+        )
+        tool = _tools(adapter)["wiki_list_pages"]
+        with pytest.raises(stop_type) as raised:
+            await tool.ainvoke(
+                {"type": "tool_call", "name": tool.name, "args": {}, "id": "c1"}
+            )
+
+    assert UPSTREAM_MARKER not in str(raised.value)
+    assert len(received) == (1 if wiki_status == 403 else 0)

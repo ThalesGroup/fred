@@ -24,7 +24,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
+from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -37,20 +38,28 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.logs.log_setup import AUDIT_LOGGER_NAME
 from fred_core.security import oidc
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
     GRANT_PARAM_RUN,
     DelegationConfig,
+    enforce_account_status,
     initialize_delegation,
     preserved_delegation,
 )
+from fred_core.security.models import AccountStatusError, AuthorizationError, Resource
 from fred_core.security.oidc import get_current_user_without_gcu
 from fred_core.security.structure import KeycloakUser
+from fred_core.tests.security.rebac_fakes import (
+    AccountStatusStore,
+    account_status_engine,
+)
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common import mcp_utils
 from fred_runtime.common.kf_base_client import KfBaseClient
 from fred_runtime.common.outbound_credentials import (
@@ -59,10 +68,15 @@ from fred_runtime.common.outbound_credentials import (
     OutboundCredentialProvider,
     OutboundCredentials,
     RunRecord,
+    get_delegation_runtime,
     set_delegation_runtime,
 )
 from fred_runtime.common.structures import AgentSettingsLike
-from fred_runtime.runtime_context import RuntimeConfig, set_runtime_context
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    get_runtime_context,
+    set_runtime_context,
+)
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
@@ -205,7 +219,8 @@ async def test_the_grant_that_follows_admission_names_the_admitted_person():
     assert credentials.parameters[GRANT_PARAM_RUN] == record.run_id
     assert credentials.parameters[GRANT_PARAM_PERSON] == record.person_id == "alice"
     assert credentials.parameters[GRANT_PARAM_AGENT] == "instance-1"
-    assert credentials.authorization == "Bearer workload-token"
+    assert PERSON_TOKEN not in repr(credentials)
+    assert (await provider.get_token_lease()).token == "workload-token"
 
 
 @pytest.mark.asyncio
@@ -226,7 +241,7 @@ async def test_a_long_run_keeps_its_grant_after_the_pod_admits_another(monkeypat
     )
     credentials = await long_run.credentials()
 
-    assert credentials.authorization == "Bearer workload-token"
+    assert (await long_run.get_token_lease()).token == "workload-token"
     assert credentials.parameters[GRANT_PARAM_PERSON] == "alice"
     assert credentials.parameters[GRANT_PARAM_RUN] == long_run.run_id
 
@@ -327,14 +342,12 @@ async def test_binding_and_execution_use_the_same_workload_provider(monkeypatch)
 
     _, target = await authorize_and_resolve(monkeypatch, resolve=_resolve)
 
-    binding = await captured["binding"].credentials()
-    assert binding.authorization == "Bearer workload-token"
-    assert binding.parameters[GRANT_PARAM_PERSON] == "alice"
-
-    assert target.credential_provider is not None
-    turn = await target.credential_provider.credentials()
-    assert turn.authorization == "Bearer workload-token"
-    assert turn.parameters[GRANT_PARAM_PERSON] == "alice"
+    for provider in (captured["binding"], target.credential_provider):
+        assert isinstance(provider, DelegatedCredentialProvider)
+        assert (await provider.get_token_lease()).token == "workload-token"
+        credentials = await provider.credentials()
+        assert credentials.parameters[GRANT_PARAM_PERSON] == "alice"
+        assert PERSON_TOKEN not in repr(credentials)
 
 
 @pytest.mark.asyncio
@@ -512,6 +525,56 @@ def test_the_audit_names_only_the_refusal_outcome_and_reason():
     assert events[0]["reason"] == "delegation_unavailable"
     for canary in ("alice", "instance-1", PERSON_TOKEN):
         assert canary not in str(events[0])
+
+
+@pytest.mark.parametrize(
+    ("uid", "instance"),
+    [
+        ("*", "instance-1"),
+        ("alice#member", "instance-1"),
+        ("alice", "instance-canary#member"),
+    ],
+    ids=["wildcard", "userset", "agent-userset"],
+)
+def test_a_value_no_grant_can_carry_starts_no_run(uid: str, instance: str):
+    runtime = install_delegation()
+    container = Container()
+    request = execute_request(agent_instance_id=instance)
+
+    with pytest.raises(HTTPException) as raised:
+        agent_app_module._admission_credentials(request, person(uid), container)
+
+    assert raised.value.status_code == 403
+    assert raised.value.detail == "delegation_unavailable"
+    assert len(runtime.records) == 0
+    assert request.runtime_context is not None
+    assert request.runtime_context.access_token == PERSON_TOKEN
+    events = audited(container, "delegation_unavailable")
+    assert [(e["outcome"], e["reason"]) for e in events] == [
+        ("rejected", "invalid_parameters")
+    ]
+    assert "canary" not in str(events).lower()
+    assert audited(container, "delegated_run_admitted") == []
+
+
+@pytest.mark.asyncio
+async def test_a_person_federated_without_import_is_admitted():
+    runtime = install_delegation()
+    container = Container()
+    federated = "f:3b0c7e1a-directory:jdoe"
+
+    provider = agent_app_module._admission_credentials(
+        execute_request(), person(federated), container
+    )
+
+    assert isinstance(provider, DelegatedCredentialProvider)
+    record = runtime.records.get(provider.run_id)
+    assert record is not None
+    assert record.person_id == federated
+    credentials = await provider.credentials()
+    assert credentials.parameters[GRANT_PARAM_PERSON] == federated
+    assert len(audited(container, "delegated_run_admitted")) == 1
+    assert audited(container, "delegation_unavailable") == []
 
 
 # ---------------------------------------------------------------------------
@@ -697,6 +760,18 @@ def unattended_request() -> RuntimeExecuteRequest:
     )
 
 
+def installing_an_account_status_engine(store: AccountStatusStore):
+    """A lifespan installing the engine for the request's account status check, as a
+    service does once its delegation block is in place."""
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        await enforce_account_status(account_status_engine(store))
+        yield
+
+    return lifespan
+
+
 def admit_through_a_route(
     bearer: str,
     *,
@@ -706,7 +781,7 @@ def admit_through_a_route(
 ) -> DelegatedCredentialProvider:
     """Admit one run the way an endpoint does, so the person admission sees is
     the one the receiver resolved from a verified bearer and nothing else."""
-    app = FastAPI()
+    app = FastAPI(lifespan=installing_an_account_status_engine(AccountStatusStore()))
     admitted: list[Any] = []
 
     @app.post("/agents/execute")
@@ -751,7 +826,8 @@ async def test_a_grant_from_a_configured_workload_admits_the_person_it_names(
     assert record.person_id == CAMPAIGN_CREATOR
     assert record.agent_id == "instance-1"
     credentials = await provider.credentials()
-    assert credentials.authorization == "Bearer workload-token"
+    assert (await provider.get_token_lease()).token == "workload-token"
+    assert calling_workload_bearer not in repr(credentials)
     assert credentials.parameters[GRANT_PARAM_PERSON] == CAMPAIGN_CREATOR
 
 
@@ -882,7 +958,7 @@ def test_a_role_holder_naming_nobody_is_refused_where_grants_are_not_believed(
     role off a verified bearer, so a workload naming nobody cannot run as itself."""
     runtime = install_delegation()
     container = Container()
-    app = FastAPI()
+    app = FastAPI(lifespan=installing_an_account_status_engine(AccountStatusStore()))
 
     @app.post("/agents/execute")
     async def _execute(user=Depends(get_current_user_without_gcu)) -> dict[str, str]:
@@ -1142,7 +1218,6 @@ class SpyProvider(OutboundCredentialProvider):
         self.run_id = run_id
         self._agent_id = agent_id
         self.children: list["SpyProvider"] = []
-        self.bearer = "Bearer workload-token"
 
     @property
     def agent_id(self) -> str:
@@ -1150,7 +1225,6 @@ class SpyProvider(OutboundCredentialProvider):
 
     async def credentials(self, *, override_token: str | None = None):
         return OutboundCredentials(
-            authorization=self.bearer,
             parameters={
                 GRANT_PARAM_PERSON: "alice",
                 GRANT_PARAM_RUN: self.run_id,
@@ -1161,7 +1235,6 @@ class SpyProvider(OutboundCredentialProvider):
 
     def for_agent(self, agent_id: str) -> "SpyProvider":
         child = SpyProvider(run_id=self.run_id, agent_id=agent_id)
-        child.bearer = self.bearer
         self.children.append(child)
         return child
 
@@ -1221,9 +1294,13 @@ async def test_each_team_member_names_itself_on_the_shared_run(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_child_is_handed_the_provider_and_not_a_credential(monkeypatch):
-    """The parent's provider changes after the child has started; the child's
-    next call must carry the change, which a copied string could not."""
-    provider = SpyProvider()
+    """The workload token rotates after the child has started; the child's
+    next request must carry the change, which a copied string could not."""
+    tokens = StaticWorkloadTokens("workload-token")
+    runtime = install_delegation(token_provider=tokens)
+    provider = delegated_provider(
+        runtime, RunRecord(run_id="run-7", person_id="alice", agent_id="parent")
+    )
     captured: list[Any] = []
     started = asyncio.Event()
     release = asyncio.Event()
@@ -1231,11 +1308,11 @@ async def test_a_child_is_handed_the_provider_and_not_a_credential(monkeypatch):
     async def _fake_iterate(definition, request, **kwargs):
         child = kwargs["credential_provider"]
         captured.append(child)
-        before = await child.credentials()
+        before = await child.get_token_lease()
         started.set()
         await release.wait()
-        after = await child.credentials()
-        captured.append((before.authorization, after.authorization))
+        after = await child.get_token_lease()
+        captured.append((before.token, after.token))
         yield {"kind": "final", "content": "done"}
 
     monkeypatch.setattr(
@@ -1246,12 +1323,15 @@ async def test_a_child_is_handed_the_provider_and_not_a_credential(monkeypatch):
         invoker({"member-1": _Definition()}, provider).invoke(invocation("member-1"))
     )
     await started.wait()
-    for child in provider.children:
-        child.bearer = "Bearer workload-token-2"
+    tokens.token = "workload-token-2"
     release.set()
     await running
 
-    assert captured[1] == ("Bearer workload-token", "Bearer workload-token-2")
+    assert isinstance(captured[0], DelegatedCredentialProvider)
+    assert (await captured[0].credentials()).parameters[GRANT_PARAM_AGENT] == (
+        "member-1"
+    )
+    assert captured[1] == ("workload-token", "workload-token-2")
 
 
 @pytest.mark.asyncio
@@ -1554,11 +1634,10 @@ def _own_credential_app(monkeypatch, tmp_path):
         agent_app_module,
         "rebac_factory",
         lambda *args, **kwargs: SimpleNamespace(
-            enforces_standing=True,
+            requires_active_accounts=True,
             enabled=True,
-            validate_standing_model=AsyncMock(),
-            is_standing_seed_ready=AsyncMock(return_value=True),
-            require_user_standing=AsyncMock(),
+            validate_account_status_model=AsyncMock(),
+            require_active_account=AsyncMock(),
         ),
     )
     app = agent_app_module.create_agent_app(
@@ -1581,6 +1660,10 @@ def _enable_workload_delegation() -> None:
         issuers=["https://issuer.test/realms/fred"],
         user_clients=["browser"],
     )
+    # A new block drops the engine the pod installed at startup.
+    engine = get_runtime_context().config.rebac_engine
+    assert engine is not None
+    asyncio.run(enforce_account_status(engine))
 
 
 @pytest.mark.parametrize(
@@ -1638,3 +1721,286 @@ def test_retained_own_credential_routes_reject_asserted_subject(
 
     assert response.status_code == 403
     assert response.json()["detail"] == "requires_own_credential"
+
+
+# ---------------------------------------------------------------------------
+# A refused team permission at managed admission
+# ---------------------------------------------------------------------------
+
+REFUSED_PERSON = "person-canary"
+REFUSED_TEAM = "team-canary"
+REFUSED_INSTANCE = "instance-canary"
+REFUSED_SESSION = "session-canary"
+REFUSED_RUN = "run-canary"
+REFUSED_CANARIES = (
+    REFUSED_PERSON,
+    REFUSED_TEAM,
+    REFUSED_INSTANCE,
+    REFUSED_SESSION,
+    REFUSED_RUN,
+)
+
+
+@contextmanager
+def audit_log() -> Iterator[list[logging.LogRecord]]:
+    """Every record written to the audit logger, which never reaches caplog."""
+    records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record)
+
+    audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
+    handler, level = _Capture(), audit_logger.level
+    audit_logger.addHandler(handler)
+    audit_logger.setLevel(logging.DEBUG)
+    try:
+        yield records
+    finally:
+        audit_logger.removeHandler(handler)
+        audit_logger.setLevel(level)
+
+
+def audit_text(records: list[logging.LogRecord]) -> str:
+    return repr([{**vars(record), "text": record.getMessage()} for record in records])
+
+
+def refuse_team_permission(user: Any, permission: Any, team_id: str) -> None:
+    """Denies the way the engine does, with the team in the message."""
+    raise AuthorizationError(
+        user.uid,
+        permission.value,
+        Resource.TEAM,
+        f"Not authorized to {permission.value} team {team_id}",
+        actor_uid=user.uid,
+        subject_type=Resource.USER,
+        subject_id=user.uid,
+    )
+
+
+def refusing_pod(
+    monkeypatch,
+    tmp_path,
+    *,
+    act_for_people: bool,
+    accept_delegated_calls: bool,
+    refusal: Any = None,
+    account_status: Any = None,
+):
+    """A pod whose relationship engine answers the team check with `refusal`
+    and the request's account status check with `account_status`."""
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(ToolFriendlyFakeChatModel(responses=[])),
+    )
+    monkeypatch.setattr(
+        oidc,
+        "decode_jwt",
+        lambda token: (
+            KeycloakUser(
+                uid=REFUSED_PERSON, username="synthetic", roles=[], client_id="browser"
+            )
+            if token == PERSON_TOKEN
+            else KeycloakUser(
+                uid="workload-subject",
+                username="synthetic",
+                roles=["service_agent"],
+                client_id="runtime-client",
+                token_issuer="https://issuer.test/realms/fred",
+                token_audiences=frozenset({"fred-delegation"}),
+                token_type="Bearer",
+                caller_roles=frozenset({"delegation_caller"}),
+            )
+        ),
+    )
+    engine = SimpleNamespace(
+        requires_active_accounts=act_for_people,
+        enabled=True,
+        validate_account_status_model=AsyncMock(),
+        require_active_account=AsyncMock(side_effect=account_status),
+        check_user_team_permission_or_raise=AsyncMock(side_effect=refusal),
+    )
+    monkeypatch.setattr(agent_app_module, "rebac_factory", lambda *a, **k: engine)
+    app = agent_app_module.create_agent_app(
+        registry={_EchoAgent().agent_id: _EchoAgent()},
+        config=_build_test_config(
+            tmp_path,
+            user_security_enabled=True,
+            act_for_people=act_for_people,
+            accept_delegated_calls=accept_delegated_calls,
+        ),
+    )
+    return app, engine
+
+
+def refused_execution(
+    monkeypatch, app, *, accept_delegated_calls: bool
+) -> tuple[Any, list[logging.LogRecord], list[dict[str, object]]]:
+    """Post one managed run and return the response, the audit log and the pod view."""
+    admissions: list[Any] = []
+    admit = agent_app_module._admission_credentials
+
+    def _spy(*args: Any) -> Any:
+        admissions.append(args)
+        return admit(*args)
+
+    monkeypatch.setattr(agent_app_module, "_admission_credentials", _spy)
+    with TestClient(app) as client:
+        grant: dict[str, str] = {}
+        bearer = PERSON_TOKEN
+        if accept_delegated_calls:
+            _enable_workload_delegation()
+            grant = {
+                GRANT_PARAM_PERSON: REFUSED_PERSON,
+                GRANT_PARAM_RUN: REFUSED_RUN,
+                GRANT_PARAM_AGENT: REFUSED_INSTANCE,
+            }
+            bearer = "workload-token"
+        with audit_log() as records:
+            response = client.post(
+                "/pod/v1/agents/execute",
+                params=grant,
+                json={
+                    "agent_instance_id": REFUSED_INSTANCE,
+                    "input": "hello",
+                    "session_id": REFUSED_SESSION,
+                    "runtime_context": {"team_id": REFUSED_TEAM},
+                },
+                headers={"Authorization": f"Bearer {bearer}"},
+            )
+        pod_view = [
+            dict(event) for event in get_pod_container_from_app(app).audit_events_buffer
+        ]
+    delegation = get_delegation_runtime()
+    assert admissions == []
+    assert delegation is not None and len(delegation.records) == 0
+    return response, records, pod_view
+
+
+@pytest.mark.parametrize(
+    ("act_for_people", "accept_delegated_calls"),
+    [(False, False), (True, False), (True, True)],
+    ids=["delegation-off", "act-for-people", "accept-delegated-calls"],
+)
+def test_a_refused_team_permission_is_audited_once_without_identifiers(
+    monkeypatch,
+    tmp_path,
+    _restore_security,
+    act_for_people: bool,
+    accept_delegated_calls: bool,
+) -> None:
+    app, engine = refusing_pod(
+        monkeypatch,
+        tmp_path,
+        act_for_people=act_for_people,
+        accept_delegated_calls=accept_delegated_calls,
+        refusal=refuse_team_permission,
+    )
+
+    response, records, pod_view = refused_execution(
+        monkeypatch, app, accept_delegated_calls=accept_delegated_calls
+    )
+
+    assert response.status_code == 403
+    assert response.headers["X-Fred-Denial-Cause"] == "permission_refused"
+    engine.check_user_team_permission_or_raise.assert_awaited_once()
+    subject, _, team_id = engine.check_user_team_permission_or_raise.await_args.args
+    assert (subject.uid, team_id) == (REFUSED_PERSON, REFUSED_TEAM)
+    denied = [r for r in records if getattr(r, "audit_event", None) == "rebac_denied"]
+    assert len(denied) == 1
+    assert (vars(denied[0])["outcome"], vars(denied[0])["reason"]) == (
+        "rejected",
+        "permission_refused",
+    )
+    assert [
+        {key: value for key, value in event.items() if key != "ts"}
+        for event in pod_view
+        if event["audit_event"] == "rebac_denied"
+    ] == [
+        {
+            "audit_event": "rebac_denied",
+            "outcome": "rejected",
+            "reason": "permission_refused",
+        }
+    ]
+    for canary in REFUSED_CANARIES:
+        assert canary not in audit_text(records)
+        assert canary not in repr(pod_view)
+
+
+@pytest.mark.parametrize(
+    ("unavailable", "status_code", "cause"),
+    [(False, 403, "account_suspended"), (True, 503, "account_status_unavailable")],
+    ids=["refused", "unavailable"],
+)
+def test_an_account_status_decision_at_managed_admission_is_not_a_permission_audit(
+    monkeypatch,
+    tmp_path,
+    _restore_security,
+    unavailable: bool,
+    status_code: int,
+    cause: str,
+) -> None:
+    app, engine = refusing_pod(
+        monkeypatch,
+        tmp_path,
+        act_for_people=True,
+        accept_delegated_calls=False,
+        account_status=AccountStatusError(unavailable=unavailable),
+    )
+
+    response, records, pod_view = refused_execution(
+        monkeypatch, app, accept_delegated_calls=False
+    )
+
+    assert response.status_code == status_code
+    assert response.headers["X-Fred-Denial-Cause"] == cause
+    engine.require_active_account.assert_awaited_once_with(REFUSED_PERSON)
+    engine.check_user_team_permission_or_raise.assert_not_awaited()
+    assert [getattr(r, "audit_event", None) for r in records] == [
+        "authorization.account.refused"
+    ]
+    assert not [e for e in pod_view if e["audit_event"] == "rebac_denied"]
+
+
+@pytest.mark.parametrize(
+    ("fields", "outcome", "reason"),
+    [
+        (
+            {"outcome": "rejected", "reason": "permission_refused"},
+            "rejected",
+            "permission_refused",
+        ),
+        (
+            {
+                "outcome": "Rejected",
+                "reason": f"Not authorized to use team {REFUSED_TEAM}",
+                "user_id": REFUSED_PERSON,
+            },
+            "rejected",
+            "rebac_denied",
+        ),
+    ],
+    ids=["codes-kept", "free-text-replaced"],
+)
+def test_under_delegation_an_audit_event_keeps_only_bounded_codes(
+    fields: dict[str, object], outcome: str, reason: str
+) -> None:
+    install_delegation()
+    container = Container()
+
+    with audit_log() as records:
+        agent_app_module._emit_audit_event(
+            container, "warning", "rebac_denied", **fields
+        )
+
+    assert [
+        {key: value for key, value in event.items() if key != "ts"}
+        for event in container.audit_events_buffer
+    ] == [{"audit_event": "rebac_denied", "outcome": outcome, "reason": reason}]
+    assert [(vars(r)["outcome"], vars(r)["reason"]) for r in records] == [
+        (outcome, reason)
+    ]
+    assert REFUSED_TEAM not in audit_text(records)
+    assert REFUSED_PERSON not in audit_text(records)
