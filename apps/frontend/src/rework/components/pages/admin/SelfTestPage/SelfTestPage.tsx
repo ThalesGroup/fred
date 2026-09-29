@@ -159,7 +159,7 @@ function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
             color="primary"
             variant="filled"
             size="medium"
-            icon={{ category: "outlined", type: "verified_user", filled: false }}
+            icon={{ category: "outlined", type: "check_circle", filled: false }}
             onClick={identityRun.runIdentity}
             disabled={busy}
           >
