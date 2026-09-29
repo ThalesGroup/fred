@@ -30,7 +30,6 @@ def upgrade() -> None:
             "command",
             sa.String(length=64),
             nullable=True,
-            comment="Optional slug identifying this prompt for invocation from the chat composer. Lowercase ASCII letters, digits, '-' and '_'. Unique per team when present.",
         ),
     )
     # Partial: any number of prompts may carry no command, a present one is
