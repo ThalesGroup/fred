@@ -143,8 +143,8 @@ async def test_cancelled_upload_keeps_workdir_until_content_store_write_finishes
     consumer = asyncio.create_task(anext_all(stream))
     await asyncio.to_thread(started.wait, 5)
     consumer.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await consumer
+    await asyncio.wait([consumer])
+    assert consumer.cancelled()
     assert workdir.exists()
 
     release.set()
