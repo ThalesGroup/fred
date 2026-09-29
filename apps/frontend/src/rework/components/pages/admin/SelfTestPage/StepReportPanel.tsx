@@ -32,17 +32,14 @@ const STEP_TO_TASK_STATE: Record<StepStatus, TaskState> = {
   skipped: "cancelled",
 };
 
-function overallState(steps: StepReport[], isRunning: boolean): TaskState {
+function overallState(steps: StepReport[], isRunning: boolean): TaskState | "partial" {
   if (isRunning || steps.length === 0) return "running";
   if (steps.some((s) => s.status === "failed")) return "failed";
   // A run that skipped out before validating anything reports as cancelled, the
   // same verdict its own steps carry: there is nothing to call a failure.
   const validated = steps.some((s) => s.status === "passed" || s.status === "running");
   if (!validated && steps.some((s) => s.status === "skipped")) return "cancelled";
-  // Past that point a skipped REQUIRED step means one validation of a run that
-  // did start never ran, so the run did not succeed — only teardown/optional
-  // steps may skip freely.
-  if (steps.some((s) => s.status === "skipped" && !s.optional)) return "failed";
+  if (steps.some((s) => s.status === "skipped" && !s.optional)) return "partial";
   return "succeeded";
 }
 
@@ -82,6 +79,8 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
   const passed = steps.filter((s) => s.status === "passed").length;
   const failed = steps.filter((s) => s.status === "failed").length;
   const skipped = steps.filter((s) => s.status === "skipped").length;
+  const verdict = overallState(steps, isRunning);
+  const state = verdict === "partial" ? "cancelled" : verdict;
   const total = steps.length;
   const completed = steps.filter((s) => s.status !== "running").length;
   const progress = total > 0 ? completed / total : null;
@@ -101,7 +100,14 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
   return (
     <section className={styles.section}>
       <div className={styles.summary}>
-        <TaskStateBadge state={overallState(steps, isRunning)} size="md" />
+        {verdict === "partial" || verdict === "succeeded" ? (
+          <span>
+            <TaskStateBadge state={state} showLabel={false} size="md" />{" "}
+            {t(verdict === "partial" ? "rework.selftest.report.partial" : "rework.selftest.report.verified")}
+          </span>
+        ) : (
+          <TaskStateBadge state={state} size="md" />
+        )}
         <span className={styles.counts}>{t("rework.selftest.report.counts", { passed, failed, skipped, total })}</span>
         <Button
           color="secondary"
@@ -114,7 +120,7 @@ export function StepReportPanel({ steps, isRunning, emptyLabel }: StepReportPane
           {copied ? t("rework.selftest.report.copied") : t("rework.selftest.report.copy")}
         </Button>
       </div>
-      <TaskProgressBar state={overallState(steps, isRunning)} progress={progress} />
+      <TaskProgressBar state={state} progress={progress} />
 
       <ul className={styles.steps}>
         {steps.map((step) => (
