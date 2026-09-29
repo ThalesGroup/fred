@@ -62,6 +62,7 @@ from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
 )
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import InputValidationError
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
@@ -478,6 +479,8 @@ class IngestionController:
 
     @staticmethod
     def _format_exception_message(exc: Exception) -> str:
+        if isinstance(exc, InputValidationError):
+            return str(exc)
         return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
 
     @staticmethod

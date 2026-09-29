@@ -24,6 +24,7 @@ where a write stands is read off the pipeline's stages, not guessed.
 import pytest
 from fred_core.documents.document_structures import Processing, ProcessingStage, ProcessingStatus
 
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import InputValidationError
 from knowledge_flow_backend.features.library_sync.controller import _bounded_failure
 from knowledge_flow_backend.features.library_sync.structures import (
     MAX_SOURCE_KEY_LENGTH,
@@ -117,6 +118,13 @@ def test_a_failure_says_its_kind_and_none_of_the_server_s_business():
 def test_the_kind_is_what_tells_a_retry_from_a_dead_end():
     assert _bounded_failure(TimeoutError()).detail["failure"] == "TimeoutError"
     assert _bounded_failure(ValueError("x")).detail["failure"] == "ValueError"
+
+
+def test_upload_validation_keeps_the_non_retryable_sync_classification():
+    failure = _bounded_failure(InputValidationError("The uploaded file is empty (0 bytes)."))
+
+    assert failure.status_code == 500
+    assert failure.detail == {"code": "document_write_failed", "failure": "ValueError"}
 
 
 RAW, PREVIEW, VECTOR, SQL = ProcessingStage.RAW_AVAILABLE, ProcessingStage.PREVIEW_READY, ProcessingStage.VECTORIZED, ProcessingStage.SQL_INDEXED
