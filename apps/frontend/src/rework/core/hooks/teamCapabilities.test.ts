@@ -13,8 +13,8 @@
 // limitations under the License.
 
 import { describe, it, expect } from "vitest";
-import { mapTeamPermissions, type TeamCapabilities } from "./teamCapabilities";
-import type { TeamPermission } from "../../../slices/controlPlane/controlPlaneOpenApi";
+import { canEditTeamContent, mapTeamPermissions, type TeamCapabilities } from "./teamCapabilities";
+import type { TeamPermission, UserTeamRelation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 // Every `TeamPermission` the generated client currently knows about, paired
 // with the flag it must turn on and nothing else. If the backend adds a
@@ -65,5 +65,35 @@ describe("mapTeamPermissions", () => {
   it("ignores an unknown permission string without throwing", () => {
     const flags = mapTeamPermissions(["not_a_real_permission" as TeamPermission]);
     expect(Object.values(flags).every((v) => v === false)).toBe(true);
+  });
+});
+
+describe("canEditTeamContent", () => {
+  const team = (...my_relations: UserTeamRelation[]) => ({ my_relations });
+
+  it("grants a team_editor, alone or alongside other roles", () => {
+    expect(canEditTeamContent(team("team_editor"))).toBe(true);
+    expect(canEditTeamContent(team("team_member", "team_editor"))).toBe(true);
+    expect(canEditTeamContent(team("team_admin", "team_editor"))).toBe(true);
+  });
+
+  // The whole point of this helper: `can_update_resources` resolves to
+  // `team_editor` alone in schema.fga, so an admin-only caller must be
+  // refused here exactly as the backend refuses them.
+  it("refuses a team_admin who is not also an editor", () => {
+    expect(canEditTeamContent(team("team_admin"))).toBe(false);
+    expect(canEditTeamContent(team("pending_team_admin"))).toBe(false);
+  });
+
+  it("refuses every non-writing role", () => {
+    for (const role of ["team_member", "team_analyst"] as UserTeamRelation[]) {
+      expect(canEditTeamContent(team(role)), role).toBe(false);
+    }
+  });
+
+  it("refuses a team whose relations are missing, null, or empty", () => {
+    expect(canEditTeamContent({})).toBe(false);
+    expect(canEditTeamContent({ my_relations: null })).toBe(false);
+    expect(canEditTeamContent(team())).toBe(false);
   });
 });
