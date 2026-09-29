@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import { useCallback, useState } from "react";
+import { identityProbeScenario } from "./scenarios/identityProbeScenario";
 import { runStep } from "./step";
 import { authzProbeScenario, type AuthzProbeDeps } from "./scenarios/authzProbeScenario";
 import { loginWithPassword } from "./keycloakDirectGrant";
@@ -35,13 +36,16 @@ interface BootstrapResponse {
 
 async function authedFetch(
   path: string,
-  token: string,
+  token?: string,
   init?: { method?: string; body?: unknown },
 ): Promise<{ status: number; body: unknown }> {
   const response = await fetch(path, {
     method: init?.method ?? "GET",
+    credentials: "omit",
+    redirect: "error",
+    signal: AbortSignal.timeout(15000),
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
     },
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -134,6 +138,7 @@ export interface AuthzProbeRun {
   isRunning: boolean;
   /** Run the probe against the current admin's own session — always available. */
   runForMyself: () => void;
+  runIdentity: () => void;
   /** Log in as `username`/`password` (short-lived, discarded after the run — see
    * `keycloakDirectGrant.ts`) and run the same probe against that account. */
   runForProfile: (username: string, password: string) => void;
@@ -161,6 +166,21 @@ export function useAuthzProbeRun(): AuthzProbeRun {
     void authzProbeScenario(token, token, deps, report).finally(() => setIsRunning(false));
   }, [report]);
 
+  const runIdentity = useCallback(() => {
+    setSteps([]);
+    setIsRunning(true);
+    void (async () => {
+      const token = await runStep(report, "identity-session", "Refresh the current session credential", async () => {
+        if (!(await KeyCloakService.ensureFreshToken(30)))
+          throw new Error("Sign in again before running the JWT checks");
+        const value = KeyCloakService.GetToken();
+        if (!value) throw new Error("No session credential");
+        return { value };
+      });
+      if (token) await identityProbeScenario(token, KeyCloakService.GetUserId(), authedFetch, report);
+    })().finally(() => setIsRunning(false));
+  }, [report]);
+
   const runForProfile = useCallback(
     (username: string, password: string) => {
       const adminToken = KeyCloakService.GetToken();
@@ -180,5 +200,5 @@ export function useAuthzProbeRun(): AuthzProbeRun {
     [report],
   );
 
-  return { steps, isRunning, runForMyself, runForProfile };
+  return { steps, isRunning, runForMyself, runForProfile, runIdentity };
 }

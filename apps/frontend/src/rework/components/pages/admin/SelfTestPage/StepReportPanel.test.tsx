@@ -32,6 +32,8 @@ function step(id: string, status: StepStatus, optional = false): StepReport {
 
 function verdictOf(steps: StepReport[]): string {
   const html = renderToStaticMarkup(<StepReportPanel steps={steps} isRunning={false} emptyLabel="empty" />);
+  if (html.includes("rework.selftest.report.verified")) return "succeeded";
+  if (html.includes("rework.selftest.report.partial")) return "partial";
   const match = html.match(/rework\.tasks\.state\.(\w+)</);
   return match?.[1] ?? "none";
 }
@@ -42,8 +44,8 @@ describe("StepReportPanel verdict", () => {
     expect(verdictOf([step("probe-availability", "skipped"), step("delete-agent", "skipped", true)])).toBe("cancelled");
   });
 
-  it("still reads a required step skipped mid-run as failed", () => {
-    expect(verdictOf([step("create-folder", "passed"), step("expiry-turn", "skipped")])).toBe("failed");
+  it("reports a required step skipped mid-run as partial", () => {
+    expect(verdictOf([step("create-folder", "passed"), step("expiry-turn", "skipped")])).toBe("partial");
   });
 
   it("keeps a clean run with optional teardown skips a success", () => {
@@ -52,6 +54,8 @@ describe("StepReportPanel verdict", () => {
 
   it("reads any failure as failed, whatever else the run did", () => {
     expect(verdictOf([step("probe-availability", "failed"), step("delete-agent", "skipped", true)])).toBe("failed");
-    expect(verdictOf([step("create-folder", "passed"), step("expiry-turn", "failed")])).toBe("failed");
+    expect(verdictOf([step("create-folder", "passed"), step("expiry-turn", "failed"), step("other", "skipped")])).toBe(
+      "failed",
+    );
   });
 });

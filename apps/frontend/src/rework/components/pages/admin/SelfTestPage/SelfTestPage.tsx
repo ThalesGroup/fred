@@ -69,6 +69,7 @@ function FunctionalSelfTestSection({ busy, onRunningChange }: SectionProps) {
 function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
   const { t } = useTranslation();
   const { steps, isRunning, runForMyself, runForProfile } = useAuthzProbeRun();
+  const identityRun = useAuthzProbeRun();
   const { data: users } = useListUsersQuery();
   const [username, setUsername] = useState<string | undefined>(undefined);
   const [password, setPassword] = useState("");
@@ -79,7 +80,10 @@ function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
   // the figure the admin accepts is the one the run then uses.
   const [pendingExpiry, setPendingExpiry] = useState<{ waitSeconds: number | null } | null>(null);
 
-  useEffect(() => onRunningChange(isRunning || expiryRun.isRunning), [isRunning, expiryRun.isRunning, onRunningChange]);
+  useEffect(
+    () => onRunningChange(isRunning || expiryRun.isRunning || identityRun.isRunning),
+    [isRunning, expiryRun.isRunning, identityRun.isRunning, onRunningChange],
+  );
 
   const userOptions: OptionModel<string>[] = useMemo(
     () =>
@@ -148,7 +152,29 @@ function AuthzSelfTestSection({ busy, onRunningChange }: SectionProps) {
 
       <StepReportPanel steps={steps} isRunning={isRunning} emptyLabel={t("rework.selftest.report.empty")} />
 
-      {realmConfig && (
+      <section className={styles.testSection}>
+        <div className={styles.header}>
+          <h3 className={styles.title}>{t("rework.selftest.authz.identityTitle")}</h3>
+          <Button
+            color="primary"
+            variant="filled"
+            size="medium"
+            icon={{ category: "outlined", type: "verified_user", filled: false }}
+            onClick={identityRun.runIdentity}
+            disabled={busy}
+          >
+            {t("rework.selftest.authz.identityRun")}
+          </Button>
+        </div>
+        <p className={styles.subtitle}>{t("rework.selftest.authz.identityDescription")}</p>
+        <StepReportPanel
+          steps={identityRun.steps}
+          isRunning={identityRun.isRunning}
+          emptyLabel={t("rework.selftest.report.empty")}
+        />
+      </section>
+
+      {KeyCloakService.GetToken() && (
         <section className={styles.testSection}>
           <div className={styles.header}>
             <h3 className={styles.testProfileTitle}>{t("rework.selftest.authz.expiry.title")}</h3>
