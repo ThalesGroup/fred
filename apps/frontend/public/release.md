@@ -1,3 +1,23 @@
+**v3.0.1** — 2026-09-29
+
+- **Summary**
+
+  Run your team's saved prompts directly from chat by typing `/`. Conversations
+  show the command used, with the full text available whenever you need it.
+
+- **Features**
+
+  - Give a team prompt a command and launch it from chat, adding your own instructions if needed (#2828, #2834)
+
+- **Bug Fixes**
+
+  - Importing a prompt shows its original team as already selected (#2828, #2834)
+
+- **Deployment note**
+
+  Apply the additive database migration during deployment. Existing prompts
+  remain unchanged; no configuration change or content re-ingestion is needed.
+
 **v3.0.0** — 2026-09-29
 
 - **Summary**

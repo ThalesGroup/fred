@@ -1,7 +1,8 @@
 ---
 schema: 1
 title: "Run a team prompt from the chat by typing a command"
-impact: minor
+impact: none
+no_action_reason: "The additive schema migration runs as part of normal deployment; existing prompts and conversations remain compatible, with no configuration, re-ingestion, or additional operator action required."
 configuration: none
 configuration_reason: "The feature is carried entirely by a schema change and application code; no configuration key, default, or chart value changes."
 ---
