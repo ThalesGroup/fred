@@ -2,14 +2,14 @@
 
 Tracking: https://github.com/ThalesGroup/fred/issues/2837
 
-The Simple capabilities view presents team documents and conversation attachments as separate packs even though both depend on `document_access`. A single resource pack makes document access a clear choice for agent creators.
+The Simple capabilities view presents team resources and conversation attachments as separate packs even though both configure document access. One combined pack makes the bundled choice clear while preserving independent configuration in Advanced.
 
 ## What Changes
 
-- Remove the standalone "Conversation attachments" pack from the Simple view. The "Team resources" pack enables both team corpus access and conversation attachments with one switch.
-- When the combined pack is enabled, select its currently available corpus and reading capabilities and configure `document_access` for corpus plus attachments (`search_attachments_only=false`, `show_attach_files_control=true`).
-- **BREAKING (form behavior):** existing corpus-only and attachment-only agents keep their stored behavior on deployment and unrelated edits. Re-enabling the resource pack in Simple adopts the combined defaults. An explicit attachment setting change in Advanced remains durable across later edits.
-- Keep individual capability and `document_access` settings editable in Advanced. Update pack state derivation, focused tests, French and English copy, and Help Center guidance.
+- Remove the standalone "Conversation attachments" card from Simple. Keep the existing "Team resources" members and add the attachment abilities to that pack.
+- Enabling the combined pack in Simple selects every available capability in the union and configures document access for corpus plus attachments (`search_attachments_only=false`, `show_attach_files_control=true`).
+- Advanced remains granular. Selecting attachments there does not enable corpus search, tabular access, or similarity search. A partial Advanced selection does not count as the full combined pack being on.
+- **BREAKING (Simple view):** existing agents are not migrated. An agent that used only the former attachments pack keeps those selected capabilities and its attachments-only mode; the combined pack reads off until the member explicitly enables the full bundle. Update focused tests, French and English copy, and Help Center guidance.
 
 ## Capabilities
 
@@ -23,4 +23,4 @@ None. No current spec under `openspec/specs/` covers agent capability packs yet.
 
 ## Impact
 
-Frontend agent form, pack registry and logic, tests, translations, and English and French Help Center pages. No backend capability, public API, or database change. Existing stored agent selections change only when the member changes the resource pack or Advanced settings and saves.
+Frontend pack registry and logic, tests, translations, and English and French Help Center pages. No backend capability, public API, database, or stored agent migration.
