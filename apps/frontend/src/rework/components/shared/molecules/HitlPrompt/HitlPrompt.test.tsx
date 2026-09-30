@@ -99,6 +99,30 @@ describe("HitlPrompt agent questions", () => {
   });
 });
 
+describe("HitlPrompt choice descriptions", () => {
+  it("renders each description below its label inside one selectable button", () => {
+    const question = {
+      ...event,
+      payload: {
+        stage: "agent_question",
+        free_text: false,
+        choices: [
+          { id: "baguette", label: "Baguette", description: "Pain blanc croustillant" },
+          { id: "complet", label: "Pain complet", description: "Riche en fibres" },
+        ],
+      },
+    };
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    const choiceButtons = Array.from(container.querySelectorAll("button")).filter((button) =>
+      button.textContent?.includes("Pain"),
+    );
+    expect(choiceButtons).toHaveLength(2);
+    expect(choiceButtons[0].textContent).toBe("BaguettePain blanc croustillant");
+    expect(choiceButtons[1].textContent).toBe("Pain completRiche en fibres");
+  });
+});
+
 describe("HitlPrompt tool approval", () => {
   it("uses the same choice presentation and approves the current call when remembering", () => {
     const container = document.createElement("div");

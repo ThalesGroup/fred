@@ -96,13 +96,21 @@ export function HitlPrompt({
             return (
               <Button
                 key={c.id}
+                className={c.description ? styles.choiceWithDescription : undefined}
                 color="primary"
                 variant="outlined"
                 size="medium"
                 disabled={isOverLimit}
                 onClick={() => onAnswer(c.id, freeText.trim() ? freeText : undefined)}
               >
-                {c.label}
+                {c.description ? (
+                  <span className={styles.choiceContent}>
+                    <span>{c.label}</span>
+                    <span className={styles.choiceDescription}>{c.description}</span>
+                  </span>
+                ) : (
+                  c.label
+                )}
               </Button>
             );
           })}

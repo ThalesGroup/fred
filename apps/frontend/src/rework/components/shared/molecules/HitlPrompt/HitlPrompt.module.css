@@ -56,6 +56,29 @@
   width: min(100%, 32rem);
 }
 
+.choiceWithDescription {
+  height: auto;
+  min-height: 2.5rem;
+}
+
+.choiceContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding-block: var(--spacing-xs);
+  text-align: center;
+}
+
+.choiceDescription {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.choiceWithDescription:disabled .choiceDescription {
+  color: var(--state-text-disabled);
+}
+
 .skippable .title,
 .skippable .question {
   padding-right: 2rem;
