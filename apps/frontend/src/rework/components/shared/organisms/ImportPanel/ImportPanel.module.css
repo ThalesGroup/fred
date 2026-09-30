@@ -118,10 +118,14 @@
   overflow-y: auto;
 }
 
+/* Nothing to follow: the line sits in the middle of an empty column rather
+   than hanging off its left edge where the cards' text would start. */
 .empty {
   margin: 0;
+  padding: var(--spacing-m) var(--spacing-s) 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
+  text-align: center;
 }
 
 .item {
