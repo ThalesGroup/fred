@@ -1,6 +1,9 @@
 # PR migration notes and release guides
 
-## For every PR: a two-minute check
+## For PRs requiring a note: a two-minute check
+
+Pull requests opened by `dependabot[bot]` are exempt from the Migration notes
+CI check. All other PRs require a note, including docs-only PRs.
 
 Ask yourself: **can an existing deployment upgrade normally, without anyone
 having to do anything extra?** Check these three points:
