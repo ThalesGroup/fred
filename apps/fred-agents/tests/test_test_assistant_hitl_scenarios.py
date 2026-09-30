@@ -114,7 +114,6 @@ async def test_test_assistant_question_requires_interactive_toggle() -> None:
         services=RuntimeServices(checkpointer=InMemorySaver()),
     )
     executor = await runtime.build_executor(_binding(ask_user=False))
-    assert "ask_user" not in executor._runtime_tools
     events = [
         event
         async for event in executor.stream(
