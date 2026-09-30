@@ -64,9 +64,11 @@ previous frontend and is harmless.
 ## Limitations
 
 Resuming an interrupted import requires the user to select the files again: a
-browser cannot reopen a file it no longer holds. The same applies to retrying a
-failed file and to answering a conflict after a reload — the panel says so
-rather than offering an action that cannot work.
+browser cannot reopen a file it no longer holds. A reload ends any transfer that
+had not reached the server, and those files are named as not having arrived —
+they are not retried or answered from their own entry, which is gone. A file the
+server already has is unaffected: its analysis is followed as before, and a
+failure there is relaunched from the document's row.
 
 Cancellation covers files whose request has not left yet. A file already being
 transferred is completed and ingested; stopping an analysis already under way is

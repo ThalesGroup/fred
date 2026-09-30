@@ -1,7 +1,10 @@
 # RFC — Resource import: explicit conflicts, visible progress
 
-**Status:** draft, pending sign-off. Product direction settled with the
-developer (2026-09-29); §7 lists what is still open. Nothing is implemented.
+**Status:** two of three slices shipped and archived (2026-09-30) — conflict
+resolution and the import panel. What remains open, and all this RFC still
+owns, is `retire-document-versioning`: migrating the alternate versions that
+already exist and removing the mechanism. §7 lists the questions that slice
+still has to settle.
 
 ## 1. Problem
 
@@ -48,103 +51,22 @@ maintain a distinction nobody can see and nobody can act on.
 
 ## 3. Design
 
-### 3.1 Conflicts are resolved before anything is uploaded
+### 3.1–3.4 Conflicts, the panel, interruption, wording — shipped
 
-Drop `canonical_name` and `version` as an ingestion concept. Replace them with
-an explicit question.
+Built and archived. What they do now is the current truth, and it lives in the
+capability specs, not here:
 
-- **The check runs on names only, before any bytes leave the browser.** The
-  client sends the file names for the destination folder and gets back the list
-  of conflicts. The user answers in well under a second, and nothing is
-  uploaded twice or uploaded for nothing.
-- **One prompt per import, not per file.** Conflicts are presented once, as a
-  list, with "overwrite all", "skip all", or a per-file choice. A 50-file import
-  with 10 conflicts interrupts the user once.
-- **Overwrite preserves the document's identity.** The `document_uid` is kept
-  and its content is replaced, so existing links, citations and agent answers
-  keep resolving and point at the new content. Re-extraction and re-indexing
-  follow, as for any content change.
+- `openspec/specs/document-import-conflicts/spec.md`
+- `openspec/specs/document-import-experience/spec.md`
 
-  This has to be done deliberately. `_generate_file_unique_id` returns a random
-  UUID per ingestion, so nothing reuses an existing uid by default. It used to
-  be derived from name and folder, and was changed precisely because "later
-  ingests overwrite earlier versions" (`base_input_processor.py:61-67`). This
-  RFC does not revert that: a deterministic uid overwrote silently, whereas here
-  an overwrite only ever happens because the user asked for it on a named file.
+The archived changes carry the reasoning and the task-by-task record:
+`openspec/changes/archive/2026-09-30-add-import-conflict-resolution/` and
+`.../2026-09-30-revamp-document-import-experience/`.
 
-- **Conflicts are scoped to the destination folder**, matching how users reason
-  about their documents. The consequence is accepted rather than hidden: the
-  same file imported into two folders becomes two independent documents, charged
-  twice against the team quota and analysed twice. That is often legitimate, so
-  it must not raise a second blocking prompt — a non-blocking mention ("this
-  file already exists in another folder") is enough.
-- **The server re-checks at write time.** The pre-check is an optimisation, not
-  a guarantee: a teammate may add the same name in between. A conflict found at
-  write time returns that file to the panel as a conflict to resolve, rather
-  than failing it or silently overwriting.
-
-The check is one scoped question — "does a document with this name exist in this
-folder?" — answerable by an indexed lookup instead of a corpus scan.
-
-### 3.2 The import panel
-
-The dialog closes as soon as the files are accepted. Progress becomes reachable
-from anywhere in the application through a panel, so leaving the Resources page
-no longer hides a running import.
-
-The panel **adds to** the per-document status already shown on folder rows; it
-does not replace it. A row stays the permanent home of its document's state, and
-the panel is the aggregated view of the same thing — plus, later, a place to
-offer actions.
-
-**This is the existing `TaskTray` component, which is built and mounted
-nowhere.** It already provides a trigger with an aggregate progress ring, an
-expandable panel, running and failed counts, and a per-task list. This RFC
-mounts and completes it for import; it does not introduce a second activity
-surface (§6).
-
-What it must show:
-
-- **Two stages, named distinctly: upload, then analysis, then ready.** They have
-  very different durations — seconds versus minutes — and only the second
-  determines whether a document is usable. A single merged progress bar hides
-  which one is stalling and when the document becomes searchable.
-- **The user's own imports only.** The panel stays short and readable. Team
-  activity remains visible where it belongs, on the rows of the folder
-  concerned.
-- **Per-file state**, not just an aggregate, so a stalled or failed file is
-  identifiable.
-
-### 3.3 Interruption, failure, cancellation
-
-- **Interruption keeps what arrived.** Uploads depend on the browser, so closing
-  the tab or losing connectivity stops the transfers in flight. Files already
-  received continue their analysis normally. On return, the panel names exactly
-  which files are missing and offers to finish the import by re-selecting them.
-  Nothing is lost and nothing already done is redone.
-- **A failed file stays in the panel**, with a reason written for a
-  non-technical reader ("unsupported format", "team storage limit reached") and
-  a retry action. It stays until the user resolves or dismisses it. Other files
-  are unaffected. Today failures are transient toasts, so a user looking
-  elsewhere never learns about them.
-- **Cancellation covers the upload stage only.** Stopping files that have not
-  left yet addresses the common case — realising the destination folder was
-  wrong. Once a file is received and analysed, it is removed like any other
-  document. Cancelling an analysis in flight is deliberately out of scope
-  (§6).
-
-### 3.4 Wording
-
-The action is importing, not saving, and the dialog accepts many files.
-
-| | today | proposed |
-|---|---|---|
-| button | "Enregistrer" / "Save" | "Importer 12 fichiers" / "Import 12 files" |
-| button, working | "Enregistrement en cours..." / "Saving..." | not needed — the dialog closes immediately |
-| title | "Ajouter un document" / "Upload a document" | "Ajouter des documents" / "Add documents" |
-
-Naming the count on the button lets the user check the batch before committing
-to it.
+One design point recorded here was decided against during the build: an import
+is **not** surfaced application-wide. The Resources page of the team it belongs
+to is its surface; the transfer and its tracking survive navigating away, and
+the panel restores the full list on return (developer decision, 2026-09-30).
 
 ### 3.5 Existing alternate versions
 
@@ -246,9 +168,12 @@ Still open:
    Cancelling the running workflow is likely correct, but it depends on the
    cancellation capability referenced in §6 and on the reconciliation rules
    OPS-04 describes.
-2. **How long do finished entries stay in the panel?** `TaskTray` already
-   evicts on a timer; whether import entries should persist across a reload
-   until dismissed needs confirming against OPS-04's acknowledgement model.
+2. ~~How long do finished entries stay in the panel?~~ Settled while building
+   the panel (2026-09-30): a file that succeeded says so and then leaves the
+   list on its own after three seconds, without being acknowledged — the
+   document is in the table by then. Only a failure or an unanswered question
+   waits for the user. The task itself keeps its own eviction window in the
+   store, which the documents table and the task tray both read.
 ## 8. Unfiled findings on import latency
 
 Surfaced while mapping this path, on the same code the conflict work touches.
@@ -274,15 +199,10 @@ the import feel slow from the browser.
 
 ## 9. Next step
 
-Sign-off on §3. The work is sliced into three OpenSpec changes:
+`retire-document-versioning` (`openspec/changes/retire-document-versioning/`,
+19 tasks, not started). It depends on conflict resolution, which has shipped,
+and it is the one slice carrying a data migration: existing alternate versions
+have to be migrated before `canonical_name` and `version` can go.
 
-- `revamp-document-import-experience` — frontend only, depends on nothing.
-- `add-import-conflict-resolution` — independent of the panel; a conflict
-  detected at write time surfaces on the affected document's row, which carries
-  its status whether or not the panel exists.
-- `retire-document-versioning` — depends on conflicts being handled first, then
-  migrates existing alternate versions and removes the mechanism.
-
-The first two can proceed in parallel; the third follows the second. Each links
-its own GitHub issue. Both remaining questions in §7 can be settled inside the
-slice that hits them.
+The two questions in §7 are both its to settle. The two latency findings in §8
+are still unfiled and are independent of it.

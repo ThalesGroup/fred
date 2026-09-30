@@ -18,20 +18,31 @@ import, and SHALL NOT remain open while files are transferred or prepared.
 - **THEN** the dialog closes without a perceptible wait
 - **AND** the rest of the application is immediately usable
 
-### Requirement: A running import is visible from anywhere
+### Requirement: A running import survives leaving its page
 
-The system SHALL show running imports in a surface reachable from any page,
-showing at least the number of files in progress without being opened.
+An import SHALL continue, and SHALL keep being followed, while the user is
+anywhere else in the application. Its surface is the Resources page of the team
+it belongs to: the system SHALL show the number of files in progress there
+without the panel being opened, and SHALL restore the full list on return.
+
+Deliberately not shown elsewhere: an import is something the user starts on one
+page and comes back to, not a background job needing an application-wide
+indicator.
 
 #### Scenario: The user leaves the Resources page
 
 - **WHEN** an import is running and the user navigates elsewhere
-- **THEN** the import remains visible and its progress keeps updating
+- **THEN** the transfer continues and its progress keeps being recorded
+- **AND** returning to the Resources page shows each file at the phase it has
+  reached, with the count visible before the panel is opened
 
 #### Scenario: The user reloads the page
 
 - **WHEN** the user reloads while an import is still running
-- **THEN** the import is still shown, with its current progress
+- **THEN** every file the server already has is still shown, with its current
+  phase
+- **AND** any file that never reached the server is named as not having
+  arrived, to be picked again
 
 ### Requirement: Every phase of an import is distinguished
 
