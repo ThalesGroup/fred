@@ -67,6 +67,7 @@ export const taskSlice = createSlice({
         // definition — including one rehydrated after a reload, whose bytes
         // went up in a browser session that may no longer exist.
         stage: kind === "ingestion" && target?.type === "document" ? "analysis" : null,
+        conflict: null,
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
@@ -83,7 +84,20 @@ export const taskSlice = createSlice({
      *  real task id replaces it at handoff. */
     uploadStarted(state, action: PayloadAction<{ localId: string; filename: string }>) {
       const { localId, filename } = action.payload;
-      if (state.byId[localId]) return;
+      const existing = state.byId[localId];
+      if (existing) {
+        // Sent again — a retry, or a conflict just answered. Same entry, back
+        // to the transfer, with whatever it was waiting on cleared.
+        existing.stage = "upload";
+        existing.state = "running";
+        existing.progress = null;
+        existing.step = null;
+        existing.error = null;
+        existing.conflict = null;
+        existing.terminalAt = null;
+        existing.acknowledgedAt = null;
+        return;
+      }
       state.byId[localId] = {
         taskId: localId,
         kind: "ingestion",
@@ -100,6 +114,7 @@ export const taskSlice = createSlice({
         error: null,
         lastSeq: -1,
         stage: "upload",
+        conflict: null,
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
@@ -134,10 +149,28 @@ export const taskSlice = createSlice({
         error: null,
         lastSeq: -1,
         stage: "analysis",
+        conflict: null,
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
       };
+    },
+
+    /** The transfer got there and the server refused to write: the folder
+     *  gained a document of that name while the import was under way.
+     *
+     *  Not a failure — nothing went wrong and nothing was lost. The file is
+     *  still ours to send; what is missing is the user's answer. */
+    uploadConflicted(state, action: PayloadAction<{ localId: string; tagId: string | null; filename: string }>) {
+      const vm = state.byId[action.payload.localId];
+      if (!vm || vm.stage !== "upload") return;
+      vm.stage = "decision";
+      // Nothing is running and nothing has settled: the entry is waiting.
+      vm.state = "pending";
+      vm.progress = null;
+      vm.step = null;
+      vm.error = null;
+      vm.conflict = { tagId: action.payload.tagId, filename: action.payload.filename };
     },
 
     /** The transfer ended with nothing left to wait for: upload-only mode, or a
@@ -239,6 +272,7 @@ export const taskSlice = createSlice({
 export const {
   taskRegistered,
   uploadStarted,
+  uploadConflicted,
   uploadHandedOff,
   uploadFinished,
   uploadFailed,

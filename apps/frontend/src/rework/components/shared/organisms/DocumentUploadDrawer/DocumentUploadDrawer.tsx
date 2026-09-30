@@ -424,11 +424,6 @@ export function DocumentUploadDrawer({
       dispatch,
       uploadMode,
       onError: (detail) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail }),
-      onLateConflicts: (filenames) =>
-        showInfo?.({
-          summary: t("documentLibrary.uploadDrawerTitle"),
-          detail: t("documentLibrary.conflictLate", { count: filenames.length }),
-        }),
       onComplete: onUploadComplete,
     });
   };

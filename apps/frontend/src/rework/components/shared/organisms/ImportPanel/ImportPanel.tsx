@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
+import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
@@ -40,8 +41,9 @@ import {
 import { stepLabel } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
-import { heldImport, releaseHeldImport, retryImport } from "../../../../features/imports/importRun";
+import { heldImport, releaseHeldImport, resolveConflict, retryImport } from "../../../../features/imports/importRun";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
+import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import styles from "./ImportPanel.module.css";
 
 export function ImportPanel() {
@@ -138,6 +140,12 @@ export function ImportPanel() {
                     onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
                   })
                 }
+                onDecide={(decision) =>
+                  void resolveConflict(task.taskId, decision, {
+                    dispatch,
+                    onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
+                  })
+                }
                 onDismiss={() => {
                   // Dismissed for good: stop holding the file open for a retry
                   // that is no longer on offer.
@@ -162,21 +170,26 @@ export function ImportPanel() {
 function ImportItem({
   task,
   onRetry,
+  onDecide,
   onDismiss,
   dismissing,
 }: {
   task: TaskViewModel;
   onRetry: () => void;
+  onDecide: (decision: ConflictDecision) => void;
   onDismiss: () => void;
   dismissing: boolean;
 }) {
   const { t } = useTranslation();
   const failed = task.state === "failed";
   const failure = failed ? importFailure(task, t) : null;
-  // A retry can only re-send bytes the browser still has. After a reload it
-  // does not, and saying "try again" then would be offering something that
-  // cannot work.
-  const canRetry = failed && heldImport(task.taskId) !== undefined;
+  const awaitingDecision = task.stage === "decision";
+  // Sending the file again is the only way to replace or retry, and only the
+  // browser has the file. After a reload it does not, and offering an action
+  // that cannot work would be worse than saying so.
+  const stillHeld = heldImport(task.taskId) !== undefined;
+
+  const statusText = failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : undefined);
 
   return (
     <div className={styles.item}>
@@ -185,10 +198,10 @@ function ImportItem({
         // The transfer has no backend step to report, so the card would show
         // nothing at all for it; a failure gets its cause named rather than the
         // sentence the backend wrote for a log.
-        statusText={failure?.summary ?? (task.stage === "upload" ? stepLabel(task, t) : undefined)}
+        statusText={statusText ?? (task.stage === "upload" ? stepLabel(task, t) : undefined)}
         statusDetail={failure?.detail}
         actions={
-          canRetry ? (
+          failed && stillHeld ? (
             <Tooltip text={t("rework.imports.retry.action")}>
               <IconButton
                 variant="icon"
@@ -203,7 +216,23 @@ function ImportItem({
         onAcknowledge={onDismiss}
         acknowledging={dismissing}
       />
-      {failed && !canRetry && <p className={styles.reselect}>{t("rework.imports.retry.unavailable")}</p>}
+
+      {/* Replace or skip, as a file explorer asks it — never in the document
+          table, which is no place to be answering a question. */}
+      {awaitingDecision && stillHeld && (
+        <div className={styles.decision}>
+          <Button variant="text" size="small" color="primary" onClick={() => onDecide("overwrite")}>
+            {t("rework.imports.conflict.replace")}
+          </Button>
+          <Button variant="text" size="small" color="on-surface-retreat" onClick={() => onDecide("skip")}>
+            {t("rework.imports.conflict.skip")}
+          </Button>
+        </div>
+      )}
+
+      {(failed || awaitingDecision) && !stillHeld && (
+        <p className={styles.reselect}>{t("rework.imports.retry.unavailable")}</p>
+      )}
     </div>
   );
 }

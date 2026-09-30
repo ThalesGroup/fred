@@ -675,8 +675,6 @@
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
-    "conflictLate_one": "{{count}} fichier n'a pas été importé : un document du même nom est apparu entre-temps dans le dossier. Réimportez-le pour choisir quoi faire.",
-    "conflictLate_other": "{{count}} fichiers n'ont pas été importés : des documents du même nom sont apparus entre-temps dans le dossier. Réimportez-les pour choisir quoi faire.",
     "conflictReplace": "Remplacer",
     "conflictReplaceAll": "Tout remplacer",
     "conflictSkip": "Ignorer",
@@ -2167,6 +2165,12 @@
       }
     },
     "imports": {
+      "conflict": {
+        "question": "Un document de ce nom existe déjà dans ce dossier.",
+        "replace": "Remplacer",
+        "rowHint": "Un fichier en attente de décision porte ce nom. Ouvrir le panneau des imports.",
+        "skip": "Ignorer"
+      },
       "failure": {
         "analysis": "L'analyse de ce fichier a échoué.",
         "attemptsExhausted": "Plusieurs tentatives ont échoué.",

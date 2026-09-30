@@ -103,7 +103,6 @@ async function importThatFails(error = "Storage quota exceeded for team fredlab:
       dispatch: store.dispatch,
       uploadMode: "process",
       onError: () => {},
-      onLateConflicts: () => {},
     });
   });
 }
@@ -183,7 +182,6 @@ describe("ImportPanel — a failed file", () => {
           dispatch: store.dispatch,
           uploadMode: "process",
           onError: () => {},
-          onLateConflicts: () => {},
         },
       );
     });

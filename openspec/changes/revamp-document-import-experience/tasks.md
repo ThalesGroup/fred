@@ -28,11 +28,11 @@
 
 ## 5. Conflicts awaiting a decision
 
-- [ ] 5.1 Carry a file the server returned as `conflict` (status distinct from `failed`, see `add-import-conflict-resolution`) as awaiting a decision, never as an error.
-- [ ] 5.2 Offer replace-or-skip on that item in the panel, and apply it by re-sending the file with `conflict_decisions`; the interactions live in the panel, not in the document table.
-- [ ] 5.3 On a document row, at most an indicator that something needs attention, opening the panel on click. The row never carries the decision itself.
-- [ ] 5.4 Offer the decision only while the browser still holds the file; otherwise say the file must be imported again, as for a retry.
-- [ ] 5.5 Test: a conflict raised at write time is listed as a question, is answerable from the panel, and leaves the other files of the import untouched.
+- [x] 5.1 A third `ImportStage`, `decision`: `pending`, no error, holding the name and the folder it clashes in. The panel opens itself when one arrives — a question no one sees is not one. The end-of-run toast that used to say "import it again to choose what to do" is gone, along with its strings: the panel is the report now.
+- [x] 5.2 Replace and Skip under the entry in the panel. `resolveConflict` sends the same file to the same folder with `conflict_decisions` attached for Replace, and sends nothing at all for Skip — the point of asking is not to transfer bytes the answer makes useless.
+- [x] 5.3 A warning marker after the contested document's name, opening the panel on click. It carries no decision. Matched on (folder, name) from the store, so a same-named document in another folder is untouched.
+- [x] 5.4 Same rule as a retry: no held file, no Replace and no Skip — the panel says the import has to be started again.
+- [x] 5.5 Test: `ImportPanel.conflicts.test.tsx` (six cases, including Replace's request metadata and Skip sending nothing) and `DocumentWorkspace.conflictMarker.test.tsx` (the row points, and offers nothing).
 
 ## 6. Interruption and cancellation
 

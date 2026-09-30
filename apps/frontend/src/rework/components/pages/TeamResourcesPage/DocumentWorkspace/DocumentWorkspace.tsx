@@ -59,7 +59,12 @@ import {
   withoutMachineWritten,
   type TagNode,
 } from "../../../../../shared/utils/tagTree.ts";
-import { taskRegistered, selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import {
+  importPanelOpenRequested,
+  selectActiveTasks,
+  selectAllTasks,
+  taskRegistered,
+} from "../../../../features/tasks/taskSlice";
 import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
@@ -1388,6 +1393,15 @@ function DocumentWorkspace({
     }
     return getDocStatus(row.doc) !== "ready" || justCompletedDocUids.has(row.doc.identity.document_uid);
   });
+  // Names in this folder that a file still on the user's hands is waiting to be
+  // told what to do about. The row only points at the panel: a table is no
+  // place to be answering a question (see the panel's own decision buttons).
+  const contestedNames = new Set(
+    allTasks
+      .filter((vm) => vm.stage === "decision" && vm.conflict?.tagId && vm.conflict.tagId === currentTag?.id)
+      .map((vm) => vm.conflict!.filename),
+  );
+
   const showsExclusion = filteredRows.some(
     (row) =>
       row.kind === "document" &&
@@ -1455,7 +1469,22 @@ function DocumentWorkspace({
             </button>
           );
         }
-        return <DocumentNameCell doc={row.doc} />;
+        if (!contestedNames.has(row.doc.identity.document_name)) return <DocumentNameCell doc={row.doc} />;
+        return (
+          <span className={styles.contestedName}>
+            <DocumentNameCell doc={row.doc} />
+            <Tooltip text={t("rework.imports.conflict.rowHint")}>
+              <IconButton
+                variant="icon"
+                size="small"
+                color="warning"
+                icon={{ category: "outlined", type: "warning" }}
+                aria-label={t("rework.imports.conflict.rowHint")}
+                onClick={() => dispatch(importPanelOpenRequested())}
+              />
+            </Tooltip>
+          </span>
+        );
       },
     },
     {

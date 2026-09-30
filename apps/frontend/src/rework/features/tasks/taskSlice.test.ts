@@ -68,6 +68,7 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     error: null,
     lastSeq: -1,
     stage: "analysis",
+    conflict: null,
     registeredAt: 1000,
     terminalAt: null,
     acknowledgedAt: null,

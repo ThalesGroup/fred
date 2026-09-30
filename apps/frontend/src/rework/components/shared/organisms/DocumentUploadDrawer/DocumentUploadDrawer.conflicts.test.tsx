@@ -37,13 +37,16 @@ const probe = vi.hoisted(() => ({
   lateConflicts: [] as string[],
   showError: vi.fn(),
   showInfo: vi.fn(),
+  dispatched: [] as { type: string; payload?: unknown }[],
   quotaPrecheck: vi.fn(),
 }));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("react-redux", () => ({ useDispatch: () => () => {} }));
+vi.mock("react-redux", () => ({
+  useDispatch: () => (action: { type: string; payload?: unknown }) => probe.dispatched.push(action),
+}));
 vi.mock("react-dropzone", () => ({
   useDropzone: () => ({ getRootProps: () => ({}), getInputProps: () => ({}), isDragActive: false }),
 }));
@@ -95,6 +98,7 @@ beforeEach(() => {
   probe.quotaPrecheck.mockReturnValue({ unwrap: () => Promise.resolve({ allowed: true }) });
   probe.showError.mockClear();
   probe.showInfo.mockClear();
+  probe.dispatched.length = 0;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -234,7 +238,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     expect(probe.sent[0].metadata.conflict_decisions).toEqual({ "a.pdf": "overwrite" });
   });
 
-  it("a conflict appearing after the question is reported as a question, not a failure", async () => {
+  it("a conflict appearing after the question is carried to the panel, not raised as a failure", async () => {
     answering([]);
     probe.lateConflicts.push("b.pdf");
     renderDrawer(["a.pdf", "b.pdf"]);
@@ -243,7 +247,11 @@ describe("DocumentUploadDrawer name conflicts", () => {
 
     expect(sentNames()).toEqual(["a.pdf", "b.pdf"]);
     expect(probe.showError).not.toHaveBeenCalled();
-    expect(probe.showInfo).toHaveBeenCalledWith(expect.objectContaining({ detail: "documentLibrary.conflictLate" }));
+    // The panel is where the answer is given, so that is where the question
+    // goes — and it reopens if the user had closed it.
+    const conflicted = probe.dispatched.filter((a) => a.type === "tasks/uploadConflicted");
+    expect(conflicted.map((a) => (a.payload as { filename: string }).filename)).toEqual(["b.pdf"]);
+    expect(probe.dispatched.map((a) => a.type)).toContain("tasks/importPanelOpenRequested");
   });
 
   it("two files of the same name into one folder are refused, not silently merged", async () => {

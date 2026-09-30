@@ -21,7 +21,16 @@
 import type { Dispatch } from "@reduxjs/toolkit";
 import { v4 as uuidv4 } from "uuid";
 import { leafFileName, streamUploadOrProcessDocument, type ScheduledTask } from "../../../slices/streamDocumentUpload";
-import { taskEvicted, uploadFailed, uploadFinished, uploadHandedOff, uploadStarted } from "../tasks/taskSlice";
+import {
+  importPanelOpenRequested,
+  taskEvicted,
+  uploadConflicted,
+  uploadFailed,
+  uploadFinished,
+  uploadHandedOff,
+  uploadStarted,
+} from "../tasks/taskSlice";
+import type { ConflictDecision } from "../../components/shared/organisms/DocumentUploadDrawer/importConflicts";
 
 export type UploadMode = "upload" | "process";
 
@@ -198,9 +207,6 @@ export interface ImportRunHandlers {
   /** Raise a notification. Called for transfer errors, with a message already
    *  naming the file where one is known. */
   onError: (message: string) => void;
-  /** Files the server refused because their name was taken while the import
-   *  was under way. Reported once for the whole run, as a question. */
-  onLateConflicts: (filenames: string[]) => void;
   onComplete?: () => void;
 }
 
@@ -211,8 +217,7 @@ export interface ImportRunHandlers {
  * reference to the component that started it.
  */
 export async function runImport(batches: ImportBatch[], handlers: ImportRunHandlers): Promise<void> {
-  const { dispatch, uploadMode, onError, onLateConflicts, onComplete } = handlers;
-  const lateConflicts: string[] = [];
+  const { dispatch, uploadMode, onError, onComplete } = handlers;
 
   // Every file is listed before a byte moves. Waiting for its own transfer to
   // end would leave most of a large import invisible: batches run a few at a
@@ -236,11 +241,9 @@ export async function runImport(batches: ImportBatch[], handlers: ImportRunHandl
         dispatch,
         uploadMode,
         onError,
-        onConflicted: (filename) => lateConflicts.push(filename),
       }),
     );
   } finally {
-    if (lateConflicts.length) onLateConflicts(lateConflicts);
     onComplete?.();
   }
 }
@@ -267,9 +270,6 @@ export async function retryImport(
       dispatch,
       uploadMode: held.uploadMode,
       onError,
-      // A name taken meanwhile is the next slice's question, not a retry
-      // failure; drop the entry as the first attempt does.
-      onConflicted: () => {},
     });
   } finally {
     onComplete?.();
@@ -287,10 +287,10 @@ function sendBatch(
     dispatch: Dispatch;
     uploadMode: UploadMode;
     onError: (message: string) => void;
-    onConflicted: (filename: string) => void;
   },
 ): Promise<void> {
-  const { dispatch, uploadMode, onError, onConflicted } = handlers;
+  const { dispatch, uploadMode, onError } = handlers;
+  const destinationTag = ((requestMetadata.tags as string[] | undefined) ?? [])[0] ?? null;
   return scheduleFiles(
     files,
     uploadMode,
@@ -303,11 +303,12 @@ function sendBatch(
     },
     onError,
     (filename) => {
-      onConflicted(filename);
-      // Answering a conflict is the panel's job in a later slice; until then
-      // the entry must not sit there claiming to be sending.
-      releaseHeldImport(entryIdOf(filename));
-      dispatch(taskEvicted(entryIdOf(filename)));
+      // Deliberately keeps the held file: answering "replace" means sending it
+      // again, and only the browser has it.
+      dispatch(uploadConflicted({ localId: entryIdOf(filename), tagId: destinationTag, filename }));
+      // The question is only a question if it is seen. A panel the user closed
+      // in the meantime opens itself again.
+      dispatch(importPanelOpenRequested());
     },
     {
       // Deliberately keeps the held file: this is the one case a retry exists for.
@@ -321,4 +322,49 @@ function sendBatch(
       },
     },
   );
+}
+
+/**
+ * Applies the user's answer to a name the folder took while the file was on
+ * its way.
+ *
+ * `skip` sends nothing — the whole point of the question is not to transfer
+ * bytes the answer makes useless — and the entry goes away. `overwrite` sends
+ * the same file again, to the same folder, with the decision attached so the
+ * server replaces the document that is there.
+ *
+ * Returns false when the browser no longer holds the file, so the caller can
+ * say the import has to be started again rather than offering an answer that
+ * cannot be applied.
+ */
+export async function resolveConflict(
+  entryId: string,
+  decision: ConflictDecision,
+  handlers: Pick<ImportRunHandlers, "dispatch" | "onError"> & { onComplete?: () => void },
+): Promise<boolean> {
+  const held = heldImports.get(entryId);
+  if (!held) return false;
+  const { dispatch, onError, onComplete } = handlers;
+
+  if (decision === "skip") {
+    releaseHeldImport(entryId);
+    dispatch(taskEvicted(entryId));
+    return true;
+  }
+
+  const requestMetadata = {
+    ...held.requestMetadata,
+    conflict_decisions: { ...((held.requestMetadata.conflict_decisions as object) ?? {}), [held.filename]: decision },
+  };
+  dispatch(uploadStarted({ localId: entryId, filename: held.filename }));
+  try {
+    await sendBatch([held.file], requestMetadata, () => entryId, {
+      dispatch,
+      uploadMode: held.uploadMode,
+      onError,
+    });
+  } finally {
+    onComplete?.();
+  }
+  return true;
 }

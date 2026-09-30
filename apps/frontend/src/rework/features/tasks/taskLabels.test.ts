@@ -102,6 +102,7 @@ describe("ingestion support labels", () => {
         target: { type: "document", id: "doc-456", label: "report.pdf" },
         step: "indexing",
         stage: "analysis",
+        conflict: null,
         error: "Configured attempts exhausted.",
         owner: null,
         localOnly: false,

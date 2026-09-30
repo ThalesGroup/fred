@@ -118,3 +118,10 @@
   color: var(--on-surface-retreat);
   font: var(--font-label-small);
 }
+
+/* The two answers, under the card they belong to. */
+.decision {
+  display: flex;
+  gap: var(--spacing-2xs);
+  margin: 0 0 var(--spacing-2xs) var(--spacing-xs);
+}

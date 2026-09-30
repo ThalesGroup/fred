@@ -675,8 +675,6 @@
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?",
     "confirmRemoveTitle": "Remove from library?",
-    "conflictLate_one": "{{count}} file was not imported: a document of the same name appeared in the folder meanwhile. Import it again to choose what to do.",
-    "conflictLate_other": "{{count}} files were not imported: documents of the same name appeared in the folder meanwhile. Import them again to choose what to do.",
     "conflictReplace": "Replace",
     "conflictReplaceAll": "Replace all",
     "conflictSkip": "Skip",
@@ -2167,6 +2165,12 @@
       }
     },
     "imports": {
+      "conflict": {
+        "question": "A document of this name is already in this folder.",
+        "replace": "Replace",
+        "rowHint": "A file waiting on a decision has this name. Open the imports panel.",
+        "skip": "Skip"
+      },
       "failure": {
         "analysis": "Analysing this file failed.",
         "attemptsExhausted": "Several attempts failed.",
