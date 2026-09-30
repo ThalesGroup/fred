@@ -95,9 +95,9 @@ class FrontendUserAuthConfig(BaseModel):
     """Public pre-auth user-authentication config for frontend bootstrap.
 
     Mirrors `fred_core` `SecurityConfiguration.user`. Served unauthenticated so the
-    frontend can decide whether to initialize Keycloak *before* any login. Carries
-    only public OIDC client values (`realm_url`, `client_id`) — never secrets, and
-    `realm_url`/`client_id` are emitted only when auth is enabled.
+    frontend can initialize the configured OIDC provider before login. Carries
+    public OIDC client and identity-mapping values, never secrets; issuer URL and
+    client ID are emitted only when auth is enabled.
     """
 
     enabled: bool
