@@ -5043,6 +5043,10 @@ The tune menu contains a platform-owned on/off row for agent questions. It
 starts enabled, persists by conversation, and affects new turns. A pending
 question stays answerable after the row is switched off. The existing HITL
 card shows a single-choice list, a free-text field, or both. A choice may carry
-the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. The card
-shows Skip only when `stage="agent_question"`, never for tool approval. A
-skipped answer is shown as a localized response after history reload.
+the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. Choices
+appear in a centered column for both agent questions and tool approval. Approval
+actions use the same neutral outline style and offer a conversation-scoped
+choice; the browser answers later matching approval pauses through the existing
+resume flow. Skip at the bottom right and close at the top right appear only
+for `stage="agent_question"`. Both resume the turn as skipped. A skipped
+answer is shown as a localized response after history reload.

@@ -34,7 +34,12 @@ interface ConversationThreadProps {
   isStreaming: boolean;
   emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
-  onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  onHitlAnswer: (
+    answer: string | boolean | undefined,
+    freeText?: string,
+    skipped?: boolean,
+    rememberApproval?: boolean,
+  ) => void;
   maxChatInputChars?: number;
   hitlFreeText: string;
   onHitlFreeTextChange: (value: string) => void;

@@ -211,6 +211,34 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it.each([
+    { offered: true, requested: true, expected: true },
+    { offered: true, requested: false, expected: false },
+    { offered: true, requested: undefined, expected: true },
+    { offered: false, requested: true, expected: undefined },
+  ])(
+    "uses the current preparation for first-turn ask_user availability ($offered, $requested)",
+    async ({ offered, requested, expected }) => {
+      prepareExecutionImpl = async () => ({
+        execute_stream_url: "http://runtime.test/execute_stream",
+        chat_controls: offered
+          ? [{ capability_id: "platform", widget: "ask_user_toggle", params: { default: true } }]
+          : [],
+        capability_base_urls: {},
+      });
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+      mount();
+
+      await act(async () => {
+        await latest.send("first question", "session-1", requested === undefined ? {} : { ask_user: requested });
+      });
+
+      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+      expect(body.runtime_context.ask_user).toBe(expected);
+      fetchSpy.mockRestore();
+    },
+  );
+
   it("forwards a caller-supplied prompt command descriptor on runtime_context", async () => {
     // The trigger slice sets `command` on the context it already passes; the
     // send path must carry it through untouched, and leave it absent for an

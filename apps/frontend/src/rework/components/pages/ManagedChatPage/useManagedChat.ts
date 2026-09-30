@@ -34,6 +34,8 @@ import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
+import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -53,6 +55,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const [input, setInput] = useState("");
   const submittedDraftRef = useRef<{ sessionId: string; draft: string } | null>(null);
   const [pendingHitl, setPendingHitl] = useState<RuntimeAwaitingHumanEvent | null>(null);
+  const autoApprovalAttemptedRef = useRef(new Set<string>());
   const [hitlFreeText, setHitlFreeText] = useState("");
   // Identifies the HITL prompt that owns `hitlFreeText`. A resume can settle
   // after another prompt has arrived; only its own draft may be cleared.
@@ -502,7 +505,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // `false` that would suppress reasoning the agent never offered to begin
     // with.
     const offersReasoning = chatControls.some((c) => c.widget === "reasoning_toggle");
-    const offersAskUser = chatControls.some((c) => c.widget === "ask_user_toggle");
     return {
       runtimeContext: buildComposerRuntimeContext({
         selectedLibraryIds: composer.selectedLibraryIds,
@@ -512,7 +514,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         boundLibraryIds,
         attachmentsMarkdown: attachments.attachmentsMarkdown,
         ...(offersReasoning ? { reasoning: composer.reasoning } : {}),
-        ...(offersAskUser ? { askUser: composer.askUser } : {}),
+        askUser: composer.askUser,
       }),
       turnOptions,
     };
@@ -666,7 +668,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   );
 
   const handleHitlAnswer = useCallback(
-    (answer: string | boolean | undefined, freeText?: string, skipped = false) => {
+    (answer: string | boolean | undefined, freeText?: string, skipped = false, rememberApproval = false) => {
       if (!pendingHitl) return;
       if (
         freeText !== undefined &&
@@ -705,7 +707,27 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         setPendingHitl((current) => current ?? prompt);
       };
       const { runtimeContext, turnOptions } = buildTurnContextRef.current();
-      void sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped)
+      const toolNames = (prompt.payload.pending_calls ?? []).map((call) => call.tool_name);
+      const rememberTools =
+        rememberApproval && prompt.payload.stage === "tool_approval" && answer === "proceed" && toolNames.length > 0;
+      const onAccepted = rememberTools
+        ? () => {
+            const saved = rememberToolApprovalGrants(
+              { userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId: prompt.session_id },
+              toolNames,
+            );
+            if (!saved) {
+              showError({
+                summary: t("chatbot.errors.toolApprovalSaveFailedSummary"),
+                detail: t("chatbot.errors.toolApprovalSaveFailedDetail"),
+              });
+            }
+          }
+        : undefined;
+      const resume = onAccepted
+        ? sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped, onAccepted)
+        : sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped);
+      void resume
         .then((reached) => {
           if (reached) {
             if (hitlDraftOwnerRef.current === draftOwner) setHitlFreeText("");
@@ -722,8 +744,30 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           restoreIfStillWanted();
         });
     },
-    [maxChatInputChars, pendingHitl, sendHitlResume],
+    [agentInstanceId, maxChatInputChars, pendingHitl, sendHitlResume, showError, t],
   );
+
+  useEffect(() => {
+    if (!pendingHitl || waitResponse || pendingHitl.payload.stage !== "tool_approval") return;
+    if (!pendingHitl.payload.choices?.some((choice) => choice.id === "proceed")) return;
+    if (activeSessionIdRef.current !== pendingHitl.session_id) return;
+    const toolNames = (pendingHitl.payload.pending_calls ?? []).map((call) => call.tool_name);
+    const scope = {
+      userId: KeyCloakService.GetUserId(),
+      agentInstanceId,
+      sessionId: pendingHitl.session_id,
+    };
+    if (!hasToolApprovalGrants(scope, toolNames)) return;
+    const occurrence = [
+      pendingHitl.session_id,
+      pendingHitl.exchange_id,
+      pendingHitl.payload.interrupt_id,
+      pendingHitl.payload.occurrence_id,
+    ].join(":");
+    if (autoApprovalAttemptedRef.current.has(occurrence)) return;
+    autoApprovalAttemptedRef.current.add(occurrence);
+    handleHitlAnswer("proceed");
+  }, [agentInstanceId, handleHitlAnswer, pendingHitl, waitResponse]);
 
   const startNewConversation = useCallback(() => {
     setPendingHitl(null);

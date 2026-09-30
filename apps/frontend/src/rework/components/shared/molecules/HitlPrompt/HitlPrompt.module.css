@@ -16,6 +16,7 @@
 
 .card {
   display: flex;
+  position: relative;
   flex-direction: column;
   gap: var(--spacing-s);
   border: 1px solid var(--outline-retreat);
@@ -49,9 +50,25 @@
 
 .choices {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  flex-direction: column;
   gap: var(--spacing-xs);
+  margin-inline: auto;
+  width: min(100%, 32rem);
+}
+
+.skippable .title,
+.skippable .question {
+  padding-right: 2rem;
+}
+
+.skipClose {
+  position: absolute;
+  top: var(--spacing-s);
+  right: var(--spacing-s);
+}
+
+.skipQuestion {
+  align-self: flex-end;
 }
 
 .freeText {

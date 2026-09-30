@@ -90,12 +90,41 @@ describe("HitlPrompt chat-input limit", () => {
 describe("HitlPrompt agent questions", () => {
   it("shows skip only for an agent question", () => {
     const question = { ...event, payload: { ...event.payload, stage: "agent_question" } };
-    expect(renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />)).toContain(
-      "chatbot.skipHitlQuestion",
-    );
-    expect(renderToStaticMarkup(<HitlPrompt event={event} onAnswer={() => undefined} />)).not.toContain(
-      "chatbot.skipHitlQuestion",
-    );
+    const questionHtml = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    expect(questionHtml).toContain("chatbot.skipHitlQuestion");
+    expect(questionHtml).toContain('aria-label="chatbot.skipHitlQuestionAria"');
+    const approvalHtml = renderToStaticMarkup(<HitlPrompt event={event} onAnswer={() => undefined} />);
+    expect(approvalHtml).not.toContain("chatbot.skipHitlQuestion");
+    expect(approvalHtml).not.toContain("chatbot.skipHitlQuestionAria");
+  });
+});
+
+describe("HitlPrompt tool approval", () => {
+  it("uses the same choice presentation and approves the current call when remembering", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const onAnswer = vi.fn();
+    const approval = {
+      ...event,
+      payload: {
+        free_text: false,
+        stage: "tool_approval",
+        choices: [
+          { id: "proceed", label: "Accept" },
+          { id: "cancel", label: "Reject" },
+        ],
+        pending_calls: [{ tool_call_id: "call-1", tool_name: "write_file", args_preview: "{}" }],
+      },
+    };
+    act(() => root.render(<HitlPrompt event={approval} onAnswer={onAnswer} />));
+    const buttons = Array.from(container.querySelectorAll("button"));
+    expect(buttons.map((button) => button.textContent)).toEqual(["Accept", "Reject", "chatbot.approveForConversation"]);
+    expect(container.textContent).not.toContain("chatbot.skipHitlQuestion");
+    act(() => buttons[2].click());
+    expect(onAnswer).toHaveBeenLastCalledWith("proceed", undefined, false, true);
+    act(() => root.unmount());
+    container.remove();
   });
 });
 
@@ -110,8 +139,11 @@ describe("HitlPrompt answer actions", () => {
     const buttons = Array.from(container.querySelectorAll("button"));
     const choice = buttons.find((button) => button.textContent?.includes("Proceed"));
     const skip = buttons.find((button) => button.textContent?.includes("chatbot.skipHitlQuestion"));
+    const close = buttons.find((button) => button.getAttribute("aria-label") === "chatbot.skipHitlQuestionAria");
     expect(choice).toBeDefined();
     expect(skip).toBeDefined();
+    expect(close).toBeDefined();
+    expect(buttons.at(-1)).toBe(skip);
     act(() => choice?.click());
     expect(onAnswer).toHaveBeenLastCalledWith("proceed", " note ");
     act(() =>
@@ -121,6 +153,8 @@ describe("HitlPrompt answer actions", () => {
     );
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, " note ");
     act(() => skip?.click());
+    expect(onAnswer).toHaveBeenLastCalledWith(undefined, undefined, true);
+    act(() => close?.click());
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, undefined, true);
     act(() => root.unmount());
     container.remove();

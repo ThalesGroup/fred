@@ -893,9 +893,17 @@ export function useChatSse(
         // (not memoized) so a mid-session language switch takes effect on the
         // very next turn, matching the existing pattern for voice transcription
         // (ManagedChatPage.tsx's handleTranscribeAudio).
+        // The current preparation decides availability, even when the eager
+        // control request has not populated React state before the first send.
+        const askUserControl = prep.chat_controls?.find((control) => control.widget === "ask_user_toggle");
+        const { ask_user: requestedAskUser, ...contextWithoutAskUser } = runtimeContext ?? {};
+        const askUserDefault = askUserControl?.params?.default;
         effectiveContext = mergePreparation(
           {
-            ...(runtimeContext ?? {}),
+            ...contextWithoutAskUser,
+            ...(askUserControl
+              ? { ask_user: requestedAskUser ?? (typeof askUserDefault === "boolean" ? askUserDefault : true) }
+              : {}),
             team_id: canonicalizeRuntimeTeamId(teamId),
             language: i18n.language?.split("-")[0] || undefined,
           },
@@ -1061,6 +1069,7 @@ export function useChatSse(
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       skipped = false,
+      onAccepted?: () => void,
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -1253,6 +1262,7 @@ export function useChatSse(
           ac.signal,
           () => {
             acceptedByRuntime = true;
+            onAccepted?.();
           },
         );
       } catch (err) {
