@@ -1,8 +1,8 @@
 ## 1. Confirm the audit before touching anything
 
-- [ ] 1.1 Re-run the consumer audit for `canonical_name` and `version` across backends, capabilities, CLI, export/import and the generated clients. Record the result; do not trust the proposal's summary.
+- [x] 1.1 Re-run the consumer audit for `canonical_name` and `version` across backends, capabilities, CLI, export/import and the generated clients. Record the result; do not trust the proposal's summary.
 - [ ] 1.2 Confirm `add-import-conflict-resolution` is merged and duplicates are handled, since this change removes the old handling.
-- [ ] 1.3 Agree the renaming scheme with the developer.
+- [x] 1.3 Agree the renaming scheme with the developer.
 
 ## 2. Migrate existing alternate versions
 
