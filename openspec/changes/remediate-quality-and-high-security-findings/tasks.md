@@ -13,12 +13,12 @@
 
 - [x] 3.1 Extend DuckDB AST validation to reject unsupported functions and expressions, including configuration and credential inspection, and verify focused validator tests cover nesting, CTEs, aliases, and bypass attempts.
 - [x] 3.2 Restrict each agent-query DuckDB connection to exact selected Parquet paths while retaining local and signed-URL reads; verify authorized views work and unrelated file or network sources fail.
-- [ ] 3.3 Exercise the reported generated SQL sites in tabular processing, service, and migration code with quoted identifiers and hostile input values; fix any unsafe construction and run the targeted tests.
-- [ ] 3.4 Run tabular service tests for authorized analytics, multi-dataset joins, error redaction, capacity, timeout, and cancellation; verify the security restrictions preserve the supported behavior.
+- [x] 3.3 Exercise the reported generated SQL sites in tabular processing, service, and migration code with quoted identifiers and hostile input values; fix any unsafe construction and run the targeted tests.
+- [x] 3.4 Run tabular service tests for authorized analytics, multi-dataset joins, error redaction, capacity, timeout, and cancellation; verify the security restrictions preserve the supported behavior.
 
 ## 4. Resolve High Findings
 
-- [ ] 4.1 Verify the resolved frontend package identity for the `canvas` CVE against package metadata and the complete lock graph; update a genuinely vulnerable dependency or record evidence for false-positive triage.
+- [x] 4.1 Verify the resolved frontend package identity for the `canvas` CVE against package metadata and the complete lock graph; update a genuinely vulnerable dependency or record evidence for false-positive triage.
 - [ ] 4.2 Trace every frontend SSRF finding from input to browser request, fix any bearer or origin exposure beyond the runtime URL path, and verify affected focused tests and written dispositions.
 - [ ] 4.3 Trace every tabular SQL and migration finding from input to execution, fix any remaining unsafe path, and verify focused regression tests and written dispositions.
 - [ ] 4.4 Reconcile the full GitLab High inventory with fixed commits or justified scanner triage and verify no High finding lacks a disposition in the PR.
