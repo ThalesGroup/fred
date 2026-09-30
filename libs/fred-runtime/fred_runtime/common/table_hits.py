@@ -19,7 +19,7 @@ the model as-is, that reads as several small unrelated tables and answers row
 questions wrong.
 
 Three retrieval surfaces build LLM content from raw hits - the legacy
-`knowledge.search` invoker, `KfVectorSearchToolkit`, and the `DocumentSearchPort`
+`knowledge.search` invoker and the `DocumentSearchPort`
 behind `document_access`. They all need the same repair, so it lives here rather
 than being reimplemented a fourth time.
 """

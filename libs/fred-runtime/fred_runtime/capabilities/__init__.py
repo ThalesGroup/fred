@@ -37,6 +37,14 @@ their own distributions under `libs/capabilities/`.
 
 from __future__ import annotations
 
+from fred_sdk.contracts.capability.mcp import (
+    MCP_CAPABILITY_SCHEMA_VERSION,
+    McpCapability,
+    McpServerConfig,
+    build_mcp_capability,
+    register_mcp_capabilities,
+)
+
 from .assembly import (
     CapabilityAgentBlock,
     build_capability_agent_block,
@@ -62,13 +70,6 @@ from .errors import (
     MissingRequiredEnvError,
     TurnOptionsInvalidError,
     UnknownCapabilityError,
-)
-from .mcp import (
-    MCP_CAPABILITY_SCHEMA_VERSION,
-    McpCapability,
-    McpServerConfig,
-    build_mcp_capability,
-    register_mcp_capabilities,
 )
 from .registry import (
     FRED_CAPABILITIES_ENTRY_POINT_GROUP,

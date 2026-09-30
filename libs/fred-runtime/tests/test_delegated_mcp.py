@@ -28,7 +28,6 @@ import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any, cast
-from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -630,7 +629,6 @@ async def test_mcp_close_retains_lifecycle_until_teardown_finishes():
     runtime._ready_event = asyncio.Event()
     runtime._lifecycle_error = None
     runtime._close_task = None
-    runtime._aclose_inprocess_toolkits = AsyncMock()
     close = asyncio.create_task(runtime.aclose())
     await started.wait()
     close.cancel()
@@ -643,7 +641,6 @@ async def test_mcp_close_retains_lifecycle_until_teardown_finishes():
         await close
     assert runtime._lifecycle_task is None
     assert runtime._close_task is not None and runtime._close_task.done()
-    runtime._aclose_inprocess_toolkits.assert_awaited_once()
     await runtime.aclose()
 
 
@@ -663,7 +660,6 @@ async def test_cancelled_mcp_init_keeps_lifecycle_for_later_disposal():
     runtime._ready_event = asyncio.Event()
     runtime._lifecycle_error = None
     runtime._close_task = None
-    runtime._aclose_inprocess_toolkits = AsyncMock()
     waiter = asyncio.create_task(runtime._await_lifecycle_attempt_completion())
     await started.wait()
     waiter.cancel()

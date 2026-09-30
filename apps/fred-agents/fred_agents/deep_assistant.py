@@ -118,7 +118,6 @@ class DeepAssistantDefinition(DeepAgentDefinition):
         # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
         # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
         # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
-        # MCPServerRef(id="mcp-web-github-readonly"),
     )
 
     fields: tuple[FieldSpec, ...] = (

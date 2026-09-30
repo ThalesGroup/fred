@@ -14,7 +14,7 @@
 """
 Sources filtering for the legacy built-in `knowledge.search` tool ref
 (`FredKnowledgeSearchToolInvoker._invoke_knowledge_search`, adapters.py) —
-same fix as `document_access` and `KfVectorSearchToolkit`, applied here for
+same fix as `document_access`, applied here for
 the third and last place that builds a chat "Sources" panel from raw hits
 (RAG-DATASET-DISCOVERY-RFC.md §7).
 """

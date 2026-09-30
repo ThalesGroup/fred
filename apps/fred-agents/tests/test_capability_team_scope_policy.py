@@ -32,9 +32,9 @@ projection function instead (control-plane-backend
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import yaml
+from fred_capability_mcp import load_catalog
+from fred_sdk.contracts.models import TeamScopePolicy
+from fred_sdk.contracts.services import FredService
 
 # Explicit waiver list — empty today. Adding an id here is a security-reviewed
 # decision (this platform's policy, 2026-07-17), not a manifest edit someone
@@ -42,16 +42,18 @@ import yaml
 # instead of a comment.
 _DEFAULT_ON_WAIVERS: set[str] = set()
 
-_MCP_CATALOG_PATH = Path(__file__).resolve().parents[1] / "config" / "mcp_catalog.yaml"
-
 
 def test_no_mcp_server_declares_default_on_without_explicit_waiver() -> None:
-    catalog = yaml.safe_load(_MCP_CATALOG_PATH.read_text())
+    class Services:
+        def get_base_url(self, service: FredService) -> str:
+            return "http://localhost:8111/knowledge-flow/v1"
+
+    catalog = load_catalog(Services())
     offenders = [
-        entry["id"]
-        for entry in catalog.get("servers", [])
-        if entry.get("team_scope") == "default_on"
-        and entry["id"] not in _DEFAULT_ON_WAIVERS
+        entry.id
+        for entry in catalog.servers
+        if entry.team_scope is TeamScopePolicy.DEFAULT_ON
+        and entry.id not in _DEFAULT_ON_WAIVERS
     ]
     assert offenders == [], (
         f"{offenders} declare team_scope: default_on without an explicit "

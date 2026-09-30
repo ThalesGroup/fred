@@ -362,15 +362,40 @@ def _base_app_props(extra: dict | None = None) -> dict:
 # Application-specific schemas
 # ---------------------------------------------------------------------------
 
+_MCP_EXTERNAL_SERVER = _obj({
+    "id": _STRING,
+    "name": _STRING,
+    "description": {"anyOf": [_STRING, {"type": "null"}]},
+    "transport": {"enum": ["sse", "stdio", "websocket", "streamable_http", None]},
+    "url": {"anyOf": [_STRING, {"type": "null"}]},
+    "enabled": _BOOL,
+    "auth_mode": {"enum": ["user_token", "no_token", "delegated"]},
+    "sse_read_timeout": {"anyOf": [_INT, {"type": "null"}]},
+    "command": {"anyOf": [_STRING, {"type": "null"}]},
+    "args": {"anyOf": [_arr(_STRING), {"type": "null"}]},
+    "env": {"anyOf": [{"type": "object", "additionalProperties": _STRING}, {"type": "null"}]},
+    "prompt_file": {"anyOf": [_STRING, {"type": "null"}]},
+    "agent_instructions": {"anyOf": [_STRING, {"type": "null"}]},
+    "prompt_group_title": {"anyOf": [_STRING, {"type": "null"}]},
+    "config_fields": _arr(_ANY),
+    "team_scope": {"enum": ["default_on", "admin_gated"]},
+    "service": {"enum": ["knowledge_flow", "control_plane", None]},
+    "path": {"anyOf": [_STRING, {"type": "null"}]},
+}, required=["id", "name"])
+
+_MCP_EXTERNAL_CATALOG = _obj({
+    "version": {"const": "v1"},
+    "servers": _arr(_MCP_EXTERNAL_SERVER),
+})
+
 def _fred_agents_app(fa_config: dict) -> dict:
     # models_catalog: free-form (large catalog structure, fully user-defined)
-    # mcp_catalog: free-form
     # dotenv: key/value env secrets
     return _obj(_base_app_props({
         "configuration": fa_config,
         "dotenv": _obj({}, additional=True),
         "models_catalog": _obj({}, additional=True),
-        "mcp_catalog": _obj({}, additional=True),
+        "mcp_catalog_external": _MCP_EXTERNAL_CATALOG,
     }))
 
 

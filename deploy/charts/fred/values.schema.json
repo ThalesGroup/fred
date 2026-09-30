@@ -856,7 +856,7 @@
               "additionalProperties": false
             },
             "configuration": {
-              "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and `config/mcp_catalog.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
+              "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
               "properties": {
                 "app": {
                   "description": "Identity and HTTP server settings for an agent pod.\n\nWhy this exists:\n- every pod needs the same identity and HTTP binding knobs, in the same\n  place, whoever built it\n- keeping these fields in `app` preserves the familiar startup contract for\n  local benches and scrape-based debugging\n\nHow to use it:\n- declare `runtime_id`; every other field defaults sanely for local work\n- the metrics exporter is configured under `observability.kpi.prometheus`,\n  not here\n\nExample:\n- `PodAppConfig(runtime_id=\"my-agents\", base_url=\"/pod/v1\", port=8000)`",
@@ -1969,10 +1969,175 @@
               "properties": {},
               "additionalProperties": true
             },
-            "mcp_catalog": {
+            "mcp_catalog_external": {
               "type": "object",
-              "properties": {},
-              "additionalProperties": true
+              "properties": {
+                "version": {
+                  "const": "v1"
+                },
+                "servers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "transport": {
+                        "enum": [
+                          "sse",
+                          "stdio",
+                          "websocket",
+                          "streamable_http",
+                          null
+                        ]
+                      },
+                      "url": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "auth_mode": {
+                        "enum": [
+                          "user_token",
+                          "no_token",
+                          "delegated"
+                        ]
+                      },
+                      "sse_read_timeout": {
+                        "anyOf": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "command": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "args": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "env": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prompt_file": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "agent_instructions": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "prompt_group_title": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "config_fields": {
+                        "type": "array",
+                        "items": {}
+                      },
+                      "team_scope": {
+                        "enum": [
+                          "default_on",
+                          "admin_gated"
+                        ]
+                      },
+                      "service": {
+                        "enum": [
+                          "knowledge_flow",
+                          "control_plane",
+                          null
+                        ]
+                      },
+                      "path": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "name"
+                    ]
+                  }
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

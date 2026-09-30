@@ -33,9 +33,20 @@ entry-point discovery test is expected to find it (no skip guard).
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
 from fred_capability_document_access import DocumentAccessCapability
+from fred_capability_mcp import load_catalog
 from fred_capability_ppt_filler.capability import PptFillerCapability
-from fred_runtime.capabilities.registry import CapabilityRegistry
+from fred_runtime.app._catalogs import apply_external_catalog_overrides
+from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.service_endpoints import ConfiguredServiceEndpoints
+from fred_runtime.capabilities.registry import (
+    CapabilityRegistry,
+    boot_capability_registry,
+)
+from fred_sdk.contracts.capability.mcp import McpCapability
 
 _PPT_PREVIEW_PART_KIND = "ppt_preview"
 
@@ -134,3 +145,68 @@ def test_discover_finds_every_shipped_capability() -> None:
     discovered = registry.discover()
 
     assert set(discovered) == _SHIPPED_CAPABILITY_IDS
+
+
+def test_default_mcp_catalog_loads_packaged_instructions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Boot from installed package metadata without a checkout config directory."""
+    (tmp_path / "models.yaml").write_text("models: []", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FRED_MCP_CATALOG_FILE", raising=False)
+    monkeypatch.setenv("FRED_MODELS_CATALOG_FILE", str(tmp_path / "models.yaml"))
+    config = apply_external_catalog_overrides(
+        AgentPodConfig.model_validate(
+            {
+                "app": {"runtime_id": "test-pod"},
+                "ai": {"knowledge_flow_url": "https://kf.example:9443/custom/v2/"},
+                "security": {
+                    "user": {
+                        "enabled": False,
+                        "realm_url": "http://localhost/r",
+                        "client_id": "test",
+                    },
+                    "m2m": {
+                        "enabled": False,
+                        "realm_url": "http://localhost/r",
+                        "client_id": "test",
+                    },
+                },
+            }
+        )
+    )
+    catalog = config.get_mcp_configuration()
+    assert catalog is not None
+    assert catalog.servers == load_catalog(ConfiguredServiceEndpoints(config)).servers
+    registry = boot_capability_registry(mcp_servers=catalog.servers, env={})
+
+    enabled = {server.id for server in catalog.servers if server.enabled}
+    assert set(registry.ids()) == _SHIPPED_CAPABILITY_IDS | enabled
+    for server_id in enabled:
+        assert isinstance(registry.capability(server_id), McpCapability)
+    by_id = {server.id: server for server in catalog.servers}
+    assert "mcp-knowledge-flow-mcp-text" not in by_id
+    assert "mcp-web-github-readonly" not in by_id
+    assert "## Tabular data access" in (
+        by_id["mcp-knowledge-flow-mcp-tabular"].agent_instructions or ""
+    )
+
+    expected_paths = {
+        "mcp-knowledge-flow-mcp-tabular": "mcp-tabular",
+        "mcp-knowledge-flow-opensearch-ops": "mcp-opensearch-ops",
+        "mcp-knowledge-flow-fs": "mcp-fs",
+        "mcp-knowledge-flow-corpus": "mcp-corpus",
+        "mcp-knowledge-flow-prometheus-ops": "mcp-prometheus-ops",
+    }
+    assert set(by_id) == set(expected_paths)
+    for server_id, path in expected_paths.items():
+        assert by_id[server_id].url == f"https://kf.example:9443/custom/v2/{path}"
+
+
+def test_document_templates_default_to_native_document_access() -> None:
+    from fred_agents.comparison.graph_agent import COMPARISON_AGENT
+    from fred_agents.mindmap.graph_agent import MINDMAP_AGENT
+    from fred_agents.react_rag_mcp import REACT_RAG_MCP_AGENT
+
+    for template in (REACT_RAG_MCP_AGENT, MINDMAP_AGENT, COMPARISON_AGENT):
+        assert [ref.id for ref in template.default_mcp_servers] == ["document_access"]
