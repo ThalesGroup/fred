@@ -36,10 +36,13 @@ class DocumentMetadataRow(Base):
     # every imported file, and the name lives inside `doc`. Declared here rather
     # than beside the others: an expression index has no mapped column to hang
     # off, so only `__table_args__` attaches it to the table.
+    # The `::text` casts are the ones PostgreSQL adds itself: `alembic check`
+    # compares this text against the reflected expression, so without them the
+    # index reads as drifted on every run.
     __table_args__ = (
         Index(
             "idx_metadata_document_name",
-            text("((doc -> 'identity' ->> 'document_name'))"),
+            text("((doc -> 'identity'::text) ->> 'document_name'::text)"),
         ).ddl_if(dialect="postgresql"),
     )
 
