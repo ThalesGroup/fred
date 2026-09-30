@@ -94,8 +94,8 @@ def test_validate_read_query_keeps_the_full_sql_line_in_parser_errors():
     assert "..." not in message
 
 
-def test_validate_read_query_allows_supported_analytical_functions_in_ctes():
-    query = "WITH scoped AS (SELECT lower(city) AS city, amount FROM d_sales) SELECT city, COUNT(*) AS rows, ROUND(AVG(amount), 2) AS average FROM scoped WHERE city LIKE 'p%' GROUP BY city"
+def test_validate_read_query_allows_analytical_functions_without_a_fixed_catalog():
+    query = "WITH scoped AS (SELECT regexp_replace(lower(city), 'a', '_') AS city, nullif(amount, 0) AS amount FROM d_sales) SELECT split_part(city, '_', 1) AS city, quantile_cont(amount, 0.5) AS median_amount FROM scoped GROUP BY city"
 
     validated = validate_read_query(query, allowed_relations={"d_sales"})
 
@@ -109,11 +109,17 @@ def test_validate_read_query_allows_supported_analytical_functions_in_ctes():
         "WITH scoped AS (SELECT current_setting('temp_directory') FROM d_sales) SELECT * FROM scoped",
         "SELECT (SELECT current_setting('allowed_paths')) FROM d_sales",
         "SELECT main.current_setting('allowed_paths') FROM d_sales",
+        "SELECT getvariable('secret') FROM d_sales",
+        "SELECT getenv('HOME') FROM d_sales",
+        "SELECT sleep_ms(1000) FROM d_sales",
+        "SELECT pg_sleep(1) FROM d_sales",
+        "SELECT pg_get_viewdef(1) FROM d_sales",
+        "SELECT write_log('untrusted') FROM d_sales",
         "SELECT unknown_network_function('https://outside.example') FROM d_sales",
     ],
 )
-def test_validate_read_query_rejects_runtime_inspection_and_unknown_functions(query: str):
-    with pytest.raises(ValueError, match="unsupported SQL function"):
+def test_validate_read_query_rejects_runtime_inspection_functions(query: str):
+    with pytest.raises(ValueError, match="restricted SQL function"):
         validate_read_query(query, allowed_relations={"d_sales"})
 
 

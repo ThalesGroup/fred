@@ -10,8 +10,8 @@ The tabular query service SHALL accept a single read-only query over dataset ali
 
 #### Scenario: Authorized analytical query
 
-- **WHEN** an agent submits a supported SELECT query over its authorized aliases
-- **THEN** the service returns the query result within the existing row and execution budgets
+- **WHEN** an agent submits a single SELECT query using DuckDB analytical functions over its authorized aliases
+- **THEN** the service returns the query result within the existing row and execution budgets without requiring the functions in a static catalog
 
 #### Scenario: Unauthorized relation or external source
 
@@ -22,6 +22,11 @@ The tabular query service SHALL accept a single read-only query over dataset ali
 
 - **WHEN** a query attempts to read engine settings or credentials through an expression
 - **THEN** the service rejects it without returning configuration or credential data
+
+#### Scenario: Side-effecting function
+
+- **WHEN** a query invokes a DuckDB function whose engine metadata marks it as having side effects, or a macro that wraps such a function or an engine metadata source
+- **THEN** the service rejects it before executing the query
 
 ### Requirement: Generated tabular SQL treats data as data
 

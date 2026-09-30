@@ -2174,8 +2174,19 @@ async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch
 
     monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
     alias = (await service.list_datasets(_user()))[0].query_alias
-    response = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT amount FROM {alias}"))
-    assert response.rows == [{"amount": 10}]
+    analytical_query = f"SELECT regexp_replace(lower(city), 'a', '_') AS city, quantile_cont(amount, 0.5) AS median_amount FROM {alias} GROUP BY city"
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=analytical_query))
+    assert response.rows == [{"city": "p_ris", "median_amount": 10.0}]
+
+    with pytest.raises(ValueError, match="restricted SQL function"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT current_setting('allowed_paths') FROM {alias}"))
+    with pytest.raises(ValueError, match=r"unauthorized datasets: read_parquet\(\)"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql="SELECT * FROM read_parquet('/etc/passwd')"))
+    with pytest.raises(ValueError, match=r"unauthorized datasets: duckdb_settings\(\)"):
+        await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT (SELECT value FROM duckdb_settings() LIMIT 1) FROM {alias}"))
+
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=analytical_query))
+    assert response.rows == [{"city": "p_ris", "median_amount": 10.0}]
 
 
 @pytest.mark.integration
@@ -2240,6 +2251,13 @@ async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
         alias = (await service.list_datasets(_user()))[0].query_alias
         response = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT amount FROM {alias}"))
         assert response.rows == [{"amount": 10}]
+        for inspection_query in (
+            f"SELECT current_setting('allowed_paths') FROM {alias}",
+            f"SELECT pg_get_viewdef(1) FROM {alias}",
+        ):
+            with pytest.raises(ValueError, match="restricted SQL function") as error:
+                await service.query_read(_user(), request=TabularQueryRequest(sql=inspection_query))
+            assert signed_url not in str(error.value)
     finally:
         server.shutdown()
         server.server_close()

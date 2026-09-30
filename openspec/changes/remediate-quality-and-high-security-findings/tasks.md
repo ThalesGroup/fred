@@ -11,7 +11,7 @@
 
 ## 3. Secure Tabular SQL
 
-- [x] 3.1 Extend DuckDB AST validation to reject unsupported functions and expressions, including configuration and credential inspection, and verify focused validator tests cover nesting, CTEs, aliases, and bypass attempts.
+- [x] 3.1 Derive pure DuckDB analytical functions from engine metadata; reject table sources, side effects, and configuration-inspection calls, and verify focused tests cover nesting, CTEs, aliases, and bypass attempts.
 - [x] 3.2 Restrict each agent-query DuckDB connection to exact selected Parquet paths while retaining local and signed-URL reads; verify authorized views work and unrelated file or network sources fail.
 - [x] 3.3 Exercise the reported generated SQL sites in tabular processing, service, and migration code with quoted identifiers and hostile input values; fix any unsafe construction and run the targeted tests.
 - [x] 3.4 Run tabular service tests for authorized analytics, multi-dataset joins, error redaction, capacity, timeout, and cancellation; verify the security restrictions preserve the supported behavior.

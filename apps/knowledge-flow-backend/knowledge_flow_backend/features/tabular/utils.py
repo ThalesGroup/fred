@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Iterable
 
 import duckdb
@@ -46,57 +47,77 @@ class ValidatedReadQuery:
     referenced_relations: frozenset[str]
 
 
-_ALLOWED_QUERY_FUNCTIONS = frozenset(
-    {
-        "+",
-        "-",
-        "*",
-        "/",
-        "%",
-        "||",
-        "~~",
-        "~~*",
-        "!~~",
-        "!~~*",
-        "abs",
-        "avg",
-        "ceil",
-        "ceiling",
-        "coalesce",
-        "concat",
-        "count",
-        "count_star",
-        "date_trunc",
-        "extract",
-        "floor",
-        "greatest",
-        "least",
-        "length",
-        "lower",
-        "ltrim",
-        "max",
-        "median",
-        "min",
-        "nullif",
-        "replace",
-        "round",
-        "rtrim",
-        "split_part",
-        "sqrt",
-        "stddev",
-        "stddev_pop",
-        "stddev_samp",
-        "strftime",
-        "string_agg",
-        "substr",
-        "substring",
-        "sum",
-        "trim",
-        "upper",
-        "var_pop",
-        "var_samp",
-    }
-)
+_BLOCKED_INSPECTION_FUNCTIONS = frozenset({"current_setting", "getvariable", "getenv"})
+
+
+def _macro_dependencies(node: Any) -> set[str] | None:
+    if not isinstance(node, (dict, list)):
+        return set()
+    dependencies: set[str] = set()
+    if isinstance(node, dict):
+        node_type = node.get("type")
+        if isinstance(node_type, str) and node_type in {"TABLE_FUNCTION", "BASE_TABLE"}:
+            return None
+        if node_type == "FUNCTION":
+            name = node.get("function_name")
+            if not isinstance(name, str) or node.get("catalog") or node.get("schema"):
+                return None
+            dependencies.add(name.casefold())
+        children = node.values()
+    else:
+        children = node
+    for value in children:
+        nested = _macro_dependencies(value)
+        if nested is None:
+            return None
+        dependencies.update(nested)
+    return dependencies
+
+
+# Built-in metadata is fixed for this DuckDB build, so each worker process computes it once.
+@lru_cache(maxsize=1)
+def _pure_builtin_functions() -> frozenset[str]:
+    connection = duckdb.connect(database=":memory:", config={"threads": "1"})
+    try:
+        rows = connection.execute(
+            """SELECT lower(function_name), function_type, has_side_effects, macro_definition
+            FROM duckdb_functions()
+            WHERE internal AND function_type IN ('scalar', 'aggregate', 'macro')"""
+        ).fetchall()
+        direct: set[str] = set()
+        unsafe: set[str] = set(_BLOCKED_INSPECTION_FUNCTIONS)
+        macros: dict[str, set[str]] = {}
+        for name, function_type, has_side_effects, definition in rows:
+            if function_type != "macro":
+                direct.add(name)
+                if has_side_effects is not False:
+                    unsafe.add(name)
+                continue
+            if not isinstance(definition, str):
+                unsafe.add(name)
+                continue
+            try:
+                serialized = connection.execute("SELECT json_serialize_sql(?)", [f"SELECT {definition}"]).fetchone()
+                payload = json.loads(serialized[0]) if serialized else None
+            except (duckdb.Error, json.JSONDecodeError, TypeError):
+                payload = None
+            dependencies = _macro_dependencies(payload)
+            if not isinstance(payload, dict) or payload.get("error") or dependencies is None:
+                unsafe.add(name)
+            else:
+                macros.setdefault(name, set()).update(dependencies)
+
+        pure = direct - unsafe - macros.keys()
+        pending = set(macros) - unsafe
+        while pending:
+            resolved = {name for name in pending if macros[name] <= pure}
+            if not resolved:
+                break
+            pure.update(resolved)
+            pending.difference_update(resolved)
+        return frozenset(pure)
+    finally:
+        connection.close()
 
 
 def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None = None) -> ValidatedReadQuery:
@@ -151,8 +172,8 @@ def _validate_query_functions(node: Any) -> None:
             raise ValueError("Table functions are not allowed in read queries")
         if node.get("type") == "FUNCTION":
             name = node.get("function_name")
-            if not isinstance(name, str) or name.casefold() not in _ALLOWED_QUERY_FUNCTIONS or node.get("catalog") or node.get("schema"):
-                raise ValueError("Query uses an unsupported SQL function")
+            if not isinstance(name, str) or name.casefold() in _BLOCKED_INSPECTION_FUNCTIONS or name.casefold() not in _pure_builtin_functions() or node.get("catalog") or node.get("schema"):
+                raise ValueError("Query uses a restricted SQL function")
         for value in node.values():
             _validate_query_functions(value)
     elif isinstance(node, list):

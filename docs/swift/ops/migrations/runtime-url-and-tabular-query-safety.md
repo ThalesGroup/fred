@@ -44,5 +44,4 @@ still be corrected before a later upgrade.
 
 ## Limitations
 
-The tabular query service accepts a reviewed subset of analytical SQL functions.
-Custom queries using unsupported functions must be revised before this upgrade.
+Pure built-in DuckDB analytical functions remain available in tabular queries. Queries that inspect runtime configuration, use side-effecting functions, or use external table sources are rejected. DuckDB settings are defense in depth and do not replace process or container isolation for untrusted SQL.
