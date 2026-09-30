@@ -68,14 +68,19 @@ def _suffixed(name: str, number: int) -> str:
 
 
 def upgrade() -> None:
-    """Upgrade schema."""
+    """Upgrade schema.
+
+    Renaming reads `version`, so it has to happen before the fields go.
+    """
     bind = op.get_bind()
 
     if bind.dialect.name == "postgresql":
         _rename_alternates_postgresql(bind)
+        _drop_the_fields_postgresql(bind)
         return
 
     _rename_alternates_portable(bind)
+    _drop_the_fields_portable(bind)
 
 
 def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
@@ -138,6 +143,28 @@ def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
             ),
             {"uid": uid, "name": new_name},
         )
+
+
+def _drop_the_fields_postgresql(bind: sa.engine.Connection) -> None:
+    """Every document, not only the alternates.
+
+    A `version: 0` left behind on the other documents is dead data that reads
+    like a live field to whoever finds it next. Guarded so a row that never
+    carried either key is not rewritten, which also makes a second run a no-op.
+    """
+    bind.execute(
+        sa.text(
+            """
+            UPDATE metadata
+            SET doc = jsonb_set(
+                    doc,
+                    '{identity}',
+                    (doc -> 'identity') - 'canonical_name' - 'version'
+                )
+            WHERE doc -> 'identity' ?| ARRAY['canonical_name', 'version']
+            """
+        )
+    )
 
 
 def _rename_alternates_portable(bind: sa.engine.Connection) -> None:
@@ -205,6 +232,25 @@ def _rename_alternates_portable(bind: sa.engine.Connection) -> None:
 
         for tag in tags:
             names_by_tag.setdefault(tag, {})[uid] = new_name
+
+
+def _drop_the_fields_portable(bind: sa.engine.Connection) -> None:
+    """SQLite counterpart of `_drop_the_fields_postgresql`."""
+    metadata_table = sa.table(
+        "metadata",
+        sa.column("document_uid", sa.String()),
+        sa.column("doc", sa.JSON()),
+    )
+    rows = bind.execute(sa.select(metadata_table.c.document_uid, metadata_table.c.doc)).fetchall()
+
+    for uid, doc in rows:
+        if not isinstance(doc, dict):
+            continue
+        identity = doc.get("identity")
+        if not isinstance(identity, dict) or not ({"canonical_name", "version"} & identity.keys()):
+            continue
+        updated_identity = {key: value for key, value in identity.items() if key not in ("canonical_name", "version")}
+        bind.execute(metadata_table.update().where(metadata_table.c.document_uid == uid).values(doc={**doc, "identity": updated_identity}))
 
 
 def downgrade() -> None:

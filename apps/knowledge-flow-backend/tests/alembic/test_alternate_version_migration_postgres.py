@@ -217,15 +217,29 @@ def test_a_document_with_no_tags_at_all_keeps_its_name(engine: sa.Engine) -> Non
     assert "version" not in identity
 
 
-def test_ordinary_documents_are_left_alone(engine: sa.Engine) -> None:
+def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields(engine: sa.Engine) -> None:
     _insert(engine, "plain", "report.pdf", ["folder-a"], version=0)
     _insert(engine, "no-version-key", "memo.pdf", ["folder-a"])
 
     _run_upgrade(engine)
 
     identities = _identities(engine)
-    assert identities["plain"]["version"] == 0
+    assert identities["plain"]["document_name"] == "report.pdf"
+    assert "version" not in identities["plain"]
+    assert "canonical_name" not in identities["plain"]
     assert identities["no-version-key"]["document_name"] == "memo.pdf"
+
+
+def test_not_one_document_is_left_carrying_either_field(engine: sa.Engine) -> None:
+    _insert(engine, "base", "report.pdf", ["folder-a"])
+    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    _insert(engine, "plain", "memo.pdf", ["folder-a"], version=0)
+
+    _run_upgrade(engine)
+
+    for identity in _identities(engine).values():
+        assert "version" not in identity
+        assert "canonical_name" not in identity
 
 
 def test_a_non_numeric_version_does_not_raise_on_the_cast(engine: sa.Engine) -> None:
@@ -239,7 +253,9 @@ def test_a_non_numeric_version_does_not_raise_on_the_cast(engine: sa.Engine) -> 
 
     _run_upgrade(engine)
 
-    assert _identities(engine)["odd"]["version"] == "not-a-number"
+    identity = _identities(engine)["odd"]
+    assert identity["document_name"] == "report.pdf"
+    assert "version" not in identity
 
 
 def test_a_title_survives_the_rename(engine: sa.Engine) -> None:

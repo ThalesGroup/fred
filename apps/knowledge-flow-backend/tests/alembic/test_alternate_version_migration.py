@@ -181,7 +181,9 @@ def test_a_document_in_no_folder_keeps_its_name() -> None:
     assert _identities(engine)["alt"]["document_name"] == "report.pdf"
 
 
-def test_ordinary_documents_are_left_alone() -> None:
+def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields() -> None:
+    """`version: 0` is not an alternate and must not be renamed — but leaving the
+    key behind would leave dead data reading like a live field."""
     engine = _engine()
     _insert(engine, "plain", "report.pdf", ["folder-a"], version=0)
     _insert(engine, "no-version-key", "memo.pdf", ["folder-a"])
@@ -190,9 +192,22 @@ def test_ordinary_documents_are_left_alone() -> None:
 
     identities = _identities(engine)
     assert identities["plain"]["document_name"] == "report.pdf"
-    # version=0 is not an alternate, so the row is not rewritten at all.
-    assert identities["plain"]["version"] == 0
+    assert "version" not in identities["plain"]
+    assert "canonical_name" not in identities["plain"]
     assert identities["no-version-key"]["document_name"] == "memo.pdf"
+
+
+def test_not_one_document_is_left_carrying_either_field() -> None:
+    engine = _engine()
+    _insert(engine, "base", "report.pdf", ["folder-a"])
+    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    _insert(engine, "plain", "memo.pdf", ["folder-a"], version=0)
+
+    _run_upgrade(engine)
+
+    for identity in _identities(engine).values():
+        assert "version" not in identity
+        assert "canonical_name" not in identity
 
 
 def test_a_title_survives_the_rename() -> None:
@@ -287,7 +302,8 @@ def test_the_suffix_goes_before_the_extension(name: str, expected: str) -> None:
 
 def test_a_non_numeric_version_is_not_treated_as_an_alternate() -> None:
     """Nothing should write a string there, but a hand-edited row must not make
-    the migration raise on a cast."""
+    the migration raise on a cast — it is dropped like any other stale key,
+    without the document being renamed."""
     engine = _engine()
     with engine.begin() as conn:
         conn.execute(
@@ -297,4 +313,6 @@ def test_a_non_numeric_version_is_not_treated_as_an_alternate() -> None:
 
     _run_upgrade(engine)
 
-    assert _identities(engine)["odd"]["version"] == "not-a-number"
+    identity = _identities(engine)["odd"]
+    assert identity["document_name"] == "report.pdf"
+    assert "version" not in identity
