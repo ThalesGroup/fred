@@ -7,7 +7,7 @@ What is proven, how, and what is not. Written 2026-09-30, against
 
 | Suite | Result |
 | --- | --- |
-| `apps/knowledge-flow-backend` `make test` | 1512 passed, 40 deselected |
+| `apps/knowledge-flow-backend` `make test` | 1513 passed, 41 deselected |
 | `apps/knowledge-flow-backend` `make code-quality` | clean |
 | `libs/fred-core` `make test` | 1028 passed, 40 deselected |
 | `libs/fred-core` `make code-quality` | clean |
