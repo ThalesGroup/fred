@@ -85,22 +85,22 @@
 .panel {
   display: flex;
   flex: 1;
-  /* The table stops growing at its own width; the import rail keeps the right
-     edge, and whatever is left over sits between them rather than piling up
-     past the rail. */
-  justify-content: space-between;
   gap: var(--spacing-s);
   min-height: 0;
+  /* How wide the import panel may get: whatever is left once the table has its
+     floor. The panel reads this; the floor belongs here, to the page that knows
+     what the table needs. */
+  --import-panel-max: calc(100% - 660px - var(--spacing-s));
 }
 
 .workspace {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-width: 0;
-  /* Past this the table only stretches its name column; the width buys nothing
-     and the row reads worse. Narrower, the name column truncates. */
-  max-width: 660px;
+  /* The table's floor: its five fixed columns total about 650px, so below this
+     the name column is all that gives. Opening the import panel never takes the
+     table past it. */
+  min-width: 660px;
   min-height: 0;
 }
 

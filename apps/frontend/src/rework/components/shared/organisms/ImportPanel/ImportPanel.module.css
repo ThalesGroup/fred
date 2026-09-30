@@ -32,6 +32,9 @@
 
 .panel[data-expanded="true"] {
   width: min(var(--import-panel-width, 360px), 45vw);
+  /* Set by whoever mounts the panel, when what sits beside it has a width it
+     cannot go below. Unset, the width above is the only bound. */
+  max-width: var(--import-panel-max, none);
 }
 
 /* No transition while dragging: the width already follows the pointer, and
