@@ -158,6 +158,25 @@ async def test_a_document_deleted_during_the_fence_is_not_impersonated(existing,
 
 
 @pytest.mark.asyncio
+async def test_the_replaced_document_stops_answering_with_its_old_content(existing, monkeypatch) -> None:
+    # The whole point of replacing: the old chunks must not survive under the
+    # uid the new content is about to be indexed under, or the document answers
+    # out of both at once. Runs the real purge — the other tests replace it, so
+    # none of them can see whether it does anything.
+    deleted: list[str] = []
+
+    class _Spy:
+        def delete_vectors_for_document(self, document_uid: str) -> None:
+            deleted.append(document_uid)
+
+    monkeypatch.setattr(MetadataService, "_vector_store", lambda self: _Spy())
+
+    await get_ingestion_service().adopt_existing_document(USER, _doc("uid-freshly-generated", "report.pdf", size=3_000_000), EXISTING_UID)
+
+    assert deleted == [EXISTING_UID]
+
+
+@pytest.mark.asyncio
 async def test_the_index_goes_but_the_content_stays_until_it_is_replaced(existing, monkeypatch) -> None:
     # The interrupted overwrite must never leave the old index answering for
     # new content. Dropping the index first and the bytes only when the new

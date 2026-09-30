@@ -208,6 +208,37 @@ describe("scheduleFiles", () => {
 
     expect(onBackgroundError).not.toHaveBeenCalled();
   });
+
+  it("fails the files a cleanly-ended stream never spoke about", async () => {
+    // A truncated body or a gateway timing out mid-response ends the read with
+    // no error and no line for the rest. Nothing else will ever report on
+    // those, so leaving them pending parks them in the panel as "sending" for
+    // as long as the tab is open.
+    streamMock.mockImplementation((_files, _mode, _meta, discover) => {
+      discover({ taskId: "t-1", documentUid: "doc-1", filename: "a.pdf" });
+      return Promise.resolve([]);
+    });
+
+    const onFailed = vi.fn();
+    const onBackgroundError = vi.fn();
+    await scheduleFiles(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.pdf")],
+      "process",
+      {},
+      vi.fn(),
+      onBackgroundError,
+      undefined,
+      { onFailed, onFinished: vi.fn() },
+    );
+
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(onFailed.mock.calls[0][0]).toBe("b.pdf");
+    // a.pdf got its task and is the task's to report on from here.
+    expect(onFailed.mock.calls[0][1]).toContain("no word from the server");
+    // Nothing failed at the request level, so nothing is raised globally —
+    // the file's own card carries it.
+    expect(onBackgroundError).not.toHaveBeenCalled();
+  });
 });
 
 describe("runWithConcurrencyLimit", () => {

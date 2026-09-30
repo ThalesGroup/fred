@@ -2187,6 +2187,7 @@
         "connectionLost": "The connection was lost during the transfer.",
         "extraction": "This file's content could not be read.",
         "indexing": "The file was read, but indexing it failed.",
+        "noAnswer": "The upload ended without the server saying what became of this file.",
         "interrupted": "Processing stopped before finishing.",
         "notAllowed": "You are not allowed to import into this folder.",
         "preparation": "Preparing this file failed.",

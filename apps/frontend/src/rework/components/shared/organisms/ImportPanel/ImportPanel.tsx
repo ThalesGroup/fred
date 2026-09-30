@@ -135,7 +135,10 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // Except for whatever is already listed below — coming back to this page
   // re-reads the record, and a file the panel is still following is not a file
   // that failed to arrive.
-  const listed = new Set(imports.map((task) => task.target?.label));
+  // From everything the panel follows, not from what it is still showing: a
+  // file whose card left after succeeding did arrive, and must not come back
+  // three seconds later as one that never did.
+  const listed = new Set(allImports.map((task) => task.target?.label));
   const missing = interrupted.filter((entry) => entry.teamId === teamId && !listed.has(entry.filename));
 
   const resumeInput = useRef<HTMLInputElement>(null);

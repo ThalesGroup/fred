@@ -47,6 +47,7 @@ const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean }[] = [
   { pattern: /storage quota exceeded/i, key: "quotaExceeded" },
   { pattern: /quota cannot be verified/i, key: "quotaUnknown" },
   { pattern: /no fast text processor|unsupported|not supported/i, key: "unsupportedType" },
+  { pattern: /no word from the server about this file/i, key: "noAnswer" },
   { pattern: /stopped reporting activity|heartbeat|time limit was exceeded/i, key: "interrupted" },
   { pattern: /configured attempts exhausted/i, key: "attemptsExhausted" },
   { pattern: /failed to fetch|networkerror|network ?error|err_/i, key: "connectionLost" },

@@ -87,17 +87,23 @@ let flushHandle: number | null = null;
  *  below is what makes losing the tab in between still cost nothing. */
 function scheduleFlush(): void {
   if (flushHandle !== null) return;
-  flushHandle = window.setTimeout(() => {
-    flushHandle = null;
-    persist(cache ?? []);
-  }, FLUSH_DELAY_MS);
+  flushHandle = window.setTimeout(flush, FLUSH_DELAY_MS);
+}
+
+/** Never writes an empty list it did not build. A null cache means another tab
+ *  rewrote the record and ours was dropped — persisting `[]` then would take
+ *  that tab's in-flight import down with it, which is the one thing this
+ *  record exists to prevent. Our own pending strike-offs are the cheaper loss:
+ *  they cost a file being offered again, not a file being forgotten. */
+function flush(): void {
+  flushHandle = null;
+  if (cache !== null) persist(cache);
 }
 
 function flushNow(): void {
   if (flushHandle === null) return;
   window.clearTimeout(flushHandle);
-  flushHandle = null;
-  persist(cache ?? []);
+  flush();
 }
 
 if (typeof window !== "undefined") {

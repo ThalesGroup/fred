@@ -2187,6 +2187,7 @@
         "connectionLost": "La connexion a été perdue pendant l'envoi.",
         "extraction": "Le contenu de ce fichier n'a pas pu être lu.",
         "indexing": "Le fichier a été lu, mais son indexation a échoué.",
+        "noAnswer": "L'envoi s'est terminé sans réponse du serveur pour ce fichier.",
         "interrupted": "Le traitement s'est interrompu avant la fin.",
         "notAllowed": "Vous n'avez pas le droit d'importer dans ce dossier.",
         "preparation": "La préparation de ce fichier a échoué.",

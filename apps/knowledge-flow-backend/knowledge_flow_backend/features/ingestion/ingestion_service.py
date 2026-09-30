@@ -138,6 +138,12 @@ class IngestionService:
         # would leave the bail-out below returning metadata that impersonates a
         # document someone just deleted — saving it recreates that row and puts
         # it back in every library it was in, none of them asked for.
+        # What it had indexed, kept before the row stops claiming it:
+        # purge_document_artifacts skips a store for a stage the document never
+        # reached, so handing it the cleared row would skip every one of them
+        # and leave the old vectors answering under the new content's uid.
+        indexed = previous.model_copy(deep=True)
+
         previous.processing.stages = {}
         if not await self.persist_progress(user, previous):
             # Deleted between the read above and this write: nothing to replace,
@@ -147,7 +153,7 @@ class IngestionService:
         metadata.identity.document_uid = existing_uid
         metadata.processing.stages = {}
         metadata.tags.tag_ids = list(dict.fromkeys([*(previous.tags.tag_ids or []), *(metadata.tags.tag_ids or [])]))
-        await self.metadata_service.purge_document_artifacts(existing_uid, metadata=previous, include_content=False)
+        await self.metadata_service.purge_document_artifacts(existing_uid, metadata=indexed, include_content=False)
         return metadata
 
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:

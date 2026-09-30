@@ -69,6 +69,15 @@ export function scheduleFiles(
       settled = true;
       resolve();
     };
+    /** Fail whatever the stream never spoke about. Every file gets exactly one
+     *  outcome, so a name still pending when the request is over got none. */
+    const accountForTheRest = (message: string) => {
+      for (const filename of [...pendingLeafNames]) {
+        pendingLeafNames.delete(filename);
+        uploadOutcome?.onFailed(filename, message);
+      }
+    };
+
     const markDone = (filename: string) => {
       pendingLeafNames.delete(filename);
       if (pendingLeafNames.size === 0) settle();
@@ -96,18 +105,21 @@ export function scheduleFiles(
         markDone(filename);
       },
     )
-      .then(() => settle())
+      .then(() => {
+        // A stream can end cleanly without a line for every file: a truncated
+        // body, a gateway timing out mid-response. Nothing else will ever
+        // report on those, so without this they sit in the panel as "sending"
+        // for as long as the tab is open.
+        accountForTheRest("The upload ended with no word from the server about this file.");
+        settle();
+      })
       .catch((err) => {
         // Some files may already have an outcome (reported above, as their
         // lines streamed in) even though the request as a whole then failed
         // — only the ones still pending were never accounted for.
-        if (pendingLeafNames.size > 0) {
-          const message = err instanceof Error ? err.message : String(err);
-          onBackgroundError(message);
-          // Without this each unaccounted file would sit in the panel as
-          // "sending" forever: nothing else will ever report on it.
-          for (const filename of pendingLeafNames) uploadOutcome?.onFailed(filename, message);
-        }
+        const message = err instanceof Error ? err.message : String(err);
+        if (pendingLeafNames.size > 0) onBackgroundError(message);
+        accountForTheRest(message);
         settle();
       });
   });
