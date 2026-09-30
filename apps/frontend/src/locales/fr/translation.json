@@ -1567,7 +1567,13 @@
         "pending": "en attente"
       },
       "stepper": {
-        "label": "Progression de l'import"
+        "label": "Progression de l'import",
+        "hint": {
+          "upload": "Le fichier quitte votre ordinateur pour rejoindre Fred. C'est la seule étape qui dépend de votre connexion.",
+          "uploading": "Fred reconnaît le type de document et met de côté ce qu'il faudra pour le traiter.",
+          "processing": "Le texte est extrait du document, page par page, pour devenir lisible par Fred.",
+          "indexing": "Le contenu est rangé pour que les agents puissent le retrouver et le citer dans leurs réponses."
+        }
       },
       "retry": {
         "action": "Réessayer",

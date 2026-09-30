@@ -38,6 +38,10 @@ const SERVER_PHASE: Record<string, number> = { uploading: 1, processing: 2, inde
 /** The phase's own name — the same wording the status line uses for it. */
 export const importPhaseName = (phase: ImportPhase, t: TFunction): string => t(PHASE_LABEL[phase]);
 
+/** What the phase is for, in a sentence or two. The names alone say little to
+ *  someone importing for the first time, so the markers carry this on hover. */
+export const importPhaseHint = (phase: ImportPhase, t: TFunction): string => t(`rework.imports.stepper.hint.${phase}`);
+
 type PhaseInput = Pick<TaskViewModel, "stage" | "step" | "state">;
 
 /** Index of the phase in flight; `IMPORT_PHASES.length` once all are behind. */

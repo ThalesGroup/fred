@@ -23,6 +23,9 @@ import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 import { ImportStepper } from "./ImportStepper";
+import { IMPORT_PHASES } from "../../../../features/imports/importPhases";
+import en from "../../../../../locales/en/translation.json";
+import fr from "../../../../../locales/fr/translation.json";
 
 function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
   return {
@@ -131,5 +134,18 @@ describe("ImportStepper", () => {
     // The transfer and the preparation did happen and stay drawn; nothing ever
     // crossed from extraction to indexing, so nothing is drawn there.
     expect(links(vm({ stage: "analysis", state: "failed", step: "processing" }))).toEqual(["done", "done", "pending"]);
+  });
+
+  // The markers are four dots; their names and what they mean live only in the
+  // tooltips. A hint missing from a locale shows the user a raw key, which is
+  // exactly the failure nobody notices until it ships.
+  it.each(["fr", "en"])("explains every phase in %s", (locale) => {
+    const hints = (locale === "fr" ? fr : en).rework.imports.stepper.hint as Record<string, string>;
+    for (const phase of IMPORT_PHASES) {
+      expect(hints[phase], `${locale}: no hint for "${phase}"`).toBeTruthy();
+    }
+    // One sentence per phase, not a paragraph — the panel holds two or three
+    // lines at the tooltip's width.
+    for (const text of Object.values(hints)) expect(text.length).toBeLessThan(160);
   });
 });

@@ -70,3 +70,31 @@
 .link[data-state="pending"] {
   background: var(--outline-variant);
 }
+
+/* The tooltip's trigger. The marker is 12px, so the hit area is the icon
+   itself — it fills the phase rather than shrink-wrapping the glyph. */
+.marker {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* Name, then what the phase is for. Kept narrow so the hint wraps to two or
+   three lines instead of stretching into one long run. */
+.tip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  max-width: 220px;
+}
+
+.tipName {
+  font: var(--font-label-medium);
+}
+
+.tipHint {
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}

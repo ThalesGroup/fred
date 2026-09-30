@@ -24,9 +24,11 @@ import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import {
   IMPORT_PHASES,
   importLinkStates,
+  importPhaseHint,
   importPhaseName,
   importPhaseStates,
   type PhaseState,
@@ -58,7 +60,20 @@ export function ImportStepper({ task }: { task: TaskViewModel }) {
             aria-label={`${importPhaseName(phase, t)} — ${t(`rework.imports.phaseState.${states[i]}`)}`}
             aria-current={states[i] === "current" ? "step" : undefined}
           >
-            <Marker state={states[i]} />
+            {/* Inside the <li>, not around it: the Tooltip renders a <span>,
+                which between <ol> and <li> would break the list. */}
+            <Tooltip
+              content={
+                <span className={styles.tip}>
+                  <span className={styles.tipName}>{importPhaseName(phase, t)}</span>
+                  <span className={styles.tipHint}>{importPhaseHint(phase, t)}</span>
+                </span>
+              }
+            >
+              <span className={styles.marker}>
+                <Marker state={states[i]} />
+              </span>
+            </Tooltip>
           </li>
         </Fragment>
       ))}
