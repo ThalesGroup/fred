@@ -224,6 +224,63 @@ function tabularEntry(
   };
 }
 
+describe("TraceDetailDrawer ask_user choices", () => {
+  it("highlights the selected choice and keeps descriptions in the drawer", () => {
+    const call = message({
+      channel: "tool_call",
+      parts: [
+        {
+          type: "tool_call",
+          call_id: "call-bread",
+          name: "ask_user",
+          args: {
+            choices: [
+              { id: "baguette", label: "Baguette", description: "Crispy bread" },
+              { id: "complet", label: "Pain complet", description: "High in fibre" },
+            ],
+          },
+        },
+      ],
+    });
+    const messages = [
+      message({
+        channel: "hitl_request",
+        role: "system",
+        parts: [
+          {
+            type: "hitl_request",
+            question: "Which bread?",
+            stage: "agent_question",
+            occurrence_id: "call-bread",
+            choices: [
+              { id: "baguette", label: "Baguette" },
+              { id: "complet", label: "Pain complet" },
+            ],
+          },
+        ],
+      }),
+      message({
+        channel: "hitl_response",
+        role: "user",
+        parts: [
+          {
+            type: "hitl_response",
+            occurrence_id: "call-bread",
+            choice_id: "complet",
+          },
+        ],
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <TraceDetailDrawer entry={{ kind: "combo", call }} messages={messages} onClose={() => undefined} />,
+    );
+    expect(html).toContain("Which bread?");
+    expect(html).toContain("High in fibre");
+    expect(html).toMatch(/data-selected="true"[^>]*>.*Pain complet/s);
+    expect(html).not.toMatch(/data-selected="true"[^>]*>.*Baguette/s);
+  });
+});
+
 describe("TraceDetailDrawer tabular tools", () => {
   it("groups CSV and workbook tables under readable document names", () => {
     const entry = tabularEntry("mcp__knowledge_flow__list_tabular_documents", [

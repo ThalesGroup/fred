@@ -1178,6 +1178,35 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("shows an accepted agent-question choice without waiting for history reload", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+    mount();
+    const question = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        question: "Which bread?",
+        occurrence_id: "call-bread",
+        choices: [{ id: "complet", label: "Pain complet" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+
+    await act(async () => {
+      await latest.sendHitlResume(question, "complet");
+    });
+
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+    expect(latest.messages.find((message) => message.channel === "hitl_response")?.parts[0]).toMatchObject({
+      choice_id: "complet",
+      occurrence_id: "call-bread",
+    });
+    fetchSpy.mockRestore();
+  });
+
   it("preserves exact HITL free text and canonical choice fields on the wire", async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
