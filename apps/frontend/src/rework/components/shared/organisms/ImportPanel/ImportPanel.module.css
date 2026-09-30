@@ -22,7 +22,10 @@
   flex-shrink: 0;
   flex-direction: column;
   transition: width var(--duration-medium-1, 250ms) ease;
-  border-radius: var(--radius-m);
+  /* Left corners face the card this sits beside; the host decides how tight
+     they are (see `--card-seam-radius`). */
+  border-radius: var(--card-seam-radius, var(--radius-m)) var(--radius-m) var(--radius-m)
+    var(--card-seam-radius, var(--radius-m));
   background: var(--surface-container-high);
   padding: var(--spacing-xs);
   width: 48px;

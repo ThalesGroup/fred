@@ -85,12 +85,17 @@
 .panel {
   display: flex;
   flex: 1;
-  gap: var(--spacing-s);
+  gap: var(--spacing-2xs);
   min-height: 0;
   /* How wide the import panel may get: whatever is left once the table has its
      floor. The panel reads this; the floor belongs here, to the page that knows
      what the table needs. */
-  --import-panel-max: calc(100% - 660px - var(--spacing-s));
+  --import-panel-max: calc(100% - 660px - var(--spacing-2xs));
+  /* The two cards sit a hair apart, so the corners along that seam are tighter
+     than the ones on the page's own edges — they read as one surface split in
+     two rather than two things that happen to be adjacent. Each card rounds its
+     own facing corners with this; unset, both stay fully rounded. */
+  --card-seam-radius: var(--radius-s);
 }
 
 .workspace {
