@@ -264,7 +264,7 @@ export default function TeamResourcesPage() {
 
         {/* A rail beside the documents card until it is opened, when it
             widens in place into the panel itself. */}
-        <ImportPanel />
+        <ImportPanel teamId={teamId} />
       </div>
     </div>
   );

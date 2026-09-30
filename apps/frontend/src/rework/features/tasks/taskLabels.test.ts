@@ -103,6 +103,7 @@ describe("ingestion support labels", () => {
         step: "indexing",
         stage: "analysis",
         conflict: null,
+        teamId: null,
         error: "Configured attempts exhausted.",
         owner: null,
         localOnly: false,

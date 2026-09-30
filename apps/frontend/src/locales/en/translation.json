@@ -2167,7 +2167,8 @@
     },
     "imports": {
       "cancel": {
-        "action": "Cancel the transfer"
+        "action": "Cancel the transfer",
+        "tooLate": "This file is already on its way and can no longer be cancelled."
       },
       "interrupted": {
         "forget": "Give up on them",

@@ -2167,7 +2167,8 @@
     },
     "imports": {
       "cancel": {
-        "action": "Annuler l'envoi"
+        "action": "Annuler l'envoi",
+        "tooLate": "Ce fichier est déjà parti, il ne peut plus être annulé."
       },
       "interrupted": {
         "forget": "Abandonner",

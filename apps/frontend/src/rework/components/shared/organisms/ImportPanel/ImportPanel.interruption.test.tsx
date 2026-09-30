@@ -66,7 +66,7 @@ function visit() {
   act(() => {
     mounted.render(
       <Provider store={store}>
-        <ImportPanel />
+        <ImportPanel teamId="team-1" />
       </Provider>,
     );
   });
@@ -124,7 +124,7 @@ async function importCutOff() {
           files: [new File(["x"], "arrived.pdf"), new File(["y"], "lost.pdf")],
         },
       ],
-      { dispatch: store.dispatch, uploadMode: "process", onError: () => {} },
+      { dispatch: store.dispatch, uploadMode: "process", teamId: "team-1", onError: () => {} },
     );
   });
 }
@@ -168,6 +168,60 @@ describe("ImportPanel — an import cut off in the middle", () => {
     expect(streamMock.mock.calls[0][2]).toMatchObject({ tags: ["tag-1"], profile: "standard" });
   });
 
+  it("resumes only what was picked, and keeps offering the rest", async () => {
+    // Two files lost, one picked back. Clearing the whole block here would
+    // mean the other is never offered again.
+    streamMock.mockImplementation(async () => []);
+    await act(async () => {
+      await runImport(
+        [
+          {
+            requestMetadata: { tags: ["tag-1"] },
+            files: [new File(["x"], "one.pdf"), new File(["y"], "two.pdf")],
+          },
+        ],
+        { dispatch: store.dispatch, uploadMode: "process", teamId: "team-1", onError: () => {} },
+      );
+    });
+    reopenTheTab();
+    streamMock.mockClear();
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "one.pdf")] });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {});
+
+    expect(sentNames()).toEqual(["one.pdf"]);
+    // The one picked is now a live entry below; the prompt keeps the other.
+    const prompt = container!.querySelector('[class*="interrupted"]')!.textContent ?? "";
+    expect(prompt).toContain("two.pdf");
+    expect(prompt).not.toContain("one.pdf");
+  });
+
+  it("gives up on the named files only, never on an import that is running", async () => {
+    await importCutOff();
+    reopenTheTab();
+    // A fresh import starts while last visit's prompt is still on screen.
+    streamMock.mockImplementation(() => new Promise(() => {}));
+    void runImport([{ requestMetadata: { tags: ["tag-1"] }, files: [new File(["z"], "fresh.pdf")] }], {
+      dispatch: store.dispatch,
+      uploadMode: "process",
+      teamId: "team-1",
+      onError: () => {},
+    });
+    await act(async () => {});
+
+    act(() => {
+      byText("rework.imports.interrupted.forget")!.click();
+    });
+
+    // Only the prompt's own files are dropped; the running one is still
+    // expected, so closing the tab now would still name it.
+    expect(unfinishedImports().map((e) => e.filename)).toEqual(["fresh.pdf"]);
+  });
+
   it("forgets them when the user says so", async () => {
     await importCutOff();
     reopenTheTab();
@@ -187,6 +241,7 @@ describe("ImportPanel — an import cut off in the middle", () => {
     void runImport([{ requestMetadata: { tags: ["tag-1"] }, files: [new File(["x"], "going.pdf")] }], {
       dispatch: store.dispatch,
       uploadMode: "process",
+      teamId: "team-1",
       onError: () => {},
     });
     await act(async () => {});
@@ -209,7 +264,7 @@ describe("ImportPanel — taking a file back before it is sent", () => {
         requestMetadata: { tags: ["tag-1"] },
         files: [new File(["x"], name)],
       })),
-      { dispatch: store.dispatch, uploadMode: "process", onError: () => {} },
+      { dispatch: store.dispatch, uploadMode: "process", teamId: "team-1", onError: () => {} },
     );
     await act(async () => {});
 

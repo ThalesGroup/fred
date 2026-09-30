@@ -33,7 +33,7 @@ import {
   uploadHandedOff,
   uploadFinished,
   uploadFailed,
-  selectImportTasks,
+  makeSelectImportTasks,
   EVICTION_DELAY_MS,
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
@@ -69,6 +69,7 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     lastSeq: -1,
     stage: "analysis",
     conflict: null,
+    teamId: "team-1",
     registeredAt: 1000,
     terminalAt: null,
     acknowledgedAt: null,
@@ -628,7 +629,8 @@ describe("ingestion terminal state", () => {
 });
 
 describe("the two stages of an import", () => {
-  const started = () => reducer(empty(), uploadStarted({ localId: "local-1", filename: "report.pdf" }));
+  const started = () =>
+    reducer(empty(), uploadStarted({ localId: "local-1", filename: "report.pdf", teamId: "team-1" }));
 
   it("lists a file while its bytes are still going up", () => {
     const s = started();
@@ -636,7 +638,25 @@ describe("the two stages of an import", () => {
     expect(s.byId["local-1"].state).toBe("running");
     // No server task yet: nothing to subscribe to, nothing to acknowledge.
     expect(s.byId["local-1"].localOnly).toBe(true);
-    expect(selectImportTasks(root(s)).map((t) => t.target?.label)).toEqual(["report.pdf"]);
+    expect(makeSelectImportTasks("team-1")(root(s)).map((t) => t.target?.label)).toEqual(["report.pdf"]);
+    // Another team's page is not where you follow this import.
+    expect(makeSelectImportTasks("team-2")(root(s))).toEqual([]);
+  });
+
+  it("leaves out an ingestion of a document already in the corpus", () => {
+    // Relaunching processing on twenty existing documents is not twenty
+    // imports, and must not fill the panel or its badge.
+    const s = reducer(
+      empty(),
+      taskRegistered({
+        taskId: "relaunch-1",
+        kind: "ingestion",
+        target: { type: "document", id: "doc-1", label: "already-there.pdf" },
+        teamId: "team-1",
+        stage: null,
+      }),
+    );
+    expect(makeSelectImportTasks("team-1")(root(s))).toEqual([]);
   });
 
   it("carries no document id until the server has written one", () => {

@@ -65,7 +65,7 @@ beforeEach(() => {
   act(() => {
     root.render(
       <Provider store={store}>
-        <ImportPanel />
+        <ImportPanel teamId="team-1" />
       </Provider>,
     );
   });
@@ -100,7 +100,7 @@ async function importWithOneConflict() {
           files: [new File(["x"], "report.pdf"), new File(["y"], "notes.md")],
         },
       ],
-      { dispatch: store.dispatch, uploadMode: "process", onError: () => {} },
+      { dispatch: store.dispatch, uploadMode: "process", teamId: "team-1", onError: () => {} },
     );
   });
 }
@@ -173,7 +173,7 @@ describe("ImportPanel — a name taken while the file was on its way", () => {
   it("asks for the import to be started again when the file is no longer held", () => {
     // What a reload leaves behind: the question, without the file it is about.
     act(() => {
-      store.dispatch(uploadStarted({ localId: "local-1", filename: "orphan.pdf" }));
+      store.dispatch(uploadStarted({ localId: "local-1", filename: "orphan.pdf", teamId: "team-1" }));
       store.dispatch(uploadConflicted({ localId: "local-1", tagId: "tag-1", filename: "orphan.pdf" }));
       container.querySelector("button")!.click();
     });

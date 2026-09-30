@@ -28,6 +28,22 @@ export function leafFileName(file: File): string {
   return file.name.split("/").pop() || file.name;
 }
 
+/** FastAPI puts its explanation in `detail`; anything else is returned as-is. */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const body = await response.text();
+    if (!body) return "";
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown };
+      return typeof parsed.detail === "string" ? parsed.detail : body;
+    } catch {
+      return body;
+    }
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Streams a batch upload/process request for one or more files sharing the same
  * destination metadata — one request per batch lets the backend's ReBAC/quota
@@ -76,7 +92,11 @@ export async function streamUploadOrProcessDocument(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    // The checks that run before the stream opens — storage quota, permissions
+    // — answer with an ordinary error and put their explanation in the body.
+    // Dropping it left the user reading a status code for the most common
+    // reason an import is refused.
+    throw new Error(`Upload failed: ${response.status} ${response.statusText}. ${await errorDetail(response)}`.trim());
   }
 
   const tasks: ScheduledTask[] = [];

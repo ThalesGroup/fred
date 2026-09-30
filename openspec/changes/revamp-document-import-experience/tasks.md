@@ -55,6 +55,15 @@
 ## 9. Verify and close out
 
 - [x] 9.1 `make code-quality` clean; `make test` 3053 passed / 7 skipped (3060). 48 tests added across the change.
-- [ ] 9.2 Run `/code-review` on the diff.
+- [x] 9.2 Reviewed the diff independently. Nine findings, seven fixed, one accepted, one turned into a design correction:
+  - **Silent loss, fixed.** The `localStorage` record was keyed by leaf filename. One import can carry the same name to two folders (`a/README.md`, `b/README.md`); only one record was written and the first arrival struck off both, so the second file was lost with nothing said on the next visit. Keyed by entry id now.
+  - **Silent loss, fixed.** "Give up" wiped the whole record, including the files of an import running at that moment. It now drops only the entries it is showing.
+  - **Fixed.** Re-picking only some of the missing files cleared the whole prompt; the rest were never offered again. Only what was actually resumed leaves the block.
+  - **Fixed.** Dismissing a failed file did not strike it off, so it came back as "did not arrive" on every later visit.
+  - **Fixed.** Relaunching ingestion on existing documents filled the panel with "imports" of files nobody imported. A stage is now what makes an entry an import; a relaunch registers without one.
+  - **Fixed.** Quota refusals never reached their wording: the check answers HTTP 400 before the stream opens and the client discarded the body, so the user read "Upload failed: 400 Bad Request". The server's own `detail` is kept now.
+  - **Fixed.** Cancelling a file whose request had just left was a silent no-op; it says so.
+  - **Fixed, at the developer's instruction.** The panel listed every team's imports. It is scoped to the team whose page it is on, carried on the entry and taken from `TaskSummary.team_id` on rehydration.
+  - **Accepted.** A failed file's `File` handle stays held if the entry is dismissed from the task tray rather than the panel. A handle, not its bytes, and only until the tab closes.
 - [x] 9.3 `docs/swift/ops/migrations/import-progress-panel.md`, impact `none`: frontend only, no backend, database, API or permission change. It declares the one thing an operator could be surprised by — the browser now keeps `fred.imports.unfinished` in `localStorage` (file names and destination tag ids, never contents) — and the two honest limits: resuming needs the files picked again, and cancellation only covers files whose request has not left. The sibling note for `add-import-conflict-resolution` was corrected at the same time: it still said the dialog offers **Replace** / **Keep**.
 - [x] 9.4 No manual session was run against a live stack for this slice, so there is nothing observed to record. What the code shows, unchanged by this change and still the lifecycle work's to fix: a task that never reaches a terminal state is shown as running forever, and the panel has no timeout of its own by design (`design.md`, Risks). `importFailure` now names the two backend sentences that carry no cause at all (`Execution failed`, `No failure details were reported`) — every occurrence of either is a lifecycle defect made visible, not a wording problem.

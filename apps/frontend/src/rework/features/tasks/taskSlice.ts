@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { createSelector, createSlice, type PayloadAction } from "@reduxjs/toolkit";
-import { TERMINAL_STATES, type AnyTaskEvent, type TaskTarget, type TaskViewModel } from "./taskTypes";
+import { TERMINAL_STATES, type AnyTaskEvent, type ImportStage, type TaskTarget, type TaskViewModel } from "./taskTypes";
 
 export interface TasksState {
   byId: Record<string, TaskViewModel>;
@@ -48,9 +48,14 @@ export const taskSlice = createSlice({
         target?: TaskTarget | null;
         owner?: string;
         localOnly?: boolean;
+        teamId?: string | null;
+        /** Pass `null` for a document ingestion that is not an import — a
+         *  relaunch of a document already in the corpus — so it does not turn
+         *  up in the import panel. */
+        stage?: ImportStage | null;
       }>,
     ) {
-      const { taskId, kind, target, owner, localOnly } = action.payload;
+      const { taskId, kind, target, owner, localOnly, stage, teamId } = action.payload;
       if (state.byId[taskId]) return;
       state.byId[taskId] = {
         taskId,
@@ -66,8 +71,9 @@ export const taskSlice = createSlice({
         // A document ingestion known to the server is past its transfer by
         // definition — including one rehydrated after a reload, whose bytes
         // went up in a browser session that may no longer exist.
-        stage: kind === "ingestion" && target?.type === "document" ? "analysis" : null,
+        stage: stage !== undefined ? stage : kind === "ingestion" && target?.type === "document" ? "analysis" : null,
         conflict: null,
+        teamId: teamId ?? null,
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
@@ -82,8 +88,8 @@ export const taskSlice = createSlice({
      *  only ever learns of it once the upload is over, which for a large import
      *  is most of the wait. `localId` is the browser's own handle on it; the
      *  real task id replaces it at handoff. */
-    uploadStarted(state, action: PayloadAction<{ localId: string; filename: string }>) {
-      const { localId, filename } = action.payload;
+    uploadStarted(state, action: PayloadAction<{ localId: string; filename: string; teamId: string | null }>) {
+      const { localId, filename, teamId } = action.payload;
       const existing = state.byId[localId];
       if (existing) {
         // Sent again — a retry, or a conflict just answered. Same entry, back
@@ -115,6 +121,7 @@ export const taskSlice = createSlice({
         lastSeq: -1,
         stage: "upload",
         conflict: null,
+        teamId,
         registeredAt: Date.now(),
         terminalAt: null,
         acknowledgedAt: null,
@@ -150,6 +157,7 @@ export const taskSlice = createSlice({
         lastSeq: -1,
         stage: "analysis",
         conflict: null,
+        teamId: vm?.teamId ?? null,
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
@@ -320,25 +328,31 @@ export const selectVisibleTasks = createSelector([selectById, selectTick], (byId
     });
 });
 
-/** The imports this user has running or just finished — what the import panel
- *  lists. Chat attachments are ingestions too, but they are their own thing and
- *  belong to the conversation, not to a team's resources. */
-export const selectImportTasks = createSelector(selectVisibleTasks, (tasks) =>
-  tasks
-    // `target.type` is what separates the two, not `localOnly`: a file still
-    // being transferred has no server task either, and it belongs here.
-    .filter((vm) => vm.kind === "ingestion" && vm.target?.type === "document")
-    // Oldest first, unlike the tray: these are the files of one import, and
-    // reading them in the order they were sent beats having the list reshuffle
-    // under the eye as each new one registers.
-    .sort((a, b) => a.registeredAt - b.registeredAt),
-);
-
-/** How many imports are still going — the rail launcher's badge. */
-export const selectRunningImportCount = createSelector(
-  selectImportTasks,
-  (tasks) => tasks.filter((vm) => !TERMINAL_STATES.has(vm.state)).length,
-);
+/**
+ * The imports this user has running or just finished in one team — what that
+ * team's import panel lists.
+ *
+ * Scoped to the team whose page the panel is on: someone else's folder is not
+ * where you follow your own import. Chat attachments are ingestions too, but
+ * they belong to the conversation, not to a team's resources — `target.type`
+ * is what separates those, not `localOnly`, since a file still being
+ * transferred has no server task either and does belong here.
+ *
+ * Factory (one memoized selector per team); memoize the call with `useMemo`.
+ */
+export const makeSelectImportTasks = (teamId: string | null) =>
+  createSelector(selectVisibleTasks, (tasks) =>
+    tasks
+      // A stage is what makes it an import: re-processing a document already
+      // in the corpus is registered without one.
+      .filter(
+        (vm) => vm.kind === "ingestion" && vm.stage !== null && vm.target?.type === "document" && vm.teamId === teamId,
+      )
+      // Oldest first, unlike the tray: these are the files of one import, and
+      // reading them in the order they were sent beats having the list reshuffle
+      // under the eye as each new one registers.
+      .sort((a, b) => a.registeredAt - b.registeredAt),
+  );
 
 /**
  * All tasks in the store, active first then most-recently-finished, with NO age

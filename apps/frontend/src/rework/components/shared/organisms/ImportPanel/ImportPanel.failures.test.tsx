@@ -26,6 +26,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { taskSlice, uploadFailed, uploadStarted } from "../../../../features/tasks/taskSlice";
 import { clearHeldImports, runImport } from "../../../../features/imports/importRun";
+import { unfinishedImports } from "../../../../features/imports/unfinishedImports";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -64,7 +65,7 @@ function mount() {
   act(() => {
     root.render(
       <Provider store={store}>
-        <ImportPanel />
+        <ImportPanel teamId="team-1" />
       </Provider>,
     );
   });
@@ -75,6 +76,7 @@ function mount() {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   clearHeldImports();
   streamMock.mockReset();
   store = makeStore();
@@ -102,6 +104,7 @@ async function importThatFails(error = "Storage quota exceeded for team fredlab:
     await runImport([{ requestMetadata: { tags: ["tag-1"] }, files: [new File(["x"], "report.pdf")] }], {
       dispatch: store.dispatch,
       uploadMode: "process",
+      teamId: "team-1",
       onError: () => {},
     });
   });
@@ -152,11 +155,26 @@ describe("ImportPanel — a failed file", () => {
     expect(Object.keys(store.getState().tasks.byId)).toHaveLength(1);
   });
 
+  it("stops expecting a failure the user dismissed", async () => {
+    await importThatFails();
+    expect(unfinishedImports()).toHaveLength(1);
+
+    const buttons = [...container.querySelectorAll("button")];
+    const dismiss = buttons[buttons.length - 1];
+    act(() => {
+      dismiss.click();
+    });
+
+    // Otherwise it comes back as "did not arrive" on every later visit, long
+    // after the user said they were done with it.
+    expect(unfinishedImports()).toEqual([]);
+  });
+
   it("asks for the file again instead of offering a retry that cannot work", () => {
     // A reload leaves the store's failed entry (rehydrated or still there) with
     // no file behind it — the browser cannot re-read what it no longer holds.
     act(() => {
-      store.dispatch(uploadStarted({ localId: "local-1", filename: "orphan.pdf" }));
+      store.dispatch(uploadStarted({ localId: "local-1", filename: "orphan.pdf", teamId: "team-1" }));
       store.dispatch(uploadFailed({ localId: "local-1", error: "Failed to fetch" }));
     });
 
@@ -181,6 +199,7 @@ describe("ImportPanel — a failed file", () => {
         {
           dispatch: store.dispatch,
           uploadMode: "process",
+          teamId: "team-1",
           onError: () => {},
         },
       );

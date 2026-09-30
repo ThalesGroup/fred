@@ -24,7 +24,7 @@
 // permanent home of its document's status; this is the same state gathered in
 // one place, and later where actions on it are offered.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
@@ -33,11 +33,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import {
-  selectImportPanelOpenRequest,
-  selectImportTasks,
-  selectRunningImportCount,
-} from "../../../../features/tasks/taskSlice";
+import { makeSelectImportTasks, selectImportPanelOpenRequest } from "../../../../features/tasks/taskSlice";
 import { stepLabel } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
@@ -52,19 +48,22 @@ import {
 } from "../../../../features/imports/importRun";
 import {
   forgetUnfinishedImports,
+  noteImportSettled,
   unfinishedImports,
   type UnfinishedFile,
 } from "../../../../features/imports/unfinishedImports";
-import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
+import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import styles from "./ImportPanel.module.css";
 
-export function ImportPanel() {
+/** @param teamId whose resources the page beside this panel shows. */
+export function ImportPanel({ teamId }: { teamId: string | null }) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { showError } = useToast();
-  const imports = useSelector(selectImportTasks);
-  const runningCount = useSelector(selectRunningImportCount);
+  const selectImports = useMemo(() => makeSelectImportTasks(teamId), [teamId]);
+  const imports = useSelector(selectImports);
+  const runningCount = imports.filter((vm) => !TERMINAL_STATES.has(vm.state)).length;
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
   const [expanded, setExpanded] = useState(false);
 
@@ -88,15 +87,26 @@ export function ImportPanel() {
   // re-reads the record, and a file the panel is still following is not a file
   // that failed to arrive.
   const listed = new Set(imports.map((task) => task.target?.label));
-  const missing = interrupted.filter((entry) => !listed.has(entry.filename));
+  const missing = interrupted.filter((entry) => entry.teamId === teamId && !listed.has(entry.filename));
 
   const resumeInput = useRef<HTMLInputElement>(null);
   const onFilesPicked = (picked: File[]) => {
-    setInterrupted([]);
     void resumeUnfinishedImports(picked, missing, {
       dispatch,
       onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
+    }).then(({ resumed }) => {
+      // Only what was actually picked leaves the block. Clearing it outright
+      // would drop the rest of the prompt after a partial selection — the
+      // remaining files would never be offered again.
+      if (resumed.length === 0) return;
+      const done = new Set(resumed);
+      setInterrupted((entries) => entries.filter((entry) => !done.has(entry.entryId)));
     });
+  };
+
+  const giveUpOnMissing = () => {
+    forgetUnfinishedImports(missing.map((entry) => entry.entryId));
+    setInterrupted((entries) => entries.filter((entry) => !missing.includes(entry)));
   };
 
   const toggleLabel = expanded ? t("rework.imports.panel.collapse") : t("rework.imports.panel.expand");
@@ -168,15 +178,7 @@ export function ImportPanel() {
                 <Button variant="text" size="small" color="primary" onClick={() => resumeInput.current?.click()}>
                   {t("rework.imports.interrupted.resume")}
                 </Button>
-                <Button
-                  variant="text"
-                  size="small"
-                  color="on-surface-retreat"
-                  onClick={() => {
-                    forgetUnfinishedImports();
-                    setInterrupted([]);
-                  }}
-                >
+                <Button variant="text" size="small" color="on-surface-retreat" onClick={giveUpOnMissing}>
                   {t("rework.imports.interrupted.forget")}
                 </Button>
               </div>
@@ -214,11 +216,20 @@ export function ImportPanel() {
                     onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
                   })
                 }
-                onCancel={() => cancelImport(task.taskId, dispatch)}
+                onCancel={() => {
+                  if (!cancelImport(task.taskId, dispatch)) {
+                    showError({
+                      summary: t("rework.imports.panel.title"),
+                      detail: t("rework.imports.cancel.tooLate"),
+                    });
+                  }
+                }}
                 onDismiss={() => {
                   // Dismissed for good: stop holding the file open for a retry
-                  // that is no longer on offer.
+                  // that is no longer on offer, and stop expecting it — or it
+                  // would be offered again as "did not arrive" on every visit.
                   releaseHeldImport(task.taskId);
+                  noteImportSettled(task.taskId);
                   void acknowledge(task.taskId, task.kind, task.localOnly);
                 }}
                 dismissing={isAcknowledging(task.taskId)}

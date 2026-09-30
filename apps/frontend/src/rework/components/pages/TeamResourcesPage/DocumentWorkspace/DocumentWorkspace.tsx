@@ -634,6 +634,10 @@ function DocumentWorkspace({
                   taskId,
                   kind: "ingestion",
                   target: { type: "document", id: doc.identity.document_uid, label: doc.identity.document_name },
+                  // Re-processing a document already in the corpus: the row and
+                  // the task tray follow it, the import panel has nothing to
+                  // say about a file nobody imported.
+                  stage: null,
                 }),
               );
           }

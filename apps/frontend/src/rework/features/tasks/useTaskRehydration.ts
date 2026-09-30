@@ -47,7 +47,16 @@ export function useTaskRehydration(): void {
         .then((body) => {
           if (!body) return;
           for (const task of body.tasks) {
-            dispatch(taskRegistered({ taskId: task.task_id, kind: task.kind, target: task.target ?? null }));
+            dispatch(
+              taskRegistered({
+                taskId: task.task_id,
+                kind: task.kind,
+                target: task.target ?? null,
+                // Carried so the import panel, which belongs to one team's
+                // page, can tell its own imports from another team's.
+                teamId: task.team_id ?? null,
+              }),
+            );
           }
         })
         .catch(() => {

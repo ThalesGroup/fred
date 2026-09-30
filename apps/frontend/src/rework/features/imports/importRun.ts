@@ -182,6 +182,7 @@ export function chunkFilesByLeafName(files: File[], maxSize: number): File[][] {
 interface HeldImport {
   file: File;
   filename: string;
+  teamId: string | null;
   uploadMode: UploadMode;
   requestMetadata: Record<string, unknown>;
 }
@@ -201,6 +202,9 @@ export function heldImport(entryId: string): HeldImport | undefined {
 
 export function releaseHeldImport(entryId: string): void {
   heldImports.delete(entryId);
+  // `cancelled` is deliberately kept: the batch that holds this file has not
+  // been dequeued yet, and that is where the cancellation is applied.
+  committed.delete(entryId);
 }
 
 /**
@@ -215,14 +219,18 @@ export function canCancelImport(entryId: string): boolean {
   return heldImports.has(entryId) && !committed.has(entryId);
 }
 
-/** Take a file back before it is sent. */
-export function cancelImport(entryId: string, dispatch: Dispatch): void {
-  if (!canCancelImport(entryId)) return;
-  const held = heldImports.get(entryId)!;
+/** Take a file back before it is sent.
+ *
+ *  False when the request left in the meantime: nothing about that transition
+ *  touches the store, so the panel can be one render behind and still be
+ *  offering the button. The caller says so rather than swallowing the click. */
+export function cancelImport(entryId: string, dispatch: Dispatch): boolean {
+  if (!canCancelImport(entryId)) return false;
   cancelled.add(entryId);
   releaseHeldImport(entryId);
-  noteImportSettled(held.filename);
+  noteImportSettled(entryId);
   dispatch(taskEvicted(entryId));
+  return true;
 }
 
 /** Test seam only — this is module state and outlives a component tree. */
@@ -235,6 +243,8 @@ export function clearHeldImports(): void {
 export interface ImportRunHandlers {
   dispatch: Dispatch;
   uploadMode: UploadMode;
+  /** Whose resources these files are headed for; the panel is per team. */
+  teamId: string | null;
   /** Raise a notification. Called for transfer errors, with a message already
    *  naming the file where one is known. */
   onError: (message: string) => void;
@@ -248,7 +258,7 @@ export interface ImportRunHandlers {
  * reference to the component that started it.
  */
 export async function runImport(batches: ImportBatch[], handlers: ImportRunHandlers): Promise<void> {
-  const { dispatch, uploadMode, onError, onComplete } = handlers;
+  const { dispatch, uploadMode, teamId, onError, onComplete } = handlers;
 
   // Every file is listed before a byte moves. Waiting for its own transfer to
   // end would leave most of a large import invisible: batches run a few at a
@@ -261,14 +271,16 @@ export async function runImport(batches: ImportBatch[], handlers: ImportRunHandl
     for (const file of batch.files) {
       const filename = leafFileName(file);
       const localId = localIdOf(batch.batchIndex, filename);
-      heldImports.set(localId, { file, filename, uploadMode, requestMetadata: batch.requestMetadata });
-      dispatch(uploadStarted({ localId, filename }));
+      heldImports.set(localId, { file, filename, teamId, uploadMode, requestMetadata: batch.requestMetadata });
+      dispatch(uploadStarted({ localId, filename, teamId }));
     }
     // Written down before anything moves: an interruption two seconds in has
     // to leave the same trace as one at the very end.
     noteImportStarted(
       batch.files.map((file) => ({
+        entryId: localIdOf(batch.batchIndex, leafFileName(file)),
         filename: leafFileName(file),
+        teamId,
         uploadMode,
         requestMetadata: batch.requestMetadata,
       })),
@@ -305,7 +317,7 @@ export async function retryImport(
   const { dispatch, onError, onComplete } = handlers;
 
   committed.delete(entryId);
-  dispatch(uploadStarted({ localId: entryId, filename: held.filename }));
+  dispatch(uploadStarted({ localId: entryId, filename: held.filename, teamId: held.teamId }));
   try {
     await sendBatch([held.file], held.requestMetadata, () => entryId, {
       dispatch,
@@ -345,7 +357,7 @@ function sendBatch(
       // The server has the bytes now, so we no longer need to be able to
       // re-send them; whatever happens next is the task's to report.
       releaseHeldImport(entryIdOf(filename));
-      noteImportSettled(filename);
+      noteImportSettled(entryIdOf(filename));
       dispatch(uploadHandedOff({ localId: entryIdOf(filename), taskId, documentUid, filename }));
     },
     onError,
@@ -365,7 +377,7 @@ function sendBatch(
       // the transfer ending says nothing about it.
       onFinished: (filename) => {
         releaseHeldImport(entryIdOf(filename));
-        noteImportSettled(filename);
+        noteImportSettled(entryIdOf(filename));
         dispatch(uploadFinished({ localId: entryIdOf(filename) }));
       },
     },
@@ -396,7 +408,7 @@ export async function resolveConflict(
 
   if (decision === "skip") {
     releaseHeldImport(entryId);
-    noteImportSettled(held.filename);
+    noteImportSettled(entryId);
     dispatch(taskEvicted(entryId));
     return true;
   }
@@ -406,7 +418,7 @@ export async function resolveConflict(
     conflict_decisions: { ...((held.requestMetadata.conflict_decisions as object) ?? {}), [held.filename]: decision },
   };
   committed.delete(entryId);
-  dispatch(uploadStarted({ localId: entryId, filename: held.filename }));
+  dispatch(uploadStarted({ localId: entryId, filename: held.filename, teamId: held.teamId }));
   try {
     await sendBatch([held.file], requestMetadata, () => entryId, {
       dispatch,
@@ -434,25 +446,44 @@ export async function resumeUnfinishedImports(
   missing: UnfinishedFile[],
   handlers: Pick<ImportRunHandlers, "dispatch" | "onError"> & { onComplete?: () => void },
 ): Promise<{ resumed: string[]; ignored: string[] }> {
-  const wanted = new Map(missing.map((entry) => [entry.filename, entry]));
+  const wanted = new Map<string, UnfinishedFile[]>();
+  for (const entry of missing) wanted.set(entry.filename, [...(wanted.get(entry.filename) ?? []), entry]);
+
   const resumed: string[] = [];
   const ignored: string[] = [];
   // One run per (mode, destination): each carries its own request, exactly as
   // the original import did.
-  const runs = new Map<string, { uploadMode: UploadMode; requestMetadata: Record<string, unknown>; files: File[] }>();
+  const runs = new Map<
+    string,
+    { uploadMode: UploadMode; teamId: string | null; requestMetadata: Record<string, unknown>; files: File[] }
+  >();
 
   for (const file of picked) {
     const filename = leafFileName(file);
-    const entry = wanted.get(filename);
-    if (!entry) {
+    const entries = wanted.get(filename);
+    if (!entries) {
       ignored.push(filename);
       continue;
     }
-    resumed.push(filename);
-    const key = `${entry.uploadMode}:${JSON.stringify(entry.requestMetadata)}`;
-    const run = runs.get(key);
-    if (run) run.files.push(file);
-    else runs.set(key, { uploadMode: entry.uploadMode, requestMetadata: entry.requestMetadata, files: [file] });
+    // One name can be missing from more than one folder — a dropped tree with
+    // a README in each. The picked file goes to every folder that is still
+    // waiting for that name; the browser cannot tell us which of the originals
+    // it is.
+    for (const entry of entries) {
+      resumed.push(entry.entryId);
+      const key = `${entry.uploadMode}:${JSON.stringify(entry.requestMetadata)}`;
+      const run = runs.get(key);
+      if (run) run.files.push(file);
+      else
+        runs.set(key, {
+          uploadMode: entry.uploadMode,
+          teamId: entry.teamId,
+          requestMetadata: entry.requestMetadata,
+          files: [file],
+        });
+    }
+    // Answered for: the original entry is superseded by the run below.
+    for (const entry of entries) noteImportSettled(entry.entryId);
   }
 
   for (const run of runs.values()) {
@@ -462,7 +493,7 @@ export async function resumeUnfinishedImports(
         files,
       })),
       // One refresh at the end, not one per destination.
-      { dispatch: handlers.dispatch, onError: handlers.onError, uploadMode: run.uploadMode },
+      { dispatch: handlers.dispatch, onError: handlers.onError, uploadMode: run.uploadMode, teamId: run.teamId },
     );
   }
   handlers.onComplete?.();

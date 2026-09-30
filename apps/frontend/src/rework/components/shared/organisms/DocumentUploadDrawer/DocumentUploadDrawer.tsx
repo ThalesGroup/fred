@@ -423,6 +423,7 @@ export function DocumentUploadDrawer({
     void runImport(batches, {
       dispatch,
       uploadMode,
+      teamId: teamId ?? null,
       onError: (detail) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail }),
       onComplete: onUploadComplete,
     });

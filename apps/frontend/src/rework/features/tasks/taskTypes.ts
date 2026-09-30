@@ -156,6 +156,9 @@ export interface TaskViewModel {
   lastSeq: number;
   /** Which half of an import this is (see `ImportStage`); null otherwise. */
   stage: ImportStage | null;
+  /** The team whose resources this touches. The import panel belongs to one
+   *  team's page and shows only that team's imports. */
+  teamId: string | null;
   /** Set while `stage` is `decision`: the name and the folder it clashes in, so
    *  a row in that folder can point at the panel where the answer is given. */
   conflict: { tagId: string | null; filename: string } | null;

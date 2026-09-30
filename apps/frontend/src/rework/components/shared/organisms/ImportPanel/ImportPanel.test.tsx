@@ -66,7 +66,7 @@ beforeEach(() => {
   act(() => {
     root.render(
       <Provider store={store}>
-        <ImportPanel />
+        <ImportPanel teamId="team-1" />
       </Provider>,
     );
   });
@@ -91,6 +91,7 @@ function importOf(taskId: string, label: string) {
     taskId,
     kind: "ingestion",
     target: { type: "document", id: `uid-${taskId}`, label },
+    teamId: "team-1",
   });
 }
 
@@ -172,6 +173,24 @@ describe("ImportPanel", () => {
     ]);
   });
 
+  it("leaves another team's imports out — this panel belongs to one team's page", () => {
+    act(() => {
+      store.dispatch(
+        taskRegistered({
+          taskId: "elsewhere",
+          kind: "ingestion",
+          target: { type: "document", id: "uid-elsewhere", label: "someone-elses.pdf" },
+          teamId: "team-2",
+        }),
+      );
+      store.dispatch(importOf("task-1", "report.pdf"));
+    });
+    click(toggle());
+
+    expect(container.textContent).toContain("report.pdf");
+    expect(container.textContent).not.toContain("someone-elses.pdf");
+  });
+
   it("leaves chat attachments out — they belong to the conversation", () => {
     act(() => {
       store.dispatch(
@@ -180,6 +199,7 @@ describe("ImportPanel", () => {
           kind: "ingestion",
           target: { type: "attachment", id: "a1", label: "pasted.png" },
           localOnly: true,
+          teamId: "team-1",
         }),
       );
       store.dispatch(importOf("task-1", "report.pdf"));
@@ -194,7 +214,7 @@ describe("ImportPanel", () => {
     click(toggle());
 
     act(() => {
-      store.dispatch(uploadStarted({ localId: "local-1", filename: "report.pdf" }));
+      store.dispatch(uploadStarted({ localId: "local-1", filename: "report.pdf", teamId: "team-1" }));
     });
 
     // The transfer is most of the wait on a large import; a panel that only
@@ -205,8 +225,8 @@ describe("ImportPanel", () => {
   it("keeps a file in its place when it crosses over to its ingestion task", () => {
     click(toggle());
     act(() => {
-      store.dispatch(uploadStarted({ localId: "local-1", filename: "report.pdf" }));
-      store.dispatch(uploadStarted({ localId: "local-2", filename: "notes.md" }));
+      store.dispatch(uploadStarted({ localId: "local-1", filename: "report.pdf", teamId: "team-1" }));
+      store.dispatch(uploadStarted({ localId: "local-2", filename: "notes.md", teamId: "team-1" }));
       store.dispatch(
         uploadHandedOff({ localId: "local-2", taskId: "task-2", documentUid: "doc-2", filename: "notes.md" }),
       );
@@ -232,7 +252,7 @@ describe("ImportPanel", () => {
     act(() => {
       root.render(
         <Provider store={store}>
-          <ImportPanel />
+          <ImportPanel teamId="team-1" />
         </Provider>,
       );
     });
@@ -281,7 +301,7 @@ describe("ImportPanel", () => {
     act(() => {
       root.render(
         <Provider store={store}>
-          <ImportPanel />
+          <ImportPanel teamId="team-1" />
         </Provider>,
       );
     });
