@@ -9,7 +9,7 @@
 - [x] 2.1 Run focused authentication tests for PyJWT consumers and record pass/fail results.
 - [x] 2.2 Run Knowledge Flow import and ingestion checks after the ML upgrades and record pass/fail results.
 - [x] 2.3 Run relevant frontend builds and package tests; verify no affected npm lock resolves a vulnerable release.
-- [ ] 2.4 Build the Knowledge Flow production Docker image with Docling 2.131 and verify model preloading after removing the obsolete RapidOCR patch.
+- [x] 2.4 Build the Knowledge Flow production Docker image with Docling 2.131 and verify model preloading after removing the obsolete RapidOCR patch.
 
 ## 3. Close out
 
