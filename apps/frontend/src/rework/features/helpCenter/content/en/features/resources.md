@@ -42,16 +42,49 @@ If the target library already holds a document of the same name, Fred says so
 You can answer once for every file concerned, or file by file. The same name in
 **another** library is not a duplicate: those are two independent documents.
 
-> If someone else uploads that name while your import is under way, Fred does
-> not decide for you: the file is not uploaded and you are told. Import it again
-> to choose.
+> If someone uploads that name while your import is under way, the question is
+> simply put to you again in the follow-up panel: **Replace** or **Skip**. Your
+> file is not lost, it is waiting on your answer.
+
+## Following your imports
+
+The dialog closes as soon as you confirm: you get Fred back straight away and
+the transfer carries on behind it. A **panel** opens on the right of the page
+and follows every file. You can fold it back into a button, reopen it, and widen
+it by dragging its left edge.
+
+Every file goes through two stages:
+
+- **Sending the file** — your browser is transferring it. For as long as this
+  lasts, nothing has reached Fred yet.
+- **Analysing the document** — Fred reads the file and indexes it. **It is the
+  end of this stage, not the end of the transfer, that makes the document usable
+  by an agent.**
+
+### If a file fails
+
+It stays in the panel with the reason, and a **Try again** button for as long as
+your browser still has the file at hand. If you reloaded the page in between,
+the panel asks you to pick it again: a browser cannot reopen a file on its own.
+
+### Cancelling a transfer
+
+Files go a few at a time. The ones still waiting their turn can be cancelled
+with one click; the ones already on their way belong to Fred and go through.
+
+### If you close the tab mid-import
+
+What already reached Fred carries on without you. The rest never left: on your
+return, the panel **names the files that did not arrive** and offers to let you
+pick them again. Only those are sent, to the same library.
 
 ## After the upload
 
-A document needs a short **preparation** before it can be used. A **Processing**
-tag shows next to its name and clears by itself: there is nothing for you to do.
-Each document also shows where it came from — **Uploaded**, **Generated** by an
-agent, or **Shared**.
+On each document's row, a **Processing** tag shows for as long as the analysis
+lasts and clears by itself: there is nothing for you to do. A marker may also
+appear there when an import is waiting on your decision — one click opens the
+panel, which is where the answer is given. Each document also shows where it
+came from: **Uploaded**, **Generated** by an agent, or **Shared**.
 
 ## Managing documents
 
