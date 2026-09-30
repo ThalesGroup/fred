@@ -250,51 +250,51 @@ describe("ManagedChatPage chat-input policy wiring", () => {
   });
 });
 
-describe("ManagedChatPage agent todo panel", () => {
-  const baseChatValue = (messages: Record<string, unknown>[]) => {
-    const noop = () => undefined;
-    return {
-      agentDisplayName: "Agent",
-      attachments: [],
-      attachmentsUploading: false,
-      capabilityIds: [],
-      chatControls: [],
-      commitTitle: noop,
-      deletePersistedAttachment: noop,
-      handleAbort: noop,
-      handleAddAttachments: noop,
-      handleHitlAnswer: noop,
-      handleSend: noop,
-      hitlFreeText: "",
-      input: "",
-      inputCharacterCount: 0,
-      inputTooLong: false,
-      isHistorySettled: true,
-      isHydratingAttachments: false,
-      isLoadingHistory: false,
-      messages,
-      pendingHitl: null,
-      persistedAttachments: [],
-      ragScope: "all",
-      reasoning: false,
-      removeAttachment: noop,
-      searchPolicy: "hybrid",
-      selectedDocumentUids: [],
-      selectedLibraryIds: [],
-      sessionId: "session-1",
-      sessionTitle: "Chat",
-      setHitlFreeText: noop,
-      setInput: noop,
-      setRagScope: noop,
-      setReasoning: noop,
-      setSearchPolicy: noop,
-      setSelectedDocumentUids: noop,
-      setSelectedLibraryIds: noop,
-      threadMessages: [renderedTurn],
-      waitResponse: false,
-    };
+const baseChatValue = (messages: Record<string, unknown>[]) => {
+  const noop = () => undefined;
+  return {
+    agentDisplayName: "Agent",
+    attachments: [],
+    attachmentsUploading: false,
+    capabilityIds: [],
+    chatControls: [],
+    commitTitle: noop,
+    deletePersistedAttachment: noop,
+    handleAbort: noop,
+    handleAddAttachments: noop,
+    handleHitlAnswer: noop,
+    handleSend: noop,
+    hitlFreeText: "",
+    input: "",
+    inputCharacterCount: 0,
+    inputTooLong: false,
+    isHistorySettled: true,
+    isHydratingAttachments: false,
+    isLoadingHistory: false,
+    messages,
+    pendingHitl: null,
+    persistedAttachments: [],
+    ragScope: "all",
+    reasoning: false,
+    removeAttachment: noop,
+    searchPolicy: "hybrid",
+    selectedDocumentUids: [],
+    selectedLibraryIds: [],
+    sessionId: "session-1",
+    sessionTitle: "Chat",
+    setHitlFreeText: noop,
+    setInput: noop,
+    setRagScope: noop,
+    setReasoning: noop,
+    setSearchPolicy: noop,
+    setSelectedDocumentUids: noop,
+    setSelectedLibraryIds: noop,
+    threadMessages: [renderedTurn],
+    waitResponse: false,
   };
+};
 
+describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
     session_id: "session-1",
     exchange_id: "exchange-1",
@@ -363,6 +363,43 @@ describe("ManagedChatPage agent todo panel", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).not.toContain('data-testid="agent-todo-panel"');
     expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+});
+
+describe("ManagedChatPage new conversation action", () => {
+  it("starts an empty chat with the same agent and hides the action there", () => {
+    const startNewConversation = vi.fn();
+    chatValue = { ...baseChatValue([]), startNewConversation };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    const button = [...container.querySelectorAll("button")].find((node) =>
+      node.textContent?.includes("chatbot.newConversation"),
+    );
+    expect(button).toBeDefined();
+    expect(container.textContent).toContain("Agent");
+
+    act(() => {
+      button?.click();
+    });
+    expect(startNewConversation).toHaveBeenCalledOnce();
+
+    chatValue = { ...chatValue, sessionId: null, sessionTitle: null, threadMessages: [] };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    expect(container.textContent).toContain("Agent");
+    expect(container.querySelector('[data-testid="composer"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("chatbot.newConversation");
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });
 

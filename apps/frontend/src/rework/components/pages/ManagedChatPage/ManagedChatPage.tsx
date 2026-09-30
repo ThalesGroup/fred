@@ -63,10 +63,11 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import Button from "@shared/atoms/Button/Button";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { transcribeAudioClip } from "./knowledgeFlowTranscription";
-import styles from "./ManagedChatPage.module.css";
+import styles from "./ManagedChatPage.module.scss";
 
 const WELCOME_VARIANT_KEYS = [
   "chatbot.startConversationVariantAnalyze",
@@ -689,6 +690,19 @@ export default function ManagedChatPage() {
                     <span className={styles.conversationTokens}>
                       {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                     </span>
+                  )}
+                  {chat.sessionId && (
+                    <Button
+                      color="primary"
+                      variant="outlined"
+                      size="small"
+                      icon={{ category: "outlined", type: "add" }}
+                      className={styles.newConversationButton}
+                      onClick={chat.startNewConversation}
+                    >
+                      <span className={styles.newConversationLabel}>{t("chatbot.newConversation")}</span>
+                      <span className={styles.newConversationShortLabel}>{t("chatbot.newConversationShort")}</span>
+                    </Button>
                   )}
                 </div>
               </div>
