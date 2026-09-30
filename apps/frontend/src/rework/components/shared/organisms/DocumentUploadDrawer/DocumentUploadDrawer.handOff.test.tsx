@@ -30,7 +30,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
-  dispatched: [] as { type: string }[],
+  dispatched: [] as { type: string; payload?: Record<string, unknown> }[],
   onClose: vi.fn(),
   onUploadComplete: vi.fn(),
   /** One per in-flight request, so the test can hold every transfer open and
@@ -44,7 +44,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("react-redux", () => ({
-  useDispatch: () => (action: { type: string }) => probe.dispatched.push(action),
+  useDispatch: () => (action: { type: string; payload?: Record<string, unknown> }) => probe.dispatched.push(action),
 }));
 vi.mock("react-dropzone", () => ({
   useDropzone: () => ({ getRootProps: () => ({}), getInputProps: () => ({}), isDragActive: false }),
@@ -189,5 +189,38 @@ describe("DocumentUploadDrawer hands the import off", () => {
     await finishTheTransfer();
 
     expect(probe.onUploadComplete).toHaveBeenCalled();
+  });
+});
+
+describe("DocumentUploadDrawer files the import under the team that owns it", () => {
+  it("prefers the resolved team id over the URL alias", async () => {
+    // The panel matches an import against the team the SERVER reports for it,
+    // which is a real id. Filing it under "personal" would work until the page
+    // was reloaded, and the panel would then come back empty.
+    const files = [new File(["x"], "report.pdf")];
+    act(() => {
+      root.render(
+        <DocumentUploadDrawer
+          isOpen
+          onClose={probe.onClose}
+          teamId="personal"
+          importScopeId="team-of-this-user"
+          metadata={{ tags: ["tag-base"] }}
+          initialFiles={files}
+        />,
+      );
+    });
+    const save = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("documentLibrary.importCount"),
+    );
+    if (!save) throw new Error("save button not rendered");
+    await act(async () => {
+      save.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const started = probe.dispatched.filter((action) => action.type === "tasks/uploadStarted");
+    expect(started.length).toBeGreaterThan(0);
+    expect(started.every((action) => action.payload.teamId === "team-of-this-user")).toBe(true);
   });
 });

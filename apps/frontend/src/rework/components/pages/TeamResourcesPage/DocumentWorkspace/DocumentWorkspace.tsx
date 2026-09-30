@@ -120,6 +120,10 @@ interface PageState {
 
 interface DocumentWorkspaceProps {
   teamId: string;
+  /** The owning team's real id, when `teamId` is the "personal" URL alias.
+   *  Only the import panel's scoping uses it; everywhere else `teamId` is
+   *  already the real one. */
+  importScopeId?: string;
   isPersonalTeam: boolean;
   /** Notified after any action that adds or removes a document (upload,
    * single/bulk removal, folder deletion) — lets the parent page's storage
@@ -196,6 +200,7 @@ function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: st
  */
 function DocumentWorkspace({
   teamId,
+  importScopeId,
   isPersonalTeam,
   onDocumentsChanged,
   rootTagId,
@@ -237,6 +242,16 @@ function DocumentWorkspace({
   // folder deletion, a newly-registered ingestion task) already calls
   // refetchTags() to refresh the folder tree — piggyback the stats refresh
   // on that same signal instead of threading it through each call site.
+  // Whether this workspace is still on screen. Read by the import drawer's
+  // completion callback, which outlives it.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const refetchTags = useCallback(() => {
     onDocumentsChanged?.();
     return refetchTagsQuery();
@@ -1911,11 +1926,17 @@ function DocumentWorkspace({
         }}
         initialFiles={droppedFiles}
         teamId={teamId}
+        importScopeId={importScopeId}
         destinationPath={uploadTargetNode.full || undefined}
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
         ensureFolderPath={canCreateFolder ? ensureFolderPath : undefined}
         requireFolderPerFile={!uploadTargetTag}
+        // Reached long after the drawer closed — the transfer is detached, and
+        // by then this workspace may be gone. Refetching a query whose
+        // subscription has ended throws, so nothing is refreshed once it is:
+        // the next mount fetches anyway.
         onUploadComplete={() => {
+          if (!mounted.current) return;
           if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
           void refetchTags();
         }}

@@ -231,6 +231,7 @@ export default function TeamResourcesPage() {
           {activeTab === "resources" && (
             <DocumentWorkspace
               teamId={teamId}
+              importScopeId={fsTeamId}
               isPersonalTeam={isPersonalTeam}
               // These guards are only about a query that is genuinely off:
               // corpusStats is skipped while the stats panel is closed, and a
@@ -260,7 +261,7 @@ export default function TeamResourcesPage() {
 
         {/* A rail beside the documents card until it is opened, when it
             widens in place into the panel itself. */}
-        <ImportPanel teamId={teamId} />
+        <ImportPanel teamId={fsTeamId} />
       </div>
     </div>
   );

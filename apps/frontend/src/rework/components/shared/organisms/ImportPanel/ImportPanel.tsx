@@ -67,8 +67,8 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   const dispatch = useDispatch();
   const { showError } = useToast();
   const selectImports = useMemo(() => makeSelectImportTasks(teamId), [teamId]);
-  const imports = useSelector(selectImports);
-  const runningCount = imports.filter((vm) => !TERMINAL_STATES.has(vm.state)).length;
+  const allImports = useSelector(selectImports);
+  const runningCount = allImports.filter((vm) => !TERMINAL_STATES.has(vm.state)).length;
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
   const [expanded, setExpanded] = useState(false);
 
@@ -79,23 +79,27 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // way.
   // A file that arrived has nothing left to say, and a panel that keeps every
   // success is a panel nobody reads. It stays long enough to be seen finishing,
-  // then goes: the document is in the table by then.
+  // then leaves — this list only. The task itself stays in the store for its
+  // own five-minute window, which the documents table reads to mark a row as
+  // just completed and the tray reads to show it at all.
+  const [settled, setSettled] = useState<string[]>([]);
+  // What the panel still has to show: everything it follows, minus the
+  // successes it has already let go of.
+  const imports = useMemo(() => allImports.filter((vm) => !settled.includes(vm.taskId)), [allImports, settled]);
   const settling = useRef(new Map<string, number>());
   useEffect(() => {
     const timers = settling.current;
-    for (const task of imports) {
+    for (const task of allImports) {
       if (task.state !== "succeeded" || timers.has(task.taskId)) continue;
       timers.set(
         task.taskId,
         window.setTimeout(() => {
           timers.delete(task.taskId);
-          releaseHeldImport(task.taskId);
-          noteImportSettled(task.taskId);
-          dispatch(taskEvicted(task.taskId));
+          setSettled((ids) => (ids.includes(task.taskId) ? ids : [...ids, task.taskId]));
         }, SETTLED_CARD_LINGER_MS),
       );
     }
-  }, [imports, dispatch]);
+  }, [allImports]);
   useEffect(
     () => () => {
       for (const timer of settling.current.values()) window.clearTimeout(timer);

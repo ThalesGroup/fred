@@ -49,6 +49,11 @@ EXISTING_UID = "uid-report"
 USER = KeycloakUser(uid="alice", username="alice", email=None, roles=[])
 
 
+async def _returns_false(self, *args, **kwargs) -> bool:
+    """A conditional write that lost its row — see the fence in adopt_existing_document."""
+    return False
+
+
 def _doc(uid: str, name: str, *, size: int, vectorized: bool = False) -> DocumentMetadata:
     metadata = DocumentMetadata(
         identity=Identity(document_name=name, document_uid=uid, title=name, author="a", created=_T, modified=_T, last_modified_by="a"),
@@ -133,6 +138,23 @@ async def test_a_document_deleted_meanwhile_is_not_purged(existing, metadata_sto
 
     assert purged == []
     assert adopted.document_uid == "uid-freshly-generated"
+
+
+@pytest.mark.asyncio
+async def test_a_document_deleted_during_the_fence_is_not_impersonated(existing, monkeypatch) -> None:
+    # The row survived the read and went before the conditional write. Taking
+    # its uid and its libraries anyway would have the caller save a row that
+    # resurrects the deleted document — back into every library it was in,
+    # including ones this import never targeted.
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+
+    monkeypatch.setattr(IngestionService, "persist_progress", _returns_false)
+    fresh = _doc("uid-freshly-generated", "report.pdf", size=3_000_000)
+
+    adopted = await get_ingestion_service().adopt_existing_document(USER, fresh, EXISTING_UID)
+
+    assert adopted.document_uid == "uid-freshly-generated"
+    assert adopted.tags.tag_ids == [DESTINATION]
 
 
 @pytest.mark.asyncio

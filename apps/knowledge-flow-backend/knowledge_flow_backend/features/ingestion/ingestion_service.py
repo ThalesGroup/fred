@@ -134,15 +134,19 @@ class IngestionService:
         if previous is None:
             return metadata
 
-        metadata.identity.document_uid = existing_uid
-        metadata.processing.stages = {}
-        metadata.tags.tag_ids = list(dict.fromkeys([*(previous.tags.tag_ids or []), *(metadata.tags.tag_ids or [])]))
-
+        # Probe before adopting anything. Taking the uid and the libraries first
+        # would leave the bail-out below returning metadata that impersonates a
+        # document someone just deleted — saving it recreates that row and puts
+        # it back in every library it was in, none of them asked for.
         previous.processing.stages = {}
         if not await self.persist_progress(user, previous):
             # Deleted between the read above and this write: nothing to replace,
             # and nothing of ours to purge.
             return metadata
+
+        metadata.identity.document_uid = existing_uid
+        metadata.processing.stages = {}
+        metadata.tags.tag_ids = list(dict.fromkeys([*(previous.tags.tag_ids or []), *(metadata.tags.tag_ids or [])]))
         await self.metadata_service.purge_document_artifacts(existing_uid, metadata=previous, include_content=False)
         return metadata
 

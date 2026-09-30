@@ -144,6 +144,10 @@ describe("ImportPanel", () => {
         vi.advanceTimersByTime(3000);
       });
       expect(cards()).toEqual([]);
+      // Gone from this list only. The task keeps its own window in the store:
+      // the documents table reads it to mark the row as just completed, and
+      // the tray reads it to show the task at all.
+      expect(store.getState().tasks.byId["t1"]?.state).toBe("succeeded");
     } finally {
       vi.useRealTimers();
     }

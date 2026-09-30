@@ -68,6 +68,10 @@ interface DocumentUploadDrawerProps {
   onUploadComplete?: () => void;
   metadata?: Record<string, unknown>;
   teamId?: string;
+  /** The team an import is filed under, for the panel that follows it. Distinct
+   *  from `teamId`, which may be the "personal" URL alias: the server reports
+   *  the owning team's real id, and the two have to agree after a reload. */
+  importScopeId?: string | null;
   /** Destination folder path shown prominently in the header, e.g. "CIR" or "CIR/Sub". */
   destinationPath?: string;
   /** Files picked before the drawer opened (dropped on a folder row) — seeded into the
@@ -92,6 +96,7 @@ export function DocumentUploadDrawer({
   onUploadComplete,
   metadata,
   teamId,
+  importScopeId,
   destinationPath,
   initialFiles,
   ensureFolderPath,
@@ -423,7 +428,7 @@ export function DocumentUploadDrawer({
     void runImport(batches, {
       dispatch,
       uploadMode,
-      teamId: teamId ?? null,
+      teamId: importScopeId ?? teamId ?? null,
       onError: (detail) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail }),
       onComplete: onUploadComplete,
     });
