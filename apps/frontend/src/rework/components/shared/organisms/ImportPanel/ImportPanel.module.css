@@ -28,8 +28,9 @@
     var(--card-seam-radius, var(--radius-m));
   background: var(--surface-container-high);
   width: 48px;
-  /* The head and the body carry every inset; the panel itself has none, so
-     there is one place to change how far in its contents sit. */
+  /* The head and the body carry every inset; the panel itself has none.
+     `--panel-edge` is what touches the border, `--panel-inset` how far the
+     title sits in from it. */
   --panel-inset: calc(var(--spacing-xs) + var(--spacing-s));
   --panel-edge: var(--spacing-xs);
   min-height: 0;
@@ -109,8 +110,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
-  /* Same inset as the title above, so the cards line up under it. */
-  padding: 0 var(--panel-inset) var(--panel-edge);
+  /* Tighter than the title above it: the cards carry their own border, and
+     letting them run wider is what keeps them from reading as a narrow column
+     in a wide panel. */
+  padding: 0 var(--spacing-s) var(--panel-edge);
   min-height: 0;
   overflow-y: auto;
 }

@@ -16,7 +16,7 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2xs);
+  gap: var(--spacing-3xs);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container);
@@ -41,6 +41,9 @@
   flex-shrink: 0;
   align-items: center;
   gap: 0;
+  /* Closer to the card's edge than the text is: an icon button's own padding
+     already reads as space, so the card's would double it. */
+  margin-right: calc(-1 * var(--spacing-2xs));
 }
 
 .filename {
