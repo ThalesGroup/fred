@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +18,7 @@ import type { CapturedCredential } from "./sessionCredential";
 import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 
 const PREP = {
-  execute_stream_url: "https://runtime.example/execute/stream",
+  execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
   context_prompt_text: null,
   chat_default_profile_id: null,
   agent_profile_overrides: {},
@@ -52,6 +53,15 @@ it("refuses to pin a turn to a credential that did not come from the session", (
 });
 
 describe("streamAgentTurn", () => {
+  it("rejects a tampered preparation URL before sending the captured bearer", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const prep = { ...PREP, execute_stream_url: "https://outside.example/agents/execute/stream" };
+
+    await expect(streamAgentTurn(prep, ARGS)).rejects.toThrow("Invalid runtime execution URL");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("keeps hold evidence on a safe execution error", async () => {
     const frames =
       'data: {"kind":"status","status":"hold"}\n\n' +

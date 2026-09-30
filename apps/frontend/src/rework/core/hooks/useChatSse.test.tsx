@@ -92,7 +92,7 @@ vi.mock("../../../security/KeycloakService", () => ({
 import { KeyCloakService } from "../../../security/KeycloakService";
 
 let prepareExecutionImpl: (args: unknown) => Promise<unknown> = async () => ({
-  execute_stream_url: "http://runtime.test/execute_stream",
+  execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
   chat_controls: [],
   capability_base_urls: {},
 });
@@ -160,7 +160,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
     });
@@ -178,6 +178,24 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       root.unmount();
     });
     container.remove();
+  });
+
+  it("does not send the bearer to a tampered preparation URL", async () => {
+    prepareExecutionImpl = async () => ({
+      execute_stream_url: "https://outside.example/agents/execute/stream",
+      chat_controls: [],
+      capability_base_urls: {},
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(onErrorMock).toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it("never calls prepare-execution when the write barrier reports a failure", async () => {
@@ -269,7 +287,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("parses a structured length rejection, removes the optimistic message, and restores the full draft", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 5,
@@ -310,7 +328,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("suppresses a late length rejection after the request's session is reset", async () => {
     flushPendingWrites = async () => true;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 10,
@@ -352,7 +370,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     let activeSessionId = "session-a";
     isTurnCurrent = (turnSessionId) => turnSessionId === activeSessionId;
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 10,
@@ -481,7 +499,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     // Explicit retry: this time prepare-execution succeeds.
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
     });
@@ -519,7 +537,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       const firstSend = latest.send("hello", "session-1");
       const secondSend = latest.send("hello", "session-1");
       prep.resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -545,7 +563,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       latest.abort();
       // The network reply arrives late, after cancellation.
       prep.resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -558,7 +576,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     // The lock must not be stuck — a subsequent Send proceeds normally.
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
     });
@@ -600,7 +618,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
       // B's prepare-execution reply finally arrives.
       prep.resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -744,13 +762,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       // A's reply arrives late, after reset() and after B has already
       // taken over the lock.
       preps[0].resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
       await sendA;
       preps[1].resolve({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: [],
         capability_base_urls: {},
       });
@@ -812,7 +830,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     // it fell back to the pod default model and lost the context prompt and
     // search scope of the turn it continued.
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       context_prompt_text: "session prompt",
@@ -1092,7 +1110,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   it("handles a structured HITL length rejection without echoing its content", async () => {
     const rejectedText = "🙂🙂🙂🙂🙂🙂";
     prepareExecutionImpl = async () => ({
-      execute_stream_url: "http://runtime.test/execute_stream",
+      execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
       capability_base_urls: {},
       max_chat_input_chars: 10,
