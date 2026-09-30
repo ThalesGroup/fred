@@ -99,6 +99,6 @@
 }
 
 .tipHint {
-  color: var(--on-surface-muted);
+  color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }

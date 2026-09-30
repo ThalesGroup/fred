@@ -71,6 +71,24 @@ describe("importPhaseLabel", () => {
     expect(importPhaseHintFor(task({ stage: "decision", state: "running" }), t)).toBeNull();
   });
 
+  // The card is read by someone importing a file, not by someone learning what
+  // the product is called. Naming it explains nothing they need and dates every
+  // string the day the product is renamed or white-labelled.
+  it("never names the product in anything the import card shows", () => {
+    const strings = (node: unknown): string[] =>
+      typeof node === "string"
+        ? [node]
+        : typeof node === "object" && node !== null
+          ? Object.values(node).flatMap(strings)
+          : [];
+
+    for (const locale of [fr, en]) {
+      for (const text of strings(locale.rework.imports)) {
+        expect(text, `"${text}" names the product`).not.toMatch(/\bFred\b/);
+      }
+    }
+  });
+
   it("has a hint for every phase, in both languages", () => {
     for (const locale of [fr, en]) {
       const hints = locale.rework.imports.stepper.hint as Record<string, string>;

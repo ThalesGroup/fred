@@ -1566,9 +1566,9 @@
       "stepper": {
         "label": "Progression de l'import",
         "hint": {
-          "upload": "Le fichier quitte votre ordinateur pour rejoindre Fred. C'est la seule étape qui dépend de votre connexion.",
-          "uploading": "Fred reconnaît le type de document et met de côté ce qu'il faudra pour le traiter.",
-          "processing": "Le texte est extrait du document, page par page, pour devenir lisible par Fred.",
+          "upload": "Le fichier quitte votre ordinateur pour rejoindre sa destination. C'est la seule étape qui dépend de votre connexion.",
+          "uploading": "Le type de document est reconnu, et tout ce qu'il faudra pour le traiter est mis de côté.",
+          "processing": "Le texte est extrait du document, page par page, pour devenir exploitable.",
           "done": "Le document est prêt. Les agents peuvent maintenant le retrouver et le citer.",
           "doneUpload": "Le fichier est arrivé à destination. Il n'a pas été analysé : ce mode se contente de l'envoyer.",
           "indexing": "Le contenu est rangé pour que les agents puissent le retrouver et le citer dans leurs réponses."
@@ -1579,7 +1579,7 @@
       },
       "retry": {
         "action": "Réessayer",
-        "relaunchFromRow": "Ce document est chez Fred : relancez son traitement depuis sa ligne dans le tableau.",
+        "relaunchFromRow": "Ce document est déjà arrivé : relancez son traitement depuis sa ligne dans le tableau.",
         "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."
       }
     },
