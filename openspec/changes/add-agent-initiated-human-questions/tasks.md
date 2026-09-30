@@ -24,6 +24,8 @@
 
 - [ ] 3.6 Render optional choice descriptions beneath labels in the same HITL button, preserving the single-line treatment when absent; verify with a managed chat example and focused component coverage.
 
+- [ ] 3.7 Replace answered agent-question prompt/reply rows with a compact question/answer card and show the same summary in the matching `ask_user` tool drawer; verify choice labels, text, comments, skip, and reload after manual UI validation.
+
 ## 4. Documentation and release verification
 
 - [x] 4.1 Amend the runtime and control-plane product contracts, update `COMPONENT-UX.md`, and add the required English operator migration note; verify each document describes the shipped behavior and rollback order.

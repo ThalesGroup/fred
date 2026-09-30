@@ -41,6 +41,13 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** a choice has a description
 - **THEN** managed chat shows it beneath the label inside the same selectable choice
 
+#### Scenario: Answered question summary in managed chat
+
+- **GIVEN** an agent question has been answered or skipped
+- **WHEN** the conversation renders or reloads
+- **THEN** a compact card in the thread shows its question and selected choice label, text answer, or skipped state, including an optional comment
+- **AND** the `ask_user` tool detail drawer shows the same summary for that call when the response is available
+
 #### Scenario: Invalid question form
 
 - **WHEN** the agent calls `ask_user` with neither options nor free text enabled, or with duplicate or empty option identifiers

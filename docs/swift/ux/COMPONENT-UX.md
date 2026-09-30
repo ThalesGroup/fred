@@ -5046,7 +5046,10 @@ card shows a single-choice list, a free-text field, or both. A choice may carry
 the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. Choices
 appear in a centered column for both agent questions and tool approval. An
 optional choice description appears beneath its label inside the same
-button. Approval
+button. After an agent question is answered or skipped, a compact card in the
+thread shows the question and response in place of the read-only prompt and
+separate answer bubble. The matching `ask_user` tool drawer repeats that
+summary. Approval
 actions use the same neutral outline style and offer a conversation-scoped
 choice; the browser answers later matching approval pauses through the existing
 resume flow. Skip at the bottom right and close at the top right appear only

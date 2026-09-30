@@ -41,6 +41,10 @@ The platform sets `stage="agent_question"` on the request; the model cannot set 
 
 Reusing `cancel` for skip was rejected: cancel belongs to the tool approval gate, whereas an unanswered business question is a normal result the agent may reason about.
 
+### Summarize answered questions in existing chat surfaces
+
+When an agent question receives a response, pair its persisted request and response by occurrence id. Replace the read-only prompt and raw response bubble with one compact card in the conversation. Resolve a selected id to its persisted choice label, and retain a separate optional comment; text-only and skipped answers use the same card. The `ask_user` tool detail drawer finds the same pair by tool call id and shows the same summary. Pending questions and tool approvals keep their existing rendering. Use Fred's surface, outline, spacing, and type tokens rather than a new modal.
+
 ### Apply the composer switch to new turns
 
 Control plane appends a platform-owned `ask_user_toggle` descriptor at prepare-execution with `params.default=true`, alongside the reasoning control. The frontend stores the toggle per session and sends `RuntimeContext.ask_user` only when the control is offered. `None` means no interactive control and does not mount the tool; `false` means the person disabled future questions. A pending `agent_question` resume keeps the tool available to finish that turn even if the composer switch is now off; the switch applies to the next new turn. This follows the existing per-session control transport while avoiding a stranded checkpoint.
