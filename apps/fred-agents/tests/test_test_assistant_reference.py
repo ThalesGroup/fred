@@ -97,7 +97,7 @@ class _InProcessAgentInvoker(AgentInvokerPort):
 def _binding(*, session_id: str, instance_id: str | None) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            session_id=session_id, user_id="u1", team_id="t1"
+            session_id=session_id, user_id="u1", team_id="t1", ask_user=True
         ),
         portable_context=PortableContext(
             request_id="r1",
@@ -181,6 +181,45 @@ class _ExecutorDriver:
 async def test_conformance(check: Check) -> None:
     failures = await check.run(_ExecutorDriver(), f"s-{check.name}")
     assert failures == [], f"{check.name}: {failures}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("prompt", "resume_payload", "expected"),
+    [
+        ("hitl confirm", {"choice_id": "yes"}, "selected **yes**"),
+        ("hitl choice", {"choice_id": "option_d"}, "another review"),
+        ("hitl text", {"text": "Bonjour"}, "**Bonjour**"),
+        (
+            "hitl comment",
+            {"choice_id": "short", "text": "Keep it brief"},
+            "**Keep it brief**",
+        ),
+    ],
+)
+async def test_no_llm_hitl_examples_pause_and_resume(
+    prompt: str, resume_payload: dict[str, str], expected: str
+) -> None:
+    driver = _ExecutorDriver()
+    session = f"s-{prompt.replace(' ', '-')}"
+    paused = await driver.send(session, prompt)
+    awaiting = next(
+        (event for event in paused.events if event.get("kind") == "awaiting_human"),
+        None,
+    )
+    assert awaiting is not None, f"Expected HITL pause, got: {paused}"
+    resumed = await driver._turn(
+        session,
+        "resume",
+        ExecutionConfig(
+            session_id=session,
+            interrupt_id=awaiting.get("interrupt_id"),
+            resume_payload=resume_payload,
+        ),
+    )
+    assert resumed.rejected is None
+    final = next(event for event in resumed.events if event.get("kind") == "final")
+    assert expected in str(final.get("content"))
 
 
 @pytest.mark.asyncio

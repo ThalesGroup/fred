@@ -16,6 +16,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, VectorSearchHit } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
+import type { HitlAnswerSummary } from "@rework/utils/hitlAnswerSummary";
 import { toEmailHtml, toPlainText, writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
@@ -34,6 +35,7 @@ import styles from "./AssistantTurn.module.css";
 interface AssistantTurnProps {
   text: string;
   traceMessages: ChatMessage[];
+  hitlAnswerSummariesByCallId?: Record<string, HitlAnswerSummary>;
   sources: VectorSearchHit[];
   /** Raw chat parts (#1977); rendering dispatches through the part-renderer registry. */
   uiParts: RawUiPart[];
@@ -55,6 +57,7 @@ interface AssistantTurnProps {
 export const AssistantTurn = memo(function AssistantTurn({
   text,
   traceMessages,
+  hitlAnswerSummariesByCallId,
   sources,
   uiParts,
   tokenUsage,
@@ -117,7 +120,12 @@ export const AssistantTurn = memo(function AssistantTurn({
           globally-unique call_ids AND still has no result, which a genuinely
           completed historical turn never does. */}
       {traceMessages.length > 0 && (
-        <ThoughtTrace messages={traceMessages} done={!isStreaming} pendingToolCallIds={pendingToolCallIds} />
+        <ThoughtTrace
+          messages={traceMessages}
+          done={!isStreaming}
+          pendingToolCallIds={pendingToolCallIds}
+          hitlAnswerSummariesByCallId={hitlAnswerSummariesByCallId}
+        />
       )}
 
       <AssistantMessage

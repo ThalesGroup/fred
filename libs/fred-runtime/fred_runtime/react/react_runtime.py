@@ -1219,6 +1219,11 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             toolset_key=self._toolset_key(),
             services=self.services,
             binding=binding,
+            capability_tool_names=tuple(
+                tool.name for tool in self._capability_block.tools
+            )
+            if self._capability_block is not None
+            else (),
         ).resolve_tools()
         bound_tools = ReActToolBinder(
             runtime_tools=runtime_tools,

@@ -66,7 +66,7 @@ from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
@@ -624,6 +624,8 @@ class NodeContext:
                     )
                 )
                 return normalized
+            except GraphBubbleUp:
+                raise
             except Exception as exc:
                 self.sink(
                     ToolResultRuntimeEvent(

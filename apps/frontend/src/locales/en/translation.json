@@ -469,6 +469,10 @@
       "resetTooltip": "Reset"
     },
     "composerSettings": {
+      "askUserLabel": "Let the agent ask questions",
+      "askUserTitle": "Agent questions",
+      "askUserOn": "Enabled",
+      "askUserOff": "Disabled",
       "attachFile": "Attach file",
       "boundLibrariesTitle": "Bound libraries",
       "documentPickerTitle": "Document picker",
@@ -519,7 +523,9 @@
       "attachmentDeleteFailedDetail": "Could not delete this file. Please try again.",
       "attachmentDeleteForbiddenDetail": "You don't have permission to delete this file.",
       "attachmentUploadFailedDetail": "Could not upload this file. Please try again.",
-      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit."
+      "chatInputTooLong": "Your message exceeds the {{limit}}-character limit.",
+      "toolApprovalSaveFailedSummary": "Approval not saved",
+      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
     },
     "hitlFreeTextLabel": "Your answer",
     "hitlWaitingAria": "Agent is waiting for your input",
@@ -530,6 +536,9 @@
     },
     "recordAudio": "Record audio",
     "sendHitlAnswer": "Send",
+    "skipHitlQuestion": "Skip",
+    "skipHitlQuestionAria": "Skip this question",
+    "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
       "deleteAria": "Delete {{name}}",
@@ -1669,6 +1678,9 @@
       "validate": "Accept the TOS"
     },
     "hitlPrompt": {
+      "answerSummary": "Question and answer",
+      "selected": "Selected",
+      "skipped": "Skipped",
       "accepted": "Accepted",
       "refused": "Refused"
     },

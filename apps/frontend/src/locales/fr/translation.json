@@ -469,6 +469,10 @@
       "resetTooltip": "Réinitialiser"
     },
     "composerSettings": {
+      "askUserLabel": "Autoriser les questions de l’agent",
+      "askUserTitle": "Questions de l’agent",
+      "askUserOn": "Activées",
+      "askUserOff": "Désactivées",
       "attachFile": "Joindre un fichier",
       "boundLibrariesTitle": "Bibliothèques liées",
       "documentPickerTitle": "Sélecteur de documents",
@@ -519,7 +523,9 @@
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
       "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
-      "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères."
+      "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères.",
+      "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
+      "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
     "hitlFreeTextLabel": "Votre réponse",
     "hitlWaitingAria": "L'agent attend votre réponse",
@@ -530,6 +536,9 @@
     },
     "recordAudio": "Enregistrer de l'audio",
     "sendHitlAnswer": "Envoyer",
+    "skipHitlQuestion": "Passer",
+    "skipHitlQuestionAria": "Passer cette question",
+    "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
@@ -1669,6 +1678,9 @@
       "validate": "Accepter les CGU"
     },
     "hitlPrompt": {
+      "answerSummary": "Question et réponse",
+      "selected": "Choisi",
+      "skipped": "Passé",
       "accepted": "Accepté",
       "refused": "Refusé"
     },

@@ -58,7 +58,12 @@ from ...contracts.models import (
     GraphNodeDefinition,
     GraphRouteDefinition,
 )
-from ...contracts.runtime import HumanChoiceOption, HumanInputRequest
+from ...contracts.runtime import (
+    HumanChoiceOption,
+    HumanInputAnswer,
+    HumanInputRequest,
+    parse_human_input_answer,
+)
 from ..runtime import (
     GraphExecutionOutput,
     GraphNodeContext,
@@ -676,6 +681,33 @@ async def intent_router_step(
     return StepResult(state_update=state_update, route_key=route_value.strip())
 
 
+async def choice_step_response(
+    context: GraphNodeContext,
+    *,
+    stage: str | None,
+    title: str | None,
+    question: str,
+    choices: Sequence[HumanChoiceOption],
+    free_text: bool = False,
+    metadata: Mapping[str, JsonScalar] | None = None,
+) -> HumanInputAnswer | None:
+    """Ask a Graph question and retain its choice, text, or skipped outcome."""
+
+    request = HumanInputRequest(
+        stage=stage,
+        title=title,
+        question=question,
+        choices=tuple(choices),
+        free_text=free_text,
+        metadata=dict(metadata or {}),
+    )
+    decision = await context.request_human_input(request)
+    try:
+        return parse_human_input_answer(decision, request, allow_legacy_string=True)
+    except ValueError:
+        return None
+
+
 async def choice_step(
     context: GraphNodeContext,
     *,
@@ -685,31 +717,7 @@ async def choice_step(
     choices: Sequence[HumanChoiceOption],
     metadata: Mapping[str, JsonScalar] | None = None,
 ) -> str | None:
-    """
-    Ask the user for a structured choice and return the selected `choice_id`.
-
-    Why this helper exists:
-    - graph nodes currently repeat `HumanInputRequest` construction and response
-      parsing for simple choice-based pauses
-
-    How to use it:
-    - pass already-built `HumanChoiceOption` items
-    - interpret a `None` result as cancel or invalid resume payload
-    - callers should resume with `{"choice_id": "<selected-id>"}`; a bare
-      string is still accepted for backward compatibility
-
-    Example:
-    ```python
-    choice_id = await choice_step(
-        context,
-        stage="scope_selection",
-        title="Choose database",
-        question="Which database should I use?",
-        choices=options,
-        metadata={"agent_family": "sql_analyst_graph"},
-    )
-    ```
-    """
+    """Ask for one Graph choice and keep the existing optional-id result."""
 
     decision = await context.request_human_input(
         HumanInputRequest(
@@ -728,8 +736,7 @@ async def choice_step(
         choice_id = None
     if not isinstance(choice_id, str):
         return None
-    normalized = choice_id.strip()
-    return normalized or None
+    return choice_id.strip() or None
 
 
 def finalize_step(

@@ -35,7 +35,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
 )
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, StructuredTool
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
 )
@@ -45,6 +45,7 @@ from pydantic import BaseModel
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.capabilities.errors import CapabilityAssemblyError
 from fred_runtime.graph.graph_executor import GraphExecutor
+from fred_runtime.runtime_support.ask_user import AskUserArgs, ask_user
 from fred_runtime.runtime_support.checkpoints import (
     checkpoint_namespace,
 )
@@ -105,6 +106,9 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             self._capability_block,
             mcp_tool_names={tool.name for tool in mcp_tools},
         )
+        platform_tools = _ask_user_tool(
+            binding, existing_names={tool.name for tool in mcp_tools + capability_tools}
+        )
         portable = binding.portable_context
         graph_checkpoint_ns = checkpoint_namespace(
             agent_instance_id=portable.baggage.get("agent_instance_id"),
@@ -120,7 +124,7 @@ class GraphRuntime(AgentRuntime[GraphAgentDefinition, BaseModel, BaseModel]):
             binding=binding,
             services=self.services,
             model=self._model,
-            runtime_tools=mcp_tools + capability_tools,
+            runtime_tools=mcp_tools + capability_tools + platform_tools,
             checkpointer=cast(BaseCheckpointSaver, checkpointer),
             checkpoint_ns=graph_checkpoint_ns,
             tool_approval=ToolApproval(
@@ -154,3 +158,29 @@ def _capability_tools(
                 "names must be unique."
             )
     return capability_block.tools
+
+
+def _ask_user_tool(
+    binding: BoundRuntimeContext, *, existing_names: set[str]
+) -> tuple[BaseTool, ...]:
+    """Expose platform questions to interactive Graph nodes only."""
+    if binding.runtime_context.ask_user is not True:
+        return ()
+    if "ask_user" in existing_names:
+        raise CapabilityAssemblyError(
+            "Platform ask_user tool collides with another runtime tool"
+        )
+
+    async def invoke(**payload: object) -> tuple[str, None]:
+        return await ask_user(payload, language=binding.runtime_context.language), None
+
+    return (
+        StructuredTool.from_function(
+            func=None,
+            coroutine=invoke,
+            name="ask_user",
+            description="Ask the user a question and continue after their answer.",
+            args_schema=AskUserArgs,
+            response_format="content_and_artifact",
+        ),
+    )

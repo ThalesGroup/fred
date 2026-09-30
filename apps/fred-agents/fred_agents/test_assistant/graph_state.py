@@ -22,8 +22,10 @@ no model is bound; tests bind `mock_llm.MockChatModel`.
 
 Trigger keywords (case-insensitive prefix match):
   echo          → simple echo reply with status events
-  hitl choice   → binary HITL confirmation gate (3 options)
+  hitl confirm  → two-option confirmation
+  hitl choice   → four-option question with descriptions
   hitl text     → free-text HITL input gate
+  hitl comment  → choice with optional text comment
   trace         → status events + streamed analytical text + mock sources
   error         → node_error path to test UI error rendering
   long          → ~30 short sentences streamed word-by-word

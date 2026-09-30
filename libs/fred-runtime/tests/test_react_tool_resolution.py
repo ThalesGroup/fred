@@ -15,6 +15,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from fred_core.store import VectorSearchHit
@@ -32,8 +34,9 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.runtime import RuntimeServices, ToolProviderPort
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel
 
 
 class _AgentSettings:
@@ -204,3 +207,130 @@ async def test_context_aware_read_query_keeps_classified_engine_detail() -> None
     assert [block.text for block in artifact.blocks] == [
         "Binder Error: Referenced column amount_typo not found"
     ]
+
+
+def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    for enabled in (None, False):
+        binding = _binding().model_copy(
+            update={
+                "runtime_context": RuntimeContext(
+                    session_id="session-1", ask_user=enabled
+                )
+            }
+        )
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=(),
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=binding,
+        )
+        assert resolver.resolve_tools() == []
+
+    binding = _binding().model_copy(
+        update={
+            "runtime_context": RuntimeContext(session_id="session-1", ask_user=True)
+        }
+    )
+    specs = ReActRuntimeToolResolver(
+        declared_tool_refs=(),
+        toolset_key=None,
+        services=RuntimeServices(),
+        binding=binding,
+    ).resolve_tools()
+    assert [spec.runtime_name for spec in specs] == ["ask_user"]
+    bound = ReActToolBinder(
+        runtime_tools=specs, tracer=None, binding=binding
+    ).build_tools()
+    schema = cast(type[BaseModel], bound[0].tool.tool_call_schema)
+    assert set(schema.model_fields) == {
+        "question",
+        "choices",
+        "allow_free_text",
+    }
+    assert schema.model_json_schema()["properties"]["choices"]["maxItems"] == 4
+
+
+def test_ask_user_colliding_with_declared_tool_is_rejected() -> None:
+    binding = _binding().model_copy(
+        update={
+            "runtime_context": RuntimeContext(session_id="session-1", ask_user=True)
+        }
+    )
+    resolver = ReActRuntimeToolResolver(
+        declared_tool_refs=(),
+        toolset_key=None,
+        services=RuntimeServices(),
+        binding=binding,
+        capability_tool_names=("ask_user",),
+    )
+    with pytest.raises(RuntimeError, match="collides"):
+        resolver.resolve_tools()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"question": " ", "allow_free_text": True, "tool_call_id": "call-1"},
+        {"question": "Choose", "tool_call_id": "call-1"},
+        {
+            "question": "Choose",
+            "choices": [{"id": " yes ", "label": "Yes"}],
+            "tool_call_id": "call-1",
+        },
+        {
+            "question": "Choose",
+            "choices": [{"id": "yes", "label": "Yes"}, {"id": "yes", "label": "Again"}],
+            "tool_call_id": "call-1",
+        },
+        {
+            "question": "Choose",
+            "choices": [{"id": str(index), "label": str(index)} for index in range(5)],
+            "tool_call_id": "call-1",
+        },
+    ],
+)
+def test_ask_user_rejects_invalid_question_forms(payload: dict[str, object]) -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        AskUserArgs.model_validate(payload)
+
+
+def test_ask_user_accepts_four_selected_choices_and_exposes_the_limit() -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+
+    choices = [{"id": str(index), "label": str(index)} for index in range(4)]
+    args = AskUserArgs.model_validate(
+        {"question": "Choose", "choices": choices, "tool_call_id": "call-1"}
+    )
+    assert len(args.choices) == 4
+
+
+def test_ask_user_colliding_with_provider_tool_is_rejected() -> None:
+    async def provider_ask_user(question: str) -> str:
+        return question
+
+    provider_tool = StructuredTool.from_function(
+        coroutine=provider_ask_user,
+        name="ask_user",
+        description="A provider tool with the reserved platform name.",
+    )
+    provider = cast(
+        ToolProviderPort, SimpleNamespace(get_tools=lambda: [provider_tool])
+    )
+    binding = _binding().model_copy(
+        update={
+            "runtime_context": RuntimeContext(session_id="session-1", ask_user=True)
+        }
+    )
+    resolver = ReActRuntimeToolResolver(
+        declared_tool_refs=(),
+        toolset_key=None,
+        services=RuntimeServices(tool_provider=provider),
+        binding=binding,
+    )
+    with pytest.raises(RuntimeError, match="collides"):
+        resolver.resolve_tools()
