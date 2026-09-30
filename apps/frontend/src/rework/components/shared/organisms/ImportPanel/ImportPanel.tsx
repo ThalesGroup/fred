@@ -290,18 +290,18 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
           everything else grows away from it. */}
       <div className={styles.head}>
         {expanded && <span className={styles.title}>{t("rework.imports.panel.title")}</span>}
-        <Tooltip text={toggleLabel} placement="left">
-          <IconButton
-            variant={expanded ? "tonal" : "icon"}
-            size="small"
-            // Open, the arrow points back the way the panel folds.
-            icon={{ category: "outlined", type: expanded ? "keyboard_arrow_right" : "download" }}
-            aria-label={toggleLabel}
-            aria-expanded={expanded}
-            badgeCount={runningCount}
-            onClick={() => setExpanded((open) => !open)}
-          />
-        </Tooltip>
+        {/* No tooltip: the button sits at the panel's own edge, where a hint
+            covers what it is about to reveal. The label is on the button. */}
+        <IconButton
+          variant={expanded ? "tonal" : "icon"}
+          size="small"
+          // Open, the arrow points back the way the panel folds.
+          icon={{ category: "outlined", type: expanded ? "keyboard_arrow_right" : "download" }}
+          aria-label={toggleLabel}
+          aria-expanded={expanded}
+          badgeCount={runningCount}
+          onClick={() => setExpanded((open) => !open)}
+        />
       </div>
 
       {expanded && (

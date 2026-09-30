@@ -287,11 +287,11 @@ export const Tooltip = ({
       const desiredTop = fitsAbove ? triggerRect.top - gapPx - height : triggerRect.bottom + gapPx;
       top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
 
-      // Aligned on the trigger's own left edge (no centring transform): centring
-      // a wide panel on a small chip detaches it from the trigger and leaves it
-      // floating after the clamp. Anchoring the edge keeps it visibly attached.
-      const fitsLeftAligned = triggerRect.left + width <= viewportWidth() - VIEWPORT_MARGIN_PX;
-      const desiredLeft = fitsLeftAligned ? triggerRect.left : triggerRect.left + triggerRect.width - width;
+      // Centred on the trigger, then shifted only as far as the viewport
+      // demands. No centring transform: `left` stays the panel's own left edge,
+      // so the clamp below is the single thing deciding where it lands.
+      const center = triggerRect.left + triggerRect.width / 2;
+      const desiredLeft = center - width / 2;
       left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
     }
 

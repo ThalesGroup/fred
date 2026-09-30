@@ -240,13 +240,15 @@ describe("ImportPanel", () => {
     // The panel widens leftwards from a fixed right edge, so a right-aligned
     // toggle sits in the same place in both forms. Its icon is what changes:
     // an arrow pointing back the way it folds once open.
+    // The button itself is the head's last child — nothing wraps it, so there
+    // is nothing between it and the edge it is pinned to.
     const head = container.querySelector("aside > div")!;
-    expect(head.lastElementChild!.querySelector("button")).toBe(toggle());
+    expect(head.lastElementChild).toBe(toggle());
     expect(container.querySelector(".material-symbols-outlined")?.textContent).toBe("download");
 
     click(toggle());
 
-    expect(head.lastElementChild!.querySelector("button")).toBe(toggle());
+    expect(head.lastElementChild).toBe(toggle());
     expect(container.querySelector(".material-symbols-outlined")?.textContent).toBe("keyboard_arrow_right");
   });
 
