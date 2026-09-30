@@ -1,6 +1,6 @@
 ## 1. Establish the Finding Inventory
 
-- [ ] 1.1 Export current GitHub Code Quality Standard findings with number, rule, category, severity, location, and state; verify the baseline reproduces 1 reliability error, 7 reliability notes, and 153 maintainability notes.
+- [x] 1.1 Export current GitHub Code Quality Standard findings with number, rule, category, severity, location, and state; verify the baseline reproduces 1 reliability error, 7 reliability notes, and 153 maintainability notes.
 - [ ] 1.2 Obtain the complete GitLab High report, reconcile every entry with the screenshots and a code or package location, and verify the inventory has a disposition slot for every High finding.
 
 ## 2. Protect Runtime Execution URLs
