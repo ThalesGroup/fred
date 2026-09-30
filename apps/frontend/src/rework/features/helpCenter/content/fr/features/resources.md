@@ -69,6 +69,11 @@ repères qui se cochent l'un après l'autre, et nomme celui en cours :
 **C'est à la fin du dernier temps, et pas à la fin de l'envoi, que le document
 devient utilisable par un agent.**
 
+Quand un fichier est arrivé au bout, sa ligne affiche **Ingestion terminée**
+puis disparaît d'elle-même au bout de quelques secondes : le document est dans
+le tableau, il n'y a plus rien à suivre. Seuls les fichiers en échec ou en
+attente de réponse restent.
+
 > Aucun de ces temps n'annonce de pourcentage : Fred ne sait pas combien de
 > temps il lui reste, et préfère ne pas l'inventer. Un temps qui dure n'est
 > pas un temps bloqué.

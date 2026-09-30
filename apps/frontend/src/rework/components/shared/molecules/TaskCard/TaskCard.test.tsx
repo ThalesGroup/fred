@@ -45,6 +45,9 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     step: null,
     error: null,
     lastSeq: -1,
+    stage: null,
+    conflict: null,
+    teamId: null,
     registeredAt: 1000,
     terminalAt: null,
     acknowledgedAt: null,
@@ -132,5 +135,23 @@ describe("TaskCard trailing slot", () => {
     const html = renderToStaticMarkup(<TaskCard task={vm()} trailingSlot={<b>markers</b>} />);
     expect(html).toContain("markers");
     expect(html).not.toContain("rework.tasks.time.");
+  });
+});
+
+describe("TaskCard filename", () => {
+  it("renders the whole name and lets the CSS ellipsis do the cutting", () => {
+    // A character count cut at the same place in a narrow card and a wide one,
+    // so a name that had room to spare was shortened anyway.
+    const name = `${"long-report-name-".repeat(4)}.pdf`;
+    const html = renderToStaticMarkup(<TaskCard task={vm({ target: target({ label: name }) })} />);
+    expect(html).toContain(name);
+    expect(html).not.toContain("…");
+  });
+
+  it("keeps the full name reachable on hover", () => {
+    const name = `${"long-report-name-".repeat(4)}.pdf`;
+    expect(renderToStaticMarkup(<TaskCard task={vm({ target: target({ label: name }) })} />)).toContain(
+      `title="${name}"`,
+    );
   });
 });

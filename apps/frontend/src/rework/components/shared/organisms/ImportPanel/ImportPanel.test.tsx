@@ -104,11 +104,73 @@ function importOf(taskId: string, label: string) {
   });
 }
 
+/** The file names the panel is currently listing, in order. */
+const cards = () => [...container.querySelectorAll("[data-testid=task-card]")].map((n) => n.textContent);
+
+const settled = (taskId: string, state: "succeeded" | "failed") => ({
+  kind: "ingestion" as const,
+  task_id: taskId,
+  state,
+  seq: 1,
+  timestamp: "2026-01-01T00:00:00Z",
+  progress: state === "succeeded" ? 1 : null,
+  step: state === "succeeded" ? "done" : null,
+  error: state === "failed" ? "boom" : null,
+  detail: null,
+});
+
 /** The trailing corner of each card: live markers, or the time it settled. */
 const corners = () =>
   [...container.querySelectorAll("[data-testid='task-card']")].map((c) => c.getAttribute("data-trailing"));
 
 describe("ImportPanel", () => {
+  it("lets a finished import go once it has been seen finishing", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        store.dispatch(importOf("t1", "report.pdf"));
+      });
+      click(toggle());
+      expect(cards()).toEqual(["report.pdf"]);
+
+      await act(async () => {
+        store.dispatch(taskEventReceived(settled("t1", "succeeded")));
+      });
+      // Not on the instant: a card that vanished the moment it succeeded would
+      // never be seen saying so.
+      expect(cards()).toEqual(["report.pdf"]);
+
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(cards()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a failed import until someone deals with it", async () => {
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        store.dispatch(importOf("t1", "report.pdf"));
+      });
+      click(toggle());
+      await act(async () => {
+        store.dispatch(taskEventReceived(settled("t1", "failed")));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+      });
+
+      // Nothing about a failure settles itself: the cause and the retry are
+      // the whole reason the panel is still open.
+      expect(cards()).toEqual(["report.pdf"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("hands the card's trailing corner to the markers, and takes it back once the file settles", () => {
     act(() => {
       store.dispatch(importOf("t1", "report.pdf"));

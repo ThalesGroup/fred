@@ -78,10 +78,14 @@ export function importLinkStates(states: PhaseState[]): PhaseState[] {
   });
 }
 
-/** The current phase's name, or null when no phase is running — a finished
- *  file, or one held on the user's answer, which the panel words itself. */
+/** The current phase's name — or, once every phase is behind it, that it is
+ *  done. Null only for a file held on the user's answer, which the panel
+ *  words itself. */
 export function importPhaseLabel(task: PhaseInput, t: TFunction): string | null {
   if (task.stage === "decision") return null;
-  const phase = IMPORT_PHASES[importPhaseIndex(task)];
-  return phase ? t(PHASE_LABEL[phase]) : null;
+  const index = importPhaseIndex(task);
+  // Past the last phase: the file is in, and saying so is the last thing the
+  // card has to say before it goes.
+  if (index >= IMPORT_PHASES.length) return t("rework.tasks.ingestionStep.done");
+  return t(PHASE_LABEL[IMPORT_PHASES[index]]);
 }

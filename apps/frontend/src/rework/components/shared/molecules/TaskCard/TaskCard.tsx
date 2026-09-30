@@ -50,10 +50,6 @@ interface TaskCardProps {
   acknowledging?: boolean;
 }
 
-export function truncate(name: string, max = 32): string {
-  return name.length > max ? `${name.slice(0, max - 1)}…` : name;
-}
-
 export function TaskCard({
   task,
   statusText,
@@ -87,8 +83,10 @@ export function TaskCard({
         {/* The state reads as a colour before it reads as anything else, so it
             leads the line the name is on. */}
         <TaskStateBadge state={task.state} showLabel={false} size="sm" />
+        {/* Cut by the CSS ellipsis, which cuts at the width actually left —
+            a character count cut short names in a wide card. */}
         <span className={styles.filename} title={displayName}>
-          {truncate(displayName)}
+          {displayName}
         </span>
         {/* Always present, even empty: the buttons are twice the line's height,
             so letting the row size itself would jolt the card every time one

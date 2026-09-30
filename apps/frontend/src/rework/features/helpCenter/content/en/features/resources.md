@@ -66,6 +66,10 @@ that tick off one by one, and names the one under way:
 **It is the end of the last stage, not the end of the transfer, that makes the
 document usable by an agent.**
 
+Once a file is through, its row reads **Ingestion complete** and then leaves on
+its own after a few seconds: the document is in the table and there is nothing
+left to follow. Only files that failed, or that are waiting on an answer, stay.
+
 > None of these stages announces a percentage: Fred does not know how long it
 > has left, and would rather not invent it. A stage that takes a while is not a
 > stage that is stuck.

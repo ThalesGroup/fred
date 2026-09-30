@@ -2947,7 +2947,7 @@
         "listed": "Document preparation",
         "vectorized": "Content indexed",
         "skip": "Already up to date",
-        "done": "Processing complete"
+        "done": "Ingestion complete"
       },
       "popover": {
         "acknowledge": "Dismiss",

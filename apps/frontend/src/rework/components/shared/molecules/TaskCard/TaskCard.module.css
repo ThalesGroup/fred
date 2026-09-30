@@ -46,6 +46,12 @@
   margin-right: calc(-1 * var(--spacing-2xs));
 }
 
+/* No buttons, no gap taken from the name: the header's own min-height is what
+   holds the card's height steady when one appears. */
+.toolbar:empty {
+  display: none;
+}
+
 .filename {
   flex: 1;
   min-width: 0;

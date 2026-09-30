@@ -57,6 +57,10 @@ import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import { ImportStepper } from "./ImportStepper";
 import styles from "./ImportPanel.module.css";
 
+/** Long enough to read that a file made it, short enough that the panel empties
+ *  itself instead of becoming a list of things already done. */
+const SETTLED_CARD_LINGER_MS = 3000;
+
 /** @param teamId whose resources the page beside this panel shows. */
 export function ImportPanel({ teamId }: { teamId: string | null }) {
   const { t } = useTranslation();
@@ -73,6 +77,33 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // the complaint the panel exists to answer. The counter starts where it
   // stands, so mounting the page does not reopen it for an import already under
   // way.
+  // A file that arrived has nothing left to say, and a panel that keeps every
+  // success is a panel nobody reads. It stays long enough to be seen finishing,
+  // then goes: the document is in the table by then.
+  const settling = useRef(new Map<string, number>());
+  useEffect(() => {
+    const timers = settling.current;
+    for (const task of imports) {
+      if (task.state !== "succeeded" || timers.has(task.taskId)) continue;
+      timers.set(
+        task.taskId,
+        window.setTimeout(() => {
+          timers.delete(task.taskId);
+          releaseHeldImport(task.taskId);
+          noteImportSettled(task.taskId);
+          dispatch(taskEvicted(task.taskId));
+        }, SETTLED_CARD_LINGER_MS),
+      );
+    }
+  }, [imports, dispatch]);
+  useEffect(
+    () => () => {
+      for (const timer of settling.current.values()) window.clearTimeout(timer);
+      settling.current.clear();
+    },
+    [],
+  );
+
   const openRequest = useSelector(selectImportPanelOpenRequest);
   const lastHandledRequest = useRef(openRequest);
   useEffect(() => {

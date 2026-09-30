@@ -32,7 +32,8 @@ transfer, then preparation, content extraction and indexing on the server — as
 markers beside the name of the phase under way, and only the ingestion task's
 own success marks a document as ready; the end of the transfer no longer does.
 No percentage is shown anywhere: the server reports named phases, not
-fractions. A failed file stays listed with its cause put into the reader's language,
+fractions. A file that completes says so and then drops out of the panel a few
+seconds later, so the list holds only what still needs following. A failed file stays listed with its cause put into the reader's language,
 and can be sent again while the browser still holds it. A name taken by someone
 else during the import is now asked as a question in the panel (**Replace** /
 **Skip**) instead of ending the import with a notification telling the user to
