@@ -15,55 +15,93 @@
 
 .stepper {
   display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 12px 1fr;
   align-items: center;
   gap: var(--spacing-2xs);
+  /* Tall enough that the rail between two markers is actually visible: the
+     12px marker eats the middle of every row. */
+  min-height: 22px;
 }
 
-.phase {
-  display: inline-flex;
-  flex-shrink: 0;
+/* The marker, with the rail drawn through the row behind it: the half above
+   carries the previous phase's colour, the half below this one's. */
+.rail {
+  display: flex;
+  position: relative;
+  justify-content: center;
   align-items: center;
-  gap: var(--spacing-3xs);
-  font: var(--font-label-medium);
-  white-space: nowrap;
+  align-self: stretch;
 }
 
-/* One colour per state, carried by both the marker and its word so a glance at
-   either says the same thing. */
-.phase[data-state="pending"] {
-  color: var(--on-surface-muted);
-}
-
-.phase[data-state="current"] {
-  color: var(--info);
-}
-
-.phase[data-state="done"] {
-  color: var(--success);
-}
-
-.phase[data-state="failed"] {
-  color: var(--error);
-}
-
-.phase [class*="material-symbols"] {
-  font-size: 12px;
-}
-
-/* The run between the two: it belongs to the phase behind it, so it fills in
-   as that phase completes. */
-.link {
-  flex: 1;
-  border-radius: 1px;
+.rail::before,
+.rail::after {
+  position: absolute;
+  left: calc(50% - 1px);
   background: var(--outline-variant);
-  min-width: var(--spacing-xs);
-  height: 2px;
+  width: 2px;
+  content: "";
 }
 
-.link[data-state="done"] {
+.rail::before {
+  top: 0;
+  height: calc(50% - 7px);
+}
+
+.rail::after {
+  bottom: 0;
+  height: calc(50% - 7px);
+}
+
+/* Nothing runs off the ends of the list. */
+.row:first-child .rail::before,
+.row:last-child .rail::after {
+  display: none;
+}
+
+.row[data-prev="done"] .rail::before,
+.row[data-state="done"] .rail::after {
   background: var(--success);
 }
 
-.link[data-state="failed"] {
+.row[data-prev="failed"] .rail::before,
+.row[data-state="failed"] .rail::after {
   background: var(--error);
+}
+
+/* One colour per state, carried by both the marker and its name so a glance at
+   either says the same thing. */
+.row[data-state="pending"] {
+  color: var(--on-surface-muted);
+}
+
+.row[data-state="current"] {
+  color: var(--info);
+}
+
+.row[data-state="done"] {
+  color: var(--success);
+}
+
+.row[data-state="failed"] {
+  color: var(--error);
+}
+
+.row [class*="material-symbols"] {
+  font-size: 12px;
+}
+
+.label {
+  min-width: 0;
+  overflow: hidden;
+  font: var(--font-label-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -12,62 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Where a file has got to, as the two things that actually happen to it.
+// Where a file has got to, as the four phases it actually goes through, each
+// named in full.
 //
-// Not a progress bar: the server reports one coarse step for the whole heavy
-// phase, so a bar either sits frozen or has to invent movement. Two named
-// phases, each either waiting, running, done or failed, say strictly what is
-// known and never suggest a percentage nobody measured.
+// Not a progress bar: no phase reports a fraction of itself, so a bar either
+// sits frozen or invents movement. Laid out as a column because the four names
+// do not fit across the panel at its default width, and they stay readable
+// however narrow the user drags it.
 
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
+import {
+  IMPORT_PHASES,
+  importPhaseName,
+  importPhaseStates,
+  type PhaseState,
+} from "../../../../features/imports/importPhases";
+import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import styles from "./ImportStepper.module.css";
 
-type PhaseState = "pending" | "current" | "done" | "failed";
-
-/** The transfer, then the analysis — see `ImportStage`. */
-function phasesOf(task: TaskViewModel): [PhaseState, PhaseState] {
-  const stopped = task.state === "failed" || task.state === "cancelled";
-  // A file the browser is still sending, or one whose name is waiting on an
-  // answer, has not reached the server's half.
-  const beforeAnalysis = task.stage === "upload" || task.stage === "decision";
-
-  if (beforeAnalysis) {
-    if (stopped) return ["failed", "pending"];
-    // Waiting on the user is not the transfer running; it is over and held.
-    return [task.stage === "decision" ? "done" : "current", "pending"];
-  }
-  if (stopped) return ["done", "failed"];
-  if (task.state === "succeeded") return ["done", "done"];
-  return ["done", "current"];
-}
-
 function Marker({ state }: { state: PhaseState }) {
-  if (state === "current") return <Spinner size={12} />;
+  // The row carries the accessible name, state included — a second "Loading"
+  // per phase would only crowd it.
+  if (state === "current") return <Spinner size={12} decorative />;
   const type = state === "done" ? "check_circle" : state === "failed" ? "error_outline" : "radio_button_unchecked";
   return <Icon category="outlined" type={type} />;
 }
 
 export function ImportStepper({ task }: { task: TaskViewModel }) {
   const { t } = useTranslation();
-  const [upload, analysis] = phasesOf(task);
-  // Nothing left to follow once both halves are behind it; the card's own
-  // badge and timestamp say what became of it.
-  if (TERMINAL_STATES.has(task.state) && task.state === "succeeded") return null;
+  // Nothing left to follow once every phase is behind it; the card's own badge
+  // and timestamp say what became of it.
+  if (task.state === "succeeded") return null;
+  const states = importPhaseStates(task);
 
   return (
-    <div className={styles.stepper} role="list">
-      <span className={styles.phase} data-state={upload} role="listitem">
-        <Marker state={upload} />
-        {t("rework.imports.step.upload")}
-      </span>
-      <span className={styles.link} data-state={upload} aria-hidden />
-      <span className={styles.phase} data-state={analysis} role="listitem">
-        <Marker state={analysis} />
-        {t("rework.imports.step.analysis")}
-      </span>
-    </div>
+    <ol className={styles.stepper}>
+      {IMPORT_PHASES.map((phase, i) => (
+        // The rail's two halves are coloured separately: the segment above a
+        // marker belongs to the phase above it, the one below to this phase.
+        <li
+          key={phase}
+          className={styles.row}
+          data-state={states[i]}
+          data-prev={states[i - 1]}
+          aria-label={`${importPhaseName(phase, t)} — ${t(`rework.imports.phaseState.${states[i]}`)}`}
+          aria-current={states[i] === "current" ? "step" : undefined}
+        >
+          <span className={styles.rail} aria-hidden>
+            <Marker state={states[i]} />
+          </span>
+          <span className={styles.label}>{importPhaseName(phase, t)}</span>
+        </li>
+      ))}
+    </ol>
   );
 }

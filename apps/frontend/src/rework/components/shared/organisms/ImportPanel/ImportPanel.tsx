@@ -34,7 +34,6 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
-import { knownIngestionStep } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
 import {
@@ -276,10 +275,9 @@ function ImportItem({
   // that cannot work would be worse than saying so.
   const stillHeld = heldImport(task.taskId) !== undefined;
 
-  // The stepper says which half the file is in; this line is for what it
-  // cannot say — a cause, a question, or the phase the server happened to name.
-  const statusText =
-    failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : knownIngestionStep(task, t));
+  // The stepper names the phases; this line is for what it cannot say — why a
+  // file stopped, or the question holding it up.
+  const statusText = failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : null);
 
   return (
     <div className={styles.item}>
@@ -289,8 +287,8 @@ function ImportItem({
         // wrote for a log.
         statusText={statusText}
         statusDetail={failure?.detail}
-        // No bar: the server reports one coarse step for the whole heavy
-        // phase, so a bar can only sit frozen or invent movement.
+        // Four named phases instead of a bar: none of them reports a fraction
+        // of itself, so a bar could only sit frozen or invent movement.
         progressSlot={<ImportStepper task={task} />}
         actions={
           failed && stillHeld ? (

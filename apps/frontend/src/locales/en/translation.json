@@ -2204,9 +2204,11 @@
         "resize": "Resize the imports panel",
         "title": "Imports"
       },
-      "step": {
-        "analysis": "Analysis",
-        "upload": "Sending"
+      "phaseState": {
+        "current": "in progress",
+        "done": "done",
+        "failed": "failed",
+        "pending": "waiting"
       },
       "retry": {
         "action": "Try again",

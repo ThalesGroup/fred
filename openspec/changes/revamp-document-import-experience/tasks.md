@@ -50,7 +50,7 @@
 
 ## 8. Help Center
 
-- [x] 8.1 `features/resources.md` in fr and en gained "Suivre vos imports" / "Following your imports": the panel and how to fold, reopen and resize it, the two stages and which one makes a document usable, what a failure offers, what can still be cancelled, and what happens on return after a tab closed mid-import. Two existing passages were corrected rather than left standing: the late-conflict note told the reader to import the file again, and "After the upload" described one preparation instead of two stages.
+- [x] 8.1 `features/resources.md` in fr and en gained "Suivre vos imports" / "Following your imports": the panel and how to fold, reopen and resize it, the four phases it ticks off and which one makes a document usable, what a failure offers, what can still be cancelled, and what happens on return after a tab closed mid-import. Two existing passages were corrected rather than left standing: the late-conflict note told the reader to import the file again, and "After the upload" described one preparation instead of two stages.
 
 ## 9. Verify and close out
 

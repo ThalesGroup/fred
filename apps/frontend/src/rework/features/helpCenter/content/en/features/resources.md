@@ -53,13 +53,21 @@ the transfer carries on behind it. A **panel** opens on the right of the page
 and follows every file. You can fold it back into a button, reopen it, and widen
 it by dragging its left edge.
 
-Every file goes through two stages:
+Every file goes through four stages, which the panel ticks off one by one:
 
-- **Sending the file** — your browser is transferring it. For as long as this
-  lasts, nothing has reached Fred yet.
-- **Analysing the document** — Fred reads the file and indexes it. **It is the
-  end of this stage, not the end of the transfer, that makes the document usable
-  by an agent.**
+1. **Sending the file** — your browser is transferring it. For as long as this
+   lasts, nothing has reached Fred yet.
+2. **Preparing the document** — Fred has received the file and is filing it.
+3. **Extracting the content** — Fred reads the document. This is almost always
+   the longest stage: a large or scanned PDF can stay here for several minutes.
+4. **Indexing** — Fred files away what it read so it can find it again.
+
+**It is the end of the last stage, not the end of the transfer, that makes the
+document usable by an agent.**
+
+> None of these stages announces a percentage: Fred does not know how long it
+> has left, and would rather not invent it. A stage that takes a while is not a
+> stage that is stuck.
 
 ### If a file fails
 

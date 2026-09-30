@@ -2204,9 +2204,11 @@
         "resize": "Redimensionner le panneau des imports",
         "title": "Imports"
       },
-      "step": {
-        "analysis": "Analyse",
-        "upload": "Envoi"
+      "phaseState": {
+        "current": "en cours",
+        "done": "terminé",
+        "failed": "échec",
+        "pending": "en attente"
       },
       "retry": {
         "action": "Réessayer",
