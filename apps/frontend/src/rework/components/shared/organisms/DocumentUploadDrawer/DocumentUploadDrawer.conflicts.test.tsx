@@ -238,6 +238,39 @@ describe("DocumentUploadDrawer name conflicts", () => {
     expect(probe.sent[0].metadata.conflict_decisions).toEqual({ "a.pdf": "overwrite" });
   });
 
+  it("offers the two options as one pick, unanswered until the user answers", async () => {
+    answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
+    renderDrawer(["a.pdf"]);
+
+    await click(button("documentLibrary.importCount"));
+
+    const panel = container.querySelector('[aria-labelledby="upload-conflicts-title"]')!;
+    const options = [...panel.querySelectorAll('[role="radio"]')];
+    expect(options).toHaveLength(2);
+    // Nothing preselected: the import is waiting on an answer, and a default
+    // would answer for the user.
+    expect(options.map((o) => o.getAttribute("aria-checked"))).toEqual(["false", "false"]);
+    // Still reachable by keyboard even with nothing picked.
+    expect(options.some((o) => o.getAttribute("tabindex") === "0")).toBe(true);
+
+    await click(options[0] as HTMLButtonElement);
+
+    expect(options.map((o) => o.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+  });
+
+  it("offers the two bulk answers as outlined buttons", async () => {
+    // They act on every row at once — the same weight as one row's own pick
+    // would read as a third option on that row.
+    answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
+    renderDrawer(["a.pdf"]);
+
+    await click(button("documentLibrary.importCount"));
+
+    for (const label of ["documentLibrary.conflictReplaceAll", "documentLibrary.conflictSkipAll"]) {
+      expect(button(label).className, label).toContain("outlined");
+    }
+  });
+
   it("a conflict appearing after the question is carried to the panel, not raised as a failure", async () => {
     answering([]);
     probe.lateConflicts.push("b.pdf");

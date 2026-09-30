@@ -675,6 +675,7 @@
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?",
     "confirmRemoveTitle": "Remove from library?",
+    "conflictDecisionFor": "What to do with “{{name}}”",
     "conflictReplace": "Replace",
     "conflictReplaceAll": "Replace all",
     "conflictSkip": "Skip",

@@ -18,6 +18,7 @@ import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { Portal } from "@shared/utils/Portal";
 import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Select from "@shared/molecules/Select/Select";
@@ -485,11 +486,14 @@ export function DocumentUploadDrawer({
             <div className={styles.fieldRow}>
               <div className={styles.field}>
                 <label className={styles.label}>{t("documentLibrary.ingestionMode")}</label>
+                {/* No error slot held open under a field that has no error
+                    to report: neither of these can fail. */}
                 <Select<"upload" | "process">
                   options={uploadModeOptions}
                   value={uploadMode}
                   onChange={setUploadMode}
                   size="small"
+                  compact
                 />
               </div>
 
@@ -501,6 +505,7 @@ export function DocumentUploadDrawer({
                     value={profile}
                     onChange={setProfile}
                     size="small"
+                    compact
                   />
                 </div>
               )}
@@ -575,24 +580,24 @@ export function DocumentUploadDrawer({
                         <span className={styles.fileName} title={conflict.label}>
                           {conflict.label}
                         </span>
-                        <Button
+                        {/* One pick per file, so the two options are one
+                            control rather than two buttons that happen to be
+                            mutually exclusive. Nothing is selected until the
+                            user answers — the import waits on that. */}
+                        <ButtonGroup
+                          size="2xs"
                           color="on-surface"
-                          variant={decision === "overwrite" ? "filled" : "outlined"}
-                          size="small"
-                          aria-pressed={decision === "overwrite"}
-                          onClick={() => decideOne(conflict, "overwrite")}
-                        >
-                          {t("documentLibrary.conflictReplace")}
-                        </Button>
-                        <Button
-                          color="on-surface"
-                          variant={decision === "skip" ? "filled" : "outlined"}
-                          size="small"
-                          aria-pressed={decision === "skip"}
-                          onClick={() => decideOne(conflict, "skip")}
-                        >
-                          {t("documentLibrary.conflictSkip")}
-                        </Button>
+                          variant="radio"
+                          aria-label={t("documentLibrary.conflictDecisionFor", { name: conflict.label })}
+                          // The block behind it is already surface-container.
+                          backgroundColor="var(--surface-container-high)"
+                          selectedIndex={decision === "overwrite" ? 0 : decision === "skip" ? 1 : -1}
+                          onSelectedIndexChange={(index) => decideOne(conflict, index === 0 ? "overwrite" : "skip")}
+                          items={[
+                            { label: t("documentLibrary.conflictReplace") },
+                            { label: t("documentLibrary.conflictSkip") },
+                          ]}
+                        />
                       </li>
                     );
                   })}

@@ -112,7 +112,7 @@
     background 150ms;
   cursor: pointer;
   border: 1.5px dashed var(--outline-retreat);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-s);
   min-height: 180px;
   overflow-y: auto;
 }

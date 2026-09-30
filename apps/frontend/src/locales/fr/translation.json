@@ -675,6 +675,7 @@
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
+    "conflictDecisionFor": "Que faire de « {{name}} »",
     "conflictReplace": "Remplacer",
     "conflictReplaceAll": "Tout remplacer",
     "conflictSkip": "Ignorer",
