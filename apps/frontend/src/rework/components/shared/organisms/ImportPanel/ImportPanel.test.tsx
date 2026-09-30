@@ -45,6 +45,7 @@ vi.mock("@shared/molecules/TaskCard/TaskCard", () => ({
     <div data-testid="task-card">{task.target?.label ?? task.taskId}</div>
   ),
 }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
 vi.mock("../../../../features/tasks/useTaskAcknowledgement", () => ({
   useTaskAcknowledgement: () => ({ acknowledge: vi.fn(), isAcknowledging: () => false }),
 }));

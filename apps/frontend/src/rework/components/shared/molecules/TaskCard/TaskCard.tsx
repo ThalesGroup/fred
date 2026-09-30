@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
@@ -26,6 +26,15 @@ import styles from "./TaskCard.module.css";
 
 interface TaskCardProps {
   task: TaskViewModel;
+  /** Replaces the footer's own error/step line. For a caller that knows the
+   *  task's domain and can say more about it than a generic card can — the
+   *  import panel naming a failure's cause, rather than showing the sentence
+   *  the backend wrote for a log. */
+  statusText?: string;
+  /** The detail behind `statusText`, on hover. */
+  statusDetail?: string | null;
+  /** Controls next to the dismiss button — a retry, a decision to make. */
+  actions?: ReactNode;
   /** Present only when this task can be acknowledged (failed/cancelled, not
    *  yet acknowledged) — the caller owns the `POST /tasks/{id}/ack` call and
    *  the resulting store update (TASK-EVENT-STREAM-RFC.md §2.10). */
@@ -37,7 +46,7 @@ export function truncate(name: string, max = 32): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
-export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) {
+export function TaskCard({ task, statusText, statusDetail, actions, onAcknowledge, acknowledging }: TaskCardProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isTerminal = TERMINAL_STATES.has(task.state);
@@ -62,6 +71,7 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
           {truncate(displayName)}
         </span>
         <TaskStateBadge state={task.state} showLabel={false} size="sm" />
+        {actions}
         {needsAttention && (
           <IconButton
             variant="icon"
@@ -81,7 +91,17 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
       )}
 
       <div className={styles.footer}>
-        {task.state === "failed" && task.error ? (
+        {statusText ? (
+          <span className={styles.stepText}>
+            {statusDetail ? (
+              <Tooltip content={<span className={styles.errorTooltip}>{statusDetail}</span>}>
+                <span>{statusText}</span>
+              </Tooltip>
+            ) : (
+              statusText
+            )}
+          </span>
+        ) : task.state === "failed" && task.error ? (
           // Tooltip's own wrapper is inline-flex with no flex-grow of its own — nesting it
           // *inside* .errorText (rather than putting .errorText on the wrapper itself) keeps
           // the existing flex:1/min-width:0/ellipsis truncation on the real flex item, so the

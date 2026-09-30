@@ -13,7 +13,6 @@
 // limitations under the License.
 
 import { useEffect, useMemo, useState } from "react";
-import { v4 as uuidv4 } from "uuid";
 import { useDispatch } from "react-redux";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
@@ -26,11 +25,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { formatBytes } from "@shared/utils/formatBytes";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import {
-  leafFileName,
-  streamUploadOrProcessDocument,
-  type ScheduledTask,
-} from "../../../../../slices/streamDocumentUpload";
+import { leafFileName } from "../../../../../slices/streamDocumentUpload";
 import {
   IngestionProcessingProfile,
   useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation,
@@ -40,14 +35,13 @@ import {
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
+import { importPanelOpenRequested } from "../../../../features/tasks/taskSlice";
 import {
-  importPanelOpenRequested,
-  taskEvicted,
-  uploadFailed,
-  uploadFinished,
-  uploadHandedOff,
-  uploadStarted,
-} from "../../../../features/tasks/taskSlice";
+  UPLOAD_BATCH_SIZE,
+  chunkFilesByLeafName,
+  runImport,
+  type ImportBatch,
+} from "../../../../features/imports/importRun";
 import {
   MAX_FOLDER_DEPTH,
   displayPath,
@@ -90,136 +84,6 @@ interface DocumentUploadDrawerProps {
    * loose file would upload tagless and be invisible in the corpus. Loose
    * files are filtered out of the list (with a toast when it happens). */
   requireFolderPerFile?: boolean;
-}
-
-/**
- * Resolves once every file in `files` has an outcome (task_id, reported
- * failure, or plain success) — resolving on just the first would let the
- * drawer close/refresh while the rest of the batch is still unaccounted for.
- * Each outcome still fires its callback as its own line streams in, so the
- * tray/toast never waits on the slowest file. A mid-stream transport failure
- * reports whatever's still pending too, so it isn't silently dropped. Pass
- * files sharing `requestMetadata` (see streamUploadOrProcessDocument).
- */
-export function scheduleFiles(
-  files: File[],
-  uploadMode: "upload" | "process",
-  requestMetadata: Record<string, unknown>,
-  onDiscovered: (task: ScheduledTask) => void,
-  onBackgroundError: (message: string) => void,
-  onConflicted?: (filename: string) => void,
-  /** Per-file end of the transfer, for the panel entry that is following it.
-   *  Separate from `onBackgroundError`, whose job is to raise a toast: one is
-   *  about a file, the other about telling the user. */
-  uploadOutcome?: { onFailed: (filename: string, message: string) => void; onFinished: (filename: string) => void },
-): Promise<void> {
-  return new Promise<void>((resolve) => {
-    let settled = false;
-    const pendingLeafNames = new Set(files.map(leafFileName));
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    const markDone = (filename: string) => {
-      pendingLeafNames.delete(filename);
-      if (pendingLeafNames.size === 0) settle();
-    };
-
-    streamUploadOrProcessDocument(
-      files,
-      uploadMode,
-      requestMetadata,
-      (task) => {
-        onDiscovered(task);
-        markDone(task.filename);
-      },
-      (filename, message) => {
-        onBackgroundError(`${filename}: ${message}`);
-        uploadOutcome?.onFailed(filename, message);
-        markDone(filename);
-      },
-      (filename) => {
-        uploadOutcome?.onFinished(filename);
-        markDone(filename);
-      },
-      (filename) => {
-        onConflicted?.(filename);
-        markDone(filename);
-      },
-    )
-      .then(() => settle())
-      .catch((err) => {
-        // Some files may already have an outcome (reported above, as their
-        // lines streamed in) even though the request as a whole then failed
-        // — only the ones still pending were never accounted for.
-        if (pendingLeafNames.size > 0) {
-          const message = err instanceof Error ? err.message : String(err);
-          onBackgroundError(message);
-          // Without this each unaccounted file would sit in the panel as
-          // "sending" forever: nothing else will ever report on it.
-          for (const filename of pendingLeafNames) uploadOutcome?.onFailed(filename, message);
-        }
-        settle();
-      });
-  });
-}
-
-// Bounds how many batched upload requests (and their ReBAC/quota checks) run
-// at once, and how many files each request carries.
-const UPLOAD_BATCH_SIZE = 8;
-const UPLOAD_CONCURRENCY = 4;
-
-/** Runs `worker` over `items` with at most `limit` calls in flight at once. */
-export async function runWithConcurrencyLimit<T>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  let next = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const item = items[next++];
-      await worker(item);
-    }
-  });
-  await Promise.all(runners);
-}
-
-/** Splits `files` into batches of at most `maxSize`, never putting two files
- * with the same leaf name in the same batch — the backend correlates a
- * batch's progress lines by that leaf name, so a collision would make two
- * files' outcomes indistinguishable within one request. */
-export function chunkFilesByLeafName(files: File[], maxSize: number): File[][] {
-  const leafNames = files.map(leafFileName);
-  const hasCollision = new Set(leafNames).size !== leafNames.length;
-  if (!hasCollision) {
-    // The common case — a drop rarely repeats a filename — is a plain O(n)
-    // slice; the collision-safe grouping below is only needed when it does.
-    const batches: File[][] = [];
-    for (let i = 0; i < files.length; i += maxSize) batches.push(files.slice(i, i + maxSize));
-    return batches;
-  }
-
-  const batches: File[][] = [];
-  let remaining = files;
-  while (remaining.length) {
-    const batch: File[] = [];
-    const leftover: File[] = [];
-    const namesInBatch = new Set<string>();
-    for (const file of remaining) {
-      const leafName = leafFileName(file);
-      if (batch.length < maxSize && !namesInBatch.has(leafName)) {
-        batch.push(file);
-        namesInBatch.add(leafName);
-      } else {
-        leftover.push(file);
-      }
-    }
-    batches.push(batch);
-    remaining = leftover;
-  }
-  return batches;
 }
 
 export function DocumentUploadDrawer({
@@ -522,7 +386,7 @@ export function DocumentUploadDrawer({
       return;
     }
 
-    const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
+    const batches: ImportBatch[] = [];
     let skippedCount = 0;
     for (const { requestMetadata, group } of groups.values()) {
       const { toUpload, skipped } = splitByDecision(group, decisions);
@@ -554,84 +418,19 @@ export function DocumentUploadDrawer({
     setIsLoading(false);
     handleClose();
     dispatch(importPanelOpenRequested());
-    void runImport(batches);
-  };
-
-  /** Carry out an import after the dialog is gone.
-   *
-   * Every outcome reaches the panel through the store, so nothing here depends
-   * on the dialog still being mounted. Kept out of `handleSave` so that the
-   * part which must finish before the dialog closes, and the part which must
-   * not, cannot be confused for one another.
-   */
-  const runImport = async (batches: { requestMetadata: Record<string, unknown>; files: File[] }[]) => {
-    // Conflicts the server found at write time, after the drawer asked: a
-    // teammate took the name meanwhile. Reported together at the end rather
-    // than one notification per file, and as a question, not an error.
-    const lateConflicts: string[] = [];
-
-    // Every file is listed before a single byte moves. Waiting for its own
-    // transfer to end would leave most of a large import invisible: batches
-    // run a few at a time, so the last files are queued for minutes with
-    // nothing on screen saying they exist.
-    const runId = uuidv4();
-    const localIdOf = (batchIndex: number, filename: string) => `import-${runId}-${batchIndex}-${filename}`;
-    batches.forEach((batch, batchIndex) => {
-      for (const file of batch.files) {
-        const filename = leafFileName(file);
-        dispatch(uploadStarted({ localId: localIdOf(batchIndex, filename), filename }));
-      }
-    });
-
-    try {
-      await runWithConcurrencyLimit(
-        batches.map((batch, batchIndex) => ({ ...batch, batchIndex })),
-        UPLOAD_CONCURRENCY,
-        (batch) =>
-          // The entry a file already has switches over to its real task the
-          // instant the server reports its id (its own line in the stream), not
-          // after the whole batch finishes — so the panel follows the analysis
-          // of the first files while the last ones are still going up.
-          scheduleFiles(
-            batch.files,
-            uploadMode,
-            batch.requestMetadata,
-            ({ taskId, documentUid, filename }) => {
-              dispatch(
-                uploadHandedOff({
-                  localId: localIdOf(batch.batchIndex, filename),
-                  taskId,
-                  documentUid,
-                  filename,
-                }),
-              );
-            },
-            (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
-            (filename) => {
-              lateConflicts.push(filename);
-              // Answering a conflict is the panel's job in a later slice; until
-              // then the entry must not sit there claiming to be sending.
-              dispatch(taskEvicted(localIdOf(batch.batchIndex, filename)));
-            },
-            {
-              onFailed: (filename, error) =>
-                dispatch(uploadFailed({ localId: localIdOf(batch.batchIndex, filename), error })),
-              // Only reached by a file that never got a task — upload-only mode,
-              // or one the server skipped. Anything with a task is that task's
-              // to finish, and the transfer ending says nothing about it.
-              onFinished: (filename) => dispatch(uploadFinished({ localId: localIdOf(batch.batchIndex, filename) })),
-            },
-          ),
-      );
-    } finally {
-      if (lateConflicts.length) {
+    // Detached on purpose: every outcome reaches the panel through the store,
+    // so nothing about the transfer depends on this dialog still being mounted.
+    void runImport(batches, {
+      dispatch,
+      uploadMode,
+      onError: (detail) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail }),
+      onLateConflicts: (filenames) =>
         showInfo?.({
           summary: t("documentLibrary.uploadDrawerTitle"),
-          detail: t("documentLibrary.conflictLate", { count: lateConflicts.length }),
-        });
-      }
-      onUploadComplete?.();
-    }
+          detail: t("documentLibrary.conflictLate", { count: filenames.length }),
+        }),
+      onComplete: onUploadComplete,
+    });
   };
 
   useEffect(() => {

@@ -25,22 +25,29 @@
 // one place, and later where actions on it are offered.
 
 import { useEffect, useRef, useState } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
   selectImportPanelOpenRequest,
   selectImportTasks,
   selectRunningImportCount,
 } from "../../../../features/tasks/taskSlice";
+import { stepLabel } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
+import { importFailure } from "../../../../features/imports/importFailure";
+import { heldImport, releaseHeldImport, retryImport } from "../../../../features/imports/importRun";
+import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import styles from "./ImportPanel.module.css";
 
 export function ImportPanel() {
   const { t } = useTranslation();
+  const dispatch = useDispatch();
+  const { showError } = useToast();
   const imports = useSelector(selectImportTasks);
   const runningCount = useSelector(selectRunningImportCount);
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
@@ -122,16 +129,81 @@ export function ImportPanel() {
             <p className={styles.empty}>{t("rework.imports.panel.empty")}</p>
           ) : (
             imports.map((task) => (
-              <TaskCard
+              <ImportItem
                 key={task.taskId}
                 task={task}
-                onAcknowledge={() => acknowledge(task.taskId, task.kind, task.localOnly)}
-                acknowledging={isAcknowledging(task.taskId)}
+                onRetry={() =>
+                  void retryImport(task.taskId, {
+                    dispatch,
+                    onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
+                  })
+                }
+                onDismiss={() => {
+                  // Dismissed for good: stop holding the file open for a retry
+                  // that is no longer on offer.
+                  releaseHeldImport(task.taskId);
+                  void acknowledge(task.taskId, task.kind, task.localOnly);
+                }}
+                dismissing={isAcknowledging(task.taskId)}
               />
             ))
           )}
         </div>
       )}
     </aside>
+  );
+}
+
+/** One file of an import.
+ *
+ *  The card itself is the shared one; what it cannot know is what a failure
+ *  means for this file and whether anything can still be done about it. That
+ *  is this component's whole job. */
+function ImportItem({
+  task,
+  onRetry,
+  onDismiss,
+  dismissing,
+}: {
+  task: TaskViewModel;
+  onRetry: () => void;
+  onDismiss: () => void;
+  dismissing: boolean;
+}) {
+  const { t } = useTranslation();
+  const failed = task.state === "failed";
+  const failure = failed ? importFailure(task, t) : null;
+  // A retry can only re-send bytes the browser still has. After a reload it
+  // does not, and saying "try again" then would be offering something that
+  // cannot work.
+  const canRetry = failed && heldImport(task.taskId) !== undefined;
+
+  return (
+    <div className={styles.item}>
+      <TaskCard
+        task={task}
+        // The transfer has no backend step to report, so the card would show
+        // nothing at all for it; a failure gets its cause named rather than the
+        // sentence the backend wrote for a log.
+        statusText={failure?.summary ?? (task.stage === "upload" ? stepLabel(task, t) : undefined)}
+        statusDetail={failure?.detail}
+        actions={
+          canRetry ? (
+            <Tooltip text={t("rework.imports.retry.action")}>
+              <IconButton
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "refresh" }}
+                aria-label={t("rework.imports.retry.action")}
+                onClick={onRetry}
+              />
+            </Tooltip>
+          ) : undefined
+        }
+        onAcknowledge={onDismiss}
+        acknowledging={dismissing}
+      />
+      {failed && !canRetry && <p className={styles.reselect}>{t("rework.imports.retry.unavailable")}</p>}
+    </div>
   );
 }

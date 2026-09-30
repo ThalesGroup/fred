@@ -21,10 +21,10 @@
 
 ## 4. Make failures survivable
 
-- [ ] 4.1 Keep a failed file listed with its cause and a retry action until retried or dismissed.
-- [ ] 4.2 Map backend failure causes onto text a non-technical reader understands; where no cause is available, say so honestly rather than inventing one.
-- [ ] 4.3 Offer retry only when the browser still holds the file; otherwise ask for re-selection.
-- [ ] 4.4 Test: a failure is still listed after navigating away and back; the other files are unaffected.
+- [x] 4.1 A failed entry stays listed until retried or dismissed (`selectVisibleTasks` keeps unacknowledged failures indefinitely) and carries a retry. The import engine moved out of the dialog into `features/imports/importRun.ts` — the dialog is gone long before the transfer is, and the panel, not the dialog, is where a retry is asked for.
+- [x] 4.2 `importFailure` maps the sentences the backend actually writes (quota guard, `_wf_file_terminal_event_args`) onto one line the reader can act on, keeping the original as hover detail. `Execution failed` and `No failure details were reported` are treated as no cause at all, because that is what they mean.
+- [x] 4.3 The file behind a failed entry is held in a module-level vault — a `File` handle, not its bytes — released as soon as it is no longer ours to send, and gone on reload. No held file, no retry button: the panel says the file has to be picked again instead.
+- [x] 4.4 Test: `ImportPanel.failures.test.tsx` — six cases over the real `TaskCard`, including the failure surviving an unmount/remount and its neighbour in the same batch being untouched.
 
 ## 5. Conflicts awaiting a decision
 

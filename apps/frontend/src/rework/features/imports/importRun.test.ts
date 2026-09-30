@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Pins down scheduleFiles' contract — see its doc comment in DocumentUploadDrawer.tsx.
+// Pins down scheduleFiles' contract — see its doc comment in importRun.ts.
 
 import { describe, expect, it, vi } from "vitest";
-import type { ScheduledTask } from "../../../../../slices/streamDocumentUpload";
+import type { ScheduledTask } from "../../../slices/streamDocumentUpload";
 
 const streamMock = vi.fn();
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+vi.mock("../../../slices/streamDocumentUpload", () => ({
   leafFileName: (file: File) => file.name.split("/").pop() || file.name,
   streamUploadOrProcessDocument: (...args: unknown[]) => streamMock(...args),
 }));
 
-import { chunkFilesByLeafName, runWithConcurrencyLimit, scheduleFiles } from "./DocumentUploadDrawer";
+import { chunkFilesByLeafName, runWithConcurrencyLimit, scheduleFiles } from "./importRun";
 
 describe("scheduleFiles", () => {
   it("resolves once its single file is discovered, without waiting for the request to settle", async () => {

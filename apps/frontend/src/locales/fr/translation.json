@@ -2167,12 +2167,32 @@
       }
     },
     "imports": {
+      "failure": {
+        "analysis": "L'analyse de ce fichier a échoué.",
+        "attemptsExhausted": "Plusieurs tentatives ont échoué.",
+        "connectionLost": "La connexion a été perdue pendant l'envoi.",
+        "extraction": "Le contenu de ce fichier n'a pas pu être lu.",
+        "indexing": "Le fichier a été lu, mais son indexation a échoué.",
+        "interrupted": "Le traitement s'est interrompu avant la fin.",
+        "notAllowed": "Vous n'avez pas le droit d'importer dans ce dossier.",
+        "preparation": "La préparation de ce fichier a échoué.",
+        "quotaExceeded": "L'espace de stockage de l'équipe est plein.",
+        "quotaUnknown": "L'espace disponible n'a pas pu être vérifié. À réessayer.",
+        "serverUnavailable": "Le serveur n'a pas répondu.",
+        "unreported": "Échec, sans cause rapportée.",
+        "unsupportedType": "Ce type de fichier n'est pas pris en charge.",
+        "upload": "L'envoi de ce fichier a échoué."
+      },
       "panel": {
         "collapse": "Masquer les imports",
         "empty": "Aucun import en cours. Les fichiers que vous ajoutez apparaissent ici pendant leur traitement.",
         "expand": "Afficher les imports",
         "resize": "Redimensionner le panneau des imports",
         "title": "Imports"
+      },
+      "retry": {
+        "action": "Réessayer",
+        "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."
       }
     },
     "knowledgeBases": {

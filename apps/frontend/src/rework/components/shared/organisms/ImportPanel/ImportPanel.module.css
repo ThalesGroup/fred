@@ -103,3 +103,18 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+/* A failure whose file the browser no longer holds: the card cannot offer a
+   retry, so the panel says what to do instead. Its own line, because the
+   card's status row truncates to one. */
+.reselect {
+  margin: 0 0 var(--spacing-2xs) var(--spacing-xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}

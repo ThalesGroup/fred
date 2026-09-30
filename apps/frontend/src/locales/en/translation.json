@@ -2167,12 +2167,32 @@
       }
     },
     "imports": {
+      "failure": {
+        "analysis": "Analysing this file failed.",
+        "attemptsExhausted": "Several attempts failed.",
+        "connectionLost": "The connection was lost during the transfer.",
+        "extraction": "This file's content could not be read.",
+        "indexing": "The file was read, but indexing it failed.",
+        "interrupted": "Processing stopped before finishing.",
+        "notAllowed": "You are not allowed to import into this folder.",
+        "preparation": "Preparing this file failed.",
+        "quotaExceeded": "The team's storage is full.",
+        "quotaUnknown": "Available storage could not be checked. Worth retrying.",
+        "serverUnavailable": "The server did not answer.",
+        "unreported": "Failed, with no cause reported.",
+        "unsupportedType": "This file type is not supported.",
+        "upload": "Sending this file failed."
+      },
       "panel": {
         "collapse": "Hide imports",
         "empty": "Nothing being imported. Files you add show up here while they are processed.",
         "expand": "Show imports",
         "resize": "Resize the imports panel",
         "title": "Imports"
+      },
+      "retry": {
+        "action": "Try again",
+        "unavailable": "This file has to be picked again before it can be retried."
       }
     },
     "knowledgeBases": {
