@@ -112,6 +112,7 @@ cache_dir = "/tmp/.pytest"
 
 markers = [
   "integration: mark integration tests",
+  "integration_postgres: integration tests that specifically need a real PostgreSQL — docker-compose.integration.yml only provisions OpenFGA, so `make test-integration` excludes this subset by default",
   "content_storage_type(type): mark test to select a content store backend",
   "metadata_storage_type(type): mark test to select a metadata store backend",
   "vector_storage_type(type): mark test to select a vector store backend",

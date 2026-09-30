@@ -1,15 +1,15 @@
 ## 1. Confirm the audit before touching anything
 
 - [x] 1.1 Re-run the consumer audit for `canonical_name` and `version` across backends, capabilities, CLI, export/import and the generated clients. Record the result; do not trust the proposal's summary.
-- [ ] 1.2 Confirm `add-import-conflict-resolution` is merged and duplicates are handled, since this change removes the old handling.
+- [x] 1.2 Confirm `add-import-conflict-resolution` is merged and duplicates are handled, since this change removes the old handling. *Satisfied by stacking instead: this change sits on top of PR #2876, so the conflict handling is present in its base and the stack enforces the merge order.*
 - [x] 1.3 Agree the renaming scheme with the developer.
 
 ## 2. Migrate existing alternate versions
 
-- [ ] 2.1 Write the migration: rename each alternate version to a distinct, non-colliding name in its folder; leave content, identifiers and folder membership untouched; clear the versioning fields.
-- [ ] 2.2 Make it idempotent and re-runnable, and test resuming it after a partial run.
-- [ ] 2.3 Test on a seeded corpus containing base documents with and without alternate versions, and folders where the obvious new name would collide.
-- [ ] 2.4 Verify no document is deleted and none becomes unreachable.
+- [x] 2.1 Write the migration: rename each alternate version to a distinct, non-colliding name in its folder; leave content, identifiers and folder membership untouched; clear the versioning fields.
+- [x] 2.2 Make it idempotent and re-runnable, and test resuming it after a partial run.
+- [x] 2.3 Test on a seeded corpus containing base documents with and without alternate versions, and folders where the obvious new name would collide.
+- [x] 2.4 Verify no document is deleted and none becomes unreachable.
 
 ## 3. Remove the import half
 
