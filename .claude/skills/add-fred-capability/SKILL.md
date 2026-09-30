@@ -52,6 +52,16 @@ Do not skip this. Open and skim:
   (`[project.entry-points."fred.capabilities"]`; `fred-capability-documents` shows
   several entry points in one package) and
   `libs/fred-runtime/fred_runtime/capabilities/registry.py` (`boot_capability_registry`).
+  MCP catalog packages use `fred.mcp_catalogs` instead: a loader accepting
+  `fred_sdk.contracts.services.ServiceEndpointsPort` and returning
+  `fred_sdk.resources.mcp.McpCatalog`. Pass the port as `services` to the SDK
+  loaders. Internal HTTP entries declare a typed `service` and relative `path`;
+  the runtime supplies the configured base URL (port and API prefix included).
+  Only remote MCP transports are supported; concrete external `url` values
+  remain supported.
+  Follow
+  `libs/capabilities/fred-capability-mcp/` for the loader and entry-point declaration;
+  use the SDK catalog loaders to resolve packaged YAML and `prompt_file` references.
   New packages go under `libs/capabilities/fred-capability-<name>/` — the directory
   name is the distribution name.
 

@@ -26,6 +26,7 @@ urls = { Homepage = "https://site.fredlab.dev", Repository = "https://github.com
 # The agent authoring surface: graph, ReAct, capability and runtime contracts,
 # plus the fred-core platform behind them. A Knowledge Base pod never needs it.
 agents = [
+  "pyyaml>=6.0.1",
   "fred-core>=4.4.0",
   "langchain-core>=1.6.5",
   "langchain>=1.4.2",

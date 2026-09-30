@@ -16,6 +16,7 @@
     "../../libs/capabilities/fred-capability-html-artifact",
     "../../libs/capabilities/fred-capability-team-wiki",
     "../../libs/capabilities/fred-capability-documents",
-    "../../libs/capabilities/fred-capability-document-access"
+    "../../libs/capabilities/fred-capability-document-access",
+    "../../libs/capabilities/fred-capability-mcp"
   ]
 }
