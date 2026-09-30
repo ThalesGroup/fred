@@ -1024,7 +1024,6 @@ class IngestionController:
                     tags=tags,
                     source_tag=source_tag,
                     profile=profile,
-                    apply_versioning=overwrites is None,
                 )
                 if overwrites:
                     metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
@@ -1243,7 +1242,6 @@ class IngestionController:
                             tags=tags,
                             source_tag=source_tag,
                             profile=profile,
-                            apply_versioning=overwrites is None,
                         )
                         if overwrites:
                             metadata = await self.service.adopt_existing_document(user, metadata, overwrites)

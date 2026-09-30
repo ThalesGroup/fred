@@ -15,9 +15,8 @@
 import asyncio
 import logging
 import pathlib
-import re
 import threading
-from typing import Iterable, Optional, Tuple
+from typing import Optional
 
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata, ProcessingStage, SourceType
@@ -46,68 +45,6 @@ class IngestionService:
         self.metadata_service = MetadataService()
         # Shared pipeline manager for the configured processing profiles.
         self.pipeline_manager = ProcessingPipelineManager.create_with_default(self.context)
-
-    @staticmethod
-    def _split_versioned_name(name: str) -> Tuple[str, int]:
-        """
-        Return (canonical_name, version) from a display name like 'report.docx (2)'.
-        Defaults to version=0 when no suffix is present.
-        """
-        match = re.match(r"^(?P<base>.+)\s\((?P<version>\d+)\)$", name.strip())
-        if match:
-            return match.group("base"), int(match.group("version"))
-        return name, 0
-
-    def _select_primary_tag(self, metadata: DocumentMetadata) -> str | None:
-        tags = metadata.tags.tag_ids or []
-        return tags[0] if tags else None
-
-    def _existing_versions(self, canonical_name: str, primary_tag: str | None, docs: Iterable[DocumentMetadata]) -> list[int]:
-        """
-        Collect known versions of the same canonical name within the same primary tag (folder).
-        Falls back to parsing the display name when older docs don't carry canonical/version fields.
-        """
-        versions: list[int] = []
-        for d in docs:
-            if primary_tag and primary_tag not in (d.tags.tag_ids or []):
-                continue
-
-            canon_field = getattr(d.identity, "canonical_name", None)
-            canon = self._split_versioned_name(canon_field)[0] if canon_field else self._split_versioned_name(d.identity.document_name)[0]
-            if canon != canonical_name:
-                continue
-
-            version = getattr(d.identity, "version", None)
-            if version is None:
-                version = self._split_versioned_name(d.identity.document_name)[1]
-            versions.append(max(0, int(version)))
-        return versions
-
-    async def _apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
-        """
-        Ensure the incoming document gets a suffix-based version within its primary folder/tag.
-        """
-        canonical_name, explicit_version = self._split_versioned_name(metadata.identity.document_name)
-        primary_tag = self._select_primary_tag(metadata)
-
-        filters = {}
-        if primary_tag:
-            filters = {"tags": {"tag_ids": [primary_tag]}}
-
-        existing_docs = await self.metadata_service.metadata_store.get_all_metadata(filters)
-        existing_versions = self._existing_versions(canonical_name, primary_tag, existing_docs)
-
-        # Prevent cascading (2), (3)… — keep at most one alternate version (1)
-        if explicit_version > 1 or any(v > 0 for v in existing_versions):
-            raise ValueError(f"A draft version already exists for '{canonical_name}'. Delete or promote it before ingesting another version.")
-
-        version = 1 if existing_versions else 0
-        display_name = canonical_name  # keep original name; UI will use version field to render badge
-
-        metadata.identity.canonical_name = canonical_name
-        metadata.identity.version = version
-        metadata.identity.document_name = display_name
-        return metadata
 
     async def adopt_existing_document(self, user: KeycloakUser, metadata: DocumentMetadata, existing_uid: str) -> DocumentMetadata:
         """Make a freshly-extracted document *be* the one it replaces.
@@ -259,19 +196,11 @@ class IngestionService:
         tags: list[str],
         source_tag: str,
         profile: IngestionProcessingProfile | str | None = None,
-        *,
-        apply_versioning: bool = True,
     ) -> DocumentMetadata:
         """
         Extracts metadata from the input file.
         This method is responsible for determining the file type and using the appropriate processor
         to extract metadata. It also validates the metadata to ensure it contains a document UID.
-
-        `apply_versioning` keeps the suffix-based draft version a person gets for
-        uploading the same name twice. A caller that addresses its documents by a
-        source key turns it off: it has one document per key by construction, so
-        a second write of that key is the same document again, not a draft beside
-        it — and the scan would refuse the third write outright.
         """
         suffix = file_path.suffix.lower()
         normalized_profile = coerce_processing_profile(profile)
@@ -287,8 +216,6 @@ class IngestionService:
         # file's own embedded metadata, never who is uploading it.
         metadata.identity.uploaded_by = user.uid
         metadata.processing.profile = normalized_profile
-        if apply_versioning:
-            metadata = await self._apply_versioning(metadata)
 
         # Step 2: enrich/clean metadata
         if source_config:

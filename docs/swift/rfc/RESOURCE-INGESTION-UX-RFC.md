@@ -1,10 +1,11 @@
 # RFC — Resource import: explicit conflicts, visible progress
 
-**Status:** two of three slices shipped and archived (2026-09-30) — conflict
-resolution and the import panel. What remains open, and all this RFC still
-owns, is `retire-document-versioning`: migrating the alternate versions that
-already exist and removing the mechanism. §7 lists the questions that slice
-still has to settle.
+**Status:** all three slices built (2026-09-30) — conflict resolution, the
+import panel, and retiring document versioning. Everything this RFC proposed
+now lives in the capability specs and in
+[INGESTION.md](../design/INGESTION.md); what is left below is one design
+question that is still genuinely open (§7) and two latency findings that still
+need issues of their own (§8). Archive this RFC once both have left it.
 
 ## 1. Problem
 
@@ -19,35 +20,19 @@ is modal, so the application is unusable throughout. The button reads
 Behind that sits a fourth problem, invisible to users, which is why this is an
 RFC and not a UI ticket.
 
-## 2. What the current versioning mechanism actually does
+## 2. The versioning mechanism, and why it went
 
-`IngestionService._apply_versioning` assigns every incoming document a
-`canonical_name` and a `version` integer within its destination folder. A second
-document with the same name becomes version 1; a third is refused with:
+`_apply_versioning` gave every incoming document a `canonical_name` and a
+`version` within its folder; a second document of that name became version 1, a
+third was refused outright. Nothing rendered the distinction, "promote" was not
+an action anywhere in the product, and both halves of the mechanism scanned the
+whole `metadata` table — 355 ms per call at 5045 documents, once per imported
+file and once per deleted document (#2844).
 
-> A draft version already exists for '<name>'. Delete or promote it before
-> ingesting another version.
-
-Verified on `swift` at `1bbe40614`:
-
-- **The frontend never renders a document version.** The comment at
-  `ingestion_service.py:105` says "UI will use version field to render badge".
-  No such badge exists anywhere in `apps/frontend/src`.
-- **"Promote" is not an action.** No route, no UI. The error tells the user to
-  do something the product does not offer. The only promotion is implicit, in
-  `MetadataService._promote_alternate_version`, when the base document is
-  deleted.
-- **It is undocumented.** `docs/swift/design/INGESTION.md` never mentions
-  versioning, canonical names or duplicates.
-- **It is the dominant cost on two hot paths.** `_apply_versioning` (once per
-  imported file) and `_promote_alternate_version` (once per deleted document)
-  both call `get_all_metadata`, which loads the entire `metadata` table,
-  deserializes every row into Pydantic and filters in Python. Measured locally:
-  6 ms at 45 documents, 36 ms at 545, 355 ms at 5045 — linear in corpus size,
-  paid per file. See #2844.
-
-The platform pays a full corpus scan on every import and every deletion to
-maintain a distinction nobody can see and nobody can act on.
+It is gone, along with `canonical_name` and `version`. What replaced it is
+current truth and lives in [INGESTION.md](../design/INGESTION.md) §"When a
+folder already holds that name"; the build record is
+`openspec/changes/archive/*-retire-document-versioning/`.
 
 ## 3. Design
 
@@ -68,12 +53,10 @@ is **not** surfaced application-wide. The Resources page of the team it belongs
 to is its surface; the transfer and its tracking survive navigating away, and
 the panel restores the full list on return (developer decision, 2026-09-30).
 
-### 3.5 Existing alternate versions
+### 3.5 Existing alternate versions — shipped
 
-Documents already carrying `version = 1` in production become ordinary
-documents with a distinct name. Nothing is deleted, nothing stays hidden, and
-the user can then decide for themselves. One-off data migration, with an
-operator note.
+Migration `02d556a6f182` renamed each one to `report (1).pdf`, deleting nothing.
+Operator note: `docs/swift/ops/migrations/retire-document-versioning.md`.
 
 ### 3.6 What the panel requires of the task lifecycle
 
@@ -120,17 +103,18 @@ already carry team activity.
 
 ## 5. Impact on existing contracts
 
-- `fred_core.documents.document_structures.Identity`: `canonical_name` and
-  `version` are removed, and the generated frontend client is regenerated in
-  the same change (§7).
-- Knowledge Flow ingestion API: a new name-check endpoint for the destination
-  folder, and a per-file decision carried on the upload request.
-- `MetadataService._promote_alternate_version` disappears with the mechanism it
-  serves, removing one of the two corpus scans reported in #2844.
-- `docs/swift/design/INGESTION.md` gains the conflict rule, which it has never
-  described.
-- Frontend: `DocumentUploadDrawer` stops owning the wait; `TaskTray` is mounted
-  and owns progress.
+All shipped, and now the current contract rather than a proposal:
+
+- `Identity` lost `canonical_name` and `version`; the generated frontend client
+  was regenerated with them.
+- Knowledge Flow ingestion API gained a name-check endpoint for the destination
+  folder and a per-file decision on the upload request.
+- `MetadataService._promote_alternate_version` went with the mechanism it
+  served, removing one of the two corpus scans reported in #2844 — which #2844
+  itself is not closed by, the rest of its cost being untouched.
+- `docs/swift/design/INGESTION.md` now describes the duplicate rule.
+- Frontend: `DocumentUploadDrawer` no longer owns the wait; `TaskTray` is
+  mounted and owns progress.
 
 ## 6. What this RFC does not own
 
@@ -149,31 +133,25 @@ already carry team activity.
   work to take up immediately after this one. Bundling it here would make both
   unreviewable. §3.6 states only what the import experience requires of it.
 
-## 7. Open questions
+## 7. Open question
 
-Two earlier questions are now settled (2026-09-29).
+One, and it is not the versioning slice's — that slice is built.
 
-**`canonical_name` and `version` are removed, not deprecated.** They are confined
-to `ingestion_service.py`, `metadata/service.py` and `document_structures.py`,
-and no capability, CLI or export path consumes them. They are exposed in the
-generated frontend client (`knowledgeFlowOpenApi.ts:2940-2942`), so that client
-must be regenerated in the same change.
+**What does overwrite do to an in-flight ingestion of the same document?**
+Cancelling the running workflow is likely correct, but it depends on the
+cancellation capability referenced in §6 and on the reconciliation rules OPS-04
+describes. Until that exists, replacing a document whose ingestion is still
+running is undefined rather than decided.
 
-**The conflict check stays scoped to the destination folder**, with the
-cross-folder consequence recorded in §3.1.
+Renaming, by contrast, is settled and needed no cancellation: a task addresses
+its document by `TaskTarget.id`, the `document_uid`, so the migration's renames
+reach no task. Only a task's `label` keeps the old name, the same display
+snapshot a citation keeps.
 
-Still open:
-
-1. **What does overwrite do to an in-flight ingestion of the same document?**
-   Cancelling the running workflow is likely correct, but it depends on the
-   cancellation capability referenced in §6 and on the reconciliation rules
-   OPS-04 describes.
-2. ~~How long do finished entries stay in the panel?~~ Settled while building
-   the panel (2026-09-30): a file that succeeded says so and then leaves the
-   list on its own after three seconds, without being acknowledged — the
-   document is in the table by then. Only a failure or an unanswered question
-   waits for the user. The task itself keeps its own eviction window in the
-   store, which the documents table and the task tray both read.
+Settled earlier and recorded where they belong now: `canonical_name`/`version`
+removal (§5), the conflict check's scope (§3.1), and how long a finished entry
+stays in the panel (three seconds, unacknowledged — in the panel's capability
+spec).
 ## 8. Unfiled findings on import latency
 
 Surfaced while mapping this path, on the same code the conflict work touches.
@@ -199,10 +177,6 @@ the import feel slow from the browser.
 
 ## 9. Next step
 
-`retire-document-versioning` (`openspec/changes/retire-document-versioning/`,
-19 tasks, not started). It depends on conflict resolution, which has shipped,
-and it is the one slice carrying a data migration: existing alternate versions
-have to be migrated before `canonical_name` and `version` can go.
-
-The two questions in §7 are both its to settle. The two latency findings in §8
-are still unfiled and are independent of it.
+Nothing left to build here. Two things have to leave this RFC before it can be
+archived: the open question in §7 needs the cancellation capability it waits on,
+and the two findings in §8 need issues of their own.

@@ -24,6 +24,32 @@ we do not distribute individual PDF pages or OCR calls across Temporal workers.
 the second rich waits; the fast worker can continue. When the first rich finishes
 extraction, its indexing goes to common while the second rich starts extraction.
 
+## When a folder already holds that name
+
+A folder never holds two documents a user cannot tell apart. Importing a name
+the destination already holds is answered, not guessed: the caller is asked
+whether to replace the document that is there or to skip the file, one decision
+per name, and replacing keeps the existing `document_uid` so every citation and
+link already pointing at it still resolves — to the new content.
+
+Callers that address their documents by a source key of their own
+(`library_sync`) never reach that question: one document per key by
+construction, so a second write of a key is the same document again.
+
+The name question is asked of the database, not of the corpus in memory:
+`document_uids_by_name_in_tag` is answered by `idx_metadata_document_name`
+together with the GIN index on `tag_ids`. Any store other than PostgreSQL still
+falls back to loading the table (#2860).
+
+Until 2026-09-30 the platform did something else: it stored the second document
+under the same name with a hidden `version = 1`, and deleting the first promoted
+the second back. Nothing rendered that distinction and no action promoted it by
+hand, so a folder simply showed one name twice — and both halves scanned the
+whole `metadata` table to do it, once per imported file and once per deleted
+document. The mechanism and the `canonical_name`/`version` fields it used are
+gone; existing alternates were renamed to `report (1).pdf` by migration
+`02d556a6f182`.
+
 ## Four roles, four queues
 
 Queue names below assume `scheduler.temporal.task_queue: ingestion`.

@@ -65,9 +65,8 @@ preview + "more" actions cell.
   `document_name` field (a separate, denormalized copy of the display name kept alongside
   the embedding) is patched best-effort across all 5 vector backends, and the in-app
   preview/download `Content-Disposition` header reads the DB record instead of the stored
-  blob's own (stale) name. `canonical_name`/`version` (the "name (1)" draft-version
-  machinery) are left untouched by a rename — a known, non-corrupting edge case. Folder
-  rename and `/fs` rename are plain metadata/filesystem operations with no extension lock.
+  blob's own (stale) name. Folder rename and `/fs` rename are plain
+  metadata/filesystem operations with no extension lock.
 - **Bulk actions** (row-selection checkbox column): delete, download (client-side ZIP for
   2+ files, direct download for one), and — Corpus only — exclude/include from search.
   Selection is scoped to the current page.
