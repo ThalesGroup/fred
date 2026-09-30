@@ -31,7 +31,11 @@ from pydantic import BaseModel, Field, model_validator
 
 class AskUserArgs(BaseModel):
     question: str = Field(min_length=1)
-    choices: tuple[HumanChoiceOption, ...] = ()
+    choices: tuple[HumanChoiceOption, ...] = Field(
+        default=(),
+        max_length=4,
+        description="Select up to four of the most relevant options before asking; do not submit a longer list.",
+    )
     allow_free_text: bool = False
     tool_call_id: Annotated[str, InjectedToolCallId]
 

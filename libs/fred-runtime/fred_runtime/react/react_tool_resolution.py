@@ -224,7 +224,8 @@ class ReActRuntimeToolResolver:
                     runtime_name="ask_user",
                     description=(
                         "Ask the user one question and continue after their answer. "
-                        "Provide choices, allow_free_text, or both."
+                        "Provide up to four of the most relevant choices, allow_free_text, or both. "
+                        "Select the choices before calling; do not truncate a longer list."
                     ),
                     args_schema=AskUserArgs,
                     tool_ref="platform.ask_user",

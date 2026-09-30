@@ -6374,8 +6374,10 @@ text is the record of what was sent.
 
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
 `RuntimeContext.ask_user` is explicitly `true`. An absent value or `false` leaves
-the tool out of the model catalog. The tool accepts a nonblank question, distinct
-single-choice options, and/or free text. Its injected tool call ID is hidden from
+the tool out of the model catalog. The tool accepts a nonblank question, up to
+four distinct single-choice options, and/or free text. The agent selects the
+most relevant options before calling; a longer list is rejected, never trimmed.
+Its injected tool call ID is hidden from
 the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
 `stage="agent_question"`. A collision with a declared, provider or capability
 tool named `ask_user` rejects executor construction.

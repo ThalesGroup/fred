@@ -249,6 +249,7 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
         "choices",
         "allow_free_text",
     }
+    assert schema.model_json_schema()["properties"]["choices"]["maxItems"] == 4
 
 
 def test_ask_user_colliding_with_declared_tool_is_rejected() -> None:
@@ -283,6 +284,11 @@ def test_ask_user_colliding_with_declared_tool_is_rejected() -> None:
             "choices": [{"id": "yes", "label": "Yes"}, {"id": "yes", "label": "Again"}],
             "tool_call_id": "call-1",
         },
+        {
+            "question": "Choose",
+            "choices": [{"id": str(index), "label": str(index)} for index in range(5)],
+            "tool_call_id": "call-1",
+        },
     ],
 )
 def test_ask_user_rejects_invalid_question_forms(payload: dict[str, object]) -> None:
@@ -291,6 +297,16 @@ def test_ask_user_rejects_invalid_question_forms(payload: dict[str, object]) -> 
 
     with pytest.raises(ValidationError):
         AskUserArgs.model_validate(payload)
+
+
+def test_ask_user_accepts_four_selected_choices_and_exposes_the_limit() -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+
+    choices = [{"id": str(index), "label": str(index)} for index in range(4)]
+    args = AskUserArgs.model_validate(
+        {"question": "Choose", "choices": choices, "tool_call_id": "call-1"}
+    )
+    assert len(args.choices) == 4
 
 
 def test_ask_user_colliding_with_provider_tool_is_rejected() -> None:
