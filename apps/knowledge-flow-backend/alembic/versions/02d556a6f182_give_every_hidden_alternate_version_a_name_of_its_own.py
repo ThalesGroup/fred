@@ -115,8 +115,15 @@ def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
     )
 
     for uid, name, tags in alternates:
+        if not name:
+            # `jsonb_set` is strict: a NULL name would make the whole `doc`
+            # column NULL and take every listing holding this row down with it.
+            # There is nothing to rename anyway; the strip below clears the
+            # fields.
+            continue
+
         new_name = name
-        if name and tags:
+        if tags:
             # A document in no folder cannot collide with anything.
             def taken(candidate: str, uid: str = uid, tags: list = tags) -> bool:
                 return bind.execute(held, {"uid": uid, "name": candidate, "tags": tags}).first() is not None

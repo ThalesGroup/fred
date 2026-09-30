@@ -35,9 +35,30 @@ Documents that carry an alternate version at migration time SHALL become
 ordinary documents with a name distinct from their base document. No document
 SHALL be deleted by the migration, and none SHALL remain hidden.
 
+A document whose name no other document in any of its folders holds SHALL keep
+that name: there is nothing for it to be confused with.
+
 #### Scenario: A folder holds a base document and its alternate version
 
 - **WHEN** the migration runs on a folder holding "report.pdf" and its alternate version
 - **THEN** both documents are listed in that folder afterwards
 - **AND** their names differ from each other
 - **AND** their content and identifiers are unchanged
+
+#### Scenario: An alternate version outlived the document it was an alternate of
+
+- **WHEN** the migration runs on an alternate version whose name no other document in its folders holds
+- **THEN** it keeps the name it has
+- **AND** it is an ordinary document afterwards
+
+### Requirement: The versioning fields leave every document
+
+The document identity SHALL NOT carry `canonical_name` or `version`, and no
+stored document SHALL retain either key after the migration — including a
+document that was never an alternate.
+
+#### Scenario: An ordinary document is migrated
+
+- **WHEN** the migration runs on a document that carried `version = 0`
+- **THEN** its name is unchanged
+- **AND** it carries neither `canonical_name` nor `version`

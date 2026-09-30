@@ -212,8 +212,9 @@ class ImportPlan:
 
     ambiguous: List[str]
     """The folder holds more than one document under that name, so "the
-    existing document" does not identify one. Possible only while alternate
-    versions exist."""
+    existing document" does not identify one. Reachable by adding a document to
+    a folder that already holds its name — `add_tag_id_to_document` has no
+    collision guard, unlike `rename_document`."""
 
 
 EMPTY_IMPORT_PLAN = ImportPlan(overwrite_uid={}, skipped=[], undecided=[], ambiguous=[])
@@ -223,8 +224,7 @@ async def _plan_import(filenames: List[str], tags: List[str], decisions: Dict[st
     """Ask the destination folder which of these names it already holds, and
     pair each answer with what the user decided about it.
 
-    Scoped to the folder the documents land in — its first tag, the one
-    versioning already treated as the document's home.
+    Scoped to the folder the documents land in — its first tag.
     """
     destination = tags[0] if tags else None
     if not destination:
@@ -256,7 +256,7 @@ async def _plan_import(filenames: List[str], tags: List[str], decisions: Dict[st
 
 
 UNDECIDED_CONFLICT_MESSAGE = "A document named '{filename}' already exists in this folder. Choose to overwrite it or to keep it."
-AMBIGUOUS_CONFLICT_MESSAGE = "This folder holds more than one document named '{filename}'. Delete or promote the alternate version before importing again."
+AMBIGUOUS_CONFLICT_MESSAGE = "This folder holds more than one document named '{filename}'. Rename or delete one of them before importing again."
 
 
 STEP_UPLOAD_PREPARATION = "upload preparation"

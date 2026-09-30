@@ -197,6 +197,28 @@ def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields() -> None
     assert identities["no-version-key"]["document_name"] == "memo.pdf"
 
 
+def test_a_nameless_alternate_does_not_destroy_its_own_row() -> None:
+    """`jsonb_set` is strict: one NULL argument makes the whole result NULL, and
+    `doc` is nullable, so setting a missing name would blank the document
+    entirely — after which every listing holding that row fails to deserialise,
+    taking the folder page with it, not just the one document."""
+    engine = _engine()
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('nameless', :tags, :doc)"),
+            {"tags": json.dumps(["folder-a"]), "doc": json.dumps({"identity": {"document_uid": "nameless", "version": 1}})},
+        )
+
+    _run_upgrade(engine)
+
+    with engine.connect() as conn:
+        doc = conn.execute(sa.text("SELECT doc FROM metadata WHERE document_uid = 'nameless'")).scalar_one()
+    assert doc is not None
+    identity = json.loads(doc)["identity"]
+    assert identity["document_uid"] == "nameless"
+    assert "version" not in identity
+
+
 def test_not_one_document_is_left_carrying_either_field() -> None:
     engine = _engine()
     _insert(engine, "base", "report.pdf", ["folder-a"])

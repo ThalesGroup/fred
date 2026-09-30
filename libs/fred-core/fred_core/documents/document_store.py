@@ -152,9 +152,9 @@ class BaseDocumentMetadataStore:
     ) -> dict[str, list[str]]:
         """Which of ``names`` a tag already holds, and under which document uids.
 
-        A name can map to more than one document: while alternate versions
-        exist, a folder can hold two documents sharing a display name. Callers
-        must not assume a single uid.
+        A name can map to more than one document: adding a document to a folder
+        that already holds its name is not guarded, so two can share a display
+        name. Callers must not assume a single uid.
 
         Portable default, overridden where the store can answer by index.
         """

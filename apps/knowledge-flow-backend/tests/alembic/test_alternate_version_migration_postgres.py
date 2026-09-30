@@ -22,6 +22,14 @@ sibling `test_postgres_document_store_sql.py` records a production failure in
 this same table caused by exactly that — a parameter passed somewhere
 PostgreSQL could not type it, which every SQLite test happily accepted.
 
+Driven through `create_async_engine` + `run_sync`, which is how
+`fred_core.sql.alembic_env` runs a migration: the DBAPI underneath is therefore
+asyncpg, the one a deployment uses. Which driver runs matters because parameter
+typing is where it differs — asyncpg prepares server-side, so a parameter whose
+type PostgreSQL cannot infer fails there. Dropping the `CAST` inside this
+migration's `to_jsonb` reproduces the failure here as
+`could not determine polymorphic type because input has type unknown`.
+
 Run:
 
     export FRED_PG_DSN="postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
@@ -40,10 +48,12 @@ import sys
 import uuid
 from pathlib import Path
 from types import ModuleType
-from typing import Iterator
+from typing import AsyncIterator
 
 import pytest
+import pytest_asyncio
 import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic.operations import Operations
 from alembic.runtime.migration import MigrationContext
@@ -51,7 +61,7 @@ from alembic.runtime.migration import MigrationContext
 pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
 _PG_DSN_ENV = "FRED_PG_DSN"
-_DEFAULT_DSN = "postgresql+psycopg2://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
+_DEFAULT_DSN = "postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
 
 _MIGRATION_FILE = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "02d556a6f182_give_every_hidden_alternate_version_a_name_of_its_own.py"
 
@@ -68,29 +78,22 @@ def _load_migration_module() -> ModuleType:
 _migration = _load_migration_module()
 
 
-def _sync_dsn() -> str:
-    """The lane's env var carries an asyncpg DSN; this migration runs on a sync
-    connection, so the driver is swapped rather than asking for a second var."""
+@pytest_asyncio.fixture
+async def engine() -> AsyncIterator[AsyncEngine]:
     dsn = os.environ.get(_PG_DSN_ENV, _DEFAULT_DSN)
-    return dsn.replace("+asyncpg", "+psycopg2")
-
-
-@pytest.fixture
-def engine() -> Iterator[sa.Engine]:
-    dsn = _sync_dsn()
     schema = f"kf_alt_itest_{uuid.uuid4().hex[:8]}"
 
-    admin = sa.create_engine(dsn)
-    with admin.begin() as conn:
-        conn.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
-    admin.dispose()
+    admin = create_async_engine(dsn)
+    async with admin.begin() as conn:
+        await conn.execute(sa.text(f'CREATE SCHEMA "{schema}"'))
+    await admin.dispose()
 
     # The migration's SQL hardcodes `metadata`, so isolation comes from the
     # connection's search_path rather than from a table prefix.
-    scoped = sa.create_engine(dsn, connect_args={"options": f"-csearch_path={schema}"})
+    scoped = create_async_engine(dsn, connect_args={"server_settings": {"search_path": schema}})
     try:
-        with scoped.begin() as conn:
-            conn.execute(
+        async with scoped.begin() as conn:
+            await conn.execute(
                 sa.text(
                     """
                     CREATE TABLE metadata (
@@ -104,187 +107,225 @@ def engine() -> Iterator[sa.Engine]:
             )
         yield scoped
     finally:
-        scoped.dispose()
-        admin = sa.create_engine(dsn)
-        with admin.begin() as conn:
-            conn.execute(sa.text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
-        admin.dispose()
+        await scoped.dispose()
+        admin = create_async_engine(dsn)
+        async with admin.begin() as conn:
+            await conn.execute(sa.text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        await admin.dispose()
 
 
-def _insert(engine: sa.Engine, uid: str, name: str, tags: list[str] | None, version: int | None = None, **identity: object) -> None:
+async def _insert(engine: AsyncEngine, uid: str, name: str, tags: list[str] | None, version: int | None = None, **identity: object) -> None:
     doc: dict = {"identity": {"document_name": name, "document_uid": uid, **identity}}
     if version is not None:
         doc["identity"]["version"] = version
         doc["identity"]["canonical_name"] = name
-    with engine.begin() as conn:
-        conn.execute(
+    async with engine.begin() as conn:
+        await conn.execute(
             sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES (:uid, :tags, CAST(:doc AS jsonb))"),
             {"uid": uid, "tags": tags, "doc": json.dumps(doc)},
         )
 
 
-def _run_upgrade(engine: sa.Engine) -> None:
-    with engine.connect() as conn:
-        ctx = MigrationContext.configure(conn)
-        with Operations.context(ctx):
-            _migration.upgrade()
-        conn.commit()
+def _do_upgrade(sync_conn: sa.Connection) -> None:
+    ctx = MigrationContext.configure(sync_conn)
+    with Operations.context(ctx):
+        _migration.upgrade()
 
 
-def _identities(engine: sa.Engine) -> dict[str, dict]:
-    with engine.connect() as conn:
-        rows = conn.execute(sa.text("SELECT document_uid, doc FROM metadata")).fetchall()
+async def _run_upgrade(engine: AsyncEngine) -> None:
+    """Exactly `alembic_env`'s shape: an async connection, `run_sync`, asyncpg."""
+    async with engine.begin() as conn:
+        await conn.run_sync(_do_upgrade)
+
+
+async def _identities(engine: AsyncEngine) -> dict[str, dict]:
+    async with engine.connect() as conn:
+        rows = (await conn.execute(sa.text("SELECT document_uid, doc FROM metadata"))).fetchall()
     return {uid: doc["identity"] for uid, doc in rows}
 
 
-def test_the_statements_run_at_all_on_postgresql(engine: sa.Engine) -> None:
+@pytest.mark.asyncio
+async def test_the_statements_run_at_all_on_postgresql(engine: AsyncEngine) -> None:
     """The regression guard: every parameter has to be typable where it sits."""
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    identities = _identities(engine)
+    identities = await _identities(engine)
     assert identities["alt"]["document_name"] == "report (1).pdf"
     assert "version" not in identities["alt"]
     assert "canonical_name" not in identities["alt"]
     assert identities["base"]["document_name"] == "report.pdf"
 
 
-def test_an_alternate_whose_base_is_gone_keeps_the_name_it_has(engine: sa.Engine) -> None:
-    _insert(engine, "orphan", "report.pdf", ["folder-a"], version=1)
+@pytest.mark.asyncio
+async def test_an_alternate_whose_base_is_gone_keeps_the_name_it_has(engine: AsyncEngine) -> None:
+    await _insert(engine, "orphan", "report.pdf", ["folder-a"], version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    identity = _identities(engine)["orphan"]
+    identity = (await _identities(engine))["orphan"]
     assert identity["document_name"] == "report.pdf"
     assert "version" not in identity
 
 
-def test_the_suffix_skips_a_number_a_third_document_already_holds(engine: sa.Engine) -> None:
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "squatter", "report (1).pdf", ["folder-a"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+@pytest.mark.asyncio
+async def test_the_suffix_skips_a_number_a_third_document_already_holds(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "squatter", "report (1).pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    assert _identities(engine)["alt"]["document_name"] == "report (2).pdf"
+    assert (await _identities(engine))["alt"]["document_name"] == "report (2).pdf"
 
 
-def test_two_alternates_in_one_folder_do_not_both_claim_the_same_number(engine: sa.Engine) -> None:
+@pytest.mark.asyncio
+async def test_two_alternates_in_one_folder_do_not_both_claim_the_same_number(engine: AsyncEngine) -> None:
     """Each rename is committed before the next candidate is tested, so the
     second alternate's collision query already sees the first one's new name."""
-    _insert(engine, "base-a", "report.pdf", ["folder-a"])
-    _insert(engine, "alt-a", "report.pdf", ["folder-a"], version=1)
-    _insert(engine, "base-b", "report.pdf", ["folder-a"])
-    _insert(engine, "alt-b", "report.pdf", ["folder-a"], version=1)
+    await _insert(engine, "base-a", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt-a", "report.pdf", ["folder-a"], version=1)
+    await _insert(engine, "base-b", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt-b", "report.pdf", ["folder-a"], version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    names = sorted(identity["document_name"] for identity in _identities(engine).values())
+    names = sorted(identity["document_name"] for identity in (await _identities(engine)).values())
     assert names == ["report (1).pdf", "report (2).pdf", "report.pdf", "report.pdf"]
 
 
-def test_a_name_free_in_one_folder_but_taken_in_another_is_not_used(engine: sa.Engine) -> None:
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "elsewhere", "report (1).pdf", ["folder-b"])
-    _insert(engine, "alt", "report.pdf", ["folder-a", "folder-b"], version=1)
+@pytest.mark.asyncio
+async def test_a_name_free_in_one_folder_but_taken_in_another_is_not_used(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "elsewhere", "report (1).pdf", ["folder-b"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a", "folder-b"], version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    assert _identities(engine)["alt"]["document_name"] == "report (2).pdf"
-
-
-def test_a_same_name_document_in_another_folder_is_not_a_collision(engine: sa.Engine) -> None:
-    _insert(engine, "unrelated", "report.pdf", ["folder-b"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
-
-    _run_upgrade(engine)
-
-    assert _identities(engine)["alt"]["document_name"] == "report.pdf"
+    assert (await _identities(engine))["alt"]["document_name"] == "report (2).pdf"
 
 
-def test_a_document_with_no_tags_at_all_keeps_its_name(engine: sa.Engine) -> None:
+@pytest.mark.asyncio
+async def test_a_same_name_document_in_another_folder_is_not_a_collision(engine: AsyncEngine) -> None:
+    await _insert(engine, "unrelated", "report.pdf", ["folder-b"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+
+    await _run_upgrade(engine)
+
+    assert (await _identities(engine))["alt"]["document_name"] == "report.pdf"
+
+
+@pytest.mark.asyncio
+async def test_a_document_with_no_tags_at_all_keeps_its_name(engine: AsyncEngine) -> None:
     """`tag_ids` is NULL rather than empty for documents that never had one, and
     `&&` against NULL is NULL, not false — hence the COALESCE in the select."""
-    _insert(engine, "base", "report.pdf", None)
-    _insert(engine, "alt", "report.pdf", None, version=1)
+    await _insert(engine, "base", "report.pdf", None)
+    await _insert(engine, "alt", "report.pdf", None, version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    identity = _identities(engine)["alt"]
+    identity = (await _identities(engine))["alt"]
     assert identity["document_name"] == "report.pdf"
     assert "version" not in identity
 
 
-def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields(engine: sa.Engine) -> None:
-    _insert(engine, "plain", "report.pdf", ["folder-a"], version=0)
-    _insert(engine, "no-version-key", "memo.pdf", ["folder-a"])
+@pytest.mark.asyncio
+async def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields(engine: AsyncEngine) -> None:
+    await _insert(engine, "plain", "report.pdf", ["folder-a"], version=0)
+    await _insert(engine, "no-version-key", "memo.pdf", ["folder-a"])
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    identities = _identities(engine)
+    identities = await _identities(engine)
     assert identities["plain"]["document_name"] == "report.pdf"
     assert "version" not in identities["plain"]
     assert "canonical_name" not in identities["plain"]
     assert identities["no-version-key"]["document_name"] == "memo.pdf"
 
 
-def test_not_one_document_is_left_carrying_either_field(engine: sa.Engine) -> None:
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
-    _insert(engine, "plain", "memo.pdf", ["folder-a"], version=0)
+@pytest.mark.asyncio
+async def test_a_nameless_alternate_does_not_destroy_its_own_row(engine: AsyncEngine) -> None:
+    """`jsonb_set` is strict: one NULL argument makes the whole result NULL, and
+    `doc` is nullable, so setting a missing name blanks the document entirely —
+    after which every listing holding that row fails to deserialise, taking the
+    folder page with it, not just the one document."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('nameless', :tags, CAST(:doc AS jsonb))"),
+            {"tags": ["folder-a"], "doc": json.dumps({"identity": {"document_uid": "nameless", "version": 1}})},
+        )
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    for identity in _identities(engine).values():
+    async with engine.connect() as conn:
+        doc = (await conn.execute(sa.text("SELECT doc FROM metadata WHERE document_uid = 'nameless'"))).scalar_one()
+    assert doc is not None
+    assert doc["identity"]["document_uid"] == "nameless"
+    assert "version" not in doc["identity"]
+
+
+@pytest.mark.asyncio
+async def test_not_one_document_is_left_carrying_either_field(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    await _insert(engine, "plain", "memo.pdf", ["folder-a"], version=0)
+
+    await _run_upgrade(engine)
+
+    for identity in (await _identities(engine)).values():
         assert "version" not in identity
         assert "canonical_name" not in identity
 
 
-def test_a_non_numeric_version_does_not_raise_on_the_cast(engine: sa.Engine) -> None:
+@pytest.mark.asyncio
+async def test_a_non_numeric_version_does_not_raise_on_the_cast(engine: AsyncEngine) -> None:
     """The CASE guard exists because PostgreSQL does not promise to evaluate a
     regex test in the same WHERE before the `::int` beside it."""
-    with engine.begin() as conn:
-        conn.execute(
+    async with engine.begin() as conn:
+        await conn.execute(
             sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('odd', :tags, CAST(:doc AS jsonb))"),
             {"tags": ["folder-a"], "doc": json.dumps({"identity": {"document_name": "report.pdf", "document_uid": "odd", "version": "not-a-number"}})},
         )
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    identity = _identities(engine)["odd"]
+    identity = (await _identities(engine))["odd"]
     assert identity["document_name"] == "report.pdf"
     assert "version" not in identity
 
 
-def test_a_title_survives_the_rename(engine: sa.Engine) -> None:
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1, title="Rapport annuel")
+@pytest.mark.asyncio
+async def test_a_title_survives_the_rename(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1, title="Rapport annuel")
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
 
-    assert _identities(engine)["alt"]["title"] == "Rapport annuel"
-
-
-def test_running_it_twice_changes_nothing_the_second_time(engine: sa.Engine) -> None:
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
-
-    _run_upgrade(engine)
-    after_first = _identities(engine)
-    _run_upgrade(engine)
-
-    assert _identities(engine) == after_first
+    assert (await _identities(engine))["alt"]["title"] == "Rapport annuel"
 
 
-def test_no_document_is_deleted(engine: sa.Engine) -> None:
-    _insert(engine, "base", "report.pdf", ["folder-a"])
-    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
-    _insert(engine, "orphan", "memo.pdf", ["folder-b"], version=1)
+@pytest.mark.asyncio
+async def test_running_it_twice_changes_nothing_the_second_time(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
 
-    _run_upgrade(engine)
+    await _run_upgrade(engine)
+    after_first = await _identities(engine)
+    await _run_upgrade(engine)
 
-    with engine.connect() as conn:
-        uids = {row[0] for row in conn.execute(sa.text("SELECT document_uid FROM metadata"))}
+    assert (await _identities(engine)) == after_first
+
+
+@pytest.mark.asyncio
+async def test_no_document_is_deleted(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    await _insert(engine, "orphan", "memo.pdf", ["folder-b"], version=1)
+
+    await _run_upgrade(engine)
+
+    async with engine.connect() as conn:
+        uids = {row[0] for row in (await conn.execute(sa.text("SELECT document_uid FROM metadata")))}
     assert uids == {"base", "alt", "orphan"}
