@@ -550,11 +550,11 @@ In short, from fred-deployment-factory, with this checkout as `FRED_DIR`:
 ```bash
 make k3d-up                                   # the infrastructure, once
 make k3d-fred FRED_DIR=<this checkout>        # build this checkout, deploy it; rerun after any change
-make k3d-fred-bootstrap BOOTSTRAP_USER=<you> BOOTSTRAP_PASSWORD=<pw>   # once, after registering in Keycloak
 ```
 
 The model API key comes from `apps/fred-agents/config/.env` (`make setup-env` here, once).
-Fred is then on <http://localhost:8088>.
+Fred is then on <http://localhost:8088>. The first time, register on its login page and
+paste the bootstrap token `make k3d-fred` printed: you become `platform_admin`.
 
 ## Production mode
 
