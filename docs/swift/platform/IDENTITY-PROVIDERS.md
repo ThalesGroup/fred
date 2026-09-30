@@ -117,40 +117,68 @@ acceptance; delegated calls rely on the person's acceptance at run admission.
 
 ## Complete local test configurations
 
-The files under each backend's `config/overlays/` directory,
-`configuration_generic_oidc.example.yaml` and
-`configuration_mock_oidc.example.yaml`, are security overlays. Prepare full
-configurations for all three backends with the repository script, from the root:
+Each backend has example overlays in `config/overlays/` for `generic_oidc`,
+`mock_oidc`, `entra` and `zitadel`. Generate complete Keycloak, generic OIDC or
+mock OIDC configurations from the repository root:
 
 ```bash
 /usr/bin/python3 scripts/prepare_identity_provider_configs.py
 ```
 
-This command worked with the system Python on this checkout. On another machine,
-use `uv run scripts/prepare_identity_provider_configs.py` to resolve its declared
-`pyyaml` and `jsonschema` dependencies. `--profile mock_oidc` selects one profile;
-`--output-dir <directory>` changes the output location. Every file is checked
-against its application's committed JSON schema before that profile is written.
-The script preserves non-security settings and never reads `.env` files.
+On another machine, `uv run scripts/prepare_identity_provider_configs.py` resolves
+the declared `pyyaml` and `jsonschema` dependencies. By default the script
+generates the three profiles that need no tenant IDs. Select one profile with
+`--profile`; `--output-dir` changes the destination. The generator validates
+every complete YAML against its application schema. It preserves non-security
+settings and does not read `.env` files.
 
-| Profile | Generated directory | Identity setup |
+For a real Entra tenant, register the clients described above, then supply their
+**public** identifiers to the generator:
+
+```bash
+/usr/bin/python3 scripts/prepare_identity_provider_configs.py --profile entra \
+  --entra-tenant TENANT_ID --entra-ui-client UI_CLIENT_ID \
+  --entra-api-client API_CLIENT_ID_GUID \
+  --entra-control-plane-client CONTROL_PLANE_CLIENT_ID \
+  --entra-knowledge-flow-client KNOWLEDGE_FLOW_CLIENT_ID \
+  --entra-runtime-client RUNTIME_CLIENT_ID
+```
+
+Set `ENTRA_CONTROL_PLANE_CLIENT_SECRET`, `ENTRA_KNOWLEDGE_FLOW_CLIENT_SECRET`
+and `ENTRA_AGENTIC_CLIENT_SECRET` in the respective backend and worker
+process environments. Set `FRED_JWT_MAX_LIFETIME_SECONDS=5400` on all three
+backends. The generated YAML contains no secret values. The six arguments are
+required; the generator will not publish an Entra profile with placeholder IDs.
+
+For ZITADEL, run the factory provisioner. It registers clients, assigns roles,
+checks workload tokens and generates complete configurations and a private
+credential file from its dynamic project and client IDs:
+
+```bash
+make -C ../fred-deployment-factory zitadel-configure SWIFT_SRC="$PWD"
+```
+
+The `configuration_zitadel.example.yaml` files show the expected settings for
+each backend. Their placeholder IDs are illustrative; use the factory-generated
+files for tests.
+
+| Profile | Complete configuration directory | Provider setup |
 | --- | --- | --- |
-| `keycloak` | `/tmp/fred-idp-tests/keycloak` | Existing Keycloak configuration and directory, unchanged |
-| `generic_oidc` | `/tmp/fred-idp-tests/generic_oidc` | Keycloak on port 8080 with the factory generic profile; local directory |
-| `mock_oidc` | `/tmp/fred-idp-tests/mock_oidc` | Factory mock issuer on port 8090; local directory and non-UUID subjects |
+| `keycloak` | `/tmp/fred-idp-tests/keycloak` | Existing Keycloak settings |
+| `generic_oidc` | `/tmp/fred-idp-tests/generic_oidc` | Factory strict generic profile on port 8080 |
+| `mock_oidc` | `/tmp/fred-idp-tests/mock_oidc` | Factory mock issuer on port 8090 |
+| `entra` | `/tmp/fred-idp-tests/entra` | Your Entra tenant and registered clients |
+| `zitadel` | `/tmp/fred-idp-tests/zitadel` | Factory provisioner on port 8091 |
 
 Each directory contains `configuration_control-plane-backend.yaml`,
-`configuration_knowledge-flow-backend.yaml`, and `configuration_fred-agents.yaml`.
-These are complete local configurations selected directly with `CONFIG_FILE`.
-Each profile also includes `conversation_policy_catalog.yaml`, resolved relative
-to the Control Plane YAML by both its API and worker.
-They retain the baseline Postgres, OpenFGA, Temporal, storage and model settings;
-those services and the normal application `.env` credentials must be available.
-Regenerate the files after changing a baseline configuration. These localhost
+`configuration_knowledge-flow-backend.yaml`, `configuration_fred-agents.yaml`
+and `conversation_policy_catalog.yaml`. Select the matching YAML with
+`CONFIG_FILE`. The generated files retain baseline Postgres, OpenFGA, Temporal,
+storage and model settings; those services and normal application credentials
+must be available. Regenerate after changing a baseline configuration. Localhost
 URLs are for applications running on the host, not inside Kubernetes pods.
 For Kubernetes with Entra, use
-[`values-entra.example.yaml`](../../../deploy/charts/fred/values-entra.example.yaml)
-and replace the tenant/application IDs with the customer's registrations.
+[`values-entra.example.yaml`](../../../deploy/charts/fred/values-entra.example.yaml).
 
 ### Quick launch from VS Code
 
@@ -170,8 +198,9 @@ Preparation adds the installed Control Plane venv binaries to PATH so the root
 `make delegation` command can find `uv` without a global installation.
 
 Each task first prepares the full configurations and matching provider setup,
-then starts three APIs, two workers and the frontend in separate VS Code terminals. Preparation restores Keycloak plus delegation, applies strict generic
-OIDC, or starts the mock provider, respectively. It also creates the Fred
+then starts three APIs, two workers and the frontend in separate VS Code
+terminals. Preparation restores Keycloak plus delegation, applies strict generic
+OIDC, starts the mock provider, or provisions ZITADEL. It also creates the Fred
 bootstrap secret if absent. Existing Docker infrastructure is otherwise left
 running. Make targets may prepare dependencies and models during startup.
 

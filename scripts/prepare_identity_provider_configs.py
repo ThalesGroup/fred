@@ -25,12 +25,19 @@ import argparse
 import json
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import jsonschema
 import yaml
 
 APPLICATIONS = ("control-plane-backend", "knowledge-flow-backend", "fred-agents")
-PROFILES = ("keycloak", "generic_oidc", "mock_oidc")
+DEFAULT_PROFILES = ("keycloak", "generic_oidc", "mock_oidc")
+PROFILES = (*DEFAULT_PROFILES, "entra")
+ENTRA_CLIENTS = {
+    "control-plane-backend": "control_plane_client",
+    "knowledge-flow-backend": "knowledge_flow_client",
+    "fred-agents": "runtime_client",
+}
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -43,7 +50,9 @@ def merge(target: dict[str, Any], overlay: dict[str, Any]) -> None:
             target[key] = value
 
 
-def prepare(profile: str, output_dir: Path) -> list[Path]:
+def prepare(
+    profile: str, output_dir: Path, entra: dict[str, str] | None = None
+) -> list[Path]:
     pending: list[tuple[Path, str]] = []
     for application in APPLICATIONS:
         config_dir = ROOT / "apps" / application / "config"
@@ -55,6 +64,21 @@ def prepare(profile: str, output_dir: Path) -> list[Path]:
                 ).read_text()
             )
             merge(config, overlay)
+        if profile == "entra":
+            if entra is None:
+                raise ValueError("Entra requires tenant and client IDs")
+            security = config["security"]
+            issuer = f"https://login.microsoftonline.com/{entra['tenant']}/v2.0"
+            security["user"].update(
+                realm_url=issuer,
+                client_id=entra["ui_client"],
+                audience=entra["api_client"],
+            )
+            security["m2m"].update(
+                realm_url=issuer,
+                client_id=entra[ENTRA_CLIENTS[application]],
+            )
+            security["delegation"]["audience"] = entra["api_client"]
         schema = json.loads(
             (config_dir / "schema/configuration.schema.json").read_text()
         )
@@ -81,9 +105,23 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=(*PROFILES, "all"), default="all")
     parser.add_argument("--output-dir", type=Path, default=Path("/tmp/fred-idp-tests"))
+    for name in ("tenant", "ui_client", "api_client", *ENTRA_CLIENTS.values()):
+        parser.add_argument("--entra-" + name.replace("_", "-"))
     args = parser.parse_args()
-    for profile in PROFILES if args.profile == "all" else (args.profile,):
-        for output in prepare(profile, args.output_dir):
+    profiles = DEFAULT_PROFILES if args.profile == "all" else (args.profile,)
+    entra = None
+    if "entra" in profiles:
+        names = ("tenant", "ui_client", "api_client", *ENTRA_CLIENTS.values())
+        entra = {name: getattr(args, "entra_" + name) for name in names}
+        if any(not value for value in entra.values()):
+            parser.error("Entra requires all six --entra-* identifiers; see --help")
+        try:
+            for value in entra.values():
+                UUID(value)
+        except ValueError:
+            parser.error("Entra tenant and client IDs must be UUIDs")
+    for profile in profiles:
+        for output in prepare(profile, args.output_dir, entra):
             print(f"OK {output}")
 
 

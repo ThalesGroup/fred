@@ -95,6 +95,8 @@ Work on the factory branch matching `test-23-09` (it provisions `fred-delegation
 
 - [x] 9.6 Provide a local configuration preparation command that merges the existing canonical production configurations and provider overlays, validates each complete YAML against its application schema, and writes launchable Keycloak, generic OIDC and mock OIDC profiles without reading or copying credentials. Document API, runtime, worker and frontend launch commands, local-delegation override handling, and the functional changes. Entra continues to use the existing Helm example, requiring tenant-specific public IDs and credentials.
 
+- [x] 9.7 Add per-backend Entra and ZITADEL configuration examples. Extend the local preparation command to require real Entra public identifiers and generate complete schema-validated configurations; keep the factory as the source of dynamically provisioned ZITADEL configurations and credentials. Document the shorter provider test setup and required environment variables.
+
 ## 10. Verification
 
 - [x] 10.1 `make code-quality` and `make test` pass in `fred`, with no new failures compared with 0.2.
