@@ -151,10 +151,10 @@
 .interrupted {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2xs);
-  border: 1px solid var(--outline-variant);
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
-  padding: var(--spacing-xs);
+  padding: var(--spacing-s);
 }
 
 .interruptedTitle {

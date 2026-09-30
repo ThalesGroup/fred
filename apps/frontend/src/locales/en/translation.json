@@ -1525,9 +1525,9 @@
       },
       "interrupted": {
         "forget": "Give up",
-        "resume": "Pick them",
+        "resume": "Select",
         "title": "Import interrupted",
-        "why": "These files never reached Fred. Pick them again to finish the import."
+        "why": "These files never reached their destination. Select them again to finish the import."
       },
       "conflict": {
         "question": "A document of this name is already in this folder.",
