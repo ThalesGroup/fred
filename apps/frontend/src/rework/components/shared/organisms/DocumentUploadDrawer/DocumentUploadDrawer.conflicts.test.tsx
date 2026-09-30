@@ -149,7 +149,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(probe.nameCheck).toHaveBeenCalledTimes(1);
     expect(probe.nameCheck).toHaveBeenCalledWith({
@@ -161,7 +161,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(container.textContent).not.toContain("documentLibrary.conflictsTitle");
     expect(sentNames()).toEqual(["a.pdf", "b.pdf"]);
@@ -171,16 +171,16 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     // The question names the conflicting file, and the non-conflicting one is
     // not sent ahead of the answer — one import, one decision point.
     expect(container.textContent).toContain("documentLibrary.conflictsTitle");
     expect(probe.sent).toEqual([]);
-    expect(button("documentLibrary.save").hasAttribute("disabled")).toBe(true);
+    expect(button("documentLibrary.importCount").hasAttribute("disabled")).toBe(true);
 
     await click(button("documentLibrary.conflictReplaceAll"));
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(sentNames()).toEqual(["a.pdf", "b.pdf"]);
     expect(probe.sent[0].metadata.conflict_decisions).toEqual({ "a.pdf": "overwrite" });
@@ -190,9 +190,9 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
     await click(button("documentLibrary.conflictSkipAll"));
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     // Sending its bytes for the server to refuse is exactly the transfer the
     // question exists to avoid.
@@ -207,9 +207,9 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf", "b.pdf"] }]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
     await click(button("documentLibrary.conflictSkipAll"));
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(probe.sent).toEqual([]);
     expect(probe.showError).not.toHaveBeenCalled();
@@ -219,7 +219,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf", "b.pdf"] }]);
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     // Scoped to the conflict panel: the file list above it has a row per file too.
     const panel = container.querySelector('[aria-labelledby="upload-conflicts-title"]')!;
@@ -229,10 +229,10 @@ describe("DocumentUploadDrawer name conflicts", () => {
 
     await click(rowButton("a.pdf", "documentLibrary.conflictReplace"));
     // One answered, one still open: Save stays out of reach.
-    expect(button("documentLibrary.save").hasAttribute("disabled")).toBe(true);
+    expect(button("documentLibrary.importCount").hasAttribute("disabled")).toBe(true);
 
     await click(rowButton("b.pdf", "documentLibrary.conflictSkip"));
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(sentNames()).toEqual(["a.pdf"]);
     expect(probe.sent[0].metadata.conflict_decisions).toEqual({ "a.pdf": "overwrite" });
@@ -243,7 +243,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     probe.lateConflicts.push("b.pdf");
     renderDrawer(["a.pdf", "b.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(sentNames()).toEqual(["a.pdf", "b.pdf"]);
     expect(probe.showError).not.toHaveBeenCalled();
@@ -270,7 +270,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
       );
     });
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(probe.sent).toEqual([]);
     expect(probe.showError).toHaveBeenCalledWith(expect.objectContaining({ detail: "documentLibrary.sameNameTwice" }));
@@ -285,7 +285,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([{ tag_id: "tag-base", names: ["a.pdf"] }]);
     renderDrawer(["a.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(container.textContent).not.toContain("documentLibrary.storageQuotaExceededTitle");
     expect(container.textContent).toContain("documentLibrary.conflictsTitle");
@@ -298,7 +298,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     answering([]);
     renderDrawer(["a.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(container.textContent).toContain("documentLibrary.storageQuotaExceededTitle");
     expect(probe.sent).toEqual([]);
@@ -310,7 +310,7 @@ describe("DocumentUploadDrawer name conflicts", () => {
     probe.nameCheck.mockReturnValue({ unwrap: () => Promise.reject(new Error("503")) });
     renderDrawer(["a.pdf"]);
 
-    await click(button("documentLibrary.save"));
+    await click(button("documentLibrary.importCount"));
 
     expect(sentNames()).toEqual(["a.pdf"]);
     expect(container.textContent).not.toContain("documentLibrary.conflictsTitle");

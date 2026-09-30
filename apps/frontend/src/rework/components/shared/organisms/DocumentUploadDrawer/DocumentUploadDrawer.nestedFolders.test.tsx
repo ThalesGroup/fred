@@ -102,7 +102,9 @@ function fileAt(name: string, path?: string): File {
 }
 
 async function clickSave() {
-  const save = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("documentLibrary.save"));
+  const save = [...container.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("documentLibrary.importCount"),
+  );
   if (!save) throw new Error("save button not rendered");
   await act(async () => {
     save.click();

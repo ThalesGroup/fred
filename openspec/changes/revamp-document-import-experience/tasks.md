@@ -42,11 +42,11 @@
 
 ## 7. The dialog itself
 
-- [ ] 7.1 Replace the save wording with "Importer {count} fichiers" / "Import {count} files", including the plural rules.
-- [ ] 7.2 Make the dialog title plural in fr and en.
-- [ ] 7.3 Drop the now-unused "saving" strings.
-- [ ] 7.4 Widen the dialog a little.
-- [ ] 7.5 Put the ingestion mode and the processing profile on one row; they get narrower, but the option labels must stay readable in both dropdowns.
+- [x] 7.1 The action button says what it does and to how many files, with the plural forms in both languages. Nothing picked yet: just "Importer" / "Import", rather than a count of zero.
+- [x] 7.2 "Ajouter des documents" / "Add documents" — the dialog has taken several files at a time for a long time.
+- [x] 7.3 `save` and `saving` are gone. There was nothing to say while loading either: the button is disabled, and the dialog now closes as soon as the checks pass.
+- [x] 7.4 560px instead of 480px.
+- [x] 7.5 Mode and profile share a row. At 560px each is about 256px wide, which the longest option label ("Importer et traiter", "Upload & process") clears comfortably.
 
 ## 8. Help Center
 

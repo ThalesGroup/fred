@@ -476,27 +476,29 @@ export function DocumentUploadDrawer({
           </div>
           <div className={styles.body}>
             <UploadWarningBanner />
-            <div className={styles.field}>
-              <label className={styles.label}>{t("documentLibrary.ingestionMode")}</label>
-              <Select<"upload" | "process">
-                options={uploadModeOptions}
-                value={uploadMode}
-                onChange={setUploadMode}
-                size="small"
-              />
-            </div>
-
-            {canSelectProfile && (
+            <div className={styles.fieldRow}>
               <div className={styles.field}>
-                <label className={styles.label}>{t("documentLibrary.processingProfile")}</label>
-                <Select<IngestionProcessingProfile>
-                  options={profileOptions}
-                  value={profile}
-                  onChange={setProfile}
+                <label className={styles.label}>{t("documentLibrary.ingestionMode")}</label>
+                <Select<"upload" | "process">
+                  options={uploadModeOptions}
+                  value={uploadMode}
+                  onChange={setUploadMode}
                   size="small"
                 />
               </div>
-            )}
+
+              {canSelectProfile && (
+                <div className={styles.field}>
+                  <label className={styles.label}>{t("documentLibrary.processingProfile")}</label>
+                  <Select<IngestionProcessingProfile>
+                    options={profileOptions}
+                    value={profile}
+                    onChange={setProfile}
+                    size="small"
+                  />
+                </div>
+              )}
+            </div>
 
             <div
               {...getRootProps()}
@@ -627,7 +629,9 @@ export function DocumentUploadDrawer({
               onClick={handleSave}
               disabled={!files.length || isLoading || !!quotaDenial || unansweredCount > 0}
             >
-              {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
+              {/* What the button does, and to how many files — "Save" said
+                  neither, and nothing is being saved here. */}
+              {files.length ? t("documentLibrary.importCount", { count: files.length }) : t("documentLibrary.import")}
             </Button>
           </div>
         </div>

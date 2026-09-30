@@ -100,7 +100,9 @@ function fileOfSize(name: string, size: number): File {
 }
 
 async function clickSave() {
-  const save = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("documentLibrary.save"));
+  const save = [...container.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("documentLibrary.importCount"),
+  );
   if (!save) throw new Error("save button not rendered");
   await act(async () => {
     save.click();
@@ -146,7 +148,9 @@ describe("DocumentUploadDrawer quota precheck at Save", () => {
     expect(container.textContent).toContain("documentLibrary.storageQuotaExceededTitle");
     // Drawer stayed open (file list still rendered) with Save disabled.
     expect(container.textContent).toContain("a.pdf");
-    const save = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("documentLibrary.save"));
+    const save = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("documentLibrary.importCount"),
+    );
     expect(save?.hasAttribute("disabled")).toBe(true);
   });
 

@@ -32,7 +32,7 @@
   box-shadow: var(--shadow-l);
   border-radius: var(--radius-m);
   background-color: var(--surface-container-high);
-  width: min(480px, 92vw);
+  width: min(560px, 92vw);
   max-height: 85vh;
   color: var(--on-surface);
 }
@@ -83,10 +83,19 @@
   overflow-y: auto;
 }
 
+/* Mode and profile side by side: two short choices that belong together, and
+   the room they leave is room the file list gets. */
+.fieldRow {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
 .field {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .label {
