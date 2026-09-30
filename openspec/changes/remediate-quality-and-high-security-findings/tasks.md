@@ -32,7 +32,8 @@
 
 ## 6. Integrate and Verify
 
-- [ ] 6.1 Run the affected targeted suites, then `make code-quality` once from the repository root, and record results and any environment limitations in the PR.
+- [x] 6.1 Run the affected targeted suites, then `make code-quality` once from the repository root, and record results and any environment limitations in the PR.
 - [ ] 6.2 Reconcile these specs and tasks with implementation, validate and sync/archive the OpenSpec change, and verify the final artifact status.
-- [ ] 6.3 Push the dedicated branch and open one draft PR linked to #2871; verify its title, finding inventory, before/after counts, and migration notes.
+- [x] 6.3 Push the dedicated branch and open one draft PR linked to #2871; verify its title, finding inventory, before/after counts, and migration notes.
 - [ ] 6.4 After the default-branch scans, verify the reliability and maintainability ratings and all GitLab High dispositions, then record any external scanner blocker in the same issue and PR.
+- [x] 6.5 Run focused KPI, tracing, and audit tests and build all four Docker images locally; record the results in the PR.
