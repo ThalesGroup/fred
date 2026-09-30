@@ -12,7 +12,7 @@
 
 ## 3. Close out
 
-- [x] 3.1 Verify the 98 obsolete-path alerts against live replacement manifests; one alert has an auditable dismissal.
-- [x] 3.2 Record the requester's decision to leave the 97 remaining obsolete-path alerts open for later triage.
+- [x] 3.1 Verify the 98 obsolete-path alerts against current manifests and patched package versions.
+- [x] 3.2 Dismiss all 98 obsolete-path alerts as not used with path-specific audit comments, then verify none remains open.
 - [x] 3.3 Add and validate the English migration note with accurate deployment and rollback guidance.
 - [x] 3.4 Reconcile this change with the final diff, run repository checks and a cold diff review, then push a draft PR linked to issue #2854.
