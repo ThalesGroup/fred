@@ -45,14 +45,13 @@ branch_labels: Union[str, Sequence[str], None] = None
 # codeql[py/unused-global-variable]
 depends_on: Union[str, Sequence[str], None] = None
 
-# `(doc->'identity'->>'version')::int` on its own would raise on a row whose
-# value is not a number, and PostgreSQL does not promise to evaluate a guard in
-# the same WHERE before the cast. CASE does promise it.
+# Asked without casting to `int`, which would abort the whole upgrade on a
+# version too large for int4 — the old model bounded it below, never above.
+# `jsonb` compares numbers numerically, and this is the same question the
+# portable branch asks, so the two branches classify every row alike.
 _IS_ALTERNATE = """
-    CASE WHEN doc -> 'identity' ->> 'version' ~ '^[0-9]+$'
-         THEN (doc -> 'identity' ->> 'version')::int
-         ELSE 0
-    END > 0
+    jsonb_typeof(doc -> 'identity' -> 'version') = 'number'
+    AND (doc -> 'identity' -> 'version') > '0'::jsonb
 """
 
 
@@ -68,19 +67,14 @@ def _suffixed(name: str, number: int) -> str:
 
 
 def upgrade() -> None:
-    """Upgrade schema.
-
-    Renaming reads `version`, so it has to happen before the fields go.
-    """
+    """Upgrade schema."""
     bind = op.get_bind()
 
     if bind.dialect.name == "postgresql":
         _rename_alternates_postgresql(bind)
-        _drop_the_fields_postgresql(bind)
         return
 
     _rename_alternates_portable(bind)
-    _drop_the_fields_portable(bind)
 
 
 def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
@@ -99,7 +93,7 @@ def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
                    COALESCE(tag_ids, ARRAY[]::varchar[]) AS tags
             FROM metadata
             WHERE {_IS_ALTERNATE}
-            ORDER BY document_uid
+            ORDER BY document_uid COLLATE "C"
             """
         )
     ).fetchall()
@@ -134,8 +128,9 @@ def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
                     number += 1
                 new_name = _suffixed(name, number)
 
-        # One statement per document: the rename and the two field removals
-        # land together or not at all, which is what makes a resumed run safe.
+        # Alembic runs the whole migration in one transaction, so this either
+        # lands for every document or for none. Re-running after it succeeded
+        # finds nothing left to do, because the fields it filters on are gone.
         bind.execute(
             sa.text(
                 """
@@ -150,28 +145,6 @@ def _rename_alternates_postgresql(bind: sa.engine.Connection) -> None:
             ),
             {"uid": uid, "name": new_name},
         )
-
-
-def _drop_the_fields_postgresql(bind: sa.engine.Connection) -> None:
-    """Every document, not only the alternates.
-
-    A `version: 0` left behind on the other documents is dead data that reads
-    like a live field to whoever finds it next. Guarded so a row that never
-    carried either key is not rewritten, which also makes a second run a no-op.
-    """
-    bind.execute(
-        sa.text(
-            """
-            UPDATE metadata
-            SET doc = jsonb_set(
-                    doc,
-                    '{identity}',
-                    (doc -> 'identity') - 'canonical_name' - 'version'
-                )
-            WHERE doc -> 'identity' ?| ARRAY['canonical_name', 'version']
-            """
-        )
-    )
 
 
 def _rename_alternates_portable(bind: sa.engine.Connection) -> None:
@@ -190,14 +163,17 @@ def _rename_alternates_portable(bind: sa.engine.Connection) -> None:
     rows = bind.execute(sa.select(metadata_table.c.document_uid, metadata_table.c.tag_ids, metadata_table.c.doc)).fetchall()
 
     def identity(doc: object) -> dict:
-        return doc.get("identity", {}) if isinstance(doc, dict) else {}
+        found = doc.get("identity") if isinstance(doc, dict) else None
+        return found if isinstance(found, dict) else {}
 
     def tags_of(tag_ids: object) -> set:
         return set(tag_ids) if isinstance(tag_ids, list) else set()
 
     def is_alternate(doc: object) -> bool:
         version = identity(doc).get("version")
-        return isinstance(version, int) and not isinstance(version, bool) and version > 0
+        if isinstance(version, bool) or not isinstance(version, (int, float)):
+            return False
+        return version > 0
 
     # Names held per folder, kept current as each alternate is renamed so two
     # alternates in one folder cannot both claim `(1)`.
@@ -239,25 +215,6 @@ def _rename_alternates_portable(bind: sa.engine.Connection) -> None:
 
         for tag in tags:
             names_by_tag.setdefault(tag, {})[uid] = new_name
-
-
-def _drop_the_fields_portable(bind: sa.engine.Connection) -> None:
-    """SQLite counterpart of `_drop_the_fields_postgresql`."""
-    metadata_table = sa.table(
-        "metadata",
-        sa.column("document_uid", sa.String()),
-        sa.column("doc", sa.JSON()),
-    )
-    rows = bind.execute(sa.select(metadata_table.c.document_uid, metadata_table.c.doc)).fetchall()
-
-    for uid, doc in rows:
-        if not isinstance(doc, dict):
-            continue
-        identity = doc.get("identity")
-        if not isinstance(identity, dict) or not ({"canonical_name", "version"} & identity.keys()):
-            continue
-        updated_identity = {key: value for key, value in identity.items() if key not in ("canonical_name", "version")}
-        bind.execute(metadata_table.update().where(metadata_table.c.document_uid == uid).values(doc={**doc, "identity": updated_identity}))
 
 
 def downgrade() -> None:

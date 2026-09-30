@@ -51,14 +51,24 @@ that name: there is nothing for it to be confused with.
 - **THEN** it keeps the name it has
 - **AND** it is an ordinary document afterwards
 
-### Requirement: The versioning fields leave every document
+### Requirement: The versioning fields leave the document contract
 
-The document identity SHALL NOT carry `canonical_name` or `version`, and no
-stored document SHALL retain either key after the migration — including a
-document that was never an alternate.
+The document identity SHALL NOT declare `canonical_name` or `version`, and the
+system SHALL ignore both keys wherever a stored document still carries them.
+
+The migration SHALL NOT rewrite a document it does not rename. Nearly every
+stored document carries `version: 0` — the retired model defaulted it — so
+clearing the key everywhere would rewrite the whole table for data nothing reads,
+inside the single transaction Alembic wraps a migration in.
 
 #### Scenario: An ordinary document is migrated
 
 - **WHEN** the migration runs on a document that carried `version = 0`
 - **THEN** its name is unchanged
-- **AND** it carries neither `canonical_name` nor `version`
+- **AND** its stored JSON is not rewritten
+
+#### Scenario: A document still carrying the retired keys is read
+
+- **WHEN** a document whose stored JSON carries `canonical_name` or `version` is read
+- **THEN** neither key appears in its identity
+- **AND** the read succeeds

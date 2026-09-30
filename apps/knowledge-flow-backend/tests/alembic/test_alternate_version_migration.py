@@ -181,9 +181,11 @@ def test_a_document_in_no_folder_keeps_its_name() -> None:
     assert _identities(engine)["alt"]["document_name"] == "report.pdf"
 
 
-def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields() -> None:
-    """`version: 0` is not an alternate and must not be renamed — but leaving the
-    key behind would leave dead data reading like a live field."""
+def test_an_ordinary_document_is_not_rewritten_at_all() -> None:
+    """Almost every document carried `version: 0` — the old model defaulted it
+    and always backfilled `canonical_name` — so rewriting them all to tidy the
+    keys would rewrite the whole table inside one transaction. The keys are inert
+    (the model ignores them) and leave on each document's next save."""
     engine = _engine()
     _insert(engine, "plain", "report.pdf", ["folder-a"], version=0)
     _insert(engine, "no-version-key", "memo.pdf", ["folder-a"])
@@ -192,8 +194,7 @@ def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields() -> None
 
     identities = _identities(engine)
     assert identities["plain"]["document_name"] == "report.pdf"
-    assert "version" not in identities["plain"]
-    assert "canonical_name" not in identities["plain"]
+    assert identities["plain"]["version"] == 0
     assert identities["no-version-key"]["document_name"] == "memo.pdf"
 
 
@@ -214,22 +215,67 @@ def test_a_nameless_alternate_does_not_destroy_its_own_row() -> None:
     with engine.connect() as conn:
         doc = conn.execute(sa.text("SELECT doc FROM metadata WHERE document_uid = 'nameless'")).scalar_one()
     assert doc is not None
-    identity = json.loads(doc)["identity"]
-    assert identity["document_uid"] == "nameless"
-    assert "version" not in identity
+    assert json.loads(doc)["identity"]["document_uid"] == "nameless"
 
 
-def test_not_one_document_is_left_carrying_either_field() -> None:
+def test_only_the_alternates_are_touched() -> None:
     engine = _engine()
-    _insert(engine, "base", "report.pdf", ["folder-a"])
+    _insert(engine, "base", "report.pdf", ["folder-a"], version=0)
     _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
     _insert(engine, "plain", "memo.pdf", ["folder-a"], version=0)
 
     _run_upgrade(engine)
 
-    for identity in _identities(engine).values():
-        assert "version" not in identity
-        assert "canonical_name" not in identity
+    identities = _identities(engine)
+    assert "version" not in identities["alt"]
+    assert identities["base"]["version"] == 0
+    assert identities["plain"]["version"] == 0
+
+
+def test_a_version_too_large_for_int4_is_still_migrated() -> None:
+    """The old model bounded `version` below with `ge=0` and never above, so an
+    archive imported from another deployment could carry any magnitude. Casting
+    it to `int` would abort the whole upgrade."""
+    engine = _engine()
+    _insert(engine, "base", "report.pdf", ["folder-a"])
+    _insert(engine, "huge", "report.pdf", ["folder-a"], version=3000000000)
+
+    _run_upgrade(engine)
+
+    identities = _identities(engine)
+    assert identities["huge"]["document_name"] == "report (1).pdf"
+    assert "version" not in identities["huge"]
+
+
+def test_a_version_that_is_a_numeric_string_is_not_an_alternate() -> None:
+    """Both branches ask one question — is this a JSON number above zero — so
+    neither renames a document whose version is the string "1"."""
+    engine = _engine()
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('stringy', :tags, :doc)"),
+            {"tags": json.dumps(["folder-a"]), "doc": json.dumps({"identity": {"document_name": "report.pdf", "document_uid": "stringy", "version": "1"}})},
+        )
+
+    _run_upgrade(engine)
+
+    assert _identities(engine)["stringy"]["document_name"] == "report.pdf"
+
+
+def test_a_non_object_identity_does_not_abort_the_whole_upgrade() -> None:
+    """One absurd row must not stop every other document from migrating."""
+    engine = _engine()
+    _insert(engine, "base", "report.pdf", ["folder-a"])
+    _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('odd-shape', :tags, :doc)"),
+            {"tags": json.dumps(["folder-a"]), "doc": json.dumps({"identity": "nope"})},
+        )
+
+    _run_upgrade(engine)
+
+    assert _identities(engine)["alt"]["document_name"] == "report (1).pdf"
 
 
 def test_a_title_survives_the_rename() -> None:
@@ -324,8 +370,7 @@ def test_the_suffix_goes_before_the_extension(name: str, expected: str) -> None:
 
 def test_a_non_numeric_version_is_not_treated_as_an_alternate() -> None:
     """Nothing should write a string there, but a hand-edited row must not make
-    the migration raise on a cast — it is dropped like any other stale key,
-    without the document being renamed."""
+    the migration raise, and must not be renamed."""
     engine = _engine()
     with engine.begin() as conn:
         conn.execute(
@@ -335,6 +380,4 @@ def test_a_non_numeric_version_is_not_treated_as_an_alternate() -> None:
 
     _run_upgrade(engine)
 
-    identity = _identities(engine)["odd"]
-    assert identity["document_name"] == "report.pdf"
-    assert "version" not in identity
+    assert _identities(engine)["odd"]["document_name"] == "report.pdf"

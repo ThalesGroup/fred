@@ -201,13 +201,11 @@ async def test_build_attachment_tabular_dataset_offloads_orphan_cleanup_to_a_thr
 async def test_build_attachment_tabular_dataset_does_not_collide_across_users_with_the_same_filename(tmp_path: Path, metadata_store):
     """
     Regression: an earlier version of this method built metadata via
-    `IngestionService.extract_metadata()`, whose versioning step scans the
-    whole metadata catalog for a document sharing the uploaded filename's
-    canonical name and raises when one already exists — folder/tag semantics
-    that make no sense for an untagged, session-scoped attachment. Building
-    `DocumentMetadata` directly (no versioning, no corpus `document_sources`
-    registry lookup) means two unrelated users attaching a file with the same
-    common name (e.g. "sales.csv") never collide.
+    `IngestionService.extract_metadata()`, which assumes a corpus document —
+    folder/tag semantics that make no sense for an untagged, session-scoped
+    attachment. Building `DocumentMetadata` directly (no corpus
+    `document_sources` registry lookup) means two unrelated users attaching a
+    file with the same common name (e.g. "sales.csv") never collide.
     """
     content_store = ApplicationContext.get_instance().get_content_store()
     content_store.clear()

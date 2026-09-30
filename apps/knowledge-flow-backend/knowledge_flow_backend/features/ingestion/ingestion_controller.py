@@ -726,10 +726,7 @@ class IngestionController:
           document class by ownership metadata instead.
         - Builds `DocumentMetadata` directly rather than going through
           `IngestionService.extract_metadata()`/`process_metadata()`: those
-          assume a corpus document. `extract_metadata()`'s versioning step
-          scans the whole metadata catalog for a same-named document and
-          raises if one exists — folder semantics that make no sense for an
-          untagged, session-scoped attachment. `process_metadata()` also
+          assume a corpus document. `process_metadata()`
           requires `source_tag` to resolve against the operator-configured
           `document_sources` registry (`resolve_source_type`), which a chat
           attachment was never meant to be a member of.
@@ -1358,9 +1355,9 @@ class IngestionController:
             description=(
                 "Answers, before any byte is sent, which of the given file names already "
                 "identify a document in each destination folder, so the user can decide to "
-                "overwrite or skip once for the whole import. Advisory only: the upload "
-                "endpoints re-check at write time, since a teammate can create the same "
-                "name in between."
+                "overwrite or skip once for the whole import. Advisory only, and not "
+                "re-checked at write time: a name a teammate creates in between is not "
+                "seen, and both imports create a document."
             ),
         )
         async def import_name_check(

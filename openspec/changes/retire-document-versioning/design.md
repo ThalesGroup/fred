@@ -25,10 +25,47 @@ reader of `canonical_name` or `version` on the document identity:
 | `tests/features/test_metadata_service_storage_release.py` | the only test that names them |
 
 Nothing in the capabilities, the CLI, or the export/import paths consumes them.
-Two docs describe the mechanism and have to follow: the RFC, and
-`RESOURCES-DASHBOARD.md`. Unrelated `version` keys exist in
-`features/resources/utils.py` (a file header) and `corpus_manager_service.py`
-(a payload's `"v1"`); neither is this field.
+Unrelated `version` keys exist in `features/resources/utils.py` (a file header)
+and `corpus_manager_service.py` (a payload's `"v1"`); neither is this field.
+
+### The audit above was scoped too narrowly, and a review caught it
+
+It asked which code reads the two *fields*. That is why it came back saying two
+docs had to follow and the frontend was clean, and it is why the first pass of
+this change missed every site below — each of which depends on the *mechanism*,
+not on the field names:
+
+| Missed | What it was |
+| --- | --- |
+| `ingestion_controller.py` `AMBIGUOUS_CONFLICT_MESSAGE` | told users to promote an alternate version, an action this change deletes |
+| `locales/{en,fr}` `rework.imports.failure.ambiguousName` | the sentence a user actually reads, saying "remove the duplicate"; the backend string is only the tooltip |
+| `imports/importFailure.test.ts` | its fixture pinned the old backend sentence verbatim, so the only automated check of that classification tested a sentence nothing emits |
+| `imports/importFailure.ts` comment | explained the cause as "a base and an alternate version" |
+| `ingestion_controller.py` name-check endpoint description | promised a write-time re-check that the removed `apply_versioning` flag was the last thing performing |
+| `tests/.../test_fast_ingest_tabular.py`, `ingestion_controller.py:706` | both justified bypassing `extract_metadata` by its versioning step |
+| `scheduler/pull_files_activities.py` | see below — a behaviour loss, not just stale prose |
+
+The lesson is cheap to state and was expensive here: audit the mechanism, not
+the identifier.
+
+### The scheduler pull path loses its only same-name bound
+
+`create_pull_file_metadata` calls `extract_metadata` with no conflict plan, and
+nothing on that path dedupes: `_generate_file_unique_id` returns a fresh uuid,
+and `source_key`/`source_library_id` — the pair `uq_metadata_source_library_key`
+constrains — are set only by `library_sync`. `_apply_versioning` used to raise
+from the third identical pull onward, so a pull source re-presenting
+`report.pdf` accumulated at most two rows before erroring.
+
+It now accumulates without bound, and each extra row makes that name permanently
+ambiguous for any UI import into that folder.
+
+Not fixed here, deliberately: the right guard needs a decision this change has
+no business taking — whether re-presenting an external path is an update to the
+document already made from it or a new document — and adding one would bundle a
+behaviour change into a removal. The old behaviour was not a guard worth keeping
+either (it created one hidden duplicate, then hard-failed). Recorded rather than
+quietly dropped.
 
 ### An alternate can outlive its base
 

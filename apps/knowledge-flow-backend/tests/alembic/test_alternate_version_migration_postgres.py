@@ -32,7 +32,7 @@ migration's `to_jsonb` reproduces the failure here as
 
 Run:
 
-    export FRED_PG_DSN="postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
+    docker compose -f ../../scripts/docker-compose.postgres.yml up -d
     .venv/bin/pytest tests/alembic/test_alternate_version_migration_postgres.py -m integration
 
 Each test gets its own throwaway schema, dropped on teardown, so it never reads
@@ -61,7 +61,11 @@ from alembic.runtime.migration import MigrationContext
 pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
 
 _PG_DSN_ENV = "FRED_PG_DSN"
-_DEFAULT_DSN = "postgresql+asyncpg://fred:Azerty123_@localhost:5432/fred"  # pragma: allowlist secret
+# The disposable PostgreSQL `scripts/docker-compose.postgres.yml` provisions —
+# the default `alembic.mk` and the control-plane's store tests already use. Never
+# the dev stack's own database, whose `metadata` table holds a real corpus and
+# which this migration's unqualified `UPDATE metadata` would reach.
+_DEFAULT_DSN = "postgresql+asyncpg://test:test@localhost:5433/test_migrations"  # pragma: allowlist secret
 
 _MIGRATION_FILE = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "02d556a6f182_give_every_hidden_alternate_version_a_name_of_its_own.py"
 
@@ -232,7 +236,11 @@ async def test_a_document_with_no_tags_at_all_keeps_its_name(engine: AsyncEngine
 
 
 @pytest.mark.asyncio
-async def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields(engine: AsyncEngine) -> None:
+async def test_an_ordinary_document_is_not_rewritten_at_all(engine: AsyncEngine) -> None:
+    """Almost every row carried `version: 0`, so a guard on "has either key"
+    filters nothing and rewrites the whole table — measured at 20 s and 1.1 GB of
+    WAL at 500k documents, against the 30 s `statement_timeout` `alembic_env`
+    sets, in one transaction. The keys are inert and leave on the next save."""
     await _insert(engine, "plain", "report.pdf", ["folder-a"], version=0)
     await _insert(engine, "no-version-key", "memo.pdf", ["folder-a"])
 
@@ -240,8 +248,7 @@ async def test_an_ordinary_document_keeps_its_name_but_loses_the_dead_fields(eng
 
     identities = await _identities(engine)
     assert identities["plain"]["document_name"] == "report.pdf"
-    assert "version" not in identities["plain"]
-    assert "canonical_name" not in identities["plain"]
+    assert identities["plain"]["version"] == 0
     assert identities["no-version-key"]["document_name"] == "memo.pdf"
 
 
@@ -263,20 +270,69 @@ async def test_a_nameless_alternate_does_not_destroy_its_own_row(engine: AsyncEn
         doc = (await conn.execute(sa.text("SELECT doc FROM metadata WHERE document_uid = 'nameless'"))).scalar_one()
     assert doc is not None
     assert doc["identity"]["document_uid"] == "nameless"
-    assert "version" not in doc["identity"]
 
 
 @pytest.mark.asyncio
-async def test_not_one_document_is_left_carrying_either_field(engine: AsyncEngine) -> None:
-    await _insert(engine, "base", "report.pdf", ["folder-a"])
+async def test_only_the_alternates_are_touched(engine: AsyncEngine) -> None:
+    await _insert(engine, "base", "report.pdf", ["folder-a"], version=0)
     await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
     await _insert(engine, "plain", "memo.pdf", ["folder-a"], version=0)
 
     await _run_upgrade(engine)
 
-    for identity in (await _identities(engine)).values():
-        assert "version" not in identity
-        assert "canonical_name" not in identity
+    identities = await _identities(engine)
+    assert "version" not in identities["alt"]
+    assert identities["base"]["version"] == 0
+    assert identities["plain"]["version"] == 0
+
+
+@pytest.mark.asyncio
+async def test_a_version_too_large_for_int4_is_still_migrated(engine: AsyncEngine) -> None:
+    """`::int` here raised `NumericValueOutOfRangeError` and aborted the whole
+    upgrade. The old model bounded `version` below with `ge=0`, never above."""
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "huge", "report.pdf", ["folder-a"], version=3000000000)
+
+    await _run_upgrade(engine)
+
+    identities = await _identities(engine)
+    assert identities["huge"]["document_name"] == "report (1).pdf"
+    assert "version" not in identities["huge"]
+
+
+@pytest.mark.asyncio
+async def test_a_version_that_is_a_numeric_string_is_not_an_alternate(engine: AsyncEngine) -> None:
+    """The regex form matched "1" and renamed the document while the portable
+    branch left it alone. Both now ask for a JSON number."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('stringy', :tags, CAST(:doc AS jsonb))"),
+            {"tags": ["folder-a"], "doc": json.dumps({"identity": {"document_name": "report.pdf", "document_uid": "stringy", "version": "1"}})},
+        )
+
+    await _run_upgrade(engine)
+
+    identities = await _identities(engine)
+    assert identities["stringy"]["document_name"] == "report.pdf"
+
+
+@pytest.mark.asyncio
+async def test_a_scalar_identity_does_not_abort_the_whole_upgrade(engine: AsyncEngine) -> None:
+    """`'{"identity":"version"}'::jsonb -> 'identity' ?| ARRAY['version']` is
+    true, so the strip pass reached `- 'version'` on a scalar and failed with
+    "cannot delete from scalar", taking every other document down with it."""
+    await _insert(engine, "base", "report.pdf", ["folder-a"])
+    await _insert(engine, "alt", "report.pdf", ["folder-a"], version=1)
+    async with engine.begin() as conn:
+        await conn.execute(
+            sa.text("INSERT INTO metadata (document_uid, tag_ids, doc) VALUES ('odd-shape', :tags, CAST(:doc AS jsonb))"),
+            {"tags": ["folder-a"], "doc": json.dumps({"identity": "version"})},
+        )
+
+    await _run_upgrade(engine)
+
+    identities = await _identities(engine)
+    assert identities["alt"]["document_name"] == "report (1).pdf"
 
 
 @pytest.mark.asyncio
@@ -291,9 +347,8 @@ async def test_a_non_numeric_version_does_not_raise_on_the_cast(engine: AsyncEng
 
     await _run_upgrade(engine)
 
-    identity = (await _identities(engine))["odd"]
-    assert identity["document_name"] == "report.pdf"
-    assert "version" not in identity
+    identities = await _identities(engine)
+    assert identities["odd"]["document_name"] == "report.pdf"
 
 
 @pytest.mark.asyncio

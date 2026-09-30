@@ -26,11 +26,19 @@ extraction, its indexing goes to common while the second rich starts extraction.
 
 ## When a folder already holds that name
 
-A folder never holds two documents a user cannot tell apart. Importing a name
-the destination already holds is answered, not guessed: the caller is asked
-whether to replace the document that is there or to skip the file, one decision
-per name, and replacing keeps the existing `document_uid` so every citation and
-link already pointing at it still resolves — to the new content.
+Importing a name the destination already holds is answered, not guessed: the
+caller is asked whether to replace the document that is there or to skip the
+file, one decision per name, and replacing keeps the existing `document_uid` so
+every citation and link already pointing at it still resolves — to the new
+content.
+
+The import answers that question once, before any byte is sent, and does not ask
+it again at write time. Two concurrent imports of one name therefore both create
+a document, and so does adding an existing document to a folder that already
+holds its name — `add_tag_id_to_document` has no collision guard, unlike
+`rename_document` (#2877). A folder holding two documents of one name is a state
+the platform can still reach; what the import does is refuse to guess which one
+was meant, and say so.
 
 Callers that address their documents by a source key of their own
 (`library_sync`) never reach that question: one document per key by
