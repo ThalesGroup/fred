@@ -16,7 +16,7 @@ Back up the Fred database and current chart values. For optional OIDC activation
 
 ## Configuration
 
-For an ordinary Keycloak upgrade, keep the existing provider and directory settings. To activate another issuer, set `security.user.provider` and `security.m2m.provider` to `oidc`, their `realm_url` values to the issuer URL, and `security.user_directory` to `local` consistently across the backends. Configure the API audience, browser scope, workload scope, identity and role claim paths, delegation settings and permitted origins for the provider. Use the [identity-provider guide](../../platform/IDENTITY-PROVIDERS.md) for the Entra recipe and generic OIDC checks. Keep confidential client secrets outside chart values.
+For an ordinary Keycloak upgrade, keep the existing provider and directory settings. To activate another issuer, set `security.user.provider` and `security.m2m.provider` to `oidc`, their `realm_url` values to the issuer URL, and `security.user_directory` to `local` consistently across the backends. Configure the API audience, browser scope, workload scope, identity and role claim paths, delegation settings and permitted origins for the provider. Use the [identity-provider guide](../../platform/IDENTITY-PROVIDERS.md) for the Entra recipe, its local configuration generator, the factory-provisioned ZITADEL profile and generic OIDC checks. Keep confidential client secrets outside chart values.
 
 ## Upgrade
 
@@ -24,7 +24,7 @@ Apply the control-plane Alembic migration that adds nullable user identity snaps
 
 ## Validation
 
-With the existing Keycloak configuration, sign in as platform administrator and run the platform self-test. For each optional provider, verify issuer discovery and backend startup, sign in as administrator, confirm the displayed identity and local-directory search, run the platform self-test, then check token refresh, agent document access through delegation and logout. Record the result before production rollout.
+With the existing Keycloak configuration, sign in as platform administrator and run the platform self-test. For Entra, provide tenant and public client IDs to the local generator and set workload secrets and the 5400-second token lifetime in the environment. For ZITADEL, use the factory provisioner to generate client IDs, credentials and complete local configurations. For each optional provider, verify issuer discovery and backend startup, sign in as administrator, confirm the displayed identity and local-directory search, run the platform self-test, then check token refresh, agent document access through delegation and logout. Record the result before production rollout.
 
 ## Rollback
 
