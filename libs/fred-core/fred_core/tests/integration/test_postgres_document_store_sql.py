@@ -318,26 +318,38 @@ async def test_uids_by_name_uses_the_document_name_index(
     """The point of the query is that it is answered by index, not by a scan.
 
     Without the index this still returns the right answer, so only the plan can
-    tell the two apart. It also pins the index to the model: it is declared in
-    `__table_args__` because an expression index has no column to hang off, and
-    a module-level declaration would silently never reach the table.
+    tell the two apart. It explains the statement the store itself builds —
+    explaining a hand-written equivalent proves the index is matchable by THAT
+    expression and nothing about the one that actually runs, which is how a
+    query that could never use this index shipped once already.
+
+    It also pins the index to the model: it is declared in `__table_args__`
+    because an expression index has no column to hang off, and a module-level
+    declaration would silently never reach the table.
     """
     from sqlalchemy import text as _text
 
     await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+    statement = pg_store._uids_by_name_statement(  # pyright: ignore[reportPrivateUsage]
+        "folder-a", ["report.pdf"]
+    )
+    # Compiled without literal_binds and handed to the driver with its own
+    # parameters: that is the form production actually sends, casts included.
     async with pg_store._sessions() as s:  # pyright: ignore[reportPrivateUsage]
-        await s.execute(_text("SET enable_seqscan = off"))
-        plan = (
-            (
-                await s.execute(
-                    _text(
-                        "EXPLAIN SELECT document_uid FROM metadata WHERE "
-                        "(doc -> 'identity' ->> 'document_name') = 'report.pdf'"
-                    )
-                )
-            )
-            .scalars()
-            .all()
+        connection = await s.connection()
+        compiled = statement.compile(
+            dialect=connection.dialect, compile_kwargs={"render_postcompile": True}
         )
+        await s.execute(_text("SET enable_seqscan = off"))
+        # The hostile case: a generic plan does not fold bind parameters, so an
+        # index expression built out of them stops matching. Only a literal one
+        # survives this.
+        await s.execute(_text("SET plan_cache_mode = force_generic_plan"))
+        # asyncpg is positional; positiontup is the order the placeholders take.
+        result = await connection.exec_driver_sql(
+            f"EXPLAIN {compiled}",
+            tuple(compiled.params[key] for key in compiled.positiontup or ()),
+        )
+        plan = [row[0] for row in result]
 
     assert any("idx_metadata_document_name" in line for line in plan), plan
