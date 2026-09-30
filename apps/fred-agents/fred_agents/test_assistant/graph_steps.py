@@ -55,10 +55,10 @@ from fred_sdk import (
     GraphNodeContext,
     GraphNodeResult,
     HumanChoiceOption,
+    HumanInputAnswer,
     StepResult,
     TuningValue,
     choice_step,
-    choice_step_response,
     intent_router_step,
     model_text_step,
     typed_node,
@@ -364,6 +364,45 @@ async def model_probe_step(
 # ── Steps: human questions ────────────────────────────────────────────────────
 
 
+async def _ask_test_user(
+    context: GraphNodeContext,
+    *,
+    question: str,
+    choices: list[HumanChoiceOption],
+    allow_free_text: bool = False,
+) -> HumanInputAnswer | None:
+    """Use the same platform tool and call ID as ReAct and Deep questions."""
+    try:
+        result = await context.invoke_runtime_tool(
+            "ask_user",
+            {
+                "question": question,
+                "choices": [choice.model_dump(mode="json") for choice in choices],
+                "allow_free_text": allow_free_text,
+            },
+        )
+    except RuntimeError as exc:
+        if "Runtime tool 'ask_user' is not available." not in str(exc):
+            raise
+        context.emit_status(
+            "ask_user_unavailable",
+            "Enable Questions de l'agent for this conversation.",
+        )
+        return None
+    if not isinstance(result, dict):
+        return None
+    if result.get("status") == "skipped":
+        return HumanInputAnswer(skipped=True)
+    if result.get("status") != "answered":
+        return None
+    return HumanInputAnswer(
+        choice_id=result.get("choice_id")
+        if isinstance(result.get("choice_id"), str)
+        else None,
+        text=result.get("text") if isinstance(result.get("text"), str) else None,
+    )
+
+
 @typed_node(TestState)
 async def hitl_confirm_step(
     state: TestState,
@@ -371,10 +410,8 @@ async def hitl_confirm_step(
 ) -> StepResult:
     """Exercise a two-option confirmation without invoking a tool."""
     context.emit_status("hitl_confirm", "Preparing yes/no confirmation.")
-    answer = await choice_step_response(
+    answer = await _ask_test_user(
         context,
-        stage="test_confirm",
-        title="Test HITL - Confirmation",
         question="Should the test agent continue?",
         choices=[
             HumanChoiceOption(id="yes", label="Yes", description="Continue this test."),
@@ -403,10 +440,8 @@ async def hitl_choice_step(
 ) -> StepResult:
     """Exercise four described choices and an explicit skipped response."""
     context.emit_status("hitl_choice", "Preparing multiple-choice request.")
-    answer = await choice_step_response(
+    answer = await _ask_test_user(
         context,
-        stage="test_choice",
-        title="Test HITL - Multiple Choice",
         question="Select one of the four test options.",
         choices=[
             HumanChoiceOption(
@@ -461,13 +496,11 @@ async def hitl_text_step(
 ) -> StepResult:
     """Exercise a genuine free-text form with no placeholder choice."""
     context.emit_status("hitl_text", "Preparing free-text input request.")
-    answer = await choice_step_response(
+    answer = await _ask_test_user(
         context,
-        stage="test_free_text",
-        title="Test HITL - Free Text Input",
         question="What should the test agent say next?",
         choices=[],
-        free_text=True,
+        allow_free_text=True,
     )
     if answer is None or answer.skipped:
         received = "(no reply)"
@@ -501,10 +534,8 @@ async def hitl_comment_step(
 ) -> StepResult:
     """Exercise one choice with an optional free-text comment."""
     context.emit_status("hitl_comment", "Preparing choice and comment request.")
-    answer = await choice_step_response(
+    answer = await _ask_test_user(
         context,
-        stage="test_choice_comment",
-        title="Test HITL - Choice and Comment",
         question="Which draft should the test agent use? Add a comment if useful.",
         choices=[
             HumanChoiceOption(
@@ -514,7 +545,7 @@ async def hitl_comment_step(
                 id="detailed", label="Detailed draft", description="An expanded answer."
             ),
         ],
-        free_text=True,
+        allow_free_text=True,
     )
     if answer is None:
         outcome, reason = "No valid answer received.", "hitl_comment_invalid"
@@ -2167,8 +2198,8 @@ async def fallback_step(
         "",
         _SCENARIO_TABLE,
         "",
-        "These questions use the Graph HITL helper. The `ask_user` tool belongs to ReAct/Deep.",
-        "The browser currently offers Skip only on ReAct/Deep agent questions.",
+        "These questions call the platform `ask_user` tool without a model.",
+        "Enable Questions de l'agent; Skip is available for these questions.",
         "",
     ]
     lines.append("Type the keyword at the start of your message to run that scenario.")
