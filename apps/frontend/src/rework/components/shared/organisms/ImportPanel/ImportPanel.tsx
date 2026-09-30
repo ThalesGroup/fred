@@ -178,10 +178,20 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
       dispatch,
       onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
     }).then(({ resumed }) => {
+      // Nothing matched. Returning quietly left the user believing they had
+      // just relaunched the import: the card stays, nothing is sent, and the
+      // only clue is that nothing happened.
+      if (resumed.length === 0) {
+        const expected = resending.current.map((entry) => entry.filename).join(", ");
+        showError({
+          summary: t("rework.imports.panel.title"),
+          detail: t("rework.imports.resend.wrongFile", { name: expected }),
+        });
+        return;
+      }
       // Only what was actually picked leaves the block. Clearing it outright
       // would drop the rest of the prompt after a partial selection — the
       // remaining files would never be offered again.
-      if (resumed.length === 0) return;
       const done = new Set(resumed);
       setInterrupted((entries) => entries.filter((entry) => !done.has(entry.entryId)));
     });

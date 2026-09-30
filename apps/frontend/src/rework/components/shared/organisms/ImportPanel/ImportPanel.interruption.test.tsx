@@ -38,7 +38,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+const showError = vi.fn();
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showError: (...a: unknown[]) => showError(...a) }),
+}));
 vi.mock("../../../../features/tasks/useTaskAcknowledgement", () => ({
   useTaskAcknowledgement: () => ({ acknowledge: vi.fn(), isAcknowledging: () => false }),
 }));
@@ -100,6 +103,7 @@ beforeEach(() => {
   forgetCachedRecord();
   clearHeldImports();
   streamMock.mockReset();
+  showError.mockClear();
   store = makeStore();
 });
 
@@ -275,6 +279,27 @@ describe("ImportPanel — an import cut off in the middle", () => {
     visit();
 
     expect(text()).not.toContain("rework.imports.failure.noAnswer");
+  });
+
+  it("says so when the file picked is not the one it asked for", async () => {
+    // The card stays and nothing is sent either way; without a word, the only
+    // clue that the wrong file was picked is that nothing happened.
+    await importCutOff();
+    reopenTheTab();
+    streamMock.mockClear();
+
+    act(() => {
+      byLabel("rework.imports.resend.action")[0]!.click();
+    });
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["z"], "something-else.pdf")] });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {});
+
+    expect(streamMock).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.objectContaining({ detail: "rework.imports.resend.wrongFile" }));
   });
 
   it("says nothing at all when the browser cleared its storage", async () => {

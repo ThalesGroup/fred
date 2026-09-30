@@ -20,7 +20,8 @@ import fr from "../../../locales/fr/translation.json";
 import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 import type { TaskViewModel } from "../tasks/taskTypes";
-import { IMPORT_PHASES, importPhaseHintFor, importPhaseLabel } from "./importPhases";
+import { IMPORT_PHASES, SERVER_PHASE, importPhaseHintFor, importPhaseIndex, importPhaseLabel } from "./importPhases";
+import { INGESTION_STEPS } from "../tasks/taskLabels";
 
 const t = ((key: string) => key) as unknown as TFunction;
 
@@ -95,6 +96,26 @@ describe("importPhaseLabel", () => {
       for (const key of [...IMPORT_PHASES, "done", "doneUpload"]) {
         expect(hints[key], `no hint for "${key}"`).toBeTruthy();
       }
+    }
+  });
+
+  // Unplaced, a late step fell to the first phase: a file showing "Indexing"
+  // went back to "Document preparation", the one thing a stepper must never
+  // do. Walked over both an import's own steps and the revectorize ones that
+  // can reach this panel.
+  it("never walks backwards on a step the server actually emits", () => {
+    const order = ["listed", "uploading", "processing", "indexing", "vectorized", "done"];
+    const walked = order.map((step) => importPhaseIndex(task({ stage: "analysis", state: "running", step })));
+
+    expect(walked).toEqual([...walked].sort((a, b) => a - b));
+  });
+
+  it("places every step the labels know about", () => {
+    // A step named in one place and forgotten in the other is exactly how the
+    // stepper started reporting a phase the file had already left.
+    for (const step of INGESTION_STEPS) {
+      if (step === "done") continue; // handled before the table is consulted
+      expect(SERVER_PHASE[step], `"${step}" has no phase`).toBeDefined();
     }
   });
 });

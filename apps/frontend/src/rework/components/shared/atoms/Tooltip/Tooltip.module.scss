@@ -66,6 +66,9 @@
 .tooltip-content-prose {
   max-width: 250px;
   white-space: normal;
+  /* A backend error can carry a path or a URL with nothing to break on, which
+     would run straight past the width above. */
+  word-break: break-word;
 }
 
 /* Opt-in interactive panel (Tooltip's `interactive` prop): the pointer can

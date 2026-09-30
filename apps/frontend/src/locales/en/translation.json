@@ -1576,7 +1576,8 @@
         }
       },
       "resend": {
-        "action": "Send again"
+        "action": "Send again",
+        "wrongFile": "None of the files picked is named {{name}}."
       },
       "retry": {
         "action": "Try again",

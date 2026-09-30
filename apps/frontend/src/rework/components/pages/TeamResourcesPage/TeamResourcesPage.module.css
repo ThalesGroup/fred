@@ -89,8 +89,13 @@
   min-height: 0;
   /* How wide the import panel may get: whatever is left once the table has its
      floor. The panel reads this; the floor belongs here, to the page that knows
-     what the table needs. */
-  --import-panel-max: calc(100% - 660px - var(--spacing-2xs));
+     what the table needs.
+
+     Floored at the panel's own minimum. Below roughly 664px that subtraction
+     goes negative, and a negative `max-width` is clamped to zero — the open
+     panel would vanish, taking the button that closes it with it, with no way
+     back short of a reload. A squeezed table is the lesser loss. */
+  --import-panel-max: max(280px, calc(100% - 660px - var(--spacing-2xs)));
   /* The two cards sit a hair apart, so the corners along that seam are tighter
      than the ones on the page's own edges — they read as one surface split in
      two rather than two things that happen to be adjacent. Each card rounds its

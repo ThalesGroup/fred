@@ -76,7 +76,12 @@ function read(): UnfinishedFile[] {
         entry !== null &&
         typeof (entry as UnfinishedFile).entryId === "string" &&
         typeof (entry as UnfinishedFile).filename === "string" &&
+        // `typeof null` is "object", and a null here reaches the upload as the
+        // request body. Every field the resume path reads is checked, since
+        // this content is whatever was in storage.
         typeof (entry as UnfinishedFile).requestMetadata === "object" &&
+        (entry as UnfinishedFile).requestMetadata !== null &&
+        ["upload", "process"].includes((entry as UnfinishedFile).uploadMode) &&
         ((entry as UnfinishedFile).notedAt ?? Infinity) > cutoff,
     ));
   } catch {

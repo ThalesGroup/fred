@@ -1576,7 +1576,8 @@
         }
       },
       "resend": {
-        "action": "Renvoyer"
+        "action": "Renvoyer",
+        "wrongFile": "Aucun des fichiers choisis ne porte le nom attendu : {{name}}."
       },
       "retry": {
         "action": "Réessayer",

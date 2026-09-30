@@ -84,3 +84,22 @@ describe("unfinishedImports", () => {
     expect(unfinishedImports()).toEqual([]);
   });
 });
+
+describe("what the record refuses to read back", () => {
+  it("drops an entry whose request body or mode is not usable", () => {
+    // Storage holds whatever was left there — another tab, an older version,
+    // a hand-edited key. `typeof null` is "object", so a null body used to
+    // pass and reach the upload as the request.
+    window.localStorage.setItem(
+      "fred.imports.unfinished",
+      JSON.stringify([
+        { entryId: "a", filename: "null-body.pdf", teamId: "t", uploadMode: "process", requestMetadata: null },
+        { entryId: "b", filename: "no-mode.pdf", teamId: "t", uploadMode: "sideways", requestMetadata: {} },
+        { entryId: "c", filename: "fine.pdf", teamId: "t", uploadMode: "process", requestMetadata: {} },
+      ]),
+    );
+    forgetCachedRecord();
+
+    expect(unfinishedImports().map((entry) => entry.filename)).toEqual(["fine.pdf"]);
+  });
+});

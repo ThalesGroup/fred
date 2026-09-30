@@ -33,7 +33,26 @@ const PHASE_LABEL: Record<ImportPhase, string> = {
   indexing: "rework.tasks.ingestionStep.indexing",
 };
 
-const SERVER_PHASE: Record<string, number> = { uploading: 1, processing: 2, indexing: 3 };
+/** Every step an ingestion task can carry, placed on the four phases. All of
+ *  them, not just the ones an import itself emits: an unplaced step falls to
+ *  the default below, and one emitted late then walks the stepper backwards.
+ *
+ *  An import emits `uploading` / `processing` / `indexing` / `done`. The other
+ *  three belong to revectorizing an existing document — a corpus operation,
+ *  not an import — and reach this panel only when such a task is shown as one,
+ *  which it should not be. Placed anyway: a stepper going backwards is a worse
+ *  way to find that out. */
+export const SERVER_PHASE: Record<string, number> = {
+  // The batch has been listed; nothing has been said about this file yet.
+  listed: 1,
+  uploading: 1,
+  processing: 2,
+  indexing: 3,
+  // Vectors written — the same work `indexing` reports on an import.
+  vectorized: 3,
+  // Already current: there was nothing left to do to it.
+  skip: IMPORT_PHASES.length,
+};
 
 /** The phase's own name — the same wording the status line uses for it. */
 export const importPhaseName = (phase: ImportPhase, t: TFunction): string => t(PHASE_LABEL[phase]);
