@@ -286,6 +286,11 @@ _MIGRATION = _obj({
     # sidecar that is desirable on a long-running Deployment keeps a hook Job
     # from ever completing, so the opt-out must target the Job alone.
     "podAnnotations": _OBJECT_FREE,
+    # Env for the migration Job only. The Job inherits nothing from the app
+    # (its env may reference release-created resources that do not exist yet
+    # on a fresh install); use this to source FRED_POSTGRES_PASSWORD from a
+    # pre-existing Secret when it is not in dotenv.
+    "extraEnvVars": _arr(_ENV_VAR),
 })
 
 _COMMAND = _obj({
