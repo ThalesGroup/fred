@@ -13,7 +13,7 @@ See proposal.md. Current alerts on existing manifests cover PyJWT in ten `uv.loc
 - Update direct constraints where they block safe releases, then regenerate each affected lock with `uv` or `npm`. Avoid manual lockfile edits because hashes, markers, and transitive versions must remain consistent.
 - Use the vendor-published PyTorch 2.13.0 / torchvision 0.28.0 pair, retaining CPU wheels on Linux x86_64 and existing macOS/ARM markers. Transformers must reach at least 5.10.0. If resolution or focused tests fail, fix compatibility in the affected application and document any upstream blocker precisely.
 - Use `npm` overrides only where the owning direct dependency cannot yet resolve a fixed transitive release. Keep overrides narrow and explain why in the PR.
-- Treat alerts on removed paths as inventory debt. Confirm the path is absent on `swift`, check its live replacement, and dismiss only those proven obsolete with a recorded reason after code verification.
+- Treat alerts on removed paths as inventory debt. Confirm each path is absent on swift and check its live replacement. The requester chose to leave the 97 remaining obsolete-path alerts open for later triage.
 
 ## Risks / Trade-offs
 

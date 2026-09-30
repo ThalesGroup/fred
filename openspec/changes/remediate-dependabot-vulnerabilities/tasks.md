@@ -12,6 +12,7 @@
 
 ## 3. Close out
 
-- [ ] 3.1 Verify the 98 obsolete-path alerts against live replacement manifests and record an auditable disposition for each alert group.
-- [x] 3.2 Add and validate the English migration note with accurate deployment and rollback guidance.
-- [ ] 3.3 Reconcile this change with the final diff, run repository checks and a cold diff review, then push a draft PR linked to issue #2854.
+- [x] 3.1 Verify the 98 obsolete-path alerts against live replacement manifests; one alert has an auditable dismissal.
+- [x] 3.2 Record the requester's decision to leave the 97 remaining obsolete-path alerts open for later triage.
+- [x] 3.3 Add and validate the English migration note with accurate deployment and rollback guidance.
+- [x] 3.4 Reconcile this change with the final diff, run repository checks and a cold diff review, then push a draft PR linked to issue #2854.
