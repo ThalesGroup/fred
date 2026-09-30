@@ -1327,45 +1327,6 @@
         }
       }
     },
-    "adminTeams": {
-      "title": "Teams",
-      "existingTeams": {
-        "title": "Existing teams",
-        "empty": "No teams yet.",
-        "table": {
-          "name": "Team",
-          "admins": "Admin(s)"
-        }
-      },
-      "defaultTeam": {
-        "title": "Default teams for new users",
-        "description": "Every new user joins these teams as a member when they accept the terms of use for the first time. Users who already accepted are not affected.",
-        "gcuDisabled": "Terms of use are not enabled on this deployment, so no user will join these teams automatically.",
-        "none": "No default team.",
-        "searchPlaceholder": "Add a team by name",
-        "remove": "Remove {{name}}",
-        "savedSummary": "Default teams updated",
-        "errors": {
-          "summary": "Failed to update the default teams",
-          "fallbackDetail": "Could not update the default teams. Please try again."
-        }
-      },
-      "createTeam": {
-        "title": "Create team",
-        "nameLabel": "Team name",
-        "namePlaceholder": "e.g. swiftpost",
-        "adminsLabel": "Initial team admin(s)",
-        "adminsPlaceholder": "Enter a name, first name, or user ID",
-        "submit": "Create team",
-        "successSummary": "Team created",
-        "errors": {
-          "summary": "Failed to create team",
-          "fallbackDetail": "Could not create the team. Please try again.",
-          "conflictDetail": "A team with this name already exists.",
-          "forbiddenDetail": "You are not allowed to create teams."
-        }
-      }
-    },
     "agentCard": {
       "activate": "Activate",
       "catalogWarning": "MCP configuration drift — recreate to resolve",
@@ -1409,18 +1370,6 @@
       "toggleSuccess": "{{agent}} {{status}}",
       "unexpectedError": "An unexpected error occurred.",
       "missingTeamId": "Missing team id in route."
-    },
-    "agentTodoPanel": {
-      "announcementComplete": "Task plan complete",
-      "ariaLabel": "Agent task plan",
-      "remaining_one": "{{count}} remaining",
-      "remaining_other": "{{count}} remaining",
-      "status": {
-        "completed": "Completed",
-        "in_progress": "In progress",
-        "pending": "Pending"
-      },
-      "title": "Tasks"
     },
     "analytics": {
       "activeUsers": {
@@ -1569,67 +1518,117 @@
         "valueLabel": "Conversations"
       }
     },
-    "announcements": {
-      "banner": {
-        "moreInfo": "More info",
-        "dismiss": "Dismiss this announcement"
+    "imports": {
+      "cancel": {
+        "action": "Cancel the transfer",
+        "tooLate": "This file is already on its way and can no longer be cancelled."
       },
-      "dialog": {
-        "close": "Close"
+      "interrupted": {
+        "forget": "Give up on them",
+        "resume": "Pick them again",
+        "title": "These files did not arrive"
       },
-      "page": {
-        "title": "Announcements",
-        "subtitle_one": "{{count}} announcement is live for every user.",
-        "subtitle_other": "{{count}} announcements are live for every user.",
-        "subtitle_zero": "Nothing is showing to users right now.",
-        "create": "New announcement",
-        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
+      "conflict": {
+        "question": "A document of this name is already in this folder.",
+        "replace": "Replace",
+        "rowHint": "A file waiting on a decision has this name. Open the imports panel.",
+        "skip": "Skip"
       },
-      "severity": {
-        "info": "Info",
-        "warning": "Warning",
-        "error": "Error",
-        "success": "Success"
+      "failure": {
+        "analysis": "Analysing this file failed.",
+        "attemptsExhausted": "Several attempts failed.",
+        "connectionLost": "The connection was lost during the transfer.",
+        "extraction": "This file's content could not be read.",
+        "indexing": "The file was read, but indexing it failed.",
+        "noAnswer": "The upload ended without the server saying what became of this file.",
+        "interrupted": "Processing stopped before finishing.",
+        "notAllowed": "You are not allowed to import into this folder.",
+        "preparation": "Preparing this file failed.",
+        "quotaExceeded": "The team's storage is full.",
+        "quotaExceededPersonal": "Your storage is full.",
+        "quotaUnknown": "Available storage could not be checked. Worth retrying.",
+        "serverUnavailable": "The server did not answer.",
+        "ambiguousName": "This folder already holds two documents of that name. Remove the duplicate before importing again.",
+        "unreported": "Failed, with no cause reported.",
+        "unsupportedType": "This file type is not supported.",
+        "upload": "Sending this file failed."
       },
-      "locale": {
-        "fr": "French",
-        "en": "English"
+      "panel": {
+        "collapse": "Hide imports",
+        "empty": "Nothing being imported. Files you add show up here while they are processed.",
+        "expand": "Show imports",
+        "resize": "Resize the imports panel",
+        "title": "Imports"
       },
-      "row": {
-        "enabled": "Show this announcement to users",
-        "enableHint": "Enable for all users",
-        "disableHint": "Disable for all users",
-        "edit": "Edit this announcement",
-        "delete": "Delete this announcement"
+      "phaseState": {
+        "current": "in progress",
+        "done": "done",
+        "failed": "failed",
+        "pending": "waiting"
       },
-      "editor": {
-        "createTitle": "New announcement",
-        "editTitle": "Edit announcement",
-        "title": "Title",
-        "titleRequired": "Give the announcement a title in at least one language.",
-        "descriptionShort": "Short description",
-        "descriptionShortHint": "Shown in the banner itself. Keep it to a line or two — bold, italic and links only.",
-        "shortRequired": "Write a short description in at least one language.",
-        "descriptionLong": "Long description (optional)",
-        "descriptionLongHint": "Shown in the More info dialog. Leave empty and the banner shows no More info button.",
-        "dismissible": "Closable",
-        "severityGroup": "Announcement severity",
-        "localeGroup": "Language being edited"
+      "stepper": {
+        "label": "Import progress"
       },
-      "saved": "Announcement saved.",
-      "saveFailed": "The announcement was not saved.",
-      "toggleFailed": "Could not change the announcement's state.",
-      "deleted": "Announcement deleted.",
-      "deleteFailed": "The announcement was not deleted.",
-      "delete": {
-        "title": "Delete this announcement?",
-        "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
+      "retry": {
+        "action": "Try again",
+        "relaunchFromRow": "Fred has this document: relaunch its processing from its row in the table.",
+        "unavailable": "This file has to be picked again before it can be retried."
       }
     },
-    "avatarCrop": {
-      "title": "Crop avatar",
-      "save": "Save",
-      "zoom": "Zoom"
+    "tokenUsageImpact": {
+      "costTitle": "Estimated cost",
+      "costValue": "${{cost}} (estimated)",
+      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
+    },
+    "teamUsage": {
+      "title": "My token usage",
+      "personalSectionTitle": "My usage",
+      "tokensOverTime": {
+        "title": "Token usage over time",
+        "valueLabel": "Tokens"
+      },
+      "byAgent": {
+        "empty": "No agent usage in this period.",
+        "title": "Usage by agent",
+        "valueLabel": "Tokens"
+      },
+      "byModel": {
+        "empty": "No model usage in this period.",
+        "title": "Usage by model",
+        "valueLabel": "Tokens"
+      },
+      "team": {
+        "pageTitle": "Team usage",
+        "sectionTitle": "Team usage",
+        "membersLabel": "Members",
+        "agentsLabel": "Agents",
+        "documentsLabel": "Documents",
+        "quota": {
+          "empty": "No storage quota configured for this team.",
+          "title": "Storage quota (% used)",
+          "valueLabel": "% of quota"
+        },
+        "conversationsOverTime": {
+          "title": "Conversations over time",
+          "valueLabel": "Conversations"
+        },
+        "mostActiveAgents": {
+          "title": "Most active agents",
+          "valueLabel": "Messages"
+        }
+      }
+    },
+    "agentTodoPanel": {
+      "announcementComplete": "Task plan complete",
+      "ariaLabel": "Agent task plan",
+      "remaining_one": "{{count}} remaining",
+      "remaining_other": "{{count}} remaining",
+      "status": {
+        "completed": "Completed",
+        "in_progress": "In progress",
+        "pending": "Pending"
+      },
+      "title": "Tasks"
     },
     "back": "Back",
     "bootstrap": {
@@ -1731,6 +1730,1191 @@
     "delete": "Delete",
     "documentIncludedByFolder": "Included by the folder selection",
     "documents": "documents",
+    "expand": "Expand",
+    "gcu": {
+      "backToApp": "Back to app",
+      "lockInformation": "Read the Terms of Service before you can accept them",
+      "title": "Terms of Service (ToS)",
+      "validate": "Accept the TOS"
+    },
+    "hitlPrompt": {
+      "accepted": "Accepted",
+      "refused": "Refused"
+    },
+    "knowledgeHub": {
+      "loading": "Loading..."
+    },
+    "loading": "Loading...",
+    "marketplace": {
+      "teams": {
+        "otherTeams": "Discover other teams",
+        "search": {
+          "ariaLabel": "Search for a team",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Search for a team"
+        },
+        "title": "Community teams",
+        "yourTeams": "Your teams"
+      },
+      "prompts": {
+        "title": "Community prompts",
+        "searchPlaceholder": "Search a prompt...",
+        "clearSearch": "Clear search",
+        "loading": "Loading prompts...",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "emptySearch": "No prompt matches this search.",
+        "import": {
+          "title": "Copy this prompt to a team",
+          "subtitle": "Select the spaces to copy “{{name}}” into.",
+          "confirm": "Copy",
+          "personalSpace": "Personal space",
+          "searchPlaceholder": "Search a team",
+          "clearSearch": "Clear search",
+          "noTeams": "No team matches.",
+          "successToast": "Prompt copied ({{count}})",
+          "errorToast": "Copy failed ({{count}})",
+          "originTeam": "Origin team"
+        },
+        "unpublish": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        }
+      }
+    },
+    "helpCenter": {
+      "title": "Help Center",
+      "languageAria": "Documentation language",
+      "sidebarAria": "Help Center navigation",
+      "copyPageLink": "Copy the page link",
+      "copyHeadingLink": "Copy the link to this paragraph",
+      "missingPage": "This page doesn't exist yet.",
+      "externalDocsLink": "Technical documentation ↗",
+      "search": {
+        "placeholder": "Search the help…",
+        "ariaLabel": "Search the Help Center",
+        "clearAriaLabel": "Clear search",
+        "resultsAria": "Search results",
+        "noResults": "No results."
+      },
+      "sections": {
+        "gettingStarted": "Getting started",
+        "features": "Features",
+        "guides": "Guides & use cases",
+        "troubleshooting": "Help & limits"
+      }
+    },
+    "avatarCrop": {
+      "title": "Crop avatar",
+      "save": "Save",
+      "zoom": "Zoom"
+    },
+    "home": {
+      "title": "Home",
+      "searchPlaceholder": "Search a team",
+      "searchClear": "Clear search",
+      "yourTeams": "Your teams",
+      "sort": {
+        "aria": "Sort teams",
+        "recent": "Recently viewed",
+        "alpha": "Alphabetical"
+      },
+      "pageTitle": "Home",
+      "pageSubtitle": "Select a space in the left panel to get started.",
+      "greeting": "Hello, what are we doing today?",
+      "greetingNamed": "Hello {{name}}, what are we doing today?",
+      "subtitle": "Access any agent, team or prompt from here.",
+      "tabs": {
+        "aria": "Home sections",
+        "quickAccess": "Quick access",
+        "activity": "Your activity",
+        "trending": "Trending"
+      },
+      "responsible": {
+        "title": "Responsible AI",
+        "footprintInfo": {
+          "aria": "How is this estimate calculated?",
+          "title": "Where does this estimate come from?",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
+          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "limitsTitle": "Good to keep in mind",
+          "limit1": "It's an estimate, not an exact measurement.",
+          "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
+          "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
+          "confirm": "Got it"
+        },
+        "cleanupTool": {
+          "aria": "Clean up",
+          "confirmAll": "Delete all",
+          "confirm": "Delete ({{count}})",
+          "cancel": "Cancel",
+          "toast": "{{count}} item(s) deleted"
+        },
+        "cleanupConversations": {
+          "title": "Clean up inactive conversations",
+          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
+          "empty": "No inactive conversation to clean up."
+        }
+      },
+      "topPrompts": {
+        "title": "Marketplace · Top 8 most-used prompts",
+        "uses": "uses",
+        "weekDelta": "▲ {{count}} · 7d",
+        "empty": "No prompt has been published to the marketplace yet.",
+        "periodDelta": "▲ {{count}} · {{days}}d"
+      },
+      "period": {
+        "label": "Period",
+        "days": "{{count}}d",
+        "d7": "Last 7 days",
+        "d30": "Last 30 days",
+        "d90": "Last 90 days"
+      },
+      "search": {
+        "placeholder": "Search agents, teams, prompts…",
+        "empty": "No results.",
+        "groups": {
+          "agents": "Agents",
+          "teams": "Teams",
+          "prompts": "Prompts"
+        }
+      },
+      "recentAgents": {
+        "title": "Recently used agents"
+      },
+      "topAgents": {
+        "title": "Your most-used agents",
+        "unit": "conv.",
+        "empty": "No agent used in this period."
+      },
+      "topTeams": {
+        "title": "Your activity across your teams",
+        "unit": "conv.",
+        "personalSpace": "Personal space",
+        "empty": "You are not a member of any team.",
+        "role": {
+          "team_admin": "Admin",
+          "team_editor": "Editor",
+          "team_analyst": "Analyst",
+          "team_member": "Member"
+        }
+      },
+      "activity": {
+        "title": "Your activity",
+        "conversations": "New conversations",
+        "messages": "Messages sent",
+        "agents": "Agents used",
+        "deltaUp": "▲ {{pct}}% ({{abs}})",
+        "deltaDown": "▼ {{pct}}% ({{abs}})",
+        "deltaFlat": "flat",
+        "vsPrevious": "vs previous period",
+        "periodCaption": "over the last {{count}} days"
+      }
+    },
+    "mainNav": {
+      "ariaLabel": "Main navigation",
+      "home": "Home",
+      "marketplace": "Marketplace",
+      "helpCenter": "Help Center",
+      "adminConsole": "Technical console"
+    },
+    "profileMenu": {
+      "contactSupport": "Contact support",
+      "profile": "Profile"
+    },
+    "promptCategories": {
+      "pickerTitle": "Category",
+      "noCategory": "No category",
+      "manage": {
+        "buttonAria": "Manage categories",
+        "title": "Manage categories",
+        "createPlaceholder": "New category...",
+        "create": "Create",
+        "empty": "No categories for this team yet.",
+        "saveAria": "Save",
+        "cancelEditAria": "Cancel",
+        "editAria": "Rename {{name}}",
+        "deleteAria": "Delete {{name}}",
+        "deleteBlocked": "This category cannot be deleted, prompts are attached to it.",
+        "deleteConfirmTitle": "Delete this category?",
+        "deleteConfirmMessage": "Remove \"{{name}}\"? This cannot be undone.",
+        "createError": "Failed to create category",
+        "renameError": "Failed to rename category",
+        "deleteError": "Failed to delete category",
+        "genericError": "Something went wrong."
+      }
+    },
+    "releaseNotes": {
+      "baseRelease": "Base Fred release",
+      "brandRelease": "{{brand}} release",
+      "copied": "Copied!",
+      "copy": "Copy",
+      "empty": "No release notes available.",
+      "versionsAria": "Release versions"
+    },
+    "resources": {
+      "workspaceTitle": "Files",
+      "pageTitle": "Team resources",
+      "pageSubtitle": "Manage local resources, manually added to the team",
+      "rootsAria": "Resource spaces",
+      "storageQuota": "Storage",
+      "roots": {
+        "resources": "Team corpus",
+        "mine": "My space",
+        "team": "Shared space",
+        "agents": "Agents",
+        "removedAgent": "Removed agent",
+        "indexed": "indexed corpus",
+        "private": "private · in {{team}}",
+        "privatePersonal": "private · personal",
+        "fileCount": "{{count}} files",
+        "empty": "empty"
+      },
+      "hints": {
+        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
+        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
+        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
+        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
+      },
+      "provenance": {
+        "origins": {
+          "uploaded": "Uploaded",
+          "agent_generated": "Generated",
+          "shared_copy": "Shared"
+        }
+      },
+      "search": {
+        "placeholder": "Search",
+        "ariaLabel": "Search in this folder",
+        "clearAriaLabel": "Clear search"
+      },
+      "folders": {
+        "templates": "Templates",
+        "uploads": "Uploads",
+        "outputs": "Outputs",
+        "work": "Work"
+      },
+      "menu": {
+        "addFile": "Add a file",
+        "newFolder": "New folder"
+      },
+      "columns": {
+        "name": "Name",
+        "size": "Size",
+        "created": "Added on",
+        "author": "Added by"
+      },
+      "embeddedTitleHint": "Embedded title: {{title}}",
+      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
+      "dropAtRoot": "Drop a folder to create it here with its structure",
+      "rootDrop": {
+        "rejectedTitle": "Drop a folder",
+        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
+        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
+        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
+      },
+      "action": {
+        "addFile": "Add files",
+        "addFileHint": "Select a folder first",
+        "back": "Back to previous folder",
+        "copyToTeam": "Copy to Team space",
+        "delete": "Delete",
+        "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
+        "download": "Download",
+        "includeInSearch": "Include in search",
+        "manageLabels": "Manage labels",
+        "more": "More actions",
+        "newFolder": "New folder",
+        "newSubfolder": "New subfolder in \"{{name}}\"",
+        "preview": "Preview",
+        "process": "Process",
+        "refresh": "Refresh this view",
+        "relaunchIngestion": "Relaunch ingestion",
+        "rename": "Rename",
+        "searchable": "Exclude from search"
+      },
+      "confirm": {
+        "deleteMessage": "Remove \"{{name}}\" from this folder?",
+        "deleteBulkMessage": "Remove {{count}} documents from this folder?",
+        "deleteTitle": "Remove document",
+        "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
+        "deleteFolderMessageUnknownCount": "Delete \"{{name}}\" and all its content? This cannot be undone.",
+        "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
+        "deleteFoldersMessage": "Delete {{count}} folder(s) and all their content? This cannot be undone.",
+        "deleteMixedMessage": "Delete {{folderCount}} folder(s) with all their content and remove {{docCount}} document(s)? This cannot be undone.",
+        "deleteFolderTitle": "Delete folder",
+        "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
+        "shareTitle": "Copy to Team space"
+      },
+      "errorTooltip": {
+        "noDetails": "Processing failed without further details. Share the document reference with support.",
+        "documentReference": "Document: {{id}}",
+        "reported": "Reported by the pipeline",
+        "stage": "Stage: {{stage}}",
+        "stages": {
+          "raw": "File storage",
+          "preview": "Content extraction",
+          "vector": "Search indexing",
+          "sql": "Structured data indexing"
+        }
+      },
+      "empty": {
+        "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
+        "agents": "No agent files yet. Files your agents create for you will appear here, grouped by agent.",
+        "createLibrary": "Create a library (folder) to start adding documents.",
+        "folder": "This folder is empty."
+      },
+      "folder": {
+        "docCount": "{{count}} docs",
+        "failed": "{{count}} failed",
+        "processing": "{{count}} processing",
+        "upToDate": "Up to date"
+      },
+      "folderModal": {
+        "atRoot": "At the top level",
+        "cancel": "Cancel",
+        "create": "Create",
+        "error": "Could not create the folder",
+        "inFolder": "In",
+        "nameLabel": "Name",
+        "namePlaceholder": "e.g. Reports 2026",
+        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
+        "title": "New folder",
+        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
+      },
+      "renameModal": {
+        "title": "Rename",
+        "nameLabel": "Name",
+        "save": "Save",
+        "error": "Could not rename"
+      },
+      "labelsModal": {
+        "title": "Manage labels",
+        "currentEmpty": "No labels yet",
+        "addPlaceholder": "Add a label…",
+        "add": "Add",
+        "createNew": "Create label",
+        "addFieldLabel": "Add a label",
+        "removeAriaLabel": "Remove label \"{{label}}\"",
+        "close": "Close"
+      },
+      "loading": "Loading resources...",
+      "preview": {
+        "title": "Document preview",
+        "tabsAria": "Display mode",
+        "tabs": {
+          "file": "File",
+          "raw": "Raw"
+        },
+        "loading": "Loading…",
+        "markdownUnavailable": "No Markdown version was generated for this document.",
+        "pdf": {
+          "loadFailed": "Failed to load PDF document.",
+          "unavailable": "Document content is unavailable.",
+          "largeTitle": "Large document",
+          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
+          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
+          "largeConfirm": "Display anyway"
+        }
+      },
+      "storage": {
+        "aria": "Storage space used",
+        "usedOfTotal": "{{used}} / {{total}}",
+        "used": "{{used}} used"
+      },
+      "pagination": {
+        "next": "Next page",
+        "page": "page {{page}} / {{pageCount}}",
+        "prev": "Previous page"
+      },
+      "status": {
+        "copyDetail": "Copy detail",
+        "detailCopied": "Detail copied",
+        "detailTitle": "Detail: {{label}}",
+        "excludedFromSearch": "Excluded from search",
+        "failed": "Error",
+        "folderFailedMore_one": "and {{count}} more",
+        "folderFailedMore_other": "and {{count}} more",
+        "folderFailedTooltip_one": "{{count}} document failed to process:",
+        "folderFailedTooltip_other": "{{count}} documents failed to process:",
+        "folderFailed_one": "{{count}} error",
+        "folderFailed_other": "{{count}} errors",
+        "justDone": "Done",
+        "processing": "Processing...",
+        "raw": "Pending",
+        "ready": "Ready"
+      },
+      "bulkActions": {
+        "selectedCount": "Selection: {{count}}",
+        "clearSelection": "Clear selection",
+        "delete": "Delete",
+        "download": "Download",
+        "excludeFromSearch": "Exclude from search",
+        "includeInSearch": "Include in search",
+        "relaunchIngestion_one": "Relaunch ingestion for {{count}} resource",
+        "relaunchIngestion_other": "Relaunch ingestion for {{count}} resources"
+      },
+      "stats": {
+        "toggle": "Statistics",
+        "filesByType": {
+          "title": "Files by type",
+          "valueLabel": "Files"
+        },
+        "sizeByType": {
+          "title": "Size by type",
+          "tooltipTitle": "Breakdown"
+        },
+        "bucket": {
+          "pdf": "PDF",
+          "text": "Text",
+          "ppt": "PPT",
+          "excel": "Excel",
+          "other": "Other"
+        }
+      },
+      "title": "Resources",
+      "toast": {
+        "bulkExcludeError": "Could not exclude the selection from search",
+        "bulkExcludeNothing": "The selected items are already excluded from search",
+        "bulkExcludedFromSearch": "{{count}} document(s) excluded from search",
+        "deleteFolderError": "Could not delete the folder",
+        "deleteFolderSuccess": "Folder deleted",
+        "downloadEmpty": "The selected folders contain no documents to download",
+        "downloadError": "Could not download the selected files",
+        "relaunchError": "Could not relaunch ingestion",
+        "relaunchStarted_one": "Ingestion relaunched",
+        "relaunchStarted_other": "Ingestion relaunched for {{count}} resources"
+      },
+      "pageTitlePersonal": "Your personal resources",
+      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space.",
+      "relaunchProfileHelp": "Choose a profile for documents whose original ingestion profile is unknown. Other documents keep their original profile.",
+      "relaunchProfileLabel": "Ingestion profile"
+    },
+    "save": "Save",
+    "serviceNotice": {
+      "agentTemplates": {
+        "description": "Ask a platform admin to enable an agent capability, or check that an agent runtime is connected.",
+        "title": "No agents available yet"
+      },
+      "controlPlane": {
+        "description": "Check that the control-plane service is running.",
+        "title": "Control plane not reachable"
+      },
+      "knowledgeService": {
+        "description": "Start the knowledge-flow service to browse resources.",
+        "title": "Knowledge service not running"
+      },
+      "evaluationService": {
+        "title": "Evaluation service not running",
+        "description": "Start the fred-evaluation service to manage evaluations and runs."
+      }
+    },
+    "sidebar": {
+      "admin": {
+        "badge": {
+          "activeTasks": "{{count}} active tasks"
+        },
+        "menu": {
+          "analytics": "Analytics",
+          "corpusAudit": "Corpus audit",
+          "features": "Features",
+          "migration": "Platform data",
+          "platformRoles": "Platform roles",
+          "selftest": "Self-test",
+          "tasks": "Activity",
+          "teams": "Teams",
+          "platformPrompt": "Platform global prompt",
+          "announcements": "Announcements"
+        },
+        "title": "Administration spaces"
+      },
+      "chatList": {
+        "deleteDialog": {
+          "title": "Delete this conversation?",
+          "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
+          "confirm": "Delete",
+          "cancel": "Cancel"
+        },
+        "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
+        "groupByAgent": "Group by agent",
+        "loading": "Loading...",
+        "title": "Chat",
+        "unknownAgent": "Unknown agent"
+      },
+      "marketplace": {
+        "menu": {
+          "teams": "Teams",
+          "prompts": "Prompts"
+        },
+        "title": "Marketplace"
+      },
+      "team": {
+        "marketplace": "Marketplace",
+        "menu": {
+          "apps": "Apps",
+          "resources": "Resources",
+          "wiki": "Wiki",
+          "knowledgeBases": "Knowledge Bases"
+        },
+        "teamLabel": "Team",
+        "userTeam": "Personal space"
+      }
+    },
+    "selftest": {
+      "page": {
+        "title": "Self-test"
+      },
+      "report": {
+        "running": "Running…",
+        "empty": "No run yet.",
+        "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
+        "copy": "Copy report",
+        "copied": "Copied"
+      },
+      "functional": {
+        "title": "Functional self-test",
+        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
+        "run": "Run campaign"
+      },
+      "authz": {
+        "title": "Authorization self-test",
+        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
+        "runSelf": "Run for myself",
+        "expiry": {
+          "title": "Agent access after your session expires",
+          "run": "Run session-expiry check",
+          "warning": {
+            "title": "Keep this page open until the check finishes",
+            "message": "This check waits for your current sign-in credential to expire, so it runs for about {{minutes}} minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
+            "messageUnknownWait": "This check waits for your current sign-in credential to expire, so it runs for several minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
+            "confirm": "Start and keep the page open"
+          },
+          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
+        },
+        "testProfile": {
+          "title": "Test another profile",
+          "usernameLabel": "Account",
+          "usernamePlaceholder": "Select an account",
+          "passwordLabel": "Password",
+          "run": "Run",
+          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
+          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
+        }
+      }
+    },
+    "tasks": {
+      "indicator": {
+        "details": "{{label}} — click for details"
+      },
+      "kind": {
+        "default": "Task",
+        "ingestion": "Processing",
+        "migration": "Migration",
+        "reindex": "Reindexing",
+        "evaluation": "Evaluation",
+        "erasure": "Erasure"
+      },
+      "migration": {
+        "dropzone": "Drag a .zip export, or click to select",
+        "empty": "No migration in progress",
+        "label": "Label (optional)",
+        "labelPlaceholder": "e.g. castle-prod",
+        "launch": "Launch migration",
+        "launching": "Launching...",
+        "title": "Platform data",
+        "import": {
+          "title": "Import"
+        },
+        "export": {
+          "title": "Export",
+          "description": "Download a .zip snapshot of this platform's agents, tags, and document metadata.",
+          "launch": "Export",
+          "launching": "Exporting…"
+        },
+        "reset": {
+          "launch": "Reset platform",
+          "running": "Resetting…",
+          "taskLabel": "Platform reset",
+          "confirmTitle": "Reset the platform?",
+          "confirmMessage": "Permanently deletes all agents, tags, and document metadata. Files (S3), vectors (OpenSearch), users (Keycloak), and permissions (OpenFGA) are not affected.",
+          "confirmLabel": "Reset",
+          "cancelLabel": "Cancel",
+          "error": "Reset failed"
+        },
+        "stats": {
+          "title": "Overview",
+          "refresh": "Refresh",
+          "teams": "Teams",
+          "members": "Members",
+          "agents": "Agents",
+          "prompts": "Prompts",
+          "col": {
+            "team": "Team",
+            "admins": "Admins",
+            "editors": "Editors",
+            "analysts": "Analysts",
+            "members": "Members",
+            "agents": "Agents",
+            "prompts": "Prompts"
+          }
+        }
+      },
+      "page": {
+        "active": "In progress",
+        "clearCompleted": "Clear completed",
+        "empty": "No tasks in progress",
+        "terminal": "Completed",
+        "terminalCount": "Completed ({{count}})",
+        "title": "Tasks"
+      },
+      "importStage": {
+        "upload": "Sending the file",
+        "uploadDone": "Upload complete",
+        "analysis": "Analysing the document"
+      },
+      "ingestionStep": {
+        "uploading": "Document preparation",
+        "processing": "Content extraction",
+        "indexing": "Indexing",
+        "listed": "Document preparation",
+        "vectorized": "Content indexed",
+        "skip": "Already up to date",
+        "done": "Ingestion complete"
+      },
+      "popover": {
+        "acknowledge": "Dismiss",
+        "close": "Close",
+        "supportReference": "Support reference: {{id}}",
+        "copyError": "Copy error",
+        "errorCopied": "Error copied",
+        "startedAgo": "started {{time}}",
+        "title": "Details — {{label}}"
+      },
+      "state": {
+        "cancelled": "Cancelled",
+        "cancelling": "Cancelling",
+        "failed": "Failed",
+        "pending": "Pending",
+        "running": "Running",
+        "succeeded": "Done"
+      },
+      "time": {
+        "hoursAgo": "{{count}}h ago",
+        "justNow": "just now",
+        "minAgo": "{{count}} min ago"
+      },
+      "tray": {
+        "empty": "No recent tasks",
+        "failed": "{{count}} failed",
+        "progress": "Task progress",
+        "running": "{{count}} running",
+        "title": "Recent tasks",
+        "trigger": "Tasks"
+      },
+      "due": {
+        "imminent": "imminent",
+        "inMinutes": "in {{count}} min",
+        "inHours": "in {{count}}h",
+        "inDays": "in {{count}}d"
+      },
+      "card": {
+        "acknowledge": "Dismiss",
+        "copyWarnings": "Copy warnings",
+        "copied": "Copied!"
+      }
+    },
+    "platformRoles": {
+      "title": "Platform roles",
+      "holders": {
+        "title": "Current role holders",
+        "empty": "No platform roles granted yet.",
+        "loading": "Loading platform roles…",
+        "error": "Platform roles could not be loaded.",
+        "rootBadge": "Primary admin",
+        "table": {
+          "user": "User",
+          "roles": "Roles"
+        }
+      },
+      "roles": {
+        "platform_admin": "Platform admin",
+        "platform_observer": "Platform observer",
+        "team_manager": "Team manager",
+        "feature_manager": "Feature manager",
+        "prompt_editor": "Prompt editor"
+      },
+      "roleDescriptions": {
+        "platform_admin": "Full platform administration: every admin page, import/export and platform reset.",
+        "platform_observer": "Read-only access to platform-wide analytics.",
+        "team_manager": "Create teams and see every team on the platform.",
+        "feature_manager": "Enable or disable capabilities, agent templates and models.",
+        "prompt_editor": "Edit the platform prompt prepended to every agent."
+      },
+      "grant": {
+        "title": "Grant a role",
+        "userLabel": "Users",
+        "userPlaceholder": "Search and add users",
+        "removeUser": "Remove {{user}}",
+        "roleLabel": "Role",
+        "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
+        "submit": "Grant role",
+        "successSummary_one": "{{role}} granted to {{user}}",
+        "successSummary_other": "{{role}} granted to {{count}} users",
+        "errors": {
+          "summary": "Could not grant the role to {{users}}",
+          "fallbackDetail": "An unexpected error occurred while granting the role.",
+          "forbiddenDetail": "Only the primary admin can manage platform admins.",
+          "conflictDetail": "Root bootstrap has never run on this platform."
+        }
+      },
+      "revoke": {
+        "ariaLabel": "Revoke {{role}} from {{user}}",
+        "successSummary": "{{role}} revoked from {{user}}",
+        "errors": {
+          "summary": "Could not revoke the role",
+          "fallbackDetail": "An unexpected error occurred while revoking the role.",
+          "forbiddenDetail": "This role is protected — only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
+        }
+      }
+    },
+    "adminTeams": {
+      "title": "Teams",
+      "existingTeams": {
+        "title": "Existing teams",
+        "empty": "No teams yet.",
+        "table": {
+          "name": "Team",
+          "admins": "Admin(s)"
+        }
+      },
+      "defaultTeam": {
+        "title": "Default teams for new users",
+        "description": "Every new user joins these teams as a member when they accept the terms of use for the first time. Users who already accepted are not affected.",
+        "gcuDisabled": "Terms of use are not enabled on this deployment, so no user will join these teams automatically.",
+        "none": "No default team.",
+        "searchPlaceholder": "Add a team by name",
+        "remove": "Remove {{name}}",
+        "savedSummary": "Default teams updated",
+        "errors": {
+          "summary": "Failed to update the default teams",
+          "fallbackDetail": "Could not update the default teams. Please try again."
+        }
+      },
+      "createTeam": {
+        "title": "Create team",
+        "nameLabel": "Team name",
+        "namePlaceholder": "e.g. swiftpost",
+        "adminsLabel": "Initial team admin(s)",
+        "adminsPlaceholder": "Enter a name, first name, or user ID",
+        "submit": "Create team",
+        "successSummary": "Team created",
+        "errors": {
+          "summary": "Failed to create team",
+          "fallbackDetail": "Could not create the team. Please try again.",
+          "conflictDetail": "A team with this name already exists.",
+          "forbiddenDetail": "You are not allowed to create teams."
+        }
+      }
+    },
+    "teamCard": {
+      "join": "Join",
+      "inviteOnly": "Invite only",
+      "memberCount": "{{count}} members"
+    },
+    "teamRoles": {
+      "team_admin": "Admin",
+      "pending_team_admin": "Admin (pending)",
+      "team_editor": "Editor",
+      "team_analyst": "Analyst",
+      "team_member": "Member",
+      "descriptions": {
+        "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
+        "pending_team_admin": "Nominated admin who has not accepted the team administrator charter yet: a member until they accept it.",
+        "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
+        "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
+        "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
+      },
+      "warnings": {
+        "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
+      }
+    },
+    "teamAdminCharter": {
+      "accept": "Accept",
+      "acceptedOn": "Accepted on {{date}}",
+      "pendingNotice": "Accept the team administrator charter to turn on your admin rights on this team.",
+      "review": "Read the charter"
+    },
+    "teamSettings": {
+      "members": {
+        "addMembersDialog": {
+          "buttonLabel": "Add members",
+          "cancel": "Cancel",
+          "confirm": "Add",
+          "pendingListEmpty": "No user selected yet",
+          "pendingListHeader": "Members to add to the team",
+          "removeAria": "Remove {{name}} from the list",
+          "searchPlaceholder": "Enter a name, first name, or user ID",
+          "subtitle": "Users will be added to the team immediately",
+          "title": "Add new members"
+        },
+        "errors": {
+          "addDetail": "Could not add this user to the team.",
+          "addSummary": "Failed to add member",
+          "forbiddenDetail": "You are not allowed to perform this action.",
+          "grantDetail": "{{name}} was added, but the {{role}} role could not be granted.",
+          "grantSummary": "Failed to grant a role",
+          "lastOwnerDetail": "A team must keep at least one admin.",
+          "removeMemberDetail": "Could not remove team member.",
+          "removeMemberSummary": "Failed to remove member",
+          "updateRoleDetail": "Could not update member role.",
+          "updateRoleSummary": "Failed to update role"
+        },
+        "moreActions": "More actions",
+        "search": {
+          "ariaLabel": "Search for a member",
+          "clearAriaLabel": "Clear search",
+          "placeholder": "Last name, First name, Identifiant"
+        },
+        "table": {
+          "actions": "Actions",
+          "deleteAction": "Delete",
+          "firstName": "First name",
+          "identifiant": "Identifiant",
+          "lastName": "Last name",
+          "role": "Role"
+        },
+        "title": "Team members"
+      },
+      "navigation": {
+        "leaveTeam": "Leave team",
+        "members": "Members",
+        "settings": "Settings",
+        "activity": "Activity",
+        "evaluations": "Evaluations",
+        "usage": "Usage",
+        "responsibilities": "Responsibilities",
+        "routing": "Model routing",
+        "retention": "Retention"
+      },
+      "routing": {
+        "title": "Model routing",
+        "defaultProfile": {
+          "title": "Default chat model",
+          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
+          "label": "Default profile id",
+          "useDeploymentDefault": "Use deployment default"
+        },
+        "agentOverrides": {
+          "title": "Agent overrides",
+          "explanation": "Override the default model for one specific agent.",
+          "agent": "Agent",
+          "agentPlaceholder": "Select an agent",
+          "targetProfileId": "Profile id",
+          "targetProfilePlaceholder": "Select a model",
+          "addRule": "Add override",
+          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
+        },
+        "profileUnavailable": "No longer enabled for this team",
+        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
+        "save": "Save",
+        "saveError": "Could not save the routing policy."
+      },
+      "parameters": {
+        "title": "Settings",
+        "name": {
+          "label": "Team name",
+          "support": "This name identifies your team everywhere on the platform. It must be unique.",
+          "save": "Rename team",
+          "alreadyTaken": "Another team already uses this name.",
+          "saveError": "Could not rename the team."
+        },
+        "description": {
+          "label": "Team description",
+          "placeholder": "Help other users understand your team's role."
+        },
+        "joiningMode": {
+          "label": "Joining mode",
+          "support": "Users can join your team freely or by invitation only.",
+          "open": "Open",
+          "inviteOnly": "Invite only",
+          "manual": "Manual only",
+          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
+        },
+        "visibility": {
+          "label": "Team visibility",
+          "support": "Determines whether the team is visible on the marketplace to every user.",
+          "public": "Public",
+          "private": "Private"
+        },
+        "teamAvatar": {
+          "title": "Team avatar",
+          "import": "Import",
+          "hint": "JPEG, PNG, or WebP · 5 MB maximum",
+          "noAvatar": "No avatar selected"
+        },
+        "teamPrompt": {
+          "label": "Team context (prompt)",
+          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
+        }
+      },
+      "retention": {
+        "enforcementNotice": "Conversations deleted in this team are hidden immediately and permanently erased after this window. Leave empty to erase immediately.",
+        "platformCap": "Platform cap",
+        "teamValue": "Team value",
+        "teamValueHint": "ISO-8601 duration (e.g. P30D). Leave empty to inherit the platform cap.",
+        "exceedsCap": "This value exceeds the platform cap.",
+        "saveError": "Could not save the retention value.",
+        "fields": {
+          "teamDeleteGrace": "Deletion grace period",
+          "teamDeleteGraceDesc": "A deleted conversation is kept for this long, then permanently erased.",
+          "maxIdle": "Maximum idle period",
+          "maxIdleDesc": "A conversation with no activity for this long is erased automatically."
+        }
+      },
+      "leaveTeam": {
+        "title": "Leave this team?",
+        "message": "You will lose access to \"{{teamName}}\" and its conversations will be handled per the team's retention policy, exactly as if an admin had removed you.",
+        "confirmLabel": "Leave",
+        "lastAdminTooltip": "You are the only admin of this team — promote another admin before leaving.",
+        "errors": {
+          "summary": "Failed to leave team",
+          "fallbackDetail": "Could not leave the team."
+        }
+      }
+    },
+    "teams": {
+      "agents": {
+        "create": "Create {{agentsNicknameSingular}}",
+        "firstCreate": "Create",
+        "loading": "Loading {{agentsNicknamePlural}}...",
+        "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
+        "podFilter": {
+          "all": "All",
+          "aria": "Filter by pod"
+        },
+        "title": "Team agents",
+        "titlePersonal": "Your personal agents",
+        "searchPlaceholder": "Search {{agentsNicknamePlural}}...",
+        "clearSearch": "Clear search",
+        "emptySearch": "No results for this search.",
+        "sort": {
+          "name": "Alphabetical",
+          "created": "Recently created",
+          "updated": "Recently updated"
+        },
+        "sortLabel": "Sort"
+      },
+      "formAgent": {
+        "advancedSettings": "Advanced settings",
+        "capabilitiesInfo": {
+          "title": "What are these capabilities for?",
+          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
+        },
+        "capabilities": {
+          "header": "Select your agent's capabilities",
+          "viewToggle": {
+            "advanced": "Advanced",
+            "aria": "Advanced capabilities view"
+          },
+          "included": {
+            "label": "Included capabilities",
+            "missing": "Missing capabilities",
+            "activeTooltip": "Active on this agent.",
+            "inactiveTooltip": "Available, but not active on this agent.",
+            "unavailableTooltip": "Not enabled by the platform administrator for your team."
+          },
+          "sections": {
+            "dataKnowledge": "Data and knowledge",
+            "documentProduction": "Document production",
+            "intelligenceOrchestration": "Intelligence and orchestration",
+            "actionsIntegration": "Actions and integration"
+          },
+          "actionsIntegrationEmpty": "No capability in this section yet.",
+          "notSupported": "This agent does not support capability selection.",
+          "packs": {
+            "teamResources": {
+              "title": "Access to team resources",
+              "description": "Lets the agent use the team's resources to carry out its mission."
+            },
+            "teamWiki": {
+              "title": "Access to the team wiki",
+              "description": "Lets the agent read the team's wiki pages and follow the rules the team set there."
+            },
+            "conversationAttachments": {
+              "title": "Attachments in a conversation",
+              "description": "Allows adding documents to a conversation to use their information."
+            },
+            "wordDocument": {
+              "title": "Generate a Word document",
+              "description": "Ability to edit and generate a downloadable text document."
+            },
+            "powerpointDocument": {
+              "title": "Fill in a PowerPoint document",
+              "description": "Ability to fill a PPT file from a detailed template."
+            },
+            "webPage": {
+              "title": "Generate a web page (HTML/CSS)",
+              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
+            },
+            "reasoning": {
+              "title": "Reasoning",
+              "description": "Access to \"reasoning\" mode in the chat options."
+            }
+          }
+        },
+        "createdBy": "Created by {{user}}",
+        "updatedBy": "Updated by {{user}}",
+        "fields": {
+          "description": {
+            "label": "Description",
+            "placeholder": "Describe this {{agentsNicknameSingular}} for the team members"
+          },
+          "name": {
+            "label": "Name",
+            "placeholder": "Enter an original name"
+          },
+          "role": {
+            "label": "Role",
+            "placeholder": "Describe the {{agentsNicknameSingular}}'s role"
+          },
+          "usageStatement": {
+            "label": "Use case",
+            "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
+            "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
+          },
+          "reasoning": {
+            "label": "Access deep reasoning",
+            "hint": "Access to \"deep reasoning\" mode in the chat options."
+          },
+          "reasoningDefaultOn": {
+            "label": "Deep reasoning on by default",
+            "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
+          }
+        },
+        "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
+        "templateBrowser": {
+          "title": "Select an agent template",
+          "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
+        },
+        "promptField": {
+          "closeLibrary": "Close library",
+          "libraryTitle": "Team library",
+          "pickFromLibrary": "Pick from library",
+          "removeTagAria": "Remove {{tag}}",
+          "tagsPlaceholder": "Type and press Enter to add tags..."
+        },
+        "sections": {
+          "aria": "Form sections",
+          "general": "General",
+          "prompts": "Prompts",
+          "tools": "Capabilities",
+          "commitments": "Commitments"
+        },
+        "selectPlaceholder": "Select an option",
+        "suspended": {
+          "title": "This agent is suspended.",
+          "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",
+          "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
+          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
+        },
+        "subtitle": "Team: {{team}}",
+        "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",
+        "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
+        "titleCreate": "Create a new {{agentsNicknameSingular}}",
+        "titleEdit": "Edit {{agent}}",
+        "validation": {
+          "requiredFields": "Complete the fields marked with * before saving."
+        }
+      },
+      "prompts": {
+        "card": {
+          "uses": "Uses: {{count}}",
+          "publishedChip": "Published",
+          "menu": {
+            "edit": "Edit",
+            "duplicate": "Duplicate",
+            "publish": "Publish to marketplace",
+            "unpublish": "Remove from marketplace",
+            "delete": "Delete",
+            "import": "Copy to...",
+            "removeFromMarketplace": "Remove from marketplace"
+          }
+        },
+        "clearSearch": "Clear search",
+        "create": "Create prompt",
+        "emptySearch": "No prompts match this search.",
+        "firstCreate": "Create prompt",
+        "form": {
+          "command": "Command",
+          "commandConflict": "This command label is already used by another team prompt",
+          "commandHelp": "Launch shortcuts in the chat",
+          "description": "Description",
+          "name": "Name",
+          "text": "Prompt text"
+        },
+        "loading": "Loading prompts...",
+        "modalCreate": "New prompt",
+        "modalEdit": "Edit prompt",
+        "noPrompt": "Create your first prompt to get started.",
+        "searchPlaceholder": "Search prompts...",
+        "title": "Team prompts",
+        "view": {
+          "closeAria": "Close",
+          "copiedToast": "Copied to clipboard",
+          "copyAria": "Copy prompt"
+        },
+        "duplicateDialog": {
+          "title": "Duplicate this prompt",
+          "nameLabel": "New prompt name",
+          "cancel": "Cancel",
+          "confirm": "Duplicate",
+          "successToast": "Prompt duplicated",
+          "errorToast": "Failed to duplicate prompt"
+        },
+        "publishDialog": {
+          "title": "Publish this prompt to the marketplace?",
+          "message": "This prompt will become public to every user of the application. They will be able to use it and import it into their own spaces to edit it. The usage counter will also reflect uses outside your team, and any change you make will be immediately visible on the marketplace.",
+          "confirm": "Publish",
+          "successToast": "Prompt published to the marketplace",
+          "errorToast": "Failed to publish prompt"
+        },
+        "unpublishDialog": {
+          "title": "Remove this prompt from the marketplace?",
+          "message": "This prompt will disappear from the marketplace and will no longer be available to other users. Your team keeps its own copy.",
+          "confirm": "Remove",
+          "successToast": "Prompt removed from the marketplace",
+          "errorToast": "Failed to remove prompt"
+        },
+        "editPublishedDialog": {
+          "title": "Save changes?",
+          "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
+          "confirm": "Save"
+        },
+        "titlePersonal": "Your personal prompts"
+      }
+    },
+    "userSettings": {
+      "accessGcu": "Access to GCU",
+      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?",
+      "accessReleaseNotes": "Release Notes",
+      "app": {
+        "dark": "Dark",
+        "english": "English",
+        "french": "French",
+        "light": "Light",
+        "system": "System",
+        "themeAria": "Theme",
+        "languageAria": "Language"
+      },
+      "conversationProfile": {
+        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",
+        "title": "Conversation profile"
+      },
+      "disconnect": "Disconnect",
+      "title": "Your profile"
+    },
     "evaluation": {
       "comingSoon": "This screen is moving here — coming next.",
       "create": {
@@ -2030,796 +3214,6 @@
         }
       }
     },
-    "expand": "Expand",
-    "gcu": {
-      "backToApp": "Back to app",
-      "lockInformation": "Read the Terms of Service before you can accept them",
-      "title": "Terms of Service (ToS)",
-      "validate": "Accept the TOS"
-    },
-    "helpCenter": {
-      "title": "Help Center",
-      "languageAria": "Documentation language",
-      "sidebarAria": "Help Center navigation",
-      "copyPageLink": "Copy the page link",
-      "copyHeadingLink": "Copy the link to this paragraph",
-      "missingPage": "This page doesn't exist yet.",
-      "externalDocsLink": "Technical documentation ↗",
-      "search": {
-        "placeholder": "Search the help…",
-        "ariaLabel": "Search the Help Center",
-        "clearAriaLabel": "Clear search",
-        "resultsAria": "Search results",
-        "noResults": "No results."
-      },
-      "sections": {
-        "gettingStarted": "Getting started",
-        "features": "Features",
-        "guides": "Guides & use cases",
-        "troubleshooting": "Help & limits"
-      }
-    },
-    "hitlPrompt": {
-      "accepted": "Accepted",
-      "refused": "Refused"
-    },
-    "home": {
-      "title": "Home",
-      "searchPlaceholder": "Search a team",
-      "searchClear": "Clear search",
-      "yourTeams": "Your teams",
-      "sort": {
-        "aria": "Sort teams",
-        "recent": "Recently viewed",
-        "alpha": "Alphabetical"
-      },
-      "pageTitle": "Home",
-      "pageSubtitle": "Select a space in the left panel to get started.",
-      "greeting": "Hello, what are we doing today?",
-      "greetingNamed": "Hello {{name}}, what are we doing today?",
-      "subtitle": "Access any agent, team or prompt from here.",
-      "tabs": {
-        "aria": "Home sections",
-        "quickAccess": "Quick access",
-        "activity": "Your activity",
-        "trending": "Trending"
-      },
-      "responsible": {
-        "title": "Responsible AI",
-        "footprintInfo": {
-          "aria": "How is this estimate calculated?",
-          "title": "Where does this estimate come from?",
-          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
-          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
-          "limitsTitle": "Good to keep in mind",
-          "limit1": "It's an estimate, not an exact measurement.",
-          "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
-          "limit3": "The goal is to give an order of magnitude to raise awareness, not a precise figure.",
-          "confirm": "Got it"
-        },
-        "cleanupTool": {
-          "aria": "Clean up",
-          "confirmAll": "Delete all",
-          "confirm": "Delete ({{count}})",
-          "cancel": "Cancel",
-          "toast": "{{count}} item(s) deleted"
-        },
-        "cleanupConversations": {
-          "title": "Clean up inactive conversations",
-          "subtitle": "These conversations have had no activity for more than 5 days. Everything is selected — untick whatever you want to keep.",
-          "empty": "No inactive conversation to clean up."
-        }
-      },
-      "topPrompts": {
-        "title": "Marketplace · Top 8 most-used prompts",
-        "uses": "uses",
-        "weekDelta": "▲ {{count}} · 7d",
-        "empty": "No prompt has been published to the marketplace yet.",
-        "periodDelta": "▲ {{count}} · {{days}}d"
-      },
-      "period": {
-        "label": "Period",
-        "days": "{{count}}d",
-        "d7": "Last 7 days",
-        "d30": "Last 30 days",
-        "d90": "Last 90 days"
-      },
-      "search": {
-        "placeholder": "Search agents, teams, prompts…",
-        "empty": "No results.",
-        "groups": {
-          "agents": "Agents",
-          "teams": "Teams",
-          "prompts": "Prompts"
-        }
-      },
-      "recentAgents": {
-        "title": "Recently used agents"
-      },
-      "topAgents": {
-        "title": "Your most-used agents",
-        "unit": "conv.",
-        "empty": "No agent used in this period."
-      },
-      "topTeams": {
-        "title": "Your activity across your teams",
-        "unit": "conv.",
-        "personalSpace": "Personal space",
-        "empty": "You are not a member of any team.",
-        "role": {
-          "team_admin": "Admin",
-          "team_editor": "Editor",
-          "team_analyst": "Analyst",
-          "team_member": "Member"
-        }
-      },
-      "activity": {
-        "title": "Your activity",
-        "conversations": "New conversations",
-        "messages": "Messages sent",
-        "agents": "Agents used",
-        "deltaUp": "▲ {{pct}}% ({{abs}})",
-        "deltaDown": "▼ {{pct}}% ({{abs}})",
-        "deltaFlat": "flat",
-        "vsPrevious": "vs previous period",
-        "periodCaption": "over the last {{count}} days"
-      }
-    },
-    "imports": {
-      "cancel": {
-        "action": "Cancel the transfer",
-        "tooLate": "This file is already on its way and can no longer be cancelled."
-      },
-      "interrupted": {
-        "forget": "Give up on them",
-        "resume": "Pick them again",
-        "title": "These files did not arrive"
-      },
-      "conflict": {
-        "question": "A document of this name is already in this folder.",
-        "replace": "Replace",
-        "rowHint": "A file waiting on a decision has this name. Open the imports panel.",
-        "skip": "Skip"
-      },
-      "failure": {
-        "analysis": "Analysing this file failed.",
-        "attemptsExhausted": "Several attempts failed.",
-        "connectionLost": "The connection was lost during the transfer.",
-        "extraction": "This file's content could not be read.",
-        "indexing": "The file was read, but indexing it failed.",
-        "noAnswer": "The upload ended without the server saying what became of this file.",
-        "interrupted": "Processing stopped before finishing.",
-        "notAllowed": "You are not allowed to import into this folder.",
-        "preparation": "Preparing this file failed.",
-        "quotaExceeded": "The team's storage is full.",
-        "quotaExceededPersonal": "Your storage is full.",
-        "quotaUnknown": "Available storage could not be checked. Worth retrying.",
-        "serverUnavailable": "The server did not answer.",
-        "ambiguousName": "This folder already holds two documents of that name. Remove the duplicate before importing again.",
-        "unreported": "Failed, with no cause reported.",
-        "unsupportedType": "This file type is not supported.",
-        "upload": "Sending this file failed."
-      },
-      "panel": {
-        "collapse": "Hide imports",
-        "empty": "Nothing being imported. Files you add show up here while they are processed.",
-        "expand": "Show imports",
-        "resize": "Resize the imports panel",
-        "title": "Imports"
-      },
-      "phaseState": {
-        "current": "in progress",
-        "done": "done",
-        "failed": "failed",
-        "pending": "waiting"
-      },
-      "stepper": {
-        "label": "Import progress"
-      },
-      "retry": {
-        "action": "Try again",
-        "relaunchFromRow": "Fred has this document: relaunch its processing from its row in the table.",
-        "unavailable": "This file has to be picked again before it can be retried."
-      }
-    },
-    "knowledgeBases": {
-      "title": "Knowledge Bases",
-      "loading": "Loading the knowledge bases…",
-      "empty": "No knowledge base yet",
-      "deleted": "{{name}} deleted",
-      "deleteFailed": "Could not delete {{name}}",
-      "unavailable": {
-        "title": "Knowledge bases unavailable",
-        "description": "The list could not be loaded. Try again in a moment."
-      },
-      "cadence": {
-        "hourly": "Every hour",
-        "daily": "Every day",
-        "weekly": "Every week"
-      },
-      "card": {
-        "open": "Documents",
-        "delete": "Delete",
-        "suspended": "Synchronization suspended",
-        "tooltip": {
-          "label": "Knowledge base details",
-          "kind": "Kind",
-          "cadence": "Runs",
-          "created": "Created"
-        },
-        "edit": "Edit",
-        "noDescription": "No description"
-      },
-      "deleteDialog": {
-        "title": "Delete this knowledge base?",
-        "message": "{{name}} and every document it holds will be deleted. This cannot be undone.",
-        "confirm": "Delete",
-        "cancel": "Cancel"
-      },
-      "documents": {
-        "back": "Knowledge bases",
-        "empty": "This knowledge base holds no document yet",
-        "loadFailed": "Could not load the documents",
-        "unavailable": {
-          "title": "Knowledge base not found",
-          "description": "It may have been deleted, or belong to another team."
-        }
-      },
-      "create": "Add knowledge base",
-      "form": {
-        "title": "New knowledge base",
-        "name": "Name",
-        "namePlaceholder": "e.g. Team handbook",
-        "synchronizedBy": "Synchronized by",
-        "pickOne": "Choose a source",
-        "noDefinitions": "No knowledge base is enabled for this team",
-        "definitionsLoading": "Loading…",
-        "definitionsFailed": "Could not load the list",
-        "zoneFred": "How often it runs",
-        "scheduleExplanation": "Each run checks the source for changes. Document processing may continue after synchronization.",
-        "suspended": "Suspend synchronization",
-        "zoneSource": "Where its documents come from",
-        "submit": "Create",
-        "created": "{{name}} created",
-        "createFailed": "Could not create {{name}}",
-        "titleEdit": "Edit {{name}}",
-        "subtitleReadOnly": "Its settings are read-only for now."
-      }
-    },
-    "knowledgeHub": {
-      "loading": "Loading..."
-    },
-    "loading": "Loading...",
-    "mainNav": {
-      "ariaLabel": "Main navigation",
-      "home": "Home",
-      "marketplace": "Marketplace",
-      "helpCenter": "Help Center",
-      "adminConsole": "Technical console"
-    },
-    "marketplace": {
-      "teams": {
-        "otherTeams": "Discover other teams",
-        "search": {
-          "ariaLabel": "Search for a team",
-          "clearAriaLabel": "Clear search",
-          "placeholder": "Search for a team"
-        },
-        "title": "Community teams",
-        "yourTeams": "Your teams"
-      },
-      "prompts": {
-        "title": "Community prompts",
-        "searchPlaceholder": "Search a prompt...",
-        "clearSearch": "Clear search",
-        "loading": "Loading prompts...",
-        "empty": "No prompt has been published to the marketplace yet.",
-        "emptySearch": "No prompt matches this search.",
-        "import": {
-          "title": "Copy this prompt to a team",
-          "subtitle": "Select the spaces to copy “{{name}}” into.",
-          "confirm": "Copy",
-          "personalSpace": "Personal space",
-          "searchPlaceholder": "Search a team",
-          "clearSearch": "Clear search",
-          "noTeams": "No team matches.",
-          "successToast": "Prompt copied ({{count}})",
-          "errorToast": "Copy failed ({{count}})",
-          "originTeam": "Origin team"
-        },
-        "unpublish": {
-          "title": "Remove this prompt from the marketplace?",
-          "message": "“{{name}}” will disappear from the marketplace and will no longer be available to other users.",
-          "confirm": "Remove",
-          "successToast": "Prompt removed from the marketplace",
-          "errorToast": "Failed to remove prompt"
-        }
-      }
-    },
-    "platformPrompt": {
-      "title": "Platform global prompt",
-      "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
-      "editor": {
-        "title": "Global prompt",
-        "badge": "Editable",
-        "subtitle": "Your platform's personality and its own standards. Sent right after the platform instructions on every call of every agent, ahead of the tool rules and each agent's instructions, which it outranks."
-      },
-      "field": {
-        "label": "Prompt text",
-        "explanation": "Keep it short: every character here is permanent context.",
-        "tooLong": "The prompt exceeds {{max}} characters."
-      },
-      "save": "Save",
-      "saving": "Saving...",
-      "reset": "Discard changes",
-      "suppressed": "The platform prompt is saved as empty, so no platform-prompt block is sent. This is not the same as never having saved one.",
-      "lastUpdated": "Last updated by {{who}} on {{when}}.",
-      "unknownAuthor": "an unknown user",
-      "saved": "Platform prompt saved.",
-      "saveFailed": "Could not save the platform prompt.",
-      "instructions": {
-        "title": "Platform operating instructions",
-        "badge": "Read-only",
-        "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
-        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
-        "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
-      },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
-    },
-    "platformRoles": {
-      "title": "Platform roles",
-      "holders": {
-        "title": "Current role holders",
-        "empty": "No platform roles granted yet.",
-        "loading": "Loading platform roles…",
-        "error": "Platform roles could not be loaded.",
-        "rootBadge": "Primary admin",
-        "table": {
-          "user": "User",
-          "roles": "Roles"
-        }
-      },
-      "roles": {
-        "platform_admin": "Platform admin",
-        "platform_observer": "Platform observer",
-        "team_manager": "Team manager",
-        "feature_manager": "Feature manager",
-        "prompt_editor": "Prompt editor"
-      },
-      "roleDescriptions": {
-        "platform_admin": "Full platform administration: every admin page, import/export and platform reset.",
-        "platform_observer": "Read-only access to platform-wide analytics.",
-        "team_manager": "Create teams and see every team on the platform.",
-        "feature_manager": "Enable or disable capabilities, agent templates and models.",
-        "prompt_editor": "Edit the platform prompt prepended to every agent."
-      },
-      "grant": {
-        "title": "Grant a role",
-        "userLabel": "Users",
-        "userPlaceholder": "Search and add users",
-        "removeUser": "Remove {{user}}",
-        "roleLabel": "Role",
-        "rootOnlyHint": "Only the primary admin can appoint or revoke platform admins.",
-        "submit": "Grant role",
-        "successSummary_one": "{{role}} granted to {{user}}",
-        "successSummary_other": "{{role}} granted to {{count}} users",
-        "errors": {
-          "summary": "Could not grant the role to {{users}}",
-          "fallbackDetail": "An unexpected error occurred while granting the role.",
-          "forbiddenDetail": "Only the primary admin can manage platform admins.",
-          "conflictDetail": "Root bootstrap has never run on this platform."
-        }
-      },
-      "revoke": {
-        "ariaLabel": "Revoke {{role}} from {{user}}",
-        "successSummary": "{{role}} revoked from {{user}}",
-        "errors": {
-          "summary": "Could not revoke the role",
-          "fallbackDetail": "An unexpected error occurred while revoking the role.",
-          "forbiddenDetail": "This role is protected — only the primary admin can revoke platform admins, and the primary admin itself is unrevocable."
-        }
-      }
-    },
-    "profileMenu": {
-      "contactSupport": "Contact support",
-      "profile": "Profile"
-    },
-    "promptCategories": {
-      "pickerTitle": "Category",
-      "noCategory": "No category",
-      "manage": {
-        "buttonAria": "Manage categories",
-        "title": "Manage categories",
-        "createPlaceholder": "New category...",
-        "create": "Create",
-        "empty": "No categories for this team yet.",
-        "saveAria": "Save",
-        "cancelEditAria": "Cancel",
-        "editAria": "Rename {{name}}",
-        "deleteAria": "Delete {{name}}",
-        "deleteBlocked": "This category cannot be deleted, prompts are attached to it.",
-        "deleteConfirmTitle": "Delete this category?",
-        "deleteConfirmMessage": "Remove \"{{name}}\"? This cannot be undone.",
-        "createError": "Failed to create category",
-        "renameError": "Failed to rename category",
-        "deleteError": "Failed to delete category",
-        "genericError": "Something went wrong."
-      }
-    },
-    "promptEditor": {
-      "copy": "Copy the prompt",
-      "copied": "Prompt copied to the clipboard",
-      "copyFailed": "Could not copy the prompt",
-      "reservedTag": "This text cannot contain <{{tag}}>: it is a reserved tag that marks a block of the system prompt. Any other tag is fine."
-    },
-    "releaseNotes": {
-      "baseRelease": "Base Fred release",
-      "brandRelease": "{{brand}} release",
-      "copied": "Copied!",
-      "copy": "Copy",
-      "empty": "No release notes available.",
-      "versionsAria": "Release versions"
-    },
-    "resources": {
-      "workspaceTitle": "Files",
-      "pageTitle": "Team resources",
-      "pageSubtitle": "Manage local resources, manually added to the team",
-      "rootsAria": "Resource spaces",
-      "storageQuota": "Storage",
-      "roots": {
-        "resources": "Team corpus",
-        "mine": "My space",
-        "team": "Shared space",
-        "agents": "Agents",
-        "removedAgent": "Removed agent",
-        "indexed": "indexed corpus",
-        "private": "private · in {{team}}",
-        "privatePersonal": "private · personal",
-        "fileCount": "{{count}} files",
-        "empty": "empty"
-      },
-      "hints": {
-        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
-        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
-        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
-        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
-      },
-      "provenance": {
-        "origins": {
-          "uploaded": "Uploaded",
-          "agent_generated": "Generated",
-          "shared_copy": "Shared"
-        }
-      },
-      "search": {
-        "placeholder": "Search",
-        "ariaLabel": "Search in this folder",
-        "clearAriaLabel": "Clear search"
-      },
-      "folders": {
-        "templates": "Templates",
-        "uploads": "Uploads",
-        "outputs": "Outputs",
-        "work": "Work"
-      },
-      "menu": {
-        "addFile": "Add a file",
-        "newFolder": "New folder"
-      },
-      "columns": {
-        "name": "Name",
-        "size": "Size",
-        "created": "Added on",
-        "author": "Added by"
-      },
-      "embeddedTitleHint": "Embedded title: {{title}}",
-      "dropInFolder": "Drop your files to add them to \"{{folder}}\"",
-      "dropAtRoot": "Drop a folder to create it here with its structure",
-      "rootDrop": {
-        "rejectedTitle": "Drop a folder",
-        "rejectedDetail": "Loose files can't land at the top level — drop a folder (it becomes a library), or drop the files into an existing folder.",
-        "skippedDetail_one": "{{count}} loose file was skipped — only the dropped folders' content was kept.",
-        "skippedDetail_other": "{{count}} loose files were skipped — only the dropped folders' content was kept."
-      },
-      "action": {
-        "addFile": "Add files",
-        "addFileHint": "Select a folder first",
-        "back": "Back to previous folder",
-        "copyToTeam": "Copy to Team space",
-        "delete": "Delete",
-        "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
-        "download": "Download",
-        "includeInSearch": "Include in search",
-        "manageLabels": "Manage labels",
-        "more": "More actions",
-        "newFolder": "New folder",
-        "newSubfolder": "New subfolder in \"{{name}}\"",
-        "preview": "Preview",
-        "process": "Process",
-        "refresh": "Refresh this view",
-        "relaunchIngestion": "Relaunch ingestion",
-        "rename": "Rename",
-        "searchable": "Exclude from search"
-      },
-      "confirm": {
-        "deleteMessage": "Remove \"{{name}}\" from this folder?",
-        "deleteBulkMessage": "Remove {{count}} documents from this folder?",
-        "deleteTitle": "Remove document",
-        "deleteFolderMessageEmpty": "Delete the empty folder \"{{name}}\"?",
-        "deleteFolderMessageUnknownCount": "Delete \"{{name}}\" and all its content? This cannot be undone.",
-        "deleteFolderMessageWithDocs": "Delete \"{{name}}\" and its {{count}} document(s)? This cannot be undone.",
-        "deleteFoldersMessage": "Delete {{count}} folder(s) and all their content? This cannot be undone.",
-        "deleteMixedMessage": "Delete {{folderCount}} folder(s) with all their content and remove {{docCount}} document(s)? This cannot be undone.",
-        "deleteFolderTitle": "Delete folder",
-        "shareMessage": "Copy \"{{name}}\" into the team space (Espace d'equipe)? The original stays where it is.",
-        "shareTitle": "Copy to Team space"
-      },
-      "errorTooltip": {
-        "noDetails": "Processing failed without further details. Share the document reference with support.",
-        "documentReference": "Document: {{id}}",
-        "reported": "Reported by the pipeline",
-        "stage": "Stage: {{stage}}",
-        "stages": {
-          "raw": "File storage",
-          "preview": "Content extraction",
-          "vector": "Search indexing",
-          "sql": "Structured data indexing"
-        }
-      },
-      "empty": {
-        "agentFiles": "This agent hasn't created any files for you yet. Files it generates for you will appear here.",
-        "agents": "No agent files yet. Files your agents create for you will appear here, grouped by agent.",
-        "createLibrary": "Create a library (folder) to start adding documents.",
-        "folder": "This folder is empty."
-      },
-      "folder": {
-        "docCount": "{{count}} docs",
-        "failed": "{{count}} failed",
-        "processing": "{{count}} processing",
-        "upToDate": "Up to date"
-      },
-      "folderModal": {
-        "atRoot": "At the top level",
-        "cancel": "Cancel",
-        "create": "Create",
-        "error": "Could not create the folder",
-        "inFolder": "In",
-        "nameLabel": "Name",
-        "namePlaceholder": "e.g. Reports 2026",
-        "nameNoSlash": "A folder name cannot contain \"/\" or \"\\\".",
-        "title": "New folder",
-        "tooDeep": "This folder is already {{max}} levels deep which is the maximum. Create the new folder higher up."
-      },
-      "renameModal": {
-        "title": "Rename",
-        "nameLabel": "Name",
-        "save": "Save",
-        "error": "Could not rename"
-      },
-      "labelsModal": {
-        "title": "Manage labels",
-        "currentEmpty": "No labels yet",
-        "addPlaceholder": "Add a label…",
-        "add": "Add",
-        "createNew": "Create label",
-        "addFieldLabel": "Add a label",
-        "removeAriaLabel": "Remove label \"{{label}}\"",
-        "close": "Close"
-      },
-      "loading": "Loading resources...",
-      "preview": {
-        "title": "Document preview",
-        "tabsAria": "Display mode",
-        "tabs": {
-          "file": "File",
-          "raw": "Raw"
-        },
-        "loading": "Loading…",
-        "markdownUnavailable": "No Markdown version was generated for this document.",
-        "pdf": {
-          "loadFailed": "Failed to load PDF document.",
-          "unavailable": "Document content is unavailable.",
-          "largeTitle": "Large document",
-          "largeBody": "This PDF has {{pages}} pages. Rendering it may slow your browser down.",
-          "largeBodyBytes": "This PDF is {{megabytes}} MB. Opening it may take a while and slow your browser down.",
-          "largeConfirm": "Display anyway"
-        }
-      },
-      "storage": {
-        "aria": "Storage space used",
-        "usedOfTotal": "{{used}} / {{total}}",
-        "used": "{{used}} used"
-      },
-      "pagination": {
-        "next": "Next page",
-        "page": "page {{page}} / {{pageCount}}",
-        "prev": "Previous page"
-      },
-      "status": {
-        "copyDetail": "Copy detail",
-        "detailCopied": "Detail copied",
-        "detailTitle": "Detail: {{label}}",
-        "excludedFromSearch": "Excluded from search",
-        "failed": "Error",
-        "folderFailedMore_one": "and {{count}} more",
-        "folderFailedMore_other": "and {{count}} more",
-        "folderFailedTooltip_one": "{{count}} document failed to process:",
-        "folderFailedTooltip_other": "{{count}} documents failed to process:",
-        "folderFailed_one": "{{count}} error",
-        "folderFailed_other": "{{count}} errors",
-        "justDone": "Done",
-        "processing": "Processing...",
-        "raw": "Pending",
-        "ready": "Ready"
-      },
-      "bulkActions": {
-        "selectedCount": "Selection: {{count}}",
-        "clearSelection": "Clear selection",
-        "delete": "Delete",
-        "download": "Download",
-        "excludeFromSearch": "Exclude from search",
-        "includeInSearch": "Include in search",
-        "relaunchIngestion_one": "Relaunch ingestion for {{count}} resource",
-        "relaunchIngestion_other": "Relaunch ingestion for {{count}} resources"
-      },
-      "stats": {
-        "toggle": "Statistics",
-        "filesByType": {
-          "title": "Files by type",
-          "valueLabel": "Files"
-        },
-        "sizeByType": {
-          "title": "Size by type",
-          "tooltipTitle": "Breakdown"
-        },
-        "bucket": {
-          "pdf": "PDF",
-          "text": "Text",
-          "ppt": "PPT",
-          "excel": "Excel",
-          "other": "Other"
-        }
-      },
-      "title": "Resources",
-      "toast": {
-        "bulkExcludeError": "Could not exclude the selection from search",
-        "bulkExcludeNothing": "The selected items are already excluded from search",
-        "bulkExcludedFromSearch": "{{count}} document(s) excluded from search",
-        "deleteFolderError": "Could not delete the folder",
-        "deleteFolderSuccess": "Folder deleted",
-        "downloadEmpty": "The selected folders contain no documents to download",
-        "downloadError": "Could not download the selected files",
-        "relaunchError": "Could not relaunch ingestion",
-        "relaunchStarted_one": "Ingestion relaunched",
-        "relaunchStarted_other": "Ingestion relaunched for {{count}} resources"
-      },
-      "pageTitlePersonal": "Your personal resources",
-      "pageSubtitlePersonal": "Manage your local resources, manually added to your personal space.",
-      "relaunchProfileHelp": "Choose a profile for documents whose original ingestion profile is unknown. Other documents keep their original profile.",
-      "relaunchProfileLabel": "Ingestion profile"
-    },
-    "save": "Save",
-    "schedule": {
-      "label": "Runs every",
-      "every": "Number",
-      "unit": {
-        "label": "Unit",
-        "minutes": "minutes",
-        "hours": "hours",
-        "days": "days"
-      }
-    },
-    "selftest": {
-      "page": {
-        "title": "Self-test"
-      },
-      "report": {
-        "running": "Running…",
-        "empty": "No run yet.",
-        "counts": "{{passed}} passed · {{failed}} failed · {{skipped}} skipped · {{total}} steps",
-        "copy": "Copy report",
-        "copied": "Copied"
-      },
-      "functional": {
-        "title": "Functional self-test",
-        "subtitle": "Create two folders in your personal space, ingest a marker document into one and a plain document into the other, then ask the real self-test agent a question scoped to each — the marker must come back from the first and be absent from the second. Everything is cleaned up at the end.",
-        "run": "Run campaign"
-      },
-      "authz": {
-        "title": "Authorization self-test",
-        "subtitle": "Proves the live API honors the authorization model: platform-admin flags match real endpoint access, and nobody — not even a platform admin — gets implicit access to a team they don't belong to.",
-        "runSelf": "Run for myself",
-        "expiry": {
-          "title": "Agent access after your session expires",
-          "run": "Run session-expiry check",
-          "warning": {
-            "title": "Keep this page open until the check finishes",
-            "message": "This check waits for your current sign-in credential to expire, so it runs for about {{minutes}} minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
-            "messageUnknownWait": "This check waits for your current sign-in credential to expire, so it runs for several minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
-            "confirm": "Start and keep the page open"
-          },
-          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
-        },
-        "testProfile": {
-          "title": "Test another profile",
-          "usernameLabel": "Account",
-          "usernamePlaceholder": "Select an account",
-          "passwordLabel": "Password",
-          "run": "Run",
-          "caption": "Requires that account's own password and Keycloak direct-grant login enabled for this realm — already on in local/demo realms, test/dev-only by design. This does not grant any new access — it reports what that account can already do.",
-          "disabledInsecure": "Not available in this deployment — there is no real Keycloak realm to authenticate against."
-        }
-      }
-    },
-    "serviceNotice": {
-      "agentTemplates": {
-        "description": "Ask a platform admin to enable an agent capability, or check that an agent runtime is connected.",
-        "title": "No agents available yet"
-      },
-      "controlPlane": {
-        "description": "Check that the control-plane service is running.",
-        "title": "Control plane not reachable"
-      },
-      "knowledgeService": {
-        "description": "Start the knowledge-flow service to browse resources.",
-        "title": "Knowledge service not running"
-      },
-      "evaluationService": {
-        "title": "Evaluation service not running",
-        "description": "Start the fred-evaluation service to manage evaluations and runs."
-      }
-    },
-    "sidebar": {
-      "admin": {
-        "badge": {
-          "activeTasks": "{{count}} active tasks"
-        },
-        "menu": {
-          "analytics": "Analytics",
-          "corpusAudit": "Corpus audit",
-          "features": "Features",
-          "migration": "Platform data",
-          "platformRoles": "Platform roles",
-          "selftest": "Self-test",
-          "tasks": "Activity",
-          "teams": "Teams",
-          "platformPrompt": "Platform global prompt",
-          "announcements": "Announcements"
-        },
-        "title": "Administration spaces"
-      },
-      "chatList": {
-        "deleteDialog": {
-          "title": "Delete this conversation?",
-          "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
-          "confirm": "Delete",
-          "cancel": "Cancel"
-        },
-        "emptyManaged": "No conversations yet. Start a new chat with a managed agent.",
-        "groupByAgent": "Group by agent",
-        "loading": "Loading...",
-        "title": "Chat",
-        "unknownAgent": "Unknown agent"
-      },
-      "marketplace": {
-        "menu": {
-          "teams": "Teams",
-          "prompts": "Prompts"
-        },
-        "title": "Marketplace"
-      },
-      "team": {
-        "marketplace": "Marketplace",
-        "menu": {
-          "apps": "Apps",
-          "resources": "Resources",
-          "wiki": "Wiki",
-          "knowledgeBases": "Knowledge Bases"
-        },
-        "teamLabel": "Team",
-        "userTeam": "Personal space"
-      }
-    },
     "taskActivity": {
       "title": "Activity",
       "subtitle": "Scheduled, running and completed tasks.",
@@ -2875,566 +3269,35 @@
         }
       }
     },
-    "tasks": {
-      "indicator": {
-        "details": "{{label}} — click for details"
+    "platformPrompt": {
+      "title": "Platform global prompt",
+      "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
+      "editor": {
+        "title": "Global prompt",
+        "badge": "Editable",
+        "subtitle": "Your platform's personality and its own standards. Sent right after the platform instructions on every call of every agent, ahead of the tool rules and each agent's instructions, which it outranks."
       },
-      "kind": {
-        "default": "Task",
-        "ingestion": "Processing",
-        "migration": "Migration",
-        "reindex": "Reindexing",
-        "evaluation": "Evaluation",
-        "erasure": "Erasure"
+      "field": {
+        "label": "Prompt text",
+        "explanation": "Keep it short: every character here is permanent context.",
+        "tooLong": "The prompt exceeds {{max}} characters."
       },
-      "migration": {
-        "dropzone": "Drag a .zip export, or click to select",
-        "empty": "No migration in progress",
-        "label": "Label (optional)",
-        "labelPlaceholder": "e.g. castle-prod",
-        "launch": "Launch migration",
-        "launching": "Launching...",
-        "title": "Platform data",
-        "import": {
-          "title": "Import"
-        },
-        "export": {
-          "title": "Export",
-          "description": "Download a .zip snapshot of this platform's agents, tags, and document metadata.",
-          "launch": "Export",
-          "launching": "Exporting…"
-        },
-        "reset": {
-          "launch": "Reset platform",
-          "running": "Resetting…",
-          "taskLabel": "Platform reset",
-          "confirmTitle": "Reset the platform?",
-          "confirmMessage": "Permanently deletes all agents, tags, and document metadata. Files (S3), vectors (OpenSearch), users (Keycloak), and permissions (OpenFGA) are not affected.",
-          "confirmLabel": "Reset",
-          "cancelLabel": "Cancel",
-          "error": "Reset failed"
-        },
-        "stats": {
-          "title": "Overview",
-          "refresh": "Refresh",
-          "teams": "Teams",
-          "members": "Members",
-          "agents": "Agents",
-          "prompts": "Prompts",
-          "col": {
-            "team": "Team",
-            "admins": "Admins",
-            "editors": "Editors",
-            "analysts": "Analysts",
-            "members": "Members",
-            "agents": "Agents",
-            "prompts": "Prompts"
-          }
-        }
+      "save": "Save",
+      "saving": "Saving...",
+      "reset": "Discard changes",
+      "suppressed": "The platform prompt is saved as empty, so no platform-prompt block is sent. This is not the same as never having saved one.",
+      "lastUpdated": "Last updated by {{who}} on {{when}}.",
+      "unknownAuthor": "an unknown user",
+      "saved": "Platform prompt saved.",
+      "saveFailed": "Could not save the platform prompt.",
+      "instructions": {
+        "title": "Platform operating instructions",
+        "badge": "Read-only",
+        "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
+        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
+        "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
       },
-      "page": {
-        "active": "In progress",
-        "clearCompleted": "Clear completed",
-        "empty": "No tasks in progress",
-        "terminal": "Completed",
-        "terminalCount": "Completed ({{count}})",
-        "title": "Tasks"
-      },
-      "importStage": {
-        "upload": "Sending the file",
-        "uploadDone": "Upload complete",
-        "analysis": "Analysing the document"
-      },
-      "ingestionStep": {
-        "uploading": "Document preparation",
-        "processing": "Content extraction",
-        "indexing": "Indexing",
-        "listed": "Document preparation",
-        "vectorized": "Content indexed",
-        "skip": "Already up to date",
-        "done": "Ingestion complete"
-      },
-      "popover": {
-        "acknowledge": "Dismiss",
-        "close": "Close",
-        "supportReference": "Support reference: {{id}}",
-        "copyError": "Copy error",
-        "errorCopied": "Error copied",
-        "startedAgo": "started {{time}}",
-        "title": "Details — {{label}}"
-      },
-      "state": {
-        "cancelled": "Cancelled",
-        "cancelling": "Cancelling",
-        "failed": "Failed",
-        "pending": "Pending",
-        "running": "Running",
-        "succeeded": "Done"
-      },
-      "time": {
-        "hoursAgo": "{{count}}h ago",
-        "justNow": "just now",
-        "minAgo": "{{count}} min ago"
-      },
-      "tray": {
-        "empty": "No recent tasks",
-        "failed": "{{count}} failed",
-        "progress": "Task progress",
-        "running": "{{count}} running",
-        "title": "Recent tasks",
-        "trigger": "Tasks"
-      },
-      "due": {
-        "imminent": "imminent",
-        "inMinutes": "in {{count}} min",
-        "inHours": "in {{count}}h",
-        "inDays": "in {{count}}d"
-      },
-      "card": {
-        "acknowledge": "Dismiss",
-        "copyWarnings": "Copy warnings",
-        "copied": "Copied!"
-      }
-    },
-    "teamAdminCharter": {
-      "accept": "Accept",
-      "acceptedOn": "Accepted on {{date}}",
-      "pendingNotice": "Accept the team administrator charter to turn on your admin rights on this team.",
-      "review": "Read the charter"
-    },
-    "teamCard": {
-      "join": "Join",
-      "inviteOnly": "Invite only",
-      "memberCount": "{{count}} members"
-    },
-    "teamRoles": {
-      "team_admin": "Admin",
-      "pending_team_admin": "Admin (pending)",
-      "team_editor": "Editor",
-      "team_analyst": "Analyst",
-      "team_member": "Member",
-      "descriptions": {
-        "team_admin": "Governs the team: manages members and their roles, and sets the team policy (quotas, allowed models, MCP servers, storage limits). Grants no control over agents, prompts, or routing - that is the Editor role.",
-        "pending_team_admin": "Nominated admin who has not accepted the team administrator charter yet: a member until they accept it.",
-        "team_editor": "Manages what the team builds: agents, shared prompts, the routing policy, and the document corpus. Grants no control over members or the team policy.",
-        "team_analyst": "Creates and runs agent evaluation campaigns, and manages the evaluation corpora.",
-        "team_member": "Default access for everyone in the team: use the team's agents and prompts, and manage your own. No configuration or administration rights."
-      },
-      "warnings": {
-        "team_analyst": "Technical role: it also opens access to the limited conversation slices those evaluation datasets are built from. Grant it deliberately."
-      }
-    },
-    "teamSettings": {
-      "members": {
-        "addMembersDialog": {
-          "buttonLabel": "Add members",
-          "cancel": "Cancel",
-          "confirm": "Add",
-          "pendingListEmpty": "No user selected yet",
-          "pendingListHeader": "Members to add to the team",
-          "removeAria": "Remove {{name}} from the list",
-          "searchPlaceholder": "Enter a name, first name, or user ID",
-          "subtitle": "Users will be added to the team immediately",
-          "title": "Add new members"
-        },
-        "errors": {
-          "addDetail": "Could not add this user to the team.",
-          "addSummary": "Failed to add member",
-          "forbiddenDetail": "You are not allowed to perform this action.",
-          "grantDetail": "{{name}} was added, but the {{role}} role could not be granted.",
-          "grantSummary": "Failed to grant a role",
-          "lastOwnerDetail": "A team must keep at least one admin.",
-          "removeMemberDetail": "Could not remove team member.",
-          "removeMemberSummary": "Failed to remove member",
-          "updateRoleDetail": "Could not update member role.",
-          "updateRoleSummary": "Failed to update role"
-        },
-        "moreActions": "More actions",
-        "search": {
-          "ariaLabel": "Search for a member",
-          "clearAriaLabel": "Clear search",
-          "placeholder": "Last name, First name, Identifiant"
-        },
-        "table": {
-          "actions": "Actions",
-          "deleteAction": "Delete",
-          "firstName": "First name",
-          "identifiant": "Identifiant",
-          "lastName": "Last name",
-          "role": "Role"
-        },
-        "title": "Team members"
-      },
-      "navigation": {
-        "leaveTeam": "Leave team",
-        "members": "Members",
-        "settings": "Settings",
-        "activity": "Activity",
-        "evaluations": "Evaluations",
-        "usage": "Usage",
-        "responsibilities": "Responsibilities",
-        "routing": "Model routing",
-        "retention": "Retention"
-      },
-      "routing": {
-        "title": "Model routing",
-        "defaultProfile": {
-          "title": "Default chat model",
-          "explanation": "The model profile used for this team's managed chat agents when no agent override matches below. Leave empty to use the deployment default.",
-          "label": "Default profile id",
-          "useDeploymentDefault": "Use deployment default"
-        },
-        "agentOverrides": {
-          "title": "Agent overrides",
-          "explanation": "Override the default model for one specific agent.",
-          "agent": "Agent",
-          "agentPlaceholder": "Select an agent",
-          "targetProfileId": "Profile id",
-          "targetProfilePlaceholder": "Select a model",
-          "addRule": "Add override",
-          "incompleteRow": "Pick both an agent and a profile for every override row (or remove the row) before saving."
-        },
-        "profileUnavailable": "No longer enabled for this team",
-        "emptyState": "This team has no enabled models yet. Ask a platform admin to enable at least one model capability before configuring routing rules.",
-        "save": "Save",
-        "saveError": "Could not save the routing policy."
-      },
-      "parameters": {
-        "title": "Settings",
-        "name": {
-          "label": "Team name",
-          "support": "This name identifies your team everywhere on the platform. It must be unique.",
-          "save": "Rename team",
-          "alreadyTaken": "Another team already uses this name.",
-          "saveError": "Could not rename the team."
-        },
-        "description": {
-          "label": "Team description",
-          "placeholder": "Help other users understand your team's role."
-        },
-        "joiningMode": {
-          "label": "Joining mode",
-          "support": "Users can join your team freely or by invitation only.",
-          "open": "Open",
-          "inviteOnly": "Invite only",
-          "manual": "Manual only",
-          "privateSupport": "A private team is not listed on the marketplace: its members are added manually by a team admin."
-        },
-        "visibility": {
-          "label": "Team visibility",
-          "support": "Determines whether the team is visible on the marketplace to every user.",
-          "public": "Public",
-          "private": "Private"
-        },
-        "teamAvatar": {
-          "title": "Team avatar",
-          "import": "Import",
-          "hint": "JPEG, PNG, or WebP · 5 MB maximum",
-          "noAvatar": "No avatar selected"
-        },
-        "teamPrompt": {
-          "label": "Team context (prompt)",
-          "placeholder": "Describe here your team's challenges and objectives. These elements will be taken into account by your team {{agentsNicknamePlural}}."
-        }
-      },
-      "retention": {
-        "enforcementNotice": "Conversations deleted in this team are hidden immediately and permanently erased after this window. Leave empty to erase immediately.",
-        "platformCap": "Platform cap",
-        "teamValue": "Team value",
-        "teamValueHint": "ISO-8601 duration (e.g. P30D). Leave empty to inherit the platform cap.",
-        "exceedsCap": "This value exceeds the platform cap.",
-        "saveError": "Could not save the retention value.",
-        "fields": {
-          "teamDeleteGrace": "Deletion grace period",
-          "teamDeleteGraceDesc": "A deleted conversation is kept for this long, then permanently erased.",
-          "maxIdle": "Maximum idle period",
-          "maxIdleDesc": "A conversation with no activity for this long is erased automatically."
-        }
-      },
-      "leaveTeam": {
-        "title": "Leave this team?",
-        "message": "You will lose access to \"{{teamName}}\" and its conversations will be handled per the team's retention policy, exactly as if an admin had removed you.",
-        "confirmLabel": "Leave",
-        "lastAdminTooltip": "You are the only admin of this team — promote another admin before leaving.",
-        "errors": {
-          "summary": "Failed to leave team",
-          "fallbackDetail": "Could not leave the team."
-        }
-      }
-    },
-    "teamUsage": {
-      "title": "My token usage",
-      "personalSectionTitle": "My usage",
-      "tokensOverTime": {
-        "title": "Token usage over time",
-        "valueLabel": "Tokens"
-      },
-      "byAgent": {
-        "empty": "No agent usage in this period.",
-        "title": "Usage by agent",
-        "valueLabel": "Tokens"
-      },
-      "byModel": {
-        "empty": "No model usage in this period.",
-        "title": "Usage by model",
-        "valueLabel": "Tokens"
-      },
-      "team": {
-        "pageTitle": "Team usage",
-        "sectionTitle": "Team usage",
-        "membersLabel": "Members",
-        "agentsLabel": "Agents",
-        "documentsLabel": "Documents",
-        "quota": {
-          "empty": "No storage quota configured for this team.",
-          "title": "Storage quota (% used)",
-          "valueLabel": "% of quota"
-        },
-        "conversationsOverTime": {
-          "title": "Conversations over time",
-          "valueLabel": "Conversations"
-        },
-        "mostActiveAgents": {
-          "title": "Most active agents",
-          "valueLabel": "Messages"
-        }
-      }
-    },
-    "teams": {
-      "agents": {
-        "create": "Create {{agentsNicknameSingular}}",
-        "firstCreate": "Create",
-        "loading": "Loading {{agentsNicknamePlural}}...",
-        "noAgent": "Create your first team {{agentsNicknameSingular}} to get started.",
-        "podFilter": {
-          "all": "All",
-          "aria": "Filter by pod"
-        },
-        "title": "Team agents",
-        "titlePersonal": "Your personal agents",
-        "searchPlaceholder": "Search {{agentsNicknamePlural}}...",
-        "clearSearch": "Clear search",
-        "emptySearch": "No results for this search.",
-        "sort": {
-          "name": "Alphabetical",
-          "created": "Recently created",
-          "updated": "Recently updated"
-        },
-        "sortLabel": "Sort"
-      },
-      "formAgent": {
-        "advancedSettings": "Advanced settings",
-        "capabilitiesInfo": {
-          "title": "What are these capabilities for?",
-          "body": "Capabilities are the tools your agent can use during a conversation — for example searching your documents, summarizing a file, or generating a presentation. Turn on only the ones your agent needs, then adjust their settings if required. You can always change this selection after the agent is created.\nFor most of them, using them is as simple as asking your agent in plain language (e.g. \"Summarize the document attached to this conversation.\")."
-        },
-        "capabilities": {
-          "header": "Select your agent's capabilities",
-          "viewToggle": {
-            "advanced": "Advanced",
-            "aria": "Advanced capabilities view"
-          },
-          "included": {
-            "label": "Included capabilities",
-            "missing": "Missing capabilities",
-            "activeTooltip": "Active on this agent.",
-            "inactiveTooltip": "Available, but not active on this agent.",
-            "unavailableTooltip": "Not enabled by the platform administrator for your team."
-          },
-          "sections": {
-            "dataKnowledge": "Data and knowledge",
-            "documentProduction": "Document production",
-            "intelligenceOrchestration": "Intelligence and orchestration",
-            "actionsIntegration": "Actions and integration"
-          },
-          "actionsIntegrationEmpty": "No capability in this section yet.",
-          "notSupported": "This agent does not support capability selection.",
-          "packs": {
-            "teamResources": {
-              "title": "Access to team resources",
-              "description": "Lets the agent use the team's resources to carry out its mission."
-            },
-            "teamWiki": {
-              "title": "Access to the team wiki",
-              "description": "Lets the agent read the team's wiki pages and follow the rules the team set there."
-            },
-            "conversationAttachments": {
-              "title": "Attachments in a conversation",
-              "description": "Allows adding documents to a conversation to use their information."
-            },
-            "wordDocument": {
-              "title": "Generate a Word document",
-              "description": "Ability to edit and generate a downloadable text document."
-            },
-            "powerpointDocument": {
-              "title": "Fill in a PowerPoint document",
-              "description": "Ability to fill a PPT file from a detailed template."
-            },
-            "webPage": {
-              "title": "Generate a web page (HTML/CSS)",
-              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
-            },
-            "reasoning": {
-              "title": "Reasoning",
-              "description": "Access to \"reasoning\" mode in the chat options."
-            }
-          }
-        },
-        "createdBy": "Created by {{user}}",
-        "updatedBy": "Updated by {{user}}",
-        "fields": {
-          "description": {
-            "label": "Description",
-            "placeholder": "Describe this {{agentsNicknameSingular}} for the team members"
-          },
-          "name": {
-            "label": "Name",
-            "placeholder": "Enter an original name"
-          },
-          "role": {
-            "label": "Role",
-            "placeholder": "Describe the {{agentsNicknameSingular}}'s role"
-          },
-          "usageStatement": {
-            "label": "Use case",
-            "intro": "To ensure your agent complies with applicable standards and regulations, please describe in detail this agent's purpose, its intended uses, and the associated risks.",
-            "placeholder": "Purpose, target users, impacted parties, data handled, outputs/deliverables, impact if the agent errs..."
-          },
-          "reasoning": {
-            "label": "Access deep reasoning",
-            "hint": "Access to \"deep reasoning\" mode in the chat options."
-          },
-          "reasoningDefaultOn": {
-            "label": "Deep reasoning on by default",
-            "hint": "Every new conversation with this agent starts with the composer's deep reasoning toggle already on. Users can still switch it off per question. Deep reasoning is slower and, on agents that call tools, can make the model repeat calls."
-          }
-        },
-        "noTemplates": "No agent templates available — ask a platform admin to enable an agent capability, or check the agent runtime.",
-        "templateBrowser": {
-          "title": "Select an agent template",
-          "subtitle": "Each template is designed and optimized to create an agent for a specific mission."
-        },
-        "promptField": {
-          "closeLibrary": "Close library",
-          "libraryTitle": "Team library",
-          "pickFromLibrary": "Pick from library",
-          "removeTagAria": "Remove {{tag}}",
-          "tagsPlaceholder": "Type and press Enter to add tags..."
-        },
-        "sections": {
-          "aria": "Form sections",
-          "general": "General",
-          "prompts": "Prompts",
-          "tools": "Capabilities",
-          "commitments": "Commitments"
-        },
-        "selectPlaceholder": "Select an option",
-        "suspended": {
-          "title": "This agent is suspended.",
-          "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",
-          "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
-          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
-        },
-        "subtitle": "Team: {{team}}",
-        "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",
-        "templateUnavailable": "Template unavailable — field definitions may be incomplete.",
-        "titleCreate": "Create a new {{agentsNicknameSingular}}",
-        "titleEdit": "Edit {{agent}}",
-        "validation": {
-          "requiredFields": "Complete the fields marked with * before saving."
-        }
-      },
-      "prompts": {
-        "card": {
-          "uses": "Uses: {{count}}",
-          "publishedChip": "Published",
-          "menu": {
-            "edit": "Edit",
-            "duplicate": "Duplicate",
-            "publish": "Publish to marketplace",
-            "unpublish": "Remove from marketplace",
-            "delete": "Delete",
-            "import": "Copy to...",
-            "removeFromMarketplace": "Remove from marketplace"
-          }
-        },
-        "clearSearch": "Clear search",
-        "create": "Create prompt",
-        "emptySearch": "No prompts match this search.",
-        "firstCreate": "Create prompt",
-        "form": {
-          "command": "Command",
-          "commandConflict": "This command label is already used by another team prompt",
-          "commandHelp": "Launch shortcuts in the chat",
-          "description": "Description",
-          "name": "Name",
-          "text": "Prompt text"
-        },
-        "loading": "Loading prompts...",
-        "modalCreate": "New prompt",
-        "modalEdit": "Edit prompt",
-        "noPrompt": "Create your first prompt to get started.",
-        "searchPlaceholder": "Search prompts...",
-        "title": "Team prompts",
-        "view": {
-          "closeAria": "Close",
-          "copiedToast": "Copied to clipboard",
-          "copyAria": "Copy prompt"
-        },
-        "duplicateDialog": {
-          "title": "Duplicate this prompt",
-          "nameLabel": "New prompt name",
-          "cancel": "Cancel",
-          "confirm": "Duplicate",
-          "successToast": "Prompt duplicated",
-          "errorToast": "Failed to duplicate prompt"
-        },
-        "publishDialog": {
-          "title": "Publish this prompt to the marketplace?",
-          "message": "This prompt will become public to every user of the application. They will be able to use it and import it into their own spaces to edit it. The usage counter will also reflect uses outside your team, and any change you make will be immediately visible on the marketplace.",
-          "confirm": "Publish",
-          "successToast": "Prompt published to the marketplace",
-          "errorToast": "Failed to publish prompt"
-        },
-        "unpublishDialog": {
-          "title": "Remove this prompt from the marketplace?",
-          "message": "This prompt will disappear from the marketplace and will no longer be available to other users. Your team keeps its own copy.",
-          "confirm": "Remove",
-          "successToast": "Prompt removed from the marketplace",
-          "errorToast": "Failed to remove prompt"
-        },
-        "editPublishedDialog": {
-          "title": "Save changes?",
-          "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
-          "confirm": "Save"
-        },
-        "titlePersonal": "Your personal prompts"
-      }
-    },
-    "tokenUsageImpact": {
-      "costTitle": "Estimated cost",
-      "costValue": "${{cost}} (estimated)",
-      "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimated)"
-    },
-    "userSettings": {
-      "accessGcu": "Access to GCU",
-      "accessGdpr": "How does {{siteTitle}} {{siteSubtitle}} handle my data ?",
-      "accessReleaseNotes": "Release Notes",
-      "app": {
-        "dark": "Dark",
-        "english": "English",
-        "french": "French",
-        "light": "Light",
-        "system": "System",
-        "themeAria": "Theme",
-        "languageAria": "Language"
-      },
-      "conversationProfile": {
-        "placeholder": "Please indicate who you are, your professional activities, and the preferred tone or form of address for your {{agentsNicknamePlural}}.",
-        "title": "Conversation profile"
-      },
-      "disconnect": "Disconnect",
-      "title": "Your profile"
+      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers."
     },
     "wiki": {
       "title": "Wiki",
@@ -3548,6 +3411,143 @@
         "review": "Could not save the review mark",
         "reviewConflict": "This page has changed since you looked at it. Reload it and check the new version before validating.",
         "restore": "Could not restore this version"
+      }
+    },
+    "promptEditor": {
+      "copy": "Copy the prompt",
+      "copied": "Prompt copied to the clipboard",
+      "copyFailed": "Could not copy the prompt",
+      "reservedTag": "This text cannot contain <{{tag}}>: it is a reserved tag that marks a block of the system prompt. Any other tag is fine."
+    },
+    "knowledgeBases": {
+      "title": "Knowledge Bases",
+      "loading": "Loading the knowledge bases…",
+      "empty": "No knowledge base yet",
+      "deleted": "{{name}} deleted",
+      "deleteFailed": "Could not delete {{name}}",
+      "unavailable": {
+        "title": "Knowledge bases unavailable",
+        "description": "The list could not be loaded. Try again in a moment."
+      },
+      "cadence": {
+        "hourly": "Every hour",
+        "daily": "Every day",
+        "weekly": "Every week"
+      },
+      "card": {
+        "open": "Documents",
+        "delete": "Delete",
+        "suspended": "Synchronization suspended",
+        "tooltip": {
+          "label": "Knowledge base details",
+          "kind": "Kind",
+          "cadence": "Runs",
+          "created": "Created"
+        },
+        "edit": "Edit",
+        "noDescription": "No description"
+      },
+      "deleteDialog": {
+        "title": "Delete this knowledge base?",
+        "message": "{{name}} and every document it holds will be deleted. This cannot be undone.",
+        "confirm": "Delete",
+        "cancel": "Cancel"
+      },
+      "documents": {
+        "back": "Knowledge bases",
+        "empty": "This knowledge base holds no document yet",
+        "loadFailed": "Could not load the documents",
+        "unavailable": {
+          "title": "Knowledge base not found",
+          "description": "It may have been deleted, or belong to another team."
+        }
+      },
+      "create": "Add knowledge base",
+      "form": {
+        "title": "New knowledge base",
+        "name": "Name",
+        "namePlaceholder": "e.g. Team handbook",
+        "synchronizedBy": "Synchronized by",
+        "pickOne": "Choose a source",
+        "noDefinitions": "No knowledge base is enabled for this team",
+        "definitionsLoading": "Loading…",
+        "definitionsFailed": "Could not load the list",
+        "zoneFred": "How often it runs",
+        "scheduleExplanation": "Each run checks the source for changes. Document processing may continue after synchronization.",
+        "suspended": "Suspend synchronization",
+        "zoneSource": "Where its documents come from",
+        "submit": "Create",
+        "created": "{{name}} created",
+        "createFailed": "Could not create {{name}}",
+        "titleEdit": "Edit {{name}}",
+        "subtitleReadOnly": "Its settings are read-only for now."
+      }
+    },
+    "schedule": {
+      "label": "Runs every",
+      "every": "Number",
+      "unit": {
+        "label": "Unit",
+        "minutes": "minutes",
+        "hours": "hours",
+        "days": "days"
+      }
+    },
+    "announcements": {
+      "banner": {
+        "moreInfo": "More info",
+        "dismiss": "Dismiss this announcement"
+      },
+      "dialog": {
+        "close": "Close"
+      },
+      "page": {
+        "title": "Announcements",
+        "subtitle_one": "{{count}} announcement is live for every user.",
+        "subtitle_other": "{{count}} announcements are live for every user.",
+        "subtitle_zero": "Nothing is showing to users right now.",
+        "create": "New announcement",
+        "empty": "No announcement yet.\nCreate one to show a banner at the top of the app."
+      },
+      "severity": {
+        "info": "Info",
+        "warning": "Warning",
+        "error": "Error",
+        "success": "Success"
+      },
+      "locale": {
+        "fr": "French",
+        "en": "English"
+      },
+      "row": {
+        "enabled": "Show this announcement to users",
+        "enableHint": "Enable for all users",
+        "disableHint": "Disable for all users",
+        "edit": "Edit this announcement",
+        "delete": "Delete this announcement"
+      },
+      "editor": {
+        "createTitle": "New announcement",
+        "editTitle": "Edit announcement",
+        "title": "Title",
+        "titleRequired": "Give the announcement a title in at least one language.",
+        "descriptionShort": "Short description",
+        "descriptionShortHint": "Shown in the banner itself. Keep it to a line or two — bold, italic and links only.",
+        "shortRequired": "Write a short description in at least one language.",
+        "descriptionLong": "Long description (optional)",
+        "descriptionLongHint": "Shown in the More info dialog. Leave empty and the banner shows no More info button.",
+        "dismissible": "Closable",
+        "severityGroup": "Announcement severity",
+        "localeGroup": "Language being edited"
+      },
+      "saved": "Announcement saved.",
+      "saveFailed": "The announcement was not saved.",
+      "toggleFailed": "Could not change the announcement's state.",
+      "deleted": "Announcement deleted.",
+      "deleteFailed": "The announcement was not deleted.",
+      "delete": {
+        "title": "Delete this announcement?",
+        "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       }
     }
   },
