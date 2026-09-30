@@ -1708,6 +1708,7 @@
           "searchPlaceholder": "Search a team",
           "clearSearch": "Clear search",
           "noTeams": "No team matches.",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can copy a prompt into one — ask a team administrator for that role.",
           "successToast": "Prompt copied ({{count}})",
           "errorToast": "Copy failed ({{count}})",
           "originTeam": "Origin team"

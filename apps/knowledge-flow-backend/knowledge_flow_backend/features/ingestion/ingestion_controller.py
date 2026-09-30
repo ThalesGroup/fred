@@ -62,6 +62,7 @@ from knowledge_flow_backend.common.structures import (
     IngestionProcessingProfile,
     Status,
 )
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import InputValidationError
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
@@ -343,6 +344,24 @@ def cleanup_uploaded_temp_file(file_path: pathlib.Path) -> None:
         logger.warning("Failed to clean up temporary upload workdir: %s", temp_root, exc_info=True)
 
 
+def cleanup_uploaded_temp_file_after(pending_save: asyncio.Future[None] | None, file_path: pathlib.Path) -> None:
+    """
+    Same as `cleanup_uploaded_temp_file`, but waits for a content-store write still
+    running in a worker thread: cancelling the request cannot stop that thread, so
+    deleting the workdir right away would pull its input out from under it.
+    """
+    if pending_save is None or pending_save.done():
+        cleanup_uploaded_temp_file(file_path)
+        return
+
+    def _after_save(task: asyncio.Future[None]) -> None:
+        if not task.cancelled() and task.exception() is not None:
+            logger.warning("Content-store write failed after its upload request was cancelled", exc_info=task.exception())
+        cleanup_uploaded_temp_file(file_path)
+
+    pending_save.add_done_callback(_after_save)
+
+
 async def resolve_tag_owners(tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
     """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
 
@@ -478,6 +497,8 @@ class IngestionController:
 
     @staticmethod
     def _format_exception_message(exc: Exception) -> str:
+        if isinstance(exc, InputValidationError):
+            return str(exc)
         return f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
 
     @staticmethod
@@ -807,6 +828,7 @@ class IngestionController:
             file_status = "error"
             file_type = pathlib.Path(filename).suffix.lstrip(".") or None
             current_step = STEP_UPLOAD_PREPARATION
+            pending_save: asyncio.Future[None] | None = None
             try:
                 output_temp_dir = input_temp_file.parent.parent
 
@@ -820,7 +842,8 @@ class IngestionController:
                 )
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
-                self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
+                await asyncio.shield(pending_save)
 
                 if scheduler_task_service is None:
                     yield (
@@ -889,7 +912,7 @@ class IngestionController:
                 logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
                 yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
             finally:
-                cleanup_uploaded_temp_file(input_temp_file)
+                cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
                 kpi.emit(
                     name="ingestion.document_duration_ms",
@@ -1017,6 +1040,7 @@ class IngestionController:
                 success = 0
                 for filename, input_temp_file in preloaded_files:
                     current_step = STEP_UPLOAD_PREPARATION
+                    pending_save: asyncio.Future[None] | None = None
                     try:
                         yield self._progress_event(step=current_step, status=Status.IN_PROGRESS, filename=filename)
                         metadata = await self.service.extract_metadata(
@@ -1027,7 +1051,8 @@ class IngestionController:
                             profile=profile,
                         )
                         output_temp_dir = input_temp_file.parent.parent
-                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
+                        pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
+                        await asyncio.shield(pending_save)
                         await self.service.save_metadata(user, metadata=metadata)
                         yield self._progress_event(
                             step=current_step,
@@ -1053,7 +1078,7 @@ class IngestionController:
                             error=error_message,
                         )
                     finally:
-                        cleanup_uploaded_temp_file(input_temp_file)
+                        cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
 
                 overall_status = Status.SUCCESS if success == total else Status.FAILED
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"

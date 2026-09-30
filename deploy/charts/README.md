@@ -1,121 +1,67 @@
-# Installation
+# The fred chart
+
+`fred/` is Fred's Helm chart: fred-agents, knowledge-flow (API and workers),
+control-plane (API and worker) and the frontend. Every deployment starts from it and adds
+its own values file. `fred/values.yaml` holds the defaults and documents each setting.
 
 ## Requirements
 
-- A fully functional Kubernetes cluster (Kubernetes Vanilla, RKE2, K3S, or more dev-oriented alternatives - Kind, K3D, Minikube, etc.)
-  - A `dev` namespace (can be created with `kubectl create namespace dev`)
-- [Helm binary](https://helm.sh/docs/intro/install/)
-- A SQL database engine
-- A S3 bucket
-- An IDP provider (such as Keycloak or another alternative)
-- A full-text search engine (such as Opensearch or another alternative)
+- A Kubernetes cluster and [Helm](https://helm.sh/docs/intro/install/) 3 or 4.
+- The services Fred uses, reached by name from the cluster: PostgreSQL, OpenSearch,
+  Keycloak (a realm with the `app`, `agentic`, `knowledge-flow` and `control-plane`
+  clients, plus `fred-delegation` when delegation is on), OpenFGA, Temporal, and
+  S3-compatible storage or Google Cloud Storage.
 
-## Build images
+## Images
 
-Build the agentic backend, the knowledge-flow backend, and the frontend images:
+The chart runs four images, `ghcr.io/thalesgroup/fred-agent/<app>`: `fred-agents`,
+`knowledge-flow-backend`, `control-plane-backend` and `frontend`. The tag defaults to the
+chart's `appVersion`; set `applications.<app>.image.tag` to run another one.
+`make docker-build` at the repository root builds all four from this checkout.
 
-### 1. Build the Docker images
+On a local cluster, the image must be inside the cluster's nodes. For a k3d cluster, don't
+import them by hand: fred-deployment-factory's `make k3d-fred` builds them, copies them into
+every node and deploys this chart (root `README.md` → "k3d Local Deployment").
 
-```bash
-docker build -f agentic-backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 .
-docker build -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 .
-docker build -f frontend/dockerfiles/Dockerfile-prod -t ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 .
-```
+## Your values file
 
-### 2. Load the images into your Kubernetes cluster
+Write one values file for your deployment and pass it with `-f`. Two things to know:
 
-Depending on your Kubernetes setup (k3s, k3d, minikube, etc.), injecting images into the local cluster can differ. Make sure to follow the approach that matches your environment. Below, we give detailed instructions for k3s and k3d users.
+- **Anchors do not carry overrides.** `values.yaml` shares blocks between an API and its
+  worker through YAML anchors, which Helm resolves when it reads the file. A setting shared
+  by `knowledge-flow-backend` and `knowledge-flow-worker` (or `control-plane-backend` and
+  `control-plane-worker`) must therefore be repeated for both in your file.
+- **Credentials by reference.** Point each application's `extraEnvVars` at a Secret that
+  exists before the release (`valueFrom.secretKeyRef`), and give each migration Job its
+  database password through `migration.extraEnvVars`. The applications read these
+  variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
+  own contract: `deploy/README.md` → "Root bootstrap secret contract (AUTHZ-07)".
 
-#### If you use **k3s** (uses containerd, not Docker):
+A complete, working example is fred-deployment-factory's `k3d-apps/fred/values.yaml`: every
+address, credential and choice a deployment has to make, each one commented. The security
+profile (`c3`) is described in `deploy/README.md` → "Security profiles & classification
+tiers". To brand the frontend without rebuilding it, see "Theme overlay" in
+`apps/frontend/README.md`.
 
-You need to save the images locally and import them into the internal containerd registry used by k3s.
+With `storage.*_store.type: opensearch` in `fred-agents` or `knowledge-flow-backend`, the
+application creates its indexes at startup.
 
-```bash
-# Agentic backend
-docker save ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 | gzip > /tmp/agentic-backend.tgz
-sudo k3s ctr images import /tmp/agentic-backend.tgz
-
-# Knowledge-flow backend
-docker save ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 | gzip > /tmp/knowledge-flow-backend.tgz
-sudo k3s ctr images import /tmp/knowledge-flow-backend.tgz
-
-# Frontend
-docker save ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 | gzip > /tmp/frontend.tgz
-sudo k3s ctr images import /tmp/frontend.tgz
-```
-
-> **Note:**
-> The `k3s ctr images import ...` command is specific to k3s. It imports Docker images into the containerd image registry used internally by k3s clusters.
-
-#### If you use **k3d** (K3S-in-Docker):
-
-You can import your locally built images directly into your k3d cluster using the following commands:
+## Deploy
 
 ```bash
-# Agentic backend
-k3d image import ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
-
-# Knowledge-flow backend
-k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
-
-# Frontend
-k3d image import ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
+helm upgrade --install fred deploy/charts/fred -n <namespace> --create-namespace \
+  -f my-values.yaml --wait
 ```
 
-Replace `<YOUR_K3D_CLUSTER_NAME>` with the name of your k3d cluster (e.g., `k3d-k3s-default`).
+## First login
 
-> **Note:**
-> The `k3d image import` command copies the image into all the k3d nodes (backed by Docker), making the image available for use in your deployments.
+Fred never creates Keycloak accounts. Register in the realm, then make that account the
+platform's `platform_admin` with the root bootstrap (`deploy/README.md` → "Root bootstrap
+secret contract (AUTHZ-07)"); `apps/control-plane-backend`'s `make bootstrap-local` does it
+against any reachable control-plane.
 
-## Prepare hosts file
+## Kubernetes tools in fred-agents
 
-```
-IP_K3S=$(hostname -I | awk '{print $1}')
-echo $IP_K3S fred.dev.fred.thalesgroup.com | sudo tee -a /etc/hosts
-```
-
-## Prepare a kubeconfig file
-
-```
-# Do this modification only if the kubeconfig points on the kubernetes cluster hosting the fred backend
-cp $HOME/.kube/config /tmp/config
-sed -i 's|^\([[:space:]]*server:\)[[:space:]]*.*$|\1 https://kubernetes.default.svc|' /tmp/config
-```
-
-> ⚠️ **Warning:** This command will replace the server address for **all clusters** defined in the kubeconfig file.  
-> If your kubeconfig contains multiple clusters, this may affect other contexts and is not limited to just the intended one.
-
-If you are fine with the new Kubernetes config file at `/tmp/config`, you can use it for the rest of the instructions.
-
-- Either move it to `~/.kube/config`
-- Or define the environment variable: `export KUBECONFIG=/tmp/config`
-
-# Customize Fred
-
-Overload the file `fred/values.yaml`
-
-> ⚠️ **Warning:** Pay attention to the example file `custom-values-examples/custom-fred.yaml`
-
-To brand the stock frontend image (logos, icons, legal markdown) without rebuilding it, see "Theme overlay" in `apps/frontend/README.md`.
-
-Note:
-if `applications.agentic-backend.configuration.storage.*_store.type` OR `applications.knowledge-flow-backend.configuration.storage.*_store.type` are valued with `opensearch`, it will trigger the creation of indexes.
-
-# Deploy Fred
-
-```
-cd deploy/charts
-
-helm upgrade -i fred ./fred/ -n dev
-OR
-helm upgrade -i fred ./fred/ -n dev --values ./fred-custom.yaml
-```
-
-## Access
-
-- URL : [Fred frontend](http://fred.dev.fred.thalesgroup.com)
-
-If you activated the Fred's security feature:
-
-- login : `alice`
-- password: `Azerty123_`
+fred-agents can inspect the cluster it runs in. It reads a kubeconfig from
+`global.kubeconfig`; its server must be reachable from the pod, e.g.
+`https://kubernetes.default.svc` for the cluster hosting Fred.

@@ -1407,6 +1407,60 @@ async def test_mistral_completed_call_text_executes_each_recovered_call_once(
 
 
 @pytest.mark.asyncio
+async def test_mixed_mistral_fragments_execute_and_pair_two_calls() -> None:
+    invocations: list[dict[str, Any]] = []
+    content: list[str | dict[str, Any]] = [
+        {"type": "thinking", "thinking": "<redacted>"},
+        {"type": "text", "text": "read"},
+        "_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"sql":"'},
+        'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
+        + 'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
+    ]
+    model = RecordingModel(
+        script=[
+            AIMessage(
+                content=content,
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+            AIMessage(content="two queries completed"),
+        ]
+    )
+    agent = _compile_agent(
+        model, tools=_replay_tools(invocations), approval_enabled=False
+    )
+
+    updates = await _drive(
+        agent,
+        {"messages": [HumanMessage("count the fleet")]},
+        "mistral-mixed-two-queries",
+    )
+
+    assert [call["args"]["sql"] for call in invocations] == [
+        "SELECT COUNT(*) FROM fake_fleet",
+        "SELECT COUNT(*) FROM fake_vehicles",
+    ]
+    messages = _update_messages(updates)
+    recovered = [
+        message
+        for message in messages
+        if isinstance(message, AIMessage) and message.tool_calls
+    ]
+    assert len(recovered) == 1
+    call_ids = [call["id"] for call in recovered[0].tool_calls]
+    result_ids = [
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    ]
+    assert Counter(result_ids) == Counter(call_ids)
+    assert all(
+        isinstance(call_id, str) and call_id.startswith("recovered-")
+        for call_id in call_ids
+    )
+    assert messages[-1].content == "two queries completed"
+
+
+@pytest.mark.asyncio
 async def test_recovered_calls_reach_compiled_hitl_before_execution() -> None:
     incident = _TOOL_CALL_TEXT_INCIDENTS[1]
     invocations: list[dict[str, Any]] = []

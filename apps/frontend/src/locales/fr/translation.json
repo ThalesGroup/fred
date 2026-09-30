@@ -1708,6 +1708,7 @@
           "searchPlaceholder": "Rechercher une équipe",
           "clearSearch": "Effacer la recherche",
           "noTeams": "Aucune équipe ne correspond.",
+          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un prompt — demandez ce rôle à un administrateur de l'équipe.",
           "successToast": "Prompt copié ({{count}})",
           "errorToast": "Échec de la copie ({{count}})",
           "originTeam": "Équipe d'origine"
