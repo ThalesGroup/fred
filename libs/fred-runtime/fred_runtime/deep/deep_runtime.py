@@ -42,7 +42,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     TracerPort,
 )
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware, TodoListMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.tools import BaseTool
@@ -450,6 +450,8 @@ def _build_deepagent_runtime_middleware(
             binding=binding,
             kpi=kpi,
         ),
+        # Deep Agents no longer installs planning for non-Codex models.
+        cast(AgentMiddleware, TodoListMiddleware()),
         *(capability_block.middleware if capability_block is not None else ()),
         *((ConcatFilesMiddleware(filesystem),) if filesystem is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
