@@ -131,16 +131,16 @@ class RunScope:
 
         return _CURRENT_RUN_SCOPE.get()
 
-    @classmethod
+    @staticmethod
     @contextmanager
-    def open(cls: type[RunScope]) -> Iterator[RunScope]:
+    def open() -> Iterator[RunScope]:
         """Join an active scope; never inherit a closed scope from an abandoned stream."""
 
         parent = _CURRENT_RUN_SCOPE.get()
         if parent is not None and not parent.closed:
             yield parent
             return
-        scope = cls()
+        scope = RunScope()
         token = _CURRENT_RUN_SCOPE.set(scope)
         try:
             yield scope

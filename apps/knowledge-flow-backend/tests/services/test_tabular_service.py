@@ -37,8 +37,8 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 
-from knowledge_flow_backend.application_context import ApplicationContext
 import knowledge_flow_backend.features.tabular.service as tabular_service_module
+from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -2151,6 +2151,34 @@ async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path, mo
     assert observed_settings == [(service.tabular_config.query.duckdb_threads, "")]
 
 
+@pytest.mark.asyncio
+async def test_query_cannot_read_outside_its_local_dataset(tmp_path, monkeypatch):
+    app_context = ApplicationContext.get_instance()
+    app_context.get_content_store().clear()
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+
+    service = TabularService()
+    original_mount = service._mount_datasets
+
+    def inspect_mount(*, connection, datasets, handle):
+        original_mount(connection=connection, datasets=datasets, handle=handle)
+        assert connection.execute("SELECT current_setting('enable_external_access')").fetchone() == (False,)
+        with pytest.raises(duckdb.PermissionException):
+            connection.execute("SELECT * FROM read_parquet('/etc/passwd')")
+
+    monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
+    alias = (await service.list_datasets(_user()))[0].query_alias
+    response = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT amount FROM {alias}"))
+    assert response.rows == [{"amount": 10}]
+
+
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
     app_context = ApplicationContext.get_instance()

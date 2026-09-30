@@ -87,7 +87,7 @@ def mint_claims(realm_url: str, client_id: str, secret: str) -> dict:
         try:
             reason = json.load(exc).get("error", "")
         except ValueError:
-            pass
+            reason = ""
         fail(
             f"Keycloak refused the {client_id} client credentials (HTTP {exc.code} {reason})."
         )

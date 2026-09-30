@@ -1,7 +1,6 @@
 import pytest
-from pydantic import ValidationError
-
 from control_plane_backend.config.models import RuntimeCatalogSourceConfig
+from pydantic import ValidationError
 
 
 @pytest.mark.parametrize("prefix", [None, "/runtime/agents-v2", "/samples/agents/v1"])
