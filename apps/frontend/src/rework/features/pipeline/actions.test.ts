@@ -53,13 +53,27 @@ it("refuses to pin a turn to a credential that did not come from the session", (
 });
 
 describe("streamAgentTurn", () => {
-  it("rejects a tampered preparation URL before sending the captured bearer", async () => {
-    const fetchMock = vi.fn();
+  it("streams through the configured path and rejects a tampered next preparation", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      body: sseBody('data: {"kind":"final","content":"done"}\n\n'),
+    }));
     vi.stubGlobal("fetch", fetchMock);
-    const prep = { ...PREP, execute_stream_url: "https://outside.example/agents/execute/stream" };
 
-    await expect(streamAgentTurn(prep, ARGS)).rejects.toThrow("Invalid runtime execution URL");
-    expect(fetchMock).not.toHaveBeenCalled();
+    const turn = await streamAgentTurn(PREP, ARGS);
+    expect(turn.answer).toBe("done");
+    expect(fetchMock).toHaveBeenCalledWith(
+      PREP.execute_stream_url,
+      expect.objectContaining({
+        redirect: "error",
+        headers: expect.objectContaining({ Authorization: "Bearer probe-bearer" }),
+      }),
+    );
+
+    const tampered = { ...PREP, execute_stream_url: "https://outside.example/agents/execute/stream" };
+    await expect(streamAgentTurn(tampered, ARGS)).rejects.toThrow("Invalid runtime execution URL");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps hold evidence on a safe execution error", async () => {
