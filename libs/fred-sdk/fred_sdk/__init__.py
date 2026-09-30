@@ -78,7 +78,6 @@ if TYPE_CHECKING:
         MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
-        MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
         MCPServerRef,
     )
     from fred_sdk.contracts.capability import (
@@ -210,7 +209,6 @@ _LAZY: dict[str, str] = {
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR": "fred_sdk.authoring.knowledge_flow_mcp",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCPServerRef": "fred_sdk.authoring.knowledge_flow_mcp",
     # Capability authoring
     "AgentCapability": "fred_sdk.contracts.capability",
@@ -330,7 +328,6 @@ __all__ = [
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT",
     # Graph authoring
     "GraphAgent",
     "GraphWorkflow",

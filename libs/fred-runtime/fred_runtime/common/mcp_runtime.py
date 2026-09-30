@@ -19,9 +19,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Iterable
 from functools import partial
-from typing import Any, List, Optional, Tuple, cast
+from typing import List, Optional, Tuple, cast
 
 import anyio
 from fred_sdk.contracts.context import RuntimeContext as AgentRuntimeContext
@@ -42,7 +41,6 @@ from fred_runtime.common.mcp_toolkit import McpToolkit
 from fred_runtime.common.mcp_utils import (
     AUTH_MODE_DELEGATED,
     AUTH_MODE_NO_TOKEN,
-    MCP_SERVER_ID_METADATA_KEY,
     MCPConnectionError,
     _normalize_auth_mode,
     get_connected_mcp_client_for_agent,
@@ -245,8 +243,6 @@ class MCPRuntime:
         self._agent_id = agent.agent_settings.id
         self._confined_logs = delegation_enabled()
         self.available_servers: List[MCPServerConfiguration] = []
-        self.remote_servers: List[MCPServerConfiguration] = []
-        self.inprocess_servers: List[MCPServerConfiguration] = []
         mcp_config = get_runtime_context().get_mcp_configuration()
         if mcp_config is None:
             if self._confined_logs:
@@ -278,17 +274,9 @@ class MCPRuntime:
                         )
                     continue
                 self.available_servers.append(server_configuration)
-                transport = (
-                    server_configuration.transport or "streamable_http"
-                ).lower()
-                if transport == "inprocess":
-                    self.inprocess_servers.append(server_configuration)
-                else:
-                    self.remote_servers.append(server_configuration)
 
         self.mcp_client: Optional[MultiServerMCPClient] = None
         self.toolkit: Optional[McpToolkit] = None
-        self._inprocess_toolkits: list[tuple[str, Any]] = []
 
         # Lifecycle orchestration so enter/exit happen in the SAME task
         self._lifecycle_task: Optional[asyncio.Task] = None
@@ -301,11 +289,9 @@ class MCPRuntime:
             logger.info("[MCP] event=server_activation outcome=resolved")
         else:
             logger.info(
-                "[MCP]agent=%s mcp_servers=%s remote=%s inprocess=%s (enabled only)",
+                "[MCP]agent=%s mcp_servers=%s (enabled only)",
                 self._agent_id,
                 [s.id for s in self.available_servers],
-                [s.id for s in self.remote_servers],
-                [s.id for s in self.inprocess_servers],
             )
 
     # ---------- lifecycle (Token-aware initialization) ----------
@@ -331,25 +317,6 @@ class MCPRuntime:
             # We allow the agent to run, but without MCP tools.
             return
 
-        try:
-            self._init_inprocess_toolkits()
-        except Exception:
-            await self._aclose_inprocess_toolkits()
-            raise
-
-        if not self.remote_servers:
-            if self._confined_logs:
-                logger.info(
-                    "[MCP] event=runtime_init outcome=succeeded reason=local_only"
-                )
-            else:
-                logger.info(
-                    "[MCP] agent=%s init: Local inprocess toolkits only; no "
-                    "remote MCP connection required.",
-                    self._agent_id,
-                )
-            return
-
         # If already running, just return
         if self._lifecycle_task and not self._lifecycle_task.done():
             return
@@ -373,14 +340,12 @@ class MCPRuntime:
             if isinstance(last_error, RunStopError):
                 # The platform ended this run. Asking again is asking for what
                 # was just refused, under the platform's own identity.
-                await self._aclose_inprocess_toolkits()
                 raise last_error
 
             if (
                 attempt >= MCP_CONNECT_MAX_ATTEMPTS
                 or not self._is_retryable_connection_error(last_error)
             ):
-                await self._aclose_inprocess_toolkits()
                 raise last_error
 
             delay_secs = MCP_CONNECT_RETRY_BASE_DELAY_SECS * (2 ** (attempt - 1))
@@ -400,7 +365,6 @@ class MCPRuntime:
                 )
             await asyncio.sleep(delay_secs)
 
-        await self._aclose_inprocess_toolkits()
         if last_error is not None:
             raise last_error
 
@@ -446,7 +410,7 @@ class MCPRuntime:
             if provider.delegated:
                 delegated_server_ids = {
                     server.id
-                    for server in self.remote_servers
+                    for server in self.available_servers
                     if str(_normalize_auth_mode(server.auth_mode))
                     == AUTH_MODE_DELEGATED
                 }
@@ -459,7 +423,7 @@ class MCPRuntime:
             else:
                 authenticated_server_ids = {
                     server.id
-                    for server in self.remote_servers
+                    for server in self.available_servers
                     if str(_normalize_auth_mode(server.auth_mode)) != AUTH_MODE_NO_TOKEN
                 }
                 interceptors.append(
@@ -473,7 +437,7 @@ class MCPRuntime:
 
             new_client, tools = await _get_or_connect_mcp_client(
                 agent_id=self._agent_id,
-                mcp_servers=self.remote_servers,
+                mcp_servers=self.available_servers,
                 runtime_context=runtime_context,
                 tool_interceptors=interceptors,
                 credentials=provider,
@@ -545,12 +509,11 @@ class MCPRuntime:
         if self.toolkit:
             # We assume McpToolkit.get_tools() handles policy/role filtering
             remote_tools = self.toolkit.get_tools()
-        elif self.remote_servers:
+        elif self.available_servers:
             logger.warning(
                 "[MCP] event=tool_loading outcome=skipped reason=runtime_unavailable"
             )
-        local_tools = self._get_inprocess_tools()
-        return self._dedupe_tools_by_name([*local_tools, *remote_tools])
+        return self._dedupe_tools_by_name(remote_tools)
 
     def get_tool_nodes(self) -> ToolNode:
         """
@@ -587,102 +550,22 @@ class MCPRuntime:
     async def _close_owned(self) -> None:
         logger.debug("[MCP] event=runtime_close outcome=started")
         # If lifecycle task exists, signal and await it to close contexts safely
-        try:
-            if self._lifecycle_task:
-                if self._stop_event and not self._stop_event.is_set():
-                    self._stop_event.set()
-                try:
-                    await self._lifecycle_task
-                finally:
-                    if self._lifecycle_task.done():
-                        self._lifecycle_task = None
-                        self._stop_event = None
-                        self._ready_event = None
-                        self._lifecycle_error = None
-            else:
-                await _close_mcp_client_quietly(self.mcp_client)
-                self.mcp_client = None
-                self.toolkit = None
-        finally:
-            await self._aclose_inprocess_toolkits()
-        logger.info("[MCP] event=runtime_close outcome=succeeded")
-
-    def _init_inprocess_toolkits(self) -> None:
-        """
-        Initialize in-process MCP toolkits from the configured factory.
-
-        Why this exists:
-        - in-process MCP providers are supplied by the host runtime, not hardcoded here
-
-        How to use it:
-        - ensure RuntimeContext provides `inprocess_toolkit_factory`
-        """
-        if self._inprocess_toolkits:
-            return
-        factory = get_runtime_context().get_inprocess_toolkit_factory()
-        if factory is None:
-            logger.info(
-                "[MCP] event=local_toolkit_init outcome=skipped reason=missing_factory"
-            )
-            return
-        for server in self.inprocess_servers:
-            toolkit = factory(server.provider, self.agent_instance)
-            if toolkit is None:
-                logger.warning(
-                    "[MCP] event=local_toolkit_init outcome=skipped reason=unavailable"
-                )
-                continue
-            self._inprocess_toolkits.append((server.id, toolkit))
-            logger.info("[MCP] event=local_toolkit_init outcome=succeeded")
-
-    def _get_inprocess_tools(self) -> list[BaseTool]:
-        tools: list[BaseTool] = []
-        for server_id, toolkit in self._inprocess_toolkits:
-            provider = getattr(toolkit, "tools", None)
-            if not callable(provider):
-                logger.warning(
-                    "[MCP] event=local_tool_loading outcome=skipped "
-                    "reason=invalid_toolkit"
-                )
-                continue
+        if self._lifecycle_task:
+            if self._stop_event and not self._stop_event.is_set():
+                self._stop_event.set()
             try:
-                toolkit_tools = cast(Iterable[BaseTool] | None, provider())
-                if toolkit_tools:
-                    # Tag with the originating server id, same convention as
-                    # the remote-MCP fetch path in `mcp_utils.py` (#2455), so
-                    # the ReAct prompt can group the tool listing by server
-                    # regardless of transport.
-                    tools.extend(
-                        tool.model_copy(
-                            update={
-                                "metadata": {
-                                    **(tool.metadata or {}),
-                                    MCP_SERVER_ID_METADATA_KEY: server_id,
-                                }
-                            }
-                        )
-                        for tool in toolkit_tools
-                    )
-            except Exception:
-                logger.warning(
-                    "[MCP] event=local_tool_loading outcome=failed "
-                    "reason=unexpected_error"
-                )
-        return tools
-
-    async def _aclose_inprocess_toolkits(self) -> None:
-        for _server_id, toolkit in self._inprocess_toolkits:
-            aclose = getattr(toolkit, "aclose", None)
-            if callable(aclose):
-                try:
-                    aclose_coro = cast(Awaitable[Any], aclose())
-                    await aclose_coro
-                except Exception:
-                    logger.warning(
-                        "[MCP] event=local_toolkit_close outcome=failed "
-                        "reason=unexpected_error"
-                    )
-        self._inprocess_toolkits = []
+                await self._lifecycle_task
+            finally:
+                if self._lifecycle_task.done():
+                    self._lifecycle_task = None
+                    self._stop_event = None
+                    self._ready_event = None
+                    self._lifecycle_error = None
+        else:
+            await _close_mcp_client_quietly(self.mcp_client)
+            self.mcp_client = None
+            self.toolkit = None
+        logger.info("[MCP] event=runtime_close outcome=succeeded")
 
     @staticmethod
     def _dedupe_tools_by_name(tools: list[BaseTool]) -> list[BaseTool]:

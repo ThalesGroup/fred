@@ -5077,12 +5077,8 @@ consolidation phase's scope-discipline rule — each is its own change):
    `corpus_manager_controller`'s `corpus_repair_vector_metadata` exist in
    code but not in the committed spec. Runtime is unaffected (`FastApiMCP`
    reads the live app), but the committed spec feeds frontend codegen.
-7. **`mcp-web-github-readonly` is `enabled: true` but inert**: catalog
-   declares `transport: inprocess, provider: web_github_readonly`, while
-   `build_inprocess_toolkit` (`inprocess_toolkit_registry.py`) only knows
-   `kf_vector_search`. It logs "no toolkit built for provider=..." and
-   contributes zero tools. No prompt pollution — `build_runtime_tool_prompt_suffix`
-   already skips empty groups — but it is a dead entry in the capability picker.
+7. **Resolved 2026-09-30:** the unimplemented GitHub catalog entry was removed
+   with the legacy local MCP transport (see §8.100).
 
 ---
 
@@ -6353,7 +6349,6 @@ Tool-name collision checks, authorization, audit and HITL are unchanged.
 Identity, services and typed capability options already use one assembly path;
 model middleware and MCP prompt injection remain specific to ReAct/Deep.
 
-
 ### 8.98 Prompt command descriptor on a user turn (2026-09-28)
 
 `RuntimeContext` gains an optional `command` — the prompt command a turn was
@@ -6433,3 +6428,40 @@ remain valid.
 A skipped question writes a response row even without choice or text. Graph
 choice helpers expose the same typed answer through `choice_step_response`;
 `choice_step` keeps its string return contract for existing authors.
+
+### 8.100 MCP catalog packages use SDK capability primitives (2026-09-29)
+
+`McpCapability`, its prompt/configuration types and builders now live in
+`fred_sdk.contracts.capability.mcp`; runtime imports remain compatibility aliases.
+`fred_sdk.resources.mcp` owns YAML validation and instruction resource loading.
+Pods discover installed `fred.mcp_catalogs` providers when no whole-catalog
+replacement is selected. An optional `mcp_catalog_external.yaml` adds
+deployment-owned servers to those providers; duplicate IDs fail startup.
+`fred-capability-mcp` supplies only Fred's internal servers and prompt files;
+transport and capability registration consume the same resolved server list.
+See `openspec/specs/mcp-capabilities/spec.md` for precedence and failure behavior.
+Server IDs, team policies, composer controls, prompt rendering and API payloads
+are unchanged; live MCP clients remain runtime-owned.
+
+`fred_sdk.contracts.services` defines typed Fred service identifiers and the
+`ServiceEndpointsPort` address contract. Runtime `ConfiguredServiceEndpoints`
+implements it from existing pod configuration and supplies it to catalog loaders
+at boot. Internal HTTP entries declare `service` + `path`; their resolved URLs
+preserve the configured port and API prefix. Service references are catalog-only metadata,
+absent from capability payloads; concrete deployment-owned URLs remain supported.
+
+### 8.101 Retire local MCP transport and duplicate document search (2026-09-30)
+
+MCP configuration no longer accepts `inprocess` or exposes a `provider` field;
+local toolkit factories and lifecycle support have been removed. Native capability
+invokers remain available. The old document-search MCP and unimplemented GitHub
+entry are absent from packaged and Helm catalogs. ReAct RAG, Mindmap and Comparison
+keep their template IDs and now default to `document_access`.
+
+Control-plane revision `ba2c3c7fd0c1` removes legacy RAG and GitHub selections
+and configuration from stored tuning, including their historical `mcp:`-prefixed
+forms; it does not select a replacement or change grants/suspensions. A revision
+already applied before this combined cleanup must be reapplied as described in
+the operator migration note.
+See the migration note at `docs/swift/ops/migrations/extract-mcp-agent-instructions.md`
+and `openspec/specs/mcp-capabilities/spec.md` for the current contract.

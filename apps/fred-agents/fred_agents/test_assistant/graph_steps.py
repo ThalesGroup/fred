@@ -2089,7 +2089,7 @@ async def graph_check_step(
             }
         )
 
-    pod = load_agent_pod_config()
+    pod = await asyncio.to_thread(load_agent_pod_config)
     control_plane_url = pod.platform.control_plane_url
     if not control_plane_url:
         return StepResult(

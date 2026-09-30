@@ -63,15 +63,9 @@ Scoping precedence (`turn_option ⊆ capability_config ⊆ session_binding`):
 - the runtime adapter then bounds the result by the session binding's own scope,
   enforcing `⊆ session_binding` (see `DocumentSearchAdapter`).
 
-Duplicate-search-tool story (pilot decision, RFC §10):
-- the builtin `knowledge.search` (`TOOL_REF_KNOWLEDGE_SEARCH`) and the inprocess
-  `mcp:mcp-knowledge-flow-mcp-text` catalog server both still expose a
-  vector-search tool that reads its scope from `RuntimeContext` only. An
-  instance that BOTH wires one of those AND selects this capability would get
-  two vector-search tools with different scoping. For the pilot this capability
-  is the forward path (it adds per-capability config + turn scoping the builtin
-  cannot express); the builtin/catalog path stays reachable for back-compat and
-  its retirement is a follow-up. Do NOT wire both on one instance.
+The builtin `knowledge.search` (`TOOL_REF_KNOWLEDGE_SEARCH`) also exposes vector
+search, scoped from `RuntimeContext`. Prefer this capability for per-capability
+configuration and turn scoping; do not wire both search tools on one instance.
 """
 
 from __future__ import annotations
@@ -555,7 +549,7 @@ class DocumentAccessCapability(
         response to the bare content string with NO tuple and NO artifact at
         all when there is no `ToolCall` to attach it to — worse than the
         tuple-collapse the original plan assumed. Switching to a bare
-        `ToolInvocationResult` return (`KfVectorSearchToolkit`'s convention)
+        `ToolInvocationResult` return (the runtime-provider convention)
         would fix that path but breaks THIS one: without
         `response_format="content_and_artifact"`, `create_agent()`'s ToolCall
         loop stringifies the whole model into `ToolMessage.content` and never
