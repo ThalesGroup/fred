@@ -18,7 +18,7 @@ security:
     realm_url: http://localhost:8091
     client_id: ZITADEL_AGENTIC_CLIENT_ID
     scope: 'openid urn:zitadel:iam:org:project:id:ZITADEL_PROJECT_ID:aud urn:zitadel:iam:org:project:role:service_agent urn:zitadel:iam:org:project:role:delegation_caller'
-    secret_env_var: ZITADEL_AGENTIC_CLIENT_SECRET
+    secret_env_var: ZITADEL_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (environment variable name only)
   delegation:
     act_for_people: true
     caller_roles_claim: [roles]
