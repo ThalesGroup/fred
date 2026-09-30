@@ -67,6 +67,7 @@ from langchain.agents.middleware import AgentMiddleware, ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import SecretStr
@@ -664,6 +665,78 @@ async def test_deep_build_executor_no_longer_rejects_operator_tool_approval(
     )
     assert hitl_middleware._approval.decision("send_email", {}) == (True, None)
     assert hitl_middleware._approval.decision("other_tool", {}) == (False, None)
+
+
+@pytest.mark.asyncio
+async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
+    executed: list[str] = []
+
+    @tool
+    def read_query(sql: str, dataset_uids: list[str]) -> str:
+        """Read fake rows."""
+
+        executed.append(sql)
+        return "one fake row"
+
+    content: list[str | dict[str, object]] = [
+        {"type": "text", "text": "read"},
+        "_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"sql":"'},
+        'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
+        + 'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
+    ]
+    middleware = deep_mod._build_deepagent_runtime_middleware(
+        tracer=None,
+        kpi=None,
+        binding=_binding(),
+        approval_policy=ToolApprovalPolicy(),
+        available_tool_names={"read_query"},
+    )
+    graph = cast(
+        Any,
+        deep_mod._create_compiled_deep_agent(
+            model=ToolFriendlyFakeChatModel(
+                responses=[
+                    AIMessage(
+                        content=content,
+                        response_metadata={"model_name": "mistral-medium-latest"},
+                    ),
+                    AIMessage(content="two queries completed"),
+                ]
+            ),
+            tools=[read_query],
+            system_prompt="Answer briefly.",
+            checkpointer=InMemorySaver(),
+            subagent_middleware=[],
+            middleware=middleware,
+            backend=StateBackend(),
+            permissions=[],
+        ),
+    )
+
+    state = await graph.ainvoke(
+        {"messages": [HumanMessage(content="count the fleet")]},
+        {"configurable": {"thread_id": "mixed-mistral-deep"}},
+    )
+
+    assert sorted(executed) == [
+        "SELECT COUNT(*) FROM fake_fleet",
+        "SELECT COUNT(*) FROM fake_vehicles",
+    ]
+    messages = state["messages"]
+    recovered = [
+        message
+        for message in messages
+        if isinstance(message, AIMessage) and message.tool_calls
+    ]
+    assert len(recovered) == 1
+    call_ids = {call["id"] for call in recovered[0].tool_calls}
+    result_ids = {
+        message.tool_call_id for message in messages if isinstance(message, ToolMessage)
+    }
+    assert result_ids == call_ids
+    assert messages[-1].content == "two queries completed"
 
 
 @pytest.mark.asyncio
