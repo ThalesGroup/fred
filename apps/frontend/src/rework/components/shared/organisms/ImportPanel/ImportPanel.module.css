@@ -89,10 +89,16 @@
   padding-bottom: var(--spacing-xs);
 }
 
+/* Only once there is a title to inset: collapsed, the rail is exactly as wide
+   as its button and any left padding would push it off the edge. */
+.panel[data-expanded="true"] .head {
+  padding-left: var(--spacing-m);
+}
+
 .title {
   margin-right: auto;
   color: var(--on-surface);
-  font: var(--font-label-medium);
+  font: var(--font-title-medium);
   white-space: nowrap;
 }
 

@@ -73,7 +73,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font: var(--font-label-large);
+  font: var(--font-label-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
