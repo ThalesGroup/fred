@@ -92,3 +92,31 @@ def test_validate_read_query_keeps_the_full_sql_line_in_parser_errors():
     assert 'syntax error at or near "SELCT"' in message
     assert f"LINE 1: {query}" in message
     assert "..." not in message
+
+
+def test_validate_read_query_allows_supported_analytical_functions_in_ctes():
+    query = "WITH scoped AS (SELECT lower(city) AS city, amount FROM d_sales) SELECT city, COUNT(*) AS rows, ROUND(AVG(amount), 2) AS average FROM scoped WHERE city LIKE 'p%' GROUP BY city"
+
+    validated = validate_read_query(query, allowed_relations={"d_sales"})
+
+    assert validated.referenced_relations == frozenset({"d_sales"})
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "SELECT current_setting('allowed_paths') FROM d_sales",
+        "WITH scoped AS (SELECT current_setting('temp_directory') FROM d_sales) SELECT * FROM scoped",
+        "SELECT (SELECT current_setting('allowed_paths')) FROM d_sales",
+        "SELECT main.current_setting('allowed_paths') FROM d_sales",
+        "SELECT unknown_network_function('https://outside.example') FROM d_sales",
+    ],
+)
+def test_validate_read_query_rejects_runtime_inspection_and_unknown_functions(query: str):
+    with pytest.raises(ValueError, match="unsupported SQL function"):
+        validate_read_query(query, allowed_relations={"d_sales"})
+
+
+def test_validate_read_query_rejects_table_functions_without_relation_allowlist():
+    with pytest.raises(ValueError, match="Table functions are not allowed"):
+        validate_read_query("SELECT * FROM read_text('/etc/passwd')")

@@ -15,9 +15,12 @@
 from __future__ import annotations
 
 import resource
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 
+import duckdb
 import pytest
 from fred_core import KeycloakUser, RebacDisabledResult
 from fred_core.common import OwnerFilter
@@ -35,6 +38,7 @@ from fred_core.documents.document_structures import (
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
+import knowledge_flow_backend.features.tabular.service as tabular_service_module
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
 from knowledge_flow_backend.features.metadata.service import MetadataService
@@ -47,6 +51,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
     max_categories,
     read_tabular_artifact,
 )
+from knowledge_flow_backend.features.tabular.execution import open_duckdb_connection
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularDatasetReadError, TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
@@ -2114,8 +2119,16 @@ async def test_query_referencing_more_datasets_than_the_cap_is_rejected(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path):
+async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path, monkeypatch):
     """Every online connection must carry explicit threads/memory/spill settings."""
+    observed_settings: list[tuple[int, str]] = []
+
+    def record_connection(handle, *, config):
+        connection = open_duckdb_connection(handle, config=config)
+        observed_settings.append(connection.execute("SELECT current_setting('threads'), current_setting('temp_directory')").fetchone())
+        return connection
+
+    monkeypatch.setattr(tabular_service_module, "open_duckdb_connection", record_connection)
     app_context = ApplicationContext.get_instance()
     app_context.get_content_store().clear()
 
@@ -2131,7 +2144,74 @@ async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path):
     alias = (await service.list_datasets(_user()))[0].query_alias
     response = await service.query_read(
         _user(),
-        request=TabularQueryRequest(sql=f"SELECT current_setting('threads') AS t, current_setting('temp_directory') AS d FROM {alias} LIMIT 1"),
+        request=TabularQueryRequest(sql=f"SELECT amount FROM {alias} LIMIT 1"),
     )
 
-    assert response.rows == [{"t": service.tabular_config.query.duckdb_threads, "d": ""}]
+    assert response.rows == [{"amount": 10}]
+    assert observed_settings == [(service.tabular_config.query.duckdb_threads, "")]
+
+
+@pytest.mark.asyncio
+async def test_query_reads_only_its_signed_parquet_url(tmp_path, monkeypatch):
+    app_context = ApplicationContext.get_instance()
+    content_store = app_context.get_content_store()
+    content_store.clear()
+    metadata = await _ingest_csv(
+        tmp_path=tmp_path,
+        metadata_store=app_context.get_metadata_store(),
+        document_uid="doc-sales",
+        file_name="sales.csv",
+        content="city,amount\nParis,10\n",
+    )
+    artifact = read_tabular_artifact(metadata)
+    assert artifact is not None
+    parquet_bytes = (content_store.object_root / artifact.object_key).read_bytes()
+
+    class ParquetHandler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_HEAD(self):
+            self._respond(include_body=False)
+
+        def do_GET(self):
+            self._respond(include_body=True)
+
+        def _respond(self, *, include_body: bool):
+            range_header = self.headers.get("Range")
+            start, end = 0, len(parquet_bytes) - 1
+            if range_header:
+                first, last = range_header.removeprefix("bytes=").split("-")
+                start = int(first) if first else 0
+                end = min(int(last), end) if last else end
+            self.send_response(206 if range_header else 200)
+            self.send_header("Content-Length", str(end - start + 1))
+            self.send_header("Accept-Ranges", "bytes")
+            if range_header:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(parquet_bytes)}")
+            self.end_headers()
+            if include_body:
+                self.wfile.write(parquet_bytes[start : end + 1])
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), ParquetHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    signed_url = f"http://127.0.0.1:{server.server_port}/data.parquet?signature=test"
+    try:
+        service = TabularService()
+        monkeypatch.setattr(service, "_resolve_dataset_location", lambda _key: signed_url)
+        original_mount = service._mount_datasets
+
+        def inspect_mount(*, connection, datasets, handle):
+            original_mount(connection=connection, datasets=datasets, handle=handle)
+            assert connection.execute("SELECT current_setting('allowed_paths')").fetchone()[0] == [signed_url]
+            with pytest.raises(duckdb.PermissionException):
+                connection.execute("SELECT * FROM read_parquet('/etc/passwd')")
+
+        monkeypatch.setattr(service, "_mount_datasets", inspect_mount)
+        alias = (await service.list_datasets(_user()))[0].query_alias
+        response = await service.query_read(_user(), request=TabularQueryRequest(sql=f"SELECT amount FROM {alias}"))
+        assert response.rows == [{"amount": 10}]
+    finally:
+        server.shutdown()
+        server.server_close()

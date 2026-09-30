@@ -46,6 +46,59 @@ class ValidatedReadQuery:
     referenced_relations: frozenset[str]
 
 
+_ALLOWED_QUERY_FUNCTIONS = frozenset(
+    {
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
+        "||",
+        "~~",
+        "~~*",
+        "!~~",
+        "!~~*",
+        "abs",
+        "avg",
+        "ceil",
+        "ceiling",
+        "coalesce",
+        "concat",
+        "count",
+        "count_star",
+        "date_trunc",
+        "extract",
+        "floor",
+        "greatest",
+        "least",
+        "length",
+        "lower",
+        "ltrim",
+        "max",
+        "median",
+        "min",
+        "nullif",
+        "replace",
+        "round",
+        "rtrim",
+        "split_part",
+        "sqrt",
+        "stddev",
+        "stddev_pop",
+        "stddev_samp",
+        "strftime",
+        "string_agg",
+        "substr",
+        "substring",
+        "sum",
+        "trim",
+        "upper",
+        "var_pop",
+        "var_samp",
+    }
+)
+
+
 def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None = None) -> ValidatedReadQuery:
     """
     Validate one read-only SQL query before execution.
@@ -88,7 +141,23 @@ def validate_read_query(query: str, *, allowed_relations: Iterable[str] | None =
             raise ValueError(f"Query references unauthorized datasets: {', '.join(disallowed_relations)}")
         referenced = frozenset(allowed_by_normalized[relation_name] for relation_name in referenced_relations if relation_name in allowed_by_normalized)
 
+    _validate_query_functions(statement)
     return ValidatedReadQuery(sql=normalized, referenced_relations=referenced)
+
+
+def _validate_query_functions(node: Any) -> None:
+    if isinstance(node, dict):
+        if node.get("type") == "TABLE_FUNCTION":
+            raise ValueError("Table functions are not allowed in read queries")
+        if node.get("type") == "FUNCTION":
+            name = node.get("function_name")
+            if not isinstance(name, str) or name.casefold() not in _ALLOWED_QUERY_FUNCTIONS or node.get("catalog") or node.get("schema"):
+                raise ValueError("Query uses an unsupported SQL function")
+        for value in node.values():
+            _validate_query_functions(value)
+    elif isinstance(node, list):
+        for value in node:
+            _validate_query_functions(value)
 
 
 def collect_cte_names(statement: dict[str, Any]) -> set[str]:
