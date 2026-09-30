@@ -24,7 +24,7 @@
 
 - [ ] 3.6 Render optional choice descriptions beneath labels in the same HITL button, preserving the single-line treatment when absent; verify with a managed chat example and focused component coverage.
 
-- [ ] 3.7 Replace answered agent-question prompt/reply rows with a compact question/answer card and show the same summary in the matching `ask_user` tool drawer; verify choice labels, text, comments, skip, and reload after manual UI validation.
+- [ ] 3.7 Show accepted answers immediately below their `ask_user` tool line, and show the offered choices with the selected one highlighted in the tool drawer; verify choice labels, text, comments, skip, and reload after manual UI validation.
 
 ## 4. Documentation and release verification
 

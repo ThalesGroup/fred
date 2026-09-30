@@ -43,7 +43,7 @@ Reusing `cancel` for skip was rejected: cancel belongs to the tool approval gate
 
 ### Summarize answered questions in existing chat surfaces
 
-When an agent question receives a response, pair its persisted request and response by occurrence id. Replace the read-only prompt and raw response bubble with one compact card in the conversation. Resolve a selected id to its persisted choice label, and retain a separate optional comment; text-only and skipped answers use the same card. The `ask_user` tool detail drawer finds the same pair by tool call id and shows the same summary. Pending questions and tool approvals keep their existing rendering. Use Fred's surface, outline, spacing, and type tokens rather than a new modal.
+When an agent question receives a response, pair its request and response by occurrence id and attach a compact question/answer card below that `ask_user` trace line. The resume stream does not emit HITL history rows, so managed chat adds an optimistic pair only after the runtime accepts the resume; a later history load replaces it with persisted rows. Resolve a selected id to its choice label, and retain an optional comment; text-only and skipped answers use the same card. The `ask_user` tool drawer uses the same pair to list every offered choice and highlight the selected one, enriching descriptions from the tool call arguments when history lacks them. Pending questions and tool approvals keep their existing rendering. Use Fred's surface, outline, spacing, and type tokens rather than a new modal.
 
 ### Apply the composer switch to new turns
 
