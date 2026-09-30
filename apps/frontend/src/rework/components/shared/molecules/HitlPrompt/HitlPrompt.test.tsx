@@ -143,7 +143,7 @@ describe("HitlPrompt answer actions", () => {
     expect(choice).toBeDefined();
     expect(skip).toBeDefined();
     expect(close).toBeDefined();
-    expect(buttons.at(-1)).toBe(skip);
+    expect(buttons[buttons.length - 1]).toBe(skip);
     act(() => choice?.click());
     expect(onAnswer).toHaveBeenLastCalledWith("proceed", " note ");
     act(() =>
