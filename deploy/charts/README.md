@@ -49,23 +49,9 @@ sudo k3s ctr images import /tmp/frontend.tgz
 
 #### If you use **k3d** (K3S-in-Docker):
 
-You can import your locally built images directly into your k3d cluster using the following commands:
-
-```bash
-# Agentic backend
-k3d image import ghcr.io/thalesgroup/fred-agent/agentic-backend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
-
-# Knowledge-flow backend
-k3d image import ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
-
-# Frontend
-k3d image import ghcr.io/thalesgroup/fred-agent/frontend:v1.0.0 -c <YOUR_K3D_CLUSTER_NAME>
-```
-
-Replace `<YOUR_K3D_CLUSTER_NAME>` with the name of your k3d cluster (e.g., `k3d-k3s-default`).
-
-> **Note:**
-> The `k3d image import` command copies the image into all the k3d nodes (backed by Docker), making the image available for use in your deployments.
+Don't import images by hand: fred-deployment-factory's `make k3d-fred` builds them, copies
+them into every node and deploys this chart with its k3d values (root `README.md` →
+"k3d Local Deployment"). The rest of this page is for installing the chart on another cluster.
 
 ## Prepare hosts file
 
