@@ -54,7 +54,7 @@
 
 ## 9. Verify and close out
 
-- [ ] 9.1 `make code-quality` and `make test` in the frontend.
+- [x] 9.1 `make code-quality` clean; `make test` 3053 passed / 7 skipped (3060). 48 tests added across the change.
 - [ ] 9.2 Run `/code-review` on the diff.
-- [ ] 9.3 Migration note: no operator action, user-visible change.
-- [ ] 9.4 Record which lifecycle defects were observed while testing, as input to the lifecycle work, without fixing them here.
+- [x] 9.3 `docs/swift/ops/migrations/import-progress-panel.md`, impact `none`: frontend only, no backend, database, API or permission change. It declares the one thing an operator could be surprised by — the browser now keeps `fred.imports.unfinished` in `localStorage` (file names and destination tag ids, never contents) — and the two honest limits: resuming needs the files picked again, and cancellation only covers files whose request has not left. The sibling note for `add-import-conflict-resolution` was corrected at the same time: it still said the dialog offers **Replace** / **Keep**.
+- [x] 9.4 No manual session was run against a live stack for this slice, so there is nothing observed to record. What the code shows, unchanged by this change and still the lifecycle work's to fix: a task that never reaches a terminal state is shown as running forever, and the panel has no timeout of its own by design (`design.md`, Risks). `importFailure` now names the two backend sentences that carry no cause at all (`Execution failed`, `No failure details were reported`) — every occurrence of either is a lifecycle defect made visible, not a wording problem.

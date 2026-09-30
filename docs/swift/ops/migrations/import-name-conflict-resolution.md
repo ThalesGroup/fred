@@ -47,7 +47,7 @@ change beyond pointing each run at a fresh folder.
 ## Validation
 
 Upload a file into a team folder that already holds a document of that name: the
-upload dialog lists it and offers **Replace** / **Keep** before anything is sent.
+upload dialog lists it and offers **Replace** / **Skip** before anything is sent.
 Choosing **Replace** leaves one document in the folder, keeping its identifier,
 with the new content.
 
