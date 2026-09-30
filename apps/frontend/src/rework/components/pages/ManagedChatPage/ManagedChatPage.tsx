@@ -695,7 +695,7 @@ export default function ManagedChatPage() {
                     <Button
                       color="primary"
                       variant="outlined"
-                      size="small"
+                      size="medium"
                       icon={{ category: "outlined", type: "add" }}
                       className={styles.newConversationButton}
                       onClick={chat.startNewConversation}
