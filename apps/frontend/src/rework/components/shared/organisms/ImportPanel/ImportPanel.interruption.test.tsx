@@ -1,0 +1,236 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// A tab closed mid-import. What the server got is its own business and carries
+// on; what never left exists nowhere but in a browser that is gone. On return
+// the panel has to name those files — "some files did not arrive" is not
+// something anyone can act on — and let the user finish that import, and only
+// that import.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { Provider } from "react-redux";
+import { configureStore } from "@reduxjs/toolkit";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { taskSlice } from "../../../../features/tasks/taskSlice";
+import { cancelImport, canCancelImport, clearHeldImports, runImport } from "../../../../features/imports/importRun";
+import { unfinishedImports } from "../../../../features/imports/unfinishedImports";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+vi.mock("../../../../features/tasks/useTaskAcknowledgement", () => ({
+  useTaskAcknowledgement: () => ({ acknowledge: vi.fn(), isAcknowledging: () => false }),
+}));
+
+const streamMock = vi.fn();
+vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+  leafFileName: (file: File) => file.name.split("/").pop() || file.name,
+  streamUploadOrProcessDocument: (...args: unknown[]) => streamMock(...args),
+}));
+
+import { ImportPanel } from "./ImportPanel";
+
+let container: HTMLDivElement | undefined;
+let root: Root | undefined;
+let store: ReturnType<typeof makeStore>;
+
+const makeStore = () => configureStore({ reducer: { tasks: taskSlice.reducer } });
+
+/** Mounting the panel is "coming back to the page". */
+function visit() {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  const mounted = createRoot(container);
+  root = mounted;
+  act(() => {
+    mounted.render(
+      <Provider store={store}>
+        <ImportPanel />
+      </Provider>,
+    );
+  });
+  act(() => {
+    container!.querySelector("button")!.click();
+  });
+}
+
+function leave() {
+  if (!root) return;
+  const mounted = root;
+  act(() => {
+    mounted.unmount();
+  });
+  container?.remove();
+  root = undefined;
+  container = undefined;
+}
+
+/** The tab is closed and reopened: the store goes, the record stays. */
+function reopenTheTab() {
+  leave();
+  store = makeStore();
+  visit();
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+  clearHeldImports();
+  streamMock.mockReset();
+  store = makeStore();
+});
+
+afterEach(leave);
+
+const text = () => container?.textContent ?? "";
+const byText = (label: string) => [...container!.querySelectorAll("button")].find((b) => b.textContent === label);
+const sentNames = () => streamMock.mock.calls.flatMap((call) => (call[0] as File[]).map((f) => f.name));
+
+/** An import where one of the two files is received and the other never is —
+ *  the tab is closed while it is still queued. */
+async function importCutOff() {
+  streamMock.mockImplementation(async (files: File[], _mode, _meta, discover) => {
+    for (const file of files) {
+      if (file.name === "arrived.pdf") discover({ taskId: "task-ok", documentUid: "doc-ok", filename: file.name });
+      // "lost.pdf" gets no line at all: the request never completed.
+    }
+    return [];
+  });
+  await act(async () => {
+    await runImport(
+      [
+        {
+          requestMetadata: { tags: ["tag-1"], profile: "standard" },
+          files: [new File(["x"], "arrived.pdf"), new File(["y"], "lost.pdf")],
+        },
+      ],
+      { dispatch: store.dispatch, uploadMode: "process", onError: () => {} },
+    );
+  });
+}
+
+describe("ImportPanel — an import cut off in the middle", () => {
+  it("names the files that did not arrive, and only those", async () => {
+    await importCutOff();
+    reopenTheTab();
+
+    expect(text()).toContain("rework.imports.interrupted.title");
+    expect(text()).toContain("lost.pdf");
+    expect(text()).not.toContain("arrived.pdf");
+  });
+
+  it("leaves what the server already received alone", async () => {
+    await importCutOff();
+
+    // Struck off the moment the server took it — it is the task's business now.
+    expect(unfinishedImports().map((entry) => entry.filename)).toEqual(["lost.pdf"]);
+  });
+
+  it("finishes that import for the missing files, ignoring anything else picked", async () => {
+    await importCutOff();
+    reopenTheTab();
+    streamMock.mockClear();
+    streamMock.mockImplementation(async () => []);
+
+    const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", {
+      value: [new File(["y"], "lost.pdf"), new File(["z"], "unrelated.pdf")],
+    });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => {});
+
+    // This finishes an import; it does not start a new one.
+    expect(sentNames()).toEqual(["lost.pdf"]);
+    // And it goes back where it was headed, sent the way it was being sent.
+    expect(streamMock.mock.calls[0][1]).toBe("process");
+    expect(streamMock.mock.calls[0][2]).toMatchObject({ tags: ["tag-1"], profile: "standard" });
+  });
+
+  it("forgets them when the user says so", async () => {
+    await importCutOff();
+    reopenTheTab();
+
+    act(() => {
+      byText("rework.imports.interrupted.forget")!.click();
+    });
+
+    expect(text()).not.toContain("lost.pdf");
+    expect(unfinishedImports()).toEqual([]);
+  });
+
+  it("does not name a file the panel is still following", async () => {
+    // Coming back to this page re-reads the record. A file still listed below
+    // did not fail to arrive — it is simply still going.
+    streamMock.mockImplementation(() => new Promise(() => {}));
+    void runImport([{ requestMetadata: { tags: ["tag-1"] }, files: [new File(["x"], "going.pdf")] }], {
+      dispatch: store.dispatch,
+      uploadMode: "process",
+      onError: () => {},
+    });
+    await act(async () => {});
+
+    visit();
+
+    expect(text()).not.toContain("rework.imports.interrupted.title");
+  });
+});
+
+describe("ImportPanel — taking a file back before it is sent", () => {
+  it("cancels what is still queued and never sends it", async () => {
+    // Requests go a few at a time. Hold every one of them open, and the batches
+    // past the concurrency limit are still waiting their turn — those are the
+    // ones the user can still take back.
+    const release: (() => void)[] = [];
+    streamMock.mockImplementation(() => new Promise<never[]>((resolve) => release.push(() => resolve([]))));
+    const running = runImport(
+      ["a.pdf", "b.pdf", "c.pdf", "d.pdf", "queued.pdf"].map((name) => ({
+        requestMetadata: { tags: ["tag-1"] },
+        files: [new File(["x"], name)],
+      })),
+      { dispatch: store.dispatch, uploadMode: "process", onError: () => {} },
+    );
+    await act(async () => {});
+
+    const entry = (label: string) =>
+      Object.values(store.getState().tasks.byId).find((vm) => vm.target?.label === label)!;
+    // The ones on the wire are the server's now; only the queued one is ours.
+    expect(canCancelImport(entry("a.pdf").taskId)).toBe(false);
+    expect(canCancelImport(entry("queued.pdf").taskId)).toBe(true);
+
+    const queuedId = entry("queued.pdf").taskId;
+    act(() => {
+      cancelImport(queuedId, store.dispatch);
+    });
+    await act(async () => {
+      for (const done of release) done();
+      await running;
+    });
+
+    expect(sentNames()).toEqual(["a.pdf", "b.pdf", "c.pdf", "d.pdf"]);
+    expect(store.getState().tasks.byId[queuedId]).toBeUndefined();
+    // And it is not left behind as a file that failed to arrive.
+    expect(unfinishedImports().map((e) => e.filename)).not.toContain("queued.pdf");
+  });
+});

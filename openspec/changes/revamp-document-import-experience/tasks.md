@@ -36,9 +36,9 @@
 
 ## 6. Interruption and cancellation
 
-- [ ] 6.1 On return after an interruption, name the files that were not received and offer to finish the import for those only.
-- [ ] 6.2 Allow cancelling files not yet transferred; leave received files untouched.
-- [ ] 6.3 Test: tab closed mid-import, then reopened — received files unaffected, missing files named.
+- [x] 6.1 `unfinishedImports` writes the names and where they were headed to `localStorage` before the first byte moves, and strikes each one off as it gets there. On return the panel names whatever is still listed — minus anything it is already following, since coming back to the page re-reads the record. The offer is `resumeUnfinishedImports`: the user picks the files again (the browser cannot reopen what it no longer holds), and only the missing ones are sent, to the folder they were headed for, with the mode and profile they were being sent with. Anything else picked is left alone.
+- [x] 6.2 `canCancelImport` is true only while a file's request has not left — batches go four at a time, so on a large import most files are still queued. `cancelImport` takes it back and `sendBatch` filters it out; a batch emptied that way is never sent. A file already on the wire is the server's and is not offered.
+- [x] 6.3 Test: `ImportPanel.interruption.test.tsx` — six cases, including the received file being struck off while the lost one is named, resuming sending only the missing file with its original destination and mode, and cancelling a queued file without touching the four in flight.
 
 ## 7. The dialog itself
 

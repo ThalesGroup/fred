@@ -2165,6 +2165,14 @@
       }
     },
     "imports": {
+      "cancel": {
+        "action": "Cancel the transfer"
+      },
+      "interrupted": {
+        "forget": "Give up on them",
+        "resume": "Pick them again",
+        "title": "These files did not arrive"
+      },
       "conflict": {
         "question": "A document of this name is already in this folder.",
         "replace": "Replace",

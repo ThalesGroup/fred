@@ -41,7 +41,20 @@ import {
 import { stepLabel } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
-import { heldImport, releaseHeldImport, resolveConflict, retryImport } from "../../../../features/imports/importRun";
+import {
+  cancelImport,
+  canCancelImport,
+  heldImport,
+  releaseHeldImport,
+  resolveConflict,
+  resumeUnfinishedImports,
+  retryImport,
+} from "../../../../features/imports/importRun";
+import {
+  forgetUnfinishedImports,
+  unfinishedImports,
+  type UnfinishedFile,
+} from "../../../../features/imports/unfinishedImports";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import styles from "./ImportPanel.module.css";
@@ -67,6 +80,24 @@ export function ImportPanel() {
     lastHandledRequest.current = openRequest;
     setExpanded(true);
   }, [openRequest]);
+
+  // What a previous visit left in the air. Read once: anything that happens
+  // from here on is in the store, where the panel can follow it properly.
+  const [interrupted, setInterrupted] = useState<UnfinishedFile[]>(() => unfinishedImports());
+  // Except for whatever is already listed below — coming back to this page
+  // re-reads the record, and a file the panel is still following is not a file
+  // that failed to arrive.
+  const listed = new Set(imports.map((task) => task.target?.label));
+  const missing = interrupted.filter((entry) => !listed.has(entry.filename));
+
+  const resumeInput = useRef<HTMLInputElement>(null);
+  const onFilesPicked = (picked: File[]) => {
+    setInterrupted([]);
+    void resumeUnfinishedImports(picked, missing, {
+      dispatch,
+      onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
+    });
+  };
 
   const toggleLabel = expanded ? t("rework.imports.panel.collapse") : t("rework.imports.panel.expand");
 
@@ -127,7 +158,44 @@ export function ImportPanel() {
 
       {expanded && (
         <div className={styles.body}>
-          {imports.length === 0 ? (
+          {missing.length > 0 && (
+            <div className={styles.interrupted}>
+              <p className={styles.interruptedTitle}>{t("rework.imports.interrupted.title")}</p>
+              {/* Named, because "some files did not arrive" is not something
+                  anyone can act on. */}
+              <p className={styles.interruptedNames}>{missing.map((entry) => entry.filename).join(", ")}</p>
+              <div className={styles.decision}>
+                <Button variant="text" size="small" color="primary" onClick={() => resumeInput.current?.click()}>
+                  {t("rework.imports.interrupted.resume")}
+                </Button>
+                <Button
+                  variant="text"
+                  size="small"
+                  color="on-surface-retreat"
+                  onClick={() => {
+                    forgetUnfinishedImports();
+                    setInterrupted([]);
+                  }}
+                >
+                  {t("rework.imports.interrupted.forget")}
+                </Button>
+              </div>
+              {/* The browser cannot reopen a file it no longer holds, so the
+                  user picks them again; only the missing ones are sent, to
+                  where they were headed. */}
+              <input
+                ref={resumeInput}
+                type="file"
+                multiple
+                hidden
+                onChange={(event) => {
+                  onFilesPicked([...(event.target.files ?? [])]);
+                  event.target.value = "";
+                }}
+              />
+            </div>
+          )}
+          {imports.length === 0 && missing.length === 0 ? (
             <p className={styles.empty}>{t("rework.imports.panel.empty")}</p>
           ) : (
             imports.map((task) => (
@@ -146,6 +214,7 @@ export function ImportPanel() {
                     onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
                   })
                 }
+                onCancel={() => cancelImport(task.taskId, dispatch)}
                 onDismiss={() => {
                   // Dismissed for good: stop holding the file open for a retry
                   // that is no longer on offer.
@@ -171,12 +240,14 @@ function ImportItem({
   task,
   onRetry,
   onDecide,
+  onCancel,
   onDismiss,
   dismissing,
 }: {
   task: TaskViewModel;
   onRetry: () => void;
   onDecide: (decision: ConflictDecision) => void;
+  onCancel: () => void;
   onDismiss: () => void;
   dismissing: boolean;
 }) {
@@ -209,6 +280,19 @@ function ImportItem({
                 icon={{ category: "outlined", type: "refresh" }}
                 aria-label={t("rework.imports.retry.action")}
                 onClick={onRetry}
+              />
+            </Tooltip>
+          ) : canCancelImport(task.taskId) ? (
+            // Only while its request has not left. A file already on the wire
+            // is the server's, and offering to call it back would leave a
+            // document behind that the panel said was cancelled.
+            <Tooltip text={t("rework.imports.cancel.action")}>
+              <IconButton
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "close" }}
+                aria-label={t("rework.imports.cancel.action")}
+                onClick={onCancel}
               />
             </Tooltip>
           ) : undefined

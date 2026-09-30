@@ -131,3 +131,27 @@
   gap: var(--spacing-2xs);
   margin: 0 0 var(--spacing-2xs) var(--spacing-xs);
 }
+
+/* What a previous visit left in the air. Above the list, because it is about
+   files that are not in it. */
+.interrupted {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-xs);
+}
+
+.interruptedTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.interruptedNames {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  overflow-wrap: anywhere;
+}

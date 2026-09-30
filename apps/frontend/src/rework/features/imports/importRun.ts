@@ -31,6 +31,7 @@ import {
   uploadStarted,
 } from "../tasks/taskSlice";
 import type { ConflictDecision } from "../../components/shared/organisms/DocumentUploadDrawer/importConflicts";
+import { noteImportSettled, noteImportStarted, type UnfinishedFile } from "./unfinishedImports";
 
 export type UploadMode = "upload" | "process";
 
@@ -187,6 +188,12 @@ interface HeldImport {
 
 const heldImports = new Map<string, HeldImport>();
 
+// Files whose request has left: past this point the server has them, or is
+// about to, and there is nothing to call back.
+const committed = new Set<string>();
+// Files the user took back before their request left.
+const cancelled = new Set<string>();
+
 /** The file behind a panel entry, if the browser still holds it. */
 export function heldImport(entryId: string): HeldImport | undefined {
   return heldImports.get(entryId);
@@ -196,9 +203,33 @@ export function releaseHeldImport(entryId: string): void {
   heldImports.delete(entryId);
 }
 
-/** Test seam only — the vault is module state and outlives a component tree. */
+/**
+ * Whether this file can still be taken back.
+ *
+ * Only while its request has not left. Batches go a few at a time, so on a
+ * large import most files are still queued — but the ones already on the wire
+ * are the server's now, and pretending otherwise would leave a document behind
+ * that the panel said was cancelled.
+ */
+export function canCancelImport(entryId: string): boolean {
+  return heldImports.has(entryId) && !committed.has(entryId);
+}
+
+/** Take a file back before it is sent. */
+export function cancelImport(entryId: string, dispatch: Dispatch): void {
+  if (!canCancelImport(entryId)) return;
+  const held = heldImports.get(entryId)!;
+  cancelled.add(entryId);
+  releaseHeldImport(entryId);
+  noteImportSettled(held.filename);
+  dispatch(taskEvicted(entryId));
+}
+
+/** Test seam only — this is module state and outlives a component tree. */
 export function clearHeldImports(): void {
   heldImports.clear();
+  committed.clear();
+  cancelled.clear();
 }
 
 export interface ImportRunHandlers {
@@ -233,6 +264,15 @@ export async function runImport(batches: ImportBatch[], handlers: ImportRunHandl
       heldImports.set(localId, { file, filename, uploadMode, requestMetadata: batch.requestMetadata });
       dispatch(uploadStarted({ localId, filename }));
     }
+    // Written down before anything moves: an interruption two seconds in has
+    // to leave the same trace as one at the very end.
+    noteImportStarted(
+      batch.files.map((file) => ({
+        filename: leafFileName(file),
+        uploadMode,
+        requestMetadata: batch.requestMetadata,
+      })),
+    );
   }
 
   try {
@@ -264,6 +304,7 @@ export async function retryImport(
   if (!held) return false;
   const { dispatch, onError, onComplete } = handlers;
 
+  committed.delete(entryId);
   dispatch(uploadStarted({ localId: entryId, filename: held.filename }));
   try {
     await sendBatch([held.file], held.requestMetadata, () => entryId, {
@@ -291,14 +332,20 @@ function sendBatch(
 ): Promise<void> {
   const { dispatch, uploadMode, onError } = handlers;
   const destinationTag = ((requestMetadata.tags as string[] | undefined) ?? [])[0] ?? null;
+  // Anything taken back since the run started never leaves; a batch emptied
+  // that way is not sent at all.
+  const toSend = files.filter((file) => !cancelled.has(entryIdOf(leafFileName(file))));
+  if (toSend.length === 0) return Promise.resolve();
+  for (const file of toSend) committed.add(entryIdOf(leafFileName(file)));
   return scheduleFiles(
-    files,
+    toSend,
     uploadMode,
     requestMetadata,
     ({ taskId, documentUid, filename }) => {
       // The server has the bytes now, so we no longer need to be able to
       // re-send them; whatever happens next is the task's to report.
       releaseHeldImport(entryIdOf(filename));
+      noteImportSettled(filename);
       dispatch(uploadHandedOff({ localId: entryIdOf(filename), taskId, documentUid, filename }));
     },
     onError,
@@ -318,6 +365,7 @@ function sendBatch(
       // the transfer ending says nothing about it.
       onFinished: (filename) => {
         releaseHeldImport(entryIdOf(filename));
+        noteImportSettled(filename);
         dispatch(uploadFinished({ localId: entryIdOf(filename) }));
       },
     },
@@ -348,6 +396,7 @@ export async function resolveConflict(
 
   if (decision === "skip") {
     releaseHeldImport(entryId);
+    noteImportSettled(held.filename);
     dispatch(taskEvicted(entryId));
     return true;
   }
@@ -356,6 +405,7 @@ export async function resolveConflict(
     ...held.requestMetadata,
     conflict_decisions: { ...((held.requestMetadata.conflict_decisions as object) ?? {}), [held.filename]: decision },
   };
+  committed.delete(entryId);
   dispatch(uploadStarted({ localId: entryId, filename: held.filename }));
   try {
     await sendBatch([held.file], requestMetadata, () => entryId, {
@@ -367,4 +417,54 @@ export async function resolveConflict(
     onComplete?.();
   }
   return true;
+}
+
+/**
+ * Picks up an import that was cut off, for the files that never arrived and
+ * those only.
+ *
+ * The browser cannot reopen a file it no longer holds, so the user selects
+ * them again; what is remembered is where each one was headed and how it was
+ * being sent, so it goes back to the same folder with the same options. A file
+ * picked that was not among the missing is left alone — this finishes an
+ * import, it does not start a new one.
+ */
+export async function resumeUnfinishedImports(
+  picked: File[],
+  missing: UnfinishedFile[],
+  handlers: Pick<ImportRunHandlers, "dispatch" | "onError"> & { onComplete?: () => void },
+): Promise<{ resumed: string[]; ignored: string[] }> {
+  const wanted = new Map(missing.map((entry) => [entry.filename, entry]));
+  const resumed: string[] = [];
+  const ignored: string[] = [];
+  // One run per (mode, destination): each carries its own request, exactly as
+  // the original import did.
+  const runs = new Map<string, { uploadMode: UploadMode; requestMetadata: Record<string, unknown>; files: File[] }>();
+
+  for (const file of picked) {
+    const filename = leafFileName(file);
+    const entry = wanted.get(filename);
+    if (!entry) {
+      ignored.push(filename);
+      continue;
+    }
+    resumed.push(filename);
+    const key = `${entry.uploadMode}:${JSON.stringify(entry.requestMetadata)}`;
+    const run = runs.get(key);
+    if (run) run.files.push(file);
+    else runs.set(key, { uploadMode: entry.uploadMode, requestMetadata: entry.requestMetadata, files: [file] });
+  }
+
+  for (const run of runs.values()) {
+    await runImport(
+      chunkFilesByLeafName(run.files, UPLOAD_BATCH_SIZE).map((files) => ({
+        requestMetadata: run.requestMetadata,
+        files,
+      })),
+      // One refresh at the end, not one per destination.
+      { dispatch: handlers.dispatch, onError: handlers.onError, uploadMode: run.uploadMode },
+    );
+  }
+  handlers.onComplete?.();
+  return { resumed, ignored };
 }
