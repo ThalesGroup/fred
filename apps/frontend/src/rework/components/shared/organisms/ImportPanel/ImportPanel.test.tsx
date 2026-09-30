@@ -25,6 +25,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   importPanelOpenRequested,
+  taskEventReceived,
   taskRegistered,
   taskSlice,
   uploadHandedOff,
@@ -41,8 +42,16 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 vi.mock("@shared/molecules/TaskCard/TaskCard", () => ({
-  TaskCard: ({ task }: { task: { taskId: string; target?: { label?: string } | null } }) => (
-    <div data-testid="task-card">{task.target?.label ?? task.taskId}</div>
+  TaskCard: ({
+    task,
+    trailingSlot,
+  }: {
+    task: { taskId: string; target?: { label?: string } | null };
+    trailingSlot?: unknown;
+  }) => (
+    <div data-testid="task-card" data-trailing={trailingSlot ? "markers" : "time"}>
+      {task.target?.label ?? task.taskId}
+    </div>
   ),
 }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
@@ -95,7 +104,39 @@ function importOf(taskId: string, label: string) {
   });
 }
 
+/** The trailing corner of each card: live markers, or the time it settled. */
+const corners = () =>
+  [...container.querySelectorAll("[data-testid='task-card']")].map((c) => c.getAttribute("data-trailing"));
+
 describe("ImportPanel", () => {
+  it("hands the card's trailing corner to the markers, and takes it back once the file settles", () => {
+    act(() => {
+      store.dispatch(importOf("t1", "report.pdf"));
+    });
+    click(toggle());
+    expect(corners()).toEqual(["markers"]);
+
+    act(() => {
+      store.dispatch(
+        taskEventReceived({
+          kind: "ingestion",
+          task_id: "t1",
+          state: "succeeded",
+          seq: 1,
+          timestamp: "2026-01-01T00:00:00Z",
+          progress: 1,
+          step: "done",
+          error: null,
+          detail: null,
+        }),
+      );
+    });
+
+    // Markers that have nothing left to follow would only repeat the badge;
+    // what the user wants then is when it happened.
+    expect(corners()).toEqual(["time"]);
+  });
+
   it("is the same element collapsed and open", () => {
     const collapsed = panel();
     expect(collapsed.dataset.expanded).toBe("false");

@@ -120,3 +120,17 @@ describe("TaskCard layout", () => {
     expect(acting).toContain("toolbar");
   });
 });
+
+describe("TaskCard trailing slot", () => {
+  it("shows the relative time when no caller claims the trailing corner", () => {
+    expect(renderToStaticMarkup(<TaskCard task={vm()} />)).toContain("rework.tasks.time.");
+  });
+
+  it("gives the corner to the caller's own content instead", () => {
+    // The import panel puts live phase markers there while a file moves, and
+    // takes them away once it settles — two things cannot share the corner.
+    const html = renderToStaticMarkup(<TaskCard task={vm()} trailingSlot={<b>markers</b>} />);
+    expect(html).toContain("markers");
+    expect(html).not.toContain("rework.tasks.time.");
+  });
+});

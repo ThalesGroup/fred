@@ -2210,6 +2210,9 @@
         "failed": "échec",
         "pending": "en attente"
       },
+      "stepper": {
+        "label": "Progression de l'import"
+      },
       "retry": {
         "action": "Réessayer",
         "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."

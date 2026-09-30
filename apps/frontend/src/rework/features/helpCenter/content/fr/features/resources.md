@@ -55,8 +55,8 @@ l'envoi continue derrière. Un **panneau** s'ouvre à droite de la page et suit
 chaque fichier. Vous pouvez le replier en simple bouton, le rouvrir, et
 l'élargir en tirant son bord gauche.
 
-Chaque fichier passe par quatre temps, que le panneau coche l'un après
-l'autre :
+Chaque fichier passe par quatre temps. Le panneau les montre comme quatre
+repères qui se cochent l'un après l'autre, et nomme celui en cours :
 
 1. **Envoi du fichier** — votre navigateur transmet. Tant que ce temps dure,
    rien n'est encore arrivé chez Fred.

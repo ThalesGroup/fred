@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Where a file has got to, as the four phases it actually goes through, each
-// named in full.
+// Where a file has got to, as the four phases it actually goes through.
 //
 // Not a progress bar: no phase reports a fraction of itself, so a bar either
-// sits frozen or invents movement. Laid out as a column because the four names
-// do not fit across the panel at its default width, and they stay readable
-// however narrow the user drags it.
+// sits frozen or invents movement. Markers only — it sits in the card's footer
+// facing the name of the phase in flight, and that name is what says which
+// marker is spinning. The caller decides when to show it; once the file is
+// settled the footer goes back to its timestamp.
 
+import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import {
   IMPORT_PHASES,
+  importLinkStates,
   importPhaseName,
   importPhaseStates,
   type PhaseState,
@@ -33,8 +35,8 @@ import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import styles from "./ImportStepper.module.css";
 
 function Marker({ state }: { state: PhaseState }) {
-  // The row carries the accessible name, state included — a second "Loading"
-  // per phase would only crowd it.
+  // The phase carries the accessible name, state included — a second
+  // "Loading" per phase would only crowd it.
   if (state === "current") return <Spinner size={12} decorative />;
   const type = state === "done" ? "check_circle" : state === "failed" ? "error_outline" : "radio_button_unchecked";
   return <Icon category="outlined" type={type} />;
@@ -42,29 +44,23 @@ function Marker({ state }: { state: PhaseState }) {
 
 export function ImportStepper({ task }: { task: TaskViewModel }) {
   const { t } = useTranslation();
-  // Nothing left to follow once every phase is behind it; the card's own badge
-  // and timestamp say what became of it.
-  if (task.state === "succeeded") return null;
   const states = importPhaseStates(task);
+  const links = importLinkStates(states);
 
   return (
-    <ol className={styles.stepper}>
+    <ol className={styles.stepper} aria-label={t("rework.imports.stepper.label")}>
       {IMPORT_PHASES.map((phase, i) => (
-        // The rail's two halves are coloured separately: the segment above a
-        // marker belongs to the phase above it, the one below to this phase.
-        <li
-          key={phase}
-          className={styles.row}
-          data-state={states[i]}
-          data-prev={states[i - 1]}
-          aria-label={`${importPhaseName(phase, t)} — ${t(`rework.imports.phaseState.${states[i]}`)}`}
-          aria-current={states[i] === "current" ? "step" : undefined}
-        >
-          <span className={styles.rail} aria-hidden>
+        <Fragment key={phase}>
+          {i > 0 && <li className={styles.link} data-state={links[i - 1]} aria-hidden />}
+          <li
+            className={styles.phase}
+            data-state={states[i]}
+            aria-label={`${importPhaseName(phase, t)} — ${t(`rework.imports.phaseState.${states[i]}`)}`}
+            aria-current={states[i] === "current" ? "step" : undefined}
+          >
             <Marker state={states[i]} />
-          </span>
-          <span className={styles.label}>{importPhaseName(phase, t)}</span>
-        </li>
+          </li>
+        </Fragment>
       ))}
     </ol>
   );

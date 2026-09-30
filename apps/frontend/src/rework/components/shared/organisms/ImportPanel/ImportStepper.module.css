@@ -13,95 +13,60 @@
  * limitations under the License.
  */
 
+/* Sits where the card's timestamp does, so it must never push the step name
+   into an ellipsis: fixed width, no shrinking, no growing. */
 .stepper {
   display: flex;
-  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.row {
-  display: grid;
-  grid-template-columns: 12px 1fr;
+.phase {
+  display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: var(--spacing-2xs);
-  /* Tall enough that the rail between two markers is actually visible: the
-     12px marker eats the middle of every row. */
-  min-height: 22px;
+  width: 12px;
+  height: 12px;
 }
 
-/* The marker, with the rail drawn through the row behind it: the half above
-   carries the previous phase's colour, the half below this one's. */
-.rail {
-  display: flex;
-  position: relative;
-  justify-content: center;
-  align-items: center;
-  align-self: stretch;
-}
-
-.rail::before,
-.rail::after {
-  position: absolute;
-  left: calc(50% - 1px);
-  background: var(--outline-variant);
-  width: 2px;
-  content: "";
-}
-
-.rail::before {
-  top: 0;
-  height: calc(50% - 7px);
-}
-
-.rail::after {
-  bottom: 0;
-  height: calc(50% - 7px);
-}
-
-/* Nothing runs off the ends of the list. */
-.row:first-child .rail::before,
-.row:last-child .rail::after {
-  display: none;
-}
-
-.row[data-prev="done"] .rail::before,
-.row[data-state="done"] .rail::after {
-  background: var(--success);
-}
-
-.row[data-prev="failed"] .rail::before,
-.row[data-state="failed"] .rail::after {
-  background: var(--error);
-}
-
-/* One colour per state, carried by both the marker and its name so a glance at
-   either says the same thing. */
-.row[data-state="pending"] {
-  color: var(--on-surface-muted);
-}
-
-.row[data-state="current"] {
-  color: var(--info);
-}
-
-.row[data-state="done"] {
-  color: var(--success);
-}
-
-.row[data-state="failed"] {
-  color: var(--error);
-}
-
-.row [class*="material-symbols"] {
+.phase [class*="material-symbols"] {
   font-size: 12px;
 }
 
-.label {
-  min-width: 0;
-  overflow: hidden;
-  font: var(--font-label-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* One colour per state, shared by the markers and the runs between them. */
+.phase[data-state="pending"],
+.link[data-state="pending"] {
+  color: var(--on-surface-muted);
+}
+
+.phase[data-state="current"],
+.link[data-state="current"] {
+  color: var(--info);
+}
+
+.phase[data-state="done"],
+.link[data-state="done"] {
+  color: var(--success);
+}
+
+.phase[data-state="failed"],
+.link[data-state="failed"] {
+  color: var(--error);
+}
+
+.link {
+  flex-shrink: 0;
+  border-radius: 1px;
+  background: currentcolor;
+  width: 10px;
+  height: 2px;
+}
+
+/* A run nothing has reached yet is a track, not a line that has been drawn. */
+.link[data-state="pending"] {
+  background: var(--outline-variant);
 }

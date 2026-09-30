@@ -2210,6 +2210,9 @@
         "failed": "failed",
         "pending": "waiting"
       },
+      "stepper": {
+        "label": "Import progress"
+      },
       "retry": {
         "action": "Try again",
         "unavailable": "This file has to be picked again before it can be retried."

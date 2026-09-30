@@ -47,13 +47,24 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
   };
 }
 
+/** The row renders phase, link, phase, link, phase, link, phase — so even
+ *  positions are the four phases and odd ones the runs between them. */
+function states(task: TaskViewModel): string[] {
+  const html = renderToStaticMarkup(<ImportStepper task={task} />);
+  const all = [...html.matchAll(/data-state="(\w+)"/g)].map((m) => m[1]);
+  expect(all).toHaveLength(7);
+  return all;
+}
+
 /** The four phases' states, in order: transfer, preparation, extraction,
  *  indexing. */
 function phases(task: TaskViewModel): string[] {
-  const html = renderToStaticMarkup(<ImportStepper task={task} />);
-  const states = [...html.matchAll(/data-state="(\w+)"/g)].map((m) => m[1]);
-  expect(states).toHaveLength(4);
-  return states;
+  return states(task).filter((_, i) => i % 2 === 0);
+}
+
+/** The three runs between them, in order. */
+function links(task: TaskViewModel): string[] {
+  return states(task).filter((_, i) => i % 2 === 1);
 }
 
 describe("ImportStepper", () => {
@@ -106,17 +117,19 @@ describe("ImportStepper", () => {
     expect(phases(vm({ stage: "analysis", state: "running", step: "done" }))).toEqual(["done", "done", "done", "done"]);
   });
 
-  it("stands down once the document is usable", () => {
-    // The card's badge and timestamp say what became of it; four ticks would
-    // only repeat them.
-    expect(renderToStaticMarkup(<ImportStepper task={vm({ stage: "analysis", state: "succeeded" })} />)).toBe("");
+  it("carries the run feeding the phase in flight in that phase's colour", () => {
+    // The eye should follow the work forward rather than stop at the last
+    // tick, so the run into the spinner is not painted as another success.
+    expect(links(vm({ stage: "analysis", state: "running", step: "processing" }))).toEqual([
+      "done",
+      "current",
+      "pending",
+    ]);
   });
 
-  it("hands each row the previous phase's state, which is what colours the rail", () => {
-    const html = renderToStaticMarkup(
-      <ImportStepper task={vm({ stage: "analysis", state: "running", step: "processing" })} />,
-    );
-    const rows = [...html.matchAll(/data-state="(\w+)"(?:\s+data-prev="(\w+)")?/g)].map((m) => [m[1], m[2]]);
-    expect(rows.map((r) => r[1])).toEqual([undefined, "done", "done", "current"]);
+  it("draws no run out of a phase that gave up", () => {
+    // The transfer and the preparation did happen and stay drawn; nothing ever
+    // crossed from extraction to indexing, so nothing is drawn there.
+    expect(links(vm({ stage: "analysis", state: "failed", step: "processing" }))).toEqual(["done", "done", "pending"]);
   });
 });

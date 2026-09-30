@@ -53,7 +53,8 @@ the transfer carries on behind it. A **panel** opens on the right of the page
 and follows every file. You can fold it back into a button, reopen it, and widen
 it by dragging its left edge.
 
-Every file goes through four stages, which the panel ticks off one by one:
+Every file goes through four stages. The panel shows them as four markers
+that tick off one by one, and names the one under way:
 
 1. **Sending the file** — your browser is transferring it. For as long as this
    lasts, nothing has reached Fred yet.

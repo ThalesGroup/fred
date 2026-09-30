@@ -36,6 +36,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
+import { importPhaseLabel } from "../../../../features/imports/importPhases";
 import {
   cancelImport,
   canCancelImport,
@@ -275,9 +276,10 @@ function ImportItem({
   // that cannot work would be worse than saying so.
   const stillHeld = heldImport(task.taskId) !== undefined;
 
-  // The stepper names the phases; this line is for what it cannot say — why a
-  // file stopped, or the question holding it up.
-  const statusText = failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : null);
+  // The single line the markers opposite are about: the phase in flight, or —
+  // when something interrupted it — why it stopped, or the question holding it.
+  const statusText =
+    failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t));
 
   return (
     <div className={styles.item}>
@@ -287,9 +289,12 @@ function ImportItem({
         // wrote for a log.
         statusText={statusText}
         statusDetail={failure?.detail}
-        // Four named phases instead of a bar: none of them reports a fraction
-        // of itself, so a bar could only sit frozen or invent movement.
-        progressSlot={<ImportStepper task={task} />}
+        // No row of its own: the markers go in the footer, facing the name of
+        // the phase they are on, and give the card back the height a bar took.
+        progressSlot={null}
+        // Only while something is moving — once the file is settled the footer
+        // goes back to saying when.
+        trailingSlot={TERMINAL_STATES.has(task.state) ? undefined : <ImportStepper task={task} />}
         actions={
           failed && stillHeld ? (
             <Tooltip text={t("rework.imports.retry.action")}>

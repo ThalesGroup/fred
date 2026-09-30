@@ -65,3 +65,23 @@ export function importPhaseStates(task: PhaseInput): PhaseState[] {
     return held ? "pending" : "current";
   });
 }
+
+/** A run stands for the work crossing from one phase to the next, so it is
+ *  drawn only once the phase behind it is done — a phase that gave up let
+ *  nothing past. The run feeding the phase in flight takes that phase's
+ *  colour, so the eye follows the work forward instead of stopping at the
+ *  last tick. */
+export function importLinkStates(states: PhaseState[]): PhaseState[] {
+  return states.slice(0, -1).map((state, i) => {
+    if (states[i + 1] === "current") return "current";
+    return state === "done" ? "done" : "pending";
+  });
+}
+
+/** The current phase's name, or null when no phase is running — a finished
+ *  file, or one held on the user's answer, which the panel words itself. */
+export function importPhaseLabel(task: PhaseInput, t: TFunction): string | null {
+  if (task.stage === "decision") return null;
+  const phase = IMPORT_PHASES[importPhaseIndex(task)];
+  return phase ? t(PHASE_LABEL[phase]) : null;
+}

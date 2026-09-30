@@ -39,6 +39,10 @@ interface TaskCardProps {
    *  task has no measurable progress to show — an import, where the server
    *  reports named phases rather than a fraction. */
   progressSlot?: ReactNode;
+  /** Replaces the footer's timestamp. For a caller with something live to put
+   *  there while the task runs — an import's phase markers, facing the name of
+   *  the phase they are on. Omit it and the timestamp comes back. */
+  trailingSlot?: ReactNode;
   /** Present only when this task can be acknowledged (failed/cancelled, not
    *  yet acknowledged) — the caller owns the `POST /tasks/{id}/ack` call and
    *  the resulting store update (TASK-EVENT-STREAM-RFC.md §2.10). */
@@ -56,6 +60,7 @@ export function TaskCard({
   statusDetail,
   actions,
   progressSlot,
+  trailingSlot,
   onAcknowledge,
   acknowledging,
 }: TaskCardProps) {
@@ -155,7 +160,7 @@ export function TaskCard({
             />
           </div>
         )}
-        <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>
+        {trailingSlot ?? <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>}
       </div>
 
       {progressSlot !== undefined ? (
