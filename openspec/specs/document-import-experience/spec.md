@@ -41,8 +41,9 @@ indicator.
 - **WHEN** the user reloads while an import is still running
 - **THEN** every file the server already has is still shown, with its current
   phase
-- **AND** any file that never reached the server is named as not having
-  arrived, to be picked again
+- **AND** any file that never reached the server is listed as a failed import,
+  named, with the cause it was given — or the interruption itself when there
+  was none — and an action to send it again
 
 ### Requirement: Every phase of an import is distinguished
 
@@ -95,6 +96,11 @@ reader and a retry action, until the user retries or dismisses it. It SHALL NOT
 be reported only by a transient notification, and SHALL NOT stop the other
 files.
 
+The cause SHALL survive a reload for a file the server never received, and the
+action offered SHALL then be to send the file again rather than to retry — the
+browser no longer holds it. No action SHALL be offered for a cause that sending
+the file again cannot change.
+
 #### Scenario: One file among fifty fails
 
 - **WHEN** one file fails and the user is looking at another page
@@ -119,6 +125,13 @@ to finish the import.
 - **THEN** the files already received are unaffected
 - **AND** the panel names the files that were not received
 - **AND** the user is offered a way to finish the import for those files only
+
+#### Scenario: The browser has cleared its stored data
+
+- **WHEN** the user returns in a browser that wipes site data between sessions
+- **THEN** the files the server received are still shown, from the server
+- **AND** nothing is claimed about files it never received, and no action is
+  offered for them
 
 ### Requirement: The upload stage can be cancelled
 

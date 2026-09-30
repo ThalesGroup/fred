@@ -1523,12 +1523,6 @@
         "action": "Cancel the transfer",
         "tooLate": "This file is already on its way and can no longer be cancelled."
       },
-      "interrupted": {
-        "forget": "Give up",
-        "resume": "Select",
-        "title": "Import interrupted",
-        "why": "These files never reached their destination. Select them again to finish the import."
-      },
       "conflict": {
         "question": "A document of this name is already in this folder.",
         "replace": "Replace",
@@ -1542,6 +1536,7 @@
         "extraction": "This file's content could not be read.",
         "indexing": "The file was read, but indexing it failed.",
         "noAnswer": "The upload ended without the server saying what became of this file.",
+        "notSent": "The import was interrupted before this file was sent. Send it again to finish.",
         "interrupted": "Processing stopped before finishing.",
         "notAllowed": "You are not allowed to import into this folder.",
         "preparation": "Preparing this file failed.",
@@ -1575,6 +1570,9 @@
           "processing": "The text is pulled out of the document, page by page, so Fred can read it.",
           "indexing": "The content is filed away so agents can find it and quote it in their answers."
         }
+      },
+      "resend": {
+        "action": "Send again"
       },
       "retry": {
         "action": "Try again",

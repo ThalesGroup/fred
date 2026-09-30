@@ -35,8 +35,14 @@ export interface ImportFailure {
   hopeless: boolean;
 }
 
+/** A file the record still lists with no cause of its own was never answered
+ *  for — the tab went away mid-import. Written as a sentence so it resolves
+ *  through the same path as a cause the backend actually sent. */
+export const INTERRUPTED_BEFORE_SEND = "The import was interrupted before this file was sent.";
+
 /** Backend sentences we recognise, most specific first. */
 const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean }[] = [
+  { pattern: /interrupted before this file was sent/i, key: "notSent" },
   // The folder holds two documents of this name (a base and an alternate
   // version). Nothing the user can do from here changes that, so it is named
   // rather than left to the generic "the upload failed".

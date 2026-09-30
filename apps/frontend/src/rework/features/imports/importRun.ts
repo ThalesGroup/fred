@@ -31,7 +31,7 @@ import {
   uploadStarted,
 } from "../tasks/taskSlice";
 import type { ConflictDecision } from "../../components/shared/organisms/DocumentUploadDrawer/importConflicts";
-import { noteImportSettled, noteImportStarted, type UnfinishedFile } from "./unfinishedImports";
+import { noteImportFailed, noteImportSettled, noteImportStarted, type UnfinishedFile } from "./unfinishedImports";
 
 export type UploadMode = "upload" | "process";
 
@@ -378,8 +378,13 @@ function sendBatch(
       dispatch(importPanelOpenRequested());
     },
     {
-      // Deliberately keeps the held file: this is the one case a retry exists for.
-      onFailed: (filename, error) => dispatch(uploadFailed({ localId: entryIdOf(filename), error })),
+      // Deliberately keeps the held file: this is the one case a retry exists
+      // for. The record keeps the entry too, now carrying why — a reload loses
+      // the store and the held file, but not the reason.
+      onFailed: (filename, error) => {
+        noteImportFailed(entryIdOf(filename), error);
+        dispatch(uploadFailed({ localId: entryIdOf(filename), error }));
+      },
       // Only reached by a file that never got a task — upload-only mode, or one
       // the server skipped. Anything with a task is that task's to finish, and
       // the transfer ending says nothing about it.

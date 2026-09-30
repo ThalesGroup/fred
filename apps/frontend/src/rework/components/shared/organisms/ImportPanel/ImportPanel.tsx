@@ -35,7 +35,7 @@ import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
-import { importFailure } from "../../../../features/imports/importFailure";
+import { importFailure, INTERRUPTED_BEFORE_SEND } from "../../../../features/imports/importFailure";
 import { importPhaseLabel } from "../../../../features/imports/importPhases";
 import {
   cancelImport,
@@ -56,6 +56,31 @@ import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/
 import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
 import { ImportStepper } from "./ImportStepper";
 import styles from "./ImportPanel.module.css";
+
+/** A file the record still lists, drawn as what it is: an import that failed.
+ *  Its cause is whatever we were told, or the interruption itself. Local-only
+ *  and keyed on the entry, so nothing here can collide with a real task. */
+function cardForMissingFile(entry: UnfinishedFile): TaskViewModel {
+  return {
+    taskId: entry.entryId,
+    kind: "ingestion",
+    target: { type: "document", id: entry.entryId, label: entry.filename },
+    owner: null,
+    localOnly: true,
+    state: "failed",
+    progress: null,
+    step: null,
+    error: entry.cause ?? INTERRUPTED_BEFORE_SEND,
+    lastSeq: -1,
+    stage: "upload",
+    conflict: null,
+    teamId: entry.teamId,
+    registeredAt: entry.notedAt ?? 0,
+    terminalAt: entry.notedAt ?? 0,
+    acknowledgedAt: null,
+    warnings: null,
+  };
+}
 
 /** Long enough to read that a file made it, short enough that the panel empties
  *  itself instead of becoming a list of things already done. */
@@ -142,8 +167,12 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   const missing = interrupted.filter((entry) => entry.teamId === teamId && !listed.has(entry.filename));
 
   const resumeInput = useRef<HTMLInputElement>(null);
+  // Which entry the open picker is for. One card asks at a time, so what comes
+  // back is offered to that entry alone — a name that matches another missing
+  // file is not an answer for it.
+  const resending = useRef<UnfinishedFile[]>([]);
   const onFilesPicked = (picked: File[]) => {
-    void resumeUnfinishedImports(picked, missing, {
+    void resumeUnfinishedImports(picked, resending.current, {
       dispatch,
       onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
     }).then(({ resumed }) => {
@@ -156,10 +185,24 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
     });
   };
 
-  const giveUpOnMissing = () => {
-    forgetUnfinishedImports(missing.map((entry) => entry.entryId));
-    setInterrupted((entries) => entries.filter((entry) => !missing.includes(entry)));
-  };
+  // The card's own dismiss. Forgetting one entry, never the whole record: the
+  // rest may be carrying an import that is running right now.
+  const forgetMissing = useCallback((entryId: string) => {
+    forgetUnfinishedImports([entryId]);
+    setInterrupted((entries) => entries.filter((entry) => entry.entryId !== entryId));
+  }, []);
+
+  const onForgetMissing = useCallback((task: TaskViewModel) => forgetMissing(task.taskId), [forgetMissing]);
+
+  const onResend = useCallback(
+    (entryId: string) => {
+      const entry = interrupted.find((candidate) => candidate.entryId === entryId);
+      if (!entry) return;
+      resending.current = [entry];
+      resumeInput.current?.click();
+    },
+    [interrupted],
+  );
 
   // Hoisted out of the list and keyed by task id: an arrow function built per
   // card per render is what kept every card re-rendering on every task event,
@@ -261,52 +304,50 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
 
       {expanded && (
         <div className={styles.body}>
-          {missing.length > 0 && (
-            <div className={styles.interrupted}>
-              <p className={styles.interruptedTitle}>{t("rework.imports.interrupted.title")}</p>
-              {/* The title says what happened; this says what it means for the
-                  files and what the two buttons are for. */}
-              <p className={styles.interruptedWhy}>{t("rework.imports.interrupted.why")}</p>
-              {/* Named, because "some files did not arrive" is not something
-                  anyone can act on. */}
-              <p className={styles.interruptedNames}>{missing.map((entry) => entry.filename).join(", ")}</p>
-              <div className={styles.interruptedActions}>
-                <Button variant="text" size="small" color="primary" onClick={() => resumeInput.current?.click()}>
-                  {t("rework.imports.interrupted.resume")}
-                </Button>
-                <Button variant="text" size="small" color="on-surface-retreat" onClick={giveUpOnMissing}>
-                  {t("rework.imports.interrupted.forget")}
-                </Button>
-              </div>
-              {/* The browser cannot reopen a file it no longer holds, so the
-                  user picks them again; only the missing ones are sent, to
-                  where they were headed. */}
-              <input
-                ref={resumeInput}
-                type="file"
-                multiple
-                hidden
-                onChange={(event) => {
-                  onFilesPicked([...(event.target.files ?? [])]);
-                  event.target.value = "";
-                }}
-              />
-            </div>
-          )}
+          {/* The browser cannot reopen a file it no longer holds, so the user
+              picks it again; only the entry the button belongs to is sent, to
+              where it was headed. */}
+          <input
+            ref={resumeInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(event) => {
+              onFilesPicked([...(event.target.files ?? [])]);
+              event.target.value = "";
+            }}
+          />
           {imports.length === 0 && missing.length === 0 ? (
             <p className={styles.empty}>{t("rework.imports.panel.empty")}</p>
           ) : (
-            imports.map((task) => (
-              <ImportItem
-                key={task.taskId}
-                task={task}
-                onRetry={onRetry}
-                onDecide={onDecide}
-                onCancel={onCancel}
-                onDismiss={onDismiss}
-                dismissing={isAcknowledging(task.taskId)}
-              />
-            ))
+            <>
+              {/* What a previous visit left behind, above what is happening
+                  now: it is the older news and the only part asking for
+                  anything. */}
+              {missing.map((entry) => (
+                <ImportItem
+                  key={entry.entryId}
+                  task={cardForMissingFile(entry)}
+                  onRetry={onRetry}
+                  onDecide={onDecide}
+                  onCancel={onCancel}
+                  onDismiss={onForgetMissing}
+                  dismissing={false}
+                  onResend={onResend}
+                />
+              ))}
+              {imports.map((task) => (
+                <ImportItem
+                  key={task.taskId}
+                  task={task}
+                  onRetry={onRetry}
+                  onDecide={onDecide}
+                  onCancel={onCancel}
+                  onDismiss={onDismiss}
+                  dismissing={isAcknowledging(task.taskId)}
+                />
+              ))}
+            </>
           )}
         </div>
       )}
@@ -326,6 +367,7 @@ const ImportItem = memo(function ImportItem({
   onCancel,
   onDismiss,
   dismissing,
+  onResend,
 }: {
   task: TaskViewModel;
   onRetry: (taskId: string) => void;
@@ -333,6 +375,9 @@ const ImportItem = memo(function ImportItem({
   onCancel: (taskId: string) => void;
   onDismiss: (task: TaskViewModel) => void;
   dismissing: boolean;
+  /** Set only for a file the record still lists. The browser no longer holds
+   *  it, so the offer is to send it again from disk, not to retry. */
+  onResend?: (entryId: string) => void;
 }) {
   const { t } = useTranslation();
   const failed = task.state === "failed";
@@ -366,7 +411,19 @@ const ImportItem = memo(function ImportItem({
         // goes back to saying when.
         trailingSlot={TERMINAL_STATES.has(task.state) ? undefined : <ImportStepper task={task} />}
         actions={
-          retryable ? (
+          // Sending it again from disk: the only offer left once the browser no
+          // longer holds the file. Not for a cause re-sending cannot change.
+          onResend && !failure?.hopeless ? (
+            <Tooltip text={t("rework.imports.resend.action")}>
+              <IconButton
+                variant="icon"
+                size="small"
+                icon={{ category: "outlined", type: "upload_file" }}
+                aria-label={t("rework.imports.resend.action")}
+                onClick={() => onResend(task.taskId)}
+              />
+            </Tooltip>
+          ) : retryable ? (
             <Tooltip text={t("rework.imports.retry.action")}>
               <IconButton
                 variant="icon"
@@ -411,7 +468,7 @@ const ImportItem = memo(function ImportItem({
       {/* Only for a file the browser was still carrying: once the server has
           it, re-selecting it would import a second copy. A failure after the
           hand-off is relaunched from the document's own row. */}
-      {(failed || awaitingDecision) && !stillHeld && task.localOnly && (
+      {(failed || awaitingDecision) && !stillHeld && task.localOnly && !onResend && (
         <p className={styles.reselect}>{t("rework.imports.retry.unavailable")}</p>
       )}
       {failed && !stillHeld && !task.localOnly && !failure?.hopeless && (

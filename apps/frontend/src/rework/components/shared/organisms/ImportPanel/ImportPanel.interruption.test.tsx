@@ -106,7 +106,11 @@ beforeEach(() => {
 afterEach(leave);
 
 const text = () => container?.textContent ?? "";
-const byText = (label: string) => [...container!.querySelectorAll("button")].find((b) => b.textContent === label);
+/** The card's own controls are icon buttons, labelled either way. */
+const byLabel = (label: string) =>
+  [...container!.querySelectorAll("button")].filter(
+    (b) => b.getAttribute("title") === label || b.getAttribute("aria-label") === label,
+  );
 const sentNames = () => streamMock.mock.calls.flatMap((call) => (call[0] as File[]).map((f) => f.name));
 
 /** An import where one of the two files is received and the other never is —
@@ -140,7 +144,9 @@ describe("ImportPanel — an import cut off in the middle", () => {
     await importCutOff();
     reopenTheTab();
 
-    expect(text()).toContain("rework.imports.interrupted.title");
+    // Drawn as what it is — an import that failed — keeping the cause it was
+    // given rather than reducing every one of them to "did not arrive".
+    expect(text()).toContain("rework.imports.failure.noAnswer");
     expect(text()).toContain("lost.pdf");
     expect(text()).not.toContain("arrived.pdf");
   });
@@ -158,6 +164,9 @@ describe("ImportPanel — an import cut off in the middle", () => {
     streamMock.mockClear();
     streamMock.mockImplementation(async () => []);
 
+    act(() => {
+      byLabel("rework.imports.resend.action")[0]!.click();
+    });
     const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, "files", {
       value: [new File(["y"], "lost.pdf"), new File(["z"], "unrelated.pdf")],
@@ -192,6 +201,15 @@ describe("ImportPanel — an import cut off in the middle", () => {
     reopenTheTab();
     streamMock.mockClear();
 
+    // Each card asks for its own file, so what comes back answers for that
+    // entry alone.
+    const before = unfinishedImports();
+    const oneEntry = before.find((e) => e.filename === "one.pdf")!.entryId;
+    const twoEntry = before.find((e) => e.filename === "two.pdf")!.entryId;
+
+    act(() => {
+      byLabel("rework.imports.resend.action")[0]!.click();
+    });
     const input = container!.querySelector('input[type="file"]') as HTMLInputElement;
     Object.defineProperty(input, "files", { value: [new File(["x"], "one.pdf")] });
     await act(async () => {
@@ -200,10 +218,12 @@ describe("ImportPanel — an import cut off in the middle", () => {
     await act(async () => {});
 
     expect(sentNames()).toEqual(["one.pdf"]);
-    // The one picked is now a live entry below; the prompt keeps the other.
-    const prompt = container!.querySelector('[class*="interrupted"]')!.textContent ?? "";
-    expect(prompt).toContain("two.pdf");
-    expect(prompt).not.toContain("one.pdf");
+    // The entry the button belonged to is answered for — superseded by the run
+    // it started. The other is untouched, still owed, still offered.
+    const left = unfinishedImports().map((e) => e.entryId);
+    expect(left).not.toContain(oneEntry);
+    expect(left).toContain(twoEntry);
+    expect(text()).toContain("two.pdf");
   });
 
   it("gives up on the named files only, never on an import that is running", async () => {
@@ -220,10 +240,10 @@ describe("ImportPanel — an import cut off in the middle", () => {
     await act(async () => {});
 
     act(() => {
-      byText("rework.imports.interrupted.forget")!.click();
+      byLabel("rework.tasks.card.acknowledge")[0]!.click();
     });
 
-    // Only the prompt's own files are dropped; the running one is still
+    // Only the dismissed card's file is dropped; the running one is still
     // expected, so closing the tab now would still name it.
     expect(unfinishedImports().map((e) => e.filename)).toEqual(["fresh.pdf"]);
   });
@@ -233,7 +253,7 @@ describe("ImportPanel — an import cut off in the middle", () => {
     reopenTheTab();
 
     act(() => {
-      byText("rework.imports.interrupted.forget")!.click();
+      byLabel("rework.tasks.card.acknowledge")[0]!.click();
     });
 
     expect(text()).not.toContain("lost.pdf");
@@ -254,22 +274,84 @@ describe("ImportPanel — an import cut off in the middle", () => {
 
     visit();
 
-    expect(text()).not.toContain("rework.imports.interrupted.title");
+    expect(text()).not.toContain("rework.imports.failure.noAnswer");
+  });
+
+  it("says nothing at all when the browser cleared its storage", async () => {
+    await importCutOff();
+    // A browser set to wipe site data on close: the record is gone, and with
+    // it every trace of a file that never reached the server. There is nothing
+    // to show and nothing to act on — the panel must simply be empty.
+    leave();
+    window.localStorage.clear();
+    forgetCachedRecord();
+    store = makeStore();
+    visit();
+
+    expect(text()).toContain("rework.imports.panel.empty");
+    expect(text()).not.toContain("lost.pdf");
+  });
+
+  it("forgets an import nobody came back to", () => {
+    // A week on, an unfinished import is archaeology. Offering it back is
+    // noise, and a browser that never returns must not accumulate it.
+    const stale = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    window.localStorage.setItem(
+      "fred.imports.unfinished",
+      JSON.stringify([
+        {
+          entryId: "old",
+          filename: "forgotten.pdf",
+          teamId: "team-1",
+          uploadMode: "process",
+          requestMetadata: {},
+          notedAt: stale,
+        },
+        {
+          entryId: "new",
+          filename: "recent.pdf",
+          teamId: "team-1",
+          uploadMode: "process",
+          requestMetadata: {},
+          notedAt: Date.now(),
+        },
+      ]),
+    );
+    forgetCachedRecord();
+
+    expect(unfinishedImports().map((e) => e.filename)).toEqual(["recent.pdf"]);
+  });
+
+  it("offers no resend for a cause resending cannot change", () => {
+    window.localStorage.setItem(
+      "fred.imports.unfinished",
+      JSON.stringify([
+        {
+          entryId: "amb",
+          filename: "twice.pdf",
+          teamId: "team-1",
+          uploadMode: "process",
+          requestMetadata: {},
+          notedAt: Date.now(),
+          cause: "This folder holds more than one document named 'twice.pdf'.",
+        },
+      ]),
+    );
+    forgetCachedRecord();
+    visit();
+
+    expect(text()).toContain("rework.imports.failure.ambiguousName");
+    // Sending it again cannot change what the folder holds.
+    expect(byLabel("rework.imports.resend.action")).toHaveLength(0);
   });
 
   // The card turns up after a reload, out of any context that would explain
-  // it. Its four strings are the whole explanation, so a missing one leaves
-  // the user a raw key where the reason should be.
+  // it. Its cause and its one button are the whole explanation, so a missing
+  // string leaves the user a raw key where the reason should be.
   it.each(["fr", "en"])("explains itself in %s", (locale) => {
-    const card = (locale === "fr" ? fr : en).rework.imports.interrupted as Record<string, string>;
-    for (const key of ["title", "why", "resume", "forget"]) {
-      expect(card[key], `${locale}: no "${key}"`).toBeTruthy();
-    }
-    // Two buttons side by side in a panel that narrows to 280px: a long label
-    // wraps onto a second line and the row stops reading as a pair.
-    for (const key of ["resume", "forget"]) {
-      expect(card[key].length, `${locale}: "${key}" is too long for the row`).toBeLessThan(20);
-    }
+    const imports = (locale === "fr" ? fr : en).rework.imports;
+    expect((imports.failure as Record<string, string>).notSent, `${locale}: no cause`).toBeTruthy();
+    expect(imports.resend.action, `${locale}: no resend label`).toBeTruthy();
   });
 });
 

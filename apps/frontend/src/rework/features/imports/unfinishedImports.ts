@@ -30,6 +30,11 @@ const STORAGE_KEY = "fred.imports.unfinished";
  *  enough that a tab lost outside `pagehide` costs at most this much. */
 const FLUSH_DELAY_MS = 250;
 
+/** After this, an unfinished import is archaeology rather than something the
+ *  user meant to finish, and offering it back is noise. Dropped on read, so a
+ *  record left behind by a browser that never came back cannot pile up. */
+const RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export interface UnfinishedFile {
   /** The panel entry this file had. Identity is the entry, never the name: one
    *  import can carry the same leaf name to two folders, and striking off by
@@ -42,6 +47,12 @@ export interface UnfinishedFile {
   /** The destination and options the file was sent with, so picking it again
    *  sends it to the same place the same way. */
   requestMetadata: Record<string, unknown>;
+  /** Why it never got there, when we were told. Absent means the page went
+   *  away before anything could be said — which is its own kind of cause. */
+  cause?: string;
+  /** When the import was started, for `RECORD_TTL_MS`. Absent on a record
+   *  written before this field existed; those are kept, not dropped. */
+  notedAt?: number;
 }
 
 /** Storage can be unavailable (private window, blocked site data) and its
@@ -58,13 +69,15 @@ function read(): UnfinishedFile[] {
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]");
     if (!Array.isArray(parsed)) return (cache = []);
+    const cutoff = Date.now() - RECORD_TTL_MS;
     return (cache = parsed.filter(
       (entry): entry is UnfinishedFile =>
         typeof entry === "object" &&
         entry !== null &&
         typeof (entry as UnfinishedFile).entryId === "string" &&
         typeof (entry as UnfinishedFile).filename === "string" &&
-        typeof (entry as UnfinishedFile).requestMetadata === "object",
+        typeof (entry as UnfinishedFile).requestMetadata === "object" &&
+        ((entry as UnfinishedFile).notedAt ?? Infinity) > cutoff,
     ));
   } catch {
     return (cache = []);
@@ -139,11 +152,20 @@ export function unfinishedImports(): UnfinishedFile[] {
 export function noteImportStarted(files: UnfinishedFile[]): void {
   const current = read();
   const known = new Set(current.map((entry) => entry.entryId));
-  cache = [...current, ...files.filter((entry) => !known.has(entry.entryId))];
+  const notedAt = Date.now();
+  cache = [...current, ...files.filter((entry) => !known.has(entry.entryId)).map((entry) => ({ ...entry, notedAt }))];
   // Written through, not scheduled: the promise this record makes is that an
   // interruption two seconds in leaves the same trace as one at the very end.
   cancelFlush();
   persist(cache);
+}
+
+/** Note why a file never got there, keeping it listed. A failure is not an
+ *  arrival: the entry stays so the next visit can say what went wrong instead
+ *  of only that the file is missing. */
+export function noteImportFailed(entryId: string, cause: string): void {
+  cache = read().map((entry) => (entry.entryId === entryId ? { ...entry, cause } : entry));
+  scheduleFlush();
 }
 
 /** Strike a file off: it got there, or the user gave up on it. */
