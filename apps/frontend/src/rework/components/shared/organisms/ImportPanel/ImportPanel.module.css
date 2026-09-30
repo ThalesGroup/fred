@@ -110,12 +110,36 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2xs);
+  /* The body is laid out while the panel is still widening, so its text
+     reflows for as long as that takes — a name's ellipsis walking, the empty
+     line sliding. Held invisible for exactly that long: the reflow still
+     happens, nobody watches it, and what appears is already at its final
+     width. The delay reads the panel's own duration, so the two cannot drift
+     apart. */
+  animation: reveal-body var(--duration-short-3, 150ms) ease var(--duration-medium-1, 250ms) both;
   /* Tighter than the title above it: the cards carry their own border, and
      letting them run wider is what keeps them from reading as a narrow column
      in a wide panel. */
   padding: 0 var(--spacing-s) var(--panel-edge);
   min-height: 0;
   overflow-y: auto;
+}
+
+@keyframes reveal-body {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Asked for less motion: the wait would only be a blank panel. */
+@media (prefers-reduced-motion: reduce) {
+  .body {
+    animation: none;
+  }
 }
 
 /* Nothing to follow: the line sits in the middle of an empty column rather
