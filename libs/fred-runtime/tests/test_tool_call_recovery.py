@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -690,6 +691,114 @@ async def test_mixed_checkpoint_fragments_recover_two_calls(
     assert [
         (call["name"], call["args"]) for call in recovered.tool_calls
     ] == expected_calls
+
+
+@pytest.mark.asyncio
+async def test_repeated_exact_markers_recover_four_valid_calls() -> None:
+    args = [
+        {"sql": f"SELECT {index}", "dataset_uids": ["fake-dataset"]}
+        for index in range(1, 5)
+    ]
+    content: list[str | dict[str, Any]] = [
+        {"type": "thinking", "thinking": "<redacted>"},
+        {"type": "text", "text": "read"},
+        "_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": json.dumps(args[0])},
+        f" read_query{json.dumps(args[1])} read_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": json.dumps(args[2])},
+        f" read_query{json.dumps(args[3])}",
+    ]
+
+    response, _ = await _recover_message(
+        AIMessage(
+            content=content, response_metadata={"model_name": "mistral-medium-latest"}
+        ),
+        tools=[read_query],
+    )
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
+        ("read_query", item) for item in args
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_markers_obey_total_call_cap() -> None:
+    content: list[str | dict[str, object]] = [{"type": "text", "text": "read_query"}]
+    for index in range(17):
+        content.extend(
+            [
+                {"type": "reference", "reference_ids": []},
+                {
+                    "type": "text",
+                    "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'
+                    + (" read_query" if index < 16 else ""),
+                },
+            ]
+        )
+    original = AIMessage(
+        content=content,
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_query])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("between", "later_marker", "later_args"),
+    [
+        (
+            "",
+            {"type": "reference", "reference_ids": []},
+            '{"sql":"SELECT 2","dataset_uids":["fake"]}',
+        ),
+        (
+            " unknown_tool",
+            {"type": "reference", "reference_ids": []},
+            '{"sql":"SELECT 2","dataset_uids":["fake"]}',
+        ),
+        (
+            " read_query",
+            {"type": "reference", "reference_ids": ["citation"]},
+            '{"sql":"SELECT 2","dataset_uids":["fake"]}',
+        ),
+        (
+            " read_query",
+            {"type": "reference", "reference_ids": []},
+            '{"sql":,"dataset_uids":["fake"]}',
+        ),
+    ],
+    ids=["adjacent", "unknown_tool", "modified_reference", "invalid_later_json"],
+)
+async def test_invalid_later_marker_rejects_all_calls(
+    between: str, later_marker: dict[str, object], later_args: str
+) -> None:
+    original = AIMessage(
+        content=[
+            {"type": "text", "text": "read_query"},
+            {"type": "reference", "reference_ids": []},
+            {
+                "type": "text",
+                "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}' + between,
+            },
+            later_marker,
+            later_args,
+        ],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_query])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
 
 
 @pytest.mark.asyncio

@@ -6247,19 +6247,25 @@ the reconstructed provider content contains the exact empty typed sentinel
 `{"type":"reference","reference_ids":[]}` between a registered tool name
 and strict JSON arguments. The bounded content list may mix typed text blocks
 and plain string fragments; their original order and bytes are retained even
-when they split a tool name or JSON argument. Prose before, between, or after valid calls remains
-assistant content; the calls execute. Non-empty citation references, extra
-reference fields, literal exporter placeholders, duplicate JSON keys, unknown
-tools, schema-invalid arguments and over-cap representations remain assistant
-text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
-which carry reference IDs.
-Native tool calls, including duplicates, are preserved unchanged.
+when they split a tool name or JSON argument. A response may contain several
+exact sentinels when each follows a registered tool name and every resulting
+call validates. The whole candidate is rejected if a later marker or call is
+invalid. Prose before, between, or after valid calls remains assistant content;
+the calls execute. Non-empty citation references, extra reference fields,
+literal exporter placeholders, duplicate JSON keys, unknown tools,
+schema-invalid arguments and over-cap representations remain assistant text.
+The exact empty sentinel is distinct from ordinary cited-answer blocks, which
+carry reference IDs. Native tool calls, including duplicates and their IDs, are
+preserved unchanged.
 
 Recovery is bounded, validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
-marker and call syntax from assistant/reasoning SSE for the same mixed
-content shape. Only the longest suffix that remains a prefix of a registered
-tool name is held while the marker is unresolved; ordinary, unrecognized-block,
+marker and call syntax from assistant/reasoning SSE for the same mixed content
+shape. If a completed message already carries native calls and marked content,
+the bridge discards pending encoded syntax instead of publishing it as a Planning
+preamble; safe prose emitted before the tool-name probe is retained. Only
+the longest suffix that remains a prefix of a registered tool name is held
+while the marker is unresolved; ordinary, unrecognized-block,
 and non-Mistral text is released unchanged. Each completed
 representation is normalized at most once and then follows the normal tool
 route: existing limits run before HITL proposals, approved calls execute through

@@ -434,6 +434,105 @@ async def test_mixed_reference_chunk_is_withheld_from_react_stream(
 
 
 @pytest.mark.asyncio
+async def test_repeated_markers_are_withheld_until_completed_recovery() -> None:
+    content: list[str | dict[str, object]] = [
+        {"type": "text", "text": "read"},
+        "_query",
+        {"type": "reference", "reference_ids": []},
+        {
+            "type": "text",
+            "text": '{"sql":"SELECT 1","dataset_uids":["fake"]} read_query',
+        },
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": '{"sql":"SELECT 2","dataset_uids":["fake"]}'},
+    ]
+    recovered = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "recovered-1",
+                "name": "read_query",
+                "args": {"sql": "SELECT 1", "dataset_uids": ["fake"]},
+            },
+            {
+                "id": "recovered-2",
+                "name": "read_query",
+                "args": {"sql": "SELECT 2", "dataset_uids": ["fake"]},
+            },
+        ],
+        response_metadata={RECOVERED_TOOL_CALL_TEXT_METADATA_KEY: True},
+    )
+    events = [
+        ("messages", (AIMessageChunk(content=content), {})),
+        ("updates", {"agent": {"messages": [recovered]}}),
+    ]
+
+    collected = await _run_stream(events, available_tool_names={"read_query"})
+
+    assert not [
+        event.delta
+        for event in collected
+        if isinstance(event, (AssistantDeltaRuntimeEvent, ThoughtDeltaEvent))
+    ]
+    assert [
+        (event.call_id, event.tool_name)
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == [("recovered-1", "read_query"), ("recovered-2", "read_query")]
+
+
+@pytest.mark.asyncio
+async def test_native_call_with_marked_content_does_not_publish_call_syntax_as_planning() -> (
+    None
+):
+    native = AIMessage(
+        content=[
+            {"type": "text", "text": "list"},
+            "_tabular_documents",
+            {"type": "reference", "reference_ids": []},
+            {"type": "text", "text": "{} {}"},
+            " +++++ >>>>> I am a tool.",
+        ],
+        tool_calls=[{"id": "native-1", "name": "list_tabular_documents", "args": {}}],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+    events = [
+        ("messages", (AIMessageChunk(content="I will inspect the catalogue. "), {})),
+        ("messages", (AIMessageChunk(content=[{"type": "text", "text": "list"}]), {})),
+        ("messages", (AIMessageChunk(content=["_tabular_documents"]), {})),
+        (
+            "messages",
+            (AIMessageChunk(content=[{"type": "reference", "reference_ids": []}]), {}),
+        ),
+        ("messages", (AIMessageChunk(content=[{"type": "text", "text": "{} {}"}]), {})),
+        ("messages", (AIMessageChunk(content=[" +++++ >>>>> I am a tool."]), {})),
+        ("updates", {"agent": {"messages": [native]}}),
+    ]
+
+    collected = await _run_stream(
+        events, available_tool_names={"list_tabular_documents"}
+    )
+
+    assistant = "".join(
+        event.delta
+        for event in collected
+        if isinstance(event, AssistantDeltaRuntimeEvent)
+    )
+    planning = "".join(
+        event.delta for event in collected if isinstance(event, ThoughtDeltaEvent)
+    )
+    assert "list_tabular_documents" not in assistant + planning
+    assert "+++++" not in assistant + planning
+    assert "I am a tool" not in assistant + planning
+    assert "I will inspect the catalogue." in planning
+    assert [
+        (event.call_id, event.tool_name)
+        for event in collected
+        if isinstance(event, ToolCallRuntimeEvent)
+    ] == [("native-1", "list_tabular_documents")]
+
+
+@pytest.mark.asyncio
 async def test_capability_only_tool_name_is_withheld_from_react_stream() -> None:
     recovered = AIMessage(
         content="",

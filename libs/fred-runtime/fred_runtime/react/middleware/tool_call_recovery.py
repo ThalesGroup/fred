@@ -97,17 +97,32 @@ def recovery_text_fragment(block: object) -> str | None:
     return None
 
 
+def _trailing_registered_name(
+    text: str, tools_by_name: dict[str, BaseTool]
+) -> str | None:
+    matching_names = [
+        name
+        for name in tools_by_name
+        if len(name) <= MAX_TOOL_CALL_RECOVERY_NAME_CHARS
+        and text.endswith(name)
+        and (len(text) == len(name) or text[-len(name) - 1] not in _TOOL_NAME_CHARS)
+    ]
+    return max(matching_names, key=len) if matching_names else None
+
+
 def _anchored_text(
     content: object, tools_by_name: dict[str, BaseTool]
-) -> tuple[str, str, str] | None:
+) -> tuple[str, list[tuple[str, str]]] | None:
     if not isinstance(content, list):
         return None
     if len(content) > _MAX_RECOVERY_BLOCKS:
         return None
 
     before: list[str] = []
-    after: list[str] = []
-    seen_reference = False
+    segment: list[str] = []
+    segments: list[tuple[str, str]] = []
+    marked_name: str | None = None
+    preamble = ""
     text_chars = 0
     for block in content:
         text = recovery_text_fragment(block)
@@ -115,35 +130,34 @@ def _anchored_text(
             text_chars += len(text)
             if text_chars > MAX_TOOL_CALL_RECOVERY_CHARS:
                 return None
-            (after if seen_reference else before).append(text)
+            (segment if marked_name is not None else before).append(text)
         elif (
             isinstance(block, dict)
             and block.get("type") == "thinking"
-            and not seen_reference
+            and marked_name is None
         ):
             continue
-        elif is_tool_call_recovery_reference_block(block) and not seen_reference:
-            seen_reference = True
+        elif is_tool_call_recovery_reference_block(block):
+            if marked_name is None:
+                before_text = "".join(before)
+                marked_name = _trailing_registered_name(before_text, tools_by_name)
+                if marked_name is None:
+                    return None
+                preamble = before_text[: -len(marked_name)]
+            else:
+                current = "".join(segment)
+                next_name = _trailing_registered_name(current, tools_by_name)
+                if next_name is None:
+                    return None
+                segments.append((marked_name, current[: -len(next_name)]))
+                marked_name = next_name
+                segment = []
         else:
             return None
-    if not seen_reference or not before or not after:
+    if marked_name is None or not segment:
         return None
-
-    before_text = "".join(before)
-    matching_names = [
-        name
-        for name in tools_by_name
-        if len(name) <= MAX_TOOL_CALL_RECOVERY_NAME_CHARS
-        and before_text.endswith(name)
-        and (
-            len(before_text) == len(name)
-            or before_text[-len(name) - 1] not in _TOOL_NAME_CHARS
-        )
-    ]
-    if not matching_names:
-        return None
-    first_name = max(matching_names, key=len)
-    return before_text[: -len(first_name)], first_name, "".join(after).strip()
+    segments.append((marked_name, "".join(segment)))
+    return preamble, segments
 
 
 def _parse_sequence(
@@ -151,7 +165,10 @@ def _parse_sequence(
     *,
     first_name: str,
     tools_by_name: dict[str, BaseTool],
-) -> tuple[list[ToolCall], str] | None:
+    max_calls: int,
+) -> tuple[list[tuple[str, dict[str, Any]]], str] | None:
+    if max_calls < 1:
+        return None
     parsed: list[tuple[str, dict[str, Any]]] = []
     retained: list[str] = []
     position = 0
@@ -192,21 +209,13 @@ def _parse_sequence(
         if next_call is None:
             retained.append(text[position:])
             break
-        if len(parsed) >= _MAX_RECOVERED_CALLS:
+        if len(parsed) >= max_calls:
             return None
         name, args, start, end = next_call
         retained.append(text[position:start])
         parsed.append((name, args))
         position = end
-    calls = [
-        tool_call(
-            name=name,
-            args=args,
-            id=f"recovered-{uuid.uuid4().hex}",
-        )
-        for name, args in parsed
-    ]
-    return calls, "".join(retained)
+    return parsed, "".join(retained)
 
 
 def _recover_calls(
@@ -215,16 +224,26 @@ def _recover_calls(
     anchored = _anchored_text(content, tools_by_name)
     if anchored is None:
         return None
-    preamble, first_name, call_text = anchored
-    parsed = _parse_sequence(
-        call_text,
-        first_name=first_name,
-        tools_by_name=tools_by_name,
-    )
-    if parsed is None:
-        return None
-    calls, retained = parsed
-    return (preamble + retained).strip(), calls
+    preamble, segments = anchored
+    parsed_calls: list[tuple[str, dict[str, Any]]] = []
+    retained: list[str] = []
+    for first_name, segment in segments:
+        parsed = _parse_sequence(
+            segment.lstrip(),
+            first_name=first_name,
+            tools_by_name=tools_by_name,
+            max_calls=_MAX_RECOVERED_CALLS - len(parsed_calls),
+        )
+        if parsed is None:
+            return None
+        calls, remaining = parsed
+        parsed_calls.extend(calls)
+        retained.append(remaining)
+    native_calls = [
+        tool_call(name=name, args=args, id=f"recovered-{uuid.uuid4().hex}")
+        for name, args in parsed_calls
+    ]
+    return (preamble + "".join(retained)).strip(), native_calls
 
 
 class ToolCallTextRecoveryMiddleware(AgentMiddleware):
