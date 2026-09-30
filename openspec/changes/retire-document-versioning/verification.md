@@ -97,7 +97,7 @@ were real and all three are fixed:
 - **`add_tag_id_to_document` has no name-collision guard**, unlike
   `rename_document`. That is what keeps the ambiguous import state reachable. It
   is a behaviour change of its own and does not belong in a removal change —
-  worth its own issue.
+  filed as #2877.
 - **Vector chunks keep their own copy of the document name** and the migration
   does not rewrite it, the same best-effort treatment the in-app rename gives it.
   A renamed document may be cited under its old name until re-vectorized.
