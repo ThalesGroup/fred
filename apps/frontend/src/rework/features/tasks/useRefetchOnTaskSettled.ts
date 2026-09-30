@@ -42,6 +42,12 @@ import { makeSelectSettledTargetsOfType, type SettledTarget } from "./taskSlice"
  * row keeps rendering from the retained task, so there is nothing to refetch.
  * Each task fires its callback once for the lifetime of the mount, so a task
  * already settled before mount triggers a single catch-up refetch.
+ *
+ * That catch-up is handed out after the mount commit, never inside it — the
+ * same hazard `useNotifyOnNewTaskTarget` documents: React runs a child's
+ * effects before its parent's, so refetching a PARENT's query from inside the
+ * mount commit reaches an instance that has not subscribed yet, and RTK Query
+ * throws "Cannot refetch a query that has not been started yet".
  */
 export function useRefetchOnTaskSettled(targetType: string, onSettled: (targetId: string) => void): void {
   const selectSettled = useMemo(() => makeSelectSettledTargetsOfType(targetType), [targetType]);
@@ -57,11 +63,22 @@ export function useRefetchOnTaskSettled(targetType: string, onSettled: (targetId
   const handledRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    for (const { taskId, targetId } of settled) {
-      if (handledRef.current.has(taskId)) continue;
-      handledRef.current.add(taskId);
-      onSettledRef.current(targetId);
-    }
+    // Queued during the effect pass, so it runs once that whole pass is over
+    // and every query on the page — parents included — has started.
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      for (const { taskId, targetId } of settled) {
+        if (handledRef.current.has(taskId)) continue;
+        handledRef.current.add(taskId);
+        onSettledRef.current(targetId);
+      }
+    });
+    // Nothing is marked handled until it is actually handed out, so a run
+    // superseded by a newer set — or by unmounting — loses nothing.
+    return () => {
+      cancelled = true;
+    };
   }, [settled]);
 }
 
