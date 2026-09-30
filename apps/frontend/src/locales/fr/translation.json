@@ -1525,8 +1525,9 @@
       },
       "interrupted": {
         "forget": "Abandonner",
-        "resume": "Les sélectionner à nouveau",
-        "title": "Ces fichiers ne sont pas arrivés"
+        "resume": "Les sélectionner",
+        "title": "Import interrompu",
+        "why": "Ces fichiers ne sont jamais arrivés jusqu'à Fred. Sélectionnez-les à nouveau pour finir l'import."
       },
       "conflict": {
         "question": "Un document de ce nom existe déjà dans ce dossier.",

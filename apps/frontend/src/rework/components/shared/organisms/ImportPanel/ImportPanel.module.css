@@ -163,9 +163,30 @@
   font: var(--font-label-medium);
 }
 
+.interruptedWhy {
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
 .interruptedNames {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
   overflow-wrap: anywhere;
+}
+
+/* Not the conflict card's `.decision`, which carries margins of its own: here
+   the box's padding is the only inset, so the buttons' text lines up with the
+   title above once their own leading padding is pulled back. */
+.interruptedActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2xs);
+  margin-inline-start: calc(-1 * var(--spacing-xs));
+}
+
+/* Two short labels side by side; neither may break across lines. */
+.interruptedActions button {
+  white-space: nowrap;
 }

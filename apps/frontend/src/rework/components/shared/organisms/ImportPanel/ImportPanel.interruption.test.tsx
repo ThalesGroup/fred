@@ -132,6 +132,9 @@ async function importCutOff() {
   });
 }
 
+import en from "../../../../../locales/en/translation.json";
+import fr from "../../../../../locales/fr/translation.json";
+
 describe("ImportPanel — an import cut off in the middle", () => {
   it("names the files that did not arrive, and only those", async () => {
     await importCutOff();
@@ -252,6 +255,21 @@ describe("ImportPanel — an import cut off in the middle", () => {
     visit();
 
     expect(text()).not.toContain("rework.imports.interrupted.title");
+  });
+
+  // The card turns up after a reload, out of any context that would explain
+  // it. Its four strings are the whole explanation, so a missing one leaves
+  // the user a raw key where the reason should be.
+  it.each(["fr", "en"])("explains itself in %s", (locale) => {
+    const card = (locale === "fr" ? fr : en).rework.imports.interrupted as Record<string, string>;
+    for (const key of ["title", "why", "resume", "forget"]) {
+      expect(card[key], `${locale}: no "${key}"`).toBeTruthy();
+    }
+    // Two buttons side by side in a panel that narrows to 280px: a long label
+    // wraps onto a second line and the row stops reading as a pair.
+    for (const key of ["resume", "forget"]) {
+      expect(card[key].length, `${locale}: "${key}" is too long for the row`).toBeLessThan(20);
+    }
   });
 });
 

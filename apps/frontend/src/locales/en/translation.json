@@ -1524,9 +1524,10 @@
         "tooLate": "This file is already on its way and can no longer be cancelled."
       },
       "interrupted": {
-        "forget": "Give up on them",
-        "resume": "Pick them again",
-        "title": "These files did not arrive"
+        "forget": "Give up",
+        "resume": "Pick them",
+        "title": "Import interrupted",
+        "why": "These files never reached Fred. Pick them again to finish the import."
       },
       "conflict": {
         "question": "A document of this name is already in this folder.",

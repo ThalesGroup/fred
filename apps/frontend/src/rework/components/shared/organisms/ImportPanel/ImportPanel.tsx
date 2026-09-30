@@ -264,10 +264,13 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
           {missing.length > 0 && (
             <div className={styles.interrupted}>
               <p className={styles.interruptedTitle}>{t("rework.imports.interrupted.title")}</p>
+              {/* The title says what happened; this says what it means for the
+                  files and what the two buttons are for. */}
+              <p className={styles.interruptedWhy}>{t("rework.imports.interrupted.why")}</p>
               {/* Named, because "some files did not arrive" is not something
                   anyone can act on. */}
               <p className={styles.interruptedNames}>{missing.map((entry) => entry.filename).join(", ")}</p>
-              <div className={styles.decision}>
+              <div className={styles.interruptedActions}>
                 <Button variant="text" size="small" color="primary" onClick={() => resumeInput.current?.click()}>
                   {t("rework.imports.interrupted.resume")}
                 </Button>
