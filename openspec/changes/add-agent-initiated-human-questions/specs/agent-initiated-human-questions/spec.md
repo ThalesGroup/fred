@@ -1,8 +1,4 @@
-## Purpose
-
-Lets an interactive ReAct or Deep agent ask its user a question during a turn, receive a choice or text answer, and continue that same turn without confusing the question with tool approval.
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 

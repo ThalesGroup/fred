@@ -12,7 +12,7 @@
 - [x] 2.3 Persist skipped answers as HITL response rows and preserve choice-plus-comment fields; verify history reload finds no pending question after a skip.
 - [x] 2.4 Exercise real compiled ReAct and Deep turns for choice, text, choice plus comment, skip, and sibling questions sharing an interrupt id; verify each result reaches the correct `ToolMessage` and the turn continues.
 
-- [ ] 2.5 Bound `ask_user` to four agent-selected choices in its schema and tool guidance; reject longer calls before pausing without truncation. Verify the schema and validation at final PR verification.
+- [x] 2.5 Bound `ask_user` to four agent-selected choices in its schema and tool guidance; reject longer calls before pausing without truncation. Verify the schema and validation at final PR verification.
 
 ## 3. Managed chat
 
@@ -22,13 +22,15 @@
 - [x] 3.4 Keep a pending question answerable when the toggle changes during its pause, and render a skipped response after reload; verify managed-chat resume and history-reconstruction tests.
 - [x] 3.5 Regenerate runtime and control-plane OpenAPI clients from backend sources; verify generated-file diffs and frontend typecheck.
 
-- [ ] 3.6 Render optional choice descriptions beneath labels in the same HITL button, preserving the single-line treatment when absent; verify with a managed chat example and focused component coverage.
+- [x] 3.6 Render optional choice descriptions beneath labels in the same HITL button, preserving the single-line treatment when absent; verify with a managed chat example and focused component coverage.
 
-- [ ] 3.7 Show accepted answers immediately below their `ask_user` tool line, and show the offered choices with the selected one highlighted in the tool drawer; verify choice labels, text, comments, skip, and reload after manual UI validation.
+- [x] 3.7 Show accepted answers immediately below their `ask_user` tool line, and show the offered choices with the selected one highlighted in the tool drawer; verify choice labels, text, comments, skip, and reload after manual UI validation.
 
 ## 4. Documentation and release verification
 
 - [x] 4.1 Amend the runtime and control-plane product contracts, update `COMPONENT-UX.md`, and add the required English operator migration note; verify each document describes the shipped behavior and rollback order.
 - [x] 4.2 Focused tests and root `make code-quality` passed. Root `make test` was interrupted externally during control-plane tests; every module completed successfully through that run or a separate full module run (control plane: 1,428 passed; knowledge flow: 1,461 passed; frontend: 2,984 passed).
 - [ ] 4.3 Performance review found only one additional async checkpoint read on authenticated HITL resumes, with no blocking work or new shared state. Independent correctness review remains for the draft PR.
-- [ ] 4.4 Delta spec is synced to the main spec and `openspec validate --strict` passes. Confirm the draft PR and archive after merge.
+- [x] 4.4 Delta spec is synced to the main spec and `openspec validate --strict` passes.
+- [x] 4.5 Add no-LLM Graph test assistant examples for confirmation, choice, text, and choice with comment; verify pause and resume with focused tests.
+- [ ] 4.6 Confirm the draft PR and archive after merge.
