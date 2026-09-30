@@ -6,7 +6,7 @@
 ## 2. Protect Runtime Execution URLs
 
 - [x] 2.1 Validate canonical root-relative `ingress_prefix` values in control-plane configuration and test accepted and rejected forms, including network-path, traversal, encoded separators, query, and fragment cases.
-- [ ] 2.2 Regenerate control-plane and chart configuration schemas, update the runtime configuration migration note, and verify the generated schemas and documented examples agree with the validator.
+- [x] 2.2 Regenerate control-plane and chart configuration schemas, update the runtime configuration migration note, and verify the generated schemas and documented examples agree with the validator.
 - [x] 2.3 Add a shared frontend preparation-URL guard at all bearer-authenticated runtime fetch sites, update contract fixtures, and run the focused pipeline and chat SSE tests with malicious URL cases.
 
 ## 3. Secure Tabular SQL
