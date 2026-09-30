@@ -29,7 +29,7 @@
     "@fontsource/inter": "^5.2.6",
     "@fontsource/roboto": "^5.1.0",
     "@lezer/highlight": "^1.2.3",
-    "@mdxeditor/editor": "^4.2.3",
+    "@mdxeditor/editor": "^4.3.1",
     "@reduxjs/toolkit": "^2.1.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.2",
