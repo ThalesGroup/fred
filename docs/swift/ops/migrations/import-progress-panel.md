@@ -27,9 +27,12 @@ now closes the dialog immediately and the transfer carries on behind it, in a
 panel beside the documents table on the team Resources page. The panel opens
 itself when an import hands off, folds back into a rail, and can be resized.
 
-Per file it distinguishes the transfer from the analysis, and only the ingestion
-task's own success marks a document as ready — the end of the transfer no longer
-does. A failed file stays listed with its cause put into the reader's language,
+Per file it shows the four phases an import goes through — the browser's
+transfer, then preparation, content extraction and indexing on the server — as
+markers beside the name of the phase under way, and only the ingestion task's
+own success marks a document as ready; the end of the transfer no longer does.
+No percentage is shown anywhere: the server reports named phases, not
+fractions. A failed file stays listed with its cause put into the reader's language,
 and can be sent again while the browser still holds it. A name taken by someone
 else during the import is now asked as a question in the panel (**Replace** /
 **Skip**) instead of ending the import with a notification telling the user to
@@ -45,9 +48,11 @@ nothing is outstanding.
 ## Validation
 
 Import several files into a team folder: the dialog closes at once and the panel
-lists every file from the start, showing the transfer and then the analysis.
-Close the tab during a large import and reopen the Resources page: the panel
-names the files that never arrived and offers to pick them again.
+lists every file from the start, ticking off each phase as it completes.
+Navigate to another page mid-import and return to Resources: the page reopens
+normally and the panel picks the imports back up. Close the tab during a large
+import and reopen the Resources page: the panel names the files that never
+arrived and offers to pick them again.
 
 ## Rollback
 

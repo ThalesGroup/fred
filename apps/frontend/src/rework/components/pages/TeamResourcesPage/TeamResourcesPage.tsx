@@ -232,16 +232,12 @@ export default function TeamResourcesPage() {
             <DocumentWorkspace
               teamId={teamId}
               isPersonalTeam={isPersonalTeam}
-              // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
-              // catch-up fire on mount for any task target already in the
-              // store — in the same commit where activeTab just switched to
-              // "resources", DocumentWorkspace (child) mounts and can run this
-              // effect before these queries' own subscribing effects (parent)
-              // have dispatched their initial fetch, since React flushes child
-              // effects before parent effects. Calling .refetch() on a query
-              // that was never started throws and takes down the whole app.
-              // Safe to just skip in that case — the query's own mount fetch
-              // is already about to run.
+              // These guards are only about a query that is genuinely off:
+              // corpusStats is skipped while the stats panel is closed, and a
+              // skipped query has nothing to refetch. They say nothing about
+              // whether a started query is ready — useNotifyOnNewTaskTarget is
+              // what keeps its callers out of the mount commit, where refetch()
+              // throws.
               onDocumentsChanged={() => {
                 if (!corpusStats.isUninitialized) void corpusStats.refetch();
                 if (!teamUninitialized) void refetchTeam();
