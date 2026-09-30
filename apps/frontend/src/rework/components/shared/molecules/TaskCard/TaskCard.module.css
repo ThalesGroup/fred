@@ -16,11 +16,11 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-2xs);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container);
-  padding: var(--spacing-xs) var(--spacing-s);
+  padding: var(--spacing-2xs) var(--spacing-s) var(--spacing-xs);
   min-width: 0;
 }
 
