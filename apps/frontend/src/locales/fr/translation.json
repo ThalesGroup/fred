@@ -2191,6 +2191,7 @@
         "notAllowed": "Vous n'avez pas le droit d'importer dans ce dossier.",
         "preparation": "La préparation de ce fichier a échoué.",
         "quotaExceeded": "L'espace de stockage de l'équipe est plein.",
+        "quotaExceededPersonal": "L'espace de stockage est plein.",
         "quotaUnknown": "L'espace disponible n'a pas pu être vérifié. À réessayer.",
         "serverUnavailable": "Le serveur n'a pas répondu.",
         "ambiguousName": "Ce dossier contient déjà deux documents de ce nom. Supprimez le doublon avant de réimporter.",
@@ -2940,6 +2941,7 @@
       },
       "importStage": {
         "upload": "Envoi du fichier",
+        "uploadDone": "Envoi terminé",
         "analysis": "Analyse du document"
       },
       "ingestionStep": {

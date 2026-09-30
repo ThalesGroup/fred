@@ -100,4 +100,10 @@ describe("importFailure", () => {
       hopeless: true,
     });
   });
+
+  it("does not blame a team for a personal space being full", () => {
+    const error = "Storage quota exceeded for personal space: limit is 1000 bytes, current usage is 999 bytes.";
+
+    expect(importFailure({ error, stage: "upload" }, t).summary).toBe("rework.imports.failure.quotaExceededPersonal");
+  });
 });

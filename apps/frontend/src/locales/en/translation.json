@@ -2191,6 +2191,7 @@
         "notAllowed": "You are not allowed to import into this folder.",
         "preparation": "Preparing this file failed.",
         "quotaExceeded": "The team's storage is full.",
+        "quotaExceededPersonal": "Your storage is full.",
         "quotaUnknown": "Available storage could not be checked. Worth retrying.",
         "serverUnavailable": "The server did not answer.",
         "ambiguousName": "This folder already holds two documents of that name. Remove the duplicate before importing again.",
@@ -2940,6 +2941,7 @@
       },
       "importStage": {
         "upload": "Sending the file",
+        "uploadDone": "Upload complete",
         "analysis": "Analysing the document"
       },
       "ingestionStep": {

@@ -40,4 +40,12 @@ describe("importPhaseLabel", () => {
     // The panel asks the question itself; a phase name would talk over it.
     expect(importPhaseLabel(task({ stage: "decision", state: "pending" }), t)).toBeNull();
   });
+
+  it("says the file was sent, not ingested, when nothing was going to ingest it", () => {
+    // Upload-only mode never hands the file to the server's half. Calling that
+    // "ingestion complete" claimed something that never happened.
+    expect(importPhaseLabel(task({ stage: "upload", state: "succeeded" }), t)).toBe(
+      "rework.tasks.importStage.uploadDone",
+    );
+  });
 });

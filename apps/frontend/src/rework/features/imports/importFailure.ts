@@ -41,6 +41,9 @@ const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean }[] = [
   // version). Nothing the user can do from here changes that, so it is named
   // rather than left to the generic "the upload failed".
   { pattern: /more than one document named/i, key: "ambiguousName", hopeless: true },
+  // The backend names whose space it refused; only the team wording would be
+  // wrong on a personal one, so that case is matched before the general form.
+  { pattern: /quota exceeded for personal space/i, key: "quotaExceededPersonal" },
   { pattern: /storage quota exceeded/i, key: "quotaExceeded" },
   { pattern: /quota cannot be verified/i, key: "quotaUnknown" },
   { pattern: /no fast text processor|unsupported|not supported/i, key: "unsupportedType" },

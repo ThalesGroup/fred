@@ -85,7 +85,10 @@ export function importPhaseLabel(task: PhaseInput, t: TFunction): string | null 
   if (task.stage === "decision") return null;
   const index = importPhaseIndex(task);
   // Past the last phase: the file is in, and saying so is the last thing the
-  // card has to say before it goes.
-  if (index >= IMPORT_PHASES.length) return t("rework.tasks.ingestionStep.done");
+  // card has to say before it goes. Except in upload-only mode, which never
+  // hands the file to the server's half — there is no ingestion to report.
+  if (index >= IMPORT_PHASES.length) {
+    return t(task.stage === "upload" ? "rework.tasks.importStage.uploadDone" : "rework.tasks.ingestionStep.done");
+  }
   return t(PHASE_LABEL[IMPORT_PHASES[index]]);
 }
