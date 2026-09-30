@@ -293,7 +293,7 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
         {/* No tooltip: the button sits at the panel's own edge, where a hint
             covers what it is about to reveal. The label is on the button. */}
         <IconButton
-          variant={expanded ? "tonal" : "icon"}
+          variant="icon"
           size="small"
           // Open, the arrow points back the way the panel folds.
           icon={{ category: "outlined", type: expanded ? "keyboard_arrow_right" : "download" }}
