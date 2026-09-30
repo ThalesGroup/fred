@@ -684,7 +684,7 @@ async def test_compiled_deep_parent_executes_mixed_mistral_calls() -> None:
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"'},
         'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
-        'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
+        + 'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
     ]
     middleware = deep_mod._build_deepagent_runtime_middleware(
         tracer=None,

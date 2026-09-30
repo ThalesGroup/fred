@@ -1416,7 +1416,7 @@ async def test_mixed_mistral_fragments_execute_and_pair_two_calls() -> None:
         {"type": "reference", "reference_ids": []},
         {"type": "text", "text": '{"sql":"'},
         'SELECT COUNT(*) FROM fake_fleet","dataset_uids":["fake"]} '
-        'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
+        + 'read_query{"sql":"SELECT COUNT(*) FROM fake_vehicles","dataset_uids":["fake"]}',
     ]
     model = RecordingModel(
         script=[

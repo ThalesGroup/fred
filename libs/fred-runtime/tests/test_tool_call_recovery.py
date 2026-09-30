@@ -631,8 +631,8 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"sql": "'},
                 'SELECT COUNT(*) FROM fake_fleet", "dataset_uids": ["fake-dataset"]} '
-                'read_query{"sql": "SELECT COUNT(*) FROM fake_vehicles", '
-                '"dataset_uids": ["fake-dataset"]}',
+                + 'read_query{"sql": "SELECT COUNT(*) FROM fake_vehicles", '
+                + '"dataset_uids": ["fake-dataset"]}',
             ],
             [
                 (
@@ -659,7 +659,7 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
                 {"type": "reference", "reference_ids": []},
                 {"type": "text", "text": '{"question": "'},
                 'fleet size", "top_k": 5} '
-                'search_documents_using_vectorization{"question": "rental fleet", "top_k": 5}',
+                + 'search_documents_using_vectorization{"question": "rental fleet", "top_k": 5}',
             ],
             [
                 (
