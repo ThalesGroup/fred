@@ -46,8 +46,9 @@ vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserId: () => "alice" },
 }));
 
+const translate = vi.hoisted(() => (key: string) => key);
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({ t: translate, i18n: { language: "en" } }),
 }));
 
 // Reactive stand-in for react-router-dom's useSearchParams: bindSessionId
@@ -1542,6 +1543,48 @@ describe("useManagedChat — session write reliability", () => {
       undefined,
       false,
     );
+  });
+
+  it("blocks new turns while an agent question is pending and during its resume", async () => {
+    let resolveResume: (reached: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));
+    mount();
+    bindSession("session-1");
+    const question = {
+      ...awaitingHumanEvent,
+      payload: { ...awaitingHumanEvent.payload, stage: "agent_question" },
+    };
+    act(() => {
+      latest.setInput("next message");
+      capturedOnAwaitingHuman?.(question);
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+      await latest.runCommand({ text: "command body", command: { command: "test" } });
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+
+    act(() => latest.handleHitlAnswer(undefined, undefined, true));
+    rerender();
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.resumingAgentQuestionSessionId).toBe("session-1");
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveResume(true);
+      await Promise.resolve();
+    });
+    rerender();
+    expect(latest.resumingAgentQuestionSessionId).toBeNull();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
   });
 
   it("restores the HITL prompt when the resume never reached the backend", async () => {

@@ -55,6 +55,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const [input, setInput] = useState("");
   const submittedDraftRef = useRef<{ sessionId: string; draft: string } | null>(null);
   const [pendingHitl, setPendingHitl] = useState<RuntimeAwaitingHumanEvent | null>(null);
+  const [resumingAgentQuestionSessionId, setResumingAgentQuestionSessionId] = useState<string | null>(null);
+  const hitlResumeOwnerRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
   const autoApprovalAttemptedRef = useRef(new Set<string>());
   const [hitlFreeText, setHitlFreeText] = useState("");
   // Identifies the HITL prompt that owns `hitlFreeText`. A resume can settle
@@ -543,7 +545,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
       );
-      if ((!text && !attachmentContext) || waitResponse || attachments.hasUploadingAttachments || inputTooLong) {
+      const awaitingAgentQuestion =
+        (pendingHitl?.session_id === sessionId && pendingHitl.payload.stage === "agent_question") ||
+        (sessionId !== null &&
+          hitlResumeOwnerRef.current?.session_id === sessionId &&
+          hitlResumeOwnerRef.current.payload.stage === "agent_question");
+      if (
+        (!text && !attachmentContext) ||
+        waitResponse ||
+        awaitingAgentQuestion ||
+        attachments.hasUploadingAttachments ||
+        inputTooLong
+      ) {
         console.debug(
           `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
@@ -639,6 +652,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       inputCharacterCount,
       inputTooLong,
       waitResponse,
+      pendingHitl,
       sessionId,
       buildTurnContext,
       composer.bindSession,
@@ -669,7 +683,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const handleHitlAnswer = useCallback(
     (answer: string | boolean | undefined, freeText?: string, skipped = false, rememberApproval = false) => {
-      if (!pendingHitl) return;
+      if (!pendingHitl || hitlResumeOwnerRef.current === pendingHitl) return;
       if (
         freeText !== undefined &&
         maxChatInputChars !== undefined &&
@@ -678,6 +692,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         return;
       }
       const prompt = pendingHitl;
+      hitlResumeOwnerRef.current = prompt;
+      if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(prompt.session_id);
       const draftOwner = hitlDraftOwnerRef.current;
       setPendingHitl(null);
       // Restore the prompt when the resume never reached the backend: the
@@ -742,6 +758,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         .catch((err) => {
           console.error("[useManagedChat] HITL resume rejected; restoring the prompt", err);
           restoreIfStillWanted();
+        })
+        .finally(() => {
+          if (hitlResumeOwnerRef.current !== prompt) return;
+          hitlResumeOwnerRef.current = null;
+          if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(null);
         });
     },
     [agentInstanceId, maxChatInputChars, pendingHitl, sendHitlResume, showError, t],
@@ -863,6 +884,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     inputTooLong,
     maxChatInputChars,
     pendingHitl,
+    resumingAgentQuestionSessionId,
     hitlFreeText,
     setHitlFreeText,
     selectedLibraryIds: composer.selectedLibraryIds,
