@@ -27,7 +27,7 @@ import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
-import { isTraceChannel, textOf, uiPartsOf } from "../../../utils/traceUtils";
+import { isTraceChannel, textOf, toolCallId, uiPartsOf } from "../../../utils/traceUtils";
 import { hitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
 
 function hitlRequestPart(m: ChatMessage): HitlRequestPart | undefined {
@@ -266,9 +266,23 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     const resolvedCallIds = new Set(
       traceMessages.flatMap((m) => m.parts.flatMap((p) => (p.type === "tool_result" ? [p.call_id] : []))),
     );
+    const traceCallIds = new Set(traceMessages.map(toolCallId).filter(Boolean));
+    const hitlAnswerSummariesByCallId: Record<string, ReturnType<typeof hitlAnswerSummary>> = {};
     for (const { request: hitlReqMsg, response: hitlRespMsg } of pairHitlHistory(msgs)) {
       const requestPart = hitlRequestPart(hitlReqMsg);
       const pairId = requestPart?.occurrence_id ?? String(hitlReqMsg.rank);
+      if (
+        requestPart?.stage === "agent_question" &&
+        hitlRespMsg &&
+        requestPart.occurrence_id &&
+        traceCallIds.has(requestPart.occurrence_id)
+      ) {
+        hitlAnswerSummariesByCallId[requestPart.occurrence_id] = hitlAnswerSummary(
+          requestPart,
+          hitlResponsePart(hitlRespMsg)!,
+        );
+        continue;
+      }
       // An unanswered trailing request is live state reconstructed below the
       // thread, not a second read-only copy of the same prompt.
       if (!(isLast && !hitlRespMsg) && !(requestPart?.stage === "agent_question" && hitlRespMsg)) {
@@ -360,6 +374,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         text: finalMessages.map((m) => textOf(m)).join(""),
         isStreaming: isStreaming && isLast,
         traceMessages,
+        hitlAnswerSummariesByCallId,
         sources,
         uiParts,
         tokenUsage,

@@ -16,6 +16,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { HitlAnswerSummary } from "@rework/utils/hitlAnswerSummary";
 import type { TraceRow, TraceSummary } from "../../../../utils/traceUtils";
 import {
   formatLatencyMs,
@@ -23,6 +24,7 @@ import {
   traceEntryKey,
   traceRows,
   traceSummary,
+  toolCallId,
 } from "../../../../utils/traceUtils";
 import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
 import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
@@ -35,6 +37,7 @@ interface ThoughtTraceProps {
   done?: boolean;
   /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
   pendingToolCallIds?: readonly string[] | null;
+  hitlAnswerSummariesByCallId?: Record<string, HitlAnswerSummary>;
 }
 
 /**
@@ -65,7 +68,12 @@ function useSummaryLabel(summary: TraceSummary): string {
 /** Stable empty identity, so the collapsed memo never yields a new array. */
 const EMPTY_ROWS: TraceRow[] = [];
 
-export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: ThoughtTraceProps) {
+export function ThoughtTrace({
+  messages,
+  done = false,
+  pendingToolCallIds,
+  hitlAnswerSummariesByCallId,
+}: ThoughtTraceProps) {
   const { t } = useTranslation();
   // Memoized: this fold runs on every streamed delta, and the page re-renders
   // for reasons of its own on top of that.
@@ -109,6 +117,9 @@ export function ThoughtTrace({ messages, done = false, pendingToolCallIds }: Tho
                 entry={entry}
                 index={index}
                 pendingToolCallIds={pendingToolCallIds}
+                hitlAnswerSummary={
+                  entry.kind === "combo" ? hitlAnswerSummariesByCallId?.[toolCallId(entry.call)] : undefined
+                }
               />
             ),
           )}

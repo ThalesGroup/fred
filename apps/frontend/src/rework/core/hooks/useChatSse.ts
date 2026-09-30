@@ -1262,6 +1262,62 @@ export function useChatSse(
           ac.signal,
           () => {
             acceptedByRuntime = true;
+            if (agentQuestion) {
+              // The SSE resume does not emit HITL history rows. Mirror the accepted
+              // answer now; a later history load replaces these with persisted rows.
+              const occurrenceId = hitlPayload?.occurrence_id ?? null;
+              const sameOccurrence = (message: ChatMessage) =>
+                message.session_id === sessionId &&
+                message.exchange_id === exchangeId &&
+                (message.parts?.[0] as { occurrence_id?: string | null } | undefined)?.occurrence_id === occurrenceId;
+              let next = messagesRef.current;
+              let rank = next.reduce((max, message) => Math.max(max, message.rank), 0) + 1;
+              const timestamp = new Date().toISOString();
+              if (!next.some((message) => message.channel === "hitl_request" && sameOccurrence(message))) {
+                next = upsertOne(next, {
+                  session_id: sessionId,
+                  exchange_id: exchangeId,
+                  rank: rank++,
+                  timestamp,
+                  role: "system",
+                  channel: "hitl_request",
+                  parts: [
+                    {
+                      type: "hitl_request",
+                      question: hitlPayload.question ?? "",
+                      title: hitlPayload.title ?? null,
+                      stage: "agent_question",
+                      choices: (hitlPayload.choices ?? []).map((choice) => ({ id: choice.id, label: choice.label })),
+                      free_text: hitlPayload.free_text ?? false,
+                      occurrence_id: occurrenceId,
+                      interrupt_id: hitlPayload.interrupt_id ?? null,
+                      pending_calls: hitlPayload.pending_calls ?? [],
+                    },
+                  ],
+                });
+              }
+              if (!next.some((message) => message.channel === "hitl_response" && sameOccurrence(message))) {
+                next = upsertOne(next, {
+                  session_id: sessionId,
+                  exchange_id: exchangeId,
+                  rank,
+                  timestamp,
+                  role: "user",
+                  channel: "hitl_response",
+                  parts: [
+                    {
+                      type: "hitl_response",
+                      choice_id: hasChoices && typeof answer === "string" ? answer : null,
+                      text: exactFreeText ?? null,
+                      skipped,
+                      occurrence_id: occurrenceId,
+                    },
+                  ],
+                });
+              }
+              messagesRef.current = next;
+              setMessages([...next]);
+            }
             onAccepted?.();
           },
         );

@@ -13,9 +13,9 @@
   overflow-wrap: anywhere;
 }
 
-.inDrawer {
-  align-self: stretch;
-  width: 100%;
+.inTrace {
+  align-self: flex-start;
+  width: min(100%, 30rem);
 }
 
 .question,
@@ -45,7 +45,8 @@
     width: min(90%, 30rem);
   }
 
-  .inDrawer {
-    width: 100%;
+  .inTrace {
+    align-self: flex-start;
+    width: min(100%, 30rem);
   }
 }

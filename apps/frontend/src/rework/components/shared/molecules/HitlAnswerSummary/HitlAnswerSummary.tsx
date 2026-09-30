@@ -18,14 +18,14 @@ import styles from "./HitlAnswerSummary.module.css";
 
 interface HitlAnswerSummaryProps {
   summary: Summary;
-  inDrawer?: boolean;
+  inTrace?: boolean;
 }
 
-export function HitlAnswerSummary({ summary, inDrawer = false }: HitlAnswerSummaryProps) {
+export function HitlAnswerSummary({ summary, inTrace = false }: HitlAnswerSummaryProps) {
   const { t } = useTranslation();
   return (
     <div
-      className={`${styles.card} ${inDrawer ? styles.inDrawer : ""}`}
+      className={`${styles.card} ${inTrace ? styles.inTrace : ""}`}
       role="group"
       aria-label={t("rework.hitlPrompt.answerSummary")}
     >

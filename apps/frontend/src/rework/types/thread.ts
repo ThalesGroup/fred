@@ -53,6 +53,7 @@ export interface ThreadMessage {
   hitlTitle?: string | null;
   hitlSkipped?: boolean;
   hitlAnswerSummary?: HitlAnswerSummary;
+  hitlAnswerSummariesByCallId?: Record<string, HitlAnswerSummary>;
   /** Set when the turn was launched by a prompt command. The transcript then
    *  renders the command instead of `text` — which stays the full assembled
    *  text, since that is what replays to the model. */

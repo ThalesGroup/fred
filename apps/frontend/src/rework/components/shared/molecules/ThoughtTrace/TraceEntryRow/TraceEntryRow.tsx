@@ -23,6 +23,8 @@ import {
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
+import { HitlAnswerSummary } from "../../HitlAnswerSummary/HitlAnswerSummary";
+import type { HitlAnswerSummary as Summary } from "@rework/utils/hitlAnswerSummary";
 import styles from "./TraceEntryRow.module.css";
 
 interface TraceEntryRowProps {
@@ -31,13 +33,14 @@ interface TraceEntryRowProps {
   index?: number | null;
   /** call_ids of every tool call currently gated behind an unanswered HITL prompt, if any — see statusForEntry(). */
   pendingToolCallIds?: readonly string[] | null;
+  hitlAnswerSummary?: Summary;
 }
 
 function DotStatus({ status }: { status: TraceStatus }) {
   return <span className={`${styles.dot} ${styles[`dot_${status}`]}`} aria-label={status} />;
 }
 
-export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: TraceEntryRowProps) {
+export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAnswerSummary }: TraceEntryRowProps) {
   const { t } = useTranslation();
   const { openTrace } = useTraceDrawer();
   const status = statusForEntry(entry, pendingToolCallIds);
@@ -61,10 +64,10 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
 
   return (
     <div
-      className={styles.row}
+      className={`${styles.row} ${hitlAnswerSummary ? styles.hasAnswer : ""}`}
       role="button"
       tabIndex={0}
-      aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}`}
+      aria-label={`${index !== null ? `${index}. ` : ""}${label}${primary ? `: ${primary}` : ""}${hitlAnswerSummary ? `. ${hitlAnswerSummary.question}: ${hitlAnswerSummary.skipped ? t("rework.hitlPrompt.skipped") : (hitlAnswerSummary.answer ?? "")}` : ""}`}
       onClick={() => openTrace(entry)}
       onKeyDown={(e) => e.key === "Enter" && openTrace(entry)}
     >
@@ -101,6 +104,11 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds }: Trace
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}
       {secondary && !isCancelled && <span className={styles.secondary}>{secondary}</span>}
+      {hitlAnswerSummary && (
+        <div className={styles.answerWrap}>
+          <HitlAnswerSummary summary={hitlAnswerSummary} inTrace />
+        </div>
+      )}
     </div>
   );
 }

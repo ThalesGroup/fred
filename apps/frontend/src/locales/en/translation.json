@@ -1679,6 +1679,7 @@
     },
     "hitlPrompt": {
       "answerSummary": "Question and answer",
+      "selected": "Selected",
       "skipped": "Skipped",
       "accepted": "Accepted",
       "refused": "Refused"

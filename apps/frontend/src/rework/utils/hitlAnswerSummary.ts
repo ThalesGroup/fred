@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { ChatMessage, HitlRequestPart, HitlResponsePart } from "../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, HitlRequestPart, HitlResponsePart, ToolCallPart } from "../../slices/runtime/runtimeOpenApi";
 
 export interface HitlAnswerSummary {
   question: string;
   answer: string | null;
   comment: string | null;
   skipped: boolean;
+  choiceId: string | null;
+  choices: Array<{ id: string; label: string; description?: string | null }>;
 }
 
 export function hitlAnswerSummary(request: HitlRequestPart, response: HitlResponsePart): HitlAnswerSummary {
@@ -31,18 +33,17 @@ export function hitlAnswerSummary(request: HitlRequestPart, response: HitlRespon
     answer: choiceLabel ?? response.text ?? null,
     comment: choiceLabel ? (response.text ?? null) : null,
     skipped: response.skipped === true,
+    choiceId: choiceId ?? null,
+    choices: request.choices,
   };
 }
 
-export function hitlAnswerSummaryForTool(
-  messages: ChatMessage[],
-  sessionId: string,
-  exchangeId: string,
-  callId: string,
-): HitlAnswerSummary | null {
+export function hitlAnswerSummaryForTool(messages: ChatMessage[], call: ChatMessage): HitlAnswerSummary | null {
+  const toolCall = call.parts?.[0] as ToolCallPart | undefined;
+  const callId = toolCall?.call_id;
   if (!callId) return null;
   const sameExchange = messages.filter(
-    (message) => message.session_id === sessionId && message.exchange_id === exchangeId,
+    (message) => message.session_id === call.session_id && message.exchange_id === call.exchange_id,
   );
   const request = sameExchange.find((message) => {
     const part = message.parts?.[0] as HitlRequestPart | undefined;
@@ -53,5 +54,17 @@ export function hitlAnswerSummaryForTool(
     return message.channel === "hitl_response" && part?.occurrence_id === callId;
   });
   if (!request || !response) return null;
-  return hitlAnswerSummary(request.parts[0] as HitlRequestPart, response.parts[0] as HitlResponsePart);
+  const summary = hitlAnswerSummary(request.parts[0] as HitlRequestPart, response.parts[0] as HitlResponsePart);
+  const authoredChoices = toolCall?.args?.choices;
+  if (!Array.isArray(authoredChoices)) return summary;
+  return {
+    ...summary,
+    choices: summary.choices.map((choice) => {
+      const authored = authoredChoices.find((candidate) => candidate?.id === choice.id);
+      return {
+        ...choice,
+        description: typeof authored?.description === "string" ? authored.description : undefined,
+      };
+    }),
+  };
 }

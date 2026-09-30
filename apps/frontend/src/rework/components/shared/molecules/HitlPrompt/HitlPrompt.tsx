@@ -88,8 +88,8 @@ export function HitlPrompt({
         return Renderer ? <Renderer key={call.tool_call_id || call.tool_name} call={call} /> : null;
       })}
 
-      {/* Answered questions hide their choices — the answer is already written into the
-          chat as the turn right after this card, so a disabled button row would be redundant. */}
+      {/* Read-only prompts hide choices; answered agent questions show their
+          result under the matching tool line instead. */}
       {!readonly && payload.choices && payload.choices.length > 0 && (
         <div className={styles.choices}>
           {payload.choices.map((c) => {

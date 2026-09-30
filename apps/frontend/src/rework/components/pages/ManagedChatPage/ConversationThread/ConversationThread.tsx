@@ -118,6 +118,7 @@ export const ConversationThread = memo(function ConversationThread({
             key={msg.id}
             text={msg.text}
             traceMessages={msg.traceMessages}
+            hitlAnswerSummariesByCallId={msg.hitlAnswerSummariesByCallId}
             sources={msg.sources}
             uiParts={msg.uiParts}
             tokenUsage={msg.tokenUsage}
