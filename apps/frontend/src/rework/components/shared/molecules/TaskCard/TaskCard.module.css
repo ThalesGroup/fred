@@ -17,7 +17,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container);
   padding: var(--spacing-xs) var(--spacing-s);
@@ -29,6 +29,18 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
+  /* The toolbar's buttons are 2rem tall against a ~20px line: reserving their
+     height here is what keeps the card from growing when one appears. */
+  min-height: 2rem;
+}
+
+/* One block, no space between its buttons — they are one control group, not
+   two unrelated affordances. */
+.toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
 }
 
 .filename {
@@ -36,13 +48,15 @@
   min-width: 0;
   overflow: hidden;
   color: var(--on-surface);
-  font: var(--font-label-medium);
+  font: var(--font-body-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Last in the card: the bar reads as the card's own baseline rather than as a
+   row between the name and the step it describes. */
 .progressRow {
-  padding: var(--spacing-3xs) 0;
+  margin-top: var(--spacing-3xs);
 }
 
 .footer {
@@ -53,12 +67,13 @@
   min-height: 16px;
 }
 
+/* Colour comes from the state, inline: the same one the bar below is drawn in,
+   so the words and the bar say one thing. */
 .stepText {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
+  font: var(--font-label-large);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

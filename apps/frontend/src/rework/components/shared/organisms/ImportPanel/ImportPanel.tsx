@@ -33,7 +33,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { makeSelectImportTasks, selectImportPanelOpenRequest } from "../../../../features/tasks/taskSlice";
+import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
 import { stepLabel } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
@@ -230,7 +230,11 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
                   // would be offered again as "did not arrive" on every visit.
                   releaseHeldImport(task.taskId);
                   noteImportSettled(task.taskId);
+                  // The server still gets its acknowledgement, but the entry
+                  // goes now rather than lingering for the tray's eviction
+                  // window: dismissing it here means being done with it.
                   void acknowledge(task.taskId, task.kind, task.localOnly);
+                  dispatch(taskEvicted(task.taskId));
                 }}
                 dismissing={isAcknowledging(task.taskId)}
               />

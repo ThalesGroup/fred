@@ -92,3 +92,31 @@ describe("TaskCard ack affordance visibility", () => {
     expect(html).not.toContain("rework.tasks.card.acknowledge");
   });
 });
+
+describe("TaskCard layout", () => {
+  it("leads with the state's colour, then the name", () => {
+    const html = renderToStaticMarkup(<TaskCard task={vm({ state: "running", step: "processing" })} />);
+
+    // The dot is what tells the state apart at a glance; it belongs at the
+    // start of the line the name is on, not after it.
+    expect(html.indexOf('role="img"')).toBeLessThan(html.indexOf("report.pdf"));
+  });
+
+  it("puts the progress bar at the bottom, under everything it describes", () => {
+    const html = renderToStaticMarkup(<TaskCard task={vm({ state: "running", step: "processing" })} />);
+
+    expect(html.indexOf("rework.tasks.time.justNow")).toBeLessThan(html.indexOf("progressbar"));
+  });
+
+  it("keeps the dismiss button in a toolbar that is there whether or not it is", () => {
+    // The buttons are twice the line's height: a row that sized itself would
+    // jolt the card every time one appeared.
+    const quiet = renderToStaticMarkup(<TaskCard task={vm({ state: "running" })} />);
+    const acting = renderToStaticMarkup(
+      <TaskCard task={vm({ state: "failed", acknowledgedAt: null })} onAcknowledge={vi.fn()} />,
+    );
+
+    expect(quiet).toContain("toolbar");
+    expect(acting).toContain("toolbar");
+  });
+});

@@ -168,6 +168,9 @@ describe("ImportPanel — a failed file", () => {
     // Otherwise it comes back as "did not arrive" on every later visit, long
     // after the user said they were done with it.
     expect(unfinishedImports()).toEqual([]);
+    // And it goes now, rather than lingering for the tray's eviction window:
+    // dismissing it means being done with it.
+    expect(container.querySelector('[class*="card"]')).toBeNull();
   });
 
   it("asks for the file again instead of offering a retry that cannot work", () => {

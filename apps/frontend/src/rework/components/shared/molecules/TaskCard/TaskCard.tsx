@@ -16,7 +16,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
-import { relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
+import { STATE_COLOR, relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -67,32 +67,33 @@ export function TaskCard({ task, statusText, statusDetail, actions, onAcknowledg
   return (
     <div className={styles.card} data-state={task.state}>
       <div className={styles.header}>
+        {/* The state reads as a colour before it reads as anything else, so it
+            leads the line the name is on. */}
+        <TaskStateBadge state={task.state} showLabel={false} size="sm" />
         <span className={styles.filename} title={displayName}>
           {truncate(displayName)}
         </span>
-        <TaskStateBadge state={task.state} showLabel={false} size="sm" />
-        {actions}
-        {needsAttention && (
-          <IconButton
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "close" }}
-            onClick={onAcknowledge}
-            disabled={acknowledging}
-            title={t("rework.tasks.card.acknowledge")}
-          />
-        )}
-      </div>
-
-      {!isTerminal && (
-        <div className={styles.progressRow}>
-          <TaskProgressBar state={task.state} progress={task.progress} />
+        {/* Always present, even empty: the buttons are twice the line's height,
+            so letting the row size itself would jolt the card every time one
+            appeared. */}
+        <div className={styles.toolbar}>
+          {actions}
+          {needsAttention && (
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "close" }}
+              onClick={onAcknowledge}
+              disabled={acknowledging}
+              title={t("rework.tasks.card.acknowledge")}
+            />
+          )}
         </div>
-      )}
+      </div>
 
       <div className={styles.footer}>
         {statusText ? (
-          <span className={styles.stepText}>
+          <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
             {statusDetail ? (
               <Tooltip content={<span className={styles.errorTooltip}>{statusDetail}</span>}>
                 <span>{statusText}</span>
@@ -112,7 +113,9 @@ export function TaskCard({ task, statusText, statusDetail, actions, onAcknowledg
             </Tooltip>
           </span>
         ) : task.step ? (
-          <span className={styles.stepText}>{stepLabel(task, t)}</span>
+          <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
+            {stepLabel(task, t)}
+          </span>
         ) : null}
         {task.warnings && task.warnings.length > 0 && (
           <div className={styles.warningGroup}>
@@ -142,6 +145,12 @@ export function TaskCard({ task, statusText, statusDetail, actions, onAcknowledg
         )}
         <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>
       </div>
+
+      {!isTerminal && (
+        <div className={styles.progressRow}>
+          <TaskProgressBar state={task.state} progress={task.progress} />
+        </div>
+      )}
     </div>
   );
 }
