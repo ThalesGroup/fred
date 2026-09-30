@@ -16,7 +16,7 @@ security:
     realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
     client_id: FRED_AGENTIC_CLIENT_ID
     scope: api://fred-api/.default
-    secret_env_var: ENTRA_AGENTIC_CLIENT_SECRET
+    secret_env_var: ENTRA_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (environment variable name only)
   delegation:
     act_for_people: true
     caller_roles_claim: [roles]

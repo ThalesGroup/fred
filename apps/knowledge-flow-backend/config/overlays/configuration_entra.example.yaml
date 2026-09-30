@@ -16,7 +16,7 @@ security:
     realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
     client_id: FRED_KNOWLEDGE_FLOW_CLIENT_ID
     scope: api://fred-api/.default
-    secret_env_var: ENTRA_KNOWLEDGE_FLOW_CLIENT_SECRET
+    secret_env_var: ENTRA_KNOWLEDGE_FLOW_CLIENT_SECRET # pragma: allowlist secret (environment variable name only)
   delegation:
     accept_delegated_calls: true
     caller_roles_claim: [roles]
