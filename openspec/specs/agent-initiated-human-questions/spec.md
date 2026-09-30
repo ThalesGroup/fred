@@ -6,7 +6,7 @@ Lets an interactive ReAct or Deep agent ask its user a question during a turn, r
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent when the conversation enables agent questions. The tool SHALL accept a question, zero or more single-choice options, and whether free text is allowed. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent when the conversation enables agent questions. The tool SHALL accept a question, zero to four single-choice options, and whether free text is allowed. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
@@ -30,6 +30,16 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 
 - **WHEN** an agent asks a question with multiple choices
 - **THEN** managed chat displays them in their given order, one per centered row
+
+#### Scenario: Too many options
+
+- **WHEN** an agent calls `ask_user` with more than four choices
+- **THEN** the call fails validation before pausing and no choices are silently removed
+
+#### Scenario: Choice descriptions in managed chat
+
+- **WHEN** a choice has a description
+- **THEN** managed chat shows it beneath the label inside the same selectable choice
 
 #### Scenario: Invalid question form
 

@@ -23,6 +23,10 @@ Add a platform `ask_user` spec to `ReActRuntimeToolResolver` only when `RuntimeC
 
 The alternative of a capability-owned question tool would require every agent author to opt in and would not deliver the epic's default availability. A second tool binder for Deep would risk parity drift.
 
+### Bound and describe choices
+
+`AskUserArgs.choices` has a maximum of four entries. Its model-facing schema and tool description ask the agent to select the most relevant options before calling; a longer call fails validation before any pause, rather than dropping choices. The limit belongs to `ask_user`, not the shared human-input request used by other HITL flows. Managed chat renders each optional choice description below its label within the same selectable button; buttons grow to fit the text.
+
 ### Use one answer shape for the tool and Graph helper
 
 The resumed value is an object with `choice_id`, `text`, or `skipped: true`. The tool returns a stable JSON result: `{"status":"answered","choice_id":...,"text":...}` with absent values omitted, or `{"status":"skipped"}`. It validates the selected id against its own offered options and never turns typed text into an option id. A shared SDK parser yields a typed answer; Graph's existing `choice_step()` remains a compatibility wrapper returning `str | None`, while a new helper exposes the complete answer for new Graph callers. Existing bare-string Graph resumes remain readable.

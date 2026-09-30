@@ -12,6 +12,8 @@
 - [x] 2.3 Persist skipped answers as HITL response rows and preserve choice-plus-comment fields; verify history reload finds no pending question after a skip.
 - [x] 2.4 Exercise real compiled ReAct and Deep turns for choice, text, choice plus comment, skip, and sibling questions sharing an interrupt id; verify each result reaches the correct `ToolMessage` and the turn continues.
 
+- [ ] 2.5 Bound `ask_user` to four agent-selected choices in its schema and tool guidance; reject longer calls before pausing without truncation. Verify the schema and validation at final PR verification.
+
 ## 3. Managed chat
 
 - [x] 3.1 Emit the platform-owned `ask_user_toggle` in control-plane execution preparation with its default on; verify the control-plane preparation test and absent-control compatibility.
@@ -19,6 +21,8 @@
 - [x] 3.3 Extend the existing HITL prompt to submit a choice with optional comment, show skip and a matching close action only for agent questions, and lay out choices vertically; verify component and resume-payload tests, including input length and keyboard behavior.
 - [x] 3.4 Keep a pending question answerable when the toggle changes during its pause, and render a skipped response after reload; verify managed-chat resume and history-reconstruction tests.
 - [x] 3.5 Regenerate runtime and control-plane OpenAPI clients from backend sources; verify generated-file diffs and frontend typecheck.
+
+- [ ] 3.6 Render optional choice descriptions beneath labels in the same HITL button, preserving the single-line treatment when absent; verify with a managed chat example and focused component coverage.
 
 ## 4. Documentation and release verification
 

@@ -5,6 +5,7 @@ The modern ReAct and Deep runtimes can pause for tool approval, but an agent can
 ## What Changes
 
 - Add one platform `ask_user` tool for a single choice, free text, or a choice with a comment. Its answer returns to the calling agent as a tool result so the same turn continues.
+- Limit agent-authored questions to four selected choices without truncating longer calls, and show each optional choice description beneath its label in managed chat.
 - Offer the tool only to an interactive conversation whose platform chat control enables it. The control starts enabled, can be switched off per conversation, and is absent from noninteractive execution.
 - Let a person skip a question. The tool returns an explicit unanswered result so the agent can continue without inventing an answer.
 - Prove that ReAct and Deep share the same tool behavior and that multiple questions in one turn retain their distinct occurrence identities. Align Graph `choice_step()` with the enriched response shape while preserving its existing callers.
