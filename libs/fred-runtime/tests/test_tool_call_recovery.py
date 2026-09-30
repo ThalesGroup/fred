@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -43,6 +44,13 @@ def read_query(sql: str, dataset_uids: list[str]) -> str:
     """Read fake tabular rows."""
 
     return "fake rows"
+
+
+@tool
+def search_documents_using_vectorization(question: str, top_k: int) -> str:
+    """Search fake documents."""
+
+    return "fake hits"
 
 
 @tool
@@ -87,7 +95,14 @@ def send_email(to: str) -> str:
     return f"sent to {to}"
 
 
-_ALL_TOOLS: list[BaseTool] = [read_query, list_tabular_documents, task, ls, write_todos]
+_ALL_TOOLS: list[BaseTool] = [
+    read_query,
+    search_documents_using_vectorization,
+    list_tabular_documents,
+    task,
+    ls,
+    write_todos,
+]
 
 
 def _structured_call_content(
@@ -448,13 +463,20 @@ async def test_deeply_nested_json_remains_assistant_text(
             '{"path":"/"}' + ('ls{"path":"/"}' * 16),
         ),
         [
+            {"type": "text", "text": "ls"},
+            {"type": "reference", "reference_ids": []},
+            {"type": "text", "text": '{"path":"'},
+            "x" * 16_385,
+            '"}',
+        ],
+        [
             *({"type": "thinking", "thinking": "x"} for _ in range(255)),
             {"type": "text", "text": "ls"},
             {"type": "reference", "reference_ids": []},
             {"type": "text", "text": '{"path":"/"}'},
         ],
     ],
-    ids=["character_cap", "call_cap", "block_cap"],
+    ids=["character_cap", "call_cap", "mixed_character_cap", "block_cap"],
 )
 async def test_recovery_caps_reject_before_creating_calls(
     content: str | list[str | dict[Any, Any]],
@@ -599,6 +621,257 @@ async def test_reconstructed_incidents_recover_every_complete_call_once(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("content", "expected_calls"),
+    [
+        (
+            [
+                {"type": "thinking", "thinking": "<redacted>"},
+                {"type": "text", "text": "read"},
+                "_query",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"sql": "'},
+                'SELECT COUNT(*) FROM fake_fleet", "dataset_uids": ["fake-dataset"]} '
+                + 'read_query{"sql": "SELECT COUNT(*) FROM fake_vehicles", '
+                + '"dataset_uids": ["fake-dataset"]}',
+            ],
+            [
+                (
+                    "read_query",
+                    {
+                        "sql": "SELECT COUNT(*) FROM fake_fleet",
+                        "dataset_uids": ["fake-dataset"],
+                    },
+                ),
+                (
+                    "read_query",
+                    {
+                        "sql": "SELECT COUNT(*) FROM fake_vehicles",
+                        "dataset_uids": ["fake-dataset"],
+                    },
+                ),
+            ],
+        ),
+        (
+            [
+                {"type": "thinking", "thinking": "<redacted>"},
+                {"type": "text", "text": "search"},
+                "_documents_using_vectorization",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"question": "'},
+                'fleet size", "top_k": 5} '
+                + 'search_documents_using_vectorization{"question": "rental fleet", "top_k": 5}',
+            ],
+            [
+                (
+                    "search_documents_using_vectorization",
+                    {"question": "fleet size", "top_k": 5},
+                ),
+                (
+                    "search_documents_using_vectorization",
+                    {"question": "rental fleet", "top_k": 5},
+                ),
+            ],
+        ),
+    ],
+    ids=["mixed_tabular_query", "mixed_vector_search"],
+)
+async def test_mixed_checkpoint_fragments_recover_two_calls(
+    content: list[str | dict[str, Any]],
+    expected_calls: list[tuple[str, dict[str, object]]],
+) -> None:
+    response, _ = await _recover_message(
+        AIMessage(
+            content=content, response_metadata={"model_name": "mistral-medium-latest"}
+        )
+    )
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [
+        (call["name"], call["args"]) for call in recovered.tool_calls
+    ] == expected_calls
+
+
+@pytest.mark.asyncio
+async def test_repeated_exact_markers_recover_four_valid_calls() -> None:
+    args = [
+        {"sql": f"SELECT {index}", "dataset_uids": ["fake-dataset"]}
+        for index in range(1, 5)
+    ]
+    content: list[str | dict[str, Any]] = [
+        {"type": "thinking", "thinking": "<redacted>"},
+        {"type": "text", "text": "read"},
+        "_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": json.dumps(args[0])},
+        f" read_query{json.dumps(args[1])} read_query",
+        {"type": "reference", "reference_ids": []},
+        {"type": "text", "text": json.dumps(args[2])},
+        f" read_query{json.dumps(args[3])}",
+    ]
+
+    response, _ = await _recover_message(
+        AIMessage(
+            content=content, response_metadata={"model_name": "mistral-medium-latest"}
+        ),
+        tools=[read_query],
+    )
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [(call["name"], call["args"]) for call in recovered.tool_calls] == [
+        ("read_query", item) for item in args
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_markers_obey_total_call_cap() -> None:
+    content: list[str | dict[str, object]] = [{"type": "text", "text": "read_query"}]
+    for index in range(17):
+        content.extend(
+            [
+                {"type": "reference", "reference_ids": []},
+                {
+                    "type": "text",
+                    "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'
+                    + (" read_query" if index < 16 else ""),
+                },
+            ]
+        )
+    original = AIMessage(
+        content=content,
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_query])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("between", "later_marker", "later_args"),
+    [
+        (
+            "",
+            {"type": "reference", "reference_ids": []},
+            '{"sql":"SELECT 2","dataset_uids":["fake"]}',
+        ),
+        (
+            " unknown_tool",
+            {"type": "reference", "reference_ids": []},
+            '{"sql":"SELECT 2","dataset_uids":["fake"]}',
+        ),
+        (
+            " read_query",
+            {"type": "reference", "reference_ids": ["citation"]},
+            '{"sql":"SELECT 2","dataset_uids":["fake"]}',
+        ),
+        (
+            " read_query",
+            {"type": "reference", "reference_ids": []},
+            '{"sql":,"dataset_uids":["fake"]}',
+        ),
+    ],
+    ids=["adjacent", "unknown_tool", "modified_reference", "invalid_later_json"],
+)
+async def test_invalid_later_marker_rejects_all_calls(
+    between: str, later_marker: dict[str, object], later_args: str
+) -> None:
+    original = AIMessage(
+        content=[
+            {"type": "text", "text": "read_query"},
+            {"type": "reference", "reference_ids": []},
+            {
+                "type": "text",
+                "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}' + between,
+            },
+            later_marker,
+            later_args,
+        ],
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[read_query])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "model_name"),
+    [
+        (
+            [
+                {"type": "text", "text": "read"},
+                "_query",
+                {"type": "reference", "reference_ids": [], "title": "example"},
+                {"type": "text", "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'},
+            ],
+            "mistral-medium-latest",
+        ),
+        (
+            [
+                {"type": "text", "text": "read"},
+                "_query",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"sql":'},
+                ',"dataset_uids":["fake"]}',
+            ],
+            "mistral-medium-latest",
+        ),
+        (
+            [
+                {"type": "text", "text": "read"},
+                "_query",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"sql":"SELECT 1",'},
+                '"dataset_uids":["fake"],"unexpected":1}',
+            ],
+            "mistral-medium-latest",
+        ),
+        (
+            [
+                {"type": "text", "text": "Example: read"},
+                '_query{"sql":"SELECT 1","dataset_uids":["fake"]}',
+            ],
+            "mistral-medium-latest",
+        ),
+        (
+            [
+                {"type": "text", "text": "read"},
+                "_query",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'},
+            ],
+            "gpt-5",
+        ),
+    ],
+    ids=[
+        "modified_reference",
+        "malformed_json",
+        "schema_invalid",
+        "ordinary_text",
+        "other_provider",
+    ],
+)
+async def test_invalid_mixed_fragments_do_not_recover(
+    content: list[str | dict[str, Any]], model_name: str
+) -> None:
+    original = AIMessage(content=content, response_metadata={"model_name": model_name})
+
+    response, _ = await _recover_message(original, tools=[read_query])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("content", "model_name"),
     [
         (
@@ -673,7 +946,12 @@ async def test_native_duplicate_calls_are_preserved_exactly() -> None:
         {"name": "ls", "args": {"path": "/"}, "id": "call-2"},
     ]
     original = AIMessage(
-        content="",
+        content=[
+            {"type": "text", "text": "read"},
+            "_query",
+            {"type": "reference", "reference_ids": []},
+            {"type": "text", "text": '{"sql":"SELECT 1","dataset_uids":["fake"]}'},
+        ],
         tool_calls=native_calls,
         response_metadata={"model_name": "mistral-medium-latest"},
     )
@@ -732,9 +1010,13 @@ async def test_recovered_call_reaches_the_existing_hitl_gate(
 ) -> None:
     response, _ = await _recover_message(
         AIMessage(
-            content=_structured_call_content(
-                "send_email", '{"to": "person@example.invalid"}'
-            ),
+            content=[
+                {"type": "text", "text": "send"},
+                "_email",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"to":"'},
+                'person@example.invalid"}',
+            ],
             response_metadata={"model_name": "mistral-medium-latest"},
         ),
         tools=[send_email],
@@ -775,7 +1057,13 @@ async def test_recovered_call_reaches_the_existing_hitl_gate(
 async def test_recovered_call_reaches_the_existing_run_budget() -> None:
     response, _ = await _recover_message(
         AIMessage(
-            content=_structured_call_content("ls", '{"path": "/"}'),
+            content=[
+                {"type": "text", "text": "l"},
+                "s",
+                {"type": "reference", "reference_ids": []},
+                {"type": "text", "text": '{"path":"'},
+                '/"}',
+            ],
             response_metadata={"model_name": "mistral-medium-latest"},
         )
     )
