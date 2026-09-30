@@ -97,7 +97,7 @@ class _InProcessAgentInvoker(AgentInvokerPort):
 def _binding(*, session_id: str, instance_id: str | None) -> BoundRuntimeContext:
     return BoundRuntimeContext(
         runtime_context=RuntimeContext(
-            session_id=session_id, user_id="u1", team_id="t1"
+            session_id=session_id, user_id="u1", team_id="t1", ask_user=True
         ),
         portable_context=PortableContext(
             request_id="r1",
@@ -204,8 +204,10 @@ async def test_no_llm_hitl_examples_pause_and_resume(
     session = f"s-{prompt.replace(' ', '-')}"
     paused = await driver.send(session, prompt)
     awaiting = next(
-        event for event in paused.events if event.get("kind") == "awaiting_human"
+        (event for event in paused.events if event.get("kind") == "awaiting_human"),
+        None,
     )
+    assert awaiting is not None, f"Expected HITL pause, got: {paused}"
     resumed = await driver._turn(
         session,
         "resume",

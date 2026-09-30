@@ -210,7 +210,7 @@ async def _crash(driver: Driver, session: str) -> list[str]:
 async def _hitl_resume(driver: Driver, session: str) -> list[str]:
     expect = _Expect()
     pause = expect.paused(
-        await driver.send(session, "hitl choice"), "test_choice", "pause"
+        await driver.send(session, "hitl choice"), "agent_question", "pause"
     )
     if pause is None:
         return expect.failures
@@ -279,7 +279,7 @@ async def _continuity(driver: Driver, session: str) -> list[str]:
 async def _abandoned_pause(driver: Driver, session: str) -> list[str]:
     expect = _Expect()
     pause = expect.paused(
-        await driver.send(session, "hitl choice"), "test_choice", "pause"
+        await driver.send(session, "hitl choice"), "agent_question", "pause"
     )
     content = expect.final(await driver.send(session, "echo moving on"), "new message")
     expect.that(content.startswith("Echo: echo moving on"), "new message did not run")
@@ -413,7 +413,7 @@ class HttpDriver:
             )
         response.raise_for_status()
         prep = response.json()
-        context: dict[str, Any] = {"team_id": self._team_id}
+        context: dict[str, Any] = {"team_id": self._team_id, "ask_user": True}
         for key in (
             "context_prompt_text",
             "chat_default_profile_id",
