@@ -135,7 +135,7 @@ If you don't have one, write it now — and wonder why you don't have it.
 **How do we roll back?**
 
 
-## 8. Operator migration declaration (required for every PR)
+## 8. Operator migration declaration (not required for Dependabot PRs)
 
 **New note:** <!-- docs/swift/ops/migrations/<unique-slug>.md -->
 
@@ -147,6 +147,6 @@ Take two minutes: any configuration/permission changes, data to reprocess,
 clients to adapt, or special deployment steps? If none, use `none` and give one
 specific reason in the note. No migration procedure needs inventing.
 
-Follow the [quick start](../docs/swift/ops/MIGRATION-GUIDES.md#for-every-pr-a-two-minute-check)
+Follow the [quick start](../docs/swift/ops/MIGRATION-GUIDES.md#for-prs-requiring-a-note-a-two-minute-check)
 and copy the [template](../docs/swift/ops/MIGRATION-NOTE-TEMPLATE.md).
 Even docs-only PRs need a note; optional migration/activation actions count too.
