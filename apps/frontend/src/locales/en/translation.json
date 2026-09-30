@@ -1536,7 +1536,8 @@
         "extraction": "This file's content could not be read.",
         "indexing": "The file was read, but indexing it failed.",
         "noAnswer": "The upload ended without the server saying what became of this file.",
-        "notSent": "The import was interrupted before this file was sent. Send it again to finish.",
+        "notSent": "Import interrupted",
+        "notSentDetail": "This file never left: the import stopped before it was sent. Send it again to finish.",
         "interrupted": "Processing stopped before finishing.",
         "notAllowed": "You are not allowed to import into this folder.",
         "preparation": "Preparing this file failed.",
@@ -2406,6 +2407,7 @@
         "succeeded": "Done"
       },
       "time": {
+        "daysAgo": "{{count}}d ago",
         "hoursAgo": "{{count}}h ago",
         "justNow": "just now",
         "minAgo": "{{count}} min ago"

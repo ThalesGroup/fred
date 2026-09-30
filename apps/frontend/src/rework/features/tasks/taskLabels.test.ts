@@ -26,10 +26,22 @@ const t = ((key: string, opts?: { count?: number }) => {
   if (key.endsWith("justNow")) return "just now";
   if (key.endsWith("minAgo")) return `${opts?.count} min ago`;
   if (key.endsWith("hoursAgo")) return `${opts?.count}h ago`;
+  if (key.endsWith("daysAgo")) return `${opts?.count}d ago`;
   return key;
 }) as unknown as TFunction;
 
+const DAY = 24 * HOUR;
+
 describe("relativeTime", () => {
+  it("counts in days past a day, never in three-figure hours", () => {
+    // The unfinished-imports record is kept for a week, so a card can legitimately
+    // be days old; "168h ago" is not something anyone reads as a week.
+    const now = Date.now();
+    expect(relativeTime(now - 23 * HOUR, t, now)).toBe("23h ago");
+    expect(relativeTime(now - 3 * DAY, t, now)).toBe("3d ago");
+    expect(relativeTime(now - 7 * DAY, t, now)).toBe("7d ago");
+  });
+
   it("returns 'just now' for less than 60 seconds ago", () => {
     const now = Date.now();
     expect(relativeTime(now - 30 * SEC, t, now)).toBe("just now");

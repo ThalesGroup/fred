@@ -40,9 +40,11 @@ export interface ImportFailure {
  *  through the same path as a cause the backend actually sent. */
 export const INTERRUPTED_BEFORE_SEND = "The import was interrupted before this file was sent.";
 
-/** Backend sentences we recognise, most specific first. */
-const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean }[] = [
-  { pattern: /interrupted before this file was sent/i, key: "notSent" },
+/** Backend sentences we recognise, most specific first. `detailKey` is for a
+ *  cause whose own sentence is no use to the reader — ours, or a backend one
+ *  that says less than we can. Without it the detail is the sentence itself. */
+const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean; detailKey?: string }[] = [
+  { pattern: /interrupted before this file was sent/i, key: "notSent", detailKey: "notSentDetail" },
   // The folder holds two documents of this name (a base and an alternate
   // version). Nothing the user can do from here changes that, so it is named
   // rather than left to the generic "the upload failed".
@@ -76,7 +78,11 @@ export function importFailure(task: { error: string | null; stage: ImportStage |
 
   const known = KNOWN_CAUSES.find(({ pattern }) => pattern.test(raw));
   if (known) {
-    return { summary: t(`rework.imports.failure.${known.key}`), detail: raw, hopeless: known.hopeless ?? false };
+    return {
+      summary: t(`rework.imports.failure.${known.key}`),
+      detail: known.detailKey ? t(`rework.imports.failure.${known.detailKey}`) : raw,
+      hopeless: known.hopeless ?? false,
+    };
   }
 
   // Unrecognised: name which half of the import gave up and hand over the

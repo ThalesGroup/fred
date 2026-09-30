@@ -1536,7 +1536,8 @@
         "extraction": "Le contenu de ce fichier n'a pas pu être lu.",
         "indexing": "Le fichier a été lu, mais son indexation a échoué.",
         "noAnswer": "L'envoi s'est terminé sans réponse du serveur pour ce fichier.",
-        "notSent": "L'import a été interrompu avant que ce fichier ne parte. Renvoyez-le pour le terminer.",
+        "notSent": "Import interrompu",
+        "notSentDetail": "Ce fichier n'est jamais parti : l'import s'est arrêté avant son envoi. Renvoyez-le pour le terminer.",
         "interrupted": "Le traitement s'est interrompu avant la fin.",
         "notAllowed": "Vous n'avez pas le droit d'importer dans ce dossier.",
         "preparation": "La préparation de ce fichier a échoué.",
@@ -2406,6 +2407,7 @@
         "succeeded": "Terminé"
       },
       "time": {
+        "daysAgo": "il y a {{count}} j",
         "hoursAgo": "il y a {{count}} h",
         "justNow": "à l'instant",
         "minAgo": "il y a {{count}} min"

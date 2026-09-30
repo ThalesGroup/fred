@@ -70,7 +70,9 @@ export function relativeTime(ms: number, t: TFunction, now = Date.now()): string
   const diffM = Math.floor(diffS / 60);
   if (diffM < 60) return t("rework.tasks.time.minAgo", { count: diffM });
   const diffH = Math.floor(diffM / 60);
-  return t("rework.tasks.time.hoursAgo", { count: diffH });
+  if (diffH < 24) return t("rework.tasks.time.hoursAgo", { count: diffH });
+  // Days past that: a record kept for a week would otherwise read "168 h".
+  return t("rework.tasks.time.daysAgo", { count: Math.floor(diffH / 24) });
 }
 
 /** Localized "due in …" hint for a future timestamp (erasure schedule view).

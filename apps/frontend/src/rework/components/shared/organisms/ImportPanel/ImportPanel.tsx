@@ -75,8 +75,10 @@ function cardForMissingFile(entry: UnfinishedFile): TaskViewModel {
     stage: "upload",
     conflict: null,
     teamId: entry.teamId,
+    // Null, never a stand-in: a record written before this field existed has no
+    // time, and 0 would date the card to 1970. The card is told to show none.
     registeredAt: entry.notedAt ?? 0,
-    terminalAt: entry.notedAt ?? 0,
+    terminalAt: entry.notedAt ?? null,
     acknowledgedAt: null,
     warnings: null,
   };
@@ -334,6 +336,7 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
                   onDismiss={onForgetMissing}
                   dismissing={false}
                   onResend={onResend}
+                  timeUnknown={entry.notedAt === undefined}
                 />
               ))}
               {imports.map((task) => (
@@ -368,6 +371,7 @@ const ImportItem = memo(function ImportItem({
   onDismiss,
   dismissing,
   onResend,
+  timeUnknown,
 }: {
   task: TaskViewModel;
   onRetry: (taskId: string) => void;
@@ -378,6 +382,9 @@ const ImportItem = memo(function ImportItem({
   /** Set only for a file the record still lists. The browser no longer holds
    *  it, so the offer is to send it again from disk, not to retry. */
   onResend?: (entryId: string) => void;
+  /** The record predates our writing down when an import started. Saying
+   *  nothing beats dating the card to the epoch. */
+  timeUnknown?: boolean;
 }) {
   const { t } = useTranslation();
   const failed = task.state === "failed";
@@ -409,7 +416,9 @@ const ImportItem = memo(function ImportItem({
         progressSlot={null}
         // Only while something is moving — once the file is settled the footer
         // goes back to saying when.
-        trailingSlot={TERMINAL_STATES.has(task.state) ? undefined : <ImportStepper task={task} />}
+        trailingSlot={
+          TERMINAL_STATES.has(task.state) ? timeUnknown ? <span /> : undefined : <ImportStepper task={task} />
+        }
         actions={
           // Sending it again from disk: the only offer left once the browser no
           // longer holds the file. Not for a cause re-sending cannot change.

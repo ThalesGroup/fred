@@ -322,6 +322,53 @@ describe("ImportPanel — an import cut off in the middle", () => {
     expect(unfinishedImports().map((e) => e.filename)).toEqual(["recent.pdf"]);
   });
 
+  it("dates nothing it cannot date", () => {
+    // A record written before we wrote down when an import started. Falling
+    // back to 0 dated the card to 1970 and printed "497440h ago".
+    window.localStorage.setItem(
+      "fred.imports.unfinished",
+      JSON.stringify([
+        { entryId: "old", filename: "undated.pdf", teamId: "team-1", uploadMode: "process", requestMetadata: {} },
+      ]),
+    );
+    forgetCachedRecord();
+    visit();
+
+    expect(text()).toContain("undated.pdf");
+    expect(text()).not.toContain("hoursAgo");
+    expect(text()).not.toContain("daysAgo");
+    expect(text()).not.toContain("justNow");
+  });
+
+  it("keeps the status line short and puts the explanation in reach", () => {
+    // The line truncates in a narrow panel, so it names what happened and the
+    // tooltip carries what it means — the reader is not technical.
+    window.localStorage.setItem(
+      "fred.imports.unfinished",
+      JSON.stringify([
+        {
+          entryId: "e",
+          filename: "cut-off.pdf",
+          teamId: "team-1",
+          uploadMode: "process",
+          requestMetadata: {},
+          notedAt: Date.now(),
+        },
+      ]),
+    );
+    forgetCachedRecord();
+    visit();
+
+    expect(text()).toContain("rework.imports.failure.notSent");
+    const short = (locale: typeof fr | typeof en) => (locale.rework.imports.failure as Record<string, string>).notSent;
+    const long = (locale: typeof fr | typeof en) =>
+      (locale.rework.imports.failure as Record<string, string>).notSentDetail;
+    for (const locale of [fr, en]) {
+      expect(short(locale).length).toBeLessThan(25);
+      expect(long(locale).length).toBeGreaterThan(short(locale).length);
+    }
+  });
+
   it("offers no resend for a cause resending cannot change", () => {
     window.localStorage.setItem(
       "fred.imports.unfinished",
