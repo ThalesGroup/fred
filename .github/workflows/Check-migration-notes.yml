@@ -16,6 +16,7 @@ concurrency:
 jobs:
   migration-notes:
     name: Migration notes
+    if: ${{ github.event_name == 'merge_group' || github.event.pull_request.user.login != 'dependabot[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
