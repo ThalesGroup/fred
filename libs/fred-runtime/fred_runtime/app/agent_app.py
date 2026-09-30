@@ -2518,42 +2518,47 @@ def _pending_interrupt_occurrences(
 
 
 async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
-    """Validate the pending question after authorization and before any claim."""
+    """Validate a pending platform question before the single-use resume claim."""
     if request.resume_payload is None or not request.interrupt_id:
         return False
     session_id = request.effective_session_id()
     checkpointer = get_runtime_context().config.checkpointer
     if not session_id or checkpointer is None:
         return False
-    loaded = await load_checkpoint(checkpointer, thread_id=session_id, checkpoint_ns="")
-    if loaded is None:
-        return False
-    _, pending_writes = loaded
-    for _task_id, channel, value in pending_writes:
-        if channel != _REACT_V2_INTERRUPT_CHANNEL:
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+        loaded = await load_checkpoint(
+            checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
+        )
+        if loaded is None:
             continue
-        candidates = value if isinstance(value, (list, tuple)) else (value,)
-        for candidate in candidates:
-            interrupt_id = getattr(candidate, "id", None)
-            payload = getattr(candidate, "value", None)
-            if isinstance(candidate, dict):
-                interrupt_id = candidate.get("id")
-                payload = candidate.get("value")
-            if interrupt_id != request.interrupt_id or not isinstance(payload, dict):
+        _, pending_writes = loaded
+        for _task_id, channel, value in pending_writes:
+            if channel != _REACT_V2_INTERRUPT_CHANNEL:
                 continue
-            if payload.get("occurrence_id") != request.occurrence_id:
-                continue
-            if payload.get("stage") != "agent_question":
-                continue
-            try:
-                prompt = HumanInputRequest.model_validate(payload)
-                parse_human_input_answer(request.resume_payload, prompt)
-            except (ValueError, ValidationError) as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail=str(exc),
-                ) from exc
-            return True
+            candidates = value if isinstance(value, (list, tuple)) else (value,)
+            for candidate in candidates:
+                interrupt_id = getattr(candidate, "id", None)
+                payload = getattr(candidate, "value", None)
+                if isinstance(candidate, dict):
+                    interrupt_id = candidate.get("id")
+                    payload = candidate.get("value")
+                if interrupt_id != request.interrupt_id or not isinstance(
+                    payload, dict
+                ):
+                    continue
+                if payload.get("occurrence_id") != request.occurrence_id:
+                    continue
+                if payload.get("stage") != "agent_question":
+                    continue
+                try:
+                    prompt = HumanInputRequest.model_validate(payload)
+                    parse_human_input_answer(request.resume_payload, prompt)
+                except (ValueError, ValidationError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(exc),
+                    ) from exc
+                return True
     if (
         isinstance(request.resume_payload, dict)
         and request.resume_payload.get("skipped") is True
