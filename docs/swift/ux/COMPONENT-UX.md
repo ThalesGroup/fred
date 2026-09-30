@@ -5049,6 +5049,11 @@ optional choice description appears beneath its label inside the same
 button. After an agent question is answered or skipped, a compact card below
 the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
+While the person is answering, the `ask_user` tool line stays in progress.
+For free text, a compact filled Send button sits directly left of Skip in the
+card footer. Choice-only questions keep Skip at the bottom right.
+The chat composer blocks new messages and commands in that conversation while
+the question or its resume is in progress, then becomes available again.
 Approval actions use the same neutral outline style and offer a conversation-scoped
 choice; the browser answers later matching approval pauses through the existing
 resume flow. Skip at the bottom right and close at the top right appear only

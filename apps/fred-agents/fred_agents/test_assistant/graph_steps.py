@@ -408,7 +408,7 @@ async def hitl_confirm_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """Exercise a two-option confirmation without invoking a tool."""
+    """Exercise a two-option confirmation through the platform question tool."""
     context.emit_status("hitl_confirm", "Preparing yes/no confirmation.")
     answer = await _ask_test_user(
         context,

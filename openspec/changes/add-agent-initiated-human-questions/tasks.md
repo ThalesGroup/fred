@@ -25,6 +25,8 @@
 - [x] 3.6 Render optional choice descriptions beneath labels in the same HITL button, preserving the single-line treatment when absent; verify with a managed chat example and focused component coverage.
 
 - [x] 3.7 Show accepted answers immediately below their `ask_user` tool line, and show the offered choices with the selected one highlighted in the tool drawer; verify choice labels, text, comments, skip, and reload after manual UI validation.
+- [x] 3.8 Keep a pending `ask_user` tool call in progress rather than error and place a compact raised Send button immediately left of Skip for free-text questions; inspect confirmation, choice, text, choice-with-comment, and tool-approval cards.
+- [x] 3.9 Disable new managed-chat messages and commands during an `ask_user` pause and its resume preflight, without blocking other conversations; restore the composer after answer or skip.
 
 ## 4. Documentation and release verification
 
@@ -32,5 +34,5 @@
 - [x] 4.2 Focused tests and root `make code-quality` passed. Root `make test` was interrupted externally during control-plane tests; every module completed successfully through that run or a separate full module run (control plane: 1,428 passed; knowledge flow: 1,461 passed; frontend: 2,984 passed).
 - [ ] 4.3 Performance review found only one additional async checkpoint read on authenticated HITL resumes, with no blocking work or new shared state. Independent correctness review remains for the draft PR.
 - [x] 4.4 Delta spec is synced to the main spec and `openspec validate --strict` passes.
-- [ ] 4.5 Route the no-LLM Graph test assistant confirmation, choice, text, and choice-with-comment examples through the platform `ask_user` tool; verify tool trace, pause and resume, skip, control gating, and the managed chat answer card.
+- [x] 4.5 Route the no-LLM Graph test assistant confirmation, choice, text, and choice-with-comment examples through the platform `ask_user` tool; verify tool trace, pause and resume, skip, control gating, and the managed chat answer card.
 - [ ] 4.6 Confirm the draft PR and archive after merge.

@@ -33,6 +33,14 @@ When the interactive control enables agent questions, Graph nodes may invoke the
 
 This does not expose `ask_user` as a Graph model-facing tool or replace the compatible `choice_step()` helper for existing Graph workflows.
 
+### Keep pauses in progress and actions compact
+
+A Graph node can call `ask_user` through the normal tool event path. LangGraph's pause must propagate without emitting a failed tool result; the tool line stays in progress until resume emits its actual result. The shared HITL card places a compact filled Send action immediately left of the text-only Skip action for free-text agent questions. Choice-only questions retain Skip at the bottom right, and tool approvals retain their own actions.
+
+### Block new chat turns during a question
+
+The managed chat composer is disabled while an agent question is pending or its resume is in flight for that conversation. The send handler applies the same guard to commands and keyboard submission, including the resume preflight interval after the prompt is hidden. Track the in-flight resume by session so navigating to another conversation does not disable its composer. Resume success or failure releases the guard; a failed resume restores the question.
+
 ### Use one answer shape for the tool and Graph helper
 
 The resumed value is an object with `choice_id`, `text`, or `skipped: true`. The tool returns a stable JSON result: `{"status":"answered","choice_id":...,"text":...}` with absent values omitted, or `{"status":"skipped"}`. It validates the selected id against its own offered options and never turns typed text into an option id. A shared SDK parser yields a typed answer; Graph's existing `choice_step()` remains a compatibility wrapper returning `str | None`, while a new helper exposes the complete answer for new Graph callers. Existing bare-string Graph resumes remain readable.

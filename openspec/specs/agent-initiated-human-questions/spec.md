@@ -55,6 +55,19 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **THEN** the step calls the platform `ask_user` tool without an LLM call and managed chat shows the question and response under the matching tool line
 - **AND** disabling the control prevents a new question tool call
 
+#### Scenario: Pending question tool state and text actions
+
+- **WHEN** an `ask_user` call waits for a human answer
+- **THEN** its tool line remains in progress until the person answers or skips, without showing an error result for the pause
+- **AND** a free-text question shows a compact raised Send button directly left of Skip at the bottom right; tool approvals keep their separate approval actions
+
+#### Scenario: Composer waits for an agent question
+
+- **GIVEN** an `ask_user` question is pending or its answer is being submitted
+- **WHEN** the person tries to send a new chat message or command in that conversation
+- **THEN** the composer and send path block the new turn until the question is answered or skipped and its resume completes
+- **AND** another conversation remains usable
+
 #### Scenario: Invalid question form
 
 - **WHEN** the agent calls `ask_user` with neither options nor free text enabled, or with duplicate or empty option identifiers
