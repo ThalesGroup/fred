@@ -32,5 +32,5 @@
 - [x] 4.2 Focused tests and root `make code-quality` passed. Root `make test` was interrupted externally during control-plane tests; every module completed successfully through that run or a separate full module run (control plane: 1,428 passed; knowledge flow: 1,461 passed; frontend: 2,984 passed).
 - [ ] 4.3 Performance review found only one additional async checkpoint read on authenticated HITL resumes, with no blocking work or new shared state. Independent correctness review remains for the draft PR.
 - [x] 4.4 Delta spec is synced to the main spec and `openspec validate --strict` passes.
-- [x] 4.5 Add no-LLM Graph test assistant examples for confirmation, choice, text, and choice with comment; verify pause and resume with focused tests.
+- [ ] 4.5 Route the no-LLM Graph test assistant confirmation, choice, text, and choice-with-comment examples through the platform `ask_user` tool; verify tool trace, pause and resume, skip, control gating, and the managed chat answer card.
 - [ ] 4.6 Confirm the draft PR and archive after merge.

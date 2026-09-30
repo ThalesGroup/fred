@@ -6,7 +6,7 @@ Lets an interactive ReAct or Deep agent ask its user a question during a turn, r
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent when the conversation enables agent questions. The tool SHALL accept a question, zero to four single-choice options, and whether free text is allowed. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, zero to four single-choice options, and whether free text is allowed. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
@@ -47,6 +47,13 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** the conversation renders or reloads
 - **THEN** a compact card below the matching `ask_user` tool line shows its question and selected choice label, text answer, or skipped state, including an optional comment, without waiting for reload
 - **AND** the `ask_user` tool detail drawer lists the offered choices and highlights the selected one when the response is available
+
+#### Scenario: No-LLM Graph test assistant uses the question tool
+
+- **GIVEN** an interactive Graph test assistant with agent questions enabled
+- **WHEN** a person runs its confirmation, choice, free-text, or choice-with-comment HITL scenario
+- **THEN** the step calls the platform `ask_user` tool without an LLM call and managed chat shows the question and response under the matching tool line
+- **AND** disabling the control prevents a new question tool call
 
 #### Scenario: Invalid question form
 

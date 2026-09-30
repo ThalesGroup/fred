@@ -9,7 +9,7 @@ The modern ReAct and Deep runtimes can pause for tool approval, but an agent can
 - Offer the tool only to an interactive conversation whose platform chat control enables it. The control starts enabled, can be switched off per conversation, and is absent from noninteractive execution.
 - Let a person skip a question. The tool returns an explicit unanswered result so the agent can continue without inventing an answer.
 - Show an answered question below its `ask_user` tool line immediately after resume; list the offered choices and highlight the selection in the tool drawer.
-- Prove that ReAct and Deep share the same tool behavior and that multiple questions in one turn retain their distinct occurrence identities. Align Graph `choice_step()` with the enriched response shape while preserving its existing callers.
+- Prove that ReAct and Deep share the same tool behavior and that multiple questions in one turn retain their distinct occurrence identities. Let the no-LLM Graph test assistant invoke the same platform tool for its HITL scenarios so managed chat shows the tool line, answered card, and choice recap. Keep Graph `choice_step()` compatible with existing callers.
 
 The shared HITL card redesign and free-text comments on the tool approval gate remain the next slice of the epic. Pause expiry and recovery remain separate lifecycle work.
 
@@ -26,7 +26,7 @@ None.
 ## Impact
 
 - `fred-sdk`: `RuntimeContext` and Graph `choice_step()` response handling.
-- `fred-runtime`: a pure question tool, conditional ReAct/Deep tool binding, HITL resume parsing, and focused integration tests.
+- `fred-runtime`: a pure question tool, conditional ReAct/Deep and Graph tool binding, HITL resume parsing, and focused integration tests.
 - Control plane: a platform-owned `ask_user_toggle` chat control in execution preparation.
 - Frontend: composer state, runtime context transport, the skip action on the existing HITL prompt, and generated API clients.
 - Contracts and docs: runtime and product contract amendments, frontend UX record, and an operator migration note. No database migration is expected.
