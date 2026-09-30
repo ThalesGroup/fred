@@ -23,7 +23,13 @@ vi.mock("../../../slices/streamDocumentUpload", () => ({
   streamUploadOrProcessDocument: (...args: unknown[]) => streamMock(...args),
 }));
 
-import { chunkFilesByLeafName, runWithConcurrencyLimit, scheduleFiles } from "./importRun";
+const noteStarted = vi.fn();
+vi.mock("./unfinishedImports", () => ({
+  noteImportStarted: (...args: unknown[]) => noteStarted(...args),
+  noteImportSettled: vi.fn(),
+}));
+
+import { chunkFilesByLeafName, runImport, runWithConcurrencyLimit, scheduleFiles } from "./importRun";
 
 describe("scheduleFiles", () => {
   it("resolves once its single file is discovered, without waiting for the request to settle", async () => {
@@ -238,6 +244,35 @@ describe("scheduleFiles", () => {
     // Nothing failed at the request level, so nothing is raised globally —
     // the file's own card carries it.
     expect(onBackgroundError).not.toHaveBeenCalled();
+  });
+});
+
+describe("runImport", () => {
+  it("writes the record once for the whole import, not once per batch", async () => {
+    // Each write rewrites the record whole, so one per batch made a large
+    // import quadratic in its own size — on the main thread, before the first
+    // byte left. One call covers every file just as durably.
+    noteStarted.mockClear();
+    streamMock.mockImplementation((files: File[], _mode, _meta, discover) => {
+      for (const file of files) {
+        discover({ taskId: `t-${file.name}`, documentUid: `doc-${file.name}`, filename: file.name });
+      }
+      return Promise.resolve([]);
+    });
+    const batches = Array.from({ length: 5 }, (_, i) => ({
+      files: [new File(["x"], `f${i}-a.pdf`), new File(["x"], `f${i}-b.pdf`)],
+      requestMetadata: { tags: ["tag-1"] },
+    }));
+
+    await runImport(batches, {
+      dispatch: vi.fn(),
+      uploadMode: "process",
+      teamId: "team-1",
+      onError: vi.fn(),
+    });
+
+    expect(noteStarted).toHaveBeenCalledTimes(1);
+    expect(noteStarted.mock.calls[0][0]).toHaveLength(10);
   });
 });
 

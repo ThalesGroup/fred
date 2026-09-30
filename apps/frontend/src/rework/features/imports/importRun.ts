@@ -279,25 +279,21 @@ export async function runImport(batches: ImportBatch[], handlers: ImportRunHandl
   const runId = uuidv4();
   const indexed = batches.map((batch, batchIndex) => ({ ...batch, batchIndex }));
   const localIdOf = (batchIndex: number, filename: string) => `import-${runId}-${batchIndex}-${filename}`;
+  const toRecord: UnfinishedFile[] = [];
   for (const batch of indexed) {
     for (const file of batch.files) {
       const filename = leafFileName(file);
       const localId = localIdOf(batch.batchIndex, filename);
       heldImports.set(localId, { file, filename, teamId, uploadMode, requestMetadata: batch.requestMetadata });
       dispatch(uploadStarted({ localId, filename, teamId }));
+      toRecord.push({ entryId: localId, filename, teamId, uploadMode, requestMetadata: batch.requestMetadata });
     }
-    // Written down before anything moves: an interruption two seconds in has
-    // to leave the same trace as one at the very end.
-    noteImportStarted(
-      batch.files.map((file) => ({
-        entryId: localIdOf(batch.batchIndex, leafFileName(file)),
-        filename: leafFileName(file),
-        teamId,
-        uploadMode,
-        requestMetadata: batch.requestMetadata,
-      })),
-    );
   }
+  // Written down before anything moves: an interruption two seconds in has to
+  // leave the same trace as one at the very end. One call for the whole import,
+  // not one per batch — each rewrites the record whole, so per batch made a
+  // large import quadratic in its own size before the first byte left.
+  noteImportStarted(toRecord);
 
   try {
     await runWithConcurrencyLimit(indexed, UPLOAD_CONCURRENCY, (batch) =>

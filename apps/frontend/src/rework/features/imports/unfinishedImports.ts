@@ -106,6 +106,14 @@ function flushNow(): void {
   flush();
 }
 
+/** Drop a pending flush without running it — for a caller about to write the
+ *  whole record itself, which would otherwise write it twice. */
+function cancelFlush(): void {
+  if (flushHandle === null) return;
+  window.clearTimeout(flushHandle);
+  flushHandle = null;
+}
+
 if (typeof window !== "undefined") {
   // Another tab rewrote the record; ours is stale.
   window.addEventListener("storage", (event) => {
@@ -134,7 +142,7 @@ export function noteImportStarted(files: UnfinishedFile[]): void {
   cache = [...current, ...files.filter((entry) => !known.has(entry.entryId))];
   // Written through, not scheduled: the promise this record makes is that an
   // interruption two seconds in leaves the same trace as one at the very end.
-  flushNow();
+  cancelFlush();
   persist(cache);
 }
 
