@@ -22,6 +22,7 @@ import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterceptio
 import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
+import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswerSummary";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
@@ -78,6 +79,9 @@ export const ConversationThread = memo(function ConversationThread({
   return (
     <ChatMessagesArea isEmpty={messages.length === 0 && !isStreaming} isLoading={isLoading} emptyState={emptyState}>
       {messages.map((msg) => {
+        if (msg.role === "hitl_response" && msg.hitlAnswerSummary) {
+          return <HitlAnswerSummary key={msg.id} summary={msg.hitlAnswerSummary} />;
+        }
         if (msg.role === "user" || msg.role === "hitl_response") {
           // hitl_response's `text` is the raw persisted choice_id ("proceed" /
           // "cancel") — the backend never localizes it (see hitlResponseKey's

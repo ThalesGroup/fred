@@ -28,6 +28,7 @@ import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import { isTraceChannel, textOf, uiPartsOf } from "../../../utils/traceUtils";
+import { hitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
 
 function hitlRequestPart(m: ChatMessage): HitlRequestPart | undefined {
   return m.parts?.[0] as HitlRequestPart | undefined;
@@ -270,7 +271,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       const pairId = requestPart?.occurrence_id ?? String(hitlReqMsg.rank);
       // An unanswered trailing request is live state reconstructed below the
       // thread, not a second read-only copy of the same prompt.
-      if (!(isLast && !hitlRespMsg)) {
+      if (!(isLast && !hitlRespMsg) && !(requestPart?.stage === "agent_question" && hitlRespMsg)) {
         result.push({
           id: `${eid}:hitl_req:${pairId}`,
           role: "hitl_request",
@@ -308,6 +309,10 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
               ? `${responsePart.label ?? responsePart.choice_id}: ${responsePart.text}`
               : (responsePart?.label ?? responsePart?.choice_id ?? responsePart?.text ?? ""),
           hitlSkipped: responsePart?.skipped === true,
+          hitlAnswerSummary:
+            requestPart?.stage === "agent_question" && responsePart
+              ? hitlAnswerSummary(requestPart, responsePart)
+              : undefined,
           isStreaming: false,
           traceMessages: [],
           sources: [],

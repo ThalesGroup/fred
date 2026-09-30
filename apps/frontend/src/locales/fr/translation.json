@@ -1678,6 +1678,7 @@
       "validate": "Accepter les CGU"
     },
     "hitlPrompt": {
+      "answerSummary": "Question et réponse",
       "skipped": "Passé",
       "accepted": "Accepté",
       "refused": "Refusé"

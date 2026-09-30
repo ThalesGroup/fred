@@ -17,6 +17,8 @@ import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenAp
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
+import { HitlAnswerSummary } from "../../HitlAnswerSummary/HitlAnswerSummary";
+import { hitlAnswerSummaryForTool } from "@rework/utils/hitlAnswerSummary";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
 import type { RagSearchResult, SqlQueryResult, TraceEntry } from "../../../../../utils/traceUtils";
 import {
@@ -170,6 +172,12 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+  if (toolName(entry.call) === "ask_user") {
+    const summary = messages
+      ? hitlAnswerSummaryForTool(messages, entry.call.session_id, entry.call.exchange_id, toolCallId(entry.call))
+      : null;
+    if (summary) return <HitlAnswerSummary summary={summary} inDrawer />;
+  }
   if (tabularToolKind(toolName(entry.call))) {
     const tabular =
       entry.result && toolResultOk(entry.result)

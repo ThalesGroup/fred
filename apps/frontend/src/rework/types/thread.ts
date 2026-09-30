@@ -19,6 +19,7 @@
 import type { ChatMessage, CommandDescriptor, VectorSearchHit } from "../../slices/runtime/runtimeOpenApi";
 import type { TokenUsage } from "./conversation";
 import type { RawUiPart } from "./parts";
+import type { HitlAnswerSummary } from "../utils/hitlAnswerSummary";
 
 export interface ThreadMessage {
   id: string;
@@ -51,6 +52,7 @@ export interface ThreadMessage {
   hitlChoices?: Array<{ id: string; label: string }>;
   hitlTitle?: string | null;
   hitlSkipped?: boolean;
+  hitlAnswerSummary?: HitlAnswerSummary;
   /** Set when the turn was launched by a prompt command. The transcript then
    *  renders the command instead of `text` — which stays the full assembled
    *  text, since that is what replays to the model. */

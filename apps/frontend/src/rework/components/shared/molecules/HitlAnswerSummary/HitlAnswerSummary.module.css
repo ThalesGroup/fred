@@ -1,0 +1,51 @@
+/* Compact record of an answered agent question, using Fred's HITL surfaces. */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-end;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-m);
+  background: var(--surface-container-high);
+  padding: var(--spacing-s) var(--spacing-m);
+  width: min(65%, 30rem);
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.inDrawer {
+  align-self: stretch;
+  width: 100%;
+}
+
+.question,
+.answer,
+.comment {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.question {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.answer {
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
+.comment {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+@media (max-width: 600px) {
+  .card {
+    width: min(90%, 30rem);
+  }
+
+  .inDrawer {
+    width: 100%;
+  }
+}
