@@ -117,8 +117,9 @@ acceptance; delegated calls rely on the person's acceptance at run admission.
 
 ## Complete local test configurations
 
-The existing `configuration_generic_oidc.example.yaml` and
-`configuration_mock_oidc.example.yaml` files are security overlays. Prepare full
+The files under each backend's `config/overlays/` directory,
+`configuration_generic_oidc.example.yaml` and
+`configuration_mock_oidc.example.yaml`, are security overlays. Prepare full
 configurations for all three backends with the repository script, from the root:
 
 ```bash

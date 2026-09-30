@@ -50,7 +50,9 @@ def prepare(profile: str, output_dir: Path) -> list[Path]:
         config = yaml.safe_load((config_dir / "configuration_prod.yaml").read_text())
         if profile != "keycloak":
             overlay = yaml.safe_load(
-                (config_dir / f"configuration_{profile}.example.yaml").read_text()
+                (
+                    config_dir / "overlays" / f"configuration_{profile}.example.yaml"
+                ).read_text()
             )
             merge(config, overlay)
         schema = json.loads(
