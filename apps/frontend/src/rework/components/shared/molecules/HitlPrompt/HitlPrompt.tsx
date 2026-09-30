@@ -147,28 +147,28 @@ export function HitlPrompt({
             aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
           />
           <CharacterLimitNotice id={characterInfoId} count={characterCount} limit={maxChatInputChars} />
-          <Button
-            color="primary"
-            variant="filled"
-            size="small"
-            disabled={!freeText.trim() || isOverLimit}
-            onClick={() => onAnswer(undefined, freeText)}
-          >
-            {t("chatbot.sendHitlAnswer")}
-          </Button>
         </div>
       )}
 
-      {isAgentQuestion && !readonly && (
-        <Button
-          className={styles.skipQuestion}
-          color="on-surface-retreat"
-          variant="text"
-          size="small"
-          onClick={skipQuestion}
-        >
-          {t("chatbot.skipHitlQuestion")}
-        </Button>
+      {!readonly && (payload.free_text || isAgentQuestion) && (
+        <div className={styles.actions}>
+          {payload.free_text && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="small"
+              disabled={!freeText.trim() || isOverLimit}
+              onClick={() => onAnswer(undefined, freeText)}
+            >
+              {t("chatbot.sendHitlAnswer")}
+            </Button>
+          )}
+          {isAgentQuestion && (
+            <Button color="on-surface-retreat" variant="text" size="small" onClick={skipQuestion}>
+              {t("chatbot.skipHitlQuestion")}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

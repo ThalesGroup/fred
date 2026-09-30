@@ -90,8 +90,15 @@
   right: var(--spacing-s);
 }
 
-.skipQuestion {
-  align-self: flex-end;
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.actions > button {
+  flex: 0 0 auto;
 }
 
 .freeText {
