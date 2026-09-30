@@ -43,9 +43,11 @@ export interface TooltipProps {
    * a one-line hint should not linger or swallow clicks.
    */
   interactive?: boolean;
-  /** Rich content instead of a plain text hint (e.g. a multi-row info panel).
-   *  Unlike `text`, the tooltip widens to fit and wraps instead of forcing a
-   *  single nowrap line. Takes precedence over `text` when both are set. */
+  /** More than `text` can carry. A string is a hint that wraps within a
+   *  readable width, keeping the panel's own padding; any other node is a
+   *  panel owning its layout, and the padding is left to it. Either way the
+   *  tooltip sizes to its content instead of forcing a single nowrap line.
+   *  Takes precedence over `text` when both are set. */
   content?: ReactNode;
   /**
    * Where the panel sits relative to the trigger.
@@ -314,7 +316,10 @@ export const Tooltip = ({
     : children;
 
   const contentClasses = [styles["tooltip-content"]];
-  if (content) contentClasses.push(styles["tooltip-content-rich"]);
+  // A string is a hint that needs to wrap, not a panel bringing its own
+  // layout: it keeps the standard padding rather than having to restate it.
+  if (content)
+    contentClasses.push(styles[typeof content === "string" ? "tooltip-content-prose" : "tooltip-content-rich"]);
   if (interactive) contentClasses.push(styles["tooltip-content-interactive"]);
 
   return (

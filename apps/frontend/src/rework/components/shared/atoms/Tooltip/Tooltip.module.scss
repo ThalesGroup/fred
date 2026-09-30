@@ -17,6 +17,11 @@
 .tooltip-wrapper {
   display: inline-flex;
   position: relative;
+  /* The wrapper is what the panel is positioned against, and an inline-flex box
+     inside a truncating `nowrap` parent takes the FULL width of its text, not
+     the width you can see. Unbounded, the panel centred on the middle of that
+     overflow — outside the card the label sits in. */
+  max-width: 100%;
 }
 
 /* Rendered in a portal on document.body (Tooltip.tsx) so it can pop above
@@ -52,6 +57,14 @@
 .tooltip-content-rich {
   padding: 0;
   overflow: hidden;
+  white-space: normal;
+}
+
+/* A hint too long for one line: the panel keeps its own padding and colour and
+ * simply wraps. Bounded, because a sentence allowed to run the viewport is
+ * read no better than a truncated one. */
+.tooltip-content-prose {
+  max-width: 250px;
   white-space: normal;
 }
 

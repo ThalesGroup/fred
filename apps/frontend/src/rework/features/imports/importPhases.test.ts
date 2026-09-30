@@ -1,3 +1,5 @@
+import en from "../../../locales/en/translation.json";
+import fr from "../../../locales/fr/translation.json";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +20,7 @@
 import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 import type { TaskViewModel } from "../tasks/taskTypes";
-import { importPhaseLabel } from "./importPhases";
+import { IMPORT_PHASES, importPhaseHintFor, importPhaseLabel } from "./importPhases";
 
 const t = ((key: string) => key) as unknown as TFunction;
 
@@ -47,5 +49,34 @@ describe("importPhaseLabel", () => {
     expect(importPhaseLabel(task({ stage: "upload", state: "succeeded" }), t)).toBe(
       "rework.tasks.importStage.uploadDone",
     );
+  });
+
+  // The names alone say little to someone importing for the first time, so the
+  // line carries the same explanation the stepper's markers do — on every
+  // phase, and on both ways an import can end.
+  it("explains whichever phase the line is naming", () => {
+    expect(importPhaseHintFor(task({ stage: "upload", state: "running" }), t)).toBe(
+      "rework.imports.stepper.hint.upload",
+    );
+    expect(importPhaseHintFor(task({ stage: "analysis", state: "running", step: "processing" }), t)).toBe(
+      "rework.imports.stepper.hint.processing",
+    );
+    expect(importPhaseHintFor(task({ stage: "analysis", state: "succeeded" }), t)).toBe(
+      "rework.imports.stepper.hint.done",
+    );
+    expect(importPhaseHintFor(task({ stage: "upload", state: "succeeded" }), t)).toBe(
+      "rework.imports.stepper.hint.doneUpload",
+    );
+    // Held on the user's answer: the panel words that line itself.
+    expect(importPhaseHintFor(task({ stage: "decision", state: "running" }), t)).toBeNull();
+  });
+
+  it("has a hint for every phase, in both languages", () => {
+    for (const locale of [fr, en]) {
+      const hints = locale.rework.imports.stepper.hint as Record<string, string>;
+      for (const key of [...IMPORT_PHASES, "done", "doneUpload"]) {
+        expect(hints[key], `no hint for "${key}"`).toBeTruthy();
+      }
+    }
   });
 });

@@ -61,6 +61,32 @@ function renderTooltip() {
 }
 
 describe("Tooltip", () => {
+  // A hint too long for one line and a panel bringing its own layout need
+  // opposite things from the container: the first keeps the standard padding
+  // and wraps, the second gets out of the way. Callers used to restate the
+  // first by hand, which is how one of them ended up red and 420px wide.
+  it("tells a text hint apart from a panel that owns its layout", () => {
+    const classesFor = (content: React.ReactNode) => {
+      act(() => {
+        root.render(
+          <Tooltip content={content}>
+            <button>Trigger</button>
+          </Tooltip>,
+        );
+      });
+      act(() => {
+        (container.querySelector("button") as HTMLButtonElement).dispatchEvent(
+          new MouseEvent("mouseover", { bubbles: true }),
+        );
+      });
+      const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+      return panel.className;
+    };
+
+    expect(classesFor("A sentence that has to wrap")).toContain("prose");
+    expect(classesFor(<div>A panel</div>)).toContain("rich");
+  });
+
   it("does not render the tooltip content until hovered", () => {
     renderTooltip();
     expect(document.querySelector('[role="tooltip"]')).toBeNull();

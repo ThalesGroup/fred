@@ -36,7 +36,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure, INTERRUPTED_BEFORE_SEND } from "../../../../features/imports/importFailure";
-import { importPhaseLabel } from "../../../../features/imports/importPhases";
+import { importPhaseHintFor, importPhaseLabel } from "../../../../features/imports/importPhases";
 import {
   cancelImport,
   canCancelImport,
@@ -399,6 +399,9 @@ const ImportItem = memo(function ImportItem({
   // when something interrupted it — why it stopped, or the question holding it.
   const statusText =
     failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t));
+  // What that line means, for a reader who has not imported before. The same
+  // sentence the stepper's markers carry, on whichever phase the line names.
+  const statusDetail = failure?.detail ?? (awaitingDecision ? null : importPhaseHintFor(task, t));
   // Sending it again cannot change what the folder holds, and the transfer is
   // not what went wrong — only clearing the duplicate name will do.
   const retryable = failed && stillHeld && !failure?.hopeless;
@@ -410,7 +413,7 @@ const ImportItem = memo(function ImportItem({
         // A failure gets its cause named rather than the sentence the backend
         // wrote for a log.
         statusText={statusText}
-        statusDetail={failure?.detail}
+        statusDetail={statusDetail}
         // No row of its own: the markers go in the footer, facing the name of
         // the phase they are on, and give the card back the height a bar took.
         progressSlot={null}

@@ -83,11 +83,15 @@
 
 /* Name, then what the phase is for. Kept narrow so the hint wraps to two or
    three lines instead of stretching into one long run. */
+/* A rich panel owns its own padding — the shared tooltip drops its text-hint
+   padding for these. Same inset and width as the plain prose variant, so the
+   two read as the same tooltip with a name on top. */
 .tip {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-3xs);
-  max-width: 220px;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-width: 250px;
 }
 
 .tipName {

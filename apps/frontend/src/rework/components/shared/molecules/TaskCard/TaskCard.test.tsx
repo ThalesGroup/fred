@@ -124,6 +124,28 @@ describe("TaskCard layout", () => {
   });
 });
 
+describe("TaskCard status line", () => {
+  it("truncates on the tooltip's own trigger, not on the row around it", () => {
+    // `text-overflow` acts on the block whose inline content overflows. Once a
+    // Tooltip wraps the text, that block is the trigger — and an unbounded
+    // trigger also anchors the panel to the full width of the untruncated
+    // text, which put it outside the card entirely.
+    const html = renderToStaticMarkup(
+      <TaskCard task={vm({ state: "running" })} statusText="A phase" statusDetail="What that phase does" />,
+    );
+
+    expect(html).toContain("truncate");
+    expect(html).toContain("A phase");
+  });
+
+  it("leaves the line alone when there is nothing to explain", () => {
+    const html = renderToStaticMarkup(<TaskCard task={vm({ state: "running" })} statusText="A phase" />);
+
+    expect(html).toContain("A phase");
+    expect(html).not.toContain("truncate");
+  });
+});
+
 describe("TaskCard trailing slot", () => {
   it("shows the relative time when no caller claims the trailing corner", () => {
     expect(renderToStaticMarkup(<TaskCard task={vm()} />)).toContain("rework.tasks.time.");

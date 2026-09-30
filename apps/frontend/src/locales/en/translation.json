@@ -1569,6 +1569,8 @@
           "upload": "The file leaves your computer for Fred. This is the only phase that depends on your connection.",
           "uploading": "Fred works out what kind of document this is and sets aside what it needs to process it.",
           "processing": "The text is pulled out of the document, page by page, so Fred can read it.",
+          "done": "The document is ready. Agents can now find it and quote it.",
+          "doneUpload": "The file has arrived. It was not analysed — this mode only sends it.",
           "indexing": "The content is filed away so agents can find it and quote it in their answers."
         }
       },

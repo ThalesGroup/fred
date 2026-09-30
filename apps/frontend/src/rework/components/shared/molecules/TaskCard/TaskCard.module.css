@@ -93,6 +93,17 @@
   white-space: nowrap;
 }
 
+/* The ellipsis moves onto the tooltip's own trigger: `text-overflow` acts on
+   the block whose inline content overflows, and once a Tooltip wraps the text
+   that block is this one, not the row above it. */
+.truncate {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .errorText {
   flex: 1;
   min-width: 0;
@@ -101,17 +112,6 @@
   font: var(--font-label-small);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.errorTooltip {
-  display: block;
-  max-width: 420px;
-  max-height: 240px;
-  overflow: auto;
-  color: var(--error);
-  font: var(--font-body-small);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .warningGroup {

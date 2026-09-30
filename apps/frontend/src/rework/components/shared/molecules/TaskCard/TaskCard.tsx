@@ -110,8 +110,8 @@ export function TaskCard({
         {statusText ? (
           <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
             {statusDetail ? (
-              <Tooltip content={<span className={styles.errorTooltip}>{statusDetail}</span>}>
-                <span>{statusText}</span>
+              <Tooltip content={statusDetail}>
+                <span className={styles.truncate}>{statusText}</span>
               </Tooltip>
             ) : (
               statusText
@@ -123,8 +123,8 @@ export function TaskCard({
           // the existing flex:1/min-width:0/ellipsis truncation on the real flex item, so the
           // Tooltip's internal markup never has to know about TaskCard's row layout.
           <span className={styles.errorText}>
-            <Tooltip content={<span className={styles.errorTooltip}>{task.error}</span>}>
-              <span>{task.error}</span>
+            <Tooltip content={task.error}>
+              <span className={styles.truncate}>{task.error}</span>
             </Tooltip>
           </span>
         ) : task.step ? (

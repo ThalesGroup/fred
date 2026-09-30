@@ -96,3 +96,14 @@ export function importPhaseLabel(task: PhaseInput, t: TFunction): string | null 
   }
   return t(PHASE_LABEL[IMPORT_PHASES[index]]);
 }
+
+/** The same explanation, for whichever phase the status line is naming. Null
+ *  where that line is not naming a phase at all. */
+export function importPhaseHintFor(task: PhaseInput, t: TFunction): string | null {
+  if (task.stage === "decision") return null;
+  const index = importPhaseIndex(task);
+  if (index >= IMPORT_PHASES.length) {
+    return t(task.stage === "upload" ? "rework.imports.stepper.hint.doneUpload" : "rework.imports.stepper.hint.done");
+  }
+  return importPhaseHint(IMPORT_PHASES[index], t);
+}

@@ -1569,6 +1569,8 @@
           "upload": "Le fichier quitte votre ordinateur pour rejoindre Fred. C'est la seule étape qui dépend de votre connexion.",
           "uploading": "Fred reconnaît le type de document et met de côté ce qu'il faudra pour le traiter.",
           "processing": "Le texte est extrait du document, page par page, pour devenir lisible par Fred.",
+          "done": "Le document est prêt. Les agents peuvent maintenant le retrouver et le citer.",
+          "doneUpload": "Le fichier est arrivé à destination. Il n'a pas été analysé : ce mode se contente de l'envoyer.",
           "indexing": "Le contenu est rangé pour que les agents puissent le retrouver et le citer dans leurs réponses."
         }
       },
