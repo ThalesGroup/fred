@@ -34,7 +34,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { makeSelectImportTasks, selectImportPanelOpenRequest, taskEvicted } from "../../../../features/tasks/taskSlice";
-import { stepLabel } from "../../../../features/tasks/taskLabels";
+import { knownIngestionStep } from "../../../../features/tasks/taskLabels";
 import { useTaskAcknowledgement } from "../../../../features/tasks/useTaskAcknowledgement";
 import { importFailure } from "../../../../features/imports/importFailure";
 import {
@@ -54,6 +54,7 @@ import {
 } from "../../../../features/imports/unfinishedImports";
 import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import type { ConflictDecision } from "../DocumentUploadDrawer/importConflicts";
+import { ImportStepper } from "./ImportStepper";
 import styles from "./ImportPanel.module.css";
 
 /** @param teamId whose resources the page beside this panel shows. */
@@ -275,17 +276,22 @@ function ImportItem({
   // that cannot work would be worse than saying so.
   const stillHeld = heldImport(task.taskId) !== undefined;
 
-  const statusText = failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : undefined);
+  // The stepper says which half the file is in; this line is for what it
+  // cannot say — a cause, a question, or the phase the server happened to name.
+  const statusText =
+    failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : knownIngestionStep(task, t));
 
   return (
     <div className={styles.item}>
       <TaskCard
         task={task}
-        // The transfer has no backend step to report, so the card would show
-        // nothing at all for it; a failure gets its cause named rather than the
-        // sentence the backend wrote for a log.
-        statusText={statusText ?? (task.stage === "upload" ? stepLabel(task, t) : undefined)}
+        // A failure gets its cause named rather than the sentence the backend
+        // wrote for a log.
+        statusText={statusText}
         statusDetail={failure?.detail}
+        // No bar: the server reports one coarse step for the whole heavy
+        // phase, so a bar can only sit frozen or invent movement.
+        progressSlot={<ImportStepper task={task} />}
         actions={
           failed && stillHeld ? (
             <Tooltip text={t("rework.imports.retry.action")}>

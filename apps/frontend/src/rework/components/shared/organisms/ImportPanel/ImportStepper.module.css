@@ -1,0 +1,69 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
+.phase {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  font: var(--font-label-medium);
+  white-space: nowrap;
+}
+
+/* One colour per state, carried by both the marker and its word so a glance at
+   either says the same thing. */
+.phase[data-state="pending"] {
+  color: var(--on-surface-muted);
+}
+
+.phase[data-state="current"] {
+  color: var(--info);
+}
+
+.phase[data-state="done"] {
+  color: var(--success);
+}
+
+.phase[data-state="failed"] {
+  color: var(--error);
+}
+
+.phase [class*="material-symbols"] {
+  font-size: 12px;
+}
+
+/* The run between the two: it belongs to the phase behind it, so it fills in
+   as that phase completes. */
+.link {
+  flex: 1;
+  border-radius: 1px;
+  background: var(--outline-variant);
+  min-width: var(--spacing-xs);
+  height: 2px;
+}
+
+.link[data-state="done"] {
+  background: var(--success);
+}
+
+.link[data-state="failed"] {
+  background: var(--error);
+}

@@ -2204,6 +2204,10 @@
         "resize": "Resize the imports panel",
         "title": "Imports"
       },
+      "step": {
+        "analysis": "Analysis",
+        "upload": "Sending"
+      },
       "retry": {
         "action": "Try again",
         "unavailable": "This file has to be picked again before it can be retried."

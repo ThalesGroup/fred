@@ -2204,6 +2204,10 @@
         "resize": "Redimensionner le panneau des imports",
         "title": "Imports"
       },
+      "step": {
+        "analysis": "Analyse",
+        "upload": "Envoi"
+      },
       "retry": {
         "action": "Réessayer",
         "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."

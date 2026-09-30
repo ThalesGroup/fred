@@ -35,6 +35,10 @@ interface TaskCardProps {
   statusDetail?: string | null;
   /** Controls next to the dismiss button — a retry, a decision to make. */
   actions?: ReactNode;
+  /** Replaces the progress bar at the foot of the card. For a caller whose
+   *  task has no measurable progress to show — an import, where the server
+   *  reports named phases rather than a fraction. */
+  progressSlot?: ReactNode;
   /** Present only when this task can be acknowledged (failed/cancelled, not
    *  yet acknowledged) — the caller owns the `POST /tasks/{id}/ack` call and
    *  the resulting store update (TASK-EVENT-STREAM-RFC.md §2.10). */
@@ -46,7 +50,15 @@ export function truncate(name: string, max = 32): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
-export function TaskCard({ task, statusText, statusDetail, actions, onAcknowledge, acknowledging }: TaskCardProps) {
+export function TaskCard({
+  task,
+  statusText,
+  statusDetail,
+  actions,
+  progressSlot,
+  onAcknowledge,
+  acknowledging,
+}: TaskCardProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isTerminal = TERMINAL_STATES.has(task.state);
@@ -146,10 +158,14 @@ export function TaskCard({ task, statusText, statusDetail, actions, onAcknowledg
         <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>
       </div>
 
-      {!isTerminal && (
-        <div className={styles.progressRow}>
-          <TaskProgressBar state={task.state} progress={task.progress} />
-        </div>
+      {progressSlot !== undefined ? (
+        <div className={styles.progressRow}>{progressSlot}</div>
+      ) : (
+        !isTerminal && (
+          <div className={styles.progressRow}>
+            <TaskProgressBar state={task.state} progress={task.progress} />
+          </div>
+        )
       )}
     </div>
   );

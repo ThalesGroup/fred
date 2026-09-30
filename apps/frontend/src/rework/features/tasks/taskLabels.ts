@@ -51,6 +51,15 @@ export function stepLabel(task: Pick<TaskViewModel, "kind" | "step" | "stage">, 
   return step;
 }
 
+/** The phase the server actually named, when it named one we have words for.
+ *  Null otherwise — the caller then has a stepper or a state badge saying
+ *  where things stand, and an untranslated pipeline identifier would only
+ *  compete with it. */
+export function knownIngestionStep(task: Pick<TaskViewModel, "kind" | "step" | "stage">, t: TFunction): string | null {
+  const step = task.step ?? "";
+  return task.kind === "ingestion" && INGESTION_STEPS.has(step) ? t(`rework.tasks.ingestionStep.${step}`) : null;
+}
+
 export function taskSupportDetails(task: TaskViewModel, t: TFunction): string {
   return [
     task.target?.label,
