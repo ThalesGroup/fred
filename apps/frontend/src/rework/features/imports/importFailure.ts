@@ -30,10 +30,17 @@ export interface ImportFailure {
   /** The backend's own sentence, when it says more than the summary. Shown
    *  alongside, never instead. */
   detail: string | null;
+  /** Re-sending the same file cannot change this outcome — the cause is in the
+   *  destination, not the transfer. Offering a retry would only fail again. */
+  hopeless: boolean;
 }
 
 /** Backend sentences we recognise, most specific first. */
-const KNOWN_CAUSES: { pattern: RegExp; key: string }[] = [
+const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean }[] = [
+  // The folder holds two documents of this name (a base and an alternate
+  // version). Nothing the user can do from here changes that, so it is named
+  // rather than left to the generic "the upload failed".
+  { pattern: /more than one document named/i, key: "ambiguousName", hopeless: true },
   { pattern: /storage quota exceeded/i, key: "quotaExceeded" },
   { pattern: /quota cannot be verified/i, key: "quotaUnknown" },
   { pattern: /no fast text processor|unsupported|not supported/i, key: "unsupportedType" },
@@ -54,16 +61,19 @@ const EMPTY_CAUSES = [/^execution failed\.?$/i, /no failure details were reporte
 export function importFailure(task: { error: string | null; stage: ImportStage | null }, t: TFunction): ImportFailure {
   const raw = task.error?.trim() ?? "";
   if (!raw || EMPTY_CAUSES.some((pattern) => pattern.test(raw))) {
-    return { summary: t("rework.imports.failure.unreported"), detail: null };
+    return { summary: t("rework.imports.failure.unreported"), detail: null, hopeless: false };
   }
 
   const known = KNOWN_CAUSES.find(({ pattern }) => pattern.test(raw));
-  if (known) return { summary: t(`rework.imports.failure.${known.key}`), detail: raw };
+  if (known) {
+    return { summary: t(`rework.imports.failure.${known.key}`), detail: raw, hopeless: known.hopeless ?? false };
+  }
 
   // Unrecognised: name which half of the import gave up and hand over the
   // original sentence unchanged. Paraphrasing it would be guessing.
   return {
     summary: t(task.stage === "upload" ? "rework.imports.failure.upload" : "rework.imports.failure.analysis"),
     detail: raw,
+    hopeless: false,
   };
 }

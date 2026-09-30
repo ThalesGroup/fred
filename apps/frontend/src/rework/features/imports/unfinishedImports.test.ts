@@ -17,7 +17,13 @@
 // what it is keyed by decides whether a file can be silently lost.
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { forgetUnfinishedImports, noteImportSettled, noteImportStarted, unfinishedImports } from "./unfinishedImports";
+import {
+  forgetCachedRecord,
+  forgetUnfinishedImports,
+  noteImportSettled,
+  noteImportStarted,
+  unfinishedImports,
+} from "./unfinishedImports";
 
 const entry = (entryId: string, filename: string, tag: string) => ({
   entryId,
@@ -29,6 +35,9 @@ const entry = (entryId: string, filename: string, tag: string) => ({
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The record is held in memory between reads; a fresh page load is what
+  // each of these starts from.
+  forgetCachedRecord();
 });
 
 describe("unfinishedImports", () => {

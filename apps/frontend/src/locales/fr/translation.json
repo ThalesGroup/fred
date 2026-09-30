@@ -2193,6 +2193,7 @@
         "quotaExceeded": "L'espace de stockage de l'équipe est plein.",
         "quotaUnknown": "L'espace disponible n'a pas pu être vérifié. À réessayer.",
         "serverUnavailable": "Le serveur n'a pas répondu.",
+        "ambiguousName": "Ce dossier contient déjà deux documents de ce nom. Supprimez le doublon avant de réimporter.",
         "unreported": "Échec, sans cause rapportée.",
         "unsupportedType": "Ce type de fichier n'est pas pris en charge.",
         "upload": "L'envoi de ce fichier a échoué."
@@ -2215,6 +2216,7 @@
       },
       "retry": {
         "action": "Réessayer",
+        "relaunchFromRow": "Ce document est chez Fred : relancez son traitement depuis sa ligne dans le tableau.",
         "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."
       }
     },

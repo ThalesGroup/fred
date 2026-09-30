@@ -27,6 +27,7 @@ describe("importFailure", () => {
     expect(importFailure({ error: null, stage: "analysis" }, t)).toEqual({
       summary: "rework.imports.failure.unreported",
       detail: null,
+      hopeless: false,
     });
   });
 
@@ -82,7 +83,21 @@ describe("importFailure", () => {
     expect(importFailure({ error, stage: "analysis" }, t)).toEqual({
       summary: "rework.imports.failure.analysis",
       detail: error,
+      hopeless: false,
     });
     expect(importFailure({ error, stage: "upload" }, t).summary).toBe("rework.imports.failure.upload");
+  });
+
+  it("does not offer to send a file again when the folder is what refuses it", () => {
+    // Two documents already share that name there. Re-sending the same file
+    // produces the same refusal, every time.
+    const error =
+      "This folder holds more than one document named 'report.pdf'. Delete or promote the alternate version before importing again.";
+
+    expect(importFailure({ error, stage: "analysis" }, t)).toEqual({
+      summary: "rework.imports.failure.ambiguousName",
+      detail: error,
+      hopeless: true,
+    });
   });
 });

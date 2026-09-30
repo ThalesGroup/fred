@@ -148,6 +148,16 @@ describe("ImportPanel", () => {
       // the documents table reads it to mark the row as just completed, and
       // the tray reads it to show the task at all.
       expect(store.getState().tasks.byId["t1"]?.state).toBe("succeeded");
+
+      // And it stays gone without scheduling itself again. The task keeps
+      // emitting nothing, but its neighbours do — every one of those events
+      // re-runs the effect over a list this task is still in.
+      await act(async () => {
+        store.dispatch(taskEventReceived({ ...settled("t1", "succeeded"), seq: 2 }));
+        store.dispatch(taskEventReceived({ ...settled("t1", "succeeded"), seq: 3 }));
+      });
+      expect(vi.getTimerCount()).toBe(0);
+      expect(cards()).toEqual([]);
     } finally {
       vi.useRealTimers();
     }

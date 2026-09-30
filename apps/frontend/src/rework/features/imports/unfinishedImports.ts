@@ -26,6 +26,10 @@ import type { UploadMode } from "./importRun";
 
 const STORAGE_KEY = "fred.imports.unfinished";
 
+/** Long enough to fold one import's strike-offs into a single write, short
+ *  enough that a tab lost outside `pagehide` costs at most this much. */
+const FLUSH_DELAY_MS = 250;
+
 export interface UnfinishedFile {
   /** The panel entry this file had. Identity is the entry, never the name: one
    *  import can carry the same leaf name to two folders, and striking off by
@@ -42,24 +46,32 @@ export interface UnfinishedFile {
 
 /** Storage can be unavailable (private window, blocked site data) and its
  *  contents can be anything. Neither is worth failing an import over. */
+// The record is read and rewritten once per batch as an import starts and once
+// per file as it lands. Parsing it each time made a large import quadratic in
+// its own size, on the main thread, before the first byte moved — so the list
+// is held here and localStorage is the durable copy, not the source consulted.
+// Another tab writing it invalidates ours (the listener below).
+let cache: UnfinishedFile[] | null = null;
+
 function read(): UnfinishedFile[] {
+  if (cache) return cache;
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "[]");
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
+    if (!Array.isArray(parsed)) return (cache = []);
+    return (cache = parsed.filter(
       (entry): entry is UnfinishedFile =>
         typeof entry === "object" &&
         entry !== null &&
         typeof (entry as UnfinishedFile).entryId === "string" &&
         typeof (entry as UnfinishedFile).filename === "string" &&
         typeof (entry as UnfinishedFile).requestMetadata === "object",
-    );
+    ));
   } catch {
-    return [];
+    return (cache = []);
   }
 }
 
-function write(files: UnfinishedFile[]): void {
+function persist(files: UnfinishedFile[]): void {
   try {
     if (files.length === 0) window.localStorage.removeItem(STORAGE_KEY);
     else window.localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
@@ -69,26 +81,67 @@ function write(files: UnfinishedFile[]): void {
   }
 }
 
-/** Files that were left in the air last time. */
+let flushHandle: number | null = null;
+
+/** Coalesce the strike-offs of one import into a single write. `pagehide`
+ *  below is what makes losing the tab in between still cost nothing. */
+function scheduleFlush(): void {
+  if (flushHandle !== null) return;
+  flushHandle = window.setTimeout(() => {
+    flushHandle = null;
+    persist(cache ?? []);
+  }, FLUSH_DELAY_MS);
+}
+
+function flushNow(): void {
+  if (flushHandle === null) return;
+  window.clearTimeout(flushHandle);
+  flushHandle = null;
+  persist(cache ?? []);
+}
+
+if (typeof window !== "undefined") {
+  // Another tab rewrote the record; ours is stale.
+  window.addEventListener("storage", (event) => {
+    if (event.key === STORAGE_KEY) cache = null;
+  });
+  window.addEventListener("pagehide", flushNow);
+}
+
+/** Drop the in-memory copy, so the next read goes back to storage. For a test
+ *  that seeds `localStorage` the way a previous page load would have. */
+export function forgetCachedRecord(): void {
+  cache = null;
+}
+
+/** Files that were left in the air last time. A copy: the caller holds it in
+ *  state while the record keeps changing underneath. */
 export function unfinishedImports(): UnfinishedFile[] {
-  return read();
+  return [...read()];
 }
 
 /** Note files as on their way. Written before the first byte moves, because an
  *  interruption two seconds in must leave the same trace as one at the end. */
 export function noteImportStarted(files: UnfinishedFile[]): void {
-  const known = new Set(read().map((entry) => entry.entryId));
-  write([...read(), ...files.filter((entry) => !known.has(entry.entryId))]);
+  const current = read();
+  const known = new Set(current.map((entry) => entry.entryId));
+  cache = [...current, ...files.filter((entry) => !known.has(entry.entryId))];
+  // Written through, not scheduled: the promise this record makes is that an
+  // interruption two seconds in leaves the same trace as one at the very end.
+  flushNow();
+  persist(cache);
 }
 
 /** Strike a file off: it got there, or the user gave up on it. */
 export function noteImportSettled(entryId: string): void {
-  write(read().filter((entry) => entry.entryId !== entryId));
+  cache = read().filter((entry) => entry.entryId !== entryId);
+  scheduleFlush();
 }
 
 /** Give up on named files only — never on the whole record, which may be
  *  carrying an import that is running right now. */
 export function forgetUnfinishedImports(entryIds: string[]): void {
   const dropped = new Set(entryIds);
-  write(read().filter((entry) => !dropped.has(entry.entryId)));
+  cache = read().filter((entry) => !dropped.has(entry.entryId));
+  persist(cache);
 }

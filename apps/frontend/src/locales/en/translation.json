@@ -2193,6 +2193,7 @@
         "quotaExceeded": "The team's storage is full.",
         "quotaUnknown": "Available storage could not be checked. Worth retrying.",
         "serverUnavailable": "The server did not answer.",
+        "ambiguousName": "This folder already holds two documents of that name. Remove the duplicate before importing again.",
         "unreported": "Failed, with no cause reported.",
         "unsupportedType": "This file type is not supported.",
         "upload": "Sending this file failed."
@@ -2215,6 +2216,7 @@
       },
       "retry": {
         "action": "Try again",
+        "relaunchFromRow": "Fred has this document: relaunch its processing from its row in the table.",
         "unavailable": "This file has to be picked again before it can be retried."
       }
     },

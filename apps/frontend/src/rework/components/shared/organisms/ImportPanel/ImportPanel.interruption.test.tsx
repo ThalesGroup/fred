@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { taskSlice } from "../../../../features/tasks/taskSlice";
 import { cancelImport, canCancelImport, clearHeldImports, runImport } from "../../../../features/imports/importRun";
-import { unfinishedImports } from "../../../../features/imports/unfinishedImports";
+import { forgetCachedRecord, unfinishedImports } from "../../../../features/imports/unfinishedImports";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -95,6 +95,9 @@ function reopenTheTab() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // The record is held in memory between reads; each test starts from a fresh
+  // page load, not a cleared key.
+  forgetCachedRecord();
   clearHeldImports();
   streamMock.mockReset();
   store = makeStore();

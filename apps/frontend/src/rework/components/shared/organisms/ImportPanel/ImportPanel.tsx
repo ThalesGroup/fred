@@ -24,7 +24,7 @@
 // permanent home of its document's status; this is the same state gathered in
 // one place, and later where actions on it are offered.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
@@ -82,23 +82,36 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // then leaves — this list only. The task itself stays in the store for its
   // own five-minute window, which the documents table reads to mark a row as
   // just completed and the tray reads to show it at all.
-  const [settled, setSettled] = useState<string[]>([]);
+  const [settled, setSettled] = useState<ReadonlySet<string>>(() => new Set());
   // What the panel still has to show: everything it follows, minus the
   // successes it has already let go of.
-  const imports = useMemo(() => allImports.filter((vm) => !settled.includes(vm.taskId)), [allImports, settled]);
+  const imports = useMemo(() => allImports.filter((vm) => !settled.has(vm.taskId)), [allImports, settled]);
   const settling = useRef(new Map<string, number>());
   useEffect(() => {
     const timers = settling.current;
     for (const task of allImports) {
-      if (task.state !== "succeeded" || timers.has(task.taskId)) continue;
+      // `settled` is part of the guard, not just `timers`: the timer removes
+      // itself when it fires, and this effect re-runs on every task event, so
+      // without it each event would schedule the same card's exit again.
+      if (task.state !== "succeeded" || timers.has(task.taskId) || settled.has(task.taskId)) continue;
       timers.set(
         task.taskId,
         window.setTimeout(() => {
           timers.delete(task.taskId);
-          setSettled((ids) => (ids.includes(task.taskId) ? ids : [...ids, task.taskId]));
+          setSettled((ids) => new Set(ids).add(task.taskId));
         }, SETTLED_CARD_LINGER_MS),
       );
     }
+  }, [allImports, settled]);
+
+  // Ids of tasks the store has since dropped: keeping them would grow for the
+  // life of the tab. Only rebuilt when it has actually drifted.
+  useEffect(() => {
+    setSettled((ids) => {
+      if (ids.size <= allImports.length) return ids;
+      const live = new Set(allImports.map((vm) => vm.taskId));
+      return new Set([...ids].filter((id) => live.has(id)));
+    });
   }, [allImports]);
   useEffect(
     () => () => {
@@ -144,6 +157,47 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
     forgetUnfinishedImports(missing.map((entry) => entry.entryId));
     setInterrupted((entries) => entries.filter((entry) => !missing.includes(entry)));
   };
+
+  // Hoisted out of the list and keyed by task id: an arrow function built per
+  // card per render is what kept every card re-rendering on every task event,
+  // and an import dispatches a great many of those.
+  const failFast = (detail: string) => showError({ summary: t("rework.imports.panel.title"), detail });
+  const onRetry = useCallback(
+    (taskId: string) => void retryImport(taskId, { dispatch, onError: failFast }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- failFast closes
+    // over showError and t, both stable for the life of the provider.
+    [dispatch],
+  );
+  const onDecide = useCallback(
+    (taskId: string, decision: ConflictDecision) =>
+      void resolveConflict(taskId, decision, { dispatch, onError: failFast }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above.
+    [dispatch],
+  );
+  const onCancel = useCallback(
+    (taskId: string) => {
+      if (!cancelImport(taskId, dispatch)) {
+        showError({ summary: t("rework.imports.panel.title"), detail: t("rework.imports.cancel.tooLate") });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above.
+    [dispatch],
+  );
+  const onDismiss = useCallback(
+    (task: TaskViewModel) => {
+      // Dismissed for good: stop holding the file open for a retry that is no
+      // longer on offer, and stop expecting it — or it would be offered again
+      // as "did not arrive" on every visit.
+      releaseHeldImport(task.taskId);
+      noteImportSettled(task.taskId);
+      // The server still gets its acknowledgement, but the entry goes now
+      // rather than lingering for the tray's eviction window: dismissing it
+      // here means being done with it.
+      void acknowledge(task.taskId, task.kind, task.localOnly);
+      dispatch(taskEvicted(task.taskId));
+    },
+    [dispatch, acknowledge],
+  );
 
   const toggleLabel = expanded ? t("rework.imports.panel.collapse") : t("rework.imports.panel.expand");
 
@@ -240,38 +294,10 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
               <ImportItem
                 key={task.taskId}
                 task={task}
-                onRetry={() =>
-                  void retryImport(task.taskId, {
-                    dispatch,
-                    onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
-                  })
-                }
-                onDecide={(decision) =>
-                  void resolveConflict(task.taskId, decision, {
-                    dispatch,
-                    onError: (detail) => showError({ summary: t("rework.imports.panel.title"), detail }),
-                  })
-                }
-                onCancel={() => {
-                  if (!cancelImport(task.taskId, dispatch)) {
-                    showError({
-                      summary: t("rework.imports.panel.title"),
-                      detail: t("rework.imports.cancel.tooLate"),
-                    });
-                  }
-                }}
-                onDismiss={() => {
-                  // Dismissed for good: stop holding the file open for a retry
-                  // that is no longer on offer, and stop expecting it — or it
-                  // would be offered again as "did not arrive" on every visit.
-                  releaseHeldImport(task.taskId);
-                  noteImportSettled(task.taskId);
-                  // The server still gets its acknowledgement, but the entry
-                  // goes now rather than lingering for the tray's eviction
-                  // window: dismissing it here means being done with it.
-                  void acknowledge(task.taskId, task.kind, task.localOnly);
-                  dispatch(taskEvicted(task.taskId));
-                }}
+                onRetry={onRetry}
+                onDecide={onDecide}
+                onCancel={onCancel}
+                onDismiss={onDismiss}
                 dismissing={isAcknowledging(task.taskId)}
               />
             ))
@@ -287,7 +313,7 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
  *  The card itself is the shared one; what it cannot know is what a failure
  *  means for this file and whether anything can still be done about it. That
  *  is this component's whole job. */
-function ImportItem({
+const ImportItem = memo(function ImportItem({
   task,
   onRetry,
   onDecide,
@@ -296,10 +322,10 @@ function ImportItem({
   dismissing,
 }: {
   task: TaskViewModel;
-  onRetry: () => void;
-  onDecide: (decision: ConflictDecision) => void;
-  onCancel: () => void;
-  onDismiss: () => void;
+  onRetry: (taskId: string) => void;
+  onDecide: (taskId: string, decision: ConflictDecision) => void;
+  onCancel: (taskId: string) => void;
+  onDismiss: (task: TaskViewModel) => void;
   dismissing: boolean;
 }) {
   const { t } = useTranslation();
@@ -315,6 +341,9 @@ function ImportItem({
   // when something interrupted it — why it stopped, or the question holding it.
   const statusText =
     failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t));
+  // Sending it again cannot change what the folder holds, and the transfer is
+  // not what went wrong — only clearing the duplicate name will do.
+  const retryable = failed && stillHeld && !failure?.hopeless;
 
   return (
     <div className={styles.item}>
@@ -331,14 +360,14 @@ function ImportItem({
         // goes back to saying when.
         trailingSlot={TERMINAL_STATES.has(task.state) ? undefined : <ImportStepper task={task} />}
         actions={
-          failed && stillHeld ? (
+          retryable ? (
             <Tooltip text={t("rework.imports.retry.action")}>
               <IconButton
                 variant="icon"
                 size="small"
                 icon={{ category: "outlined", type: "refresh" }}
                 aria-label={t("rework.imports.retry.action")}
-                onClick={onRetry}
+                onClick={() => onRetry(task.taskId)}
               />
             </Tooltip>
           ) : canCancelImport(task.taskId) ? (
@@ -351,12 +380,12 @@ function ImportItem({
                 size="small"
                 icon={{ category: "outlined", type: "close" }}
                 aria-label={t("rework.imports.cancel.action")}
-                onClick={onCancel}
+                onClick={() => onCancel(task.taskId)}
               />
             </Tooltip>
           ) : undefined
         }
-        onAcknowledge={onDismiss}
+        onAcknowledge={() => onDismiss(task)}
         acknowledging={dismissing}
       />
 
@@ -364,18 +393,24 @@ function ImportItem({
           table, which is no place to be answering a question. */}
       {awaitingDecision && stillHeld && (
         <div className={styles.decision}>
-          <Button variant="text" size="small" color="primary" onClick={() => onDecide("overwrite")}>
+          <Button variant="text" size="small" color="primary" onClick={() => onDecide(task.taskId, "overwrite")}>
             {t("rework.imports.conflict.replace")}
           </Button>
-          <Button variant="text" size="small" color="on-surface-retreat" onClick={() => onDecide("skip")}>
+          <Button variant="text" size="small" color="on-surface-retreat" onClick={() => onDecide(task.taskId, "skip")}>
             {t("rework.imports.conflict.skip")}
           </Button>
         </div>
       )}
 
-      {(failed || awaitingDecision) && !stillHeld && (
+      {/* Only for a file the browser was still carrying: once the server has
+          it, re-selecting it would import a second copy. A failure after the
+          hand-off is relaunched from the document's own row. */}
+      {(failed || awaitingDecision) && !stillHeld && task.localOnly && (
         <p className={styles.reselect}>{t("rework.imports.retry.unavailable")}</p>
+      )}
+      {failed && !stillHeld && !task.localOnly && !failure?.hopeless && (
+        <p className={styles.reselect}>{t("rework.imports.retry.relaunchFromRow")}</p>
       )}
     </div>
   );
-}
+});

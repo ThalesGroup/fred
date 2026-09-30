@@ -15,6 +15,7 @@
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { KeyCloakService } from "../../../security/KeycloakService";
+import { personalTeamId } from "@shared/utils/teamId";
 import { taskRegistered } from "./taskSlice";
 import type { TaskListResponse } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
@@ -34,6 +35,13 @@ export function useTaskRehydration(): void {
 
   useEffect(() => {
     const token = KeyCloakService.GetToken();
+    // This listing is scope=user, so every task in it is this user's own. A
+    // personal-space tag resolves to a user, never a team, so the server
+    // leaves team_id empty for it — which is the personal space, not "no
+    // team". Saying so here is what lets the import panel find these again
+    // after a reload.
+    const uid = KeyCloakService.GetUserId();
+    const personalScope = uid ? personalTeamId(uid) : null;
     if (!token) return;
 
     for (const base of TASK_SOURCES) {
@@ -54,7 +62,7 @@ export function useTaskRehydration(): void {
                 target: task.target ?? null,
                 // Carried so the import panel, which belongs to one team's
                 // page, can tell its own imports from another team's.
-                teamId: task.team_id ?? null,
+                teamId: task.team_id ?? personalScope,
               }),
             );
           }
