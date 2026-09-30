@@ -212,7 +212,12 @@ class ReActRuntimeToolResolver:
             used_names.add("ask_user")
 
             async def invoke_ask_user(payload: dict[str, object]) -> tuple[str, None]:
-                return (await ask_user(payload), None)
+                return (
+                    await ask_user(
+                        payload, language=self._binding.runtime_context.language
+                    ),
+                    None,
+                )
 
             specs.append(
                 FredRuntimeToolSpec(

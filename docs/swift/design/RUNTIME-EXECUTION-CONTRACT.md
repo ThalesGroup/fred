@@ -6386,7 +6386,7 @@ single-use claim, the runtime validates a selected option against the pending
 question. `resume_payload` may be `{"choice_id":"id"}`, `{"text":"..."}`,
 both fields, or `{"skipped":true}`. Skip cannot carry an answer. The tool result
 is compact JSON with `status="answered"` and the supplied fields, or
-`status="skipped"`. Each sibling question keeps its own tool call identity.
+`status="skipped"` and a French or English `instruction` that tells the agent to continue with stated assumptions. The turn language chooses French when it starts with `fr`; English is the fallback. Each sibling question keeps its own tool call identity.
 Approval gates retain their existing resume behavior and do not accept skip.
 
 `HitlResponsePart.skipped` is optional and defaults to false for old history.

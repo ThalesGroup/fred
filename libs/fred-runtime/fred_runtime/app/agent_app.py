@@ -4186,6 +4186,7 @@ async def _iterate_runtime_event_payloads_inner(
             if tuning is not None and tuning.reasoning_enabled
             else []
         ),
+        ask_user=ctx.get("ask_user"),
         # The user's per-question reasoning choice (REASON-01 level 4). Same
         # trap as every field above: unnamed here means silently dropped. Kept
         # tri-state on purpose — `ctx.get` yielding None means "the agent never

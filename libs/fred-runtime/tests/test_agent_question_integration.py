@@ -69,9 +69,9 @@ class _Definition:
     agent_id = "question-test"
 
 
-def _compile(kind: str, model: _Model) -> Any:
+def _compile(kind: str, model: _Model, language: str | None = None) -> Any:
     binding = BoundRuntimeContext(
-        runtime_context=RuntimeContext(ask_user=True),
+        runtime_context=RuntimeContext(ask_user=True, language=language),
         portable_context=PortableContext(
             request_id="request-1",
             correlation_id="correlation-1",
@@ -149,19 +149,35 @@ async def _drive(agent: Any, payload: object, thread: str) -> list[Interrupt]:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["react", "deep"])
 @pytest.mark.parametrize(
-    "answer, expected",
+    "answer, expected, language",
     [
-        ({"choice_id": "yes"}, {"status": "answered", "choice_id": "yes"}),
-        ({"text": "Maybe later"}, {"status": "answered", "text": "Maybe later"}),
+        ({"choice_id": "yes"}, {"status": "answered", "choice_id": "yes"}, None),
+        ({"text": "Maybe later"}, {"status": "answered", "text": "Maybe later"}, None),
         (
             {"choice_id": "yes", "text": "Please"},
             {"status": "answered", "choice_id": "yes", "text": "Please"},
+            None,
         ),
-        ({"skipped": True}, {"status": "skipped"}),
+        (
+            {"skipped": True},
+            {
+                "status": "skipped",
+                "instruction": "The user chose not to answer this question. Continue this turn using your own assumptions and state them in your response, without asking the same question again.",
+            },
+            "en-US",
+        ),
+        (
+            {"skipped": True},
+            {
+                "status": "skipped",
+                "instruction": "L'utilisateur n'a pas souhaité répondre à cette question. Continue ce tour avec tes propres hypothèses et explicite-les dans ta réponse, sans reposer la même question.",
+            },
+            "fr-FR",
+        ),
     ],
 )
 async def test_question_resumes_its_tool_call(
-    kind: str, answer: dict[str, object], expected: dict[str, str]
+    kind: str, answer: dict[str, object], expected: dict[str, str], language: str | None
 ) -> None:
     model = _Model(
         script=[
@@ -183,8 +199,8 @@ async def test_question_resumes_its_tool_call(
             AIMessage(content="continued"),
         ]
     )
-    agent = _compile(kind, model)
-    thread = f"{kind}-{answer}"
+    agent = _compile(kind, model, language)
+    thread = f"{kind}-{answer}-{language}"
     pending = await _drive(agent, {"messages": [HumanMessage("Ask me")]}, thread)
     assert len(pending) == 1
     assert pending[0].value["stage"] == "agent_question"

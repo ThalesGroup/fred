@@ -8,15 +8,15 @@
 ## 2. Runtime question tool and admission
 
 - [x] 2.1 Mount the pure `ask_user` tool only for enabled interactive turns through the shared ReAct/Deep resolver and binder; verify tool catalog, collision, absence, and injected occurrence-id tests.
-- [x] 2.2 Validate each pending agent-question answer before the single-use claim, then return choice/text or skipped JSON to the matching tool call; verify invalid answers leave the pause retryable and approval-gate behavior is unchanged.
+- [x] 2.2 Validate each pending agent-question answer before the single-use claim, then return choice/text or skipped JSON with a localized continuation instruction to the matching tool call; verify invalid answers leave the pause retryable and approval-gate behavior is unchanged.
 - [x] 2.3 Persist skipped answers as HITL response rows and preserve choice-plus-comment fields; verify history reload finds no pending question after a skip.
 - [x] 2.4 Exercise real compiled ReAct and Deep turns for choice, text, choice plus comment, skip, and sibling questions sharing an interrupt id; verify each result reaches the correct `ToolMessage` and the turn continues.
 
 ## 3. Managed chat
 
 - [x] 3.1 Emit the platform-owned `ask_user_toggle` in control-plane execution preparation with its default on; verify the control-plane preparation test and absent-control compatibility.
-- [x] 3.2 Store the toggle per conversation and send `RuntimeContext.ask_user` on new turns only when offered; verify frontend composer and request-builder tests for true, false, absent, and session switching.
-- [x] 3.3 Extend the existing HITL prompt to submit a choice with optional comment and show skip only for agent questions; verify component and resume-payload tests, including input length and keyboard behavior.
+- [x] 3.2 Store the toggle per conversation and send `RuntimeContext.ask_user` on new turns only when the fresh preparation offers it, including the first turn before eager controls load; verify true, false, absent, first-turn, and session-switching tests.
+- [x] 3.3 Extend the existing HITL prompt to submit a choice with optional comment, show skip and a matching close action only for agent questions, and lay out choices vertically; verify component and resume-payload tests, including input length and keyboard behavior.
 - [x] 3.4 Keep a pending question answerable when the toggle changes during its pause, and render a skipped response after reload; verify managed-chat resume and history-reconstruction tests.
 - [x] 3.5 Regenerate runtime and control-plane OpenAPI clients from backend sources; verify generated-file diffs and frontend typecheck.
 

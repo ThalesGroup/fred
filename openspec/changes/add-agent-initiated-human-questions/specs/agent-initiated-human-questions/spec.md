@@ -26,6 +26,11 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** it asks a question with options and free text allowed
 - **THEN** the person can submit one option together with an optional comment in a single answer
 
+#### Scenario: Choices in managed chat
+
+- **WHEN** an agent asks a question with multiple choices
+- **THEN** managed chat displays them in their given order, one per centered row
+
 #### Scenario: Invalid question form
 
 - **WHEN** the agent calls `ask_user` with neither options nor free text enabled, or with duplicate or empty option identifiers
@@ -52,12 +57,23 @@ On resume, `ask_user` SHALL return one result to its own tool call that distingu
 
 ### Requirement: A person can skip an agent question
 
-An unanswered `ask_user` prompt SHALL offer a skip action. Skipping SHALL resume the calling tool with an explicit unanswered result, record the skipped response in history, and SHALL NOT fabricate a choice, text answer, or a new user turn. A tool-approval prompt SHALL retain its own approval choices and SHALL NOT gain this skip action.
+An unanswered `ask_user` prompt SHALL offer a skip action at the bottom right and a close control at the top right that performs the same action. Skipping SHALL resume the calling tool with an explicit unanswered result and a short instruction in the turn language to continue with stated assumptions, record the skipped response in history, and SHALL NOT fabricate a choice, text answer, or a new user turn. A tool-approval prompt SHALL retain its own approval choices and SHALL NOT gain this skip action.
 
 #### Scenario: Skip a poorly posed question
 
 - **WHEN** the person skips a pending agent question
 - **THEN** the agent receives an explicit skipped result and can continue the turn, and reloading the conversation does not restore that question as pending
+
+#### Scenario: Close a question
+
+- **WHEN** the person closes a pending agent question with the top-right control
+- **THEN** the question is skipped and the agent continues the same turn with the same result as the bottom-right skip action
+
+#### Scenario: Localized skip instruction
+
+- **GIVEN** a turn whose language is French or English
+- **WHEN** the person skips the question
+- **THEN** the calling agent receives the instruction to continue with explicit assumptions in that language
 
 #### Scenario: Approval remains distinct
 
@@ -67,6 +83,12 @@ An unanswered `ask_user` prompt SHALL offer a skip action. Skipping SHALL resume
 ### Requirement: Conversation control determines availability
 
 Managed chat SHALL expose a platform-owned control for agent questions, initially enabled and stored per conversation. When the control is off, the agent SHALL not see `ask_user` on a new turn. When the interactive control is absent, including noninteractive execution, the agent SHALL not see `ask_user`; absence SHALL remain distinct from an explicit off value in the runtime context. A resume of a question already pending SHALL remain answerable even if the control has since been switched off; the switch takes effect on the next new turn.
+
+#### Scenario: First turn before eager controls load
+
+- **GIVEN** a new managed conversation whose eager preparation has not populated the composer controls
+- **WHEN** the first turn's preparation offers the agent-question control
+- **THEN** the runtime context follows the conversation's selected value or the enabled default
 
 #### Scenario: Disable for a conversation
 

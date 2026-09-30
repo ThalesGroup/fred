@@ -56,7 +56,7 @@ class AskUserArgs(BaseModel):
         return self
 
 
-async def ask_user(payload: dict[str, object]) -> str:
+async def ask_user(payload: dict[str, object], *, language: str | None = None) -> str:
     args = AskUserArgs.model_validate(payload)
     request = HumanInputRequest(
         stage="agent_question",
@@ -68,7 +68,21 @@ async def ask_user(payload: dict[str, object]) -> str:
     decision = interrupt(request.model_dump(mode="json"))
     answer = parse_human_input_answer(decision, request)
     if answer.skipped:
-        return '{"status":"skipped"}'
+        is_french = language is not None and language.strip().lower().replace(
+            "_", "-"
+        ).startswith("fr")
+        instruction = (
+            "L'utilisateur n'a pas souhaité répondre à cette question. Continue ce tour "
+            "avec tes propres hypothèses et explicite-les dans ta réponse, sans reposer la même question."
+            if is_french
+            else "The user chose not to answer this question. Continue this turn using your own "
+            "assumptions and state them in your response, without asking the same question again."
+        )
+        return json.dumps(
+            {"status": "skipped", "instruction": instruction},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
     result: dict[str, str] = {"status": "answered"}
     if answer.choice_id is not None:
         result["choice_id"] = answer.choice_id
