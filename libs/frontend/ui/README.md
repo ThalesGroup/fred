@@ -1,16 +1,17 @@
 # `@fred-oss/ui`
 
-This package is generated from FRED's canonical React components. The published
-`@fred-oss/ui@0.1.0-alpha.2` archive contains `Button`, `Icon`, `IconButton`,
-`Spinner`, `TextInput`, `Dialog`, `Select`, `Chip`, `Tooltip`, and `Checkbox`.
-Publication and public-registry verification do not imply adoption by RAGS or
-another external application.
+This package is generated from FRED's canonical React components. The reviewed
+`@fred-oss/ui@0.1.0-alpha.3` candidate extends the published alpha.2 surface for
+hosted applications. Publication is a separate protected release step.
 
-The public root exports ten component values and the reviewed `ButtonProps`,
-`IconButtonProps`, `IconProps`, `TextInputProps`, `SpinnerProps`, `DialogProps`,
-`SelectProps<T>`, `SelectOption<T>`, `ChipProps`, `TooltipProps`, `CheckboxProps`,
-`ButtonSize`, `ButtonVariant`, `IconButtonVariant`, `ColorTheme`, and `MaterialIconType` contracts.
-No component subpath is public.
+The public root exports `Button`, `Icon`, `IconButton`, `Spinner`, `TextInput`,
+`Dialog`, `Select`, `Chip`, `Tooltip`, `Checkbox`, `TextArea`, `Switch`,
+`ProgressBar`, `IndicatorDot`, `Disclosure`, `Breadcrumb`, `PageHeader`,
+`SelectableCard`, `FileDropzone`, `ServiceNotice`, `PageEmptyState`,
+`KpiStatCard`, `DataTable`, `TablePagination`, `InlineDrawer`, `Toast`,
+`ToastProvider`, `useToast`, and `StatusBadge`, together with their prop and
+required option/visual contracts. Generic `DataTableProps<T>` and
+`DataTableColumn<T>` retain the consumer's row type. No component subpath is public.
 
 Install this archive together with the matching `@fred-oss/design-tokens` archive and
 consumer-owned React 19.2.4 / React DOM 19.2.4. Import the contracts explicitly:
@@ -42,6 +43,23 @@ defaults its button name to `Remove ${label}`, which callers can override via
 `removeAriaLabel`. `Tooltip` accepts text or rich content and dismisses on Escape;
 `Checkbox` retains native input props, refs, and `indeterminate`.
 
+KPI state text is configurable through `loadingLabel`, `errorLabel`, and
+`noDataLabel`. `DataTable` accepts `labels` for selection and nested `pagination`
+labels; `TablePaginationLabels` includes typed `totalItems(count)` and
+`pageNumber(page, pageCount)` formatters. Defaults are neutral English; FRED's
+application adapters supply its existing translations. Pagination options use
+`SelectOption<number>`. `ServiceNotice` and `PageEmptyState` accept only
+`MaterialIconType` names.
+
+`StatusBadge` renders a label with `success`, `error`, `warning`, `info`, or
+`neutral` tone; use `Chip` for removable input tokens. `InlineDrawer` supports
+both overlay and push layouts; push drawers accept `resizable` bounds and a
+`persistKey`. Resize/storage hooks are private implementation dependencies.
+`ToastProvider` and direct `Toast` accept `onCopy(text)`, `copyLabel`, and
+`dismissLabel`. Supply your application's clipboard action to enable error
+copying; without it, the copy control is omitted. `useToast` exposes success,
+error, info, and warning notifications with caller-controlled expiry.
+
 Wrap reusable UI in a consumer-owned `.fred-ui` root and set `data-theme="light"` or
 `data-theme="dark"` on that root or an ancestor. The UI stylesheet includes component
 CSS and the packaged Material Symbols Outlined font. It does not apply FRED shell-wide
@@ -64,7 +82,7 @@ prerequisites are errors.
 
 Canonical ownership, package boundaries, and future work are described by the existing
 [frontend packaging RFC](https://github.com/ThalesGroup/fred/blob/swift/docs/swift/FRED-FRONTEND-PACKAGING-RFC.md). Rounded,
-Sharp, custom SVG icons, deferred components, other overlays, iframe SDK work, and
+Sharp, custom SVG icons, domain-specific components, iframe SDK work, and
 adopter migrations are outside this extension milestone.
 
 The checked-in manifest uses the published UI prerelease coordinate. Future release

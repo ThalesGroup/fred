@@ -49,7 +49,7 @@ test("accepts the actual packed UI archive", async () => {
     ),
   );
   assert.equal(evidence.package, `${manifest.name}@${manifest.version}`);
-  assert.equal(evidence.glyphCount, 134);
+  assert.equal(evidence.glyphCount, 135);
   assert.deepEqual(evidence.externalModules, [
     "react",
     "react-dom",
@@ -62,6 +62,8 @@ for (const file of [
   "dist/styles.css",
   "dist/fonts/MaterialSymbolsOutlined.woff2",
   "dist/types/src/index.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/DataTable/DataTable.d.ts",
+  "dist/types/.generated/src/hooks/useLocalStorageState.d.ts",
   "licenses/Material-Symbols-Apache-2.0.txt",
   "THIRD_PARTY_NOTICES.md",
 ]) {
@@ -453,4 +455,13 @@ test("rejects build evidence that marks React internal", async (context) => {
     validateUiArchive(archive),
     /react is not proven external/,
   );
+});
+
+test("rejects a missing hosted component runtime export", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/index.js");
+    const source = await readFile(file, "utf8");
+    await writeFile(file, source.replace(/\b\w+ as StatusBadge,?/, ""));
+  });
+  await assert.rejects(validateUiArchive(archive), /runtime exports differ/);
 });

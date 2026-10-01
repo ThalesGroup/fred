@@ -71,3 +71,66 @@ export {
   badDialog,
   badCheckbox,
 };
+
+import {
+  StatusBadge,
+  ServiceNotice,
+  PageEmptyState,
+  Switch,
+  DataTable,
+  TablePagination,
+  ToastProvider,
+  type DataTableColumn,
+} from "@fred-oss/ui";
+
+// @ts-expect-error Tones are a closed domain-neutral union.
+const badBadge = <StatusBadge label="Bad" tone="completed" />;
+// @ts-expect-error Custom application icons are outside the package.
+const badNotice = <ServiceNotice icon="customAgent" title="Bad" />;
+// @ts-expect-error Unsupported material glyphs are rejected.
+const badEmpty = <PageEmptyState icon="imaginary_icon" message="Bad" />;
+// @ts-expect-error Only implemented switch sizes are supported.
+const badSwitch = <Switch size="large" />;
+const badColumn: DataTableColumn<{ id: number }> = {
+  label: "Bad",
+  // @ts-expect-error Row renderers retain their generic row type.
+  cellRenderer: (row: string) => row,
+};
+const badTable = (
+  // @ts-expect-error Table row keys are string or number, never an arbitrary object.
+  <DataTable data={[{ id: 1 }]} columns={[]} rowKey={(row) => row} />
+);
+const badPagination = (
+  <TablePagination
+    totalItems={1}
+    currentPage={0}
+    pageCount={1}
+    rowsPerPage={1}
+    // @ts-expect-error Numeric pagination options cannot contain string values.
+    rowsPerPageOptions={[{ key: "bad", label: "Bad", value: "one" }]}
+    onFirst={() => {}}
+    onPrev={() => {}}
+    onNext={() => {}}
+    onLast={() => {}}
+  />
+);
+const badToast = (
+  <ToastProvider
+    // @ts-expect-error Copy receives text, not an event or numeric value.
+    onCopy={(value: number) => {
+      void value;
+    }}
+  >
+    Bad
+  </ToastProvider>
+);
+export {
+  badBadge,
+  badNotice,
+  badEmpty,
+  badSwitch,
+  badColumn,
+  badTable,
+  badPagination,
+  badToast,
+};

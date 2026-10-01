@@ -5075,3 +5075,13 @@ Approval actions use the same neutral outline style and offer a conversation-sco
 choice; the browser answers later matching approval pauses through the existing
 resume flow. Skip at the bottom right and close at the top right appear only
 for `stage="agent_question"`. Both resume the turn as skipped. A skipped answer is shown in the same card, including after history reload.
+
+## Shared hosted-application UI components
+
+The alpha.3 package surface reuses canonical atoms and molecules in place;
+see [the package README](../../../libs/frontend/ui/README.md) for exports and
+neutral contracts. KPI/table primitives take caller labels, while FRED's thin
+application adapters supply translations. Toast copying is application-owned.
+The generic StatusBadge replaces the evaluation-only pill implementation and
+keeps evaluation tone mapping local to the evaluation views. Task/ingestion
+badges and charts remain separate domain components.
