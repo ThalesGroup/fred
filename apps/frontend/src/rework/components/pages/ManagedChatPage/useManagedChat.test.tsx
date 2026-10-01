@@ -1459,7 +1459,13 @@ describe("useManagedChat — session write reliability", () => {
     };
     const second = {
       ...awaitingHumanEvent,
-      payload: { stage: "agent_question", question: "Budget?", interrupt_id: "interrupt-b", occurrence_id: "call-b" },
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        free_text: true,
+      },
     };
     sendHitlResumeMock.mockResolvedValueOnce(false);
     mount();
@@ -1479,6 +1485,14 @@ describe("useManagedChat — session write reliability", () => {
     expect(latest.pendingHitlTabs).toEqual([first, second]);
     expect(latest.canSendAllHitl).toBe(true);
     expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+    act(() => latest.setHitlFreeText("A different answer"));
+    expect(latest.stagedHitlAnswer).toEqual({
+      answer: undefined,
+      freeText: "A different answer",
+      skipped: false,
+    });
+    act(() => latest.setHitlFreeText(""));
+    expect(latest.canSendAllHitl).toBe(false);
   });
 
   it("remembers only the gated tool after the approval resume is accepted", async () => {

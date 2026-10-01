@@ -104,10 +104,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         const key = hitlKey(selected);
         hitlDraftsRef.current.set(key, value);
         const staged = stagedHitlAnswersRef.current.get(key);
-        if (staged && !staged.skipped) {
+        if (staged && (!staged.skipped || value.trim())) {
           const next = new Map(stagedHitlAnswersRef.current);
           if (staged.answer === undefined && !value.trim()) next.delete(key);
-          else next.set(key, { ...staged, freeText: value.trim() ? value : undefined });
+          else next.set(key, { ...staged, freeText: value.trim() ? value : undefined, skipped: false });
           replaceStagedHitlAnswers(next);
         }
       }
