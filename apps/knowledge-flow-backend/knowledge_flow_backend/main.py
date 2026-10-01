@@ -161,6 +161,8 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="knowledge-flow",
         log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
         store=application_context.get_log_store(),
     )
     logger.info("%s create_app() called with base_url=%s", LOG_PREFIX, base_url)

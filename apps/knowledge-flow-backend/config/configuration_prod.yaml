@@ -18,6 +18,7 @@ app:
   address: "127.0.0.1"
   port: 8111
   log_level: info
+  log_format: text
   reload: false
   reload_dir: "."
   # Must mirror the control-plane's own configuration_prod.yaml: that backend

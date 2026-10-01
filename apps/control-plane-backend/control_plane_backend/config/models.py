@@ -30,7 +30,8 @@ from fred_core.common import (
 )
 from fred_core.scheduler import SchedulerBackend
 from fred_sdk.contracts.models import TuningValue
-from pydantic import BaseModel, Field, field_validator, model_validator
+from fred_pod.common.structures import LogOutputFormat
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
 
@@ -41,6 +42,7 @@ class AppConfig(BaseModel):
     address: str = "127.0.0.1"
     port: int = 8222
     log_level: str = "info"
+    log_format: LogOutputFormat = "text"
     gcu_version: str | None = None
     team_admin_charter_version: str | None = Field(
         default=None,

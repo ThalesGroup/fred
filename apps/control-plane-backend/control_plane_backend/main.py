@@ -266,6 +266,8 @@ def create_app() -> FastAPI:
     log_setup(
         service_name="control-plane",
         log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
         store=build_log_store(
             log_store_config=configuration.storage.log_store,
             opensearch_config=configuration.storage.opensearch,
