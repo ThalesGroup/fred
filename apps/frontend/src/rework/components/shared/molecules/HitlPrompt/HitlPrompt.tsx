@@ -126,7 +126,7 @@ export function HitlPrompt({
                 value={freeText}
                 onChange={(e) => setFreeText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && freeText.trim() && !isOverLimit) {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && freeText.trim() && !isOverLimit) {
                     e.preventDefault();
                     onAnswer(undefined, freeText);
                   }

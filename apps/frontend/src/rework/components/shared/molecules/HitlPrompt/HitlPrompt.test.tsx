@@ -213,6 +213,12 @@ describe("HitlPrompt answer actions", () => {
     act(() => choice?.click());
     expect(onAnswer).toHaveBeenLastCalledWith("proceed", " note ");
     act(() =>
+      container
+        .querySelector("input")
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true })),
+    );
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    act(() =>
       container.querySelector("input")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
     );
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, " note ");
