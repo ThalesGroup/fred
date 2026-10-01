@@ -144,6 +144,7 @@ export const materialIcons = [
   "create_new_folder",
   "refresh",
   "schedule",
+  "pending",
   "edit_calendar",
   "expand_less",
   "expand_more",

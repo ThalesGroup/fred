@@ -63,6 +63,10 @@ that tick off one by one, and names the one under way:
    the longest stage: a large or scanned PDF can stay here for several minutes.
 4. **Indexing** — Fred files away what it read so it can find it again.
 
+Fred analyses a few files at a time. When you import several, the ones waiting
+their turn read **Waiting…**, in grey, with a still marker: the file has arrived,
+and its analysis starts as soon as a slot frees up.
+
 **It is the end of the last stage, not the end of the transfer, that makes the
 document usable by an agent.**
 

@@ -24,7 +24,7 @@ import type { TaskViewModel } from "../tasks/taskTypes";
  *  the server emits per file. */
 export const IMPORT_PHASES = ["upload", "uploading", "processing", "indexing"] as const;
 export type ImportPhase = (typeof IMPORT_PHASES)[number];
-export type PhaseState = "pending" | "current" | "done" | "failed";
+export type PhaseState = "pending" | "waiting" | "current" | "done" | "failed";
 
 const PHASE_LABEL: Record<ImportPhase, string> = {
   upload: "rework.tasks.importStage.upload",
@@ -77,6 +77,10 @@ export function importPhaseIndex(task: PhaseInput): number {
   return SERVER_PHASE[step] ?? 1;
 }
 
+/** Transferred, but no ingestion worker has taken the file yet: the server
+ *  creates the task `pending` and never writes that state again once started. */
+const isQueued = (task: PhaseInput): boolean => task.state === "pending" && task.stage === "analysis";
+
 export function importPhaseStates(task: PhaseInput): PhaseState[] {
   const current = importPhaseIndex(task);
   const stopped = task.state === "failed" || task.state === "cancelled";
@@ -85,7 +89,8 @@ export function importPhaseStates(task: PhaseInput): PhaseState[] {
     if (i < current) return "done";
     if (i > current) return "pending";
     if (stopped) return "failed";
-    return held ? "pending" : "current";
+    if (held) return "pending";
+    return isQueued(task) ? "waiting" : "current";
   });
 }
 
@@ -96,7 +101,7 @@ export function importPhaseStates(task: PhaseInput): PhaseState[] {
  *  last tick. */
 export function importLinkStates(states: PhaseState[]): PhaseState[] {
   return states.slice(0, -1).map((state, i) => {
-    if (states[i + 1] === "current") return "current";
+    if (states[i + 1] === "current" || states[i + 1] === "waiting") return states[i + 1];
     return state === "done" ? "done" : "pending";
   });
 }
@@ -106,6 +111,7 @@ export function importLinkStates(states: PhaseState[]): PhaseState[] {
  *  words itself. */
 export function importPhaseLabel(task: PhaseInput, t: TFunction): string | null {
   if (task.stage === "decision") return null;
+  if (isQueued(task)) return t("rework.imports.stepper.waiting");
   const index = importPhaseIndex(task);
   // Past the last phase: the file is in, and saying so is the last thing the
   // card has to say before it goes. Except in upload-only mode, which never
@@ -120,6 +126,7 @@ export function importPhaseLabel(task: PhaseInput, t: TFunction): string | null 
  *  where that line is not naming a phase at all. */
 export function importPhaseHintFor(task: PhaseInput, t: TFunction): string | null {
   if (task.stage === "decision") return null;
+  if (isQueued(task)) return t("rework.imports.stepper.hint.waiting");
   const index = importPhaseIndex(task);
   if (index >= IMPORT_PHASES.length) {
     return t(task.stage === "upload" ? "rework.imports.stepper.hint.doneUpload" : "rework.imports.stepper.hint.done");
