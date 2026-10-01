@@ -238,7 +238,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     "uses the current preparation for first-turn ask_user availability ($offered, $requested)",
     async ({ offered, requested, expected }) => {
       prepareExecutionImpl = async () => ({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: offered
           ? [{ capability_id: "platform", widget: "ask_user_toggle", params: { default: true } }]
           : [],
