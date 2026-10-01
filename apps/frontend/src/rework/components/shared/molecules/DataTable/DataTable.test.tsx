@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import DataTable, { DataTableColumn, SortState } from "./DataTable.tsx";
+import DataTable, { DataTableColumn, SortState } from "./LocalizedDataTable.tsx";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({

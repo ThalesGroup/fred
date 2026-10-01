@@ -22,8 +22,8 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
-import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
-import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard.tsx";
+import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import {
   usePlatformStatsQuery,

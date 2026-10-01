@@ -19,7 +19,7 @@ import { ComponentSize } from "../../utils/Type.ts";
 export type SwitchSize = Extract<ComponentSize, "small" | "medium">;
 
 // `size` is the native input's character width, meaningless on a checkbox.
-interface SwitchProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
+export interface SwitchProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
   size?: SwitchSize;
 }
 

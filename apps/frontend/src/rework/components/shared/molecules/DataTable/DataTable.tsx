@@ -14,11 +14,11 @@
 
 import styles from "./DataTable.module.scss";
 import React, { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import Checkbox from "@shared/atoms/Checkbox/Checkbox.tsx";
-import TablePagination from "@shared/molecules/TablePagination/TablePagination.tsx";
-import { OptionModel } from "@models/Option.model.ts";
+import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
+import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
+import TablePagination from "../TablePagination/TablePagination.tsx";
+import type { SelectOption } from "../Select/Select.tsx";
+import type { TablePaginationLabels } from "../TablePagination/TablePagination.tsx";
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
 
@@ -51,7 +51,14 @@ export interface ServerPagination {
   onLimitChange?: (limit: number) => void;
 }
 
-interface DataTableProps<T> {
+export interface DataTableLabels {
+  selectAllOnPage: string;
+  selectRow: string;
+  pagination?: Partial<TablePaginationLabels>;
+}
+
+export interface DataTableProps<T> {
+  labels?: Partial<DataTableLabels>;
   columns: DataTableColumn<T>[];
   data: T[];
   backgroundColor?: string;
@@ -140,13 +147,14 @@ function compareSortValues(
   return String(a).localeCompare(String(b));
 }
 
-const rowsPerPageOptions: OptionModel<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
+const rowsPerPageOptions: SelectOption<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
   value: n,
   label: String(n),
   key: String(n),
 }));
 
 export default function DataTable<T>({
+  labels,
   columns,
   data,
   backgroundColor = "var(--surface-container)",
@@ -163,7 +171,6 @@ export default function DataTable<T>({
   onSortChange,
   sortClearable = true,
 }: DataTableProps<T>) {
-  const { t } = useTranslation();
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
@@ -291,7 +298,7 @@ export default function DataTable<T>({
               checked={allOnPageSelected}
               indeterminate={someOnPageSelected}
               onChange={toggleAllOnPage}
-              aria-label={t("dataTable.selection.selectAllOnPage")}
+              aria-label={labels?.selectAllOnPage ?? "Select all on page"}
             />
           </div>
         )}
@@ -311,10 +318,7 @@ export default function DataTable<T>({
                     {/* The arrow points the way the list runs, as a file
                         explorer does: down for ascending (A at the top, Z at
                         the bottom), up for descending. */}
-                    <Icon
-                      category="outlined"
-                      type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"}
-                    />
+                    <Icon type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"} />
                   </span>
                 </button>
               ) : (
@@ -362,7 +366,7 @@ export default function DataTable<T>({
                   <Checkbox
                     checked={selectedKeys?.has(key) ?? false}
                     onChange={() => toggleRow(key)}
-                    aria-label={t("dataTable.selection.selectRow")}
+                    aria-label={labels?.selectRow ?? "Select row"}
                   />
                 </div>
               )}
@@ -393,6 +397,7 @@ export default function DataTable<T>({
       </div>
       {paginationEnabled && (
         <TablePagination
+          labels={labels?.pagination}
           totalItems={serverPagination ? serverPagination.totalCount : data.length}
           currentPage={currentPage}
           pageCount={pageCount}

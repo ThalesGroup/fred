@@ -26,7 +26,7 @@ import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar";
 import Select from "@shared/molecules/Select/Select";
 import type { OptionModel } from "@models/Option.model.ts";
 import { Breadcrumb } from "@shared/molecules/Breadcrumb/Breadcrumb";
-import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
+import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";

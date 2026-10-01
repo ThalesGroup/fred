@@ -13,18 +13,38 @@
 // limitations under the License.
 
 import styles from "./TablePagination.module.scss";
-import { useTranslation } from "react-i18next";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
-import { OptionModel } from "@models/Option.model.ts";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
+import Select from "../Select/Select.tsx";
+import type { SelectOption } from "../Select/Select.tsx";
+
+export interface TablePaginationLabels {
+  totalItems: (count: number) => string;
+  itemsPerPage: string;
+  pageNumber: (page: number, pageCount: number) => string;
+  first: string;
+  prev: string;
+  next: string;
+  last: string;
+}
+
+const defaultLabels: TablePaginationLabels = {
+  totalItems: (count) => `${count} items`,
+  itemsPerPage: "Items per page",
+  pageNumber: (page, pageCount) => `Page ${page} of ${pageCount}`,
+  first: "First page",
+  prev: "Previous page",
+  next: "Next page",
+  last: "Last page",
+};
 
 export interface TablePaginationProps {
+  labels?: Partial<TablePaginationLabels>;
   totalItems: number;
   /** 0-based. */
   currentPage: number;
   pageCount: number;
   rowsPerPage: number;
-  rowsPerPageOptions: OptionModel<number>[];
+  rowsPerPageOptions: SelectOption<number>[];
   /** Omit to keep rowsPerPage fixed and hide the selector. */
   onRowsPerPageChange?: (value: number) => void;
   onFirst: () => void;
@@ -42,6 +62,7 @@ export interface TablePaginationProps {
  * `serverPagination` props).
  */
 export default function TablePagination({
+  labels,
   totalItems,
   currentPage,
   pageCount,
@@ -53,17 +74,17 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
-  const { t } = useTranslation();
+  const text = { ...defaultLabels, ...labels };
 
   return (
     <div className={styles["datatable-footer"]}>
       <div className={styles["datatable-footer-left"]}>
-        <span className={styles["footer-label"]}>{t("dataTable.pagination.totalItems", { count: totalItems })}</span>
+        <span className={styles["footer-label"]}>{text.totalItems(totalItems)}</span>
       </div>
       <div className={styles["datatable-footer-right"]}>
         {onRowsPerPageChange && (
           <>
-            <span className={styles["footer-label"]}>{t("dataTable.pagination.itemsPerPage")}</span>
+            <span className={styles["footer-label"]}>{text.itemsPerPage}</span>
             <div className={styles["footer-rows-per-page-select"]}>
               <Select<number>
                 size="small"
@@ -79,7 +100,7 @@ export default function TablePagination({
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "first_page" }}
-          aria-label={t("dataTable.pagination.first")}
+          aria-label={text.first}
           disabled={currentPage <= 0}
           onClick={onFirst}
         />
@@ -87,18 +108,18 @@ export default function TablePagination({
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "chevron_left" }}
-          aria-label={t("dataTable.pagination.prev")}
+          aria-label={text.prev}
           disabled={currentPage <= 0}
           onClick={onPrev}
         />
         <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-          {t("dataTable.pagination.pageNumber", { page: currentPage + 1, pageCount })}
+          {text.pageNumber(currentPage + 1, pageCount)}
         </span>
         <IconButton
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "chevron_right" }}
-          aria-label={t("dataTable.pagination.next")}
+          aria-label={text.next}
           disabled={currentPage >= pageCount - 1}
           onClick={onNext}
         />
@@ -106,7 +127,7 @@ export default function TablePagination({
           variant="icon"
           size="medium"
           icon={{ category: "outlined", type: "last_page" }}
-          aria-label={t("dataTable.pagination.last")}
+          aria-label={text.last}
           disabled={currentPage >= pageCount - 1}
           onClick={onLast}
         />

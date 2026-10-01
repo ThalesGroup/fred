@@ -13,11 +13,11 @@
 // limitations under the License.
 
 import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { usePaneResize } from "@rework/core/hooks/usePaneResize";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
+import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 
-interface InlineDrawerResizeSpec {
+export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
   persistKey: string;
   /** Drag bounds (px). Default 320–900, the legacy chat pane's bounds. */
@@ -28,7 +28,7 @@ interface InlineDrawerResizeSpec {
   maxViewportFraction?: number;
 }
 
-interface InlineDrawerProps {
+export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;

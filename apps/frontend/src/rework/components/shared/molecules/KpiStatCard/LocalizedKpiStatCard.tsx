@@ -12,21 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ColorTheme } from "../../utils/Type.ts";
-import styles from "./ProgressBar.module.css";
+import { useTranslation } from "react-i18next";
+import KpiStatCard, { type KpiStatCardProps } from "./KpiStatCard.tsx";
 
-export interface ProgressBarProps {
-  theme: ColorTheme;
-  current: number;
-  max: number;
-}
-
-export default function ProgressBar({ theme, current, max }: ProgressBarProps) {
-  const percentage = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
-
+export default function LocalizedKpiStatCard(props: KpiStatCardProps) {
+  const { t } = useTranslation();
   return (
-    <div className={styles.track} role="progressbar" aria-valuenow={current} aria-valuemin={0} aria-valuemax={max}>
-      <div data-color={theme} className={styles.fill} style={{ width: `${percentage}%` }} />
-    </div>
+    <KpiStatCard
+      loadingLabel={t("common.loading")}
+      errorLabel={t("common.loadingError")}
+      noDataLabel={t("common.noData")}
+      {...props}
+    />
   );
 }

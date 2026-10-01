@@ -18,12 +18,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TablePagination from "./TablePagination.tsx";
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({
-    t: (key: string, opts?: Record<string, unknown>) => (opts ? `${key} ${JSON.stringify(opts)}` : key),
-  }),
-}));
-
 let container: HTMLDivElement;
 let root: Root;
 
@@ -73,8 +67,7 @@ describe("TablePagination", () => {
   it("shows the total item count and current/total page", () => {
     render(<TablePagination {...baseProps} />);
     expect(container.textContent).toContain("45");
-    expect(container.textContent).toContain('"page":2');
-    expect(container.textContent).toContain('"pageCount":3');
+    expect(container.textContent).toContain("Page 2 of 3");
   });
 
   it("hides the rows-per-page selector when onRowsPerPageChange is omitted", () => {

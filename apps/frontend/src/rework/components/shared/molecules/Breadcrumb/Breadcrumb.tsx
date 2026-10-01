@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./Breadcrumb.module.css";
 
 export interface BreadcrumbSegment {
@@ -68,7 +68,7 @@ export function Breadcrumb({ segments }: BreadcrumbProps) {
               )}
               {!isCurrent && (
                 <span className={styles.separator} aria-hidden="true">
-                  <Icon category="outlined" type="chevron_right" />
+                  <Icon type="chevron_right" />
                 </span>
               )}
             </li>

@@ -74,7 +74,7 @@ vi.mock("@shared/molecules/BarChart/BarChart", () => ({
 vi.mock("@shared/molecules/HistogramChart/HistogramChart", () => ({
   default: ({ title }: { title: string }) => <div>{title}</div>,
 }));
-vi.mock("@shared/molecules/KpiStatCard/KpiStatCard", () => ({
+vi.mock("@shared/molecules/KpiStatCard/LocalizedKpiStatCard", () => ({
   default: ({ label }: { label: string }) => <div>{label}</div>,
 }));
 vi.mock("@shared/molecules/TimeRangeSelector/TimeRangeSelector", () => ({

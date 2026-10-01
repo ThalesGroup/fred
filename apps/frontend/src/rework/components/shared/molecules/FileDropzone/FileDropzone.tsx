@@ -13,10 +13,10 @@
 // limitations under the License.
 
 import { useRef, useState } from "react";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./FileDropzone.module.css";
 
-interface FileDropzoneProps {
+export interface FileDropzoneProps {
   /** `accept` attribute for the file input, e.g. ".json,.csv". */
   accept: string;
   /** Primary hint shown inside the zone. */
@@ -52,7 +52,7 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
           if (file) onFile(file);
         }}
       >
-        <Icon category="outlined" type="attach_file" />
+        <Icon type="attach_file" />
         <span className={styles.hint}>{hint}</span>
         {subHint && <span className={styles.subHint}>{subHint}</span>}
         <input

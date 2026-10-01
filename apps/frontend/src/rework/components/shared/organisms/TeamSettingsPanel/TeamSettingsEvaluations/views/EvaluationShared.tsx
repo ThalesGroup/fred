@@ -15,6 +15,8 @@
 // Shared building blocks for the evaluation admin pages. Design-system only:
 // semantic status -> design-token class names, no hardcoded colors.
 
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge.tsx";
+
 import type { TaskState } from "@rework/features/tasks/taskTypes";
 import styles from "./EvaluationShared.module.css";
 
@@ -82,17 +84,8 @@ export function scoreTone(pct: number): StatusTone {
   return "error";
 }
 
-const toneClass: Record<StatusTone, string> = {
-  success: styles.toneSuccess,
-  error: styles.toneError,
-  warning: styles.toneWarning,
-  info: styles.toneInfo,
-  neutral: styles.toneNeutral,
-};
-
-/** A small, design-token-driven status pill. */
 export function StatusPill({ label, tone }: { label: string; tone: StatusTone }) {
-  return <span className={`${styles.pill} ${toneClass[tone]}`}>{label}</span>;
+  return <StatusBadge label={label} tone={tone} />;
 }
 
 /** Labelled, monospace, scrollable text block (case input/output, etc.).
