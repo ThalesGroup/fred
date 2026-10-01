@@ -28,4 +28,8 @@ identically on `swift` and are unrelated; `alembic heads` one head, `alembic upg
 head` on the local Postgres, `make db-check-sqlite` (upgrade, check, downgrade) passed;
 `make migration-check` accepted 1 new note; `openspec validate --strict` passed. An
 independent review found no blocking issue; its refetch-flicker and double-click
-findings are fixed. Task 3.4 (UI check) awaits the developer.
+findings are fixed. After the card layout fixes (equal card height, bottom-aligned
+usage count, no gap between the corner buttons), frontend `make test` passed 3,166 with
+the same 4 `useChatSse` failures, and a second `/code-review` of the whole branch found
+nothing. Task 3.4: the developer checked the Prompts page favorites filter in the
+browser; the other surfaces are left to the PR review.
