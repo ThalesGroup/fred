@@ -574,8 +574,8 @@ def _child_with_pdf_timings(request, pipe, _parent_pid) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failed", [False, True])
-async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_path, monkeypatch, failed, capfd):
+@pytest.mark.parametrize("failed, telemetry", [(False, True), (True, True), (False, False)])
+async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_path, monkeypatch, failed, telemetry, capfd):
     import json
     from dataclasses import replace
     from types import SimpleNamespace
@@ -597,6 +597,12 @@ async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_pat
         "activity_attempt": 2,
     }
     request = replace(_request(tmp_path), profile="rich" if failed else "medium", log_format="json", logging_context=encode_log_context(context))
+    if not telemetry:
+
+        def unavailable(*args, **kwargs):
+            raise OSError("telemetry unavailable")
+
+        monkeypatch.setattr(extraction_process.socket, "socketpair", unavailable)
     capfd.readouterr()
     try:
         await run_extraction_in_process(request=request, budget_seconds=30, heartbeat=lambda: None, target=_child_with_pdf_timings, start_method="spawn")
@@ -610,12 +616,13 @@ async def test_spawned_child_forwards_pdf_timings_on_success_and_failure(tmp_pat
     assert child["service"] == "knowledge-flow-worker" and child["service_role"] == "worker"
     assert child["severity"] == "INFO" and "timestamp" in child
     events = [call.kwargs for call in writer.emit.call_args_list]
-    assert [event["name"] for event in events] == ["knowledge_flow.pdf.image_description_latency_ms", "knowledge_flow.pdf.image_loop_latency_ms"]
+    assert [event["name"] for event in events] == (["knowledge_flow.pdf.image_description_latency_ms", "knowledge_flow.pdf.image_loop_latency_ms"] if telemetry else [])
     for event in events:
         assert event["type"] == "timer"
         assert event["unit"] == "ms"
         assert event["value"] >= 0
         assert event["actor"].type == "system"
         assert event["dims"]["status"] == ("error" if failed else "ok")
-    assert events[0]["dims"]["model_name"] == "test-vision"
-    assert events[1]["dims"]["file_type"] == "pdf"
+    if telemetry:
+        assert events[0]["dims"]["model_name"] == "test-vision"
+        assert events[1]["dims"]["file_type"] == "pdf"
