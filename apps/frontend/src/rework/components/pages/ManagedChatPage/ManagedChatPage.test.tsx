@@ -85,6 +85,9 @@ vi.mock("./ConversationThread/ConversationThread", () => ({
 vi.mock("@shared/molecules/ThoughtTrace/traceDrawerContext", () => ({
   TraceDrawerProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ agentIconName: "person" }),
+}));
 vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
   useFrontendBootstrap: () => ({ activeTeam: { id: bootstrap.activeTeamId } }),
 }));
@@ -147,7 +150,6 @@ vi.mock("@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer", ()
 vi.mock("@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog", () => ({
   UploadWarningAckDialog: () => null,
 }));
-vi.mock("@shared/atoms/IconButton/IconButton", () => ({ default: () => null }));
 vi.mock("@shared/molecules/TokenUsageBadge/TokenUsageBadge", () => ({ TokenUsageBadge: () => null }));
 // Stands in for the real host on the one thing the page owns: which panel key
 // it is told to show. Rendering that back is what lets a test see the drawer
@@ -250,51 +252,51 @@ describe("ManagedChatPage chat-input policy wiring", () => {
   });
 });
 
-describe("ManagedChatPage agent todo panel", () => {
-  const baseChatValue = (messages: Record<string, unknown>[]) => {
-    const noop = () => undefined;
-    return {
-      agentDisplayName: "Agent",
-      attachments: [],
-      attachmentsUploading: false,
-      capabilityIds: [],
-      chatControls: [],
-      commitTitle: noop,
-      deletePersistedAttachment: noop,
-      handleAbort: noop,
-      handleAddAttachments: noop,
-      handleHitlAnswer: noop,
-      handleSend: noop,
-      hitlFreeText: "",
-      input: "",
-      inputCharacterCount: 0,
-      inputTooLong: false,
-      isHistorySettled: true,
-      isHydratingAttachments: false,
-      isLoadingHistory: false,
-      messages,
-      pendingHitl: null,
-      persistedAttachments: [],
-      ragScope: "all",
-      reasoning: false,
-      removeAttachment: noop,
-      searchPolicy: "hybrid",
-      selectedDocumentUids: [],
-      selectedLibraryIds: [],
-      sessionId: "session-1",
-      sessionTitle: "Chat",
-      setHitlFreeText: noop,
-      setInput: noop,
-      setRagScope: noop,
-      setReasoning: noop,
-      setSearchPolicy: noop,
-      setSelectedDocumentUids: noop,
-      setSelectedLibraryIds: noop,
-      threadMessages: [renderedTurn],
-      waitResponse: false,
-    };
+const baseChatValue = (messages: Record<string, unknown>[]) => {
+  const noop = () => undefined;
+  return {
+    agentDisplayName: "Agent",
+    attachments: [],
+    attachmentsUploading: false,
+    capabilityIds: [],
+    chatControls: [],
+    commitTitle: noop,
+    deletePersistedAttachment: noop,
+    handleAbort: noop,
+    handleAddAttachments: noop,
+    handleHitlAnswer: noop,
+    handleSend: noop,
+    hitlFreeText: "",
+    input: "",
+    inputCharacterCount: 0,
+    inputTooLong: false,
+    isHistorySettled: true,
+    isHydratingAttachments: false,
+    isLoadingHistory: false,
+    messages,
+    pendingHitl: null,
+    persistedAttachments: [],
+    ragScope: "all",
+    reasoning: false,
+    removeAttachment: noop,
+    searchPolicy: "hybrid",
+    selectedDocumentUids: [],
+    selectedLibraryIds: [],
+    sessionId: "session-1",
+    sessionTitle: "Chat",
+    setHitlFreeText: noop,
+    setInput: noop,
+    setRagScope: noop,
+    setReasoning: noop,
+    setSearchPolicy: noop,
+    setSelectedDocumentUids: noop,
+    setSelectedLibraryIds: noop,
+    threadMessages: [renderedTurn],
+    waitResponse: false,
   };
+};
 
+describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
     session_id: "session-1",
     exchange_id: "exchange-1",
@@ -363,6 +365,67 @@ describe("ManagedChatPage agent todo panel", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).not.toContain('data-testid="agent-todo-panel"');
     expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+});
+
+describe("ManagedChatPage new conversation action", () => {
+  it("keeps the header on a bound session whose history came back empty", () => {
+    chatValue = { ...baseChatValue([]), threadMessages: [], startNewConversation: vi.fn() };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    expect(container.querySelector('[class*="topBar"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="chatbot.newConversation"]')).not.toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("starts an empty chat that names the same agent and hides the action there", () => {
+    const startNewConversation = vi.fn();
+    chatValue = { ...baseChatValue([]), startNewConversation };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="chatbot.newConversation"]');
+    expect(button).not.toBeNull();
+    expect(container.textContent).toContain("Agent");
+
+    act(() => {
+      button?.click();
+    });
+    expect(startNewConversation).toHaveBeenCalledOnce();
+
+    chatValue = {
+      ...chatValue,
+      agentInstance: { display_name: "Contract Reviewer", role: "Reviews supplier contracts" },
+      sessionId: null,
+      sessionTitle: null,
+      threadMessages: [],
+    };
+    act(() => {
+      root.render(<ManagedChatPage />);
+    });
+    expect(container.textContent).toContain("Contract Reviewer");
+    expect(container.textContent).toContain("Reviews supplier contracts");
+    expect(container.querySelector('[class*="topBar"]')).toBeNull();
+    expect(container.querySelector('[data-testid="composer"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="chatbot.newConversation"]')).toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });
 

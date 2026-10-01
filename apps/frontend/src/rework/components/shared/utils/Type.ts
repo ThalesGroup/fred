@@ -58,6 +58,7 @@ const customIcons = ["customAgent"] as const;
  */
 export const materialIcons = [
   "add",
+  "add_comment",
   "crown",
   "remove",
   "home",

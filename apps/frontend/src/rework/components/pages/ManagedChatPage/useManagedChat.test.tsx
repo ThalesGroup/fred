@@ -736,6 +736,9 @@ describe("useManagedChat — session write reliability", () => {
     act(() => {
       latest.startNewConversation();
     });
+    expect(latest.sessionId).toBeNull();
+    expect(registerSessionCalls).toHaveLength(1);
+
     act(() => {
       latest.setInput("message for B");
     });
