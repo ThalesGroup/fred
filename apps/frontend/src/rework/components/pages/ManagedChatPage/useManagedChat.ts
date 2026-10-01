@@ -876,6 +876,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     sessionId,
     sessionTitle,
     agentDisplayName,
+    agentInstance,
     capabilityIds,
     chatControls,
     input,

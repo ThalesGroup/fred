@@ -401,6 +401,7 @@
       "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
+    "newConversation": "Nouvelle conversation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",

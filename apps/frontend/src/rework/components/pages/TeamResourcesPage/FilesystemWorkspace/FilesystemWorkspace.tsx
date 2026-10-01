@@ -316,7 +316,7 @@ export default function FilesystemWorkspace({
   const columns: DataTableColumn<FilesystemResourceInfoResult>[] = [
     {
       label: t("rework.resources.columns.name"),
-      size: "2fr",
+      size: "minmax(8rem, 2fr)",
       cellRenderer: (entry) => {
         if (entry.type === "directory") {
           const label = CONVENTIONAL_FOLDER_KEY[entry.path] ? t(CONVENTIONAL_FOLDER_KEY[entry.path]) : entry.path;
@@ -348,19 +348,19 @@ export default function FilesystemWorkspace({
     },
     {
       label: t("rework.resources.columns.size"),
-      size: "6.5rem",
+      size: "minmax(0, 6.5rem)",
       cellRenderer: (entry) => (
         <span className={styles.nowrapCell}>{entry.type === "directory" ? "—" : formatBytes(entry.size ?? 0)}</span>
       ),
     },
     {
       label: t("rework.resources.columns.created"),
-      size: "9rem",
+      size: "minmax(0, 9rem)",
       cellRenderer: (entry) => <span className={styles.nowrapCell}>{formatDateTime(entry.created)}</span>,
     },
     {
       label: t("rework.resources.columns.author"),
-      size: "9rem",
+      size: "minmax(0, 9rem)",
       cellRenderer: (entry) => {
         const uid = entry.created_by;
         return <span className={styles.nowrapCell}>{uid ? userDisplayName(uid, creatorById.get(uid)) : "—"}</span>;

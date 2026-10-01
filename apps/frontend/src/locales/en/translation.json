@@ -401,6 +401,7 @@
       "runErrorDetail": "The prompt behind this command could not be read. Please try again in a moment."
     },
     "composerPlaceholder": "Ask your question, or type / for a command",
+    "newConversation": "New conversation",
     "uiParts": {
       "ariaLabel": "Agent cards",
       "geoAria": "Map data",
