@@ -3,6 +3,7 @@ schema: 1
 title: "Use scoped diagnostic context in ingestion workers"
 impact: minor
 configuration: production
+configuration_reason: "Deployment configuration owns worker app.log_format; reference values already select JSON and omitted local values remain text."
 ---
 ## Applicability
 
