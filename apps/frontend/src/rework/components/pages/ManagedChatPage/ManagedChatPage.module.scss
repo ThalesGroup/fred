@@ -208,19 +208,21 @@
   flex-shrink: 0;
   animation: spectrum-rotate 2s linear infinite;
   animation-play-state: paused;
-  white-space: nowrap;
 }
 
+/* The atom's own 1px outline at rest, so the drawn circle is the full 40px box.
+   Hover/focus swaps 1px border + 1px padding for the 2px spectrum border: same
+   box, same inner size, no icon shift. */
 .newConversationButton.newConversationButton.newConversationButton {
-  border-width: 2px;
-  --btn-border: transparent;
-  box-shadow: inset 0 0 0 1px var(--outline);
+  padding: 1px;
 }
 
-.newConversationButton.newConversationButton.newConversationButton:hover,
-.newConversationButton.newConversationButton.newConversationButton:focus-visible {
+.newConversationButton.newConversationButton.newConversationButton:hover:not(:disabled),
+.newConversationButton.newConversationButton.newConversationButton:focus-visible:not(:disabled) {
   animation-play-state: running;
-  box-shadow: none;
+  border-width: 2px;
+  padding: 0;
+  --btn-border: transparent;
   --btn-background-surface: transparent;
   --btn-text-color: var(--on-surface);
   @include spectrum-border-fill;
@@ -229,21 +231,6 @@
 @media (prefers-reduced-motion: reduce) {
   .newConversationButton {
     animation: none;
-  }
-}
-
-.newConversationShortLabel {
-  display: none;
-}
-
-@media (max-width: 600px) {
-  .conversationTokens,
-  .newConversationLabel {
-    display: none;
-  }
-
-  .newConversationShortLabel {
-    display: inline;
   }
 }
 
@@ -366,10 +353,64 @@
 
 .welcomeBlock {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-l);
   margin: 0 auto var(--spacing-xl);
   width: 100%;
   text-align: center;
+}
+
+/* Agent identity above the greeting, stacked and centred: round icon, name,
+   role. Palette follows Home's recent-agent tiles. */
+.welcomeAgent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  padding: var(--spacing-m);
+  max-width: 100%;
+}
+
+.welcomeAgentIcon {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-full);
+  background-color: var(--secondary-container);
+  width: 2.5rem;
+  height: 2.5rem;
+  color: var(--on-secondary-container);
+  font-size: 1.5rem;
+}
+
+.welcomeAgentIdentity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 100%;
+}
+
+.welcomeAgentName,
+.welcomeAgentRole {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welcomeAgentName {
+  max-width: 100%;
+  color: var(--secondary);
+  font: var(--font-title-medium);
+}
+
+.welcomeAgentRole {
+  max-width: 100%;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
 }
 
 .welcomeTitle {

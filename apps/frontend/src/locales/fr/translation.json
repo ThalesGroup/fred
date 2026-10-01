@@ -402,7 +402,6 @@
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
     "newConversation": "Nouvelle conversation",
-    "newConversationShort": "Nouveau chat",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",

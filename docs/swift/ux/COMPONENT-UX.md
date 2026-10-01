@@ -3426,15 +3426,14 @@ drawer spans the full page height for better viewer visualization (changed 2026-
 the drawers lived inside `.contentRow` and reflowed only the content, the panel sliding **under**
 the full-width header; before that again the header lived inside the main column and shrank on
 open). The `topBar` is an inset rounded card — `--radius-s` corners, 12px top/left/right margin,
-flush bottom (2026-09-01). Its right side offers **New conversation** when a session is open.
-The action clears the session selection for the same agent and leaves the previous conversation
-available in the sidebar; a new session is created on first send. Its spectrum border appears
-on hover or keyboard focus and stays still at rest and with reduced motion. At widths below
-600px the button uses a shorter label and the token total is hidden to preserve room for the
-agent name. The launcher rail is a **page-root in-flow column** at the far right
-(see "Capability side-panel launcher rail"), not part of `.pageBody`. The
-`data-picker-top-boundary` attribute stays on the header so the composer's anchored pickers still
-stop just below it. The composer is
+flush bottom (2026-09-01). Its right side offers a **New conversation** outlined icon button
+(`add_comment`, with a tooltip) when a session is open. The action clears the session selection
+for the same agent and leaves the previous conversation available in the sidebar; a new session
+is created on first send. Its spectrum border appears on hover or keyboard focus and stays still
+at rest and with reduced motion. Every empty conversation, however it was started, shows the agent's
+icon, name, and role above the greeting, stacked and centred in an `outline-muted` bordered box (`radius-m`, `spacing-m` padding; round `secondary-container` icon,
+name in `title-medium`, role in `body-medium`), because the header's agent name is easy to miss; the `topBar` itself is hidden until the first send binds a session (an existing session with an empty history keeps it). The launcher rail is a **page-root in-flow column** at the far right
+(see "Capability side-panel launcher rail"), not part of `.pageBody`. The composer is
 built once (a single `composer` element) and placed either centered in the empty "new
 conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times
 (2026-08-06, see `RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` —

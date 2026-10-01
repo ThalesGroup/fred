@@ -10,12 +10,13 @@ See `proposal.md` for motivation. `ManagedChatPage` already has a right-side hea
 
 ## Decisions
 
-- Put an explicitly labelled button in `ManagedChatPage`'s `topBarRight` and invoke `chat.startNewConversation()`. A link to the same route could leave the page mounted with no reliable session-state transition; the existing hook owns that transition.
+- Put an icon button in `ManagedChatPage`'s `topBarRight` and invoke `chat.startNewConversation()`. A link to the same route could leave the page mounted with no reliable session-state transition; the existing hook owns that transition.
 - Show the button only while a session is bound. The empty chat already represents a new conversation, so a second action there would be redundant.
-- Use the shared `Button` atom and spectrum-border mixin. Keep a neutral outline at rest, reveal the brand border on hover and `:focus-visible`, and stop rotation for `prefers-reduced-motion: reduce`. This follows the AgentCard conversation affordance while avoiding ambient motion in the reading view.
-- Add a concise localized label. Reserve action space and let the title truncate at narrow widths; retain the agent name's own row.
+- Use the shared `IconButton` atom (`outlined`, `add_comment`) wrapped in `Tooltip`, with the spectrum-border mixin. Keep a neutral outline at rest, reveal the brand border on hover and `:focus-visible`, and stop rotation for `prefers-reduced-motion: reduce`. This follows the AgentCard conversation affordance while avoiding ambient motion in the reading view.
+- `ManagedChatWelcome` renders the agent identity from the instance `useManagedChat` already resolves, now returned as `agentInstance`. It stacks a round icon, the name (`title-medium`), and the role (`body-medium`), centred, with the colours of Home's `CompactAgentCard`; no shared component is extracted for now. The header is hidden while no session is bound: it would only repeat the agent name. A bound session with an empty or failed history keeps it, so it never looks like a fresh chat.
+- The localized label is the tooltip text and `aria-label`. An icon keeps the action compact at every width, so the header needs no narrow-width variant.
 
 ## Risks / Trade-offs
 
-- An active response can be abandoned by a session switch. The hook already aborts in-flight work on a session change; a focused page test will verify this path and that the previous session remains accessible.
+- An active response can be abandoned by a session switch. The hook already aborts in-flight work on a session change; this PR does not add a test for that path.
 - Existing CSS Module button specificity can override the border style. Reuse the AgentCard override pattern and verify light/dark, narrow-width, focus, and reduced-motion states during review.

@@ -60,10 +60,15 @@ import {
 import {
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
   type ContextPromptSummary,
+  type ManagedAgentInstanceSummary,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import Button from "@shared/atoms/Button/Button";
+import Icon from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import { resolveAgentIcon } from "@shared/utils/agentIcon";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import { useTranscribeAudioKnowledgeFlowV1AudioTranscriptionsPostMutation } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { transcribeAudioClip } from "./knowledgeFlowTranscription";
@@ -84,14 +89,28 @@ function pickWelcomeVariant(previous: number | null): number {
   return (next + 1) % WELCOME_VARIANT_KEYS.length;
 }
 
-function ManagedChatWelcome() {
+// The header's agent name is easy to miss, so the empty chat restates which
+// agent the conversation will be with.
+function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) {
   const { t } = useTranslation();
+  const { agentIconName } = useFrontendProperties();
   const firstName = KeyCloakService.GetUserGivenName();
   const [variantIndex] = useState(() => pickWelcomeVariant(null));
   const welcomeName = firstName ?? t("chatbot.welcomeFallback");
 
   return (
     <div className={styles.welcomeBlock}>
+      {agent && (
+        <div className={styles.welcomeAgent}>
+          <span className={styles.welcomeAgentIcon}>
+            <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
+          </span>
+          <span className={styles.welcomeAgentIdentity}>
+            <span className={styles.welcomeAgentName}>{agent.display_name}</span>
+            <span className={styles.welcomeAgentRole}>{agent.role}</span>
+          </span>
+        </div>
+      )}
       <p className={styles.welcomeTitle}>{t(WELCOME_VARIANT_KEYS[variantIndex], { username: welcomeName })}</p>
     </div>
   );
@@ -668,45 +687,47 @@ export default function ManagedChatPage() {
             together with the content below — the panel sits at the page body's
             right edge at full height, no longer under this bar. The inner row is
             capped to the composer field width so title and composer stay
-            aligned. */}
-            <div className={styles.topBar}>
-              <div className={styles.topBarInner}>
-                <div className={styles.topBarTitle}>
-                  {chat.sessionId && chat.sessionTitle != null && (
-                    <div className={styles.topBarTitleRow}>
-                      <span className={styles.titleLabel}>
-                        {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+            aligned. Hidden on a new conversation (no session yet), where the
+            welcome block already names the agent. */}
+            {!(isInitialState && chat.sessionId == null) && (
+              <div className={styles.topBar}>
+                <div className={styles.topBarInner}>
+                  <div className={styles.topBarTitle}>
+                    {chat.sessionId && chat.sessionTitle != null && (
+                      <div className={styles.topBarTitleRow}>
+                        <span className={styles.titleLabel}>
+                          {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
+                        </span>
+                        {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
+                        <span className={styles.editButtonSlot}>
+                          <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
+                        </span>
+                      </div>
+                    )}
+                    <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+                  </div>
+                  <div className={styles.topBarRight}>
+                    {conversationTokens.total_tokens > 0 && (
+                      <span className={styles.conversationTokens}>
+                        {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
                       </span>
-                      {/* Absolutely positioned: reserves no layout space, revealed on topBar hover */}
-                      <span className={styles.editButtonSlot}>
-                        <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
-                      </span>
-                    </div>
-                  )}
-                  <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
-                </div>
-                <div className={styles.topBarRight}>
-                  {conversationTokens.total_tokens > 0 && (
-                    <span className={styles.conversationTokens}>
-                      {t("chatbot.conversationTokenUsage.total", { count: conversationTokens.total_tokens })}
-                    </span>
-                  )}
-                  {chat.sessionId && (
-                    <Button
-                      color="primary"
-                      variant="outlined"
-                      size="medium"
-                      icon={{ category: "outlined", type: "add" }}
-                      className={styles.newConversationButton}
-                      onClick={chat.startNewConversation}
-                    >
-                      <span className={styles.newConversationLabel}>{t("chatbot.newConversation")}</span>
-                      <span className={styles.newConversationShortLabel}>{t("chatbot.newConversationShort")}</span>
-                    </Button>
-                  )}
+                    )}
+                    {chat.sessionId && (
+                      <Tooltip text={t("chatbot.newConversation")}>
+                        <IconButton
+                          variant="outlined"
+                          size="medium"
+                          icon={{ category: "outlined", type: "add_comment" }}
+                          aria-label={t("chatbot.newConversation")}
+                          className={styles.newConversationButton}
+                          onClick={chat.startNewConversation}
+                        />
+                      </Tooltip>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Conversation column — holds only the main column now; the push drawers
             moved up to the page body so they reflow the header too. */}
@@ -731,7 +752,7 @@ export default function ManagedChatPage() {
                   >
                     {isInitialState ? (
                       <div className={styles.initialStage}>
-                        <ManagedChatWelcome />
+                        <ManagedChatWelcome agent={chat.agentInstance} />
                         <div className={styles.initialComposer}>
                           {composer}
                           <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>

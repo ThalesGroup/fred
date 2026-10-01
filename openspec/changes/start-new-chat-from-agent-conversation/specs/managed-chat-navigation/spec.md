@@ -17,8 +17,19 @@ The managed chat SHALL offer a new-conversation action when an existing conversa
 - **WHEN** the user sends the first message
 - **THEN** the message belongs to a new session for the same team and agent
 
+### Requirement: Name the agent in an empty conversation
+An empty managed conversation SHALL show the agent's icon, name, and role above the greeting, however the conversation was started. Until the first message creates a session, it SHALL NOT show the conversation header; an existing session with no messages keeps its header.
+
+#### Scenario: Empty conversation
+- **WHEN** a user opens an empty conversation with an agent, from the header action, the Agents page, or Home
+- **THEN** the agent's icon, name, and role appear above the greeting, and the conversation header is hidden
+
+#### Scenario: Existing session with no messages
+- **WHEN** a user opens an existing conversation whose history is empty or failed to load
+- **THEN** the conversation header stays visible with its title and new-conversation action
+
 ### Requirement: Keep the action discoverable without continuous motion
-The action SHALL have a visible label, support keyboard activation, and use the existing spectrum treatment only during deliberate interaction. It SHALL have no continuous animation at rest and SHALL respect reduced-motion preferences.
+The action SHALL be an icon button with an accessible name and a tooltip, SHALL support keyboard activation, and use the existing spectrum treatment only during deliberate interaction. It SHALL have no continuous animation at rest and SHALL respect reduced-motion preferences.
 
 #### Scenario: Conversation at rest
 - **WHEN** a user reads an open conversation without interacting with the action
