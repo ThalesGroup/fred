@@ -54,6 +54,15 @@ Refusals stop the run with a typed reason: `authority_lost` (403, suspension, or
 grant. With either switch on, every authenticated request checks
 `organization#suspended` once and fails closed when OpenFGA cannot answer.
 
+## Diagnostic context
+
+After existing delegated admission, Fred can inherit a bounded `X-Fred-Log-Context`
+bag for operational correlation. Grant/principal identity overrides forwarded identity;
+logging metadata never grants permissions. Ordinary bearer calls ignore this header.
+The [observability contract](OBSERVABILITY-AND-AUDIT.md#61-delegated-downstream-diagnostic-context)
+defines transport bounds, receiver precedence and first-party confinement. No additional
+switch or credential acquisition is introduced.
+
 ## Known limits
 
 - **Effective rights are the person's, not person ∩ agent.** `agent` in the grant

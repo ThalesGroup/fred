@@ -53,6 +53,7 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.propagation import outbound_context_headers
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
@@ -3099,6 +3100,9 @@ class TeamWikiAdapter(TeamWikiPort):
             if credentials.authorization
             else {}
         )
+        if credentials.delegated:
+            headers.update(outbound_context_headers())
+            request_kwargs["follow_redirects"] = False
         auth = httpx.USE_CLIENT_DEFAULT
         if isinstance(provider, DelegatedCredentialProvider):
             auth = M2MBearerAuth(provider)

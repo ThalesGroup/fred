@@ -35,6 +35,8 @@ import httpx
 import pytest
 from conftest import MockIdentityProvider, admitted_provider
 from fastapi import HTTPException
+from fred_core.logs.context import log_context
+from fred_core.logs.propagation import CONTEXT_HEADER, decode_log_context
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
     GRANT_PARAM_PERSON,
@@ -290,13 +292,23 @@ async def test_each_delegated_request_acquires_its_bearer_once(monkeypatch, path
     identity = MockIdentityProvider(monkeypatch, "workload-token-1")
     receiver, seen = recording(answering(path))
 
-    await PATHS[path](admitted_provider(identity.provider), receiver)
+    with log_context(
+        correlation_id="journey-a",
+        request_id="upstream-a",
+        team_id="team-a",
+        custom={"phase": 2},
+    ):
+        await PATHS[path](admitted_provider(identity.provider), receiver)
 
     assert len(seen) == 1
     assert identity.acquisitions == 1
     assert identity.token_requests == ["request_initial"]
     assert bearers(seen) == ["Bearer workload-token-1"]
     assert grant_of(seen[0]) == GRANT
+    assert decode_log_context(seen[0].headers[CONTEXT_HEADER]) == (
+        {"correlation_id": "journey-a", "team_id": "team-a", "custom": {"phase": 2}},
+        None,
+    )
 
 
 @pytest.mark.parametrize("path", RUN_PATHS)
@@ -817,3 +829,42 @@ async def test_binding_lookup_preserves_only_bounded_account_status_unavailable(
     else:
         assert raised.value.status_code == 502
         assert not raised.value.headers
+
+
+@pytest.mark.asyncio
+async def test_shared_client_context_is_per_invocation_and_redirects_are_confined(
+    monkeypatch,
+):
+    identity = MockIdentityProvider(monkeypatch, "workload-token-1")
+    client, seen = kf_client(
+        lambda request: httpx.Response(
+            302, headers={"Location": "http://external.invalid/redirect"}
+        ),
+        credentials=admitted_provider(identity.provider),
+    )
+    client.client.follow_redirects = True
+    supplied = {"accept": "application/json"}
+    try:
+        with log_context(correlation_id="first", custom="first-only"):
+            await client._execute_authenticated_request(
+                "GET", "/documents", headers=supplied
+            )
+        with log_context(correlation_id="second"):
+            await client._execute_authenticated_request("GET", "/documents")
+        client._explicit_credentials = static_person_provider("ordinary-person")
+        await client._execute_authenticated_request(
+            "GET", "/documents", follow_redirects=False
+        )
+    finally:
+        await client.client.aclose()
+    assert supplied == {"accept": "application/json"}
+    assert len(seen) == 3
+    assert all(request.url.host == "kf.invalid" for request in seen)
+    assert decode_log_context(seen[0].headers[CONTEXT_HEADER])[0] == {
+        "correlation_id": "first",
+        "custom": "first-only",
+    }
+    assert decode_log_context(seen[1].headers[CONTEXT_HEADER])[0] == {
+        "correlation_id": "second"
+    }
+    assert CONTEXT_HEADER not in seen[2].headers
