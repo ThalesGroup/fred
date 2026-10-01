@@ -882,8 +882,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             raise ValueError("a batch claim requires distinct sibling occurrences")
         await self._ensure_tables()
         token = secrets.token_urlsafe(16)
+        pool_wait_start = time.monotonic()
+        pool_wait_ms = 0.0
+        sql_start: float | None = None
         try:
             async with self.store.begin() as conn:
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 now = await self._db_now(conn)
                 stale_cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
                 for interrupt_id, occurrence_id in occurrences:
@@ -911,6 +916,15 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         raise _BatchClaimUnavailable
         except _BatchClaimUnavailable:
             return None
+        finally:
+            if sql_start is not None:
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="hitl_claim",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
         return token
 
     async def astart_hitl_resumes(
@@ -922,8 +936,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         claim_token: str,
     ) -> bool:
         """Start every claimed sibling atomically before invoking the graph."""
+        pool_wait_start = time.monotonic()
+        pool_wait_ms = 0.0
+        sql_start: float | None = None
         try:
             async with self.store.begin() as conn:
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 for interrupt_id, occurrence_id in occurrences:
                     result = await conn.execute(
                         update(self.hitl_claim_table)
@@ -944,6 +963,15 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                         raise _BatchClaimUnavailable
         except _BatchClaimUnavailable:
             return False
+        finally:
+            if sql_start is not None:
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="hitl_claim_start",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
         return True
 
     async def astart_hitl_resume(

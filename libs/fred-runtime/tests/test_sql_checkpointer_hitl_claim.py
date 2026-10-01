@@ -661,3 +661,28 @@ async def test_batch_claim_and_start_are_all_or_nothing(checkpointer) -> None:
         is True
     )
     assert {row.status for row in await _claim_rows(checkpointer)} == {"started"}
+
+
+@pytest.mark.asyncio
+async def test_batch_claim_and_start_reuse_persistence_timers(engine) -> None:
+    emitted: list[dict] = []
+
+    class _RecordingKPIWriter(NoOpKPIWriter):
+        def emit(self, **kwargs) -> None:
+            emitted.append(kwargs)
+
+    cp = FredSqlCheckpointer(engine, prefix="v2_", kpi=_RecordingKPIWriter())
+    occurrences = (("interrupt-a", "call-a"), ("interrupt-b", "call-b"))
+    token = await cp.aclaim_hitl_resumes(
+        thread_id="t1", checkpoint_ns="", occurrences=occurrences
+    )
+    assert token is not None
+    assert await cp.astart_hitl_resumes(
+        thread_id="t1", checkpoint_ns="", occurrences=occurrences, claim_token=token
+    )
+    for op in ("hitl_claim", "hitl_claim_start"):
+        assert {
+            event["name"]
+            for event in emitted
+            if event["dims"] == {"store": "checkpoint", "op": op}
+        } == {"persist_sql_ms", "persist_pool_wait_ms"}
