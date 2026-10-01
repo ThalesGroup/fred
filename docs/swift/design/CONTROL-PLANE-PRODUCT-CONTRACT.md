@@ -4414,3 +4414,12 @@ content-free `web_research.request` KPI event emitted by Fred Agents; the cost
 is `cost.usd` = `web_research.cost_per_1000_searches` / 1000 per successful
 search. Queries, URLs and per-user details stay in the restricted runtime
 activity API.
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Conversation creation and execution preparation bind resolved team/session/instance
+references to the request's diagnostic context. Attachment persistence additionally
+binds attachment/document references after ownership validation. Generic completion
+uses a shared ASGI lifecycle event and never treats logging metadata as authority.
+See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).
+

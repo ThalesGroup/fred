@@ -53,6 +53,7 @@ from fred_core.documents.document_structures import (
 )
 from fred_core.kpi import KPIActor, KPIWriter
 from fred_core.kpi.kpi_writer import to_kpi_actor
+from fred_core.logs.context import bind_operation_context
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.delegation import holds_caller_role
 from fred_core.security.structure import is_service_agent
@@ -532,6 +533,10 @@ async def resolve_tag_owners(tags: List[str], user: KeycloakUser) -> tuple[set[s
                 owner_id = owner_id[len("personal-") :]
             user_ids.add(owner_id)
 
+    if len(team_ids) == 1:
+        bind_operation_context(team_id=next(iter(team_ids)))
+    elif team_ids or user_ids:
+        bind_operation_context(clear=("team_id",))
     return team_ids, user_ids
 
 
@@ -1055,6 +1060,7 @@ class IngestionController:
             yield event
 
         for filename, input_temp_file in preloaded_files:
+            bind_operation_context(clear=("document_uid", "task_id"))
             file_started = time.perf_counter()
             file_status = "error"
             file_type = pathlib.Path(filename).suffix.lstrip(".") or None
@@ -1074,6 +1080,7 @@ class IngestionController:
                 )
                 if overwrites:
                     metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
+                bind_operation_context(document_uid=metadata.document_uid)
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
                 pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
@@ -1148,6 +1155,7 @@ class IngestionController:
             finally:
                 cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
                 duration_ms = (time.perf_counter() - file_started) * 1000.0
+                logger.info("Upload preparation completed", extra={"outcome": file_status, "duration_ms": duration_ms})
                 kpi.emit(
                     name="ingestion.document_duration_ms",
                     type="timer",
@@ -1183,10 +1191,12 @@ class IngestionController:
                     files=files_to_schedule,
                     background_tasks=scheduler_background_tasks,
                 )
-                logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
+                bind_operation_context(workflow_id=handle.workflow_id)
+                logger.info("Ingestion accepted", extra={"outcome": "accepted", "document_count": len(definition.files)})
                 task_ids = {file.document_uid: file.task_id for file in definition.files}
                 scheduled_candidates = [(name, uid, kind, task_ids[uid]) for name, uid, kind, _ in scheduled_candidates]
                 for filename, document_uid, _, task_id in scheduled_candidates:
+                    bind_operation_context(document_uid=document_uid, task_id=task_id)
                     # Canonical progress event carrying task_id, like the preparation
                     # and processing steps — so the UI can correlate every step of the
                     # sequence to its task. workflow_id is bound server-side (above) and
@@ -1222,6 +1232,7 @@ class IngestionController:
                     yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
 
         overall_status = Status.SUCCESS if success == total else Status.FAILED
+        logger.info("Upload batch completed", extra={"outcome": "succeeded" if success == total else "failed", "accepted_count": success, "document_count": total})
         done_payload: dict = {"step": "done", "status": overall_status}
         if last_error:
             done_payload["error"] = last_error
@@ -1323,6 +1334,7 @@ class IngestionController:
                         cleanup_uploaded_temp_file_after(pending_save, input_temp_file)
 
                 overall_status = Status.SUCCESS if success == total else Status.FAILED
+                logger.info("Upload batch completed", extra={"outcome": "succeeded" if success == total else "failed", "accepted_count": success, "document_count": total})
                 yield json.dumps({"step": "done", "status": overall_status}) + "\n"
 
             return StreamingResponse(event_stream(), media_type="application/x-ndjson")
@@ -1581,6 +1593,7 @@ class IngestionController:
             # Store to temp
             raw_path = uploadfile_to_path(file)
             document_uid = uuid.uuid4().hex
+            bind_operation_context(document_uid=document_uid, **({"session_id": session_id} if session_id else {}))
             tabular_available = False
 
             if pathlib.Path(filename).suffix.lower() in {".xls", ".xlsx", ".xlsm"}:
@@ -1762,6 +1775,7 @@ class IngestionController:
                     summary_md = summary_md[:summary_max_chars].rstrip() + "\n…"
                     summary_truncated = True
 
+            logger.info("Attachment ingestion completed", extra={"outcome": "succeeded"})
             return FastIngestResponse(
                 document_uid=document_uid,
                 chunks=chunks,

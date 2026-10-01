@@ -41,6 +41,7 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.context import bind_operation_context
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
     RefreshableTokenProvider,
@@ -3257,6 +3258,12 @@ async def prepare_execution(
         raise ExecutionPreparationError(
             f"Unknown agent instance {agent_instance_id!r} for team {team_id!r}."
         )
+    bind_operation_context(
+        user_id=user.uid,
+        team_id=str(team_id),
+        agent_instance_id=agent_instance_id,
+        **({"session_id": session_id} if session_id else {}),
+    )
     if not instance.enabled:
         raise ExecutionPreparationError(
             f"Agent instance {agent_instance_id!r} is disabled.",
@@ -4375,6 +4382,16 @@ async def create_session(
         )
         if instance is not None:
             source_runtime_id = instance.source_runtime_id
+    bind_operation_context(
+        user_id=user.uid,
+        team_id=str(team_id),
+        session_id=request.session_id,
+        **(
+            {"agent_instance_id": request.agent_instance_id}
+            if request.agent_instance_id
+            else {}
+        ),
+    )
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
@@ -4399,6 +4416,7 @@ async def create_session(
         )
     except Exception:
         logger.exception("[control-plane][kpi] Failed to emit session.created_total")
+    logger.info("Conversation created", extra={"outcome": "succeeded"})
     return _record_to_item(created)
 
 
@@ -4687,6 +4705,13 @@ async def create_session_attachment(
         session_id=session_id,
         user_id=user_id,
     )
+    bind_operation_context(
+        user_id=user_id,
+        team_id=str(team_id),
+        session_id=session_id,
+        attachment_id=request.attachment_id,
+        document_uid=request.document_uid,
+    )
     store = deps.get_session_attachment_store()
     await store.save(
         SessionAttachmentRecord(
@@ -4709,6 +4734,7 @@ async def create_session_attachment(
             f"Failed to persist attachment {request.attachment_id!r} for session {session_id!r}.",
             http_status=500,
         )
+    logger.info("Conversation attachment persisted", extra={"outcome": "succeeded"})
     return _to_session_attachment_summary(created)
 
 

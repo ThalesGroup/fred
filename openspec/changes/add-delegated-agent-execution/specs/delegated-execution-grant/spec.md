@@ -727,52 +727,38 @@ bearer.
 - **THEN** the log carries bounded event, outcome and reason fields and no
   identifier or exception text
 
-### Requirement: Delegation logging confinement precedes request parsing
+### Requirement: Safe request completion and admitted diagnostic context
 
-When either delegation switch is on, request logging SHALL exclude identifiers,
-payloads, credentials and unbounded upstream text before authentication or body
-parsing. This SHALL cover query and body grants, malformed requests, errors and
-redirects. Only bounded event, outcome, method, status and reason fields SHALL be
-logged for a request, whether or not it carries a grant, and the event SHALL NOT
-state that a request was delegated. Health probes SHALL stay below the default
-level. With both switches off, request diagnostics SHALL remain available
-subject to existing sensitive-query scrubbing. With either switch on, the access
-log SHALL write each request's only per-request line; no request or response
-logging middleware SHALL write another.
+Generic HTTP logging SHALL emit one ASGI completion event at actual response or stream
+termination. It MAY include fresh local request/operation references, safe route templates,
+method, duration and outcome; status SHALL be present only if a response was sent.
+Raw paths, queries, bearer claims, bodies, redirect locations, client addresses and
+unbounded upstream text SHALL remain excluded before and after admission.
+Authenticated/admitted person and resolved business references MAY enrich diagnostic
+logs. Logging context SHALL NOT authorize a request or alter audit restrictions.
+Duplicate Uvicorn and request/response access lines SHALL be suppressed.
 
 #### Scenario: Body grant is rejected before authentication
 
-- **GIVEN** either delegation switch is on and a POST body carries synthetic grant
-  identifiers
 - **WHEN** authentication or parsing fails before a principal is established
-- **THEN** no log level emits identifiers, bearer claims, paths, body data or
-  upstream detail
+- **THEN** the completion excludes grant identifiers, bearer claims, raw paths,
+  bodies and upstream detail; no unverified person is bound
 
 #### Scenario: Redirect carries sensitive text
 
-- **WHEN** a backend with either switch on returns a redirect containing a canary
-  identifier
-- **THEN** the location is absent from every emitted log field
+- **WHEN** a backend returns a redirect containing a canary identifier
+- **THEN** the location is absent from every generic completion field
 
-#### Scenario: Access log of a request
+#### Scenario: A streaming request is logged once
 
-- **GIVEN** either delegation switch is on
-- **WHEN** any request, with or without grant parameters, is logged by the access log
-- **THEN** the record carries only a neutral event, its outcome, the method and the status
+- **WHEN** a backend stream terminates or disconnects
+- **THEN** it produces one completion with safe metadata and current admitted
+  diagnostic context, and no duplicate raw access event
 
-#### Scenario: Health probe under delegation
+#### Scenario: Failed health probe remains visible
 
-- **GIVEN** either delegation switch is on
-- **WHEN** a health or readiness probe is answered
-- **THEN** its access record is not emitted at the default level
-
-#### Scenario: A request is logged once
-
-- **GIVEN** either delegation switch is on
-- **WHEN** any backend serves a request
-- **THEN** it produces one access record, and no request or response logging
-  middleware writes a second line recording its path, query, client address or
-  bearer claims
+- **WHEN** a health or readiness probe fails
+- **THEN** its completion is visible; successful probes are suppressed
 
 ### Requirement: Workload acquisition failures preserve safe retry behavior
 

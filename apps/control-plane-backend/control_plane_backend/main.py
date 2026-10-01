@@ -38,6 +38,7 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingMiddleware
 from fred_core.scheduler import SchedulerBackend
 from pydantic import BaseModel
 
@@ -322,8 +323,10 @@ def create_app() -> FastAPI:
         allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
+        expose_headers=REFERENCE_HEADERS,
     )
     app.add_middleware(KPIMiddleware, kpi=container.get_kpi_writer)
+    app.add_middleware(RequestLoggingMiddleware)
 
     router = APIRouter(prefix=configuration.app.base_url)
 
