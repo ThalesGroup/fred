@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { StatusBadgeTone } from "../../atoms/StatusBadge/StatusBadge.tsx";
 import styles from "./KpiStatCard.module.scss";
 
 export interface KpiStatCardProps {
   label: string;
+  tone?: StatusBadgeTone;
   loadingLabel?: string;
   errorLabel?: string;
   noDataLabel?: string;
@@ -28,6 +30,7 @@ export interface KpiStatCardProps {
 
 export default function KpiStatCard({
   label,
+  tone = "neutral",
   value,
   delta,
   unavailable,
@@ -52,7 +55,7 @@ export default function KpiStatCard({
   const hasValue = !isLoading && !isError && !unavailable && value != null;
 
   return (
-    <section className={styles.card}>
+    <section className={styles.card} data-tone={tone}>
       <span className={styles.label}>{label}</span>
       {isLoading && <span className={styles.state}>{loadingLabel}</span>}
       {isError && <span className={styles.stateError}>{errorLabel}</span>}

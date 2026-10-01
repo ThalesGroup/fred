@@ -587,3 +587,51 @@ describe("DataTable server pagination", () => {
     expect(onOffsetChange).not.toHaveBeenCalled();
   });
 });
+
+describe("row activation", () => {
+  it("activates background by pointer and keyboard without selecting or intercepting controls", () => {
+    const activate = vi.fn();
+    const select = vi.fn();
+    const embedded = vi.fn();
+    render(
+      <DataTable
+        data={[{ id: 1 }]}
+        columns={[
+          {
+            label: "Id",
+            cellRenderer: (row) => (
+              <>
+                <span>{row.id}</span>
+                <button onClick={embedded}>Detail</button>
+                <input aria-label="Input" />
+              </>
+            ),
+          },
+        ]}
+        rowKey={(row) => row.id}
+        onRowClick={activate}
+        selectable
+        selectedKeys={new Set()}
+        onSelectionChange={select}
+      />,
+    );
+    const row = container.querySelector('[data-activatable="true"]')!;
+    click(row.querySelector("span"));
+    expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
+    expect(select).not.toHaveBeenCalled();
+    click(row.querySelector("button"));
+    expect(embedded).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenCalledOnce();
+    act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+    expect(activate).toHaveBeenCalledTimes(3);
+    act(() =>
+      row.querySelector("button")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+    );
+    click(row.querySelector('input[aria-label="Input"]'));
+    expect(activate).toHaveBeenCalledTimes(3);
+    click(row.querySelector('input[type="checkbox"]'));
+    expect(select).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenCalledTimes(3);
+  });
+});

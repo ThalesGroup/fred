@@ -45,3 +45,17 @@ it("renders caller-owned state labels without a translation provider", () => {
     act(() => root.unmount());
   }
 });
+
+it("retains neutral styling by default and accepts outcome tones", () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    act(() => root.render(<KpiStatCard label="Passed" value={4} isLoading={false} isError={false} />));
+    expect(container.querySelector("section")?.dataset.tone).toBe("neutral");
+    act(() => root.render(<KpiStatCard label="Passed" value={4} tone="success" isLoading={false} isError={false} />));
+    expect(container.querySelector("section")?.dataset.tone).toBe("success");
+    expect(container.textContent).toBe("Passed4");
+  } finally {
+    act(() => root.unmount());
+  }
+});

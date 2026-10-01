@@ -3,7 +3,7 @@
 ## 0.1.0-alpha.3
 
 Review: approved
-Changes: Extend the canonical UI archive with hosted-application form, progress, navigation, page, KPI, table/pagination, drawer, and toast components; add StatusBadge. Labels and toast copying are consumer-owned, public icons remain Material Symbols only, and FRED retains its translated behavior. Candidate preparation only; publication requires the protected release workflow.
+Changes: Extend the canonical UI archive with hosted-application form, progress, navigation, page, KPI, table/pagination, drawer, and toast components; add StatusBadge. Labels and toast copying are consumer-owned, public icons remain Material Symbols only, and FRED retains its translated behavior. Real-consumer validation adds typed row activation with embedded-action isolation, localized drawer close actions, and semantic KPI tones. Candidate preparation only; publication requires the protected release workflow.
 
 ## 0.1.0-alpha.2
 

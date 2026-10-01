@@ -96,6 +96,8 @@ export interface DataTableProps<T> {
   selectable?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
+  /** Activates the row background; embedded controls keep their own actions. */
+  onRowClick?: (row: T) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
    *  for DataTable to sort `data` internally using each column's
@@ -167,6 +169,7 @@ export default function DataTable<T>({
   selectable = false,
   selectedKeys,
   onSelectionChange,
+  onRowClick,
   sortState: controlledSortState,
   onSortChange,
   sortClearable = true,
@@ -337,26 +340,24 @@ export default function DataTable<T>({
               className={styles["datatable-row"]}
               key={key}
               data-selected={isSelected || undefined}
-              onClick={
-                selectable
+              data-activatable={!!onRowClick || undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
                   ? (event) => {
-                      // Clicking an interactive control inside the row (a
-                      // preview button, a folder-name link, the checkbox
-                      // itself) must do its own thing, not also toggle
-                      // selection — only the row's otherwise-inert
-                      // background counts as "select this row". `label`
-                      // matters here specifically for the Checkbox atom: its
-                      // native input is visually hidden and wrapped in a
-                      // <label>, so a real click lands on the label/box, not
-                      // the input directly — the browser then separately
-                      // forwards a synthetic click to the input itself. Not
-                      // excluding `label` here meant this handler fired on
-                      // the first (visible) click AND the checkbox's own
-                      // onChange fired on the forwarded one: two toggles
-                      // that cancel out, looking like the click did nothing.
+                      if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+                      event.preventDefault();
+                      onRowClick(line);
+                    }
+                  : undefined
+              }
+              onClick={
+                onRowClick || selectable
+                  ? (event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest('button, a, input, label, [role="menuitem"]')) return;
-                      toggleRow(key);
+                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      if (onRowClick) onRowClick(line);
+                      else toggleRow(key);
                     }
                   : undefined
               }

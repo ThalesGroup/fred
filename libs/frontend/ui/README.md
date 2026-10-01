@@ -88,3 +88,10 @@ adopter migrations are outside this extension milestone.
 The checked-in manifest uses the published UI prerelease coordinate. Future release
 candidates must still be compared with a complete, maintainer-confirmed contract as described in
 [../RELEASE.md](../RELEASE.md).
+
+Real-consumer interaction props: `DataTable<T>.onRowClick(row)` activates row
+background/cells by pointer or Enter/Space while leaving embedded controls alone.
+When combined with selection, background activates and checkboxes select.
+`InlineDrawer.closeLabel` supplies the accessible close action name.
+`KpiStatCard.tone` accepts the shared `StatusBadgeTone` vocabulary and defaults to
+neutral. These additive alpha.3 props preserve existing consumer defaults.

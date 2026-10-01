@@ -78,6 +78,7 @@ import {
   PageEmptyState,
   Switch,
   DataTable,
+  KpiStatCard,
   TablePagination,
   ToastProvider,
   type DataTableColumn,
@@ -134,3 +135,22 @@ export {
   badPagination,
   badToast,
 };
+
+const badRowActivation = (
+  <DataTable<{ id: string }>
+    data={[]}
+    columns={[]}
+    // @ts-expect-error The row callback retains the table row type.
+    onRowClick={(row: number) => void row}
+  />
+);
+const badKpiTone = (
+  <KpiStatCard
+    label="Bad"
+    // @ts-expect-error KPI tones share the supported status vocabulary.
+    tone="purple"
+    isLoading={false}
+    isError={false}
+  />
+);
+export { badRowActivation, badKpiTone };

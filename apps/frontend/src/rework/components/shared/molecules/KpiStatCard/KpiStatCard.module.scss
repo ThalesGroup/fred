@@ -80,3 +80,16 @@
   color: var(--on-surface-retreat);
   font: var(--font-label-large);
 }
+
+.card[data-tone="success"] .value {
+  color: var(--success);
+}
+.card[data-tone="error"] .value {
+  color: var(--error);
+}
+.card[data-tone="warning"] .value {
+  color: var(--warning);
+}
+.card[data-tone="info"] .value {
+  color: var(--info);
+}

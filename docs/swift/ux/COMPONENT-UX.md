@@ -4918,14 +4918,12 @@ Three additions, all made for the rail and all useful beyond it:
   having been lost for good — stayed open alongside the next one hovered. On a
   rail of many triggers that meant two panels on screen at once.
 
-
 ### Ingestion actions — 2026-09-23
 
 `DocumentWorkspace` offers no user cancellation while ingestion is pending or
 running. Delete remains disabled until the task settles; its tooltip explains
 that ingestion is active. A durable terminal event refreshes document state and
 quota. Cancellation scope and cleanup are deferred to a separate design.
-
 
 ### Ingestion failure explanations — 2026-09-23
 
@@ -4937,7 +4935,6 @@ an explicit fallback when no reason was recorded and a copyable document ID.
 Personal Resources loads both failures and successes so an old failure does not
 return after a successful retry. Existing tooltip, copy and task components are
 reused. These changes have static review only; runtime/visual checks are pending.
-
 
 ### Ingestion relaunch — 2026-09-26
 
@@ -4952,7 +4949,6 @@ only for documents whose original profile is unknown; in a mixed selection this
 choice applies only to those documents. Cancel submits nothing. Pending requests
 suppress repeated clicks. Completed relaunches supply a new terminal task outcome
 so an earlier failure does not outlive a successful retry.
-
 
 ## Prompt commands in the composer — 2026-09-28
 
@@ -5085,3 +5081,9 @@ application adapters supply translations. Toast copying is application-owned.
 The generic StatusBadge replaces the evaluation-only pill implementation and
 keeps evaluation tone mapping local to the evaluation views. Task/ingestion
 badges and charts remain separate domain components.
+
+### Hosted UI consumer interaction contracts
+
+`DataTable.onRowClick`, `InlineDrawer.closeLabel` and `KpiStatCard.tone` complete
+the evaluator's SDK integration. Defaults preserve current Fred consumers.
+Behavior and acceptance scenarios: [frontend package specs](../../../openspec/specs/frontend-package-archives/spec.md).

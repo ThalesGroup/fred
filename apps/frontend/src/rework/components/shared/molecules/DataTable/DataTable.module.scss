@@ -221,3 +221,11 @@
 .header-sort-button:hover .sort-icon[data-visible] {
   opacity: 1;
 }
+
+.datatable-row[data-activatable="true"] {
+  cursor: pointer;
+}
+.datatable-row[data-activatable="true"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}

@@ -32,6 +32,7 @@ export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  closeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
@@ -90,6 +91,7 @@ export function InlineDrawer({
   open,
   onClose,
   title,
+  closeLabel = "Close panel",
   titleAccessory,
   headerActions,
   width = "480px",
@@ -202,7 +204,7 @@ export function InlineDrawer({
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "close" }}
-                  aria-label="Close panel"
+                  aria-label={closeLabel}
                   onClick={handleClose}
                 />
               </div>
