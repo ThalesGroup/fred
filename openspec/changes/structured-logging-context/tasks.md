@@ -34,8 +34,8 @@ Apply the agreed source specification and [design](design.md) sequentially. Fini
 
 ## 5. P3 — Frontend pod
 
-- [ ] 5.1 Add the final stack layer and configure escaped JSON nginx access logs in `apps/frontend/dockerfiles/docker-entrypoint.sh` with event time, status-derived severity and safe metadata; verify rendered configuration and representative output escaping/query omission using existing smoke infrastructure where available, keeping container-dependent checks outside default offline tests.
-- [ ] 5.2 Inventory native nginx error/startup output and document collector parsing limits and activation/rollback in existing frontend/observability guidance and an English migration note; verify the note clearly identifies any unverified deployment behavior.
+- [x] 5.1 Add the final stack layer and configure escaped JSON nginx access logs in `apps/frontend/dockerfiles/docker-entrypoint.sh` with event time, status-derived severity and safe metadata; verify rendered configuration and representative output escaping/query omission using existing smoke infrastructure where available, keeping container-dependent checks outside default offline tests.
+- [x] 5.2 Inventory native nginx error/startup output and document collector parsing limits and activation/rollback in existing frontend/observability guidance and an English migration note; verify the note clearly identifies any unverified deployment behavior.
 - [ ] 5.3 Review the final slice, commit and publish its assigned draft PR, attach it and verify focused checks plus CI on its current head.
 
 ## 6. Stack verification and close-out
@@ -57,3 +57,5 @@ Slice 2 focused evidence: 58 logging/sensitive-data/audit/metric checks passed b
 Slice 3 current head: 121 CI checks successful, 5 intentionally skipped; no failures or pending checks. Independent reviews rechecked trust, budget precedence and response-safe correlation. Draft #2911 is assigned and mergeable.
 
 Slice 4 focused evidence: 10 durable delivery checks, 8 activity/thread checks, 18 existing workflow checks plus 4 optional/legacy argument checks passed. Four real spawned-child cases cover success, failure, default supervision and telemetry-channel fallback while preserving JSON context and existing KPI behavior. Raw worker production types returned 0 errors/warnings before review; review added restored delivery scopes and spawn fallback, rechecked with focused coverage. Independent Standards/Spec/performance reviews found no remaining blockers. No live Temporal/GKE canary was performed.
+
+Slice 5 focused evidence: existing rendered-config smoke passed; existing container smoke passed using the current production nginx 1.31 runtime stage and cached unchanged web assets. Real requests include encoded quotes/backslashes/newlines, credential/cookie/query canaries and existing body/header checks; all access lines parse as JSON, 2xx/4xx/5xx severities and fixed route families are correct, and request content is absent. Native stderr remains text. Independent Standards/Spec/performance reviews found no material blockers. Managed GKE collection remains unverified.
