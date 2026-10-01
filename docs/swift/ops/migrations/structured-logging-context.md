@@ -30,3 +30,7 @@ Check normal, failing and streaming requests, a chat resume, a tool invocation, 
 ## Rollback
 
 Roll back this layer to restore previous access logging. No database migration or new configuration is required. Downstream and worker propagation require subsequent layers.
+
+## Limitations
+
+No deployment or collector canary was performed. This layer does not propagate context across services or persist ingestion context for workers; the following layers add those boundaries.
