@@ -40,7 +40,7 @@ Tool coverage:
 Capability coverage:
   document summarize  Search then summarize through the capability approval gate.
   document scenario   AgentCapability tool invocation via
-                       context.invoke_runtime_tool (NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+                       context.invoke_runtime_tool.
                        "document_access" is selected per-instance via
                        tuning.selected_capability_ids — NOT declared on this
                        class the way default_mcp_servers is. Degrades to a
