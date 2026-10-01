@@ -42,6 +42,20 @@ make docker-run \
   FRONTEND_CONTROL_PLANE_UPSTREAM=http://control-plane-backend:8222
 ```
 
+Production nginx writes escaped JSON access events to stdout: event time, status-derived
+`severity` (`INFO`/`WARNING`/`ERROR`), local nginx request ID, method, bounded route
+family, elapsed seconds and response bytes. Raw paths, queries, addresses,
+request bodies and request headers are omitted. This proxy ID is local to nginx;
+API response reference headers retain their own service identity.
+
+Native nginx error/startup events and entrypoint theme/configuration messages
+remain text on their existing streams. Native errors can contain request lines
+and filesystem/upstream details; the access-log exclusions do not sanitize them.
+Collector parsing and severity/timestamp promotion require a deployment canary;
+see [observability guidance](../../docs/swift/platform/OBSERVABILITY-AND-AUDIT.md#63-frontend-pod-logs)
+and the [migration guide](../../docs/swift/ops/migrations/structured-logging-frontend.md).
+No browser telemetry or collector sidecar is introduced.
+
 Applications are not built into Fred. Each one is an independently built and
 deployed UI container (optionally with its own API), registered in deployment
 configuration. The frontend serves two prefixes for them, and the dev server
