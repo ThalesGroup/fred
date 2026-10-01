@@ -4,6 +4,7 @@ title: "Imports ask before replacing a document of the same name"
 impact: minor
 configuration: none
 configuration_reason: "No configuration key, default or secret changes; the behaviour is unconditional."
+after: [2849-k3d-moves-to-deployment-factory, runtime-url-and-tabular-query-safety]
 ---
 ## Applicability
 
@@ -44,6 +45,9 @@ imported, instead of being versioned silently. Such a client sends its answer as
 repository's own ingestion load-test script is the only such client and needs no
 change beyond pointing each run at a fresh folder.
 
+Two files of one import can no longer land in the same folder under the same
+name. The import dialog refuses the selection and names the collision.
+
 ## Validation
 
 Upload a file into a team folder that already holds a document of that name: the
@@ -53,17 +57,13 @@ with the new content.
 
 ## Rollback
 
-Use the normal rollback procedure. Downgrading the knowledge-flow Alembic
-revision drops the index; no document data is affected either way.
-
-Also user-visible, needing no operator action: two files of one import can no
-longer land in the same folder under the same name. The import dialog refuses
-the selection and names the collision. Previously the second file became an
-alternate version of the first.
+Downgrading this knowledge-flow Alembic revision drops the index without
+changing document data. Release rollback does not undo the later document
+renames; follow the alternate-version migration rollback guidance.
 
 ## Limitations
 
-Two documents can still share a display name in one folder while alternate
-versions exist (a base document and its version). Such a name cannot be replaced
-— the import refuses it and says so — until the alternate version is deleted or
-promoted.
+The alternate-version migration in this release gives hidden alternates
+their own names. Concurrent imports or adding an existing document to a folder
+can still create duplicate names; the import then asks the user to rename or
+delete one.

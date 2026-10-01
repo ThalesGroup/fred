@@ -4,6 +4,7 @@ title: "Hidden alternate document versions are retired and renamed"
 impact: minor
 configuration: none
 configuration_reason: "No configuration key, default or secret changes; the migration runs as part of the knowledge-flow Alembic upgrade and the behaviour it replaces is unconditional."
+after: [import-name-conflict-resolution]
 ---
 
 ## Applicability
@@ -15,9 +16,8 @@ removal applies everywhere.
 ## Prerequisites
 
 No additional prerequisites beyond the normal deployment procedure. The
-same-name import question this change relies on shipped in the previous release
-("Imports ask before replacing a document of the same name") and must be present
-before this one, which removes the mechanism it replaced.
+same-name import question and this migration ship together. When enabled, the
+chart migration Job runs before the new application code is rolled out.
 
 Before upgrading, you can see exactly which documents the migration will rename:
 
@@ -103,9 +103,9 @@ If a specific name must be restored, rename the document in the UI.
 
 ## Limitations
 
-The previous note's limitation is narrowed, not closed. Alternate versions are
-gone, so they are no longer how a folder ends up holding two documents of one
-name — but two other paths still are: two concurrent imports of the same name
+The import name-conflict note's limitation is narrowed, not closed. Alternate
+versions are gone, so they are no longer how a folder ends up holding two
+documents of one name - but two other paths still are: two concurrent imports of the same name
 (the pre-upload name check is not repeated at write time), and adding an existing
 document to a folder that already holds its name, which is unguarded unlike a
 rename (#2877). In that state the import still refuses the name and now tells the
