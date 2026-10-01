@@ -9,6 +9,14 @@ configuration_reason: "Existing logging configuration is retained; HTTP completi
 
 The three Fred APIs, interactive agent execution/tools, conversation creation and attachments, and upload admission.
 
+## Prerequisites
+
+Deploy the shared output foundation first. Custom collectors should accept the new completion fields.
+
+## Configuration
+
+No new configuration. Keep the selected `app.log_format`; update collector queries and log access as described below.
+
 ## Upgrade
 
 Deploy after the shared output foundation. Update access-log queries to the `http` logger's single completion event (`http_method`, safe `route`, `http_status` when sent, `outcome`, `duration_ms`). Uvicorn access and the earlier Knowledge Flow request/response lines are suppressed. Successful probes are omitted; failures remain visible.
