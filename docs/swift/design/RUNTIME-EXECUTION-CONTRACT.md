@@ -6245,7 +6245,10 @@ ReAct and Deep parent/child frames may recover a tool call only at the completed
 assistant-message boundary, only for a Mistral-qualified response, and only when
 the reconstructed provider content contains the exact empty typed sentinel
 `{"type":"reference","reference_ids":[]}` between a registered tool name
-and strict JSON arguments. The bounded content list may mix typed text blocks
+and JSON arguments. Literal CR/LF inside a quoted JSON string are accepted;
+other raw control characters remain invalid. Arguments are checked against the
+model-visible tool schema and the full input schema, using a temporary call ID
+only for an injected `tool_call_id` so cross-field validators still run. The bounded content list may mix typed text blocks
 and plain string fragments; their original order and bytes are retained even
 when they split a tool name or JSON argument. A response may contain several
 exact sentinels when each follows a registered tool name and every resulting

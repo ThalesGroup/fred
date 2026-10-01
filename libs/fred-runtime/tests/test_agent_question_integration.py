@@ -271,6 +271,68 @@ async def test_multiple_choices_allow_text_even_when_agent_disables_it(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["react", "deep"])
+async def test_marked_mistral_question_pauses_after_an_answer(kind: str) -> None:
+    model = _Model(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ask_user",
+                        "args": {"question": "Destination?", "allow_free_text": True},
+                        "id": "first-question",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=[
+                    {"type": "text", "text": "ask_user"},
+                    {"type": "reference", "reference_ids": []},
+                    {
+                        "type": "text",
+                        "text": '{"question":"\nWhich island?","allow_free_text":true}',
+                    },
+                ],
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+            AIMessage(content="continued"),
+        ]
+    )
+    agent = _compile(kind, model)
+    thread = f"marked-followup-{kind}"
+
+    first = await _drive(agent, {"messages": [HumanMessage("Plan a trip")]}, thread)
+    assert len(first) == 1
+    second = await _drive(
+        agent,
+        Command(resume={first[0].id: {"text": "Canaries"}}),
+        thread,
+    )
+
+    assert len(second) == 1
+    assert second[0].value["question"] == "\nWhich island?"
+    assert second[0].value["occurrence_id"].startswith("recovered-")
+    assert (
+        await _drive(
+            agent,
+            Command(resume={second[0].id: {"text": "Tenerife"}}),
+            thread,
+        )
+        == []
+    )
+    assert any(
+        message.tool_call_id == second[0].value["occurrence_id"]
+        and json.loads(str(message.content))
+        == {"status": "answered", "text": "Tenerife"}
+        for call in model.calls
+        for message in call
+        if isinstance(message, ToolMessage)
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["react", "deep"])
 async def test_sibling_questions_keep_distinct_tool_call_ids(kind: str) -> None:
     model = _Model(
         script=[

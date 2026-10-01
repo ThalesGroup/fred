@@ -5,6 +5,8 @@
 
 - [x] 1.3 Preserve pre-pause sources, UI parts, and token usage in the pause event and persisted history; verify the resumed exchange retains them without a stale final answer.
 
+- [x] 1.4 Recover marked Mistral `ask_user` calls whose JSON question contains literal line breaks after HITL resume. Validate the public and full question schemas, retain other rejection guards, and verify ReAct and Deep routing.
+
 ## 2. Managed chat
 
 - [x] 2.1 Render the localized text input as the final choice row for agent questions with choices and free text; verify choice, text-only, choice-plus-comment, approval, and length-limit behavior in focused component tests.

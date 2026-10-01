@@ -85,6 +85,13 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** the question pauses and the person later answers it
 - **THEN** the pre-pause metadata remains visible and persisted with the completed exchange, without emitting the earlier tool failure as an answer
 
+#### Scenario: Marked follow-up question after a HITL answer
+
+- **GIVEN** a Mistral assistant response contains the existing typed tool-call marker and a registered `ask_user` name
+- **WHEN** its JSON question contains a literal line break inside the quoted string after an earlier question is answered
+- **THEN** the runtime validates the public arguments and complete question rules, then routes the call through the ordinary HITL pause, including valid sibling calls, rather than publishing encoded call syntax as the final answer
+- **AND** unmarked text, unknown tools, and other malformed argument content remain ineligible for recovery
+
 #### Scenario: Composer waits for an agent question
 
 - **GIVEN** an `ask_user` question is pending or its answer is being submitted
