@@ -228,7 +228,6 @@ def _wired_uvicorn_logging() -> Iterator[tuple[_Sink, _Sink]]:
     finally:
         root.setLevel(saved_root[0])
         root.handlers[:] = saved_root[1]
-        delattr(root, f"_fred_handlers_{service_name}")
         for lg, filters, handlers, level, propagate in saved_uvicorn:
             lg.filters[:] = filters
             lg.handlers[:] = handlers
@@ -507,7 +506,12 @@ def test_shared_output_contract_and_repeat_setup(
         with log_context(user_id="person-a", correlation_id="operation-a"):
             logging.getLogger("contract.event").warning(
                 "first\nsecond",
-                extra={"count": 3, "user_id": "spoof", "severity": "spoof"},
+                extra={
+                    "count": 3,
+                    "user_id": "spoof",
+                    "severity": "spoof",
+                    "_fred_context": {"user_id": "spoof", "token": "SECRET-CANARY"},
+                },
             )
         lines = capsys.readouterr().out.splitlines()
         assert len(lines) == 1
@@ -521,6 +525,7 @@ def test_shared_output_contract_and_repeat_setup(
         assert 0 <= event["timestamp"]["nanos"] < 1_000_000_000
         assert store.indexed[0].extra["correlation_id"] == "operation-a"
         assert "\x1b" not in lines[0]
+        assert "SECRET-CANARY" not in lines[0]
         log_setup(
             service_name="contract-test",
             store=store,
@@ -534,3 +539,30 @@ def test_shared_output_contract_and_repeat_setup(
     finally:
         root.handlers[:] = saved[1]
         root.setLevel(saved[0])
+
+
+def test_dependency_child_diagnostics_remain_sanitized(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    initialize_delegation(DelegationConfig(accept_delegated_calls=True))
+    log_setup(
+        service_name="dependency-contract",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+    logging.getLogger("httpx.transport").warning("SECRET-CANARY signed_url=credential")
+    output = capsys.readouterr().out
+    assert "SECRET-CANARY" not in output
+    assert json.loads(output)["severity"] == "WARNING"
+
+
+def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> None:
+    from fred_core.logs.context import log_context
+
+    with pytest.raises(ValueError):
+        with log_context(details=[["x" * 1024] * 32] * 32):
+            pass
+    with pytest.raises(ValueError):
+        with log_context(details=object()):
+            pass

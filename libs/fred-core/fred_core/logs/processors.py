@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
+from dataclasses import dataclass
+from typing import Any
 from structlog.typing import EventDict
 
 from structlog.processors import JSONRenderer, format_exc_info
@@ -28,38 +30,78 @@ from fred_core.logs.context import (
     current_context,
     safe_key,
     safe_value,
+    ValueBudget,
+    MAX_FIELDS,
 )
+
+from fred_core.logs.log_structures import KPI_LOGGER_NAME
 
 STANDARD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {
     "message",
     "asctime",
     "_fred_context",
     "_fred_task",
+    "_fred_snapshot",
 }
+
+
+@dataclass(frozen=True)
+class ContextSnapshot:
+    values: dict[str, object]
+    task_name: str
+
+
+def capture_record_context(record: logging.LogRecord) -> None:
+    """Stamp producer-owned metadata; plain event dictionaries cannot impersonate it."""
+    try:
+        task = asyncio.current_task()
+        name = task.get_name() if task is not None else "Main"
+    except RuntimeError:
+        name = "Sync"
+    record._fred_snapshot = ContextSnapshot(current_context(), name)
+
+
+_base_record_factory = logging.getLogRecordFactory()
+
+
+def _record_factory(
+    *args: Any, **kwargs: Any
+) -> logging.LogRecord:  # opaque stdlib factory adapter
+    record = _base_record_factory(*args, **kwargs)
+    capture_record_context(record)
+    return record
+
+
+def install_context_capture() -> None:
+    """Capture before handlers/queues and retain existing custom record factories."""
+    global _base_record_factory
+    current = logging.getLogRecordFactory()
+    if current is not _record_factory:
+        _base_record_factory = current
+        logging.setLogRecordFactory(_record_factory)
 
 
 class ContextSnapshotFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        """Capture once in the emitter, before any store/thread handoff."""
-        if not hasattr(record, "_fred_context"):
-            record._fred_context = current_context()
-            try:
-                task = asyncio.current_task()
-                record._fred_task = task.get_name() if task is not None else "Main"
-            except RuntimeError:
-                record._fred_task = "Sync"
+        """Support manually constructed records while retaining producer snapshots."""
+        if not isinstance(getattr(record, "_fred_snapshot", None), ContextSnapshot):
+            capture_record_context(record)
         return True
 
 
 def event_properties(record: logging.LogRecord) -> dict[str, object]:
     """Keep JSON-safe extras while protecting bound identity and event metadata."""
-    context = getattr(record, "_fred_context", {})
+    snapshot = getattr(record, "_fred_snapshot", None)
+    context = snapshot.values if isinstance(snapshot, ContextSnapshot) else {}
     properties: dict[str, object] = {}
+    budget = ValueBudget()
     for key, value in vars(record).items():
+        if len(properties) >= MAX_FIELDS - len(context):
+            break
         if key in STANDARD_ATTRIBUTES or key in RESERVED_FIELDS or key in context:
             continue
         try:
-            properties[safe_key(key)] = safe_value(value)
+            properties[safe_key(key)] = safe_value(value, budget=budget)
         except ValueError:
             continue
     return {**properties, **context}
@@ -100,7 +142,7 @@ class EventProcessor:
             "message": record.getMessage(),
             "logger": record.name,
             "service": self.service,
-            "category": "kpi" if record.name == "KPI" else "application",
+            "category": "kpi" if record.name == KPI_LOGGER_NAME else "application",
             "logging.googleapis.com/sourceLocation": {
                 "file": record.filename,
                 "line": str(record.lineno),
@@ -108,7 +150,7 @@ class EventProcessor:
             },
             "process": record.process,
             "thread": record.threadName,
-            "task_name": getattr(record, "_fred_task", "Sync"),
+            "task_name": record._fred_snapshot.task_name,
         }
         if self.role is not None:
             result["service_role"] = self.role

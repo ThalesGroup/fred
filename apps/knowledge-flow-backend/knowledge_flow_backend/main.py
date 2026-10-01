@@ -28,6 +28,7 @@ import uvicorn
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
+from fred_core.logs.null_log_store import NullLogStore
 from fred_core import enforce_account_status, get_config, initialize_user_security, log_setup
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
@@ -139,6 +140,13 @@ def _without_response_docs(mcp: FastApiMCP) -> FastApiMCP:
 
 def create_app() -> FastAPI:
     configuration: Configuration = load_configuration()
+    log_setup(
+        service_name="knowledge-flow",
+        log_level=configuration.app.log_level,
+        log_format=configuration.app.log_format,
+        service_role="api",
+        store=NullLogStore(),
+    )
     env_file = get_loaded_env_file_path() or "<unset>"
     config_file = get_loaded_config_file_path() or "<unset>"
     logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)

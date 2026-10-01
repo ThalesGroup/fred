@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import TypeAlias
@@ -82,22 +83,48 @@ MAX_VALUE_BYTES = 1024
 MAX_DEPTH = 3
 
 
-def safe_value(value: object, depth: int = 0) -> LogValue:
-    """Copy small JSON values; reject opaque objects before binding or transport."""
-    if value is None or isinstance(value, (bool, int)):
+@dataclass
+class ValueBudget:
+    bytes_left: int = 4096
+    nodes_left: int = 128
+
+    def consume(self, size: int) -> None:
+        """Bound aggregate validation work as well as serialized metadata size."""
+        self.bytes_left -= size
+        self.nodes_left -= 1
+        if self.bytes_left < 0 or self.nodes_left < 0:
+            raise ValueError("logging metadata budget exceeded")
+
+
+def safe_value(
+    value: object, depth: int = 0, *, budget: ValueBudget | None = None
+) -> LogValue:
+    """Copy bounded JSON values, sharing one budget across nested collections."""
+    budget = budget if budget is not None else ValueBudget()
+    budget.consume(8)
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int) and -(2**63) <= value < 2**63:
+        budget.consume(20)
         return value
     if isinstance(value, float) and math.isfinite(value):
+        budget.consume(24)
         return value
-    if isinstance(value, str) and len(value.encode("utf-8")) <= MAX_VALUE_BYTES:
-        return value
+    if isinstance(value, str) and len(value) <= MAX_VALUE_BYTES:
+        encoded_size = len(value.encode("utf-8"))
+        if encoded_size <= MAX_VALUE_BYTES:
+            budget.consume(encoded_size)
+            return value
     if depth < MAX_DEPTH:
         if isinstance(value, list) and len(value) <= MAX_FIELDS:
-            return [safe_value(item, depth + 1) for item in value]
+            return [safe_value(item, depth + 1, budget=budget) for item in value]
         if isinstance(value, dict) and len(value) <= MAX_FIELDS:
-            return {
-                safe_key(key): safe_value(item, depth + 1)
-                for key, item in value.items()
-            }
+            result: LogContext = {}
+            for key, item in value.items():
+                name = safe_key(key)
+                budget.consume(len(name))
+                result[name] = safe_value(item, depth + 1, budget=budget)
+            return result
     raise ValueError("unsupported logging value")
 
 
@@ -116,21 +143,26 @@ def safe_context(values: Mapping[str, object]) -> LogContext:
     """Validate a diagnostic bag without accepting core event fields."""
     if len(values) > MAX_FIELDS:
         raise ValueError("too many logging fields")
-    return {
-        safe_key(key): safe_value(value)
-        for key, value in values.items()
-        if key not in RESERVED_FIELDS
-    }
+    budget = ValueBudget()
+    result: LogContext = {}
+    for key, value in values.items():
+        if key in RESERVED_FIELDS:
+            continue
+        name = safe_key(key)
+        budget.consume(len(name))
+        result[name] = safe_value(value, budget=budget)
+    return result
 
 
 def current_context() -> LogContext:
     """Snapshot the producing task's validated context for delayed delivery."""
     context: LogContext = {}
+    budget = ValueBudget()
     for key, value in get_contextvars().items():
         if key in RESERVED_FIELDS or len(context) >= MAX_FIELDS:
             continue
         try:
-            context[safe_key(key)] = safe_value(value)
+            context[safe_key(key)] = safe_value(value, budget=budget)
         except ValueError:
             continue
     return context
