@@ -181,7 +181,7 @@ def _ask_user_tool(
             name="ask_user",
             description=(
                 "Ask the user one question and continue after their answer. "
-                "When possible, set title to exactly one subject word with no spaces. "
+                "When possible, give the question a short subject title of a few words. "
                 "Hard limit: at most four choices. Select the four best matches before calling; "
                 "multiple choices always include an Other free-text answer."
             ),

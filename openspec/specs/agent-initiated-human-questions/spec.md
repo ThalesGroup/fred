@@ -6,7 +6,7 @@ Lets an interactive ReAct or Deep agent ask its user a question during a turn, r
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional one-word subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional short subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
@@ -43,10 +43,11 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **GIVEN** several `ask_user` calls in one exchange are awaiting answers
 - **WHEN** managed chat receives their pauses or reloads their history
 - **THEN** it displays one HITL card with a tab for each unanswered question in call order, selecting the first by default
-- **AND** each tab displays one word from its subject title, or a localized numbered fallback when no title exists, and tabs wrap within the card instead of scrolling horizontally
-- **AND** switching tabs preserves each question’s draft and answering the selected tab resumes its own call
-- **AND** answering or skipping a question keeps the card open on the next unanswered tab until no questions remain
-- **AND** answered questions remain in the trace while remaining questions stay available
+- **AND** each tab displays a short subject title, or a localized numbered fallback when no title exists, with horizontal scrolling when needed
+- **AND** selecting a choice records a draft answer and advances to the next question without resuming the agent
+- **AND** the person can revisit a tab, change its choice or text answer, and skip an individual question
+- **AND** once every tab has a draft answer or skip, one Send action submits all answers together to their own calls
+- **AND** the card stays open until the batch is accepted, and failed submission preserves editable answers
 
 #### Scenario: Question Markdown in managed chat
 
@@ -186,7 +187,7 @@ Managed chat SHALL expose a platform-owned control for agent questions, initiall
 
 ### Requirement: Multiple questions remain individually answerable
 
-Several `ask_user` calls in one turn SHALL each retain a distinct occurrence identity, and each answer SHALL return to its own call. History and reload SHALL preserve answered questions and restore the unanswered one.
+Several `ask_user` calls in one turn SHALL each retain a distinct occurrence identity, and each answer SHALL return to its own call. A complete set of simultaneous agent-question answers SHALL be accepted in one resume request only when every answer matches a pending occurrence; rejection SHALL leave the checkpoint and editable answers intact. History and reload SHALL preserve each response and any remaining pending questions.
 
 #### Scenario: Sibling questions
 
@@ -199,6 +200,14 @@ Several `ask_user` calls in one turn SHALL each retain a distinct occurrence ide
 - **GIVEN** the first question in a turn was answered and a second is pending
 - **WHEN** the conversation is reloaded
 - **THEN** the second question is restored as the only pending question
+
+#### Scenario: Complete batch of sibling answers
+
+- **GIVEN** several agent questions are pending on one checkpoint
+- **WHEN** the person submits one answer or skip for every pending occurrence
+- **THEN** the runtime validates and claims the complete set atomically, resumes the graph once, and stores a separate answer for each occurrence
+- **AND** an incomplete or invalid batch leaves every pending question answerable
+
 
 ### Requirement: Graph choice questions preserve their response contract
 

@@ -1196,6 +1196,52 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it("sends simultaneous question answers in one runtime request", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 });
+    });
+    mount();
+    const first = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "yes", label: "Yes" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    const second = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        choices: [],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(first, undefined, undefined, undefined, undefined, false, undefined, [
+        { event: first, answer: "yes", skipped: false },
+        { event: second, answer: undefined, freeText: " Other ", skipped: false },
+      ]);
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].interrupt_id).toBeNull();
+    expect(bodies[0]).not.toHaveProperty("occurrence_id");
+    expect(bodies[0].resume_payload).toEqual({
+      answers: [
+        { interrupt_id: "interrupt-a", occurrence_id: "call-a", answer: { choice_id: "yes" } },
+        { interrupt_id: "interrupt-b", occurrence_id: "call-b", answer: { text: " Other " } },
+      ],
+    });
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(2);
+    fetchSpy.mockRestore();
+  });
+
   it("shows an accepted agent-question choice without waiting for history reload", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")

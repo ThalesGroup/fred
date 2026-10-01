@@ -124,10 +124,10 @@ describe("HitlPrompt question tabs", () => {
     });
     const tabs = container.querySelectorAll('[role="tab"]');
     expect(tabs).toHaveLength(2);
-    expect(tabs[0].textContent).toBe("Trip");
+    expect(tabs[0].textContent).toBe("Trip duration");
     expect(tabs[0].getAttribute("title")).toBe("Trip duration");
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-    expect(tabs[1].textContent).toBe("chatbot.hitlQuestionTabFallback2");
+    expect(tabs[1].textContent).toBe("chatbot.hitlQuestionTabFallback 2");
     act(() => (tabs[1] as HTMLButtonElement).click());
     expect(onSelectQuestion).toHaveBeenCalledWith(second);
     act(() => root.unmount());
@@ -283,5 +283,60 @@ describe("HitlPrompt answer actions", () => {
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, undefined, true);
     act(() => root.unmount());
     container.remove();
+  });
+});
+
+describe("HitlPrompt staged batch answers", () => {
+  it("advances through choices while keeping every tab editable until Send all", () => {
+    const first = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", title: "Trip duration", occurrence_id: "call-a" },
+    };
+    const second = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", title: "Travel budget", occurrence_id: "call-b" },
+    };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onStageAnswer = vi.fn();
+    const onSendAll = vi.fn();
+    const onAnswer = vi.fn();
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSendAll={onSendAll}
+          onAnswer={onAnswer}
+          canSendAll={false}
+        />,
+      ),
+    );
+    const choice = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Proceed");
+    act(() => choice?.click());
+    expect(onStageAnswer).toHaveBeenCalledWith("proceed", undefined, false);
+    expect(onAnswer).not.toHaveBeenCalled();
+    const sendAll = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "chatbot.sendAllHitlAnswers",
+    );
+    expect(sendAll?.hasAttribute("disabled")).toBe(true);
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSendAll={onSendAll}
+          onAnswer={onAnswer}
+          canSendAll
+          stagedAnswer={{ answer: "proceed", skipped: false }}
+        />,
+      ),
+    );
+    expect(choice?.getAttribute("aria-pressed")).toBe("true");
+    act(() => sendAll?.click());
+    expect(onSendAll).toHaveBeenCalledOnce();
+    act(() => root.unmount());
   });
 });

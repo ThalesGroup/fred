@@ -1386,14 +1386,30 @@ describe("useManagedChat — session write reliability", () => {
   };
   const grantScope = { userId: "alice", agentInstanceId: "agent-1", sessionId: "session-1" };
 
-  it("keeps simultaneous questions in arrival order with separate drafts", async () => {
+  it("stages simultaneous answers, permits revision, then resumes once", async () => {
     const first = {
       ...awaitingHumanEvent,
-      payload: { stage: "agent_question", question: "Destination?", occurrence_id: "call-a", free_text: true },
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [
+          { id: "paris", label: "Paris" },
+          { id: "rome", label: "Rome" },
+        ],
+        free_text: true,
+      },
     };
     const second = {
       ...awaitingHumanEvent,
-      payload: { stage: "agent_question", question: "Budget?", occurrence_id: "call-b", free_text: true },
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        free_text: true,
+      },
     };
     mount();
     bindSession("session-1");
@@ -1402,42 +1418,50 @@ describe("useManagedChat — session write reliability", () => {
       capturedOnAwaitingHuman?.(second);
     });
     rerender();
-    expect(latest.pendingHitl).toEqual(first);
     expect(latest.pendingHitlTabs).toEqual([first, second]);
-
-    act(() => latest.setHitlFreeText("Paris"));
-    act(() => latest.selectHitlTab(second));
+    act(() => latest.stageHitlAnswer("paris"));
     expect(latest.pendingHitl).toEqual(second);
-    expect(latest.hitlFreeText).toBe("");
+    expect(latest.canSendAllHitl).toBe(false);
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+
     act(() => latest.setHitlFreeText("No limit"));
+    act(() => latest.stageHitlAnswer(undefined, "No limit"));
+    expect(latest.canSendAllHitl).toBe(true);
     act(() => latest.selectHitlTab(first));
-    expect(latest.hitlFreeText).toBe("Paris");
-    act(() => latest.selectHitlTab(second));
-    expect(latest.hitlFreeText).toBe("No limit");
+    act(() => latest.stageHitlAnswer("rome"));
+    expect(latest.stagedHitlAnswer?.answer).toBe("rome");
 
     await act(async () => {
-      latest.handleHitlAnswer(undefined, latest.hitlFreeText);
+      latest.handleSendAllHitl();
       await Promise.resolve();
     });
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
     expect(sendHitlResumeMock).toHaveBeenCalledWith(
-      second,
+      first,
       undefined,
-      "No limit",
+      undefined,
       expect.any(Object),
       undefined,
       false,
+      undefined,
+      [
+        { event: first, answer: "rome", freeText: undefined, skipped: false },
+        { event: second, answer: undefined, freeText: "No limit", skipped: false },
+      ],
     );
+    expect(latest.pendingHitl).toBeNull();
   });
 
-  it("keeps the HITL card on the next tab after Skip", async () => {
+  it("keeps all staged answers editable when a batch resume fails", async () => {
     const first = {
       ...awaitingHumanEvent,
-      payload: { stage: "agent_question", question: "Duration?", occurrence_id: "call-a" },
+      payload: { stage: "agent_question", question: "Duration?", interrupt_id: "interrupt-a", occurrence_id: "call-a" },
     };
     const second = {
       ...awaitingHumanEvent,
-      payload: { stage: "agent_question", question: "Budget?", occurrence_id: "call-b" },
+      payload: { stage: "agent_question", question: "Budget?", interrupt_id: "interrupt-b", occurrence_id: "call-b" },
     };
+    sendHitlResumeMock.mockResolvedValueOnce(false);
     mount();
     bindSession("session-1");
     act(() => {
@@ -1445,11 +1469,16 @@ describe("useManagedChat — session write reliability", () => {
       capturedOnAwaitingHuman?.(second);
     });
     rerender();
-    act(() => latest.handleHitlAnswer(undefined, undefined, true));
-    expect(latest.pendingHitl).toEqual(second);
-    expect(latest.pendingHitlTabs).toEqual([second]);
-    await act(async () => await Promise.resolve());
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(first, undefined, undefined, expect.any(Object), undefined, true);
+    act(() => latest.stageHitlAnswer(undefined, undefined, true));
+    act(() => latest.stageHitlAnswer(undefined, undefined, true));
+    expect(latest.canSendAllHitl).toBe(true);
+    await act(async () => {
+      latest.handleSendAllHitl();
+      await Promise.resolve();
+    });
+    expect(latest.pendingHitlTabs).toEqual([first, second]);
+    expect(latest.canSendAllHitl).toBe(true);
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
   });
 
   it("remembers only the gated tool after the approval resume is accepted", async () => {

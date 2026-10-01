@@ -37,24 +37,13 @@
 
 .questionTabs {
   margin-right: 2rem;
-  min-width: 0;
-}
-
-.questionTabs :global([role="tablist"]) {
-  flex-wrap: wrap;
-  width: 100%;
   max-width: 100%;
+  overflow-x: auto;
 }
 
 .questionTabs :global([role="tab"]) {
-  min-width: 0;
-  max-width: 100%;
+  max-width: 13rem;
   white-space: nowrap;
-}
-
-.questionTabs :global([role="tab"] > div) {
-  min-width: 0;
-  max-width: 100%;
 }
 
 .questionTabs :global([role="tab"] span) {
@@ -170,4 +159,9 @@
   min-width: 0;
   color: var(--on-surface);
   font: var(--font-body-medium);
+}
+
+.selectedChoice {
+  border-color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 12%, transparent);
 }

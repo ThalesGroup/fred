@@ -5070,6 +5070,12 @@ same button. After an agent question is answered or skipped, a compact card belo
 the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
 While the person is answering, the `ask_user` tool line stays in progress.
+Simultaneous questions share one card with short subject tabs that scroll
+horizontally when needed. A choice or Skip records a local draft and advances
+to the next unanswered tab. The person can revisit any tab and revise the
+choice or text. Send all becomes available only when every tab has an answer
+or skip; it sends one request for the complete set. The card stays visible
+during submission and keeps the drafts if submission fails.
 For free text, a compact filled Send button sits directly left of Skip in the
 card footer. Choice-only questions keep Skip at the bottom right.
 The chat composer blocks new messages and commands in that conversation while

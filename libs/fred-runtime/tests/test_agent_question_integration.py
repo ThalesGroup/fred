@@ -382,3 +382,60 @@ async def test_sibling_questions_keep_distinct_tool_call_ids(kind: str) -> None:
         "call-1": {"status": "answered", "text": "one"},
         "call-2": {"status": "answered", "text": "two"},
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["react", "deep"])
+async def test_sibling_questions_resume_together_in_one_graph_invocation(
+    kind: str,
+) -> None:
+    model = _Model(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ask_user",
+                        "args": {"question": "First?", "allow_free_text": True},
+                        "id": "call-1",
+                        "type": "tool_call",
+                    },
+                    {
+                        "name": "ask_user",
+                        "args": {"question": "Second?", "allow_free_text": True},
+                        "id": "call-2",
+                        "type": "tool_call",
+                    },
+                ],
+            ),
+            AIMessage(content="continued"),
+        ]
+    )
+    agent = _compile(kind, model)
+    thread = f"batch-siblings-{kind}"
+    pending = await _drive(agent, {"messages": [HumanMessage("Ask twice")]}, thread)
+    by_call = {item.value["occurrence_id"]: item for item in pending}
+    assert (
+        await _drive(
+            agent,
+            Command(
+                resume={
+                    by_call["call-1"].id: {"text": "one"},
+                    by_call["call-2"].id: {"text": "two"},
+                }
+            ),
+            thread,
+        )
+        == []
+    )
+    results = {
+        message.tool_call_id: json.loads(str(message.content))
+        for call in model.calls
+        for message in call
+        if isinstance(message, ToolMessage)
+        and message.tool_call_id in {"call-1", "call-2"}
+    }
+    assert results == {
+        "call-1": {"status": "answered", "text": "one"},
+        "call-2": {"status": "answered", "text": "two"},
+    }

@@ -30,6 +30,10 @@ interface HitlPromptProps {
   siblingQuestions?: RuntimeAwaitingHumanEvent[];
   onSelectQuestion?: (event: RuntimeAwaitingHumanEvent) => void;
   busy?: boolean;
+  stagedAnswer?: { answer: string | boolean | undefined; freeText?: string; skipped: boolean };
+  canSendAll?: boolean;
+  onStageAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
+  onSendAll?: () => void;
   onAnswer: (
     answer: string | boolean | undefined,
     freeText?: string,
@@ -43,7 +47,9 @@ interface HitlPromptProps {
 }
 
 function questionTabLabel(event: RuntimeAwaitingHumanEvent, index: number, fallback: string): string {
-  return event.payload.title?.match(/[\p{L}\p{N}]+/u)?.[0] ?? `${fallback}${index + 1}`;
+  const title = event.payload.title?.trim();
+  if (!title) return `${fallback} ${index + 1}`;
+  return title;
 }
 
 export function HitlPrompt({
@@ -51,6 +57,10 @@ export function HitlPrompt({
   siblingQuestions = [],
   onSelectQuestion,
   busy = false,
+  stagedAnswer,
+  canSendAll = false,
+  onStageAnswer,
+  onSendAll,
   onAnswer,
   readonly = false,
   maxChatInputChars,
@@ -61,6 +71,7 @@ export function HitlPrompt({
   const payload = event.payload;
   const isAgentQuestion = payload.stage === "agent_question";
   const hasQuestionTabs = !readonly && isAgentQuestion && siblingQuestions.length > 1;
+  const collectingAnswers = hasQuestionTabs && onStageAnswer !== undefined;
   const selectedQuestionIndex = siblingQuestions.findIndex((question) =>
     question.payload.occurrence_id
       ? question.payload.occurrence_id === event.payload.occurrence_id
@@ -72,9 +83,13 @@ export function HitlPrompt({
   const characterInfoId = useId();
   const characterCount = countUnicodeCodePoints(freeText);
   const isOverLimit = maxChatInputChars !== undefined && characterCount > maxChatInputChars;
-  const skipQuestion = () => {
-    if (!busy) onAnswer(undefined, undefined, true);
+  const answerQuestion = (answer: string | boolean | undefined, text?: string, skipped = false) => {
+    if (busy) return;
+    if (collectingAnswers) onStageAnswer(answer, text, skipped);
+    else if (skipped) onAnswer(answer, text, true);
+    else onAnswer(answer, text);
   };
+  const skipQuestion = () => answerQuestion(undefined, undefined, true);
   const setFreeText = (value: string) => {
     if (onFreeTextChange) onFreeTextChange(value);
     else setLocalFreeText(value);
@@ -138,12 +153,18 @@ export function HitlPrompt({
             return (
               <Button
                 key={c.id}
-                className={c.description ? styles.choiceWithDescription : undefined}
+                className={[
+                  c.description && styles.choiceWithDescription,
+                  collectingAnswers && stagedAnswer?.answer === c.id && !stagedAnswer.skipped && styles.selectedChoice,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 color="primary"
                 variant="outlined"
                 size="medium"
                 disabled={isOverLimit || busy}
-                onClick={() => onAnswer(c.id, freeText.trim() ? freeText : undefined)}
+                aria-pressed={collectingAnswers ? stagedAnswer?.answer === c.id && !stagedAnswer.skipped : undefined}
+                onClick={() => answerQuestion(c.id, freeText.trim() ? freeText : undefined)}
               >
                 {c.description ? (
                   <span className={styles.choiceContent}>
@@ -167,7 +188,7 @@ export function HitlPrompt({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.nativeEvent.isComposing && freeText.trim() && !isOverLimit && !busy) {
                     e.preventDefault();
-                    onAnswer(undefined, freeText);
+                    answerQuestion(undefined, freeText);
                   }
                 }}
                 aria-invalid={isOverLimit || undefined}
@@ -206,7 +227,7 @@ export function HitlPrompt({
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && freeText.trim() && !isOverLimit && !busy) {
                 e.preventDefault();
-                onAnswer(undefined, freeText);
+                answerQuestion(undefined, freeText);
               }
             }}
             rows={2}
@@ -225,9 +246,14 @@ export function HitlPrompt({
               variant="filled"
               size="small"
               disabled={!freeText.trim() || isOverLimit || busy}
-              onClick={() => onAnswer(undefined, freeText)}
+              onClick={() => answerQuestion(undefined, freeText)}
             >
-              {t("chatbot.sendHitlAnswer")}
+              {t(collectingAnswers ? "chatbot.nextHitlQuestion" : "chatbot.sendHitlAnswer")}
+            </Button>
+          )}
+          {collectingAnswers && (
+            <Button color="primary" variant="filled" size="small" disabled={!canSendAll || busy} onClick={onSendAll}>
+              {t("chatbot.sendAllHitlAnswers")}
             </Button>
           )}
           {isAgentQuestion && (

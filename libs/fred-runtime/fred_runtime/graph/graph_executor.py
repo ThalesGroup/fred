@@ -83,6 +83,7 @@ from fred_runtime.react.react_stream_adapter import (
     split_stream_event_mode,
 )
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
+from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
 from fred_runtime.runtime_support.tool_approval import ToolApproval
 
@@ -518,6 +519,16 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             if not pending_ids:
                 raise RuntimeError(
                     "Graph execution received a resume payload without a pending pause."
+                )
+            batch = parse_batched_human_answers(config.resume_payload)
+            if batch is not None:
+                batch_ids = {item.interrupt_id for item in batch}
+                if batch_ids != pending_ids:
+                    raise RuntimeError(
+                        "Graph batch answers must match every pending question."
+                    )
+                return Command(
+                    resume={item.interrupt_id: item.answer for item in batch}
                 )
             if config.interrupt_id is not None:
                 if config.interrupt_id not in pending_ids:

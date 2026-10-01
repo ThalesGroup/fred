@@ -124,6 +124,10 @@ def _make_config(
     return cast(RunnableConfig, {"configurable": configurable})
 
 
+class _BatchClaimUnavailable(Exception):
+    pass
+
+
 class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     """
     Durable checkpoint backend for Fred v2 runtimes.
@@ -865,6 +869,82 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                 sql_ms=(time.monotonic() - sql_start) * 1000.0,
             )
             return token if row is not None else None
+
+    async def aclaim_hitl_resumes(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        occurrences: tuple[tuple[str, str], ...],
+    ) -> str | None:
+        """Claim every sibling occurrence in one transaction or claim none."""
+        if len(occurrences) < 2 or len(set(occurrences)) != len(occurrences):
+            raise ValueError("a batch claim requires distinct sibling occurrences")
+        await self._ensure_tables()
+        token = secrets.token_urlsafe(16)
+        try:
+            async with self.store.begin() as conn:
+                now = await self._db_now(conn)
+                stale_cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
+                for interrupt_id, occurrence_id in occurrences:
+                    stmt = self._hitl_claim_insert(conn.dialect.name).values(
+                        thread_id=thread_id,
+                        checkpoint_ns=checkpoint_ns,
+                        interrupt_id=_hitl_claim_key(interrupt_id, occurrence_id),
+                        claim_token=token,
+                        status=self._HITL_CLAIM_CLAIMED,
+                        claimed_at=now,
+                    )
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["thread_id", "checkpoint_ns", "interrupt_id"],
+                        set_={
+                            "claim_token": token,
+                            "status": self._HITL_CLAIM_CLAIMED,
+                            "claimed_at": now,
+                        },
+                        where=(
+                            (self.hitl_claim_table.c.status == self._HITL_CLAIM_CLAIMED)
+                            & (self.hitl_claim_table.c.claimed_at < stale_cutoff)
+                        ),
+                    ).returning(self.hitl_claim_table.c.claim_token)
+                    if (await conn.execute(stmt)).first() is None:
+                        raise _BatchClaimUnavailable
+        except _BatchClaimUnavailable:
+            return None
+        return token
+
+    async def astart_hitl_resumes(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        occurrences: tuple[tuple[str, str], ...],
+        claim_token: str,
+    ) -> bool:
+        """Start every claimed sibling atomically before invoking the graph."""
+        try:
+            async with self.store.begin() as conn:
+                for interrupt_id, occurrence_id in occurrences:
+                    result = await conn.execute(
+                        update(self.hitl_claim_table)
+                        .where(
+                            and_(
+                                self.hitl_claim_table.c.thread_id == thread_id,
+                                self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
+                                self.hitl_claim_table.c.interrupt_id
+                                == _hitl_claim_key(interrupt_id, occurrence_id),
+                                self.hitl_claim_table.c.claim_token == claim_token,
+                                self.hitl_claim_table.c.status
+                                == self._HITL_CLAIM_CLAIMED,
+                            )
+                        )
+                        .values(status=self._HITL_CLAIM_STARTED)
+                    )
+                    if (result.rowcount or 0) != 1:
+                        raise _BatchClaimUnavailable
+        except _BatchClaimUnavailable:
+            return False
+        return True
 
     async def astart_hitl_resume(
         self,

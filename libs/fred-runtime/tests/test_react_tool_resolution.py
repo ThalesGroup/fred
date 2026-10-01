@@ -311,7 +311,7 @@ def test_ask_user_accepts_four_selected_choices_and_exposes_the_limit() -> None:
     assert len(args.choices) == 4
 
 
-def test_ask_user_normalizes_a_multiword_subject_title() -> None:
+def test_ask_user_accepts_a_short_subject_title() -> None:
     from fred_runtime.runtime_support.ask_user import AskUserArgs
 
     args = AskUserArgs.model_validate(
@@ -322,7 +322,7 @@ def test_ask_user_normalizes_a_multiword_subject_title() -> None:
             "tool_call_id": "call-1",
         }
     )
-    assert args.title == "Trip"
+    assert args.title == "Trip duration"
 
 
 @pytest.mark.asyncio
@@ -346,7 +346,7 @@ async def test_ask_user_persists_the_subject_title(
             "tool_call_id": "call-1",
         }
     )
-    assert requests[0]["title"] == "Trip"
+    assert requests[0]["title"] == "Trip duration"
 
 
 @pytest.mark.asyncio

@@ -539,6 +539,8 @@
       "empty": "Aucun aperçu markdown disponible."
     },
     "recordAudio": "Enregistrer de l'audio",
+    "nextHitlQuestion": "Suivant",
+    "sendAllHitlAnswers": "Tout envoyer",
     "sendHitlAnswer": "Envoyer",
     "skipHitlQuestion": "Passer",
     "skipHitlQuestionAria": "Passer cette question",

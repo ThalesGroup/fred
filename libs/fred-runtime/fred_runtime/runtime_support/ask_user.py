@@ -34,7 +34,7 @@ class AskUserArgs(BaseModel):
     title: str | None = Field(
         default=None,
         max_length=60,
-        description="Exactly one subject word for the question tab, with no spaces (for example: Duration).",
+        description="A short subject for the question tab, preferably two or three words.",
     )
     choices: tuple[HumanChoiceOption, ...] = Field(
         default=(),
@@ -48,10 +48,8 @@ class AskUserArgs(BaseModel):
     def validate_question(self) -> AskUserArgs:
         if not self.question.strip():
             raise ValueError("question must not be blank")
-        if self.title is not None:
-            if not self.title.strip():
-                raise ValueError("title must not be blank")
-            self.title = self.title.split()[0]
+        if self.title is not None and not self.title.strip():
+            raise ValueError("title must not be blank")
         if not self.choices and not self.allow_free_text:
             raise ValueError("ask_user requires choices or free text")
         ids = [choice.id for choice in self.choices]

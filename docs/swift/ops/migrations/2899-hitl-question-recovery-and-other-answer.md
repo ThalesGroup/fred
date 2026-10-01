@@ -4,7 +4,7 @@ title: "Improve HITL question recovery and Other answers"
 impact: none
 configuration: none
 configuration_reason: "Agent-question handling, managed-chat presentation, and frontend TypeScript path resolution change; no deployment configuration keys or defaults change."
-no_action_reason: "Existing data and APIs are unchanged; the updated behavior takes effect through normal deployment."
+no_action_reason: "No data migration is required; the additive batch resume form takes effect through normal deployment."
 ---
 ## Applicability
 
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Ask an interactive agent a question with multiple choices. Confirm that an Other text field appears below the choices, accepts an answer, and that a question following an invalid tool call does not show the previous failure as a final response.
+Ask an interactive agent a question with multiple choices. Confirm that an Other text field appears below the choices and accepts an answer. For simultaneous questions, edit answers across tabs, submit once, and confirm each call receives its own answer. A question following an invalid tool call must not show the previous failure as a final response.
 
 ## Rollback
 

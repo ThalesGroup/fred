@@ -224,7 +224,7 @@ class ReActRuntimeToolResolver:
                     runtime_name="ask_user",
                     description=(
                         "Ask the user one question and continue after their answer. "
-                        "When possible, set title to exactly one subject word with no spaces. "
+                        "When possible, give the question a short subject title of a few words. "
                         "Hard limit: choices must contain no more than four items. "
                         "If you have five or more candidates, first select the four that best satisfy the user's constraints; "
                         "the interface always offers an Other free-text answer alongside multiple choices. "

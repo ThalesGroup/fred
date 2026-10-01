@@ -34,6 +34,10 @@ interface ConversationThreadProps {
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
   onSelectHitlTab?: (event: RuntimeAwaitingHumanEvent) => void;
   hitlBusy?: boolean;
+  stagedHitlAnswer?: { answer: string | boolean | undefined; freeText?: string; skipped: boolean };
+  canSendAllHitl?: boolean;
+  onStageHitlAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
+  onSendAllHitl?: () => void;
   isLoading: boolean;
   isStreaming: boolean;
   emptyState?: ReactNode;
@@ -62,6 +66,10 @@ export const ConversationThread = memo(function ConversationThread({
   pendingHitlTabs = [],
   onSelectHitlTab,
   hitlBusy = false,
+  stagedHitlAnswer,
+  canSendAllHitl,
+  onStageHitlAnswer,
+  onSendAllHitl,
   isLoading,
   isStreaming,
   emptyState,
@@ -140,6 +148,10 @@ export const ConversationThread = memo(function ConversationThread({
           siblingQuestions={pendingHitlTabs}
           onSelectQuestion={onSelectHitlTab}
           busy={hitlBusy}
+          stagedAnswer={stagedHitlAnswer}
+          canSendAll={canSendAllHitl}
+          onStageAnswer={onStageHitlAnswer}
+          onSendAll={onSendAllHitl}
           onAnswer={onHitlAnswer}
           maxChatInputChars={maxChatInputChars}
           freeTextValue={hitlFreeText}

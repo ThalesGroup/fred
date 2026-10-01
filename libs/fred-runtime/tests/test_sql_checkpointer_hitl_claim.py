@@ -612,3 +612,52 @@ async def test_hitl_claim_rows_never_appear_in_pending_writes(checkpointer) -> N
     _checkpoint, pending_writes = loaded
     channels = {channel for _task_id, channel, _value in pending_writes}
     assert channels == {"__interrupt__"}  # the claim row is NOT among them
+
+
+@pytest.mark.asyncio
+async def test_batch_claim_and_start_are_all_or_nothing(checkpointer) -> None:
+    occurrences = (("interrupt-a", "call-a"), ("interrupt-b", "call-b"))
+    single = await checkpointer.aclaim_hitl_resume(
+        thread_id="t1",
+        checkpoint_ns="",
+        interrupt_id="interrupt-b",
+        occurrence_id="call-b",
+    )
+    assert single is not None
+    assert (
+        await checkpointer.aclaim_hitl_resumes(
+            thread_id="t1", checkpoint_ns="", occurrences=occurrences
+        )
+        is None
+    )
+    rows = await _claim_rows(checkpointer)
+    assert len(rows) == 1
+    assert rows[0].claim_token == single
+    await checkpointer.arelease_hitl_resume(
+        thread_id="t1",
+        checkpoint_ns="",
+        interrupt_id="interrupt-b",
+        occurrence_id="call-b",
+        claim_token=single,
+    )
+    token = await checkpointer.aclaim_hitl_resumes(
+        thread_id="t1", checkpoint_ns="", occurrences=occurrences
+    )
+    assert token is not None
+    assert (
+        await checkpointer.astart_hitl_resumes(
+            thread_id="t1",
+            checkpoint_ns="",
+            occurrences=occurrences,
+            claim_token="wrong",
+        )
+        is False
+    )
+    assert {row.status for row in await _claim_rows(checkpointer)} == {"claimed"}
+    assert (
+        await checkpointer.astart_hitl_resumes(
+            thread_id="t1", checkpoint_ns="", occurrences=occurrences, claim_token=token
+        )
+        is True
+    )
+    assert {row.status for row in await _claim_rows(checkpointer)} == {"started"}

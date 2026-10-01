@@ -6378,7 +6378,7 @@ text is the record of what was sent.
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
 `RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
 platform tool explicitly under that control. An absent value or `false` leaves
-the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional one-word subject title, up to
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional short subject title, up to
 four distinct single-choice options, and/or free text. Two or more choices
 automatically allow a text answer even when the agent sets `allow_free_text=false`;
 zero- and one-choice questions follow that flag. The agent selects the most
@@ -6411,14 +6411,23 @@ A Graph question pause leaves its tool call in progress; only the resumed call
 emits a tool result. The no-LLM Graph test assistant exercises confirmation,
 choice, free text, and choice with comment through this platform tool.
 
-Managed chat groups simultaneous agent questions in one HITL card with compact
-subject tabs in call order. The model is asked for one word; longer titles are
-reduced to the first word without failing the tool call. The tabs wrap inside
-the card and older questions without titles use localized numbered labels.
-The first unanswered question is selected initially. Each tab keeps its own draft. Answering or skipping one question selects the
-next unanswered tab while the runtime resumes, and the card stays open until
-all questions are resolved. Reload reconstructs every unanswered sibling from
-history by occurrence ID.
+Managed chat groups simultaneous agent questions in one HITL card with short
+subject tabs in call order. Tabs scroll horizontally when needed, and older
+questions without titles use localized numbered labels. The first unanswered
+question is selected initially. Selecting a choice or skipping stages that
+answer and advances to the next unanswered tab. The person can revisit any
+tab and change its answer. Once every tab has an answer or skip, one Send
+resumes all pending calls in a single backend request. The card remains visible
+until that request succeeds and retains every draft if it fails. Reload
+reconstructs unanswered siblings from history by occurrence ID.
+
+A batch resume uses `resume_payload={"answers":[{"interrupt_id":"...",
+"occurrence_id":"...","answer":{...}},...]}` without top-level interrupt or
+occurrence IDs. The request must cover the exact pending set of agent questions.
+The runtime validates each answer, claims the occurrences in one database
+transaction, and resumes LangGraph once with an interrupt-ID-to-answer map.
+It persists one response row per occurrence. Existing single-answer resumes
+remain valid.
 
 `HitlResponsePart.skipped` is optional and defaults to false for old history.
 A skipped question writes a response row even without choice or text. Graph

@@ -539,6 +539,8 @@
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "nextHitlQuestion": "Next",
+    "sendAllHitlAnswers": "Send all",
     "sendHitlAnswer": "Send",
     "skipHitlQuestion": "Skip",
     "skipHitlQuestionAria": "Skip this question",
