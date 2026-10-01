@@ -103,6 +103,14 @@ Normal deployment restores the write_todos tool; no data or API migration is nee
 
 See the source note for applicability, validation and rollback.
 
+## Replace the token-exchange RFC with a current delegated execution doc and remove stale root notes
+
+Impact: **none** · [Source](https://github.com/ThalesGroup/fred/blob/code/v3.1.0/docs/swift/ops/migrations/delegation-doc-and-root-notes-cleanup.md)
+
+No runtime behavior, API, data or permission changes; the edited Python files differ only in comments and docstrings.
+
+See the source note for applicability, validation and rollback.
+
 ## Refresh vulnerable Python and npm dependencies
 
 Impact: **none** · [Source](https://github.com/ThalesGroup/fred/blob/code/v3.1.0/docs/swift/ops/migrations/dependabot-security-refresh.md)
@@ -180,6 +188,14 @@ See the source note for applicability, validation and rollback.
 Impact: **none** · [Source](https://github.com/ThalesGroup/fred/blob/code/v3.1.0/docs/swift/ops/migrations/offload-upload-save-input.md)
 
 Upload endpoints, stored data and write order are unchanged; the fix takes effect with a normal deployment.
+
+See the source note for applicability, validation and rollback.
+
+## Align the Fred 3.1.0 guide with the linear release history
+
+Impact: **none** · [Source](https://github.com/ThalesGroup/fred/blob/code/v3.1.0/docs/swift/ops/migrations/release-3-1-0-linear-history.md)
+
+The guide now includes the documentation and comment cleanup already on the release branch; this alignment adds no runtime or data change.
 
 See the source note for applicability, validation and rollback.
 
