@@ -46,8 +46,6 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from knowledge_flow_backend.application_context import ApplicationContext, get_configuration
 from knowledge_flow_backend.common.config_loader import (
-    get_loaded_config_file_path,
-    get_loaded_env_file_path,
     load_configuration,
 )
 from knowledge_flow_backend.common.http_logging import RequestResponseLogger
@@ -148,9 +146,7 @@ def create_app() -> FastAPI:
         service_role="api",
         store=NullLogStore(),
     )
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
-    logger.info("%s Environment file: %s | Configuration file: %s", LOG_PREFIX, env_file, config_file)
+    logger.info("Application configuration ready")
     logger.info("%s Embedding model: [%s] %s", LOG_PREFIX, configuration.embedding_model.provider, configuration.embedding_model.name)
     logger.info("%s Chat model: [%s] %s", LOG_PREFIX, configuration.chat_model.provider, configuration.chat_model.name)
     if configuration.ocr_model:

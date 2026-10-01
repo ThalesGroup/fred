@@ -566,3 +566,24 @@ def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> No
     with pytest.raises(ValueError):
         with log_context(details=object()):
             pass
+
+
+def test_startup_diagnostics_wait_for_selected_output(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from fred_pod.common.config_files import ConfigFiles
+
+    files = ConfigFiles(logger=logging.getLogger("config-test"))
+    files.mark_config_loaded("/sensitive/customer/configuration.yaml")
+    assert not capsys.readouterr().out
+    log_setup(
+        service_name="bootstrap-test",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+    output = capsys.readouterr().out
+    event = json.loads(output)
+    assert event["service"] == "bootstrap-test"
+    assert event["severity"] == "INFO"
+    assert "sensitive" not in output
