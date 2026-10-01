@@ -138,8 +138,7 @@ describe("DocumentWorkspace — the table only reserves what it uses", () => {
 
     await openTheLibrary();
 
-    // One 8rem track after the author column, not two: the status one is gone.
-    expect(tracks()).not.toContain("8rem");
+    expect(tracks()).not.toContain("minmax(0, 8rem)");
     expect(tracks()).toContain("5.75rem");
   });
 
@@ -148,7 +147,7 @@ describe("DocumentWorkspace — the table only reserves what it uses", () => {
 
     await openTheLibrary();
 
-    expect(tracks()).toContain("8rem");
+    expect(tracks()).toContain("minmax(0, 8rem)");
   });
 
   it("reserves the third action slot only for a document excluded from search", async () => {
@@ -159,7 +158,7 @@ describe("DocumentWorkspace — the table only reserves what it uses", () => {
     await openTheLibrary();
 
     // Excluded and ready: the search-off indicator joins preview and "more".
-    expect(tracks()).toContain("8rem");
+    expect(tracks()).toMatch(/ 8rem$/);
     expect(tracks()).not.toContain("5.75rem");
   });
 });

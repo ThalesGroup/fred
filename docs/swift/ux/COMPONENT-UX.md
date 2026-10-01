@@ -3795,6 +3795,17 @@ document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
+### Resources table — columns beside the import panel (2026-10-01)
+
+In the Documents, Filesystem and Agents workspaces the name column is
+`minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
+between them (size, created, author, status) are `minmax(0, <usual width>)`. They
+keep their usual width while there is room and are the ones that shrink, truncated,
+when the import panel widens, so the name and the row's more button always stay
+visible. `--import-panel-max` still reserves 660px for the table. The workspace has
+no hard `min-width`: a 660px one pushed the open panel off screen whenever both did
+not fit.
+
 ### `DocumentWorkspace` — refresh control (2026-09-11)
 
 The knowledge-flow query slice used to refetch on every mount and keep nothing
