@@ -10,4 +10,5 @@
 
 ## 3. Close-out
 
-- [ ] 3.1 Run targeted tests and the root quality gate once, validate and sync the OpenSpec delta, and verify the draft PR describes the result and limitations.
+- [x] 3.1 Run targeted tests, full module suites, the root quality gate, and OpenSpec validation and sync; verify draft PR #2900 records the result and limitations. Evidence: runtime 1,726 passed; frontend 3,165 passed; root quality and migration checks passed.
+- [ ] 3.2 Obtain independent correctness review before merge, resolve findings, and archive the change after merge.
