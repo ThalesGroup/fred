@@ -3,7 +3,7 @@ schema: 1
 title: "Improve HITL question recovery and Other answers"
 impact: none
 configuration: none
-configuration_reason: "Only agent-question handling and managed-chat presentation change; no configuration keys or defaults change."
+configuration_reason: "Agent-question handling, managed-chat presentation, and frontend TypeScript path resolution change; no deployment configuration keys or defaults change."
 no_action_reason: "Existing data and APIs are unchanged; the updated behavior takes effect through normal deployment."
 ---
 ## Applicability
