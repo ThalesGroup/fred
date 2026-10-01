@@ -1325,6 +1325,57 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onErrorMock).not.toHaveBeenCalled();
   });
 
+  it("retains pause metadata in the live HITL request row", async () => {
+    flushPendingWrites = async () => true;
+    const event = {
+      kind: "awaiting_human",
+      sequence: 1,
+      request: {
+        stage: "agent_question",
+        question: "Continue?",
+        choices: [
+          { id: "yes", label: "Yes" },
+          { id: "no", label: "No" },
+        ],
+        free_text: true,
+        interrupt_id: "interrupt-1",
+        occurrence_id: "question-1",
+      },
+      sources: [{ uid: "source-1", title: "Guide", content: "Evidence", score: 1 }],
+      ui_parts: [{ type: "link", href: "https://example.test/guide" }],
+      token_usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+      context_tokens: 100,
+      model_name: "test-model",
+    };
+    const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);
+    let readCount = 0;
+    const body = {
+      getReader: () => ({
+        read: async () => (readCount++ === 0 ? { done: false, value: bytes } : { done: true, value: undefined }),
+        releaseLock: () => {},
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body,
+    } as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    const request = latest.messages.find((message) => message.channel === "hitl_request");
+    expect(request?.metadata?.sources?.[0].uid).toBe("source-1");
+    expect(request?.metadata?.ui_parts?.[0].type).toBe("link");
+    expect(request?.metadata?.token_usage?.total_tokens).toBe(120);
+    expect(request?.metadata?.context_tokens).toBe(100);
+    expect(latest.messages.some((message) => message.role === "assistant" && message.channel === "final")).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
   it("a user abort of an accepted stream reports no error and never re-requests", async () => {
     flushPendingWrites = async () => true;
     const read = deferred<ReadableStreamReadResult<Uint8Array>>();

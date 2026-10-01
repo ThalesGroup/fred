@@ -6,9 +6,9 @@ Tracked by [#2899](https://github.com/ThalesGroup/fred/issues/2899).
 
 ## What Changes
 
-- A turn paused for an agent question does not emit a stale tool failure as its final answer. Failed turns that do not pause retain their safe error response.
+- A turn paused for an agent question does not emit a stale tool failure as its final answer. The pause carries earlier sources, UI parts, and token usage so they survive history and resume. Failed turns that do not pause retain their safe error response.
 - Agent questions with two or more choices always accept a text answer, regardless of the model's `allow_free_text` argument. The four-choice limit remains.
-- Managed chat places a localized "Other" / "Autre" text field as the last row of the choice list. Text-only questions and tool approvals retain their existing forms.
+- Managed chat places a localized gray "Other" / "Autre" label beside the editable last row of the choice list and renders question Markdown. Text-only questions and tool approvals retain their existing forms.
 
 ## Capabilities
 
@@ -22,4 +22,4 @@ None.
 
 ## Impact
 
-ReAct runtime streaming and `ask_user` request construction, managed-chat HITL rendering, focused tests, runtime and UX documentation, and one migration note. The wire schema and database schema remain unchanged.
+ReAct runtime streaming and `ask_user` request construction, managed-chat HITL rendering, focused tests, runtime and UX documentation, and one migration note. The pause event gains additive metadata fields; the database schema remains unchanged.

@@ -204,6 +204,50 @@ describe("reconstructPendingHitl", () => {
   });
 });
 
+describe("toThreadMessages pause metadata", () => {
+  it("retains pre-pause sources, UI parts, and usage after the answer resumes", () => {
+    const source = { uid: "source-1", title: "Guide", content: "Evidence", score: 1 } as never;
+    const toolCall = msg({
+      rank: 1,
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} } as never],
+    });
+    const request = {
+      ...hitlRequestMsg("e1", { occurrence_id: "call-1" }, 2),
+      metadata: {
+        sources: [source],
+        ui_parts: [LINK],
+        model: "test-model",
+        token_usage: { input_tokens: 230, output_tokens: 30, total_tokens: 260 },
+        context_tokens: 130,
+      },
+    } as ChatMessage;
+
+    const open = toThreadMessages([toolCall, request], false).find((row) => row.role === "assistant");
+    expect(open?.sources).toEqual([source]);
+    expect(open?.uiParts).toEqual([LINK]);
+    expect(open?.tokenUsage?.total_tokens).toBe(260);
+
+    const final = msg({
+      rank: 4,
+      parts: [{ type: "text", text: "Done" } as never],
+      metadata: {
+        token_usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        context_tokens: 140,
+      },
+    });
+    const resumed = toThreadMessages(
+      [toolCall, request, hitlResponseMsg("e1", { occurrence_id: "call-1" }, 3), final],
+      false,
+    ).find((row) => row.role === "assistant");
+    expect(resumed?.text).toBe("Done");
+    expect(resumed?.sources).toEqual([source]);
+    expect(resumed?.uiParts).toEqual([LINK]);
+    expect(resumed?.tokenUsage).toEqual({ input_tokens: 240, output_tokens: 35, total_tokens: 275 });
+    expect(resumed?.contextTokens).toBe(140);
+  });
+});
+
 describe("toThreadMessages — open HITL gate rendering", () => {
   it("still renders a readonly card for a PAST answered exchange", () => {
     const messages = [hitlRequestMsg("e1"), hitlResponseMsg("e1"), hitlRequestMsg("e2"), hitlResponseMsg("e2")];

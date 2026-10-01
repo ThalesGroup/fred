@@ -32,12 +32,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
+from fred_core.store import VectorSearchHit
 from fred_runtime.react.react_runtime import (
     _GENERIC_TOOL_FAILURE_MESSAGE,
     _TransportBackedReActExecutor,
     _user_facing_tool_error_text,
 )
 from fred_sdk.contracts.context import (
+    LinkPart,
     ToolContentBlock,
     ToolContentKind,
     ToolInvocationResult,
@@ -449,6 +451,151 @@ async def test_failed_tool_then_human_pause_has_no_stale_final() -> None:
         and event.request.occurrence_id == "question"
         for event in collected
     )
+    assert not any(isinstance(event, FinalRuntimeEvent) for event in collected)
+
+
+@pytest.mark.asyncio
+async def test_human_pause_preserves_prior_tool_output_and_usage() -> None:
+    source = VectorSearchHit(
+        uid="source-1", title="Guide", content="Evidence", score=1.0
+    )
+    link = LinkPart(href="https://example.test/guide", title="Guide")
+    events = [
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "id": "search",
+                                    "name": "summarize_document",
+                                    "args": {},
+                                }
+                            ],
+                            usage_metadata={
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                                "total_tokens": 120,
+                            },
+                            response_metadata={"model_name": "test-model"},
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(
+                            content="Evidence",
+                            tool_call_id="search",
+                            name="summarize_document",
+                            artifact=ToolInvocationResult(
+                                tool_ref="summarize_document",
+                                blocks=(
+                                    ToolContentBlock(
+                                        kind=ToolContentKind.TEXT, text="Evidence"
+                                    ),
+                                ),
+                                sources=(source,),
+                                ui_parts=(link,),
+                            ),
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {"id": "question", "name": "ask_user", "args": {}}
+                            ],
+                            usage_metadata={
+                                "input_tokens": 130,
+                                "output_tokens": 10,
+                                "total_tokens": 140,
+                            },
+                            response_metadata={"model_name": "test-model"},
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "__interrupt__": {
+                    "value": {
+                        "stage": "agent_question",
+                        "question": "Choose",
+                        "free_text": True,
+                        "occurrence_id": "question",
+                    },
+                    "id": "interrupt-1",
+                }
+            },
+        ),
+    ]
+
+    collected = await _run_stream(events)
+    pause = next(
+        event for event in collected if isinstance(event, AwaitingHumanRuntimeEvent)
+    )
+    assert pause.sources == (source,)
+    assert pause.ui_parts == (link,)
+    assert pause.model_name == "test-model"
+    assert pause.token_usage is not None
+    assert pause.token_usage["total_tokens"] == 260
+    assert pause.context_tokens == 130
+    assert not any(isinstance(event, FinalRuntimeEvent) for event in collected)
+
+
+@pytest.mark.asyncio
+async def test_parallel_human_pauses_keep_each_request_without_double_counting() -> (
+    None
+):
+    calls = AIMessage(
+        content="",
+        tool_calls=[{"id": "first", "name": "ask_user", "args": {}}],
+        usage_metadata={"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+    )
+    events: list[object] = [("updates", {"agent": {"messages": [calls]}})]
+    for occurrence_id in ("first", "second"):
+        events.append(
+            (
+                "updates",
+                {
+                    "__interrupt__": {
+                        "value": {
+                            "stage": "agent_question",
+                            "question": "Choose",
+                            "free_text": True,
+                            "occurrence_id": occurrence_id,
+                        },
+                        "id": f"interrupt-{occurrence_id}",
+                    }
+                },
+            )
+        )
+
+    collected = await _run_stream(events)
+    pauses = [
+        event for event in collected if isinstance(event, AwaitingHumanRuntimeEvent)
+    ]
+    assert [pause.request.occurrence_id for pause in pauses] == ["first", "second"]
+    assert pauses[0].token_usage is not None
+    assert pauses[0].token_usage["total_tokens"] == 120
+    assert pauses[1].token_usage is None
     assert not any(isinstance(event, FinalRuntimeEvent) for event in collected)
 
 

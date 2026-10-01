@@ -3005,36 +3005,53 @@ async def _write_turn_history(
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
             raw_pending_calls = req.get("pending_calls") or []
-            messages.append(
-                make_hitl_request(
-                    session_id,
-                    exchange_id,
-                    rank,
-                    question=question,
-                    choices=[
-                        {
-                            "id": c.get("id", ""),
-                            "label": c.get("label", c.get("id", "")),
-                        }
-                        for c in raw_choices
-                        if isinstance(c, dict)
-                    ],
-                    stage=req.get("stage"),
-                    title=req.get("title"),
-                    free_text=bool(req.get("free_text")),
-                    interrupt_id=req.get("interrupt_id"),
-                    occurrence_id=req.get("occurrence_id"),
-                    pending_calls=[
-                        {
-                            "tool_call_id": c.get("tool_call_id", ""),
-                            "tool_name": c.get("tool_name", ""),
-                            "args_preview": c.get("args_preview", ""),
-                        }
-                        for c in raw_pending_calls
-                        if isinstance(c, dict)
-                    ],
-                )
+            hitl_message = make_hitl_request(
+                session_id,
+                exchange_id,
+                rank,
+                question=question,
+                choices=[
+                    {
+                        "id": c.get("id", ""),
+                        "label": c.get("label", c.get("id", "")),
+                    }
+                    for c in raw_choices
+                    if isinstance(c, dict)
+                ],
+                stage=req.get("stage"),
+                title=req.get("title"),
+                free_text=bool(req.get("free_text")),
+                interrupt_id=req.get("interrupt_id"),
+                occurrence_id=req.get("occurrence_id"),
+                pending_calls=[
+                    {
+                        "tool_call_id": c.get("tool_call_id", ""),
+                        "tool_name": c.get("tool_name", ""),
+                        "args_preview": c.get("args_preview", ""),
+                    }
+                    for c in raw_pending_calls
+                    if isinstance(c, dict)
+                ],
             )
+            raw_usage = payload.get("token_usage")
+            hitl_message.metadata = ChatMetadata(
+                model=payload.get("model_name"),
+                token_usage=ChatTokenUsage(**raw_usage)
+                if isinstance(raw_usage, dict)
+                else None,
+                context_tokens=payload.get("context_tokens"),
+                sources=[
+                    VectorSearchHit.model_validate(source)
+                    for source in (payload.get("sources") or [])
+                    if isinstance(source, dict)
+                ],
+                ui_parts=[
+                    part
+                    for part in (payload.get("ui_parts") or [])
+                    if isinstance(part, dict) and isinstance(part.get("type"), str)
+                ],
+            )
+            messages.append(hitl_message)
             rank += 1
 
         elif kind == "node_error":

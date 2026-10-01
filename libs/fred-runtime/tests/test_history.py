@@ -367,6 +367,60 @@ def test_write_turn_history_skips_save_when_no_content() -> None:
     store.save.assert_not_awaited()
 
 
+def test_write_turn_history_preserves_pause_metadata_without_final() -> None:
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="find a guide",
+            payloads=[
+                {
+                    "kind": "awaiting_human",
+                    "request": {
+                        "question": "Continue?",
+                        "stage": "agent_question",
+                        "occurrence_id": "question-1",
+                    },
+                    "sources": [
+                        {
+                            "uid": "source-1",
+                            "title": "Guide",
+                            "content": "Evidence",
+                            "score": 1.0,
+                        }
+                    ],
+                    "ui_parts": [
+                        {"type": "link", "href": "https://example.test/guide"}
+                    ],
+                    "model_name": "test-model",
+                    "token_usage": {
+                        "input_tokens": 230,
+                        "output_tokens": 30,
+                        "total_tokens": 260,
+                    },
+                    "context_tokens": 130,
+                }
+            ],
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    assert len(messages) == 2
+    request = messages[1]
+    assert request.channel == Channel.hitl_request
+    assert request.metadata.sources[0].uid == "source-1"
+    assert request.metadata.ui_parts[0]["type"] == "link"
+    assert request.metadata.model == "test-model"
+    assert request.metadata.token_usage.total_tokens == 260
+    assert request.metadata.context_tokens == 130
+
+
 def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     """
     _write_turn_history must map awaiting_human and node_error payloads to

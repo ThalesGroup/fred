@@ -335,39 +335,41 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       }
     }
 
-    const finalMessages = msgs.filter((m) => {
-      const ch = m.channel as string;
-      return m.role !== "user" && ch !== "hitl_request" && ch !== "hitl_response" && !isTraceChannel(m.channel);
-    });
+    const finalMessages: ChatMessage[] = [];
+    const metadataMessages: ChatMessage[] = [];
+    for (const message of msgs) {
+      const channel = message.channel as string;
+      if (channel === "hitl_request") {
+        metadataMessages.push(message);
+      } else if (message.role !== "user" && channel !== "hitl_response" && !isTraceChannel(message.channel)) {
+        finalMessages.push(message);
+        metadataMessages.push(message);
+      }
+    }
 
     if (traceMessages.length > 0 || finalMessages.length > 0 || (isStreaming && isLast)) {
       const sources: VectorSearchHit[] = [];
       let tokenUsage: TokenUsage | null = null;
       let contextTokens: number | null = null;
-      for (let i = finalMessages.length - 1; i >= 0; i--) {
-        const meta = finalMessages[i].metadata as Record<string, unknown> | undefined;
-        if (!tokenUsage && meta?.token_usage) {
-          const tu = meta.token_usage as Record<string, number>;
-          tokenUsage = {
-            input_tokens: tu.input_tokens ?? 0,
-            output_tokens: tu.output_tokens ?? 0,
-            total_tokens: tu.total_tokens ?? 0,
-          };
+      for (const message of metadataMessages) {
+        const meta = message.metadata;
+        if (meta?.token_usage) {
+          const usage = meta.token_usage;
+          tokenUsage ??= { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+          tokenUsage.input_tokens += usage.input_tokens ?? 0;
+          tokenUsage.output_tokens += usage.output_tokens ?? 0;
+          tokenUsage.total_tokens += usage.total_tokens ?? 0;
         }
-        if (contextTokens === null && typeof meta?.context_tokens === "number") {
+        if (typeof meta?.context_tokens === "number") {
           contextTokens = meta.context_tokens;
         }
-        if (sources.length === 0) {
-          const srcs = meta?.sources as VectorSearchHit[] | undefined;
-          if (srcs && srcs.length > 0) sources.push(...srcs);
-        }
-        if (tokenUsage && contextTokens !== null && sources.length > 0) break;
+        if (meta?.sources?.length) sources.push(...meta.sources);
       }
       const marginal = marginalTokenUsage(contextTokens, tokenUsage, previousContextTokens);
       previousContextTokens = contextTokens;
       // Raw retention (#1977): every ui_part — link, geo, capability kinds,
       // and kinds this build does not know — survives into the view model.
-      const uiParts: RawUiPart[] = finalMessages.flatMap((m) => uiPartsOf(m));
+      const uiParts: RawUiPart[] = metadataMessages.flatMap((m) => uiPartsOf(m));
       result.push({
         id: `${eid}:assistant`,
         role: "assistant",

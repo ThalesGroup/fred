@@ -6388,6 +6388,11 @@ tool named `ask_user` rejects executor construction.
 A pending human interrupt is the turn's result until the person responds. If an
 earlier tool call failed and the agent recovered by asking a valid question, the
 stream retains the failed tool trace but emits no stale failure as a final answer.
+The pause event carries sources, UI parts, model usage and context size accumulated
+before the interrupt. History stores these on the HITL request row; managed chat
+combines them with metadata from the resumed answer in the same exchange. For
+parallel pending questions, the stream attaches the shared pre-pause metadata
+only to the first pause event so usage is counted once.
 
 The tool pauses through LangGraph before any external effect. A resume must carry
 the pending interrupt and occurrence IDs. After authorization and before the

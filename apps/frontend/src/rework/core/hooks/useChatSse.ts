@@ -556,6 +556,48 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
+          const occurrenceId = event.request.occurrence_id ?? event.request.interrupt_id;
+          const alreadyRecorded =
+            occurrenceId &&
+            messagesRef.current.some(
+              (message) =>
+                message.session_id === sessionId &&
+                message.exchange_id === exchangeId &&
+                message.channel === "hitl_request" &&
+                message.parts.some(
+                  (part) => part.type === "hitl_request" && (part.occurrence_id ?? part.interrupt_id) === occurrenceId,
+                ),
+            );
+          if (!alreadyRecorded) {
+            emit({
+              session_id: sessionId,
+              exchange_id: exchangeId,
+              rank: rankRef.current++,
+              timestamp: ts,
+              role: "system",
+              channel: "hitl_request",
+              parts: [
+                {
+                  type: "hitl_request",
+                  stage: event.request.stage,
+                  title: event.request.title,
+                  question: event.request.question ?? event.request.title ?? "HITL pause",
+                  choices: (event.request.choices ?? []).map(({ id, label }) => ({ id, label })),
+                  free_text: event.request.free_text ?? false,
+                  interrupt_id: event.request.interrupt_id,
+                  occurrence_id: event.request.occurrence_id,
+                  pending_calls: event.request.pending_calls ?? [],
+                },
+              ],
+              metadata: {
+                model: event.model_name ?? null,
+                token_usage: event.token_usage ?? null,
+                context_tokens: event.context_tokens ?? null,
+                sources: event.sources ?? [],
+                ui_parts: event.ui_parts ?? [],
+              },
+            });
+          }
           const hitl: RuntimeAwaitingHumanEvent = {
             type: "awaiting_human",
             session_id: sessionId,

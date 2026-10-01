@@ -79,6 +79,12 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** the valid question pauses for a human answer
 - **THEN** the turn emits the pending question without a final answer containing the earlier tool failure
 
+#### Scenario: Tool output before a question pause
+
+- **GIVEN** an agent turn has produced sources, UI parts, or model usage before asking a question
+- **WHEN** the question pauses and the person later answers it
+- **THEN** the pre-pause metadata remains visible and persisted with the completed exchange, without emitting the earlier tool failure as an answer
+
 #### Scenario: Composer waits for an agent question
 
 - **GIVEN** an `ask_user` question is pending or its answer is being submitted

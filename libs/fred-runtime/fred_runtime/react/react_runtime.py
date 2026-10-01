@@ -62,6 +62,7 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     Executor,
     FinalRuntimeEvent,
+    HumanInputRequest,
     RuntimeEvent,
     RuntimeServices,
     ThoughtDeltaEvent,
@@ -499,7 +500,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # also contradicted the §8.27 tool-failure-recovery prompt suffix that
         # tells the model to answer from what succeeded).
         last_tool_error: str | None = None
-        awaiting_human = False
+        awaiting_requests: list[HumanInputRequest] = []
         suppress_assistant_deltas: bool = False
         # Tracks whether the current round (the batch of tool calls requested
         # by the latest AIMessage) has produced at least one successful result.
@@ -804,12 +805,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
 
                 interrupt_request = _extract_interrupt_request(update)
                 if interrupt_request is not None:
-                    awaiting_human = True
-                    yield AwaitingHumanRuntimeEvent(
-                        sequence=sequence,
-                        request=interrupt_request,
-                    )
-                    sequence += 1
+                    awaiting_requests.append(interrupt_request)
                     continue
 
                 for message in _extract_messages_from_update(update):
@@ -987,9 +983,11 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # attached to the individual ToolCallRuntimeEvents any
                         # more (#2403): showing a decision's whole prompt on a
                         # tool row read as if the tool had consumed it.
-                        _, tool_call_token_usage, _ = _runtime_metadata_from_message(
-                            message
+                        tool_model_name, tool_call_token_usage, _ = (
+                            _runtime_metadata_from_message(message)
                         )
+                        if tool_model_name is not None:
+                            last_model_name = tool_model_name
                         total_token_usage = _sum_token_usage(
                             total_token_usage, tool_call_token_usage
                         )
@@ -1041,9 +1039,24 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             if closed is not None:
                 yield closed
 
-            if not awaiting_human and (
-                last_tool_error is not None or last_assistant_message is not None
-            ):
+            if awaiting_requests:
+                for index, request in enumerate(awaiting_requests):
+                    yield AwaitingHumanRuntimeEvent(
+                        sequence=sequence,
+                        request=request,
+                        sources=collected_sources if index == 0 else (),
+                        ui_parts=collected_ui_parts if index == 0 else (),
+                        model_name=last_model_name if index == 0 else None,
+                        token_usage=total_token_usage if index == 0 else None,
+                        context_tokens=context_tokens if index == 0 else None,
+                    )
+                    sequence += 1
+                if span is not None and self._services.tracer is not None:
+                    span.set_usage(
+                        model=last_model_name,
+                        usage=to_langfuse_usage(total_token_usage),
+                    )
+            elif last_tool_error is not None or last_assistant_message is not None:
                 final_content = (
                     last_tool_error
                     if last_tool_error is not None
