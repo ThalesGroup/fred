@@ -206,12 +206,10 @@ export default function PromptCard({
       </div>
 
       {/* ── Body ── */}
-      {(body || preview) && (
-        <div className={styles.body}>
-          {body && <p className={styles.description}>{body}</p>}
-          {preview && <p className={styles.preview}>"{preview}"</p>}
-        </div>
-      )}
+      <div className={styles.body}>
+        {body && <p className={styles.description}>{body}</p>}
+        {preview && <p className={styles.preview}>"{preview}"</p>}
+      </div>
 
       {/* ── Footer: usage count + optional "published" chip ── */}
       <div className={styles.footer}>

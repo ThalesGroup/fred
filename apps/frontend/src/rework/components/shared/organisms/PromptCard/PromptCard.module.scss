@@ -83,8 +83,12 @@
 
 /* ── Body ───────────────────────────────────────────────────────────────────── */
 
+/* Always two lines tall, so every card in the grid has the same height whatever
+   the filter leaves on a row. */
 .body {
   flex: 1;
+  min-height: calc(2em * 1.45);
+  font: var(--font-body-medium);
 }
 
 .description {
