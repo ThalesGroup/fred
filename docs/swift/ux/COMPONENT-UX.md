@@ -3433,8 +3433,8 @@ flush bottom (2026-09-01). Its right side offers a **New conversation** outlined
 for the same agent and leaves the previous conversation available in the sidebar; a new session
 is created on first send. Its spectrum border appears on hover or keyboard focus and stays still
 at rest and with reduced motion. Every empty conversation, however it was started, shows the agent's
-icon, name, and role above the greeting, stacked and centred in an `outline-muted` bordered box (`radius-m`, `spacing-m` padding; round `secondary-container` icon,
-name in `title-medium`, role in `body-medium`), because the header's agent name is easy to miss; the `topBar` itself is hidden until the first send binds a session (an existing session with an empty history keeps it). The launcher rail is a **page-root in-flow column** at the far right
+icon, name, and role above the greeting, stacked and centred in an `outline-muted` bordered box (a stable 200px width and 144px minimum height, shrinking to fit narrow screens; `radius-m`, `spacing-m` padding; round `secondary-container` icon,
+name in `title-medium`, role in `body-medium`; long labels truncate and reveal their full text on hover), because the header's agent name is easy to miss; the `topBar` itself is hidden until the first send binds a session (an existing session with an empty history keeps it). The launcher rail is a **page-root in-flow column** at the far right
 (see "Capability side-panel launcher rail"), not part of `.pageBody`. The composer is
 built once (a single `composer` element) and placed either centered in the empty "new
 conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times

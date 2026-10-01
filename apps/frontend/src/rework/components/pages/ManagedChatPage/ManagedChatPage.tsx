@@ -106,8 +106,12 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
             <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
           </span>
           <span className={styles.welcomeAgentIdentity}>
-            <span className={styles.welcomeAgentName}>{agent.display_name}</span>
-            <span className={styles.welcomeAgentRole}>{agent.role}</span>
+            <span className={styles.welcomeAgentName} title={agent.display_name}>
+              {agent.display_name}
+            </span>
+            <span className={styles.welcomeAgentRole} title={agent.role}>
+              {agent.role}
+            </span>
           </span>
         </div>
       )}

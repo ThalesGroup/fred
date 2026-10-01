@@ -366,12 +366,14 @@
 .welcomeAgent {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
   gap: var(--spacing-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   padding: var(--spacing-m);
-  max-width: 100%;
+  width: min(200px, 100%);
+  min-height: 144px;
 }
 
 .welcomeAgentIcon {
