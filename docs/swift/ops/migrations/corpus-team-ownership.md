@@ -123,3 +123,20 @@ Corpus deletion tasks cannot be cancelled through the UI or the task API (`HTTP 
 ## Folder rename contract
 
 The existing `PUT /tags/{id}` now renames a folder and all descendant paths in one transaction when the parent path is retained. Clients should omit `path` when renaming by folder ID; omitting `item_ids` retains document membership. The UI sends one mutation and no descendant updates or membership snapshot. Folder IDs, source cursors and document memberships are preserved. Name collisions return HTTP 409 without a partial rename. Refresh the frontend as part of the coordinated cutover.
+
+
+## Integration with name-conflict imports
+
+The unpublished corpus migrations now follow knowledge-flow revision
+`c3a71f5e0d48` from swift. Apply the single Alembic chain; no merge revision or
+manual stamping is needed. The document-name index is retained alongside scalar
+folder membership. Metadata conversion reads bounded pages and closes each query
+before schema changes. The folder-path uniqueness expression preserves the same
+NULL/empty-root semantics on PostgreSQL and SQLite.
+
+Replacement imports retain the existing document ID in its single folder. An
+active target rejects the whole backend request before any shared write. If a
+confirmed replacement target disappears before planning or preparation, that file
+fails explicitly: refresh the folder and start a new import. No automatic
+recreation, resubmission or partial cleanup is introduced. This integration does
+not complete the coordinated deployment runbook described above.

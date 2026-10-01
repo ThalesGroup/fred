@@ -893,9 +893,17 @@ export function useChatSse(
         // (not memoized) so a mid-session language switch takes effect on the
         // very next turn, matching the existing pattern for voice transcription
         // (ManagedChatPage.tsx's handleTranscribeAudio).
+        // The current preparation decides availability, even when the eager
+        // control request has not populated React state before the first send.
+        const askUserControl = prep.chat_controls?.find((control) => control.widget === "ask_user_toggle");
+        const { ask_user: requestedAskUser, ...contextWithoutAskUser } = runtimeContext ?? {};
+        const askUserDefault = askUserControl?.params?.default;
         effectiveContext = mergePreparation(
           {
-            ...(runtimeContext ?? {}),
+            ...contextWithoutAskUser,
+            ...(askUserControl
+              ? { ask_user: requestedAskUser ?? (typeof askUserDefault === "boolean" ? askUserDefault : true) }
+              : {}),
             team_id: canonicalizeRuntimeTeamId(teamId),
             language: i18n.language?.split("-")[0] || undefined,
           },
@@ -1060,6 +1068,8 @@ export function useChatSse(
       freeText?: string,
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
+      skipped = false,
+      onAccepted?: () => void,
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -1197,6 +1207,7 @@ export function useChatSse(
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
       const answerValue = !hasChoices && exactFreeText ? exactFreeText : answer;
+      const agentQuestion = hitlPayload?.stage === "agent_question";
 
       setWaitResponse(true);
 
@@ -1224,17 +1235,25 @@ export function useChatSse(
             runtime_context: mergePreparation(
               {
                 ...(runtimeContext ?? {}),
+                ...(agentQuestion ? { ask_user: true } : {}),
                 team_id: canonicalizeRuntimeTeamId(teamId),
                 language: i18n.language?.split("-")[0] || undefined,
               },
               prep,
             ),
             turn_options: turnOptions,
-            resume_payload: {
-              answer: answerValue,
-              choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
-              text: hasChoices ? exactFreeText : undefined,
-            },
+            resume_payload: agentQuestion
+              ? skipped
+                ? { skipped: true }
+                : {
+                    choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
+                    text: exactFreeText,
+                  }
+              : {
+                  answer: answerValue,
+                  choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
+                  text: hasChoices ? exactFreeText : undefined,
+                },
           },
           prep.execute_stream_url,
           token,
@@ -1243,6 +1262,63 @@ export function useChatSse(
           ac.signal,
           () => {
             acceptedByRuntime = true;
+            if (agentQuestion) {
+              // The SSE resume does not emit HITL history rows. Mirror the accepted
+              // answer now; a later history load replaces these with persisted rows.
+              const occurrenceId = hitlPayload?.occurrence_id ?? null;
+              const sameOccurrence = (message: ChatMessage) =>
+                message.session_id === sessionId &&
+                message.exchange_id === exchangeId &&
+                (message.parts?.[0] as { occurrence_id?: string | null } | undefined)?.occurrence_id === occurrenceId;
+              let next = messagesRef.current;
+              let rank = next.reduce((max, message) => Math.max(max, message.rank), 0) + 1;
+              const timestamp = new Date().toISOString();
+              if (!next.some((message) => message.channel === "hitl_request" && sameOccurrence(message))) {
+                next = upsertOne(next, {
+                  session_id: sessionId,
+                  exchange_id: exchangeId,
+                  rank: rank++,
+                  timestamp,
+                  role: "system",
+                  channel: "hitl_request",
+                  parts: [
+                    {
+                      type: "hitl_request",
+                      question: hitlPayload.question ?? "",
+                      title: hitlPayload.title ?? null,
+                      stage: "agent_question",
+                      choices: (hitlPayload.choices ?? []).map((choice) => ({ id: choice.id, label: choice.label })),
+                      free_text: hitlPayload.free_text ?? false,
+                      occurrence_id: occurrenceId,
+                      interrupt_id: hitlPayload.interrupt_id ?? null,
+                      pending_calls: hitlPayload.pending_calls ?? [],
+                    },
+                  ],
+                });
+              }
+              if (!next.some((message) => message.channel === "hitl_response" && sameOccurrence(message))) {
+                next = upsertOne(next, {
+                  session_id: sessionId,
+                  exchange_id: exchangeId,
+                  rank,
+                  timestamp,
+                  role: "user",
+                  channel: "hitl_response",
+                  parts: [
+                    {
+                      type: "hitl_response",
+                      choice_id: hasChoices && typeof answer === "string" ? answer : null,
+                      text: exactFreeText ?? null,
+                      skipped,
+                      occurrence_id: occurrenceId,
+                    },
+                  ],
+                });
+              }
+              messagesRef.current = next;
+              setMessages([...next]);
+            }
+            onAccepted?.();
           },
         );
       } catch (err) {

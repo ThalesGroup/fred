@@ -18,9 +18,9 @@ import logging
 from datetime import datetime, timezone
 from typing import List
 
-from fred_core.documents.tag_models import TagRow
+from fred_core.documents.tag_models import TagRow, tag_full_path_expression
 from fred_core.sql.async_session import make_session_factory, use_session
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -64,7 +64,7 @@ class PostgresTagStore(BaseTagStore):
         return await self.list_all(session=session)
 
     async def list_by_owner(self, owner_id: str, *, path_prefix: str | None = None, limit: int | None = None, offset: int = 0) -> list[Tag]:
-        full_path = case((or_(TagRow.path.is_(None), TagRow.path == ""), TagRow.name), else_=TagRow.path + "/" + TagRow.name)
+        full_path = tag_full_path_expression()
         query = select(TagRow).where(TagRow.owner_id == owner_id, TagRow.type == TagType.DOCUMENT.value, TagRow.deletion_task_id.is_(None))
         if path_prefix:
             query = query.where(or_(full_path == path_prefix, full_path.startswith(path_prefix + "/", autoescape=True)))
@@ -175,7 +175,7 @@ class PostgresTagStore(BaseTagStore):
 
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
         """Resolve the persisted, unique full path through its SQL index."""
-        full_path_column = case((or_(TagRow.path.is_(None), TagRow.path == ""), TagRow.name), else_=TagRow.path + "/" + TagRow.name)
+        full_path_column = tag_full_path_expression()
         async with use_session(self._sessions, session) as s:
             row = (await s.scalars(select(TagRow).where(TagRow.owner_id == owner_id, TagRow.type == tag_type.value, full_path_column == full_path))).one_or_none()
         return self._row_to_tag(row) if row is not None else None

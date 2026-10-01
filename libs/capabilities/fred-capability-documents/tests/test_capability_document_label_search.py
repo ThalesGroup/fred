@@ -331,10 +331,7 @@ async def test_missing_document_tree_port_fails_loud() -> None:
 async def test_list_by_label_adapter_forwards_params_and_maps_the_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The REAL `DocumentTreeAdapter.list_by_label`: unlike `tree()`, no
-    session-binding/team narrowing is applied (documented gap — Knowledge
-    Flow's label resolution has none to apply to) — this test locks the
-    param forwarding and wire-to-SDK-model mapping, not a scoping seam."""
+    """The real adapter forwards the current team and the additive selection."""
 
     from types import SimpleNamespace
 
@@ -389,14 +386,25 @@ async def test_list_by_label_adapter_forwards_params_and_maps_the_result(
     captured: dict[str, Any] = {}
     monkeypatch.setattr(adapters_module, "KfDocumentClient", _FakeDocumentClient)
 
-    binding = _binding(session_id="s-1", selected_document_libraries_ids=["A"])
+    binding = _binding(
+        session_id="s-1",
+        selected_document_libraries_ids=["A"],
+        selected_document_uids=["B-doc"],
+    )
     adapter = adapters_module.DocumentTreeAdapter(
         binding=binding, settings=_settings(team_id="team-9")
     )
 
     result = await adapter.list_by_label(label="DAT", offset=0, limit=50)
 
-    assert captured["client"].calls[0] == {"label": "DAT", "offset": 0, "limit": 50}
+    assert captured["client"].calls[0] == {
+        "label": "DAT",
+        "offset": 0,
+        "limit": 50,
+        "team_id": "team-9",
+        "folder_ids": ["A"],
+        "document_uids": ["B-doc"],
+    }
     assert result.label == "DAT"
     assert result.documents == (
         DocumentLabelReference(document_uid="doc-1", document_name="a.pdf"),

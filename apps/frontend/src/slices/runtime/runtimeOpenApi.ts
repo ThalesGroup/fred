@@ -435,6 +435,8 @@ export type RuntimeContext = {
   agent_profile_overrides?: {
     [key: string]: string;
   } | null;
+  /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
+  ask_user?: boolean | null;
   attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
@@ -866,6 +868,7 @@ export type HitlResponsePart = {
   choice_id?: string | null;
   label?: string | null;
   occurrence_id?: string | null;
+  skipped?: boolean;
   text?: string | null;
   type?: "hitl_response";
 };

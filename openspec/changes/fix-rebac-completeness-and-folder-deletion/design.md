@@ -1,6 +1,6 @@
 ## Context
 
-See proposal.md for the changed scope. The branch contains uncommitted implementation work. Abandoned experiments have been removed. The developer authorized continuing the full sequence; tasks.md records the verified slices and remaining work.
+See proposal.md for the changed scope. The branch contains committed implementation checkpoints and an in-progress integration of swift. Abandoned experiments have been removed. The developer authorized continuing the full sequence; tasks.md records the verified slices and remaining work.
 
 Baseline code anchors used for the initial investigation:
 - `libs/fred-core/fred_core/security/rebac/schema.fga`: document rights derive from folder rights; team profile visibility is not corpus access; admin/editor roles are distinct.
@@ -331,3 +331,12 @@ The concrete SQL boundary uses the existing root-folder rows as short transactio
 Approved atomic rename: the frontend sends one request for the selected folder. The backend renames that folder and rewrites descendant paths in one SQL transaction, using the existing tree admission lock. No retry or compensation is added. A rename must not replace document membership from the UI snapshot. Keep intersecting folder/action changes visible for comparison with Maxime's forthcoming PR; assess actual conflicts after this change is complete rather than adding compatibility mechanisms speculatively.
 
 Global reindexing scope decision: the developer will revisit and may remove that administrative feature separately. Do not add lifecycle coordination, a maintenance admission gate or a new operator quiet-period requirement for global reindexing in this change. This exclusion is not evidence that concurrent reindexing/deletion is safe. Keep ordinary user/source ingestion and reprocessing within the agreed admission scope.
+
+
+### Integration of the import replacement flow from swift
+
+Integrate swift at `ba2471598` (including import PR #2876) without replacing the approved corpus admission model. Resolve each replacement UID before admitting the complete backend batch. Only after admission may the backend clear old processing stages, purge old indexes, overwrite content and save metadata. A replacement keeps its UID and its single destination folder; it does not union historical folder memberships. An active target rejects the entire admitted batch before shared writes. Retain the incoming import decisions/progress UI and asynchronous content writes with deferred temporary-file cleanup.
+
+The developer explicitly confirmed that a replacement target disappearing before planning or preparation produces a per-file error and requires a new import. Never turn that confirmed replacement into a newly identified document automatically. A document now belonging to another folder is likewise refused. There is no retry or compensation protocol.
+
+Keep the name lookup index from swift and adapt its query to scalar folder membership. Reparent this branch's first unpublished migration onto `c3a71f5e0d48`; do not introduce a merge revision. Migration validation and data conversion use bounded UID-ordered pages so no server cursor remains open during schema changes.

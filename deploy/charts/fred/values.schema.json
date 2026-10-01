@@ -141,6 +141,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -2031,6 +2051,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -2817,6 +2857,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -7375,6 +7435,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -11933,6 +12013,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -16297,6 +16397,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -20661,6 +20781,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -25025,6 +25165,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -27154,6 +27314,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false

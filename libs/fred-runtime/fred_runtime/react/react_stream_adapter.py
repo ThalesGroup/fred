@@ -51,6 +51,7 @@ from pydantic import ValidationError
 
 from fred_runtime.react.middleware.tool_call_recovery import (
     is_tool_call_recovery_reference_block,
+    recovery_text_fragment,
 )
 from fred_runtime.runtime_support.model_metadata import (
     normalize_token_usage,
@@ -249,22 +250,29 @@ def decode_stream_chunk(raw_event: object) -> StreamChunkDecode:
         isinstance(block, dict) and isinstance(block.get("type"), str)
         for block in chunk.content
     )
-    has_reference_marker = typed_blocks and any(
-        is_tool_call_recovery_reference_block(block) for block in chunk.content
+    has_reference_marker = (
+        isinstance(chunk.content, list)
+        and any(is_tool_call_recovery_reference_block(block) for block in chunk.content)
+        and all(
+            recovery_text_fragment(block) is not None
+            or is_tool_call_recovery_reference_block(block)
+            or (isinstance(block, dict) and block.get("type") == "thinking")
+            for block in chunk.content
+        )
     )
     before_reference: list[str] = []
     after_reference: list[str] = []
     seen_reference = False
     if has_reference_marker:
         for block in chunk.content:
-            if not isinstance(block, dict):
-                continue
             if is_tool_call_recovery_reference_block(block):
                 seen_reference = True
-            elif block.get("type") == "text" and isinstance(block.get("text"), str):
-                (after_reference if seen_reference else before_reference).append(
-                    block["text"]
-                )
+            else:
+                fragment = recovery_text_fragment(block)
+                if fragment is not None:
+                    (after_reference if seen_reference else before_reference).append(
+                        fragment
+                    )
 
     fragments: list[str] = []
     # Some OpenAI-compatible gateways surface reasoning at the top level rather than

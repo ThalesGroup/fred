@@ -51,8 +51,10 @@ Workflow overview (keyword-routed by dispatch_step):
     dispatch
      ├─ echo        ──► echo_step        ──► finalize
      ├─ model_probe ──► model_probe_step ──► finalize
-     ├─ hitl_choice ──► hitl_choice_step ──► finalize
-     ├─ hitl_text   ──► hitl_text_step   ──► finalize
+     ├─ hitl_confirm ──► hitl_confirm_step ──► finalize
+     ├─ hitl_choice  ──► hitl_choice_step  ──► finalize
+     ├─ hitl_text    ──► hitl_text_step    ──► finalize
+     ├─ hitl_comment ──► hitl_comment_step ──► finalize
      ├─ trace       ──► trace_step       ──► finalize
      ├─ error       ──► error_step  (raises) → finalize (via on_error)
      ├─ think       ──► think_step        ──► finalize
@@ -112,6 +114,8 @@ from .graph_steps import (
     geo_step,
     graph_check_step,
     hitl_choice_step,
+    hitl_comment_step,
+    hitl_confirm_step,
     hitl_text_step,
     long_step,
     markdown_step,
@@ -124,7 +128,7 @@ from .graph_steps import (
 _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
     "Send a message starting with one of these keywords to trigger a scenario:\n"
-    "  echo | model | planning | hitl choice | hitl text | "
+    "  echo | model | planning | hitl confirm | hitl choice | hitl text | hitl comment | "
     "trace | error | think | markdown | mermaid | long | files | geo | document\n\n"
     "Any other message shows this help menu."
 )
@@ -148,7 +152,7 @@ class TestAssistantGraphAgent(GraphAgent):
     Use this agent when you need to:
     - validate chat UI rendering without a model provider
     - validate the control-plane agent form renders all field types correctly
-    - test HITL flows (binary choice and free-text)
+    - test HITL questions (confirmation, multiple choice, text, choice plus comment)
     - test source panel rendering with mock VectorSearchHit data
     - test error / node_error SSE event rendering
     - test long streaming reply layout (word-by-word via emit_assistant_delta)
@@ -171,7 +175,7 @@ class TestAssistantGraphAgent(GraphAgent):
         "and every FieldSpec type (prompt, boolean, integer, string, select, "
         "number, text-multiline, array, secret, url). "
         "Routing by keyword prefix: echo | model | planning | "
-        "hitl choice | hitl text | trace | error | think | markdown | long | files."
+        "hitl confirm | hitl choice | hitl text | hitl comment | trace | error | think | markdown | long | files."
     )
     tags: tuple[str, ...] = ("test", "graph", "hitl", "streaming", "no-llm", "dev")
 
@@ -357,8 +361,10 @@ class TestAssistantGraphAgent(GraphAgent):
             "dispatch": dispatch_step,
             "echo": echo_step,
             "model_probe": model_probe_step,
+            "hitl_confirm": hitl_confirm_step,
             "hitl_choice": hitl_choice_step,
             "hitl_text": hitl_text_step,
+            "hitl_comment": hitl_comment_step,
             "trace": trace_step,
             "error": error_step,
             "think": think_step,
@@ -388,8 +394,10 @@ class TestAssistantGraphAgent(GraphAgent):
             "graph_check": "finalize",
             "echo": "finalize",
             "model_probe": "finalize",
+            "hitl_confirm": "finalize",
             "hitl_choice": "finalize",
             "hitl_text": "finalize",
+            "hitl_comment": "finalize",
             "trace": "finalize",
             "think": "finalize",
             "markdown": "finalize",
@@ -410,8 +418,10 @@ class TestAssistantGraphAgent(GraphAgent):
             "dispatch": {
                 "echo": "echo",
                 "model_probe": "model_probe",
+                "hitl_confirm": "hitl_confirm",
                 "hitl_choice": "hitl_choice",
                 "hitl_text": "hitl_text",
+                "hitl_comment": "hitl_comment",
                 "trace": "trace",
                 "error": "error",
                 "think": "think",

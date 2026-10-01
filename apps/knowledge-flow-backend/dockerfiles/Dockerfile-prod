@@ -35,7 +35,6 @@ COPY libs/fred-core /workspace/libs/fred-core
 
 # Install dependencies using make
 RUN make dev VENV=/app/venv TARGET=/app/target
-RUN python /workspace/scripts/patch_docling_rapidocr_openvino.py
 
 # Prepare local encodings directory
 RUN mkdir -p $TIKTOKEN_CACHE_DIR

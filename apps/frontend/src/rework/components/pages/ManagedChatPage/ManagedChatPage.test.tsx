@@ -50,6 +50,7 @@ vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
 vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
   RichInputField: (props: {
     sendDisabled?: boolean;
+    disabled?: boolean;
     characterCount?: number;
     characterLimit?: number;
     focusEndRequestId?: number;
@@ -57,6 +58,7 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
     <div
       data-testid="composer"
       data-send-disabled={props.sendDisabled}
+      data-composer-disabled={props.disabled}
       data-character-count={props.characterCount}
       data-character-limit={props.characterLimit}
       data-focus-request={props.focusEndRequestId}
@@ -237,6 +239,14 @@ describe("ManagedChatPage chat-input policy wiring", () => {
     expect(html).toContain('data-testid="thread"');
     expect(html).toContain('data-hitl-draft="complete HITL draft"');
     expect(html).toContain('data-has-hitl-change-handler="true"');
+
+    chatValue.pendingHitl = {
+      session_id: "session-1",
+      exchange_id: "exchange-1",
+      payload: { stage: "agent_question", free_text: true },
+    };
+    const pendingQuestionHtml = renderToStaticMarkup(<ManagedChatPage />);
+    expect(pendingQuestionHtml).toContain('data-composer-disabled="true"');
   });
 });
 

@@ -139,9 +139,11 @@ from fred_sdk.contracts.runtime import (
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
+    HumanInputRequest,
     RuntimeErrorEvent,
     RuntimeEvent,
     RuntimeServices,
+    parse_human_input_answer,
 )
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
@@ -2334,6 +2336,9 @@ async def _authorize_and_resolve(
     )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
+    if await _validate_agent_question_answer(request):
+        base_ctx = request.runtime_context or RuntimeContext()
+        request.runtime_context = base_ctx.model_copy(update={"ask_user": True})
     # After authorization, before the context is copied into the internal
     # request: the record is written only for a run this pod accepted, and the
     # copy below must not carry a token this run may no longer use.
@@ -2510,6 +2515,59 @@ def _pending_interrupt_occurrences(
                 )
             )
     return frozenset(occurrences)
+
+
+async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
+    """Validate a pending platform question before the single-use resume claim."""
+    if request.resume_payload is None or not request.interrupt_id:
+        return False
+    session_id = request.effective_session_id()
+    checkpointer = get_runtime_context().config.checkpointer
+    if not session_id or checkpointer is None:
+        return False
+    for thread_id, checkpoint_ns in _resume_checkpoint_locations(request, session_id):
+        loaded = await load_checkpoint(
+            checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
+        )
+        if loaded is None:
+            continue
+        _, pending_writes = loaded
+        for _task_id, channel, value in pending_writes:
+            if channel != _REACT_V2_INTERRUPT_CHANNEL:
+                continue
+            candidates = value if isinstance(value, (list, tuple)) else (value,)
+            for candidate in candidates:
+                interrupt_id = getattr(candidate, "id", None)
+                payload = getattr(candidate, "value", None)
+                if isinstance(candidate, dict):
+                    interrupt_id = candidate.get("id")
+                    payload = candidate.get("value")
+                if interrupt_id != request.interrupt_id or not isinstance(
+                    payload, dict
+                ):
+                    continue
+                if payload.get("occurrence_id") != request.occurrence_id:
+                    continue
+                if payload.get("stage") != "agent_question":
+                    continue
+                try:
+                    prompt = HumanInputRequest.model_validate(payload)
+                    parse_human_input_answer(request.resume_payload, prompt)
+                except (ValueError, ValidationError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(exc),
+                    ) from exc
+                return True
+    if (
+        isinstance(request.resume_payload, dict)
+        and request.resume_payload.get("skipped") is True
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="skip is only available for agent questions",
+        )
+    return False
 
 
 def _resume_checkpoint_locations(
@@ -2760,7 +2818,9 @@ async def _write_turn_history(
     if resume_payload is not None:
         choice_id: str | None = None
         text: str | None = None
+        skipped = False
         if isinstance(resume_payload, dict):
+            skipped = resume_payload.get("skipped") is True
             raw_choice_id = resume_payload.get("choice_id")
             if isinstance(raw_choice_id, str) and raw_choice_id:
                 choice_id = raw_choice_id
@@ -2775,7 +2835,7 @@ async def _write_turn_history(
             choice_id = resume_payload
         else:
             choice_id = str(resume_payload)
-        if choice_id or text:
+        if choice_id or text or skipped:
             messages.append(
                 make_hitl_response(
                     session_id,
@@ -2783,6 +2843,7 @@ async def _write_turn_history(
                     rank,
                     choice_id=choice_id,
                     text=text,
+                    skipped=skipped,
                     occurrence_id=occurrence_id,
                 )
             )
@@ -4130,6 +4191,7 @@ async def _iterate_runtime_event_payloads_inner(
             if tuning is not None and tuning.reasoning_enabled
             else []
         ),
+        ask_user=ctx.get("ask_user"),
         # The user's per-question reasoning choice (REASON-01 level 4). Same
         # trap as every field above: unnamed here means silently dropped. Kept
         # tri-state on purpose — `ctx.get` yielding None means "the agent never

@@ -5,8 +5,8 @@ calls. Task rows cover uploads whose document metadata has not been written yet.
 """
 
 from fred_core.documents.document_models import DocumentMetadataRow
-from fred_core.documents.tag_models import TagRow
-from sqlalchemy import and_, case, or_, select, update
+from fred_core.documents.tag_models import TagRow, tag_full_path_expression
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
@@ -15,10 +15,6 @@ from knowledge_flow_backend.models.task_models import KfTaskRunRow
 
 class CorpusBusy(ValueError):
     """The requested write conflicts with admitted corpus work."""
-
-
-def _full_path():
-    return case((or_(TagRow.path.is_(None), TagRow.path == ""), TagRow.name), else_=TagRow.path + "/" + TagRow.name)
 
 
 class CorpusLifecycle:
@@ -35,7 +31,7 @@ class CorpusLifecycle:
             (
                 await session.scalars(
                     select(TagRow)
-                    .where(or_(*(and_(TagRow.owner_id == owner, _full_path() == name) for owner, name in roots)))
+                    .where(or_(*(and_(TagRow.owner_id == owner, tag_full_path_expression() == name) for owner, name in roots)))
                     .order_by(TagRow.tag_id)
                     .with_for_update()
                     .execution_options(populate_existing=True)
@@ -75,7 +71,13 @@ class CorpusLifecycle:
         if not folder.name:
             raise ValueError("A corpus folder must have a persisted name")
         path = f"{folder.path}/{folder.name}" if folder.path else folder.name
-        return list((await session.scalars(select(TagRow).where(TagRow.owner_id == folder.owner_id, or_(_full_path() == path, _full_path().startswith(path + "/", autoescape=True))))).all())
+        return list(
+            (
+                await session.scalars(
+                    select(TagRow).where(TagRow.owner_id == folder.owner_id, or_(tag_full_path_expression() == path, tag_full_path_expression().startswith(path + "/", autoescape=True)))
+                )
+            ).all()
+        )
 
     @classmethod
     async def claim_folder_deletion(cls, session: AsyncSession, folder_id: str, task_id: str) -> list[str]:

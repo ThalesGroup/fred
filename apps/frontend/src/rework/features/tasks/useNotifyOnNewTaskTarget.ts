@@ -36,6 +36,14 @@ import { makeSelectTaskTargetsOfType } from "./taskSlice";
  * Fires at most once per target id for the lifetime of the mount, including
  * for a target already known when the component mounts (a catch-up call), so
  * the consumer's refetch is idempotent-safe to call eagerly.
+ *
+ * That catch-up is handed out after the mount commit, never inside it. React
+ * runs a child's effects before its parent's, so a consumer calling `refetch()`
+ * on one of its PARENT's queries would reach a hook instance whose own
+ * subscribing effect has not run yet — and RTK Query throws "Cannot refetch a
+ * query that has not been started yet", which takes the whole page down.
+ * `isUninitialized` does not see this: it reads the shared cache entry, which
+ * is still fulfilled from a previous visit, not whether this instance started.
  */
 export function useNotifyOnNewTaskTarget(targetType: string, onNewTarget: (targetId: string) => void): void {
   const selectTargets = useMemo(() => makeSelectTaskTargetsOfType(targetType), [targetType]);
@@ -49,11 +57,22 @@ export function useNotifyOnNewTaskTarget(targetType: string, onNewTarget: (targe
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    for (const targetId of targetIds) {
-      if (seenRef.current.has(targetId)) continue;
-      seenRef.current.add(targetId);
-      onNewTargetRef.current(targetId);
-    }
+    // Queued during the effect pass, so it runs once that whole pass is over
+    // and every query on the page — parents included — has started.
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      for (const targetId of targetIds) {
+        if (seenRef.current.has(targetId)) continue;
+        seenRef.current.add(targetId);
+        onNewTargetRef.current(targetId);
+      }
+    });
+    // Nothing is marked seen until it is actually handed out, so a run
+    // superseded by a newer set of ids — or by unmounting — loses nothing.
+    return () => {
+      cancelled = true;
+    };
   }, [targetIds]);
 }
 

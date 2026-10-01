@@ -10,7 +10,8 @@
 #
 #  DISABLE A COMPONENT  : applications.<name>.enabled: false
 #  OVERRIDE VALUES      : helm install fred ./charts/fred -f my-overrides.yaml
-#  MINIMAL EXAMPLE      : see deploy/charts/fred/custom-values-example.yaml
+#  COMPLETE EXAMPLE     : fred-deployment-factory, k3d-apps/fred/values.yaml
+#                         (how to write one: deploy/charts/README.md)
 #
 #  SECTIONS:
 #    1. YAML Anchors   — shared blocks (eliminates duplication)

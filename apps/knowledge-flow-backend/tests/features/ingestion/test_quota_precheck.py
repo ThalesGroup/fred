@@ -30,7 +30,7 @@ from fastapi import HTTPException
 from fred_core import KeycloakUser
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
+from knowledge_flow_backend.features.ingestion.ingestion_controller import ImportPlan, IngestionController
 
 
 class _FakeTagStore:
@@ -185,6 +185,60 @@ async def test_fails_closed_on_a_malformed_owner_id(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_a_replacement_is_charged_the_difference_not_the_whole_file(monkeypatch):
+    # A team at 90 of 100 replacing a 20-byte document with a 25-byte file grows
+    # by 5, not 25. Charging the whole file refused imports that free space.
+    _setup(monkeypatch, _FakeConfig(), team_quotas={"team-a": (90, 100)})
+    controller = _controller()
+
+    async def _owners(tags, user):
+        return {"team-a"}, set()
+
+    monkeypatch.setattr(controller, "_resolve_tag_owners", _owners)
+
+    async def _replaced(plan):
+        return 20
+
+    monkeypatch.setattr(controller, "_replaced_bytes", _replaced)
+
+    plan = ImportPlan(overwrite_uid={"report.pdf": "uid-report"}, skipped=[], undecided=[], ambiguous=[])
+
+    class _F:
+        size = 25
+        filename = "report.pdf"
+
+    await controller._check_quota_before_upload([_F()], ["tag-a"], _user(str(uuid4())), plan)
+
+
+@pytest.mark.asyncio
+async def test_a_file_the_plan_leaves_out_is_not_charged(monkeypatch):
+    # Skipped and unanswered files are never stored, so a batch is not refused
+    # for bytes it will not write.
+    _setup(monkeypatch, _FakeConfig(), team_quotas={"team-a": (90, 100)})
+    controller = _controller()
+
+    async def _owners(tags, user):
+        return {"team-a"}, set()
+
+    monkeypatch.setattr(controller, "_resolve_tag_owners", _owners)
+    plan = ImportPlan(overwrite_uid={}, skipped=["big.pdf"], undecided=["taken.pdf"], ambiguous=[])
+
+    class _Big:
+        size = 500
+        filename = "big.pdf"
+
+    class _Taken:
+        size = 500
+        filename = "taken.pdf"
+
+    class _Small:
+        size = 5
+        filename = "small.pdf"
+
+    await controller._check_quota_before_upload([_Big(), _Taken(), _Small()], ["tag-a"], _user(str(uuid4())), plan)
+
+
+@pytest.mark.asyncio
 async def test_upload_enforcement_raises_400_with_the_historical_message(monkeypatch):
     # _check_quota_before_upload is now a thin wrapper over _evaluate_quota;
     # its externally observable contract (400 + message shape) must not drift.
@@ -198,6 +252,7 @@ async def test_upload_enforcement_raises_400_with_the_historical_message(monkeyp
 
     class _F:
         size = 20
+        filename = "new.pdf"
 
     with pytest.raises(HTTPException) as exc:
         await controller._check_quota_before_upload([_F()], ["tag-a"], _user(str(uuid4())))

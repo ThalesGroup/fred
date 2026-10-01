@@ -329,6 +329,7 @@ class HitlResponsePart(BaseModel):
     type: Literal["hitl_response"] = "hitl_response"
     choice_id: Optional[str] = None
     text: Optional[str] = None
+    skipped: bool = False
     occurrence_id: Optional[str] = None
     label: Optional[str] = None
 
@@ -668,6 +669,7 @@ def make_hitl_response(
     *,
     choice_id: Optional[str] = None,
     text: Optional[str] = None,
+    skipped: bool = False,
     occurrence_id: Optional[str] = None,
     label: Optional[str] = None,
 ) -> ChatMessage:
@@ -699,6 +701,7 @@ def make_hitl_response(
             HitlResponsePart(
                 choice_id=choice_id,
                 text=text,
+                skipped=skipped,
                 occurrence_id=occurrence_id,
                 label=label,
             )

@@ -468,6 +468,21 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    importNameCheckKnowledgeFlowV1DocumentsNameCheckPost: build.mutation<
+      ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiResponse,
+      ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/documents/name-check`,
+        method: "POST",
+        body: queryArg.importNameCheckRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     fastMarkdownKnowledgeFlowV1FastTextPost: build.mutation<
       FastMarkdownKnowledgeFlowV1FastTextPostApiResponse,
       FastMarkdownKnowledgeFlowV1FastTextPostApiArg
@@ -1829,6 +1844,14 @@ export type QuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostApiArg = {
   agent?: string | null;
   quotaPrecheckRequest: QuotaPrecheckRequest;
 };
+export type ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiResponse =
+  /** status 200 Successful Response */ ImportNameCheckResponse;
+export type ImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  importNameCheckRequest: ImportNameCheckRequest;
+};
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiResponse = /** status 200 Successful Response */ any;
 export type FastMarkdownKnowledgeFlowV1FastTextPostApiArg = {
   /** Response format: 'json' or 'text' */
@@ -2946,6 +2969,20 @@ export type QuotaPrecheckRequest = {
   team_id?: string | null;
   total_size: number;
 };
+export type ImportNameConflicts = {
+  tag_id: string;
+  names: string[];
+};
+export type ImportNameCheckResponse = {
+  conflicts?: ImportNameConflicts[];
+};
+export type ImportDestinationNames = {
+  tag_id: string;
+  names?: string[];
+};
+export type ImportNameCheckRequest = {
+  destinations?: ImportDestinationNames[];
+};
 export type BodyFastMarkdownKnowledgeFlowV1FastTextPost = {
   file: string;
   /** JSON string of FastTextOptions */
@@ -3564,6 +3601,7 @@ export const {
   useUploadDocumentsSyncKnowledgeFlowV1UploadDocumentsPostMutation,
   useProcessDocumentsSyncKnowledgeFlowV1UploadProcessDocumentsPostMutation,
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation,
   useFastMarkdownKnowledgeFlowV1FastTextPostMutation,
   useFastIngestKnowledgeFlowV1FastIngestPostMutation,
   useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation,

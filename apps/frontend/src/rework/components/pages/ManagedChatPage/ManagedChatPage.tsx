@@ -496,6 +496,8 @@ export default function ManagedChatPage() {
     onRagScopeChange: chat.setRagScope,
     reasoning: chat.reasoning,
     onReasoningChange: chat.setReasoning,
+    askUser: chat.askUser,
+    onAskUserChange: chat.setAskUser,
   };
   // The "tune" button only appears when the agent exposes tool controls the
   // tune popover actually renders — i.e. any chat control that isn't the
@@ -506,7 +508,10 @@ export default function ManagedChatPage() {
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
-  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory;
+  const awaitingAgentQuestion =
+    (chat.pendingHitl?.session_id === chat.sessionId && chat.pendingHitl.payload.stage === "agent_question") ||
+    (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
+  const composerControlsDisabled = chat.waitResponse || chat.isLoadingHistory || awaitingAgentQuestion;
 
   // `/` at the start of an empty composer. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
@@ -529,18 +534,18 @@ export default function ManagedChatPage() {
       value={chat.input}
       onChange={chat.setInput}
       onSend={commands.submit}
-      onInterrupt={chat.handleAbort}
+      onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
       placeholder={t("chatbot.composerPlaceholder")}
       accessibleDescription={t("chatbot.composerPlaceholder")}
       commandTrigger={commands.trigger}
       aboveFieldSlot={commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
-      disabled={chat.waitResponse || chat.isLoadingHistory}
+      disabled={composerControlsDisabled}
       sendDisabled={chat.attachmentsUploading || chat.inputTooLong}
       characterCount={chat.inputCharacterCount}
       characterLimit={chat.maxChatInputChars}
       enableVoiceInput
       onTranscribeAudio={handleTranscribeAudio}
-      voiceInputDisabled={chat.waitResponse || chat.isLoadingHistory}
+      voiceInputDisabled={composerControlsDisabled}
       onVoiceInputError={reportVoiceInputError}
       focusEndRequestId={focusEndRequestId}
       showSendButton

@@ -42,6 +42,7 @@ export function buildComposerRuntimeContext(params: {
    * That is NOT the same as `false`, which actively suppresses reasoning.
    */
   reasoning?: boolean;
+  askUser?: boolean;
 }): Pick<
   RuntimeContext,
   | "selected_document_libraries_ids"
@@ -50,6 +51,7 @@ export function buildComposerRuntimeContext(params: {
   | "search_rag_scope"
   | "attachments_markdown"
   | "reasoning"
+  | "ask_user"
 > {
   const selectedDocumentLibrariesIds =
     params.boundLibraryIds && params.boundLibraryIds.length > 0
@@ -64,5 +66,6 @@ export function buildComposerRuntimeContext(params: {
     search_rag_scope: params.ragScope,
     ...(params.attachmentsMarkdown != null ? { attachments_markdown: params.attachmentsMarkdown } : {}),
     ...(params.reasoning !== undefined ? { reasoning: params.reasoning } : {}),
+    ...(params.askUser !== undefined ? { ask_user: params.askUser } : {}),
   };
 }

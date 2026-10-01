@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models.base import Base, JsonColumn, TimestampColumn
@@ -40,6 +40,10 @@ class DocumentMetadataRow(Base):
     )
 
     __table_args__ = (
+        Index(
+            "idx_metadata_document_name",
+            text("((doc -> 'identity'::text) ->> 'document_name'::text)"),
+        ).ddl_if(dialect="postgresql"),
         CheckConstraint(
             "(kind = 'corpus' AND folder_id IS NOT NULL) OR (kind = 'attachment' AND folder_id IS NULL)",
             name="ck_metadata_kind_folder",

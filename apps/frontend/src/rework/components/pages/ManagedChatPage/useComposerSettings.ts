@@ -27,6 +27,7 @@ interface ComposerState {
    *  only — the effort a reasoning turn runs with is the ops-authored
    *  `reasoning_effort` of the routed profile, never a user pick. */
   reasoning: boolean;
+  askUser: boolean;
 }
 
 /** Reads a stock widget's `params.default` (RFC §3.3), e.g. `search_policy` /
@@ -70,6 +71,7 @@ function buildInitial(sessionId: string | null, chatControls: readonly ChatContr
     // measured re-issuing duplicate tool calls. `?? false` also means a
     // frontend newer than the pod (no such widget) simply never reasons.
     reasoning: findDefault<boolean>(chatControls, "reasoning_toggle") ?? false,
+    askUser: findDefault<boolean>(chatControls, "ask_user_toggle") ?? true,
   };
   const stored = readStorage(sessionId) as Partial<ComposerState> & { reasoningEffort?: string };
   // Sessions stored by the short-lived effort-picker build (2026-08-12, dev
@@ -170,6 +172,7 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
   const setSelectedDocumentUids = useCallback((uids: string[]) => update({ selectedDocumentUids: uids }), [update]);
 
   const setReasoning = useCallback((value: boolean) => update({ reasoning: value }), [update]);
+  const setAskUser = useCallback((value: boolean) => update({ askUser: value }), [update]);
 
   return {
     searchPolicy: state.searchPolicy,
@@ -178,6 +181,8 @@ export function useComposerSettings(sessionId: string | null, chatControls: read
     selectedDocumentUids: state.selectedDocumentUids,
     reasoning: state.reasoning,
     setReasoning,
+    askUser: state.askUser,
+    setAskUser,
     setSearchPolicy,
     setRagScope,
     setSelectedLibraryIds,

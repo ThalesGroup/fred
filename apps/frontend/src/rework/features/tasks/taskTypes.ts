@@ -18,6 +18,23 @@ export type { TaskState, TaskTarget };
 
 export const TERMINAL_STATES: ReadonlySet<TaskState> = new Set(["succeeded", "failed", "cancelled"]);
 
+/**
+ * The two halves of importing a document, which the user experiences as two
+ * different waits and which only the second one makes usable.
+ *
+ * - `upload` — the browser is sending the bytes. There is no server task yet,
+ *   so nothing but the browser knows this file exists.
+ * - `analysis` — the server took the file and named an ingestion task. Only
+ *   when that task succeeds is the document actually searchable.
+ * - `decision` — the transfer got there and the server refused to write,
+ *   because the folder gained a document of that name meanwhile. Nothing went
+ *   wrong and nothing is happening: the answer is the user's to give.
+ *
+ * Null for everything that is not a document import (chat attachments, the
+ * other task kinds): they have no such split.
+ */
+export type ImportStage = "upload" | "analysis" | "decision";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HAND-MAINTAINED ADAPTER — keep in sync with the backend by hand.
 //
@@ -156,6 +173,14 @@ export interface TaskViewModel {
   step: string | null;
   error: string | null;
   lastSeq: number;
+  /** Which half of an import this is (see `ImportStage`); null otherwise. */
+  stage: ImportStage | null;
+  /** The team whose resources this touches. The import panel belongs to one
+   *  team's page and shows only that team's imports. */
+  teamId: string | null;
+  /** Set while `stage` is `decision`: the name and the folder it clashes in, so
+   *  a row in that folder can point at the panel where the answer is given. */
+  conflict: { tagId: string | null; filename: string } | null;
   registeredAt: number;
   terminalAt: number | null;
   acknowledgedAt: number | null;

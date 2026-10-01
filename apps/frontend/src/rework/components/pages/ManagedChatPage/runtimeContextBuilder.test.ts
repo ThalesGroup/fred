@@ -60,6 +60,18 @@ describe("buildComposerRuntimeContext", () => {
     expect("reasoning" in context).toBe(false);
   });
 
+  it("preserves absent, enabled, and disabled agent-question controls", () => {
+    const base = {
+      selectedLibraryIds: [],
+      selectedDocumentUids: [],
+      searchPolicy: "hybrid" as const,
+      ragScope: "hybrid" as const,
+    };
+    expect(buildComposerRuntimeContext(base)).not.toHaveProperty("ask_user");
+    expect(buildComposerRuntimeContext({ ...base, askUser: true }).ask_user).toBe(true);
+    expect(buildComposerRuntimeContext({ ...base, askUser: false }).ask_user).toBe(false);
+  });
+
   it("forwards the explicit per-question choice when offered", () => {
     const declined = buildComposerRuntimeContext({
       selectedLibraryIds: [],

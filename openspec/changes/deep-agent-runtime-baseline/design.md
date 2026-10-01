@@ -3,9 +3,10 @@
 `DeepAgentRuntime` delegates planning to `deepagents.create_deep_agent` while keeping Fred's ReAct
 transport, events, observability and SQL checkpointer. Two library facts shape this design:
 
-- `create_deep_agent` unconditionally adds its own `TodoListMiddleware` and `FilesystemMiddleware`
-  (tool names `ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep`/`execute`) to every agent it
-  compiles, regardless of what tools Fred passes in.
+- `create_deep_agent` adds `FilesystemMiddleware` (tool names
+  `ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep`/`execute`). Since Deep Agents 0.7.19,
+  `TodoListMiddleware` is no longer included for Fred's model profiles, so Fred supplies it to
+  both parent and child middleware stacks.
 - The follow-on `add-deep-agent-conversation-filesystem` change supplies an explicit
   conversation-scoped `CompositeBackend`. Its runtime-provided safe tools are therefore standard
   bindings rather than capability-provided tools; `execute` remains unavailable.

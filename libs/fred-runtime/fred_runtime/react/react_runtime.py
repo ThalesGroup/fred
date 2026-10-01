@@ -98,6 +98,7 @@ from .middleware.tool_call_recovery import (
     MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
     RECOVERED_TOOL_CALL_TEXT_METADATA_KEY,
     is_mistral_model_name,
+    is_tool_call_recovery_reference_block,
 )
 
 # Everything imported from `react_langchain_adapter` below is SDK-bound glue.
@@ -896,7 +897,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                                 RECOVERED_TOOL_CALL_TEXT_METADATA_KEY
                             )
                         )
-                        if not recovered_text_call:
+                        native_marked_call = bool(message.tool_calls) and (
+                            isinstance(message.content, list)
+                            and any(
+                                is_tool_call_recovery_reference_block(block)
+                                for block in message.content
+                            )
+                        )
+                        if not recovered_text_call and not native_marked_call:
                             buffered = "".join(recovery_buffer)
                             closed = _close_model_native_thought()
                             if closed is not None:
@@ -1211,6 +1219,11 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
             toolset_key=self._toolset_key(),
             services=self.services,
             binding=binding,
+            capability_tool_names=tuple(
+                tool.name for tool in self._capability_block.tools
+            )
+            if self._capability_block is not None
+            else (),
         ).resolve_tools()
         bound_tools = ReActToolBinder(
             runtime_tools=runtime_tools,

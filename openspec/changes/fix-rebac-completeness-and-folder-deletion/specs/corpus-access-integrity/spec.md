@@ -264,3 +264,22 @@ Renaming a corpus folder SHALL use one UI mutation and one backend SQL transacti
 - **WHEN** an editor renames a folder containing nested folders and documents
 - **THEN** the backend updates the complete subtree from its stored inventory, independently of the UI snapshot
 - **AND** a name conflict leaves the original subtree unchanged
+
+
+### Requirement: Replacement imports follow corpus admission
+
+A confirmed replacement SHALL retain the existing document UID and its single destination folder. The backend SHALL resolve replacement identities before admitting the complete request and SHALL admit it before shared metadata, content or index mutations. Existing import decision and progress behavior SHALL remain available.
+
+#### Scenario: An existing replacement target is busy
+- **WHEN** one selected replacement already has an active ingestion
+- **THEN** the backend refuses the new batch before any shared document write or index purge
+- **AND** the existing ingestion continues unchanged
+
+#### Scenario: Replacement target disappeared
+- **WHEN** a confirmed replacement target no longer exists at planning or preparation time
+- **THEN** that file produces an explicit error requiring a new import
+- **AND** the backend does not create a new document automatically
+
+#### Scenario: Replacement target changed folders
+- **WHEN** the planned replacement now belongs to another folder
+- **THEN** replacement fails without modifying that document or its artifacts

@@ -16,15 +16,17 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, List, Optional, cast
+from typing import Any, List, Optional, Sequence, cast
 
 from pydantic import ValidationError
 from sqlalchemy import (
     BigInteger,
     CursorResult,
+    String,
     bindparam,
     delete,
     func,
+    literal_column,
     or_,
     select,
     text,
@@ -291,6 +293,54 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             docs = [self._from_row(row) for row in rows]
             await self._hydrate_labels(docs, s)
         return docs
+
+    @staticmethod
+    def _uids_by_name_statement(tag_id: str, names: Sequence[str]):
+        """The statement `document_uids_by_name_in_tag` runs, on its own.
+
+        Separated so the integration test can EXPLAIN what actually runs rather
+        than a hand-written equivalent of it.
+        """
+        # Literal SQL, not `doc["identity"]["document_name"]`: Postgres matches an
+        # index expression by tree equality, and the ORM accessor renders JSONB
+        # subscripting, which never matches the `->` the index is built on. Bound
+        # keys match only while the planner folds them into a custom plan.
+        name_expr = literal_column(
+            f"(({DocumentMetadataRow.__tablename__}.doc -> 'identity') ->> 'document_name')",
+            String,
+        )
+        cond: ColumnElement[bool] = cast(
+            ColumnElement[bool], DocumentMetadataRow.folder_id == tag_id
+        )
+        return select(name_expr, DocumentMetadataRow.document_uid).where(
+            cond, name_expr.in_(list(dict.fromkeys(names)))
+        )
+
+    async def document_uids_by_name_in_tag(
+        self,
+        tag_id: str,
+        names: Sequence[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, list[str]]:
+        """Answer by index instead of loading the folder.
+
+        The name expression and scalar folder_id are both indexed; PostgreSQL
+        chooses the plan without loading and decoding the folder's documents.
+        """
+
+        if not names:
+            return {}
+        if not self._is_postgres:
+            return await super().document_uids_by_name_in_tag(
+                tag_id, names, session=session
+            )
+
+        query = self._uids_by_name_statement(tag_id, names)
+        found: dict[str, list[str]] = {}
+        async with use_session(self._sessions, session) as s:
+            for name, uid in (await s.execute(query)).all():
+                found.setdefault(name, []).append(uid)
+        return found
 
     def _browse_order_by(self, sort_by: DocumentSortField, sort_order: SortOrder):
         """ORDER BY terms for a paginated tag browse.

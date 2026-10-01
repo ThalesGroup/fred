@@ -38,6 +38,17 @@ def _membership(row) -> tuple[str, str | None]:
     raise RuntimeError(f"Document {uid}: ambiguous kind, missing folder or multiple folders; review before upgrading. No automatic repair is performed.")
 
 
+def _batches(connection, query, uid_column):
+    last_uid = None
+    while True:
+        page = query if last_uid is None else query.where(uid_column > last_uid)
+        rows = connection.execute(page.order_by(uid_column).limit(1000)).all()
+        if not rows:
+            return
+        yield rows
+        last_uid = rows[-1].document_uid
+
+
 def upgrade() -> None:
     connection = op.get_bind()
     metadata = sa.MetaData()
@@ -50,17 +61,18 @@ def upgrade() -> None:
     # The JSON first element is portable across the migration's PostgreSQL and
     # SQLite fixtures; membership agreement is checked independently below.
     first_folder = documents.c.doc["tags"]["tag_ids"][0].as_string()
-    query = sa.select(documents, folders.c.tag_id.label("existing_folder")).outerjoin(folders, folders.c.tag_id == first_folder).execution_options(yield_per=1000)
+    query = sa.select(documents, folders.c.tag_id.label("existing_folder")).outerjoin(folders, folders.c.tag_id == first_folder)
     # Validate before altering the schema. Historical reports whose only parent
     # was in FGA are deliberately not guessed to be conversation attachments.
-    for row in connection.execute(query):
-        _membership(row)
+    for rows in _batches(connection, query, documents.c.document_uid):
+        for row in rows:
+            _membership(row)
     with op.batch_alter_table("metadata") as batch:
         batch.add_column(sa.Column("kind", sa.String(), nullable=True))
         batch.add_column(sa.Column("folder_id", sa.String(), nullable=True))
     updated = sa.Table("metadata", sa.MetaData(), autoload_with=connection)
     write = updated.update().where(updated.c.document_uid == sa.bindparam("uid")).values(kind=sa.bindparam("row_kind"), folder_id=sa.bindparam("row_folder"), doc=sa.bindparam("row_doc"))
-    for partition in connection.execute(query).partitions(1000):
+    for partition in _batches(connection, query, documents.c.document_uid):
         values = []
         for row in partition:
             kind, folder_id = _membership(row)
@@ -76,7 +88,7 @@ def upgrade() -> None:
         batch.create_index("ix_metadata_folder_id", ["folder_id"])
         batch.drop_index("idx_metadata_tag_ids_gin")
         batch.drop_column("tag_ids")
-    op.create_index("uq_tag_owner_full_path", "tag", ["owner_id", sa.text("(CASE WHEN path IS NULL OR path = '' THEN name ELSE path || '/' || name END)")], unique=True)
+    op.create_index("uq_tag_owner_full_path", "tag", ["owner_id", sa.text("(coalesce(nullif(path, '') || '/', '') || name)")], unique=True)
 
 
 def downgrade() -> None:
@@ -86,7 +98,7 @@ def downgrade() -> None:
         batch.add_column(sa.Column("tag_ids", postgresql.ARRAY(sa.String()).with_variant(sa.JSON(), "sqlite"), nullable=True))
     documents = sa.Table("metadata", sa.MetaData(), autoload_with=connection)
     write = documents.update().where(documents.c.document_uid == sa.bindparam("uid")).values(tag_ids=sa.bindparam("row_folders"), doc=sa.bindparam("row_doc"))
-    for partition in connection.execute(sa.select(documents).execution_options(yield_per=1000)).partitions(1000):
+    for partition in _batches(connection, sa.select(documents), documents.c.document_uid):
         values = []
         for row in partition:
             folders = [row.folder_id] if row.folder_id else []

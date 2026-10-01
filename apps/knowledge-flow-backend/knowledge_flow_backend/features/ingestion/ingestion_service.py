@@ -107,6 +107,26 @@ class IngestionService:
         metadata.identity.document_name = display_name
         return metadata
 
+    async def adopt_existing_document(self, user: KeycloakUser, metadata: DocumentMetadata, existing_uid: str) -> DocumentMetadata:
+        """Replace an admitted document in its single destination folder, keeping its UID."""
+        previous = await self.metadata_service.metadata_store.get_metadata_by_uid(existing_uid)
+        if previous is None:
+            raise ValueError("The document to replace no longer exists. Start a new import.")
+        if previous.kind != "corpus" or previous.tags.tag_ids != metadata.tags.tag_ids:
+            raise ValueError("The document to replace no longer belongs to the destination folder. Start a new import.")
+
+        # Clear the recorded stages before purging, but use their original values
+        # to identify every artifact the old document actually produced.
+        indexed = previous.model_copy(deep=True)
+        previous.processing.stages = {}
+        if not await self.metadata_service.update_document_metadata_trusted(user, previous):
+            raise ValueError("The document to replace no longer exists. Start a new import.")
+
+        metadata.identity.document_uid = existing_uid
+        metadata.processing.stages = {}
+        await self.metadata_service.purge_document_artifacts(existing_uid, metadata=indexed, include_content=False)
+        return metadata
+
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
         self.content_store.save_input(metadata.document_uid, input_dir)
         metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)

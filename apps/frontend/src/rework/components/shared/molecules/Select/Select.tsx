@@ -59,6 +59,10 @@ export interface SelectProps<T> {
   ariaLabel?: string;
   disabled?: boolean;
   error?: string;
+  /** Drops the fixed-height slot kept under the trigger for an error message.
+   *  That slot is reserved even with no error, so a field that cannot fail
+   *  otherwise carries an empty line of padding under it. An error still
+   *  shows when there is one. */
   compact?: boolean;
   /** Consumer-owned empty-state wording; FRED callers retain the existing default. */
   emptyMessage?: string;

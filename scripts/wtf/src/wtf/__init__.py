@@ -473,7 +473,6 @@ def worktree_skip_paths(wt: Path) -> list[str]:
     paths = [
         *INTER_SERVICE_CONFIGS,
         f"{service_dir('fred-agents')}/config/models_catalog.yaml",
-        "deploy/local/k3d/values-local.yaml",
         ".vscode/tasks.json",
         ".vscode/launch.json",
         ".vscode/fred.code-workspace",

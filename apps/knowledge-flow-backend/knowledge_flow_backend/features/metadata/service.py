@@ -551,7 +551,7 @@ class MetadataService:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         await self._delete_document_and_artifacts(actor_uid=actor_uid, document_uid=document_uid)
 
-    async def purge_document_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None) -> None:
+    async def purge_document_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None, include_content: bool = True) -> None:
         """Delete everything a document produced outside its metadata row.
 
         Vectors, tabular Parquet revisions and stored content — the one
@@ -568,6 +568,10 @@ class MetadataService:
         Best-effort per store and never raises: a document whose row is already
         gone must not be blocked from having its bytes reclaimed because one
         store is briefly unavailable.
+
+        `include_content=False` drops only what indexes the document, leaving
+        its bytes in place — an overwrite replaces those in the same step, and
+        the document must never be without content in between.
         """
         stages = metadata.processing.stages if metadata else {}
         label = metadata.document_name if metadata else document_uid
@@ -582,11 +586,12 @@ class MetadataService:
         if not metadata or ProcessingStage.SQL_INDEXED in stages:
             await self._delete_tabular_artifacts(document_uid, metadata=metadata)
 
-        try:
-            await asyncio.to_thread(self.content_store.delete_content, document_uid)
-            logger.info("[CONTENT] Deleted content for document '%s'", label)
-        except Exception as exc:
-            logger.warning("[CONTENT] Could not delete content for '%s': %s", label, exc)
+        if include_content:
+            try:
+                await asyncio.to_thread(self.content_store.delete_content, document_uid)
+                logger.info("[CONTENT] Deleted content for document '%s'", label)
+            except Exception as exc:
+                logger.warning("[CONTENT] Could not delete content for '%s': %s", label, exc)
 
     def _vector_store(self) -> BaseVectorStore:
         """Resolve the vector store in whichever process is running.

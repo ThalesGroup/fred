@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Index, String, case, or_
+from sqlalchemy import Index, String, func, literal_column
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import Grouping
 
 from fred_core.models.base import Base, JsonColumn, TimestampColumn
@@ -41,16 +42,23 @@ class TagRow(Base):
     type: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     doc: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
 
-    __table_args__ = (
-        Index(
-            "uq_tag_owner_full_path",
-            owner_id,
-            Grouping(
-                case(
-                    (or_(path.is_(None), path == ""), name),
-                    else_=path + "/" + name,
-                )
-            ),
-            unique=True,
-        ),
+
+def tag_full_path_expression() -> ColumnElement[str]:
+    """Use the indexed expression, including in generic PostgreSQL plans."""
+    return (
+        func.coalesce(
+            func.nullif(TagRow.path, literal_column("''"), type_=String)
+            + literal_column("'/'", String),
+            literal_column("''"),
+        )
+        + TagRow.name
     )
+
+
+# owner_id attaches this expression index to the mapped table.
+_full_path_unique_index = Index(
+    "uq_tag_owner_full_path",
+    TagRow.owner_id,
+    Grouping(tag_full_path_expression()),
+    unique=True,
+)

@@ -3411,6 +3411,15 @@ async def prepare_execution(
     )
     if reasoning_control is not None:
         chat_controls = [*chat_controls, reasoning_control]
+    if not isinstance(user, AssertedUser):
+        chat_controls = [
+            *chat_controls,
+            ChatControlDescriptor(
+                capability_id=PLATFORM_CHAT_CONTROL_OWNER,
+                widget="ask_user_toggle",
+                params={"default": True},
+            ),
+        ]
 
     return ExecutionPreparation(
         agent_instance_id=agent_instance_id,

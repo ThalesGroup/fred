@@ -97,7 +97,10 @@ async def pg_store() -> AsyncIterator[PostgresDocumentMetadataStore]:
             )
             await conn.execute(
                 insert(TagRow),
-                {"tag_id": "tag-a", "owner_id": "team-a", "type": "document"},
+                [
+                    {"tag_id": tag_id, "owner_id": "team-a", "type": "document"}
+                    for tag_id in ("tag-a", "folder-a", "folder-b")
+                ],
             )
         yield PostgresDocumentMetadataStore(engine)
     finally:
@@ -271,3 +274,141 @@ async def test_browse_pages_a_tied_sort_without_repeating_on_postgres(
         seen.extend(doc.identity.document_uid for doc in docs)
 
     assert seen == ["a", "b", "c"]
+
+
+def _named(uid: str, name: str, tag_ids: list[str]) -> DocumentMetadata:
+    doc = _doc(uid)
+    doc.identity.document_name = name
+    doc.tags = Tagging(tag_ids=tag_ids)
+    return doc
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_finds_only_names_in_that_tag(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+    await pg_store.save_metadata(_named("d2", "notes.md", ["folder-a"]))
+    await pg_store.save_metadata(_named("d3", "report.pdf", ["folder-b"]))
+
+    found = await pg_store.document_uids_by_name_in_tag(
+        "folder-a", ["report.pdf", "absent.pdf"]
+    )
+
+    assert found == {"report.pdf": ["d1"]}
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_reports_every_document_sharing_a_name(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    # A folder can already hold a base document and its alternate version under
+    # the same display name, so a name does not identify a single document.
+    await pg_store.save_metadata(_named("base", "report.pdf", ["folder-a"]))
+    await pg_store.save_metadata(_named("alternate", "report.pdf", ["folder-a"]))
+
+    found = await pg_store.document_uids_by_name_in_tag("folder-a", ["report.pdf"])
+
+    assert sorted(found["report.pdf"]) == ["alternate", "base"]
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_with_no_names_touches_nothing(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+
+    assert await pg_store.document_uids_by_name_in_tag("folder-a", []) == {}
+
+
+@pytest.mark.asyncio
+async def test_uids_by_name_uses_the_document_name_index(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    """The point of the query is that it is answered by index, not by a scan.
+
+    Without the index this still returns the right answer, so only the plan can
+    tell the two apart. It explains the statement the store itself builds —
+    explaining a hand-written equivalent proves the index is matchable by THAT
+    expression and nothing about the one that actually runs, which is how a
+    query that could never use this index shipped once already.
+
+    It also pins the index to the model: it is declared in `__table_args__`
+    because an expression index has no column to hang off, and a module-level
+    declaration would silently never reach the table.
+    """
+    from sqlalchemy import text as _text
+
+    await pg_store.save_metadata(_named("d1", "report.pdf", ["folder-a"]))
+    statement = pg_store._uids_by_name_statement(  # pyright: ignore[reportPrivateUsage]
+        "folder-a", ["report.pdf"]
+    )
+    # Compiled without literal_binds and handed to the driver with its own
+    # parameters: that is the form production actually sends, casts included.
+    async with pg_store._sessions() as s:  # pyright: ignore[reportPrivateUsage]
+        # With one row either index is equally selective. A populated folder
+        # makes the name index useful and avoids an arbitrary planner tie.
+        for index in range(1000):
+            await pg_store.save_metadata(
+                _named(f"other-{index}", f"other-{index}.pdf", ["folder-a"]),
+                session=s,
+            )
+        await s.flush()
+        await s.execute(_text("ANALYZE metadata"))
+        connection = await s.connection()
+        compiled = statement.compile(
+            dialect=connection.dialect, compile_kwargs={"render_postcompile": True}
+        )
+        await s.execute(_text("SET enable_seqscan = off"))
+        # The hostile case: a generic plan does not fold bind parameters, so an
+        # index expression built out of them stops matching. Only a literal one
+        # survives this.
+        await s.execute(_text("SET plan_cache_mode = force_generic_plan"))
+        # asyncpg is positional; positiontup is the order the placeholders take.
+        result = await connection.exec_driver_sql(
+            f"EXPLAIN {compiled}",
+            tuple(compiled.params[key] for key in compiled.positiontup or ()),
+        )
+        plan = [row[0] for row in result]
+
+    assert any("idx_metadata_document_name" in line for line in plan), plan
+
+
+@pytest.mark.asyncio
+async def test_folder_path_lookup_uses_the_unique_path_index(
+    pg_store: PostgresDocumentMetadataStore,
+) -> None:
+    from sqlalchemy import select
+
+    from fred_core.documents.tag_models import tag_full_path_expression
+
+    async with pg_store._sessions() as session:
+        await session.execute(
+            insert(TagRow),
+            [
+                {
+                    "tag_id": f"indexed-{i}",
+                    "owner_id": "team-a",
+                    "name": f"Folder-{i}",
+                    "type": "document",
+                }
+                for i in range(1000)
+            ],
+        )
+        await session.execute(text("ANALYZE tag"))
+        await session.execute(text("SET plan_cache_mode = force_generic_plan"))
+        statement = select(TagRow.tag_id).where(
+            TagRow.owner_id == "team-a", tag_full_path_expression() == "Folder-17"
+        )
+        assert (await session.execute(statement)).scalar_one() == "indexed-17"
+        connection = await session.connection()
+        compiled = statement.compile(dialect=connection.dialect)
+        plan = [
+            row[0]
+            for row in await connection.exec_driver_sql(
+                f"EXPLAIN {compiled}",
+                tuple(compiled.params[key] for key in compiled.positiontup or ()),
+            )
+        ]
+    assert any("uq_tag_owner_full_path" in line for line in plan), plan
+    assert any("Index Cond" in line and "COALESCE" in line for line in plan), plan

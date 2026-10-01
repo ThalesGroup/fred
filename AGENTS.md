@@ -126,6 +126,17 @@ Adjust this policy from that evidence; do not build another tracking system
 solely to measure the workflow. Under evaluation means the policy can evolve,
 not that substantial work may silently bypass it.
 
+## Commit and verification rhythm
+
+Commit completed, reviewable blocks as work progresses instead of accumulating
+all changes in one final commit. Each commit should have one clear purpose and
+exclude unrelated local changes.
+
+Group tests and broad quality checks near the end of a PR or after a substantial
+set of related files has changed. During implementation, run only the narrow
+check needed to resolve a concrete risk. Honor a developer's request for manual
+feature validation before running tests.
+
 ## Branch and draft PR workflow
 
 For implementation work, identify or create the tracking GitHub issue and use
@@ -134,3 +145,7 @@ as the branch for this work. Keep unrelated local changes out of commits.
 At completion, push and open a draft PR unless the user limits the task to local
 changes. Lightweight work does not require an OpenSpec change alongside its
 issue or PR. Explicit user instructions take precedence over this workflow.
+
+PR titles must use `<type>(#<issue-number>): <short title>`, where `type` is
+`fix`, `feat`, `chore`, `docs`, `impr`, `ci`, `perf` or other. Use the primary tracking issue number
+and write the title in English.

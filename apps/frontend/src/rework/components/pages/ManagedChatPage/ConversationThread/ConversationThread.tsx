@@ -22,6 +22,7 @@ import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterceptio
 import type { CommandDescriptor } from "../../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "@rework/types/thread";
 import { HitlPrompt } from "@shared/molecules/HitlPrompt/HitlPrompt.tsx";
+import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswerSummary";
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
@@ -34,7 +35,12 @@ interface ConversationThreadProps {
   isStreaming: boolean;
   emptyState?: ReactNode;
   scrollContainerRef: RefObject<HTMLDivElement>;
-  onHitlAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  onHitlAnswer: (
+    answer: string | boolean | undefined,
+    freeText?: string,
+    skipped?: boolean,
+    rememberApproval?: boolean,
+  ) => void;
   maxChatInputChars?: number;
   hitlFreeText: string;
   onHitlFreeTextChange: (value: string) => void;
@@ -73,12 +79,19 @@ export const ConversationThread = memo(function ConversationThread({
   return (
     <ChatMessagesArea isEmpty={messages.length === 0 && !isStreaming} isLoading={isLoading} emptyState={emptyState}>
       {messages.map((msg) => {
+        if (msg.role === "hitl_response" && msg.hitlAnswerSummary) {
+          return <HitlAnswerSummary key={msg.id} summary={msg.hitlAnswerSummary} />;
+        }
         if (msg.role === "user" || msg.role === "hitl_response") {
           // hitl_response's `text` is the raw persisted choice_id ("proceed" /
           // "cancel") — the backend never localizes it (see hitlResponseKey's
           // docstring) — so translate it here; an unrecognized id falls back
           // to showing the raw text rather than nothing.
-          const key = msg.role === "hitl_response" ? hitlResponseKey(msg.text) : null;
+          const key = msg.hitlSkipped
+            ? "rework.hitlPrompt.skipped"
+            : msg.role === "hitl_response"
+              ? hitlResponseKey(msg.text)
+              : null;
           // Only a real user turn anchors the outline rail — a hitl_response
           // renders through UserTurn but is a reply to the agent, not a turn
           // anyone navigates back to.
@@ -105,6 +118,7 @@ export const ConversationThread = memo(function ConversationThread({
             key={msg.id}
             text={msg.text}
             traceMessages={msg.traceMessages}
+            hitlAnswerSummariesByCallId={msg.hitlAnswerSummariesByCallId}
             sources={msg.sources}
             uiParts={msg.uiParts}
             tokenUsage={msg.tokenUsage}

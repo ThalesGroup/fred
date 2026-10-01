@@ -6245,19 +6245,28 @@ ReAct and Deep parent/child frames may recover a tool call only at the completed
 assistant-message boundary, only for a Mistral-qualified response, and only when
 the reconstructed provider content contains the exact empty typed sentinel
 `{"type":"reference","reference_ids":[]}` between a registered tool name
-and strict JSON arguments. Prose before, between, or after valid calls remains
-assistant content; the calls execute. Non-empty citation references, extra
-reference fields, literal exporter placeholders, duplicate JSON keys, unknown
-tools, schema-invalid arguments and over-cap representations remain assistant
-text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
-which carry reference IDs.
-Native tool calls, including duplicates, are preserved unchanged.
+and strict JSON arguments. The bounded content list may mix typed text blocks
+and plain string fragments; their original order and bytes are retained even
+when they split a tool name or JSON argument. A response may contain several
+exact sentinels when each follows a registered tool name and every resulting
+call validates. The whole candidate is rejected if a later marker or call is
+invalid. Prose before, between, or after valid calls remains assistant content;
+the calls execute. Non-empty citation references, extra reference fields,
+literal exporter placeholders, duplicate JSON keys, unknown tools,
+schema-invalid arguments and over-cap representations remain assistant text.
+The exact empty sentinel is distinct from ordinary cited-answer blocks, which
+carry reference IDs. Native tool calls, including duplicates and their IDs, are
+preserved unchanged.
 
 Recovery is bounded, validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
-marker and call syntax from assistant/reasoning SSE. Only the longest suffix
-that remains a prefix of a registered tool name is held while the marker is
-unresolved; ordinary and non-Mistral text is released unchanged. Each completed
+marker and call syntax from assistant/reasoning SSE for the same mixed content
+shape. If a completed message already carries native calls and marked content,
+the bridge discards pending encoded syntax instead of publishing it as a Planning
+preamble; safe prose emitted before the tool-name probe is retained. Only
+the longest suffix that remains a prefix of a registered tool name is held
+while the marker is unresolved; ordinary, unrecognized-block,
+and non-Mistral text is released unchanged. Each completed
 representation is normalized at most once and then follows the normal tool
 route: existing limits run before HITL proposals, approved calls execute through
 tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
@@ -6370,3 +6379,33 @@ are also retired, including their renderer and `mcp.reports_enabled` flag. Curre
 control-plane prompts and generic document/content access remain available. The
 resource store and obsolete MCP flags are removed with regenerated contracts. Existing data must pass the explicit migration gate described in
 [the operator guide](../ops/migrations/retire-knowledge-flow-resources.md).
+
+### 8.100 Agent-initiated human questions
+
+An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
+`RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
+platform tool explicitly under that control. An absent value or `false` leaves
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, up to
+four distinct single-choice options, and/or free text. The agent selects the
+most relevant options before calling; a longer list is rejected, never trimmed.
+Its injected tool call ID is hidden from
+the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
+`stage="agent_question"`. A collision with a declared, provider or capability
+tool named `ask_user` rejects executor construction.
+
+The tool pauses through LangGraph before any external effect. A resume must carry
+the pending interrupt and occurrence IDs. After authorization and before the
+single-use claim, the runtime validates a selected option against the pending
+question. `resume_payload` may be `{"choice_id":"id"}`, `{"text":"..."}`,
+both fields, or `{"skipped":true}`. Skip cannot carry an answer. The tool result
+is compact JSON with `status="answered"` and the supplied fields, or
+`status="skipped"` and a French or English `instruction` that tells the agent to continue with stated assumptions. The turn language chooses French when it starts with `fr`; English is the fallback. Each sibling question keeps its own tool call identity.
+Approval gates retain their existing resume behavior and do not accept skip.
+A Graph question pause leaves its tool call in progress; only the resumed call
+emits a tool result. The no-LLM Graph test assistant exercises confirmation,
+choice, free text, and choice with comment through this platform tool.
+
+`HitlResponsePart.skipped` is optional and defaults to false for old history.
+A skipped question writes a response row even without choice or text. Graph
+choice helpers expose the same typed answer through `choice_step_response`;
+`choice_step` keeps its string return contract for existing authors.

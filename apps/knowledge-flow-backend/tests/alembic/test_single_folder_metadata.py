@@ -8,8 +8,11 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
 
-@pytest.mark.parametrize("case", ["corpus", "corpus_fast_source", "attachment", "multiple", "missing", "disagree", "unknown_folder", "unknown_attachment", "duplicate_folder"])
-def test_single_folder_migration_preserves_or_refuses_data(case, monkeypatch):
+@pytest.mark.parametrize(
+    "case,count",
+    [(case, 1) for case in ["corpus", "corpus_fast_source", "attachment", "multiple", "missing", "disagree", "unknown_folder", "unknown_attachment", "duplicate_folder"]] + [("corpus", 1001)],
+)
+def test_single_folder_migration_preserves_or_refuses_data(case, count, monkeypatch):
     path = Path(__file__).parents[2] / "alembic/versions/b2845a001004_single_folder_metadata.py"
     spec = importlib.util.spec_from_file_location("single_folder", path)
     module = importlib.util.module_from_spec(spec)
@@ -46,6 +49,9 @@ def test_single_folder_migration_preserves_or_refuses_data(case, monkeypatch):
         if case == "disagree":
             doc["tags"]["tag_ids"] = ["different"]
         connection.execute(metadata.insert(), {"document_uid": "doc", "tag_ids": folders, "source_tag": source, "doc": doc})
+        for index in range(1, count):
+            extra = {**doc, "identity": {**doc["identity"], "document_uid": f"doc-{index}"}}
+            connection.execute(metadata.insert(), {"document_uid": f"doc-{index}", "tag_ids": folders, "source_tag": source, "doc": extra})
         monkeypatch.setattr(module, "op", Operations(MigrationContext.configure(connection)))
         if case not in {"corpus", "corpus_fast_source", "attachment"}:
             with pytest.raises(RuntimeError, match="Duplicate folder path" if case == "duplicate_folder" else "Document doc:"):
@@ -55,7 +61,8 @@ def test_single_folder_migration_preserves_or_refuses_data(case, monkeypatch):
         else:
             module.upgrade()
             migrated = sa.Table("metadata", sa.MetaData(), autoload_with=connection)
-            row = connection.execute(sa.select(migrated)).one()
+            assert connection.scalar(sa.select(sa.func.count()).select_from(migrated).where(migrated.c.kind == ("attachment" if case == "attachment" else "corpus"))) == count
+            row = connection.execute(sa.select(migrated).where(migrated.c.document_uid == "doc")).one()
             assert row.document_uid == "doc"
             assert row.kind == ("attachment" if case == "attachment" else "corpus")
             assert row.folder_id == (None if case == "attachment" else "folder")
@@ -65,7 +72,8 @@ def test_single_folder_migration_preserves_or_refuses_data(case, monkeypatch):
                     connection.execute(migrated.insert(), {"document_uid": "invalid", "kind": kind, "folder_id": folder})
             module.downgrade()
             restored = sa.Table("metadata", sa.MetaData(), autoload_with=connection)
-            row = connection.execute(sa.select(restored)).one()
+            assert connection.scalar(sa.select(sa.func.count()).select_from(restored).where(restored.c.tag_ids == folders)) == count
+            row = connection.execute(sa.select(restored).where(restored.c.document_uid == "doc")).one()
             assert row.tag_ids == folders
             assert row.doc == doc
     engine.dispose()
