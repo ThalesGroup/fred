@@ -60,12 +60,12 @@ from the third identical pull onward, so a pull source re-presenting
 It now accumulates without bound, and each extra row makes that name permanently
 ambiguous for any UI import into that folder.
 
-Not fixed here, deliberately: the right guard needs a decision this change has
-no business taking — whether re-presenting an external path is an update to the
-document already made from it or a new document — and adding one would bundle a
-behaviour change into a removal. The old behaviour was not a guard worth keeping
-either (it created one hidden duplicate, then hard-failed). Recorded rather than
-quietly dropped.
+Not fixed here, deliberately, and filed as #2880: the right guard needs a
+decision this change has no business taking — whether re-presenting an external
+path is an update to the document already made from it or a new document — and
+adding one would bundle a behaviour change into a removal. The old behaviour was
+not a guard worth keeping either (it created one hidden duplicate, then
+hard-failed). Recorded rather than quietly dropped.
 
 ### An alternate can outlive its base
 

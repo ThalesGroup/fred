@@ -183,8 +183,8 @@ useful fact to carry forward from this change.
   A renamed document may be cited under its old name until re-vectorized.
   Recorded in the operator note.
 - **The non-PostgreSQL name lookup is still a full scan** (#2860), untouched.
-- **The scheduler pull path lost its only same-name bound** — see design.md.
-  Needs an issue and a design decision, not a patch inside a removal.
+- **The scheduler pull path lost its only same-name bound** — #2880, with the
+  design question it needs answered first. See design.md.
 - **No CI job runs the PostgreSQL migration tests.** `make test` excludes
   `integration`, `test-integration`/`-only` exclude `integration_postgres`, and
   knowledge-flow's CI `integration-target` is empty, so only the manual
