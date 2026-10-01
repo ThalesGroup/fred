@@ -57,12 +57,6 @@ type RawAppConfig = {
   properties?: Record<string, string>;
 };
 
-export const FeatureFlagKey = {
-  ENABLE_K8_FEATURES: "enableK8Features",
-  ENABLE_ELEC_WARFARE: "enableElecWarfare",
-} as const;
-export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFlagKey];
-
 let config: AppConfig | null = null;
 
 /**
@@ -167,21 +161,6 @@ export const getConfig = (): AppConfig => {
   if (!config) throw new Error("Config not loaded yet. Call loadConfig() first.");
   return config;
 };
-
-/**
- * Read one pre-auth static feature flag by key.
- *
- * Why this function exists:
- * - a few startup decisions still read from the tiny static config before the
- *   control-plane bootstrap has hydrated the shell
- *
- * How to use it:
- * - call after `loadConfig()` and pass a `FeatureFlagKey` value
- *
- * Example:
- * - `const enabled = isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES);`
- */
-export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConfig().feature_flags?.[flag];
 
 /**
  * Read one static frontend property by key.

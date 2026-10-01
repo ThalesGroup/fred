@@ -17,10 +17,6 @@ import { TERMINAL_STATES, type AnyTaskEvent, type ImportStage, type TaskTarget, 
 
 export interface TasksState {
   byId: Record<string, TaskViewModel>;
-  // Monotonic counter bumped by the tray clock (see `trayClockTicked`). Terminal
-  // tasks age out of the tray purely by elapsed wall-clock, which `byId` does not
-  // reflect; this gives `selectVisibleTasks` an input to recompute on.
-  tick?: number;
   // Bumped when something asks the import panel to show itself
   // (see `importPanelOpenRequested`).
   importPanelOpenRequest?: number;
@@ -32,7 +28,7 @@ interface TasksRootState {
   tasks: TasksState;
 }
 
-const initialState: TasksState = { byId: {}, tick: 0, importPanelOpenRequest: 0 };
+const initialState: TasksState = { byId: {}, importPanelOpenRequest: 0 };
 
 export const EVICTION_DELAY_MS = 5 * 60 * 1000;
 
@@ -245,14 +241,6 @@ export const taskSlice = createSlice({
       state.importPanelOpenRequest = (state.importPanelOpenRequest ?? 0) + 1;
     },
 
-    /** Advance the tray clock so time-based selectors (`selectVisibleTasks`)
-     *  recompute. Dispatched by a timer when a succeeded task crosses its
-     *  eviction window — it must drop out of the floating tray without being
-     *  removed from the store (admin history keeps it for the session). */
-    trayClockTicked(state) {
-      state.tick = (state.tick ?? 0) + 1;
-    },
-
     /** Manually drop every terminal task (succeeded/failed/cancelled). Backs the
      *  admin "Clear completed" button — done tasks are kept for the whole session
      *  (useful after big ingestions) and only removed when the user asks. */
@@ -264,11 +252,8 @@ export const taskSlice = createSlice({
       }
     },
 
-    /** A single task was acknowledged server-side (`POST /tasks/{id}/ack`,
-     *  TASK-EVENT-STREAM-RFC.md §2.10) — mirror the server's timestamp into
-     *  the local view model so `selectVisibleTasks`'s eviction timer and
-     *  `selectUnacknowledgedFailures` see it, same as before, but driven by a
-     *  real per-task server record instead of a per-browser bulk flag. */
+    /** Mirror the server's per-task acknowledgement timestamp so task
+     *  selectors update without a browser-local bulk flag. */
     taskAcknowledged(state, action: PayloadAction<{ taskId: string; acknowledgedAt: string }>) {
       const vm = state.byId[action.payload.taskId];
       if (!vm) return;
@@ -286,7 +271,6 @@ export const {
   uploadFailed,
   taskEventReceived,
   taskEvicted,
-  trayClockTicked,
   importPanelOpenRequested,
   taskAcknowledged,
   completedTasksCleared,
@@ -295,7 +279,6 @@ export const {
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
 const selectById = (state: TasksRootState) => state.tasks.byId;
-const selectTick = (state: TasksRootState) => state.tasks.tick;
 
 /** Bumped every time something asks the import panel to open; it watches this. */
 export const selectImportPanelOpenRequest = (state: TasksRootState) => state.tasks.importPanelOpenRequest ?? 0;
@@ -304,9 +287,7 @@ export const selectActiveTasks = createSelector(selectById, (byId) =>
   Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)),
 );
 
-// `selectTick` is a memoization input only: it carries no data into the result but
-// forces a recompute when the tray clock advances, so terminal tasks age out on time.
-export const selectVisibleTasks = createSelector([selectById, selectTick], (byId) => {
+export const selectVisibleTasks = createSelector(selectById, (byId) => {
   const now = Date.now();
   return Object.values(byId)
     .filter((vm) => {
@@ -357,7 +338,7 @@ export const makeSelectImportTasks = (teamId: string | null) =>
 /**
  * All tasks in the store, active first then most-recently-finished, with NO age
  * cutoff. Backs the admin Tasks page, which keeps the full session history until
- * the user clears it — unlike `selectVisibleTasks` (tray) which drops old ones.
+ * the user clears it; `selectVisibleTasks` drops old ones.
  */
 export const selectAllTasks = createSelector(selectById, (byId) =>
   Object.values(byId).sort((a, b) => {
