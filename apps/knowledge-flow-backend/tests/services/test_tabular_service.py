@@ -37,7 +37,6 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 
-import knowledge_flow_backend.features.tabular.service as tabular_service_module
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.content.filesystem_content_store import FileSystemContentStore
@@ -2128,7 +2127,7 @@ async def test_duckdb_resource_limits_are_applied_on_the_query_path(tmp_path, mo
         observed_settings.append(connection.execute("SELECT current_setting('threads'), current_setting('temp_directory')").fetchone())
         return connection
 
-    monkeypatch.setattr(tabular_service_module, "open_duckdb_connection", record_connection)
+    monkeypatch.setattr("knowledge_flow_backend.features.tabular.service.open_duckdb_connection", record_connection)
     app_context = ApplicationContext.get_instance()
     app_context.get_content_store().clear()
 
