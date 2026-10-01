@@ -15,9 +15,28 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 import os
 
 from dotenv import load_dotenv
+
+
+# Pod-local, bounded bootstrap diagnostics wait until the selected formatter exists.
+_startup_events: deque[tuple[logging.Logger, logging.LogRecord]] = deque(maxlen=32)
+
+
+def defer_startup_log(logger: logging.Logger, level: int, message: str) -> None:
+    """Preserve event time while deferring config diagnostics until logging setup."""
+    record = logger.makeRecord(logger.name, level, __file__, 0, message, (), None)
+    _startup_events.append((logger, record))
+
+
+def flush_startup_logs() -> None:
+    """Emit bounded bootstrap diagnostics after the application's handlers exist."""
+    while _startup_events:
+        logger, record = _startup_events.popleft()
+        if logger.isEnabledFor(record.levelno):
+            logger.handle(record)
 
 
 class ConfigFiles:
@@ -26,7 +45,7 @@ class ConfigFiles:
     Why this exists:
     - Every backend starts the same way: load environment variables, then load a
       YAML configuration file.
-    - Developers and operators should see the exact files that were used.
+    - Exact selected paths stay available to operational inspection, outside logs.
 
     Example:
     - `ENV_FILE=./config/.env.prod`
@@ -54,7 +73,6 @@ class ConfigFiles:
         self._default_config_file = default_config_file
         self._env_var_name = env_var_name
         self._config_var_name = config_var_name
-        self._log_prefix = log_prefix
         self._loaded_env_file_path: str | None = None
         self._loaded_config_file_path: str | None = None
 
@@ -89,18 +107,14 @@ class ConfigFiles:
           loads production secrets and returns that path.
         """
         env_path = dotenv_path or os.getenv(self._env_var_name, self._default_env_file)
-        if load_dotenv(env_path):
-            self._logger.info(
-                "%s Loaded environment variables from: %s",
-                self._log_prefix,
-                env_path,
-            )
-        else:
-            self._logger.warning(
-                "%s No .env file found at: %s",
-                self._log_prefix,
-                env_path,
-            )
+        loaded = load_dotenv(env_path)
+        defer_startup_log(
+            self._logger,
+            logging.INFO if loaded else logging.WARNING,
+            "Environment configuration loaded"
+            if loaded
+            else "Environment file unavailable; using process environment",
+        )
         self._loaded_env_file_path = env_path
         return env_path
 
@@ -123,13 +137,13 @@ class ConfigFiles:
         return resolved
 
     def mark_config_loaded(self, config_file: str) -> None:
-        """Record and log the configuration file effectively loaded.
+        """Record the selected file and defer its identifier-free load status.
 
         Example:
         - After parsing `configuration_prod.yaml`, call this method so startup
-          logs and diagnostics expose the exact profile in use.
+          inspection exposes the profile while logs contain only load status.
         """
         self._loaded_config_file_path = config_file
-        self._logger.info(
-            "%s Loaded configuration from: %s", self._log_prefix, config_file
+        defer_startup_log(
+            self._logger, logging.INFO, "Application configuration loaded"
         )

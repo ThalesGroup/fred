@@ -261,8 +261,6 @@ async def _reconcile_team_admin_charter_roles(container) -> None:
 
 def create_app() -> FastAPI:
     configuration = load_configuration()
-    env_file = get_loaded_env_file_path() or "<unset>"
-    config_file = get_loaded_config_file_path() or "<unset>"
     log_setup(
         service_name="control-plane",
         log_level=configuration.app.log_level,
@@ -273,7 +271,7 @@ def create_app() -> FastAPI:
             opensearch_config=configuration.storage.opensearch,
         ),
     )
-    logger.info("Environment file: %s | Configuration file: %s", env_file, config_file)
+    logger.info("Application configuration ready")
 
     docs_enabled = read_env_bool("PRODUCTION_FASTAPI_DOCS_ENABLED", default=True)
     container = build_application_container(configuration)

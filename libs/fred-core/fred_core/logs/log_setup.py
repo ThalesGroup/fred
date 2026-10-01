@@ -31,6 +31,7 @@ from fred_core.logs.log_structures import (
 )
 
 from fred_pod.common.structures import LogOutputFormat
+from fred_pod.common.config_files import flush_startup_logs
 from fred_core.logs.processors import (
     ContextSnapshotFilter,
     event_properties,
@@ -423,3 +424,4 @@ def log_setup(
     audit_logger.addHandler(audit_handler)
     audit_logger.setLevel(log_level.upper())
     audit_logger.propagate = False
+    flush_startup_logs()

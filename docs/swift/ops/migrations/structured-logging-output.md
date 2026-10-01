@@ -31,4 +31,4 @@ Set `app.log_format: text` and restart if a parser needs the prior readable work
 
 ## Limitations
 
-No GKE deployment or canary was performed during offline verification. Native processes outside Python do not use this formatter. This slice does not yet provide ingress/journey scopes, trusted downstream propagation, or worker handoff. Dependency warning/error events are console-only to avoid recursive store emission.
+No GKE deployment or canary was performed during offline verification. Native processes outside Python do not use this formatter. Configuration-load statuses are buffered until the selected formatter is available; invalid/unavailable configuration can still produce bootstrap failure output before a valid logging setting exists. This slice does not yet provide ingress/journey scopes, trusted downstream propagation, or worker handoff. Dependency warning/error events are console-only to avoid recursive store emission.
