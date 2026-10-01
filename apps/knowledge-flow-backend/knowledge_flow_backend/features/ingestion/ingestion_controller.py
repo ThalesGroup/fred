@@ -1543,7 +1543,7 @@ class IngestionController:
             # Store to temp
             raw_path = uploadfile_to_path(file)
             document_uid = uuid.uuid4().hex
-            bind_operation_context(document_uid=document_uid, **({"session_id": session_id} if session_id else {}))
+            bind_operation_context({"session_id": session_id} if session_id else {}, document_uid=document_uid)
             tabular_available = False
 
             # The tabular build (best-effort, after vectors below) still needs
