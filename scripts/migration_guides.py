@@ -85,6 +85,67 @@ def schema_property_paths(
     return paths
 
 
+_VALIDATION_KEYS = {
+    "type",
+    "properties",
+    "patternProperties",
+    "additionalProperties",
+    "required",
+    "items",
+    "anyOf",
+    "allOf",
+    "oneOf",
+    "not",
+    "enum",
+    "const",
+    "pattern",
+    "minLength",
+    "maxLength",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+    "multipleOf",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "minProperties",
+    "maxProperties",
+    "format",
+    "if",
+    "then",
+    "else",
+}
+
+
+def schema_validation_shape(node: object) -> object:
+    """Keep validation rules while ignoring descriptions and ordering."""
+    if not isinstance(node, dict):
+        return node
+    result = {}
+    for key, value in node.items():
+        if key not in _VALIDATION_KEYS:
+            continue
+        if key in {"properties", "patternProperties"}:
+            result[key] = {
+                name: schema_validation_shape(child) for name, child in value.items()
+            }
+        elif key in {"anyOf", "allOf", "oneOf"}:
+            result[key] = sorted(
+                (schema_validation_shape(child) for child in value),
+                key=lambda child: json.dumps(child, sort_keys=True),
+            )
+        elif key in {"required", "enum"}:
+            result[key] = sorted(value, key=str)
+        elif key == "items" and isinstance(value, list):
+            result[key] = [schema_validation_shape(child) for child in value]
+        elif isinstance(value, dict):
+            result[key] = schema_validation_shape(value)
+        else:
+            result[key] = value
+    return result
+
+
 def version(value):
     match = VERSION.fullmatch(value)
     require(match is not None, f"Invalid version {value!r}; use X.Y.Z or X.Y.Z-rc.1")
@@ -416,26 +477,33 @@ class Repo:
             )
             if production:
                 chart = "deploy/charts/fred/values.yaml"
-                require(
-                    chart in changed,
-                    "Production configuration changes require Fred chart values.yaml in the same PR",
-                )
-                before = yaml.safe_load(self.read(chart, base))
-                after = yaml.safe_load(self.read(chart))
                 schema = "deploy/charts/fred/values.schema.json"
                 removed_options = set()
+                validation_changed = False
                 if (
                     schema in changed
                     and schema in self.paths(base)
                     and schema in self.paths()
                 ):
+                    old_schema = json.loads(self.read(schema, base))
+                    new_schema = json.loads(self.read(schema))
                     removed_options = schema_property_paths(
-                        json.loads(self.read(schema, base))
-                    ) - schema_property_paths(json.loads(self.read(schema)))
+                        old_schema
+                    ) - schema_property_paths(new_schema)
+                    validation_changed = schema_validation_shape(
+                        old_schema
+                    ) != schema_validation_shape(new_schema)
                 require(
-                    before != after or removed_options,
-                    "Comment-only values.yaml edits require removed options in the generated chart schema to establish production configuration changes; declare local if appropriate",
+                    chart in changed or (validation_changed and not removed_options),
+                    "Production configuration changes require Fred chart values.yaml or a chart schema validation change in the same PR",
                 )
+                if chart in changed:
+                    before = yaml.safe_load(self.read(chart, base))
+                    after = yaml.safe_load(self.read(chart))
+                    require(
+                        before != after or removed_options or validation_changed,
+                        "Comment-only values.yaml edits require a generated chart schema validation change or removed option; declare local if appropriate",
+                    )
         return notes
 
     def coverage(self, base, notes):

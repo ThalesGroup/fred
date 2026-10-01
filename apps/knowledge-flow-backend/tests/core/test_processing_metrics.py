@@ -18,6 +18,8 @@ from contextlib import contextmanager
 from importlib.util import resolve_name
 from pathlib import Path
 
+import pytest
+
 from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope, processing_timer
 
 
@@ -36,11 +38,9 @@ def test_metrics_context_propagates_to_thread_and_restores_after_error():
     async def scenario():
         with processing_metrics_scope(timer):
             await asyncio.to_thread(work)
-            try:
+            with pytest.raises(ValueError, match="setup"):
                 with processing_metrics_scope(lambda *_: (_ for _ in ()).throw(ValueError("setup"))):
                     work()
-            except ValueError:
-                pass
             work()
         work()  # No collector outside scope.
 

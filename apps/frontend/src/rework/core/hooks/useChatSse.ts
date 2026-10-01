@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { runtimeExecuteStreamPath } from "../utils/runtimeExecutionUrl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -709,12 +710,11 @@ export function useChatSse(
       // then failed mid-stream" — only the first may put the HITL prompt back.
       onAccepted?: () => void,
     ): Promise<void> => {
-      const url = new URL(executeStreamUrl, window.location.origin);
-      console.debug(
-        `[useChatSse] streamToMessages — resolved URL="${url.toString()}" signal.aborted=${signal.aborted}`,
-      );
-      const response = await fetch(url.toString(), {
+      const url = runtimeExecuteStreamPath(executeStreamUrl);
+      console.debug(`[useChatSse] streamToMessages — resolved URL="${url}" signal.aborted=${signal.aborted}`);
+      const response = await fetch(url, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,

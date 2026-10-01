@@ -1259,21 +1259,10 @@ class TabularService:
         datasets: list[ResolvedDataset],
         handle: DuckDBAbortHandle,
     ) -> None:
-        """
-        Mount authorized Parquet datasets as temporary DuckDB views.
+        """Mount authorized Parquet views with exact-path external access.
 
-        Why this exists:
-        - DuckDB is not the security boundary; only the views registered in the
-          session are visible to the query.
-
-        How to use:
-        - Call on a fresh in-memory connection, inside the worker thread, before
-          executing one SQL query.
-        - The abort handle is checked before each dataset because this loop is
-          the one part of a job `connection.interrupt()` cannot stop: resolving a
-          location and opening a remote Parquet are blocking calls outside
-          DuckDB's own interruptible execution. Checking between datasets bounds
-          how much of an abandoned mount still runs.
+        Resolve paths and load httpfs before restricting access. Abort checks
+        bracket mounts because remote reads can block outside DuckDB execution.
         """
 
         dataset_locations: list[tuple[ResolvedDataset, str]] = []
@@ -1284,6 +1273,10 @@ class TabularService:
 
         if any(self._requires_httpfs(location) for _, location in dataset_locations):
             self._ensure_httpfs_ready(connection)
+
+        connection.execute("SET allow_persistent_secrets = false")
+        connection.execute("SET allowed_paths = ?", [[location for _, location in dataset_locations]])
+        connection.execute("SET enable_external_access = false")
 
         with _redacting_dataset_read_errors():
             for dataset, location in dataset_locations:
