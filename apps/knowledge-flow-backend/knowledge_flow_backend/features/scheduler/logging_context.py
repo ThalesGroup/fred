@@ -11,7 +11,8 @@
 import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
 from functools import wraps
 from typing import ParamSpec, TypeVar
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -49,6 +50,17 @@ def capture_ingestion_context(user: KeycloakUser, definition: PipelineDefinition
     definition.logging_context = encoded
     for file in definition.files:
         file.logging_context = encoded
+
+
+@contextmanager
+def ingestion_delivery_scope(definition: PipelineDefinition) -> Iterator[None]:
+    """Restore the persisted submission for delivery, including deferred logs."""
+    local: dict[str, object] = {"workflow_id": definition.workflow_id}
+    if definition.files and not is_service_agent(definition.files[0].processed_by):
+        local["user_id"] = definition.files[0].processed_by.uid
+    with request_log_scope(correlation_id=str(uuid5(NAMESPACE_URL, definition.workflow_id or str(uuid4())))):
+        bind_received_log_context(definition.logging_context, **local)
+        yield
 
 
 def ingestion_activity(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:

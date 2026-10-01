@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from fred_core import KeycloakUser
-from fred_core.logs.context import log_context
+from fred_core.logs.context import current_context, log_context
 from fred_core.logs.propagation import decode_log_context
 from fred_core.tasks.models import IngestionTaskEvent, TaskState
 from fred_core.tasks.store import TaskStore
@@ -63,8 +63,16 @@ async def test_restart_before_delivery_preserves_profile_task_and_execution(deli
     run = await delivery.tasks.store.get_run(definition.files[0].task_id)
     assert run.execution_id == definition.workflow_id
     assert run.team_id == "team"
+    observed = []
+
+    def start(**kw):
+        observed.append(dict(current_context()))
+        return WorkflowHandle(workflow_id=kw["definition"].workflow_id)
+
+    delivery.scheduler.start_document_processing.side_effect = start
     with log_context(correlation_id="unrelated-delivery"):
         await delivery.retry_pending()
+        assert current_context() == {"correlation_id": "unrelated-delivery"}
     sent = delivery.scheduler.start_document_processing.call_args.kwargs["definition"]
     assert sent.files[0].profile == "rich"
     assert sent.files[0].task_id == run.task_id
@@ -73,6 +81,7 @@ async def test_restart_before_delivery_preserves_profile_task_and_execution(deli
     values, reason = decode_log_context(sent.logging_context)
     assert reason is None
     assert values == {"correlation_id": "upload-journey", "user_id": USER.uid, "team_id": "team", "custom": "retained", "workflow_id": sent.workflow_id}
+    assert observed == [values]
     assert sent.files[0].logging_context == sent.logging_context
     async with delivery.sessions() as session:
         assert await session.scalar(select(func.count()).select_from(IngestionSubmissionRow)) == 0

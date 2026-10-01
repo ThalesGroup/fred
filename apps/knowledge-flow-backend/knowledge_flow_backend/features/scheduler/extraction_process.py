@@ -235,16 +235,21 @@ class _ChildGroup:
             self.pgid = _own_process_group(self._pid)
 
 
-def _child_with_kpis(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, sender: socket.socket, target: Callable[..., None]) -> None:
+def _child_with_logging(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, target: Callable[..., None]) -> None:
     log_setup(service_name="knowledge-flow-worker", service_role="worker", log_format=request.log_format, log_level=request.log_level, store=NullLogStore(), use_rich=False, include_uvicorn=False)
+    with request_log_scope():
+        bind_received_log_context(request.logging_context)
+        target(request, result_pipe, parent_pid)
+
+
+def _child_with_kpis(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, sender: socket.socket, target: Callable[..., None]) -> None:
     from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket, processor_activity_timer
 
     sender.setblocking(False)
     token = extraction_kpi_socket.set(sender)
     try:
-        with request_log_scope(), processing_metrics_scope(processor_activity_timer):
-            bind_received_log_context(request.logging_context)
-            target(request, result_pipe, parent_pid)
+        with processing_metrics_scope(processor_activity_timer):
+            _child_with_logging(request, result_pipe, parent_pid, target=target)
     finally:
         extraction_kpi_socket.reset(token)
         sender.close()
@@ -266,7 +271,7 @@ async def run_extraction_in_process(
         receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
     except OSError:
         logger.warning("[EXTRACTION][KPI] Could not create telemetry channel", exc_info=True)
-        await _run_extraction_in_process(request=request, budget_seconds=budget_seconds, heartbeat=heartbeat, target=target, start_method=start_method)
+        await _run_extraction_in_process(request=request, budget_seconds=budget_seconds, heartbeat=heartbeat, target=partial(_child_with_logging, target=target), start_method=start_method)
         return
     with receiver, sender:
         receiver.setblocking(False)
