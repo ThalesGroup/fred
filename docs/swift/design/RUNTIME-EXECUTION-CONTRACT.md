@@ -6399,3 +6399,37 @@ choice, free text, and choice with comment through this platform tool.
 A skipped question writes a response row even without choice or text. Graph
 choice helpers expose the same typed answer through `choice_step_response`;
 `choice_step` keeps its string return contract for existing authors.
+
+### 8.100 A Graph run left unfinished by a lost process is offered back (2026-10-01)
+
+Graph agents stream with `durability="sync"`: a step's checkpoint is persisted
+before the next step starts. A run ending in a live process (success, unhandled
+node error, step limit) leaves no pending step, via LangGraph's
+`aupdate_state(config, None, as_node=END)`. A cancelled or disconnected run keeps
+its pending step.
+
+A Graph thread with pending steps and no pending interrupt is therefore an
+interrupted execution. A new turn on it runs nothing and returns one
+`ExecutionInterruptedRuntimeEvent` (`kind="execution_interrupted"`). The event
+carries a `HumanInputRequest` (`stage="execution_interrupted"`, choices
+`continue`/`restart`, `metadata.node_id`/`node_title`) and an opaque
+`interruption_id` derived from the thread head. That turn writes no history and
+no turn KPI.
+
+`RuntimeExecuteRequest.interrupted_action` answers it:
+
+- `continue` requires `interruption_id`, allows empty `input` and excludes
+  `resume_payload`. It resumes the interrupted step with `astream(None)`, behind
+  the HITL single-use claim keyed `continue:{interruption_id}`. A stale or
+  unknown id, or a non-Graph agent, gets an execution error and nothing runs.
+  The continued exchange persists its assistant rows without a user row.
+- `restart` runs the input as an ordinary new turn. Non-Graph agents ignore it.
+
+`GraphExecutor.invoke`, in-process child invocations and the OpenAI-compatible
+route have no one to ask, so they restart. Pending steps cannot tell a lost run
+from one still running elsewhere; nothing stops a user from continuing a run that
+is still live on another replica or tab. The chat renders the event with `HitlPrompt` and sends `restart`
+for the first message after the user presses Stop. A step re-run by `continue`
+repeats any side effect inside it: commit externally with a key fixed in an
+earlier step. Full rationale:
+`openspec/changes/resume-interrupted-graph-execution/design.md`.
