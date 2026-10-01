@@ -31,6 +31,7 @@ import type {
   NodeErrorRuntimeEvent,
   RuntimeContext,
   RuntimeErrorEvent,
+  ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
@@ -183,7 +184,14 @@ type AnyRuntimeEvent =
   | ({ kind: "tool_call" } & ToolCallRuntimeEvent)
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
-  | ({ kind: "execution_error" } & RuntimeErrorEvent);
+  | ({ kind: "execution_error" } & RuntimeErrorEvent)
+  | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent);
+
+/** The user's answer to an interrupted Graph run, sent with the next turn. */
+export type InterruptedRunChoice = {
+  action: NonNullable<RuntimeExecuteRequest["interrupted_action"]>;
+  interruptionId?: string;
+};
 
 class RuntimeHttpError extends Error {
   constructor(
@@ -329,6 +337,9 @@ export function useChatSse(
   // Per-hook warn-once latch for the degraded token preflight (see
   // `preflightTurnToken`), so two mounted chats do not silence each other.
   const degradedTokenWarnedRef = useRef(false);
+  // A deliberate Stop is never offered back as an interrupted run: the next
+  // send restarts instead.
+  const stoppedRef = useRef(false);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -391,6 +402,7 @@ export function useChatSse(
     // unconditional, unlike releasePreflightLock's ownership-checked release,
     // because this IS the current owner's cancellation, issued from outside.
     preflightOwnerRef.current = null;
+    stoppedRef.current = false;
     setWaitResponse(false);
     thoughtBufsRef.current.clear();
     setAll([]);
@@ -398,6 +410,13 @@ export function useChatSse(
     setMaxChatInputChars(undefined);
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
+  // A turn the runtime refused before running: its optimistic bubble goes away.
+  const dropOptimisticTurn = useCallback((exchangeId: string) => {
+    messagesRef.current = messagesRef.current.filter(
+      (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
+    );
+    setMessages([...messagesRef.current]);
+  }, []);
 
   const abort = useCallback(() => {
     console.debug("[useChatSse] abort() called — clearing waitResponse");
@@ -407,6 +426,7 @@ export function useChatSse(
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
+    stoppedRef.current = true;
     setWaitResponse(false);
   }, []);
 
@@ -582,6 +602,30 @@ export function useChatSse(
           break;
         }
 
+        case "execution_interrupted": {
+          // Nothing ran: drop the optimistic message, give the draft back, and
+          // offer the choice on the human-input card.
+          dropOptimisticTurn(exchangeId);
+          onTurnRejected?.("", sessionId);
+          const step = String(event.request.metadata?.node_title ?? event.request.metadata?.node_id ?? "");
+          onAwaitingHuman?.({
+            type: "awaiting_human",
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            payload: {
+              ...event.request,
+              title: i18n.t("chatbot.interruptedRun.title", { step }),
+              question: i18n.t("chatbot.interruptedRun.question"),
+              choices: [
+                { id: "continue", label: i18n.t("chatbot.interruptedRun.continue") },
+                { id: "restart", label: i18n.t("chatbot.interruptedRun.restart") },
+              ],
+              metadata: { ...event.request.metadata, interruption_id: event.interruption_id },
+            },
+          });
+          break;
+        }
+
         case "turn_persisted": {
           onBindDraftAgentToSessionId?.(event.session_id);
           onTurnPersisted?.(event.session_id);
@@ -693,7 +737,7 @@ export function useChatSse(
           break;
       }
     },
-    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onError],
+    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onTurnRejected, onError, dropOptimisticTurn, i18n],
   );
 
   const streamToMessages = useCallback(
@@ -751,8 +795,11 @@ export function useChatSse(
       sessionId: string | null,
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
+      interrupted?: InterruptedRunChoice,
     ) => {
       const sendId = Math.random().toString(36).slice(2, 8);
+      const choice = interrupted ?? (stoppedRef.current ? { action: "restart" as const } : undefined);
+      const continuing = choice?.action === "continue";
       console.debug(
         `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} inputChars=${countUnicodeCodePoints(input)}`,
       );
@@ -952,7 +999,9 @@ export function useChatSse(
       if (preflightOwnerRef.current === ac) {
         preflightOwnerRef.current = null;
       }
-      onTurnStarted?.();
+      stoppedRef.current = false;
+      // A continue sends no message: the composer keeps the user's draft.
+      if (!continuing) onTurnStarted?.();
 
       // Optimistic user message for immediate UI feedback before the first SSE frame.
       const userMsg: ChatMessage = {
@@ -971,8 +1020,10 @@ export function useChatSse(
           ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
         },
       };
-      messagesRef.current = upsertOne(messagesRef.current, userMsg);
-      setMessages([...messagesRef.current]);
+      if (!continuing) {
+        messagesRef.current = upsertOne(messagesRef.current, userMsg);
+        setMessages([...messagesRef.current]);
+      }
       console.debug(`[useChatSse][${sendId}] starting streamToMessages`);
 
       // Read as LATE as possible — right before the bearer goes on the wire.
@@ -990,6 +1041,7 @@ export function useChatSse(
             session_id: sessionId,
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
+            ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),
           },
           prep.execute_stream_url,
           token,
@@ -1006,10 +1058,7 @@ export function useChatSse(
         } else if (name === "AbortError") {
           console.debug(`[useChatSse][${sendId}] streamToMessages aborted (AbortError) — swallowed`);
         } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
-          messagesRef.current = messagesRef.current.filter(
-            (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
-          );
-          setMessages([...messagesRef.current]);
+          dropOptimisticTurn(exchangeId);
           onTurnRejected?.(input, effectiveSessionId);
           if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
           onError?.(
@@ -1040,6 +1089,7 @@ export function useChatSse(
       onError,
       onTurnStarted,
       onTurnRejected,
+      dropOptimisticTurn,
       isTurnCurrent,
       flushPendingWrites,
       applyPreparation,

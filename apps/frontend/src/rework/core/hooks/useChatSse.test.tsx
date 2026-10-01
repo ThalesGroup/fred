@@ -125,6 +125,7 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     onError: (msg) => onErrorMock(msg),
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
+    onAwaitingHuman: (event) => onAwaitingHumanMock(event),
     isTurnCurrent,
   });
   onRender(hook);
@@ -136,6 +137,7 @@ let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 const onErrorMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
+const onAwaitingHumanMock = vi.fn();
 
 describe("useChatSse — send() ordering barrier and prepare-execution failure handling", () => {
   let container: HTMLDivElement;
@@ -157,6 +159,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onErrorMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
+    onAwaitingHumanMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
     prepareExecutionImpl = async () => ({
@@ -818,6 +821,80 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
   // the UI's own locale because nothing ever sent it. Fixed by reading the
   // live i18next language (mocked to "fr-FR" for this file, see the
   // react-i18next mock above) into every request's runtime_context.
+  it("an interrupted run gives the draft back and offers continue or restart on the HITL card", async () => {
+    flushPendingWrites = async () => true;
+    const interrupted = {
+      kind: "execution_interrupted",
+      interruption_id: "int-1",
+      request: { stage: "execution_interrupted", metadata: { node_id: "publish", node_title: "Publish" } },
+    };
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(interrupted)}\n\n`, { status: 200 }));
+    mount();
+
+    await act(async () => {
+      await latest.send("again", "session-1");
+    });
+
+    expect(latest.messages).toHaveLength(0);
+    expect(onTurnRejectedMock).toHaveBeenCalledWith("", "session-1");
+    const card = onAwaitingHumanMock.mock.calls[0][0] as RuntimeAwaitingHumanEvent;
+    expect(card.payload.stage).toBe("execution_interrupted");
+    expect(card.payload.choices?.map((choice) => choice.id)).toEqual(["continue", "restart"]);
+    expect(card.payload.metadata?.interruption_id).toBe("int-1");
+    fetchSpy.mockRestore();
+  });
+
+  it("continue sends the interruption with no input, no user bubble and the composer untouched", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("", "session-1", undefined, undefined, { action: "continue", interruptionId: "int-1" });
+    });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({ input: "", interrupted_action: "continue", interruption_id: "int-1" });
+    expect(onTurnStartedMock).not.toHaveBeenCalled();
+    expect(latest.messages.filter((message) => message.role === "user")).toHaveLength(0);
+    fetchSpy.mockRestore();
+  });
+
+  it("restart sends the message with interrupted_action restart", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    await act(async () => {
+      await latest.send("again", "session-1", undefined, undefined, { action: "restart" });
+    });
+
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body).toMatchObject({ input: "again", interrupted_action: "restart", interruption_id: null });
+    fetchSpy.mockRestore();
+  });
+
+  it("after Stop, only the next message restarts", async () => {
+    flushPendingWrites = async () => true;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    mount();
+
+    act(() => latest.abort());
+    await act(async () => {
+      await latest.send("after stop", "session-1");
+    });
+    await act(async () => {
+      await latest.send("later", "session-1");
+    });
+
+    const bodies = fetchSpy.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
+    expect(bodies[0].interrupted_action).toBe("restart");
+    expect(bodies[1].interrupted_action).toBeUndefined();
+    fetchSpy.mockRestore();
+  });
+
   it("send() forwards the UI language into runtime_context", async () => {
     flushPendingWrites = async () => true;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));

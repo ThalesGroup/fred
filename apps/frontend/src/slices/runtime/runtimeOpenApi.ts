@@ -228,6 +228,9 @@ export type ExecuteAgentApiResponse = /** status 200 Successful Response */
           kind: "execution_error";
         } & RuntimeErrorEvent)
       | ({
+          kind: "execution_interrupted";
+        } & ExecutionInterruptedRuntimeEvent)
+      | ({
           kind: "final";
         } & FinalRuntimeEvent)
       | ({
@@ -496,6 +499,10 @@ export type RuntimeExecuteRequest =
       input?: string;
       /** LangGraph's own Interrupt.id for the HITL occurrence being resumed (ReAct and Graph agents). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received, and validated against the currently pending interrupt. */
       interrupt_id?: string | null;
+      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its interrupted step (input may be empty); 'restart' runs this input as a new turn. */
+      interrupted_action?: ("continue" | "restart") | null;
+      /** Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; required with interrupted_action='continue' and valid only there. */
+      interruption_id?: string | null;
       /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
@@ -534,6 +541,10 @@ export type RuntimeExecuteRequest =
       input?: string;
       /** LangGraph's own Interrupt.id for the HITL occurrence being resumed (ReAct and Graph agents). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received, and validated against the currently pending interrupt. */
       interrupt_id?: string | null;
+      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its interrupted step (input may be empty); 'restart' runs this input as a new turn. */
+      interrupted_action?: ("continue" | "restart") | null;
+      /** Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; required with interrupted_action='continue' and valid only there. */
+      interruption_id?: string | null;
       /** Prior conversation turns forwarded by the calling agent. Used to seed memory in sub-agents invoked via context.invoke_agent(). Graph sub-agents receive history through build_turn_state; ReAct sub-agents receive it as a leading SystemMessage. */
       invocation_turns?: ConversationTurn[];
       /** Identifier of one HITL pause within a LangGraph interrupt. Echoed back from HumanInputRequest.occurrence_id when present and valid only on a resume request. */
@@ -590,6 +601,12 @@ export type RuntimeErrorEvent = {
   kind?: "execution_error";
   message: string;
   reason?: RuntimeStopReason | null;
+  sequence?: number;
+};
+export type ExecutionInterruptedRuntimeEvent = {
+  interruption_id: string;
+  kind?: "execution_interrupted";
+  request: HumanInputRequest;
   sequence?: number;
 };
 export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
