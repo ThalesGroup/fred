@@ -13,9 +13,11 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 # codeql[py/unused-global-variable]
-revision: str = "d7822fba0d40"
+revision: str = "d7822fba0d40"  # pragma: allowlist secret
 # codeql[py/unused-global-variable]
-down_revision: Union[str, Sequence[str], None] = "21e235382895"
+down_revision: Union[str, Sequence[str], None] = (
+    "21e235382895"  # pragma: allowlist secret
+)
 # codeql[py/unused-global-variable]
 branch_labels: Union[str, Sequence[str], None] = None
 # codeql[py/unused-global-variable]

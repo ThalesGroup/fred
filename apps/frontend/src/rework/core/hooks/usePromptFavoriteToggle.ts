@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import {
@@ -26,9 +27,12 @@ export function usePromptFavoriteToggle(teamId: string | undefined) {
   const { notifyApiError } = useApiErrorToast();
   const [addFavorite] = useAddPromptFavoriteMutation();
   const [removeFavorite] = useRemovePromptFavoriteMutation();
+  // A second click before the first answers would race it on the server.
+  const inFlight = useRef(new Set<string>());
 
   return async (prompt: { id: string; is_favorite?: boolean }) => {
-    if (!teamId) return;
+    if (!teamId || inFlight.current.has(prompt.id)) return;
+    inFlight.current.add(prompt.id);
     const arg = { teamId, promptId: prompt.id };
     try {
       await (prompt.is_favorite ? removeFavorite(arg) : addFavorite(arg)).unwrap();
@@ -37,6 +41,8 @@ export function usePromptFavoriteToggle(teamId: string | undefined) {
         summary: t("rework.teams.prompts.favorite.errorSummary"),
         fallbackDetail: t("rework.teams.prompts.favorite.errorDetail"),
       });
+    } finally {
+      inFlight.current.delete(prompt.id);
     }
   };
 }

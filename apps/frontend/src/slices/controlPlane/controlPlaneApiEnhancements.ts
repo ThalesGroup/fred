@@ -518,14 +518,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlanePrompt", id: "MARKETPLACE" },
       ],
     },
-    // Favorites are patched in place; the per-prompt tag then refreshes any other
-    // cached listing of that prompt (the same space under its alias, say).
+    // Patched in place rather than invalidated: a refetch of every listing per
+    // star click would flicker when several are clicked in a row.
     addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: {
-      invalidatesTags: (_, error, arg) => (error ? [] : [{ type: "ControlPlanePrompt", id: arg.promptId }]),
       onQueryStarted: (arg, lifecycle) => patchFavorite(arg, true, lifecycle),
     },
     removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: {
-      invalidatesTags: (_, error, arg) => (error ? [] : [{ type: "ControlPlanePrompt", id: arg.promptId }]),
       onQueryStarted: (arg, lifecycle) => patchFavorite(arg, false, lifecycle),
     },
     // Prompts marketplace (PROMPT-06). The community listing is a live view of

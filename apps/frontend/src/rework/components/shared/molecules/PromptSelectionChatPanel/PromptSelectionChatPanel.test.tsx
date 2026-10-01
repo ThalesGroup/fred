@@ -286,7 +286,7 @@ describe("PromptSelectionChatPanel", () => {
     await click(star ?? undefined);
 
     expect(h.toggleFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
-    expect(h.favoriteTeamIds.at(-1)).toBe(TEAM_ID);
+    expect(h.favoriteTeamIds[h.favoriteTeamIds.length - 1]).toBe(TEAM_ID);
     expect(onInsert).not.toHaveBeenCalled();
   });
 });

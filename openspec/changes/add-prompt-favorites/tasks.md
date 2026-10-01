@@ -18,5 +18,14 @@
 
 - [x] 3.1 Help Center Prompts page, fr and en.
 - [x] 3.2 English migration note (schema migration, no operator action).
-- [ ] 3.3 Run root `make code-quality`, frontend and control-plane `make test`, `make migration-check`, `openspec validate --strict`, `/code-review`; record the results here.
+- [x] 3.3 Run root `make code-quality`, frontend and control-plane `make test`, `make migration-check`, `openspec validate --strict`, `/code-review`; record the results here.
 - [ ] 3.4 Verify in the UI: toggle from both surfaces, both filters, light and dark themes, leaving a team.
+
+Verification (2026-10-01): root `make code-quality` passed all 16 modules (global `uv`
+override); control-plane `make test` 1,450 passed; frontend `make test` 3,166 passed,
+7 skipped, 4 failed — all in `useChatSse.test.tsx` (first-turn `ask_user`), which fail
+identically on `swift` and are unrelated; `alembic heads` one head, `alembic upgrade
+head` on the local Postgres, `make db-check-sqlite` (upgrade, check, downgrade) passed;
+`make migration-check` accepted 1 new note; `openspec validate --strict` passed. An
+independent review found no blocking issue; its refetch-flicker and double-click
+findings are fixed. Task 3.4 (UI check) awaits the developer.
