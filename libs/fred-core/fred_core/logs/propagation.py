@@ -127,14 +127,21 @@ def admit_delegated_log_context(
     header: str | None, *, user_id: str, run_id: str, agent_id: str
 ) -> None:
     """Apply only after principal/grant admission; grant identity always wins."""
-    bind_operation_context(user_id=user_id, run_id=run_id, agent_id=agent_id)
+    bind_received_log_context(header, user_id=user_id, run_id=run_id, agent_id=agent_id)
+
+
+def bind_received_log_context(header: str | None, **local_fields: object) -> None:
+    """Restore a bag only at an already trusted boundary, reserving local fields.
+
+    Callers own admission: delegated principal/grant for HTTP, existing trusted
+    scheduler/worker delivery for jobs. This helper grants no authority.
+    """
+    bind_operation_context(local_fields)
     if header is not None:
         values, reason = decode_log_context(header)
         if values is not None:
             values = {
-                key: value
-                for key, value in values.items()
-                if key not in {"user_id", "run_id", "agent_id"}
+                key: value for key, value in values.items() if key not in local_fields
             }
             try:
                 # Reserve the receiver's references and admitted identity before
@@ -145,6 +152,4 @@ def admit_delegated_log_context(
             else:
                 bind_operation_context(values)
         if reason is not None:
-            logger.warning(
-                "Delegated logging metadata dropped", extra={"reason": reason}
-            )
+            logger.warning("Logging metadata dropped", extra={"reason": reason})
