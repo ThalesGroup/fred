@@ -70,7 +70,7 @@ enable workload delegation rather than relying on backend person-token refresh.
    `delegation.accept_delegated_calls: true`. Where delegation is used, set
    `caller_roles_claim: [roles]`, `audience: <Fred API GUID>`, and
    `service_accounts_only: false`.
-6. Set `FRED_JWT_MAX_LIFETIME_SECONDS=5400` for the backends that validate
+6. Set `FRED_JWT_MAX_LIFETIME_SECONDS=6000` for the backends that validate
    Entra access tokens. Verify the actual token lifetime and claims in the
    test tenant before rollout.
 
@@ -146,7 +146,7 @@ For a real Entra tenant, register the clients described above, then supply their
 
 Set `ENTRA_CONTROL_PLANE_CLIENT_SECRET`, `ENTRA_KNOWLEDGE_FLOW_CLIENT_SECRET`
 and `ENTRA_AGENTIC_CLIENT_SECRET` in the respective backend and worker
-process environments. Set `FRED_JWT_MAX_LIFETIME_SECONDS=5400` on all three
+process environments. Set `FRED_JWT_MAX_LIFETIME_SECONDS=6000` on all three
 backends. The generated YAML contains no secret values. The six arguments are
 required; the generator will not publish an Entra profile with placeholder IDs.
 
@@ -247,7 +247,7 @@ export FRED_TEST_CONFIG_DIR="/tmp/fred-idp-tests/$FRED_TEST_PROFILE"
 export FRED_TEST_UV="$FRED_TEST_ROOT/apps/control-plane-backend/.venv/bin/uv"
 # OIDC profiles: allow the mock lifetime and ignore a stale Keycloak policy.
 if [ "$FRED_TEST_PROFILE" != keycloak ]; then
-  export FRED_JWT_MAX_LIFETIME_SECONDS=5400
+  export FRED_JWT_MAX_LIFETIME_SECONDS=6000
   export FRED_LOCAL_DELEGATION_FILE=
 else
   unset FRED_JWT_MAX_LIFETIME_SECONDS

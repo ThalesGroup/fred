@@ -24,7 +24,7 @@ Apply the control-plane Alembic migration that adds nullable user identity snaps
 
 ## Validation
 
-With the existing Keycloak configuration, sign in as platform administrator and run the platform self-test. For Entra, provide tenant and public client IDs to the local generator and set workload secrets and the 5400-second token lifetime in the environment. For ZITADEL, use the factory provisioner to generate client IDs, credentials and complete local configurations. For each optional provider, verify issuer discovery and backend startup, sign in as administrator, confirm the displayed identity and local-directory search, run the platform self-test, then check token refresh, agent document access through delegation and logout. Record the result before production rollout.
+With the existing Keycloak configuration, sign in as platform administrator and run the platform self-test. For Entra, provide tenant and public client IDs to the local generator and set workload secrets and the 6000-second token lifetime in the environment. For ZITADEL, use the factory provisioner to generate client IDs, credentials and complete local configurations. For each optional provider, verify issuer discovery and backend startup, sign in as administrator, confirm the displayed identity and local-directory search, run the platform self-test, then check token refresh, agent document access through delegation and logout. Record the result before production rollout.
 
 ## Rollback
 
