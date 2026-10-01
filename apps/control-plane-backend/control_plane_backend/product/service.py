@@ -3259,10 +3259,10 @@ async def prepare_execution(
             f"Unknown agent instance {agent_instance_id!r} for team {team_id!r}."
         )
     bind_operation_context(
+        {"session_id": session_id} if session_id else {},
         user_id=user.uid,
         team_id=str(team_id),
         agent_instance_id=agent_instance_id,
-        **({"session_id": session_id} if session_id else {}),
     )
     if not instance.enabled:
         raise ExecutionPreparationError(
@@ -4383,14 +4383,12 @@ async def create_session(
         if instance is not None:
             source_runtime_id = instance.source_runtime_id
     bind_operation_context(
+        {"agent_instance_id": request.agent_instance_id}
+        if request.agent_instance_id
+        else {},
         user_id=user.uid,
         team_id=str(team_id),
         session_id=request.session_id,
-        **(
-            {"agent_instance_id": request.agent_instance_id}
-            if request.agent_instance_id
-            else {}
-        ),
     )
     record = SessionMetadataRecord(
         session_id=request.session_id,

@@ -90,7 +90,12 @@ def operation_log_scope(
             pass
 
 
-def bind_operation_context(*, clear: tuple[str, ...] = (), **values: object) -> None:
+def bind_operation_context(
+    values: Mapping[str, object] | None = None,
+    *,
+    clear: tuple[str, ...] = (),
+    **fields: object,
+) -> None:
     """Retain resolved request IDs for completion; diagnostic limits fail open.
 
     Call after business admission/resolution, e.g. ``bind_operation_context(session_id=id)``.
@@ -98,7 +103,7 @@ def bind_operation_context(*, clear: tuple[str, ...] = (), **values: object) -> 
     Neither helper is an authorization source.
     """
     validated: LogContext = {}
-    for key, value in islice(values.items(), MAX_FIELDS):
+    for key, value in islice({**(values or {}), **fields}.items(), MAX_FIELDS):
         try:
             candidate = safe_context({**validated, key: value})
         except ValueError:
