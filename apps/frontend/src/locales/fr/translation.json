@@ -401,6 +401,7 @@
       "runErrorDetail": "Le prompt de cette commande n'a pas pu être lu. Réessayez dans un instant."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
+    "newConversation": "Nouvelle conversation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
       "geoAria": "Données cartographiques",
@@ -469,6 +470,10 @@
       "resetTooltip": "Réinitialiser"
     },
     "composerSettings": {
+      "askUserLabel": "Autoriser les questions de l’agent",
+      "askUserTitle": "Questions de l’agent",
+      "askUserOn": "Activées",
+      "askUserOff": "Désactivées",
       "attachFile": "Joindre un fichier",
       "boundLibrariesTitle": "Bibliothèques liées",
       "documentPickerTitle": "Sélecteur de documents",
@@ -519,7 +524,9 @@
       "attachmentDeleteFailedDetail": "Impossible de supprimer ce fichier. Veuillez réessayer.",
       "attachmentDeleteForbiddenDetail": "Vous n'avez pas la permission de supprimer ce fichier.",
       "attachmentUploadFailedDetail": "Impossible d'importer ce fichier. Veuillez réessayer.",
-      "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères."
+      "chatInputTooLong": "Votre message dépasse la limite de {{limit}} caractères.",
+      "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
+      "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
     "hitlFreeTextLabel": "Votre réponse",
     "hitlWaitingAria": "L'agent attend votre réponse",
@@ -530,6 +537,9 @@
     },
     "recordAudio": "Enregistrer de l'audio",
     "sendHitlAnswer": "Envoyer",
+    "skipHitlQuestion": "Passer",
+    "skipHitlQuestionAria": "Passer cette question",
+    "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
       "deleteAria": "Supprimer {{name}}",
@@ -675,6 +685,16 @@
     "confirmDeleteFolderTitle": "Supprimer le dossier ?",
     "confirmRemoveMessage": "Supprimer « {{doc}} » de « {{folder}} » ?",
     "confirmRemoveTitle": "Supprimer de la bibliothèque ?",
+    "conflictDecisionFor": "Que faire de « {{name}} »",
+    "conflictReplace": "Remplacer",
+    "conflictReplaceAll": "Tout remplacer",
+    "conflictSkip": "Ignorer",
+    "conflictSkipAll": "Tout ignorer",
+    "conflictSkippedSummary_one": "{{count}} fichier a été ignoré : le dossier garde le document qu'il contenait déjà.",
+    "conflictSkippedSummary_other": "{{count}} fichiers ont été ignorés : le dossier garde les documents qu'il contenait déjà.",
+    "conflictsMessage": "Choisissez de remplacer le document existant ou d'ignorer le fichier. Un document remplacé garde ses liens et sa place dans le dossier.",
+    "conflictsTitle_one": "{{count}} fichier existe déjà dans ce dossier",
+    "conflictsTitle_other": "{{count}} fichiers existent déjà dans ce dossier",
     "currentUsage": "Utilisation actuelle : ",
     "documents": "{{count}} document(s)",
     "download": "Télécharger",
@@ -714,8 +734,11 @@
     "removeSuccess": "Documents supprimés",
     "removedManyDocuments": "Documents supprimés de la bibliothèque.",
     "removedOneDocument": "Document supprimé de la bibliothèque.",
-    "save": "Enregistrer",
-    "saving": "Enregistrement en cours...",
+    "sameNameTwice_one": "Deux fichiers arriveraient dans ce dossier sous le nom {{names}}. Retirez-en un : un dossier ne peut pas contenir deux documents du même nom.",
+    "sameNameTwice_other": "Plusieurs fichiers arriveraient dans ce dossier sous des noms déjà pris par un autre fichier sélectionné : {{names}}. Retirez les doublons : un dossier ne peut pas contenir deux documents du même nom.",
+    "import": "Importer",
+    "importCount_one": "Importer {{count}} fichier",
+    "importCount_other": "Importer {{count}} fichiers",
     "searchOff": "Recherche désactivée",
     "searchOn": "Recherche activée",
     "searchPlaceholder": "Rechercher un document",
@@ -730,7 +753,7 @@
     "tooDeepTitle": "Dossier trop profond",
     "uploadAndProcess": "Importer et traiter",
     "uploadDestination": "Les fichiers seront ajoutés à",
-    "uploadDrawerTitle": "Ajouter un document",
+    "uploadDrawerTitle": "Ajouter des documents",
     "uploadInLibrary": "Ajouter fichiers",
     "uploadOnly": "Importer seulement",
     "viewOriginalPdf": "Voir le PDF original"
@@ -1506,6 +1529,75 @@
         "valueLabel": "Conversations"
       }
     },
+    "imports": {
+      "cancel": {
+        "action": "Annuler l'envoi",
+        "tooLate": "Ce fichier est déjà parti, il ne peut plus être annulé."
+      },
+      "conflict": {
+        "question": "Un document de ce nom existe déjà dans ce dossier.",
+        "replace": "Remplacer",
+        "rowHint": "Un fichier en attente de décision porte ce nom. Ouvrir le panneau des imports.",
+        "skip": "Ignorer"
+      },
+      "failure": {
+        "analysis": "L'analyse de ce fichier a échoué.",
+        "attemptsExhausted": "Plusieurs tentatives ont échoué.",
+        "connectionLost": "La connexion a été perdue pendant l'envoi.",
+        "extraction": "Le contenu de ce fichier n'a pas pu être lu.",
+        "indexing": "Le fichier a été lu, mais son indexation a échoué.",
+        "noAnswer": "L'envoi s'est terminé sans réponse du serveur pour ce fichier.",
+        "notSent": "Import interrompu",
+        "notSentDetail": "Ce fichier n'est jamais parti : l'import s'est arrêté avant son envoi. Renvoyez-le pour le terminer.",
+        "interrupted": "Le traitement s'est interrompu avant la fin.",
+        "notAllowed": "Vous n'avez pas le droit d'importer dans ce dossier.",
+        "preparation": "La préparation de ce fichier a échoué.",
+        "quotaExceeded": "L'espace de stockage de l'équipe est plein.",
+        "quotaExceededPersonal": "L'espace de stockage est plein.",
+        "quotaUnknown": "L'espace disponible n'a pas pu être vérifié. À réessayer.",
+        "serverUnavailable": "Le serveur n'a pas répondu.",
+        "ambiguousName": "Ce dossier contient déjà deux documents de ce nom. Supprimez le doublon avant de réimporter.",
+        "unreported": "Échec, sans cause rapportée.",
+        "unsupportedType": "Ce type de fichier n'est pas pris en charge.",
+        "upload": "L'envoi de ce fichier a échoué."
+      },
+      "panel": {
+        "collapse": "Masquer les imports",
+        "empty": "Aucun import en cours. Les fichiers que vous ajoutez apparaissent ici pendant leur traitement.",
+        "expand": "Afficher les imports",
+        "resize": "Redimensionner le panneau des imports",
+        "title": "Imports"
+      },
+      "phaseState": {
+        "current": "en cours",
+        "done": "terminé",
+        "failed": "échec",
+        "pending": "en attente",
+        "waiting": "en file d'attente"
+      },
+      "stepper": {
+        "label": "Progression de l'import",
+        "waiting": "En attente…",
+        "hint": {
+          "upload": "Le fichier quitte votre ordinateur pour rejoindre sa destination. C'est la seule étape qui dépend de votre connexion.",
+          "uploading": "Le type de document est reconnu, et tout ce qu'il faudra pour le traiter est mis de côté.",
+          "processing": "Le texte est extrait du document, page par page, pour devenir exploitable.",
+          "done": "Le document est prêt. Les agents peuvent maintenant le retrouver et le citer.",
+          "doneUpload": "Le fichier est arrivé à destination. Il n'a pas été analysé : ce mode se contente de l'envoyer.",
+          "indexing": "Le contenu est rangé pour que les agents puissent le retrouver et le citer dans leurs réponses.",
+          "waiting": "Le fichier est arrivé. Son analyse démarre dès qu'une place se libère."
+        }
+      },
+      "resend": {
+        "action": "Renvoyer",
+        "wrongFile": "Aucun des fichiers choisis ne porte le nom attendu : {{name}}."
+      },
+      "retry": {
+        "action": "Réessayer",
+        "relaunchFromRow": "Ce document est déjà arrivé : relancez son traitement depuis sa ligne dans le tableau.",
+        "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."
+      }
+    },
     "tokenUsageImpact": {
       "costTitle": "Coût estimé",
       "costValue": "{{cost}} $ (estimé)",
@@ -1669,6 +1761,9 @@
       "validate": "Accepter les CGU"
     },
     "hitlPrompt": {
+      "answerSummary": "Question et réponse",
+      "selected": "Choisi",
+      "skipped": "Passé",
       "accepted": "Accepté",
       "refused": "Refusé"
     },
@@ -2301,11 +2396,19 @@
         "terminalCount": "Terminées ({{count}})",
         "title": "Tâches"
       },
+      "importStage": {
+        "upload": "Envoi du fichier",
+        "uploadDone": "Envoi terminé",
+        "analysis": "Analyse du document"
+      },
       "ingestionStep": {
         "uploading": "Préparation du document",
         "processing": "Extraction du contenu",
         "indexing": "Indexation",
-        "done": "Traitement terminé"
+        "listed": "Préparation du document",
+        "vectorized": "Contenu indexé",
+        "skip": "Déjà à jour",
+        "done": "Ingestion terminée"
       },
       "popover": {
         "acknowledge": "Ignorer",
@@ -2325,6 +2428,7 @@
         "succeeded": "Terminé"
       },
       "time": {
+        "daysAgo": "il y a {{count}} j",
         "hoursAgo": "il y a {{count}} h",
         "justNow": "à l'instant",
         "minAgo": "il y a {{count}} min"

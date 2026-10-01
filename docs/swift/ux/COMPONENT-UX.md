@@ -2682,6 +2682,8 @@ what surfaced it here (this dialog's `Annuler` button, `color="on-surface"`).
 Fixed at the shared-component level (`--btn-border: var(--outline)` in both
 `Button.module.scss` and `IconButton.module.scss`), so every existing
 `variant="outlined"` call site is corrected without touching call sites.
+`IconButton`'s outlined border has since moved to the lighter `outline-muted`
+token (2026-10-01); `Button` keeps `outline`.
 
 #### Open UX issues
 
@@ -3426,10 +3428,14 @@ drawer spans the full page height for better viewer visualization (changed 2026-
 the drawers lived inside `.contentRow` and reflowed only the content, the panel sliding **under**
 the full-width header; before that again the header lived inside the main column and shrank on
 open). The `topBar` is an inset rounded card — `--radius-s` corners, 12px top/left/right margin,
-flush bottom (2026-09-01). The launcher rail is a **page-root in-flow column** at the far right
-(see "Capability side-panel launcher rail"), not part of `.pageBody`. The
-`data-picker-top-boundary` attribute stays on the header so the composer's anchored pickers still
-stop just below it. The composer is
+flush bottom (2026-09-01). Its right side offers a **New conversation** outlined icon button
+(`add_comment`, with a tooltip) when a session is open. The action clears the session selection
+for the same agent and leaves the previous conversation available in the sidebar; a new session
+is created on first send. Its spectrum border appears on hover or keyboard focus and stays still
+at rest and with reduced motion. Every empty conversation, however it was started, shows the agent's
+icon, name, and role above the greeting, stacked and centred in an `outline-muted` bordered box (a stable 200px width and 144px minimum height, shrinking to fit narrow screens; `radius-m`, `spacing-m` padding; round `secondary-container` icon,
+name in `title-medium`, role in `body-medium`; long labels truncate and reveal their full text on hover), because the header's agent name is easy to miss; the `topBar` itself is hidden until the first send binds a session (an existing session with an empty history keeps it). The launcher rail is a **page-root in-flow column** at the far right
+(see "Capability side-panel launcher rail"), not part of `.pageBody`. The composer is
 built once (a single `composer` element) and placed either centered in the empty "new
 conversation" state or in the sticky `inputOverlay` mid-conversation — same structure both times
 (2026-08-06, see `RichInputField`'s "Resolved" entry). `topSlot` holds `ComposerOptionChips` —
@@ -3794,6 +3800,17 @@ pre-`bind_libraries` library scope stays binding). The legacy tool's "Bound
 document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
+
+### Resources table — columns beside the import panel (2026-10-01)
+
+In the Documents, Filesystem and Agents workspaces the name column is
+`minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
+between them (size, created, author, status) are `minmax(0, <usual width>)`. They
+keep their usual width while there is room and are the ones that shrink, truncated,
+when the import panel widens, so the name and the row's more button always stay
+visible. `--import-panel-max` still reserves 660px for the table. The workspace has
+no hard `min-width`: a 660px one pushed the open panel off screen whenever both did
+not fit.
 
 ### `DocumentWorkspace` — refresh control (2026-09-11)
 
@@ -5036,3 +5053,25 @@ Fixed, non-editable text before the input's own text, mirroring the existing
 deleted. `--on-surface-retreat`, with the input padded out of its way. Its first
 use is the `/` on the prompt library's command field, so the field reads as the
 thing the user will type in the chat.
+
+### Agent questions in managed chat (2026-09-29)
+
+The tune menu contains a platform-owned on/off row for agent questions. It
+starts enabled, persists by conversation, and affects new turns. A pending
+question stays answerable after the row is switched off. The existing HITL
+card shows a single-choice list, a free-text field, or both. A choice may carry
+the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. Choices
+appear in a centered column for both agent questions and tool approval. An
+optional choice description appears beneath its label inside the same
+button. After an agent question is answered or skipped, a compact card below
+the matching `ask_user` trace line shows the question and response immediately.
+The tool drawer lists the offered choices and highlights the selected one.
+While the person is answering, the `ask_user` tool line stays in progress.
+For free text, a compact filled Send button sits directly left of Skip in the
+card footer. Choice-only questions keep Skip at the bottom right.
+The chat composer blocks new messages and commands in that conversation while
+the question or its resume is in progress, then becomes available again.
+Approval actions use the same neutral outline style and offer a conversation-scoped
+choice; the browser answers later matching approval pauses through the existing
+resume flow. Skip at the bottom right and close at the top right appear only
+for `stage="agent_question"`. Both resume the turn as skipped. A skipped answer is shown in the same card, including after history reload.

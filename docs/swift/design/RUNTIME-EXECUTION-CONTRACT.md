@@ -6369,3 +6369,33 @@ selects a renderer and nothing more, and a malformed value is dropped rather
 than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
+
+### 8.99 Agent-initiated human questions
+
+An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
+`RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
+platform tool explicitly under that control. An absent value or `false` leaves
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, up to
+four distinct single-choice options, and/or free text. The agent selects the
+most relevant options before calling; a longer list is rejected, never trimmed.
+Its injected tool call ID is hidden from
+the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
+`stage="agent_question"`. A collision with a declared, provider or capability
+tool named `ask_user` rejects executor construction.
+
+The tool pauses through LangGraph before any external effect. A resume must carry
+the pending interrupt and occurrence IDs. After authorization and before the
+single-use claim, the runtime validates a selected option against the pending
+question. `resume_payload` may be `{"choice_id":"id"}`, `{"text":"..."}`,
+both fields, or `{"skipped":true}`. Skip cannot carry an answer. The tool result
+is compact JSON with `status="answered"` and the supplied fields, or
+`status="skipped"` and a French or English `instruction` that tells the agent to continue with stated assumptions. The turn language chooses French when it starts with `fr`; English is the fallback. Each sibling question keeps its own tool call identity.
+Approval gates retain their existing resume behavior and do not accept skip.
+A Graph question pause leaves its tool call in progress; only the resumed call
+emits a tool result. The no-LLM Graph test assistant exercises confirmation,
+choice, free text, and choice with comment through this platform tool.
+
+`HitlResponsePart.skipped` is optional and defaults to false for old history.
+A skipped question writes a response row even without choice or text. Graph
+choice helpers expose the same typed answer through `choice_step_response`;
+`choice_step` keeps its string return contract for existing authors.

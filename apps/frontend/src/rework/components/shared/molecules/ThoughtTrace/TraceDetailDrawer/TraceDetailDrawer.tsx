@@ -17,6 +17,8 @@ import type { ChatMessage } from "../../../../../../slices/runtime/runtimeOpenAp
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { SourcesPanel } from "../../SourcesPanel/SourcesPanel";
 import { InlineDrawer } from "../../InlineDrawer/InlineDrawer";
+import { HitlChoiceRecap } from "../../HitlAnswerSummary/HitlChoiceRecap";
+import { hitlAnswerSummaryForTool } from "@rework/utils/hitlAnswerSummary";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
 import type { RagSearchResult, SqlQueryResult, TraceEntry } from "../../../../../utils/traceUtils";
 import {
@@ -170,6 +172,10 @@ function GenericToolDetail({ entry }: { entry: Extract<TraceEntry, { kind: "comb
 
 /** Dispatches a tool-result entry to the richest view its content shape supports. */
 function ToolDetail({ entry, messages }: { entry: Extract<TraceEntry, { kind: "combo" }>; messages?: ChatMessage[] }) {
+  if (toolName(entry.call) === "ask_user") {
+    const summary = messages ? hitlAnswerSummaryForTool(messages, entry.call) : null;
+    if (summary) return <HitlChoiceRecap summary={summary} />;
+  }
   if (tabularToolKind(toolName(entry.call))) {
     const tabular =
       entry.result && toolResultOk(entry.result)

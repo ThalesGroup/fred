@@ -29,6 +29,11 @@ import {
   selectActiveTaskForTarget,
   makeSelectSettledTargetsOfType,
   makeSelectTaskTargetsOfType,
+  uploadStarted,
+  uploadHandedOff,
+  uploadFinished,
+  uploadFailed,
+  makeSelectImportTasks,
   EVICTION_DELAY_MS,
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
@@ -62,6 +67,9 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     step: null,
     error: null,
     lastSeq: -1,
+    stage: "analysis",
+    conflict: null,
+    teamId: "team-1",
     registeredAt: 1000,
     terminalAt: null,
     acknowledgedAt: null,
@@ -617,5 +625,96 @@ describe("ingestion terminal state", () => {
     const initial: TasksState = { byId: { t1: vm({ state, lastSeq: 2, error: "original", terminalAt: 123 }) } };
     const result = reducer(initial, taskEventReceived(ev({ state: "running", seq: 3 })));
     expect(result.byId.t1).toEqual(initial.byId.t1);
+  });
+});
+
+describe("the two stages of an import", () => {
+  const started = () =>
+    reducer(empty(), uploadStarted({ localId: "local-1", filename: "report.pdf", teamId: "team-1" }));
+
+  it("lists a file while its bytes are still going up", () => {
+    const s = started();
+    expect(s.byId["local-1"].stage).toBe("upload");
+    expect(s.byId["local-1"].state).toBe("running");
+    // No server task yet: nothing to subscribe to, nothing to acknowledge.
+    expect(s.byId["local-1"].localOnly).toBe(true);
+    expect(makeSelectImportTasks("team-1")(root(s)).map((t) => t.target?.label)).toEqual(["report.pdf"]);
+    // Another team's page is not where you follow this import.
+    expect(makeSelectImportTasks("team-2")(root(s))).toEqual([]);
+  });
+
+  it("leaves out an ingestion of a document already in the corpus", () => {
+    // Relaunching processing on twenty existing documents is not twenty
+    // imports, and must not fill the panel or its badge.
+    const s = reducer(
+      empty(),
+      taskRegistered({
+        taskId: "relaunch-1",
+        kind: "ingestion",
+        target: { type: "document", id: "doc-1", label: "already-there.pdf" },
+        teamId: "team-1",
+        stage: null,
+      }),
+    );
+    expect(makeSelectImportTasks("team-1")(root(s))).toEqual([]);
+  });
+
+  it("carries no document id until the server has written one", () => {
+    // An invented id would make every selector that resolves a task back to a
+    // document row match a document that does not exist.
+    expect(makeSelectTaskTargetsOfType("document")(root(started()))).toEqual([]);
+  });
+
+  it("shows a transferred file as being analysed, never as ready", () => {
+    const handed = reducer(
+      started(),
+      uploadHandedOff({ localId: "local-1", taskId: "task-1", documentUid: "doc-1", filename: "report.pdf" }),
+    );
+
+    // The transfer is over; the document is not usable until its ingestion
+    // task says so, so nothing here may settle on success.
+    expect(handed.byId["local-1"]).toBeUndefined();
+    expect(handed.byId["task-1"].stage).toBe("analysis");
+    expect(handed.byId["task-1"].state).toBe("pending");
+    expect(handed.byId["task-1"].terminalAt).toBeNull();
+
+    // And the stream's own end-of-transfer line changes nothing.
+    const after = reducer(handed, uploadFinished({ localId: "local-1" }));
+    expect(after.byId["task-1"].state).toBe("pending");
+
+    const ready = reducer(handed, taskEventReceived(ev({ task_id: "task-1", state: "succeeded", seq: 1 })));
+    expect(ready.byId["task-1"].state).toBe("succeeded");
+  });
+
+  it("keeps the file in place in the list when it crosses over", () => {
+    const s = started();
+    const handed = reducer(
+      s,
+      uploadHandedOff({ localId: "local-1", taskId: "task-1", documentUid: "doc-1", filename: "report.pdf" }),
+    );
+    // Same start time, so the panel's oldest-first list does not reshuffle
+    // under the eye as each file is accepted.
+    expect(handed.byId["task-1"].registeredAt).toBe(s.byId["local-1"].registeredAt);
+  });
+
+  it("settles a file that never gets a task — upload-only, or skipped", () => {
+    const s = reducer(started(), uploadFinished({ localId: "local-1" }));
+    expect(s.byId["local-1"].state).toBe("succeeded");
+  });
+
+  it("fails a transfer that never reached a task, since no task will report it", () => {
+    const s = reducer(started(), uploadFailed({ localId: "local-1", error: "Network error" }));
+    expect(s.byId["local-1"].state).toBe("failed");
+    expect(s.byId["local-1"].error).toBe("Network error");
+  });
+
+  it("leaves a handed-off task alone when a late transfer outcome arrives", () => {
+    const handed = reducer(
+      started(),
+      uploadHandedOff({ localId: "local-1", taskId: "task-1", documentUid: "doc-1", filename: "report.pdf" }),
+    );
+    const running = reducer(handed, taskEventReceived(ev({ task_id: "task-1", state: "running", seq: 1 })));
+
+    expect(reducer(running, uploadFailed({ localId: "task-1", error: "late" })).byId["task-1"].state).toBe("running");
   });
 });

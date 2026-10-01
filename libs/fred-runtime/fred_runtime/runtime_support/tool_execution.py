@@ -30,6 +30,7 @@ from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.runtime import SpanPort
 from langchain_core.messages.tool import ToolMessage
+from langgraph.errors import GraphBubbleUp
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_context import get_runtime_context
@@ -157,6 +158,10 @@ class ToolExecution:
                     == "true",
                 )
                 result = await invoke()
+            except GraphBubbleUp:
+                if kpi_dims is not None:
+                    kpi_dims["status"] = "awaiting_human"
+                raise
             except asyncio.CancelledError:
                 if confined:
                     emit_audit_log(

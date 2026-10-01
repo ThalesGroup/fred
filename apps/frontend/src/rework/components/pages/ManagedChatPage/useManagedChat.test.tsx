@@ -42,8 +42,13 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+vi.mock("../../../../security/KeycloakService", () => ({
+  KeyCloakService: { GetUserId: () => "alice" },
+}));
+
+const translate = vi.hoisted(() => (key: string) => key);
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({ t: translate, i18n: { language: "en" } }),
 }));
 
 // Reactive stand-in for react-router-dom's useSearchParams: bindSessionId
@@ -144,6 +149,8 @@ const composerValue = {
   ragScope: "general" as const,
   selectedLibraryIds: [] as string[],
   selectedDocumentUids: [] as string[],
+  askUser: true,
+  setAskUser: vi.fn(),
   setSearchPolicy: vi.fn(),
   setRagScope: vi.fn(),
   setSelectedLibraryIds: vi.fn(),
@@ -238,6 +245,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 
 import { useManagedChat } from "./useManagedChat";
 import { clearSessionHistoryCache, getCachedSessionHistory } from "./sessionHistoryCache";
+import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useManagedChat>) => void }) {
   const hook = useManagedChat({ teamId: "team-1", agentInstanceId: "agent-1" });
@@ -283,6 +291,8 @@ describe("useManagedChat — session write reliability", () => {
   };
 
   beforeEach(() => {
+    localStorage.clear();
+    composerValue.askUser = true;
     clearSessionHistoryCache();
     chatSseMessages = [];
     chatSseMaxChatInputChars = undefined;
@@ -404,6 +414,22 @@ describe("useManagedChat — session write reliability", () => {
 
     expect(latest.inputTooLong).toBe(false);
     expect(sendMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])("keeps the ask_user choice for a first send before controls load (%s)", async (askUser) => {
+    composerValue.askUser = askUser;
+    mount();
+    act(() => {
+      latest.setInput("first question");
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+    });
+
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    expect(sendMock.mock.calls[0][2]).toMatchObject({ ask_user: askUser });
   });
 
   // #2369: a brand-new conversation's composer settings live only in memory —
@@ -710,6 +736,9 @@ describe("useManagedChat — session write reliability", () => {
     act(() => {
       latest.startNewConversation();
     });
+    expect(latest.sessionId).toBeNull();
+    expect(registerSessionCalls).toHaveLength(1);
+
     act(() => {
       latest.setInput("message for B");
     });
@@ -1343,6 +1372,115 @@ describe("useManagedChat — session write reliability", () => {
     rerender();
   };
 
+  const toolApprovalEvent = {
+    ...awaitingHumanEvent,
+    payload: {
+      ...awaitingHumanEvent.payload,
+      stage: "tool_approval",
+      pending_calls: [{ tool_call_id: "call-1", tool_name: "write_file", args_preview: "{}" }],
+      choices: [
+        { id: "proceed", label: "Accept" },
+        { id: "cancel", label: "Reject" },
+      ],
+    },
+  };
+  const grantScope = { userId: "alice", agentInstanceId: "agent-1", sessionId: "session-1" };
+
+  it("remembers only the gated tool after the approval resume is accepted", async () => {
+    localStorage.clear();
+    sendHitlResumeMock.mockImplementationOnce(async (...args: unknown[]) => {
+      (args[6] as (() => void) | undefined)?.();
+      return true;
+    });
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(toolApprovalEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("proceed", undefined, false, true);
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      toolApprovalEvent,
+      "proceed",
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+      expect.any(Function),
+    );
+    expect(hasToolApprovalGrants(grantScope, ["write_file"])).toBe(true);
+    expect(hasToolApprovalGrants(grantScope, ["delete"])).toBe(false);
+  });
+
+  it("does not remember a conversation approval when the resume was not accepted", async () => {
+    sendHitlResumeMock.mockResolvedValueOnce(false);
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(toolApprovalEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("proceed", undefined, false, true);
+      await Promise.resolve();
+    });
+
+    expect(hasToolApprovalGrants(grantScope, ["write_file"])).toBe(false);
+    expect(latest.pendingHitl).toEqual(toolApprovalEvent);
+  });
+
+  it("automatically resumes only when every gated tool was remembered", async () => {
+    localStorage.clear();
+    rememberToolApprovalGrants(grantScope, ["write_file"]);
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(toolApprovalEvent));
+    rerender();
+    await tick();
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      toolApprovalEvent,
+      "proceed",
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+    );
+
+    const mixedBatch = {
+      ...toolApprovalEvent,
+      exchange_id: "exch-2",
+      payload: {
+        ...toolApprovalEvent.payload,
+        interrupt_id: "interrupt-b",
+        pending_calls: [
+          ...toolApprovalEvent.payload.pending_calls,
+          { tool_call_id: "call-2", tool_name: "delete", args_preview: "{}" },
+        ],
+      },
+    };
+    act(() => capturedOnAwaitingHuman?.(mixedBatch));
+    rerender();
+    expect(latest.pendingHitl).toEqual(mixedBatch);
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores a failed automatic resume without retrying the same occurrence", async () => {
+    localStorage.clear();
+    rememberToolApprovalGrants(grantScope, ["write_file"]);
+    sendHitlResumeMock.mockResolvedValueOnce(false);
+    mount();
+    bindSession("session-1");
+    await act(async () => {
+      capturedOnAwaitingHuman?.(toolApprovalEvent);
+      await Promise.resolve();
+    });
+    rerender();
+    expect(latest.pendingHitl).toEqual(toolApprovalEvent);
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+  });
+
   it("blocks over-limit HITL free text locally while leaving fixed choices available", async () => {
     chatSseMaxChatInputChars = 5;
     mount();
@@ -1370,7 +1508,14 @@ describe("useManagedChat — session write reliability", () => {
     await act(async () => {
       latest.handleHitlAnswer("proceed");
     });
-    expect(sendHitlResumeMock).toHaveBeenCalledWith(freeTextEvent, "proceed", undefined, expect.any(Object), undefined);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      freeTextEvent,
+      "proceed",
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+    );
   });
 
   it("accepts HITL free text at the exact configured code-point limit", async () => {
@@ -1399,7 +1544,50 @@ describe("useManagedChat — session write reliability", () => {
       "🙂🙂🙂🙂🙂",
       expect.any(Object),
       undefined,
+      false,
     );
+  });
+
+  it("blocks new turns while an agent question is pending and during its resume", async () => {
+    let resolveResume: (reached: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(() => new Promise<boolean>((resolve) => (resolveResume = resolve)));
+    mount();
+    bindSession("session-1");
+    const question = {
+      ...awaitingHumanEvent,
+      payload: { ...awaitingHumanEvent.payload, stage: "agent_question" },
+    };
+    act(() => {
+      latest.setInput("next message");
+      capturedOnAwaitingHuman?.(question);
+    });
+    rerender();
+
+    await act(async () => {
+      await latest.handleSend();
+      await latest.runCommand({ text: "command body", command: { command: "test" } });
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+
+    act(() => latest.handleHitlAnswer(undefined, undefined, true));
+    rerender();
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.resumingAgentQuestionSessionId).toBe("session-1");
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveResume(true);
+      await Promise.resolve();
+    });
+    rerender();
+    expect(latest.resumingAgentQuestionSessionId).toBeNull();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
   });
 
   it("restores the HITL prompt when the resume never reached the backend", async () => {
@@ -1426,6 +1614,7 @@ describe("useManagedChat — session write reliability", () => {
       "  complete answer 🙂  ",
       expect.any(Object),
       undefined,
+      false,
     );
     expect(latest.pendingHitl).toEqual(awaitingHumanEvent);
     expect(latest.hitlFreeText).toBe("  complete answer 🙂  ");

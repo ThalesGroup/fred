@@ -54,13 +54,13 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
   streamUploadOrProcessDocument: () => Promise.resolve([]),
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
+    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
+  ],
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [vi.fn()],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
-}));
-vi.mock("../../../../features/tasks/taskSlice", () => ({
-  taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";

@@ -14,7 +14,7 @@
 
 import styles from "./ButtonGroupItem.module.scss";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
-import { ComponentSize, ColorTheme } from "@shared/utils/Type.ts";
+import { ButtonSize, ColorTheme } from "@shared/utils/Type.ts";
 import { ComponentPropsWithRef } from "react";
 
 export interface ButtonGroupItemProps extends ComponentPropsWithRef<"button"> {
@@ -29,7 +29,9 @@ export interface ButtonGroupItemProps extends ComponentPropsWithRef<"button"> {
 }
 
 export interface ButtonGroupItemPrivateProps {
-  size: ComponentSize;
+  /** Only the tiers this component styles: `xs` has no rule here and
+   *  rendered an item with no height and no padding. */
+  size: ButtonSize;
   color: ColorTheme;
   selected: boolean;
   /** Drives ARIA role/state: a mutually-exclusive "radio" pick or a "tabs" strip. */

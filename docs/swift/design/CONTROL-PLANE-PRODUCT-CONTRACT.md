@@ -4245,3 +4245,16 @@ remain active; absence from a browser's task cache never proves abandonment.
 Raw-file preparation is outside the admission transaction: this does not make
 external content writes atomic with SQL, or recover historical unbound tasks.
 The source synchronization preparation contract is unchanged.
+
+## Agent-question composer control
+
+Managed execution preparation appends a platform-owned `ask_user_toggle`
+`ChatControlDescriptor` with `params.default=true` for a person with an own
+credential. It is independent of capability chat controls and model reasoning.
+The frontend stores the choice per conversation and sends `RuntimeContext.ask_user`
+only when the turn's preparation offers the descriptor. It retains the choice
+before eager controls load, so the first turn uses the fresh preparation and the
+enabled default. `false` disables questions on new turns; an absent descriptor
+sends no field. A question already pending remains
+answerable when the control is switched off during its pause. Asserted-person
+preparation does not offer the control.

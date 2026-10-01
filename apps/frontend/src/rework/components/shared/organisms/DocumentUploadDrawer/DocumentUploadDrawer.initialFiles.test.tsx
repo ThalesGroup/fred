@@ -31,7 +31,12 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  // Renders the count too: the action button's whole job is to say how many
+  // files it is about to import.
+  useTranslation: () => ({
+    t: (key: string, o?: { count?: number }) => (o?.count ? `${key}:${o.count}` : key),
+    i18n: { language: "en" },
+  }),
 }));
 vi.mock("react-redux", () => ({ useDispatch: () => () => {} }));
 vi.mock("react-dropzone", () => ({
@@ -50,15 +55,15 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // Precheck answers "allowed" so saves proceed; the denial path has its own
   // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
+    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
+  ],
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
     () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
   ],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
-}));
-vi.mock("../../../../features/tasks/taskSlice", () => ({
-  taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -94,13 +99,22 @@ describe("DocumentUploadDrawer initialFiles seeding", () => {
 
     expect(container.textContent).toContain("a.pdf");
     expect(container.textContent).toContain("b.docx");
-    const save = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("documentLibrary.save"));
+    const save = [...container.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("documentLibrary.importCount"),
+    );
     expect(save?.disabled).toBe(false);
+    // Says what it does and to how many files — "Save" said neither, and
+    // nothing is being saved here.
+    expect(save?.textContent).toBe("documentLibrary.importCount:2");
   });
 
   it("still opens on the empty dropzone without initialFiles", () => {
     render(<DocumentUploadDrawer isOpen onClose={() => {}} />);
 
     expect(container.textContent).toContain("documentLibrary.dropFiles");
+    // Nothing picked yet: no count to give, so the button just names the act.
+    expect([...container.querySelectorAll("button")].some((b) => b.textContent === "documentLibrary.import")).toBe(
+      true,
+    );
   });
 });

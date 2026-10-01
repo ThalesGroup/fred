@@ -15,42 +15,26 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
-import type { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { hitlRendererForTool } from "@rework/features/capabilities/hitlRendererRegistry";
 import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
   event: RuntimeAwaitingHumanEvent;
-  onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  onAnswer: (
+    answer: string | boolean | undefined,
+    freeText?: string,
+    skipped?: boolean,
+    rememberApproval?: boolean,
+  ) => void;
   readonly?: boolean;
   maxChatInputChars?: number;
   freeTextValue?: string;
   onFreeTextChange?: (value: string) => void;
-}
-
-/**
- * Visual treatment for one HITL choice button. The tool-approval gate
- * (`build_tool_approval_request`, the only HITL prompt in the system today)
- * always uses the stable ids "proceed"/"cancel" — never localized, unlike
- * `label` — so a semantic success/error pairing keys off them directly:
- * Accept reads as a positive (success) action, Reject as a destructive
- * (error) one. A future bespoke Graph-authored question with different
- * choice ids falls back to the previous default/non-default styling.
- */
-function choiceButtonStyle(choice: { id: string; default?: boolean }): {
-  color: ColorTheme;
-  variant: ButtonVariant;
-} {
-  if (choice.id === "proceed") return { color: "success", variant: "filled" };
-  if (choice.id === "cancel") return { color: "error", variant: "filled" };
-  return {
-    color: choice.default ? "primary" : "on-surface-retreat",
-    variant: choice.default ? "filled" : "text",
-  };
 }
 
 export function HitlPrompt({
@@ -63,11 +47,13 @@ export function HitlPrompt({
 }: HitlPromptProps) {
   const { t } = useTranslation();
   const payload = event.payload;
+  const isAgentQuestion = payload.stage === "agent_question";
   const [localFreeText, setLocalFreeText] = useState("");
   const freeText = freeTextValue ?? localFreeText;
   const characterInfoId = useId();
   const characterCount = countUnicodeCodePoints(freeText);
   const isOverLimit = maxChatInputChars !== undefined && characterCount > maxChatInputChars;
+  const skipQuestion = () => onAnswer(undefined, undefined, true);
   const setFreeText = (value: string) => {
     if (onFreeTextChange) onFreeTextChange(value);
     else setLocalFreeText(value);
@@ -75,10 +61,21 @@ export function HitlPrompt({
 
   return (
     <div
-      className={`${styles.card} ${!readonly ? styles.active : ""}`}
+      className={`${styles.card} ${!readonly ? styles.active : ""} ${isAgentQuestion && !readonly ? styles.skippable : ""}`}
       role="group"
       aria-label={t("chatbot.hitlWaitingAria")}
     >
+      {isAgentQuestion && !readonly && (
+        <IconButton
+          className={styles.skipClose}
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          aria-label={t("chatbot.skipHitlQuestionAria")}
+          title={t("chatbot.skipHitlQuestionAria")}
+          onClick={skipQuestion}
+        />
+      )}
       {payload.title && <p className={styles.title}>{payload.title}</p>}
       {payload.question && <p className={styles.question}>{payload.question}</p>}
 
@@ -91,25 +88,45 @@ export function HitlPrompt({
         return Renderer ? <Renderer key={call.tool_call_id || call.tool_name} call={call} /> : null;
       })}
 
-      {/* Answered questions hide their choices — the answer is already written into the
-          chat as the turn right after this card, so a disabled button row would be redundant. */}
+      {/* Read-only prompts hide choices; answered agent questions show their
+          result under the matching tool line instead. */}
       {!readonly && payload.choices && payload.choices.length > 0 && (
         <div className={styles.choices}>
           {payload.choices.map((c) => {
-            const { color, variant } = choiceButtonStyle(c);
             return (
               <Button
                 key={c.id}
-                color={color}
-                variant={variant}
-                size="small"
-                style={{ order: c.default ? 2 : 1 }}
-                onClick={() => onAnswer(c.id)}
+                className={c.description ? styles.choiceWithDescription : undefined}
+                color="primary"
+                variant="outlined"
+                size="medium"
+                disabled={isOverLimit}
+                onClick={() => onAnswer(c.id, freeText.trim() ? freeText : undefined)}
               >
-                {c.label}
+                {c.description ? (
+                  <span className={styles.choiceContent}>
+                    <span>{c.label}</span>
+                    <span className={styles.choiceDescription}>{c.description}</span>
+                  </span>
+                ) : (
+                  c.label
+                )}
               </Button>
             );
           })}
+          {payload.stage === "tool_approval" &&
+            (payload.pending_calls?.length ?? 0) > 0 &&
+            payload.pending_calls?.every((call) => call.tool_name) &&
+            payload.choices.some((choice) => choice.id === "proceed") && (
+              <Button
+                color="primary"
+                variant="outlined"
+                size="medium"
+                onClick={() => onAnswer("proceed", undefined, false, true)}
+              >
+                {t("chatbot.approveForConversation")}
+              </Button>
+            )}
         </div>
       )}
 
@@ -119,20 +136,38 @@ export function HitlPrompt({
             label={t("chatbot.hitlFreeTextLabel")}
             value={freeText}
             onChange={(e) => setFreeText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && freeText.trim() && !isOverLimit) {
+                e.preventDefault();
+                onAnswer(undefined, freeText);
+              }
+            }}
             rows={2}
             aria-invalid={isOverLimit || undefined}
             aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
           />
           <CharacterLimitNotice id={characterInfoId} count={characterCount} limit={maxChatInputChars} />
-          <Button
-            color="primary"
-            variant="filled"
-            size="small"
-            disabled={!freeText.trim() || isOverLimit}
-            onClick={() => onAnswer(undefined, freeText)}
-          >
-            {t("chatbot.sendHitlAnswer")}
-          </Button>
+        </div>
+      )}
+
+      {!readonly && (payload.free_text || isAgentQuestion) && (
+        <div className={styles.actions}>
+          {payload.free_text && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="small"
+              disabled={!freeText.trim() || isOverLimit}
+              onClick={() => onAnswer(undefined, freeText)}
+            >
+              {t("chatbot.sendHitlAnswer")}
+            </Button>
+          )}
+          {isAgentQuestion && (
+            <Button color="on-surface-retreat" variant="text" size="small" onClick={skipQuestion}>
+              {t("chatbot.skipHitlQuestion")}
+            </Button>
+          )}
         </div>
       )}
     </div>

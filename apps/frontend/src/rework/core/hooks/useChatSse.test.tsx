@@ -229,6 +229,34 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it.each([
+    { offered: true, requested: true, expected: true },
+    { offered: true, requested: false, expected: false },
+    { offered: true, requested: undefined, expected: true },
+    { offered: false, requested: true, expected: undefined },
+  ])(
+    "uses the current preparation for first-turn ask_user availability ($offered, $requested)",
+    async ({ offered, requested, expected }) => {
+      prepareExecutionImpl = async () => ({
+        execute_stream_url: "http://runtime.test/execute_stream",
+        chat_controls: offered
+          ? [{ capability_id: "platform", widget: "ask_user_toggle", params: { default: true } }]
+          : [],
+        capability_base_urls: {},
+      });
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+      mount();
+
+      await act(async () => {
+        await latest.send("first question", "session-1", requested === undefined ? {} : { ask_user: requested });
+      });
+
+      const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+      expect(body.runtime_context.ask_user).toBe(expected);
+      fetchSpy.mockRestore();
+    },
+  );
+
   it("forwards a caller-supplied prompt command descriptor on runtime_context", async () => {
     // The trigger slice sets `command` on the context it already passes; the
     // send path must carry it through untouched, and leave it absent for an
@@ -1143,6 +1171,57 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onErrorMock.mock.calls.flat().join(" ")).not.toContain(rejectedText);
     expect(errorSpy.mock.calls.flat().join(" ")).not.toContain(rejectedText);
     errorSpy.mockRestore();
+    fetchSpy.mockRestore();
+  });
+
+  it("sends agent-question answers and skip while keeping the pending tool mounted", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ detail: "runtime unavailable" }), { status: 503 });
+    });
+    mount();
+    const question = {
+      ...hitlEvent,
+      payload: { ...hitlEvent.payload, stage: "agent_question", choices: [{ id: "yes", label: "Yes" }] },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(question, "yes", " Please ", { ask_user: false });
+      await latest.sendHitlResume(question, undefined, undefined, { ask_user: false }, undefined, true);
+    });
+    expect(bodies[0].resume_payload).toEqual({ choice_id: "yes", text: " Please " });
+    expect(bodies[1].resume_payload).toEqual({ skipped: true });
+    expect((bodies[0].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    expect((bodies[1].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it("shows an accepted agent-question choice without waiting for history reload", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+    mount();
+    const question = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        question: "Which bread?",
+        occurrence_id: "call-bread",
+        choices: [{ id: "complet", label: "Pain complet" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+
+    await act(async () => {
+      await latest.sendHitlResume(question, "complet");
+    });
+
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+    expect(latest.messages.find((message) => message.channel === "hitl_response")?.parts[0]).toMatchObject({
+      choice_id: "complet",
+      occurrence_id: "call-bread",
+    });
     fetchSpy.mockRestore();
   });
 

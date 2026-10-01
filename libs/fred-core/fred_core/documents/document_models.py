@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Index, String
+from sqlalchemy import Index, String, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -31,6 +31,20 @@ class DocumentMetadataRow(Base):
     """ORM model for the ``metadata`` table."""
 
     __tablename__ = "metadata"
+
+    # "Does this folder already hold a document with this name?" is asked for
+    # every imported file, and the name lives inside `doc`. Declared here rather
+    # than beside the others: an expression index has no mapped column to hang
+    # off, so only `__table_args__` attaches it to the table.
+    # The `::text` casts are the ones PostgreSQL adds itself: `alembic check`
+    # compares this text against the reflected expression, so without them the
+    # index reads as drifted on every run.
+    __table_args__ = (
+        Index(
+            "idx_metadata_document_name",
+            text("((doc -> 'identity'::text) ->> 'document_name'::text)"),
+        ).ddl_if(dialect="postgresql"),
+    )
 
     document_uid: Mapped[str] = mapped_column(String, primary_key=True)
     source_tag: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
