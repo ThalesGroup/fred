@@ -2294,7 +2294,7 @@ InlineDrawer SHALL retain its overlay/push, close, and optional pointer-resize b
 
 ### Requirement: A generic status badge preserves evaluation status display
 
-StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning`, `info`, or `neutral` using paired design-system color tokens. It MUST NOT depend on domain states or act as a removable input chip. Evaluation StatusPill SHALL use this shared atom while preserving its current labels and tone mapping.
+StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning`, `info`, or `neutral` using paired design-system color tokens. It MUST NOT depend on domain states or act as a removable input chip. Hosted applications SHALL own their domain-specific labels and tone mappings; the shared atom MUST remain available after retiring the built-in evaluation views.
 
 #### Scenario: All badge tones render in both themes
 - **WHEN** a consumer renders each supported tone in light and dark themed roots

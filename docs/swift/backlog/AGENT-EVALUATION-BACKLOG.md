@@ -297,9 +297,8 @@ predicate, grant only team `can_read`, scope to the request `team_id`, and fail 
 
 Design: [`TASK-EVENT-STREAM-RFC.md`](../rfc/TASK-EVENT-STREAM-RFC.md) §5.
 Refines Phases 3–4 for the deployed reality: the evaluator ships as a **standalone service**
-(own `/evaluation/v1` surface), not inside the control-plane (EVAL-01 §8.3). The `/rework`
-evaluation UI is already built (Phase 4 UI) against a **bespoke** campaign SSE; this is the
-cutover to canonical task events.
+(own `/evaluation/v1` surface), not inside the control-plane (EVAL-01 §8.3). The original task-event adoption scope is recorded below; its built-in frontend
+integration has since been retired in favor of the hosted evaluator (#2904).
 
 - [ ] `fred-core` 3.1.1 → 3.2.0: implement the `evaluation` kind (`EvaluationDetail`,
       `EvaluationTaskEvent`, `StartEvaluationParams`/`Request`, extend unions) per OPS-04 §2.1/§2.5
@@ -308,15 +307,10 @@ cutover to canonical task events.
       reconcile sweeper; `target={type:"evaluation_campaign",…}`, `team_id`
 - [ ] Evaluator: mount `POST/GET /evaluation/v1/tasks`, `GET …/tasks/{id}/events`,
       `POST …/tasks/{id}/cancel`; add `task_run` + `task_event_log` migrations; remove bespoke SSE
-- [ ] Frontend: regenerate evaluation slice (now carries `/tasks*` + `evaluation` `TaskEvent`)
-- [ ] Frontend: make `useTaskRehydration` + `useTaskSseManager` **multi-source** (knowledge-flow +
-      control-plane + evaluation); add `evaluation` to `taskKinds`/labels
-- [ ] Frontend: cut over the `EvaluationCampaignDetail` **SEAM** (bespoke SSE → `useTaskStream` →
-      `TaskStateBadge`/`TaskProgressBar`); surface campaigns in `TaskTray` + inline `TaskIndicator`
-- [ ] **Cross-repo codegen guard**: CI check asserting the frontend's vendored
-      `src/slices/evaluation/openapi.json` matches the `fred-agent-evaluator` published OpenAPI for
-      the pinned evaluator/fred-core version (turns silent client drift into a failing build).
-      Provenance + regen procedure: `apps/frontend/src/slices/evaluation/README.md`.
+The former Fred frontend slice/codegen and TaskTray integration work is superseded
+by #2904. Evaluation UI, API generation and progress now belong to the external
+`fred-agent-evaluator` application. Fred supplies the generic Apps host and shared
+UI components; see [the hosting specification](../../../openspec/specs/frontend-application-hosting/spec.md).
 
 ---
 

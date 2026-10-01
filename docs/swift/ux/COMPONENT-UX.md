@@ -2259,7 +2259,7 @@ sees inside scales with their role:
   view, just non-interactive, so a plain member can still see who holds
   elevated roles) and nothing else in the sidebar;
 - editors/analysts/admins: the same sections as before (Members with edit
-  controls, Parameters gated on `can_update_info`, Activity/Evaluations per
+  controls, Parameters gated on `can_update_info`, Activity per
   their existing gates) — Activity's gate moved from `canReadMembers` (now
   true for everyone) to a new `hasElevatedTeamRole` helper
   (`teamCapabilities.ts`), since it isn't part of the plain-member baseline.
@@ -2269,7 +2269,7 @@ settings sidebar — now a `filled` / `error` `Button` (`LeaveTeamButton.tsx`)
 rendered inline in the Members section header, `24px` to the right of the
 "Membres" page title (`.team-settings-members-header-left`, `gap:
 var(--spacing-l)`), so it only appears on the Members section, not on
-Parameters/Activity/Evaluations. Disabled with an explanatory `title`
+Parameters/Activity. Disabled with an explanatory `title`
 tooltip only for a team's sole remaining `team_admin` (computed client-side
 from the members list; the backend's last-admin invariant is the actual
 source of truth and still applies server-side regardless). Confirms via
@@ -2895,7 +2895,7 @@ and the `TaskActivity` entry below.
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
 you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
-Activity/Evaluations/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
+Activity/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
 match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
 (no sibling tabs to switch to) keeps the bare Back.
 
@@ -2928,7 +2928,6 @@ now share one consistent header pattern instead of diverging per page:
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
-| `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
 | `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
@@ -5080,8 +5079,8 @@ The alpha.3 package surface reuses canonical atoms and molecules in place;
 see [the package README](../../../libs/frontend/ui/README.md) for exports and
 neutral contracts. KPI/table primitives take caller labels, while FRED's thin
 application adapters supply translations. Toast copying is application-owned.
-The generic StatusBadge replaces the evaluation-only pill implementation and
-keeps evaluation tone mapping local to the evaluation views. Task/ingestion
+The generic StatusBadge is available to hosted applications, which own their
+domain-specific labels and tone mappings. Task/ingestion
 badges and charts remain separate domain components.
 
 ### Hosted UI consumer interaction contracts
@@ -5089,3 +5088,13 @@ badges and charts remain separate domain components.
 `DataTable.onRowClick`, `InlineDrawer.closeLabel` and `KpiStatCard.tone` complete
 the evaluator's SDK integration. Defaults preserve current Fred consumers.
 Behavior and acceptance scenarios: [frontend package specs](../../../openspec/specs/frontend-package-archives/spec.md).
+
+### Evaluation application — built-in UI retired (#2904)
+
+Evaluation campaigns are accessed through the registered application under Apps.
+Team settings no longer contain an Evaluations section; old
+`/team/:teamId/settings/evaluations` URLs follow the existing Members fallback.
+Fred's Activity page, task rehydration and task event subscriptions query only
+Fred's control-plane and knowledge-flow services. Evaluation progress belongs
+to the external application's UI. Shared SDK components and backend evaluation
+permissions remain available; no evaluation data is removed.

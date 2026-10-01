@@ -52,12 +52,6 @@ export function useTaskAcknowledgement() {
       return;
     }
     const backend = taskBackendFor(kind);
-    if (backend === "evaluation") {
-      // No acknowledgement endpoint exists on the evaluation backend yet
-      // (tracked separately, not part of #2123) — nothing to call; the
-      // button stays visible rather than silently pretending to succeed.
-      return;
-    }
     setPendingTaskId(taskId);
     try {
       const result = await (

@@ -11,6 +11,10 @@ no_action_reason: "Existing consumers retain their current default interactions 
 
 Fred deployments and consumers of the unpublished UI alpha.3 candidate.
 
+## Prerequisites
+
+No additional prerequisites beyond the normal deployment procedure.
+
 ## Configuration
 
 No configuration changes are required.
