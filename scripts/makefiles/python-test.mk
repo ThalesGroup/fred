@@ -52,5 +52,5 @@ test-integration: dev ## Run integration tests that rely on external services an
 		${UV} run pytest -m "integration and not integration_postgres"
 
 .PHONY: test-integration-postgres
-test-integration-postgres: dev ## Run the integration tests that need a real PostgreSQL — not provisioned by docker-compose.integration.yml (OpenFGA only), so these are excluded from test-integration/test-integration-only until that's addressed. Point FRED_PG_DSN at a running Postgres first (see the test file's own docstring for the default dev-stack DSN).
+test-integration-postgres: dev ## Run the integration tests that need a real PostgreSQL — not provisioned by docker-compose.integration.yml (OpenFGA only), so these are excluded from test-integration/test-integration-only and from CI until that's addressed. Start one with `docker compose -f scripts/docker-compose.postgres.yml up -d`, which these tests default to, or point FRED_PG_DSN elsewhere.
 	${UV} run pytest -m integration_postgres

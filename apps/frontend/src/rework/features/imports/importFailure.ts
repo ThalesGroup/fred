@@ -45,9 +45,9 @@ export const INTERRUPTED_BEFORE_SEND = "The import was interrupted before this f
  *  that says less than we can. Without it the detail is the sentence itself. */
 const KNOWN_CAUSES: { pattern: RegExp; key: string; hopeless?: boolean; detailKey?: string }[] = [
   { pattern: /interrupted before this file was sent/i, key: "notSent", detailKey: "notSentDetail" },
-  // The folder holds two documents of this name (a base and an alternate
-  // version). Nothing the user can do from here changes that, so it is named
-  // rather than left to the generic "the upload failed".
+  // The folder holds two documents of this name. Retrying cannot clear it — the
+  // user has to rename or delete one of them there first — so it is named rather
+  // than left to the generic "the upload failed".
   { pattern: /more than one document named/i, key: "ambiguousName", hopeless: true },
   // The backend names whose space it refused; only the team wording would be
   // wrong on a personal one, so that case is matched before the general form.

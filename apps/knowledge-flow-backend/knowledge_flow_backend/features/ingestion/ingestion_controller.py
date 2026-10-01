@@ -212,8 +212,9 @@ class ImportPlan:
 
     ambiguous: List[str]
     """The folder holds more than one document under that name, so "the
-    existing document" does not identify one. Possible only while alternate
-    versions exist."""
+    existing document" does not identify one. Reachable by adding a document to
+    a folder that already holds its name — `add_tag_id_to_document` has no
+    collision guard, unlike `rename_document`."""
 
 
 EMPTY_IMPORT_PLAN = ImportPlan(overwrite_uid={}, skipped=[], undecided=[], ambiguous=[])
@@ -223,8 +224,7 @@ async def _plan_import(filenames: List[str], tags: List[str], decisions: Dict[st
     """Ask the destination folder which of these names it already holds, and
     pair each answer with what the user decided about it.
 
-    Scoped to the folder the documents land in — its first tag, the one
-    versioning already treated as the document's home.
+    Scoped to the folder the documents land in — its first tag.
     """
     destination = tags[0] if tags else None
     if not destination:
@@ -256,7 +256,7 @@ async def _plan_import(filenames: List[str], tags: List[str], decisions: Dict[st
 
 
 UNDECIDED_CONFLICT_MESSAGE = "A document named '{filename}' already exists in this folder. Choose to overwrite it or to keep it."
-AMBIGUOUS_CONFLICT_MESSAGE = "This folder holds more than one document named '{filename}'. Delete or promote the alternate version before importing again."
+AMBIGUOUS_CONFLICT_MESSAGE = "This folder holds more than one document named '{filename}'. Rename or delete one of them before importing again."
 
 
 STEP_UPLOAD_PREPARATION = "upload preparation"
@@ -726,10 +726,7 @@ class IngestionController:
           document class by ownership metadata instead.
         - Builds `DocumentMetadata` directly rather than going through
           `IngestionService.extract_metadata()`/`process_metadata()`: those
-          assume a corpus document. `extract_metadata()`'s versioning step
-          scans the whole metadata catalog for a same-named document and
-          raises if one exists — folder semantics that make no sense for an
-          untagged, session-scoped attachment. `process_metadata()` also
+          assume a corpus document. `process_metadata()`
           requires `source_tag` to resolve against the operator-configured
           `document_sources` registry (`resolve_source_type`), which a chat
           attachment was never meant to be a member of.
@@ -1024,7 +1021,6 @@ class IngestionController:
                     tags=tags,
                     source_tag=source_tag,
                     profile=profile,
-                    apply_versioning=overwrites is None,
                 )
                 if overwrites:
                     metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
@@ -1243,7 +1239,6 @@ class IngestionController:
                             tags=tags,
                             source_tag=source_tag,
                             profile=profile,
-                            apply_versioning=overwrites is None,
                         )
                         if overwrites:
                             metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
@@ -1360,9 +1355,9 @@ class IngestionController:
             description=(
                 "Answers, before any byte is sent, which of the given file names already "
                 "identify a document in each destination folder, so the user can decide to "
-                "overwrite or skip once for the whole import. Advisory only: the upload "
-                "endpoints re-check at write time, since a teammate can create the same "
-                "name in between."
+                "overwrite or skip once for the whole import. Advisory only, and not "
+                "re-checked at write time: a name a teammate creates in between is not "
+                "seen, and both imports create a document."
             ),
         )
         async def import_name_check(

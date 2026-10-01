@@ -91,8 +91,10 @@ describe("importFailure", () => {
   it("does not offer to send a file again when the folder is what refuses it", () => {
     // Two documents already share that name there. Re-sending the same file
     // produces the same refusal, every time.
+    // Kept verbatim from AMBIGUOUS_CONFLICT_MESSAGE: the classification is a
+    // regex over the backend's sentence, so a paraphrase here would test nothing.
     const error =
-      "This folder holds more than one document named 'report.pdf'. Delete or promote the alternate version before importing again.";
+      "This folder holds more than one document named 'report.pdf'. Rename or delete one of them before importing again.";
 
     expect(importFailure({ error, stage: "analysis" }, t)).toEqual({
       summary: "rework.imports.failure.ambiguousName",
