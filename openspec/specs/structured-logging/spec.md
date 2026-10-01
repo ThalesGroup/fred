@@ -1,10 +1,10 @@
-# Spec Delta
+# Structured Logging Specification
 
 ## Purpose
 
 Provide consistent metadata-only logs that let operators follow a Fred operation across APIs, admitted downstream calls, ingestion workers and the frontend pod while preserving diagnostic isolation and existing security boundaries.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Common application output contract
 
@@ -88,7 +88,7 @@ Existing trusted scheduling/admission SHALL persist an optional bounded safe log
 
 ### Requirement: Frontend pod access logs remain parseable
 
-Nginx access output SHALL be correctly escaped JSON with event time, HTTP status and severity, without raw query strings or sensitive headers. Native error/startup output SHALL be inventoried and remaining collector parsing limitations SHALL be documented. This behavior SHALL NOT require an extra container or delay API/worker delivery.
+Nginx access output SHALL be correctly escaped JSON with event time, HTTP status and severity, without raw query strings or sensitive headers. Native error/startup output SHALL be inventoried and remaining collector parsing and request-detail exposure limitations SHALL be documented. Native text SHALL NOT be represented as sanitized JSON access output. This behavior SHALL NOT require an extra container or delay API/worker delivery.
 
 #### Scenario: Access request contains sensitive query data
 
