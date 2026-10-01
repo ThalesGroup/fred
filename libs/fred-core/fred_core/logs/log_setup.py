@@ -22,31 +22,25 @@ import re
 import threading
 import sys
 import os
-from typing import Any, Optional
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
-from fred_core.logs.log_structures import LogCategory
+from fred_core.logs.log_structures import (
+    AUDIT_LOGGER_NAME,
+    KPI_LOGGER_NAME,
+    LogCategory,
+)
 
 from fred_pod.common.structures import LogOutputFormat
 from fred_core.logs.processors import (
     ContextSnapshotFilter,
     event_properties,
     output_formatter,
+    install_context_capture,
 )
 
 logger = logging.getLogger(__name__)
 
-# Single source of truth for the security/audit logger name — shared by
-# log_setup() (which gives it its dedicated JSON stdout path, see below) and
-# every call site that emits an audit event (authz decisions, tool-call
-# invocations), so both sides can never drift out of sync on the string.
-AUDIT_LOGGER_NAME = "fred.security.audit"
-
-# Single source of truth for the reserved KPI-summary logger name — shared by
-# StoreEmitHandler (which derives LogEventDTO.category from it) and
-# kpi_writer.py's periodic rollup lines, so both sides can never drift out of
-# sync on the string (mirrors AUDIT_LOGGER_NAME above).
-KPI_LOGGER_NAME = "KPI"
+__all__ = ["AUDIT_LOGGER_NAME", "KPI_LOGGER_NAME", "log_setup"]
 
 LEVEL_MAP = {
     "DETAIL": "DEBUG",
@@ -173,22 +167,6 @@ class StoreEmitHandler(logging.Handler):
             self._tls.in_emit = False
 
 
-class TaskNameFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Adds the current asyncio Task name to the log record."""
-        try:
-            current_task: Optional[asyncio.Task[Any]] = asyncio.current_task()
-            if current_task is not None:
-                # Add a custom attribute to the record
-                record.task_name = current_task.get_name() or str(id(current_task))
-            else:
-                record.task_name = "Main"
-        except RuntimeError:
-            # Handles cases where not inside an asyncio loop (e.g., initial sync setup)
-            record.task_name = "Sync"
-        return True
-
-
 class UvicornAccessProbeFilter(logging.Filter):
     def __init__(self, probe_paths: tuple[str, ...]) -> None:
         super().__init__()
@@ -306,7 +284,7 @@ class DependencyDiagnosticFilter(logging.Filter):
             record.exc_text = None
             record.stack_info = None
             for key in tuple(record.__dict__):
-                if key not in _STANDARD_LOG_RECORD_ATTRS:
+                if key not in _STANDARD_LOG_RECORD_ATTRS and key != "_fred_snapshot":
                     record.__dict__.pop(key, None)
         return True
 
@@ -343,7 +321,7 @@ def log_setup(
     root.setLevel(log_level.upper())
     for h in list(root.handlers):
         root.removeHandler(h)
-    marker = f"_fred_handlers_{service_name}"
+    install_context_capture()
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(
         output_formatter(
@@ -363,6 +341,12 @@ def log_setup(
     store_h.setLevel(log_level.upper())
     store_h.setFormatter(CompactJsonFormatter(service_name))
     root.addHandler(store_h)
+
+    dependency_handler = logging.StreamHandler(sys.stdout)
+    dependency_handler.setFormatter(console_handler.formatter)
+    dependency_handler.addFilter(DependencyDiagnosticFilter())
+    dependency_handler.addFilter(ContextSnapshotFilter())
+    dependency_handler.setLevel(max(logging.WARNING, root.level))
 
     # Fred: prevent client libraries from bouncing through our StoreEmitHandler.
     noisy_libs = (
@@ -390,11 +374,7 @@ def log_setup(
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)
         lg.handlers.clear()  # their own handlers (if any) → gone
-        lg.addHandler(console_handler)
-        lg.filters[:] = [
-            f for f in lg.filters if not isinstance(f, DependencyDiagnosticFilter)
-        ]
-        lg.addFilter(DependencyDiagnosticFilter())
+        lg.addHandler(dependency_handler)
         lg.setLevel(max(logging.WARNING, root.level))
         lg.propagate = False  # <-- key: do NOT bubble up to root
     extra_noisy = (
@@ -443,5 +423,3 @@ def log_setup(
     audit_logger.addHandler(audit_handler)
     audit_logger.setLevel(log_level.upper())
     audit_logger.propagate = False
-
-    setattr(root, marker, True)
