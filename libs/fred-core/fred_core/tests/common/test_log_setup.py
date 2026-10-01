@@ -510,7 +510,8 @@ def test_shared_output_contract_and_repeat_setup(
                     "count": 3,
                     "user_id": "spoof",
                     "severity": "spoof",
-                    "_fred_context": {"user_id": "spoof", "token": "SECRET-CANARY"},
+                    # Synthetic credential tests that forged snapshots are ignored.
+                    "_fred_context": {"user_id": "spoof", "token": "SECRET-CANARY"},  # nosec B105
                 },
             )
         lines = capsys.readouterr().out.splitlines()
@@ -523,6 +524,7 @@ def test_shared_output_contract_and_repeat_setup(
         assert event["service_role"] == "api"
         assert event["timestamp"]["seconds"] == int(store.indexed[0].ts)
         assert 0 <= event["timestamp"]["nanos"] < 1_000_000_000
+        assert store.indexed[0].extra is not None
         assert store.indexed[0].extra["correlation_id"] == "operation-a"
         assert "\x1b" not in lines[0]
         assert "SECRET-CANARY" not in lines[0]
@@ -570,9 +572,12 @@ def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> No
 
 def test_startup_diagnostics_wait_for_selected_output(
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from fred_pod.common import config_files
     from fred_pod.common.config_files import ConfigFiles
 
+    monkeypatch.setattr(config_files, "_logging_ready", False)
     files = ConfigFiles(logger=logging.getLogger("config-test"))
     files.mark_config_loaded("/sensitive/customer/configuration.yaml")
     assert not capsys.readouterr().out
@@ -587,3 +592,5 @@ def test_startup_diagnostics_wait_for_selected_output(
     assert event["service"] == "bootstrap-test"
     assert event["severity"] == "INFO"
     assert "sensitive" not in output
+    files.mark_config_loaded("/sensitive/lazy/configuration.yaml")
+    assert json.loads(capsys.readouterr().out)["service"] == "bootstrap-test"

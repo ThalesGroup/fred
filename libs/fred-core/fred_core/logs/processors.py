@@ -17,24 +17,23 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
-from structlog.typing import EventDict
 
 from structlog.processors import JSONRenderer, format_exc_info
 from structlog.stdlib import ProcessorFormatter
+from structlog.typing import EventDict
 
 from fred_core.logs.context import (
+    MAX_FIELDS,
     RESERVED_FIELDS,
+    LogContext,
+    ValueBudget,
     current_context,
     safe_key,
     safe_value,
-    ValueBudget,
-    MAX_FIELDS,
-    LogContext,
 )
-
 from fred_core.logs.log_structures import KPI_LOGGER_NAME
 
 STANDARD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {

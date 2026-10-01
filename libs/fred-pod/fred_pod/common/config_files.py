@@ -15,26 +15,35 @@
 from __future__ import annotations
 
 import logging
-from collections import deque
 import os
+from collections import deque
 
 from dotenv import load_dotenv
 
-
 # Pod-local, bounded bootstrap diagnostics wait until the selected formatter exists.
 _startup_events: deque[tuple[logging.Logger, logging.LogRecord]] = deque(maxlen=32)
+_logging_ready = False
 
 
 def defer_startup_log(logger: logging.Logger, level: int, message: str) -> None:
     """Preserve event time while deferring config diagnostics until logging setup."""
     record = logger.makeRecord(logger.name, level, __file__, 0, message, (), None)
+    if _logging_ready:
+        if logger.isEnabledFor(level):
+            logger.handle(record)
+        return
     _startup_events.append((logger, record))
 
 
 def flush_startup_logs() -> None:
     """Emit bounded bootstrap diagnostics after the application's handlers exist."""
+    global _logging_ready
+    _logging_ready = True
     while _startup_events:
-        logger, record = _startup_events.popleft()
+        try:
+            logger, record = _startup_events.popleft()
+        except IndexError:
+            break
         if logger.isEnabledFor(record.levelno):
             logger.handle(record)
 
