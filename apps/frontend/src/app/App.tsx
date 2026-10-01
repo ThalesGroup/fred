@@ -53,6 +53,7 @@ const LoadingScreen = ({
 };
 
 function FredUiContent() {
+  const isHelpCenter = /\/help(?:\/|$)/.test(window.location.pathname);
   const [router, setRouter] = useState<any>(null);
   const { siteDisplayName, faviconName, logoName, faviconNameDark, logoNameDark } = useFrontendProperties();
   const { t } = useTranslation();
@@ -108,18 +109,24 @@ function FredUiContent() {
             rest, so routed pages keep sizing with height: 100%, never 100vh. */}
         <div className={styles.appShell}>
           <div className={styles.appContent}>
-            <GcuGuard>
-              <BootstrapGuard>
-                <AnnouncementStack />
-                <div className={styles.routedContent}>
-                  <ConfirmationDialogProvider>
-                    <ToastProvider>
-                      <RouterProvider router={router} />
-                    </ToastProvider>
-                  </ConfirmationDialogProvider>
-                </div>
-              </BootstrapGuard>
-            </GcuGuard>
+            {isHelpCenter ? (
+              <div className={styles.routedContent}>
+                <RouterProvider router={router} />
+              </div>
+            ) : (
+              <GcuGuard>
+                <BootstrapGuard>
+                  <AnnouncementStack />
+                  <div className={styles.routedContent}>
+                    <ConfirmationDialogProvider>
+                      <ToastProvider>
+                        <RouterProvider router={router} />
+                      </ToastProvider>
+                    </ConfirmationDialogProvider>
+                  </div>
+                </BootstrapGuard>
+              </GcuGuard>
+            )}
           </div>
         </div>
       </AuthProvider>
