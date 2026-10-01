@@ -382,6 +382,34 @@
           }
         }
       }
+    },
+    "pptx_generator": {
+      "name": "Generate a PowerPoint deck",
+      "description": "Ability to compose a complete PowerPoint deck from scratch — title, bullets, tables, native charts, and images — with an optional brand template.",
+      "form": {
+        "uploadTemplate": "Upload a .pptx brand template (optional)",
+        "replaceTemplate": "Replace the template",
+        "uploadAria": "PowerPoint brand template file",
+        "clearAria": "Remove the selected file",
+        "currentTemplate": "A brand template is configured for this agent."
+      },
+      "preview": {
+        "untitled": "Presentation",
+        "open": "Open preview",
+        "cardAria": "Presentation preview",
+        "download": "Download .pptx",
+        "downloadError": "Download failed",
+        "close": "Close preview",
+        "loadError": "Failed to load preview.",
+        "loading": "Loading preview…",
+        "empty": "No preview yet. Ask the assistant to generate a deck."
+      },
+      "panel": {
+        "pptx_preview_pane": {
+          "title": "Presentation preview",
+          "launcher": "PPT viewer"
+        }
+      }
     }
   },
   "chatbot": {
@@ -2808,6 +2836,10 @@
             "reasoning": {
               "title": "Reasoning",
               "description": "Access to \"reasoning\" mode in the chat options."
+            },
+            "powerpointGeneration": {
+              "title": "Generate a PowerPoint deck",
+              "description": "Ability to compose a complete slide deck from scratch — text, tables, native charts, shapes, and styling — with an optional brand template."
             }
           }
         },

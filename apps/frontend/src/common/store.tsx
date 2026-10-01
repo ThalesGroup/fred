@@ -23,6 +23,7 @@ import writableDocumentReducer from "../rework/features/capabilities/writable_do
 import { pptFillerCapabilityApi } from "../rework/features/capabilities/ppt_filler/api/pptFillerCapabilityApi.ts";
 import pptPreviewReducer from "../rework/features/capabilities/ppt_filler/pptPreviewSlice.ts";
 import htmlArtifactReducer from "../rework/features/capabilities/html_artifact/htmlArtifactSlice.ts";
+import pptxPreviewReducer from "../rework/features/capabilities/pptx_generator/pptxPreviewSlice.ts";
 import { sidePanelOpenRequestSlice } from "../rework/features/capabilities/sidePanelOpenRequestSlice.ts";
 
 // Optional: Logging middleware for debugging
@@ -58,6 +59,7 @@ const combinedReducer = combineReducers({
   [pptFillerCapabilityApi.reducerPath]: pptFillerCapabilityApi.reducer,
   pptPreview: pptPreviewReducer,
   htmlArtifact: htmlArtifactReducer,
+  pptxPreview: pptxPreviewReducer,
   capabilitySidePanelOpenRequest: sidePanelOpenRequestSlice.reducer,
 });
 
