@@ -28,7 +28,7 @@ applications:
           audience: FRED_API_CLIENT_ID_GUID
           service_accounts_only: false
     dotenv:
-      FRED_JWT_MAX_LIFETIME_SECONDS: "5400"
+      FRED_JWT_MAX_LIFETIME_SECONDS: "6000"
 
   knowledge-flow-backend:
     configuration:
@@ -54,7 +54,7 @@ applications:
           audience: FRED_API_CLIENT_ID_GUID
           service_accounts_only: false
     dotenv:
-      FRED_JWT_MAX_LIFETIME_SECONDS: "5400"
+      FRED_JWT_MAX_LIFETIME_SECONDS: "6000"
 
   control-plane-backend:
     configuration:
@@ -80,4 +80,4 @@ applications:
           audience: FRED_API_CLIENT_ID_GUID
           service_accounts_only: false
     dotenv:
-      FRED_JWT_MAX_LIFETIME_SECONDS: "5400"
+      FRED_JWT_MAX_LIFETIME_SECONDS: "6000"
