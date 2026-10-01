@@ -34,7 +34,7 @@ from fred_core.logs.context import (
     safe_key,
     safe_value,
 )
-from fred_core.logs.log_structures import KPI_LOGGER_NAME
+from fred_core.logs.log_structures import AUDIT_LOGGER_NAME, KPI_LOGGER_NAME
 
 STANDARD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {
     "message",
@@ -58,7 +58,10 @@ def capture_record_context(record: logging.LogRecord) -> None:
         name = task.get_name() if task is not None else "Main"
     except RuntimeError:
         name = "Sync"
-    record._fred_snapshot = ContextSnapshot(current_context(), name)
+    # Audit records keep their own explicit schema even before serialization.
+    # Queues and in-process handlers must not retain generic operation identity.
+    context = {} if record.name == AUDIT_LOGGER_NAME else current_context()
+    record._fred_snapshot = ContextSnapshot(context, name)
 
 
 _base_record_factory = logging.getLogRecordFactory()
