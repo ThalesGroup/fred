@@ -2993,6 +2993,48 @@ async def _write_turn_history(
             # AND a reload while the gate is still open can reconstruct a
             # working (not just readable) prompt.
             req = payload.get("request", {})
+            raw_usage = payload.get("token_usage")
+            pause_sources = [
+                VectorSearchHit.model_validate(source)
+                for source in (payload.get("sources") or [])
+                if isinstance(source, dict)
+            ]
+            pause_ui_parts = [
+                part
+                for part in (payload.get("ui_parts") or [])
+                if isinstance(part, dict) and isinstance(part.get("type"), str)
+            ]
+            if (
+                isinstance(raw_usage, dict)
+                or pause_sources
+                or pause_ui_parts
+                or payload.get("model_name") is not None
+                or payload.get("context_tokens") is not None
+            ):
+                messages.append(
+                    ChatMessage(
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        rank=rank,
+                        timestamp=datetime.now(timezone.utc),
+                        role=Role.system,
+                        channel=Channel.system_note,
+                        parts=[],
+                        metadata=ChatMetadata.model_validate(
+                            {
+                                "model": payload.get("model_name"),
+                                "token_usage": raw_usage
+                                if isinstance(raw_usage, dict)
+                                else None,
+                                "context_tokens": payload.get("context_tokens"),
+                                "sources": pause_sources,
+                                "ui_parts": pause_ui_parts,
+                                "extras": {"pause_metadata": True},
+                            }
+                        ),
+                    )
+                )
+                rank += 1
             # A resumed run re-raises the siblings still waiting, so the same
             # pause is emitted again. One question keeps one row: the run that
             # first surfaced it already wrote it.
@@ -3031,24 +3073,6 @@ async def _write_turn_history(
                     }
                     for c in raw_pending_calls
                     if isinstance(c, dict)
-                ],
-            )
-            raw_usage = payload.get("token_usage")
-            hitl_message.metadata = ChatMetadata(
-                model=payload.get("model_name"),
-                token_usage=ChatTokenUsage(**raw_usage)
-                if isinstance(raw_usage, dict)
-                else None,
-                context_tokens=payload.get("context_tokens"),
-                sources=[
-                    VectorSearchHit.model_validate(source)
-                    for source in (payload.get("sources") or [])
-                    if isinstance(source, dict)
-                ],
-                ui_parts=[
-                    part
-                    for part in (payload.get("ui_parts") or [])
-                    if isinstance(part, dict) and isinstance(part.get("type"), str)
                 ],
             )
             messages.append(hitl_message)

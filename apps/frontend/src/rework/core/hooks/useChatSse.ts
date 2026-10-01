@@ -556,6 +556,31 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
+          if (
+            event.token_usage ||
+            event.sources?.length ||
+            event.ui_parts?.length ||
+            event.model_name ||
+            event.context_tokens != null
+          ) {
+            emit({
+              session_id: sessionId,
+              exchange_id: exchangeId,
+              rank: rankRef.current++,
+              timestamp: ts,
+              role: "system",
+              channel: "system_note",
+              parts: [],
+              metadata: {
+                model: event.model_name ?? null,
+                token_usage: event.token_usage ?? null,
+                context_tokens: event.context_tokens ?? null,
+                sources: event.sources ?? [],
+                ui_parts: event.ui_parts ?? [],
+                extras: { pause_metadata: true },
+              },
+            });
+          }
           const occurrenceId = event.request.occurrence_id ?? event.request.interrupt_id;
           const alreadyRecorded =
             occurrenceId &&
@@ -589,13 +614,6 @@ export function useChatSse(
                   pending_calls: event.request.pending_calls ?? [],
                 },
               ],
-              metadata: {
-                model: event.model_name ?? null,
-                token_usage: event.token_usage ?? null,
-                context_tokens: event.context_tokens ?? null,
-                sources: event.sources ?? [],
-                ui_parts: event.ui_parts ?? [],
-              },
             });
           }
           const hitl: RuntimeAwaitingHumanEvent = {

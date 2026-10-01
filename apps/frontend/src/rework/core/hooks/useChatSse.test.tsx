@@ -1325,7 +1325,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onErrorMock).not.toHaveBeenCalled();
   });
 
-  it("retains pause metadata in the live HITL request row", async () => {
+  it("retains pause metadata when a sibling request is re-emitted", async () => {
     flushPendingWrites = async () => true;
     const event = {
       kind: "awaiting_human",
@@ -1347,7 +1347,17 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       context_tokens: 100,
       model_name: "test-model",
     };
-    const bytes = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);
+    const previouslySurfaced = {
+      ...event,
+      sources: [],
+      ui_parts: [],
+      token_usage: null,
+      context_tokens: null,
+      model_name: null,
+    };
+    const bytes = new TextEncoder().encode(
+      `data: ${JSON.stringify(previouslySurfaced)}\n\ndata: ${JSON.stringify(event)}\n\n`,
+    );
     let readCount = 0;
     const body = {
       getReader: () => ({
@@ -1368,10 +1378,15 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     });
 
     const request = latest.messages.find((message) => message.channel === "hitl_request");
-    expect(request?.metadata?.sources?.[0].uid).toBe("source-1");
-    expect(request?.metadata?.ui_parts?.[0].type).toBe("link");
-    expect(request?.metadata?.token_usage?.total_tokens).toBe(120);
-    expect(request?.metadata?.context_tokens).toBe(100);
+    const metadata = latest.messages.find(
+      (message) => message.channel === "system_note" && message.metadata?.extras?.pause_metadata,
+    );
+    expect(request?.parts[0].type).toBe("hitl_request");
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(metadata?.metadata?.sources?.[0].uid).toBe("source-1");
+    expect(metadata?.metadata?.ui_parts?.[0].type).toBe("link");
+    expect(metadata?.metadata?.token_usage?.total_tokens).toBe(120);
+    expect(metadata?.metadata?.context_tokens).toBe(100);
     expect(latest.messages.some((message) => message.role === "assistant" && message.channel === "final")).toBe(false);
     fetchSpy.mockRestore();
   });

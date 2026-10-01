@@ -30,6 +30,24 @@ import type { TokenUsage } from "@rework/types/conversation";
 import { isTraceChannel, textOf, toolCallId, uiPartsOf } from "../../../utils/traceUtils";
 import { hitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
 
+function isPauseMetadata(m: ChatMessage): boolean {
+  return m.channel === "system_note" && m.metadata?.extras?.pause_metadata === true;
+}
+
+function hasLegacyPauseMetadata(m: ChatMessage): boolean {
+  const metadata = m.metadata;
+  return (
+    m.channel === "hitl_request" &&
+    Boolean(
+      metadata?.sources?.length ||
+        metadata?.ui_parts?.length ||
+        metadata?.token_usage ||
+        metadata?.context_tokens != null ||
+        metadata?.model,
+    )
+  );
+}
+
 function hitlRequestPart(m: ChatMessage): HitlRequestPart | undefined {
   return m.parts?.[0] as HitlRequestPart | undefined;
 }
@@ -262,7 +280,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       });
     }
 
-    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel));
+    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel) && !isPauseMetadata(m));
     const resolvedCallIds = new Set(
       traceMessages.flatMap((m) => m.parts.flatMap((p) => (p.type === "tool_result" ? [p.call_id] : []))),
     );
@@ -339,15 +357,25 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     const metadataMessages: ChatMessage[] = [];
     for (const message of msgs) {
       const channel = message.channel as string;
-      if (channel === "hitl_request") {
+      if (isPauseMetadata(message) || hasLegacyPauseMetadata(message)) {
         metadataMessages.push(message);
-      } else if (message.role !== "user" && channel !== "hitl_response" && !isTraceChannel(message.channel)) {
+      } else if (
+        message.role !== "user" &&
+        channel !== "hitl_request" &&
+        channel !== "hitl_response" &&
+        !isTraceChannel(message.channel)
+      ) {
         finalMessages.push(message);
         metadataMessages.push(message);
       }
     }
 
-    if (traceMessages.length > 0 || finalMessages.length > 0 || (isStreaming && isLast)) {
+    if (
+      traceMessages.length > 0 ||
+      finalMessages.length > 0 ||
+      metadataMessages.length > 0 ||
+      (isStreaming && isLast)
+    ) {
       const sources: VectorSearchHit[] = [];
       let tokenUsage: TokenUsage | null = null;
       let contextTokens: number | null = null;

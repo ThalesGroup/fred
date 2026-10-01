@@ -212,24 +212,29 @@ describe("toThreadMessages pause metadata", () => {
       channel: "tool_call",
       parts: [{ type: "tool_call", call_id: "call-1", name: "search", args: {} } as never],
     });
-    const request = {
-      ...hitlRequestMsg("e1", { occurrence_id: "call-1" }, 2),
+    const pauseMetadata = msg({
+      rank: 2,
+      role: "system",
+      channel: "system_note",
+      parts: [],
       metadata: {
+        extras: { pause_metadata: true },
         sources: [source],
         ui_parts: [LINK],
         model: "test-model",
         token_usage: { input_tokens: 230, output_tokens: 30, total_tokens: 260 },
         context_tokens: 130,
       },
-    } as ChatMessage;
+    });
+    const request = hitlRequestMsg("e1", { occurrence_id: "call-1" }, 3);
 
-    const open = toThreadMessages([toolCall, request], false).find((row) => row.role === "assistant");
+    const open = toThreadMessages([toolCall, pauseMetadata, request], false).find((row) => row.role === "assistant");
     expect(open?.sources).toEqual([source]);
     expect(open?.uiParts).toEqual([LINK]);
     expect(open?.tokenUsage?.total_tokens).toBe(260);
 
     const final = msg({
-      rank: 4,
+      rank: 5,
       parts: [{ type: "text", text: "Done" } as never],
       metadata: {
         token_usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
@@ -237,7 +242,7 @@ describe("toThreadMessages pause metadata", () => {
       },
     });
     const resumed = toThreadMessages(
-      [toolCall, request, hitlResponseMsg("e1", { occurrence_id: "call-1" }, 3), final],
+      [toolCall, pauseMetadata, request, hitlResponseMsg("e1", { occurrence_id: "call-1" }, 4), final],
       false,
     ).find((row) => row.role === "assistant");
     expect(resumed?.text).toBe("Done");
@@ -245,6 +250,51 @@ describe("toThreadMessages pause metadata", () => {
     expect(resumed?.uiParts).toEqual([LINK]);
     expect(resumed?.tokenUsage).toEqual({ input_tokens: 240, output_tokens: 35, total_tokens: 275 });
     expect(resumed?.contextTokens).toBe(140);
+  });
+
+  it("reads metadata from a previously persisted HITL request row", () => {
+    const source = { uid: "legacy-source", title: "Guide", content: "Evidence", score: 1 } as never;
+    const request = {
+      ...hitlRequestMsg("e1", { occurrence_id: "legacy-question" }, 1),
+      metadata: {
+        sources: [source],
+        ui_parts: [LINK],
+        token_usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+        context_tokens: 100,
+      },
+    } as ChatMessage;
+    const final = msg({
+      rank: 2,
+      parts: [{ type: "text", text: "Done" } as never],
+      metadata: { token_usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 }, context_tokens: 110 },
+    });
+
+    const assistant = toThreadMessages([request, final], false).find((row) => row.role === "assistant");
+    expect(assistant?.text).toBe("Done");
+    expect(assistant?.sources).toEqual([source]);
+    expect(assistant?.uiParts).toEqual([LINK]);
+    expect(assistant?.tokenUsage?.total_tokens).toBe(135);
+  });
+
+  it("adds metadata from a resumed stream even when no new question row is written", () => {
+    const request = hitlRequestMsg("e1", { occurrence_id: "sibling" }, 2);
+    const firstPause = msg({
+      rank: 1,
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { pause_metadata: true }, token_usage: { total_tokens: 100 } },
+    });
+    const resumedPause = msg({
+      rank: 3,
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { pause_metadata: true }, token_usage: { total_tokens: 25 } },
+    });
+    const rows = toThreadMessages([firstPause, request, resumedPause], false);
+    const assistant = rows.find((row) => row.role === "assistant");
+    expect(rows.filter((row) => row.role === "hitl_request")).toHaveLength(0);
+    expect(assistant?.traceMessages).toHaveLength(0);
+    expect(assistant?.tokenUsage?.total_tokens).toBe(125);
   });
 });
 

@@ -411,14 +411,17 @@ def test_write_turn_history_preserves_pause_metadata_without_final() -> None:
     )
 
     messages = store.save.call_args.kwargs["messages"]
-    assert len(messages) == 2
-    request = messages[1]
-    assert request.channel == Channel.hitl_request
-    assert request.metadata.sources[0].uid == "source-1"
-    assert request.metadata.ui_parts[0]["type"] == "link"
-    assert request.metadata.model == "test-model"
-    assert request.metadata.token_usage.total_tokens == 260
-    assert request.metadata.context_tokens == 130
+    assert len(messages) == 3
+    metadata = messages[1]
+    assert metadata.channel == Channel.system_note
+    assert metadata.parts == []
+    assert metadata.metadata.extras == {"pause_metadata": True}
+    assert metadata.metadata.sources[0].uid == "source-1"
+    assert metadata.metadata.ui_parts[0]["type"] == "link"
+    assert metadata.metadata.model == "test-model"
+    assert metadata.metadata.token_usage.total_tokens == 260
+    assert metadata.metadata.context_tokens == 130
+    assert messages[2].channel == Channel.hitl_request
 
 
 def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
@@ -595,6 +598,11 @@ def test_write_turn_history_skips_a_pause_the_previous_run_already_surfaced() ->
         {
             "kind": "awaiting_human",
             "request": {"question": "Second?", "occurrence_id": "ask-2"},
+            "token_usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+            },
         },
         {
             "kind": "awaiting_human",
@@ -616,14 +624,16 @@ def test_write_turn_history_skips_a_pause_the_previous_run_already_surfaced() ->
     )
 
     messages = store.save.call_args.kwargs["messages"]
-    # The answer to ask-1, then only the pause this run raised for the first
-    # time — and no rank burned by the skipped one.
+    # Re-emitted ask-2 keeps this stream's usage without duplicating its
+    # question; only ask-3 gets a new request row.
     assert [m.channel for m in messages] == [
         Channel.hitl_response,
+        Channel.system_note,
         Channel.hitl_request,
     ]
-    assert messages[1].parts[0].occurrence_id == "ask-3"
-    assert [m.rank for m in messages] == [0, 1]
+    assert messages[1].metadata.token_usage.total_tokens == 120
+    assert messages[2].parts[0].occurrence_id == "ask-3"
+    assert [m.rank for m in messages] == [0, 1, 2]
 
 
 def test_legacy_hitl_response_choice_id_remains_readable() -> None:
