@@ -117,12 +117,15 @@
 
 /* ── Footer: usage count + published badge ─────────────────────────────────── */
 
+/* Bottom-aligned and as tall as the published chip, so the usage count sits in the
+   same place, and the card keeps its height, whether the chip is there or not. */
 .footer {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--spacing-xs);
   margin-top: var(--spacing-2xs);
+  min-height: 1.25rem;
 }
 
 .uses {
