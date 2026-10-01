@@ -24,6 +24,7 @@ down the wire instead of listing the whole corpus.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from types import SimpleNamespace
 from typing import Any
 
 import fred_runtime.integrations.v2_runtime.adapters as adapters_module
@@ -66,6 +67,18 @@ class _RecordingKfClient:
     async def extract(self, **kwargs: Any):
         type(self).calls.append(("extract", kwargs))
         return _Extraction()
+
+    async def list_by_label(self, **kwargs: Any):
+        type(self).calls.append(("list_by_label", kwargs))
+        return SimpleNamespace(
+            label=kwargs["label"],
+            documents=[],
+            total=0,
+            offset=kwargs["offset"],
+            limit=kwargs["limit"],
+            next_offset=None,
+            has_more=False,
+        )
 
     async def tree(self, **kwargs: Any):
         type(self).calls.append(("tree", kwargs))
@@ -234,3 +247,38 @@ async def test_tree_without_a_selection_sends_no_document_filter() -> None:
     await adapter.tree()
 
     assert _RecordingKfClient.calls[0][1]["document_uids"] is None
+
+
+@pytest.mark.parametrize(
+    "folders,documents",
+    [(None, None), ([], []), (["lib-a"], ["doc-b"]), ([], ["doc-b"])],
+)
+async def test_label_search_carries_team_and_current_selection(folders, documents):
+    adapter = adapters_module.DocumentTreeAdapter(
+        binding=_binding(
+            selected_document_libraries_ids=folders, selected_document_uids=documents
+        ),
+        settings=_FakeSettings(),
+    )
+    await adapter.list_by_label(label="DAT", offset=5, limit=10)
+    assert _RecordingKfClient.calls == [
+        (
+            "list_by_label",
+            {
+                "label": "DAT",
+                "offset": 5,
+                "limit": 10,
+                "team_id": "team-1",
+                "folder_ids": folders or None,
+                "document_uids": documents or None,
+            },
+        )
+    ]
+
+
+async def test_label_search_uses_conversation_team_over_agent_configuration():
+    settings = _FakeSettings()
+    settings.team_id = "agent-owner-team"
+    adapter = adapters_module.DocumentTreeAdapter(binding=_binding(), settings=settings)
+    await adapter.list_by_label(label="DAT")
+    assert _RecordingKfClient.calls[0][1]["team_id"] == "team-1"

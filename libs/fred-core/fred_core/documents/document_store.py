@@ -353,6 +353,7 @@ class BaseDocumentMetadataStore:
         labels: set[str],
         document_uids: set[str] | None = None,
         session: AsyncSession | None = None,
+        folder_ids: set[str] | None = None,
     ) -> List[str]:
         """Return the uids of documents carrying ANY of `labels` (OR
         semantics) as a single indexed `label IN (...)` query — the
@@ -370,6 +371,8 @@ class BaseDocumentMetadataStore:
         offset: int = 0,
         limit: int = 50,
         session: AsyncSession | None = None,
+        folder_ids: set[str] | None = None,
+        selected_folder_ids: set[str] | None = None,
     ) -> tuple[List[str], int]:
         """Ordered, bounded sibling of `get_document_uids_with_any_label`: a
         real `ORDER BY ... OFFSET ... LIMIT ...` query plus a matching
@@ -383,6 +386,7 @@ class BaseDocumentMetadataStore:
         self,
         document_uids: set[str] | None = None,
         session: AsyncSession | None = None,
+        folder_ids: set[str] | None = None,
     ) -> List[str]:
         """Return the distinct labels in use, sorted, optionally narrowed to
         `document_uids` (see `get_document_uids_with_label` — same

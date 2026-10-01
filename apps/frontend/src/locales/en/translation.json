@@ -2241,6 +2241,7 @@
         "details": "{{label}} — click for details"
       },
       "kind": {
+        "deletion": "Corpus deletion",
         "default": "Task",
         "ingestion": "Processing",
         "migration": "Migration",

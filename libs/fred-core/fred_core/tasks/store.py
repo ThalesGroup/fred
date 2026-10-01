@@ -125,7 +125,7 @@ class TaskStore:
         scheduled_for: datetime | None = None,
         session: AsyncSession | None = None,
         execution_id: str | None = None,
-    ) -> None:
+    ) -> TaskRunColumns:
         # Persist `target` at creation so GET /tasks resolves it even before any
         # worker emits an event. Without this the inline indicator on the target's
         # row (e.g. a document) would vanish on reload whenever no worker is running.
@@ -146,6 +146,7 @@ class TaskStore:
         )
         async with use_session(self._sessions, session) as s:
             s.add(row)
+        return row
 
     async def record_event(
         self,

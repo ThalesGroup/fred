@@ -16,45 +16,36 @@
 import asyncio
 import logging
 from datetime import datetime
+from functools import cached_property
 from typing import Optional
 from uuid import uuid4
 
 from fred_core import (
-    AuthorizationError,
     FileTypeBucket,
     KeycloakUser,
-    RebacDisabledResult,
-    RebacReference,
-    Relation,
-    RelationType,
-    Resource,
     TagPermission,
     TeamPermission,
     file_type_bucket,
     is_service_agent,
 )
 from fred_core.common import OwnerFilter
-from fred_core.common.team_id import is_personal_team_id
 from fred_core.security.delegation import holds_caller_role
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError
+from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.resources.service import ResourceService
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
 from knowledge_flow_backend.features.tag.structure import (
     MissingTeamIdError,
     Tag,
     TagCreate,
-    TagMemberUser,
     TagType,
     TagUpdate,
     TagWithItemsId,
     TagWithPermissions,
-    UserTagRelation,
 )
 from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized
-from knowledge_flow_backend.features.tag.tag_item_service import get_specific_tag_item_service
-from knowledge_flow_backend.features.users.users_service import UserSummary, get_users_by_ids
+from knowledge_flow_backend.features.tag.tag_item_service import DocumentTagItemService
 
 logger = logging.getLogger(__name__)
 
@@ -68,17 +59,20 @@ _TAG_ITEM_DELETE_BATCH = 5
 class TagService:
     """
     Service for Tag CRUD, user-scoped, with hierarchical path support.
-    Documents & prompts still link by tag *id* (no change to metadata schema).
+    Corpus folders use SQL team ownership; documents reference one folder ID.
     """
 
     def __init__(self):
         context = ApplicationContext.get_instance()
         self._tag_store = context.get_tag_store()
         self.document_metadata_service = MetadataService()
-        self.resource_service = ResourceService()  # For templates, if needed
         self.rebac = context.get_rebac_engine()
 
     # ---------- Public API ----------
+
+    @cached_property
+    def corpus_access(self) -> CorpusAccess:
+        return CorpusAccess(self.rebac, self._tag_store)
 
     async def list_all_tags_for_user(
         self,
@@ -90,86 +84,26 @@ class TagService:
         owner_filter: Optional[OwnerFilter] = None,
         team_id: Optional[str] = None,
     ) -> list[TagWithPermissions]:
-        """
-        List user tags, optionally filtered by type and hierarchical prefix (e.g. 'Sales' or 'Sales/HR').
-        Pagination included.
-
-        owner_filter controls which tags are returned:
-        - None: all tags the user can read (default, current behavior)
-        - PERSONAL: only tags where the user is directly owner/editor/viewer (not via team)
-        - TEAM: only tags owned by the specified team (team_id required)
-        """
-        if team_id == "personal":
-            team_id = None
-            owner_filter = OwnerFilter.PERSONAL
-
-        # 1) fetch
-        tags: list[Tag] = await self._tag_store.list_all_tags()
-
-        # Filter by permissions (if rebac is enabled)
-        authorized_tag_ids = await self.resolve_authorized_tag_ids_in_rebac(user, owner_filter, team_id)
-        if not isinstance(authorized_tag_ids, RebacDisabledResult):
-            tags = [t for t in tags if t.id in authorized_tag_ids]
-
-        # 2) filter by type
-        if tag_type is not None:
-            tags = [t for t in tags if t.type == tag_type]
-
-        # 3) filter by path prefix (match both path itself and leaf)
-        if path_prefix:
-            prefix = self._normalize_path(path_prefix)
-            if prefix:
-                # Match on a path boundary, not a raw string prefix: plain
-                # `startswith` made "/Sales" also select "/Salesforce", so
-                # deleting one library silently deleted a sibling whose name
-                # merely began with the same characters (#2149 review).
-                tags = [t for t in tags if self._full_path_of(t) == prefix or self._full_path_of(t).startswith(prefix.rstrip("/") + "/")]
-
-        # 4) stable sort by full_path (optional but nice for UI determinism)
-        tags.sort(key=lambda t: self._full_path_of(t).lower())
-
-        # 5) paginate
-        sliced = tags[offset : offset + limit]
-
-        # 6) attach item ids — one batched resolution per tag type, never one
-        # per tag: the authorization lookup behind it is per user, so a per-tag
-        # loop recomputed the same answer once per library.
-        ids_by_tag: dict[str, list[str]] = {}
-        tag_ids_by_type: dict[TagType, list[str]] = {}
-        for tag in sliced:
-            tag_ids_by_type.setdefault(tag.type, []).append(tag.id)
-        for tag_type_key, type_tag_ids in tag_ids_by_type.items():
-            item_service = get_specific_tag_item_service(tag_type_key)
-            ids_by_tag.update(await item_service.retrieve_items_ids_for_tags(user, type_tag_ids))
-
-        tags_with_items: list[TagWithItemsId] = [TagWithItemsId.from_tag(tag, ids_by_tag.get(tag.id, [])) for tag in sliced]
-
-        # 7) batch-resolve permissions for all returned tags
-        tag_ids = {t.id for t in tags_with_items}
-        permissions_map = await self._get_tag_permissions_for_list(user, tag_ids)
-
-        tags_with_perm = [TagWithPermissions.from_tag_with_items(t, permissions_map.get(t.id, [])) for t in tags_with_items]
-
-        logger.info(
-            "[TAGS] list_all_tags_for_user user=%s type=%s owner_filter=%s returned=%d tags=%s",
-            user.uid,
-            tag_type,
-            owner_filter,
-            len(tags_with_perm),
-            [t.id for t in tags_with_perm],
-        )
-        return tags_with_perm
+        """List one team's corpus; SQL applies scope and pagination together."""
+        if owner_filter == OwnerFilter.TEAM and not team_id:
+            raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
+        resolved_team = self.corpus_access.team_id(user, team_id)
+        service_read = is_service_agent(user) and not holds_caller_role(user)
+        tags = await self._readable_team_folders(user, team_id, path_prefix=self._normalize_path(path_prefix), limit=limit, offset=offset)
+        ids_by_tag = await self.document_metadata_service.metadata_store.document_uids_by_tags([tag.id for tag in tags])
+        permissions = [TagPermission.READ]
+        if not service_read and await self.rebac.has_user_permission(user, TeamPermission.CAN_UPDATE_RESOURCES, resolved_team):
+            permissions.extend([TagPermission.UPDATE, TagPermission.DELETE])
+        return [TagWithPermissions.from_tag_with_items(TagWithItemsId.from_tag(tag, ids_by_tag.get(tag.id, [])), permissions) for tag in tags]
 
     async def list_authorized_tags_ids(self, user: KeycloakUser, owner_filter: Optional[OwnerFilter], team_id: Optional[str]) -> set[str]:
-        if team_id == "personal" or is_personal_team_id(team_id):
-            team_id = None
-            owner_filter = OwnerFilter.PERSONAL
-        """Convenience method to get the set of authorized tag IDs for a user. If ReBAC is disabled, return all tag IDs."""
-        # todo: add a filter on tag type ?
-        tag_ids = await self.resolve_authorized_tag_ids_in_rebac(user, owner_filter, team_id)
-        if isinstance(tag_ids, RebacDisabledResult):
-            return {t.id for t in await self._tag_store.list_all_tags()}
-        return tag_ids
+        if owner_filter == OwnerFilter.TEAM and not team_id:
+            raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
+        return {tag.id for tag in await self._readable_team_folders(user, team_id)}
+
+    async def _readable_team_folders(self, user: KeycloakUser, team_id: str | None, *, path_prefix: str | None = None, limit: int | None = None, offset: int = 0) -> list[Tag]:
+        resolved_team = self.corpus_access.team_id(user, team_id)
+        return await self.corpus_access.list_readable_folders(user, resolved_team, path_prefix=path_prefix, limit=limit, offset=offset)
 
     async def get_corpus_type_stats(self, user: KeycloakUser, team_id: Optional[str]) -> dict[FileTypeBucket, tuple[int, int]]:
         """
@@ -188,11 +122,8 @@ class TagService:
         - pass the team id (or None/"personal" for the caller's personal corpus)
         """
         tag_ids = await self.list_authorized_tags_ids(user, None, team_id)
-        # One batched read for the whole corpus: the per-tag loop this replaces
-        # re-ran the authorization lookup and a full metadata scan per library.
-        # The union is already de-duplicated, so a document filed under two of
-        # the team's libraries is still counted once.
-        docs = await self.document_metadata_service.get_documents_metadata_in_tags(user, list(tag_ids))
+        # Team admission above already authorized this SQL folder inventory.
+        docs = await self.document_metadata_service.metadata_store.metadata_in_tags(list(tag_ids))
         totals: dict[FileTypeBucket, list[int]] = {}
         for doc in docs:
             bucket = file_type_bucket(doc.document_name)
@@ -202,157 +133,64 @@ class TagService:
         return {bucket: (count, size) for bucket, (count, size) in totals.items()}
 
     async def get_tag_for_user(self, tag_id: str, user: KeycloakUser) -> TagWithItemsId:
-        if is_service_agent(user) and not holds_caller_role(user):
-            # EVAL-AUTH (Solution A) — extends the bypass already applied to the
-            # bulk resolver (resolve_authorized_tag_ids_in_rebac) to this
-            # single-tag lookup. The service_agent holds no per-user tag
-            # relation, so the interactive check below always denies it.
-            #
-            # No team_id parameter is needed here (unlike the tabular per-uid
-            # fallback, which trusts the request's own team_id): the tag's own
-            # `owner_id` already tells us the team that would have to grant
-            # read access, so we scope the check to that team directly rather
-            # than trusting an externally supplied one. This also means a
-            # personal tag (`owner_id` is a user id, not a team) safely fails
-            # closed — `resolve_authorized_tag_ids_in_rebac` returns nothing
-            # for a subject that isn't a real ReBAC team.
-            tag = await self._tag_store.get_tag_by_id(tag_id)
-            authorized_ids = await self.resolve_authorized_tag_ids_in_rebac(user, None, tag.owner_id)
-            if not isinstance(authorized_ids, RebacDisabledResult) and tag_id not in authorized_ids:
-                logger.warning(
-                    "ReBAC authorization denied: subject=user:%s permission=%s resource=%s:%s (service_agent, team=%s)",
-                    user.uid,
-                    TagPermission.READ.value,
-                    Resource.TAGS.value,
-                    tag_id,
-                    tag.owner_id,
-                )
-                raise AuthorizationError(user.uid, TagPermission.READ.value, Resource.TAGS)
-        else:
-            await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
-            tag = await self._tag_store.get_tag_by_id(tag_id)
-
-        item_service = get_specific_tag_item_service(tag.type)
-        item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
-
+        tag = await self.corpus_access.get_folder(user, tag_id)
+        item_ids = (await self.document_metadata_service.metadata_store.document_uids_by_tags([tag.id])).get(tag.id, [])
         return TagWithItemsId.from_tag(tag, item_ids)
 
     async def create_tag_for_user(self, tag_data: TagCreate, user: KeycloakUser) -> TagWithItemsId:
-        team_id = tag_data.team_id
-        if team_id == "personal":
-            team_id = None
+        owner_id = self.corpus_access.team_id(user, tag_data.team_id)
+        parent = None
+        if tag_data.path:
+            parent = await self._tag_store.get_by_owner_type_full_path(owner_id, tag_data.type, tag_data.path)
+            if parent is None:
+                raise TagNotFoundError(f"Parent folder '{tag_data.path}' not found")
+        if parent is not None:
+            await self.corpus_access.check_folder(user, parent, write=True)
+            await refuse_if_synchronized(self._tag_store, parent, user)
+        else:
+            await self.corpus_access.check_team(user, owner_id, write=True)
+        return await self.create_tag_trusted(tag_data, owner_id=owner_id)
 
-        # owner_id is the team or user, used for uniqueness scoping
-        owner_id = team_id or user.uid
-
-        # Normalize + uniqueness
-        norm_path = self._normalize_path(tag_data.path)
-        full_path = self._compose_full_path(norm_path, tag_data.name)
-
-        # Resolved before authorization, not only for the ReBAC link below: a
-        # folder inside another is authorized by the right to write in that
-        # parent, which is how one grant over a library reaches its whole
-        # subtree. A top-level folder still takes the team-level right, so being
-        # able to fill one folder never becomes being able to add folders to a
-        # team.
-        parent_tag = None
-        if norm_path:
-            parent_tag = await self._tag_store.get_by_owner_type_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=norm_path)
-
-        if team_id:
-            authorized_by_parent = parent_tag is not None and await self.rebac.has_user_permission(user, TagPermission.UPDATE, parent_tag.id)
-            if not authorized_by_parent:
-                await self.rebac.check_user_team_permission_or_raise(
-                    user=user,
-                    permission=TeamPermission.CAN_UPDATE_RESOURCES,
-                    team_id=team_id,
-                )
-
-        if parent_tag is not None:
-            # A machine's folder tree is its source's shape, so a folder a person
-            # adds to it would be one the next run neither knows nor removes.
-            await refuse_if_synchronized(self._tag_store, parent_tag, user)
-
+    async def create_tag_trusted(self, tag_data: TagCreate, *, owner_id: str) -> TagWithItemsId:
+        """Persist a folder after team/source admission; no per-folder grants."""
+        path = self._normalize_path(tag_data.path)
+        full_path = self._compose_full_path(path, tag_data.name)
         await self._ensure_unique_full_path(owner_id=owner_id, tag_type=tag_data.type, full_path=full_path)
-
         now = datetime.now()
         tag = await self._tag_store.create_tag(
-            Tag(
-                id=str(uuid4()),
-                owner_id=owner_id,
-                created_at=now,
-                updated_at=now,
-                name=tag_data.name,
-                path=norm_path,
-                description=tag_data.description,
-                type=tag_data.type,
-            )
+            Tag(id=str(uuid4()), owner_id=owner_id, created_at=now, updated_at=now, name=tag_data.name, path=path, description=tag_data.description, type=tag_data.type)
         )
-
-        # Create ReBAC ownership: team owns the tag, or user owns the tag
-        if team_id:
-            await self.rebac.add_relation(
-                Relation(
-                    subject=RebacReference(type=Resource.TEAM, id=team_id),
-                    relation=RelationType.OWNER,
-                    resource=RebacReference(type=Resource.TAGS, id=tag.id),
-                ),
-                actor_uid=user.uid,
-            )
-        else:
-            await self.rebac.add_user_relation(user, RelationType.OWNER, resource_type=Resource.TAGS, resource_id=tag.id)
-
-        # Link to parent tag in ReBAC when the new tag is nested.
-        if norm_path:
-            if parent_tag:
-                await self.rebac.add_relation(
-                    Relation(
-                        subject=RebacReference(type=Resource.TAGS, id=parent_tag.id),
-                        relation=RelationType.PARENT,
-                        resource=RebacReference(type=Resource.TAGS, id=tag.id),
-                    ),
-                    actor_uid=user.uid,
-                )
-            else:
-                logger.warning(
-                    "[TAGS] Parent tag not found for full_path=%s (owner=%s, type=%s) during creation of %s",
-                    norm_path,
-                    owner_id,
-                    tag_data.type,
-                    tag.id,
-                )
-
         return TagWithItemsId.from_tag(tag, [])
 
     async def update_tag_for_user(self, tag_id: str, tag_data: TagUpdate, user: KeycloakUser) -> TagWithItemsId:
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-
-        tag = await self._tag_store.get_tag_by_id(tag_id)
+        tag = await self.corpus_access.get_folder(user, tag_id, write=True)
         # The one person-facing path that changes what a folder holds or is
         # called — adding an item, removing one, renaming, moving. Deleting the
         # folder does not come through here, and stays open on purpose.
         await refuse_if_synchronized(self._tag_store, tag, user)
-        item_service = get_specific_tag_item_service(tag.type)
+        item_service = DocumentTagItemService()
 
-        # Add / remove changed item ids
-        old_item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
-        added_ids, removed_ids = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
+        # Renaming never sends document membership from the UI snapshot.
+        # Explicit membership updates retain their existing path until deletion
+        # actions are cut over to the dedicated lifecycle operation.
+        if tag_data.item_ids is not None:
+            old_item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
+            added_ids, removed_ids = self._compute_ids_diff(old_item_ids, tag_data.item_ids)
+            await asyncio.gather(
+                *(item_service.add_tag_id_to_item(user, added_id, tag_id) for added_id in added_ids),
+                *(item_service.remove_tag_id_from_item(user, removed_id, tag_id) for removed_id in removed_ids),
+            )
 
-        await asyncio.gather(
-            *(item_service.add_tag_id_to_item(user, added_id, tag_id) for added_id in added_ids),
-            *(item_service.remove_tag_id_from_item(user, removed_id, tag_id) for removed_id in removed_ids),
-        )
-
-        # Apply the editable metadata from the request. Without this the endpoint
-        # saved the tag loaded from the store unchanged, so every rename (name or
-        # path) was silently dropped — a folder rename appeared to do nothing.
-        # `type` is intentionally not mutated here: it selected `item_service`
-        # above, so changing it would desynchronize the item diff already applied.
-        tag.name = tag_data.name
-        tag.path = tag_data.path
-        tag.description = tag_data.description
-        tag.updated_at = datetime.now()
-        updated_tag = await self._tag_store.update_tag_by_id(tag_id, tag)
+        requested_path = tag_data.path if "path" in tag_data.model_fields_set else tag.path
+        if (tag.path or "") == (requested_path or ""):
+            updated_tag = await self._tag_store.rename_tag(tag_id, name=tag_data.name, description=tag_data.description)
+        else:
+            # Existing path-changing API; no new folder move UI is introduced.
+            tag.name = tag_data.name
+            tag.path = requested_path
+            tag.description = tag_data.description
+            tag.updated_at = datetime.now()
+            updated_tag = await self._tag_store.update_tag_by_id(tag_id, tag)
 
         # Return the up-to-date list of item ids
         item_ids = await item_service.retrieve_items_ids_for_tag(user, tag.id)
@@ -382,7 +220,7 @@ class TagService:
 
     async def _delete_one_tag(self, tag: Tag, user: KeycloakUser):
         await self.rebac.check_user_permission_or_raise(user, TagPermission.DELETE, tag.id)
-        item_service = get_specific_tag_item_service(tag.type)
+        item_service = DocumentTagItemService()
 
         # Remove tag on all items (and delete them if they have no tag anymore).
         # Bounded batches, not one coroutine per document: each removal takes a
@@ -401,190 +239,12 @@ class TagService:
 
         # TODO: remove all relation of this tag in ReBAC
 
-    async def share_tag_with_user(
-        self,
-        user: KeycloakUser,
-        tag_id: str,
-        target_id: str,
-        target_type: Resource,
-        relation: UserTagRelation,
-    ) -> None:
-        """
-        Share a tag with another user by adding a relation in the ReBAC engine.
-        """
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
-        await self.rebac.add_relation(
-            Relation(
-                subject=RebacReference(type=target_type, id=target_id),
-                relation=relation.to_relation(),
-                resource=RebacReference(type=Resource.TAGS, id=tag_id),
-            ),
-            actor_uid=user.uid,
-        )
+    async def update_tag_timestamp_trusted(self, tag_id: str) -> None:
+        """Touch a folder after an already-authorized document write."""
 
-    async def unshare_tag_with_user(self, user: KeycloakUser, tag_id: str, target_id: str, target_type: Resource) -> None:
-        """
-        Revoke tag access previously granted to another user.
-        Removes any user-tag relation regardless of the level originally assigned.
-        """
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.SHARE, tag_id)
-        for relation in list(UserTagRelation):
-            await self.rebac.delete_relation(
-                Relation(
-                    subject=RebacReference(type=target_type, id=target_id),
-                    relation=relation.to_relation(),
-                    resource=RebacReference(type=Resource.TAGS, id=tag_id),
-                )
-            )
-
-    async def list_tag_members(self, tag_id: str, user: KeycloakUser) -> list[TagMemberUser]:
-        """
-        List users who have access to the tag along with their relation level.
-        """
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
-
-        # Fetch user relations
-        user_relations = await self._get_tag_members_by_type(tag_id, Resource.USER)
-
-        # Fetch user summaries
-        user_summaries = await get_users_by_ids(user_relations.keys())
-
-        # Compose result
-        users: list[TagMemberUser] = []
-        for user_id, relation in user_relations.items():
-            summary = user_summaries.get(user_id) or UserSummary(id=user_id)
-            users.append(TagMemberUser(relation=relation, user=summary))
-
-        return users
-
-    async def update_tag_timestamp(self, tag_id: str, user: KeycloakUser) -> None:
-        await self.rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-
-        tag = await self._tag_store.get_tag_by_id(tag_id)
-        tag.updated_at = datetime.now()
-        await self._tag_store.update_tag_by_id(tag_id, tag)
+        await self._tag_store.touch_tag(tag_id)
 
     # ---------- Internals / helpers ----------
-
-    # Permissions that are actual ReBAC relations (owner/editor/viewer),
-    # not action-based permissions. We exclude them from the batch permission
-    # check since they are not useful for frontend UI gating.
-    _RELATION_PERMISSIONS: set[TagPermission] = {perm for perm in TagPermission if perm.value in {rt.value for rt in RelationType}}
-
-    async def _get_tag_permissions_for_list(
-        self,
-        user: KeycloakUser,
-        tag_ids: set[str],
-    ) -> dict[str, list[TagPermission]]:
-        """Batch-resolve action permissions for multiple tags using lookup_resources.
-
-        Uses one lookup_resources call per permission type (O(permissions), not O(tags × permissions)).
-        """
-        if not tag_ids:
-            return {}
-
-        action_permissions = [p for p in TagPermission if p not in self._RELATION_PERMISSIONS]
-
-        results = await asyncio.gather(*[self.rebac.lookup_user_resources(user, perm) for perm in action_permissions])
-
-        perm_map: dict[str, list[TagPermission]] = {tid: [] for tid in tag_ids}
-        for perm, authorized_refs in zip(action_permissions, results):
-            if isinstance(authorized_refs, RebacDisabledResult):
-                # ReBAC disabled: grant all action permissions to every tag
-                for tid in tag_ids:
-                    perm_map[tid] = list(action_permissions)
-                return perm_map
-            authorized_ids = {ref.id for ref in authorized_refs}
-            for tid in tag_ids & authorized_ids:
-                perm_map[tid].append(perm)
-
-        return perm_map
-
-    async def resolve_authorized_tag_ids_in_rebac(
-        self,
-        user: KeycloakUser,
-        owner_filter: Optional[OwnerFilter],
-        team_id: Optional[str],
-    ) -> set[str] | RebacDisabledResult:
-        """Return the set of tag IDs the user is allowed to see, or None if ReBAC is disabled.
-
-        Always enforces TagPermission.READ as the security baseline.
-        When an owner_filter is provided, the result is intersected with the
-        owner-filtered tag IDs so only readable tags matching the filter are returned.
-        """
-        # EVAL-AUTH (Solution A, knowledge-flow enforcement point): the evaluation
-        # worker (`service_agent`) holds no per-user tag relations, so the READ
-        # baseline is empty and would zero out the result. Instead, authorize the
-        # TEAM's tags directly, scoped to the request team_id (read-only). This lets a
-        # RAG agent run by the worker retrieve the team's indexed corpus. Fail closed
-        # without a (non-personal) team.
-        if is_service_agent(user) and not holds_caller_role(user):
-            if not team_id or is_personal_team_id(team_id):
-                return set()
-            team_ref = RebacReference(type=Resource.TEAM, id=team_id)
-            owned, edited, viewed = await asyncio.gather(
-                self.rebac.lookup_resources(team_ref, TagPermission.OWNER, Resource.TAGS),
-                self.rebac.lookup_resources(team_ref, TagPermission.EDITOR, Resource.TAGS),
-                self.rebac.lookup_resources(team_ref, TagPermission.VIEWER, Resource.TAGS),
-            )
-            if isinstance(owned, RebacDisabledResult) or isinstance(edited, RebacDisabledResult) or isinstance(viewed, RebacDisabledResult):
-                return RebacDisabledResult()
-            return {ref.id for r in (owned, edited, viewed) for ref in r}
-
-        readable_coro = self.rebac.lookup_user_resources(user, TagPermission.READ)
-
-        if owner_filter is None:
-            readable_refs = await readable_coro
-            if isinstance(readable_refs, RebacDisabledResult):
-                return RebacDisabledResult()
-            return {ref.id for ref in readable_refs}
-
-        # Determine the subject reference based on the filter
-        if owner_filter == OwnerFilter.TEAM:
-            if not team_id:
-                raise MissingTeamIdError("team_id is required when owner_filter is 'team'")
-            subject_ref = RebacReference(type=Resource.TEAM, id=team_id)
-        else:
-            subject_ref = RebacReference(type=Resource.USER, id=user.uid)
-
-        # Run all lookups in parallel: security baseline + owner-filtered lookups
-        readable_refs, owned, edited, viewed = await asyncio.gather(
-            readable_coro,
-            self.rebac.lookup_resources(subject_ref, TagPermission.OWNER, Resource.TAGS),
-            self.rebac.lookup_resources(subject_ref, TagPermission.EDITOR, Resource.TAGS),
-            self.rebac.lookup_resources(subject_ref, TagPermission.VIEWER, Resource.TAGS),
-        )
-        if isinstance(readable_refs, RebacDisabledResult) or isinstance(owned, RebacDisabledResult) or isinstance(edited, RebacDisabledResult) or isinstance(viewed, RebacDisabledResult):
-            return RebacDisabledResult()
-
-        readable_ids = {ref.id for ref in readable_refs}
-        filtered_ids = {ref.id for r in (owned, edited, viewed) for ref in r}
-        return readable_ids & filtered_ids
-
-    async def _get_tag_members_by_type(self, tag_id: str, subject_type: Resource) -> dict[str, UserTagRelation]:
-        tag_reference = RebacReference(type=Resource.TAGS, id=tag_id)
-        relation_priority = {
-            UserTagRelation.OWNER: 0,
-            UserTagRelation.EDITOR: 1,
-            UserTagRelation.VIEWER: 2,
-        }
-        members: dict[str, UserTagRelation] = {}
-
-        for relation in (
-            UserTagRelation.OWNER,
-            UserTagRelation.EDITOR,
-            UserTagRelation.VIEWER,
-        ):
-            subjects = await self.rebac.lookup_subjects(tag_reference, relation.to_relation(), subject_type)
-            if isinstance(subjects, RebacDisabledResult):
-                return {}
-
-            for subject in subjects:
-                current = members.get(subject.id)
-                if current is None or relation_priority[relation] < relation_priority[current]:
-                    members[subject.id] = relation
-
-        return members
 
     @staticmethod
     def _compute_ids_diff(before: list[str], after: list[str]) -> tuple[list[str], list[str]]:

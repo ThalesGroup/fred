@@ -37,6 +37,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const renameMutation = vi.fn();
+const updateTag = vi.fn();
 const refetchTags = vi.fn(async () => undefined);
 const refetchDocs = vi.fn(async (_tagId?: string) => undefined);
 const showError = vi.fn();
@@ -51,8 +52,7 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 }));
 vi.mock("../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation: () => [renameMutation],
-  useUpdateTagMutation: () => [vi.fn()],
-  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation: () => [vi.fn()],
+  useUpdateTagMutation: () => [updateTag],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [vi.fn()],
   useMutateDocumentLabelsMutation: () => [vi.fn()],
 }));
@@ -76,6 +76,7 @@ describe("useDocumentCommands.renameDocument (#2407)", () => {
 
   beforeEach(() => {
     renameMutation.mockReset();
+    updateTag.mockReset();
     refetchTags.mockClear();
     refetchDocs.mockClear();
     showError.mockClear();
@@ -92,6 +93,26 @@ describe("useDocumentCommands.renameDocument (#2407)", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it("renames a folder in one request without sending document membership", async () => {
+    updateTag.mockReturnValue({ unwrap: async () => undefined });
+    const tag = { id: "root", name: "Before", path: null, type: "document", item_ids: ["stale-doc"] };
+    const node = {
+      name: "Before",
+      full: "Before",
+      tagsHere: [tag],
+      children: new Map([["Child", { name: "Child", full: "Before/Child", tagsHere: [], children: new Map() }]]),
+    } as Parameters<typeof commands.renameFolder>[0];
+    await act(async () => {
+      await commands.renameFolder(node, "After");
+    });
+    expect(updateTag).toHaveBeenCalledTimes(1);
+    expect(updateTag).toHaveBeenCalledWith({
+      tagId: "root",
+      tagUpdate: { name: "After", description: undefined, type: "document" },
+    });
+    expect(refetchTags).toHaveBeenCalledTimes(1);
   });
 
   it("reloads the caller's folder page after the rename succeeds", async () => {

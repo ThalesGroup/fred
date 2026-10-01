@@ -1984,7 +1984,6 @@ dependencies = [
     { name = "pymupdf" },
     { name = "pymupdf4llm" },
     { name = "pymysql" },
-    { name = "pypandoc" },
     { name = "pypandoc-binary" },
     { name = "pypdf" },
     { name = "python-docx" },
@@ -2076,7 +2075,6 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.27.2.3" },
     { name = "pymupdf4llm", specifier = ">=1.27.2.3" },
     { name = "pymysql", specifier = ">=1.1.1" },
-    { name = "pypandoc", specifier = "==1.15" },
     { name = "pypandoc-binary", specifier = "==1.15" },
     { name = "pypdf", specifier = "==6.19.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "==8.3.5" },
@@ -3890,15 +3888,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3f/e8/7325d258199b159eb2c03fe32107533e2832e70e63f4fb88a6aa00023201/pyopenssl-26.4.0.tar.gz", hash = "sha256:28dfcce0162b9211413e26dfbfdf1d24317fbeba18fc93c12400a1856b2a0bc7", size = 182046, upload-time = "2026-08-01T19:50:50.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/ad/2cf6d3fa2fae5c79e1ed9960c0d42badd0f94d81dd12b50604cdc839e648/pyopenssl-26.4.0-py3-none-any.whl", hash = "sha256:f0eb0cb2d581d3ad2b9c489468485e7f2ab6727d08401bcf9d824c3caddf3c1c", size = 56026, upload-time = "2026-08-01T19:50:48.94Z" },
-]
-
-[[package]]
-name = "pypandoc"
-version = "1.15"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e1/88/26e650d053df5f3874aa3c05901a14166ce3271f58bfe114fd776987efbd/pypandoc-1.15.tar.gz", hash = "sha256:ea25beebe712ae41d63f7410c08741a3cab0e420f6703f95bc9b3a749192ce13", size = 32940, upload-time = "2025-01-08T17:39:58.705Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/06/0763e0ccc81754d3eadb21b2cb86cf21bdedc9b52698c2ad6785db7f0a4e/pypandoc-1.15-py3-none-any.whl", hash = "sha256:4ededcc76c8770f27aaca6dff47724578428eca84212a31479403a9731fc2b16", size = 21321, upload-time = "2025-01-08T17:39:09.928Z" },
 ]
 
 [[package]]

@@ -81,8 +81,6 @@ from knowledge_flow_backend.core.stores.files.base_file_store import BaseFileSto
 from knowledge_flow_backend.core.stores.files.gcs_file_store import GcsFileStore
 from knowledge_flow_backend.core.stores.files.local_file_store import LocalFileStore
 from knowledge_flow_backend.core.stores.files.minio_file_store import MinioFileStore
-from knowledge_flow_backend.core.stores.resources.base_resource_store import BaseResourceStore
-from knowledge_flow_backend.core.stores.resources.postgres_resource_store import PostgresResourceStore
 from knowledge_flow_backend.core.stores.tags.base_tag_store import BaseTagStore
 from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.core.stores.vector.base_text_splitter import BaseTextSplitter
@@ -286,7 +284,6 @@ class ApplicationContext:
 
     _log_store_instance: Optional[BaseLogStore] = None
     _opensearch_client: Optional[OpenSearch] = None
-    _resource_store_instance: Optional[BaseResourceStore] = None
     _file_store_instance: Optional[BaseFileStore] = None
     _content_store_instance: Optional[BaseContentStore] = None
     _embedder_instance: Optional[Embeddings] = None
@@ -904,16 +901,6 @@ class ApplicationContext:
             return self._tag_store_instance
         raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
 
-    def get_resource_store(self) -> BaseResourceStore:
-        if self._resource_store_instance is not None:
-            return self._resource_store_instance
-
-        store_config = get_configuration().storage.resource_store
-        if isinstance(store_config, PostgresTableConfig):
-            self._resource_store_instance = PostgresResourceStore(engine=self.get_pg_async_engine())
-            return self._resource_store_instance
-        raise ValueError(f"Unsupported tag storage backend: {store_config.type}")
-
     def get_content_loader(self, source: str) -> BaseContentLoader:
         """
         Factory method to create a document loader instance based on configuration.
@@ -1189,7 +1176,6 @@ class ApplicationContext:
             _describe("tag_store", st.tag_store)
             _describe("metadata_store", st.metadata_store)
             _describe("vector_store", st.vector_store)
-            _describe("resource_store", st.resource_store)
 
         except Exception:
             logger.warning("  ⚠️ Failed to read storage section (some variables may be missing).")

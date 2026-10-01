@@ -1072,15 +1072,40 @@ async def _run_import_body(
                 uid = row["document_uid"]
                 if await s.get(DocumentMetadataRow, uid) is not None:
                     return False
+                kind = row.get("kind", "corpus")
+                folder_ids = row.get("tag_ids") or []
+                if (
+                    kind not in {"corpus", "attachment"}
+                    or not isinstance(folder_ids, list)
+                    or len(folder_ids) != (1 if kind == "corpus" else 0)
+                ):
+                    raise ValueError(
+                        f"Document {uid}: corpus import requires one folder; attachments require explicit kind and no folder"
+                    )
+                doc = _reset_transported_stages(row.get("doc"))
+                if doc is not None:
+                    doc = dict(doc)
+                    embedded = (doc.get("tags") or {}).get("tag_ids")
+                    if embedded is not None and embedded != folder_ids:
+                        raise ValueError(
+                            f"Document {uid}: conflicting imported folder memberships"
+                        )
+                    doc.pop("kind", None)
+                    doc["tags"] = {
+                        key: value
+                        for key, value in (doc.get("tags") or {}).items()
+                        if key != "tag_ids"
+                    }
                 s.add(
                     DocumentMetadataRow(
                         document_uid=uid,
                         source_tag=row.get("source_tag"),
                         date_added_to_kb=_coerce_dt(row.get("date_added_to_kb")),
-                        tag_ids=row.get("tag_ids") or [],
+                        kind=kind,
+                        folder_id=folder_ids[0] if folder_ids else None,
                         source_library_id=row.get("source_library_id"),
                         source_key=row.get("source_key"),
-                        doc=_reset_transported_stages(row.get("doc")),
+                        doc=doc,
                     )
                 )
                 return True

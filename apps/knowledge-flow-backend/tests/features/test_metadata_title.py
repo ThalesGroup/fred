@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import (
@@ -75,6 +77,7 @@ def _service(doc: DocumentMetadata | None) -> tuple[MetadataService, _FakeMetada
     store = _FakeMetadataStore(doc)
     service.metadata_store = store
     service.rebac = _FakeRebac()
+    service.corpus_access = AsyncMock()
     service.vector_store = None
     return service, store
 

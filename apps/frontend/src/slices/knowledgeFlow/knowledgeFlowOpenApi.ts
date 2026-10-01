@@ -84,21 +84,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    searchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPost: build.mutation<
-      SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse,
-      SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/documents/metadata/search`,
-        method: "POST",
-        body: queryArg.filters,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
     getDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGet: build.query<
       GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiResponse,
       GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg
@@ -225,6 +210,7 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/documents/labels`,
         params: {
+          team_id: queryArg.teamId,
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -235,6 +221,7 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/documents/by-label/${queryArg.label}`,
         params: {
+          team_id: queryArg.teamId,
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -246,6 +233,9 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/documents/by-label`,
         params: {
           label: queryArg.label,
+          team_id: queryArg.teamId,
+          folder_ids: queryArg.folderIds,
+          document_uids: queryArg.documentUids,
           offset: queryArg.offset,
           limit: queryArg.limit,
           person: queryArg.person,
@@ -684,40 +674,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    listTagMembers: build.query<ListTagMembersApiResponse, ListTagMembersApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/members`,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    shareTag: build.mutation<ShareTagApiResponse, ShareTagApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/share`,
-        method: "POST",
-        body: queryArg.tagShareRequest,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    unshareTag: build.mutation<UnshareTagApiResponse, UnshareTagApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/tags/${queryArg.tagId}/share/${queryArg.targetId}`,
-        method: "DELETE",
-        params: {
-          target_type: queryArg.targetType,
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
     echoSchemaKnowledgeFlowV1SchemasEchoPost: build.mutation<
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse,
       EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg
@@ -845,73 +801,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/documents/${queryArg.documentUid}/extract`,
         method: "POST",
         body: queryArg.extractDocumentRequest,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    getResourceCreationSchema: build.query<GetResourceCreationSchemaApiResponse, GetResourceCreationSchemaApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/resources/schema`,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    createResource: build.mutation<CreateResourceApiResponse, CreateResourceApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/resources`,
-        method: "POST",
-        body: queryArg.resourceCreate,
-        params: {
-          library_tag_id: queryArg.libraryTagId,
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    listResourcesByKind: build.query<ListResourcesByKindApiResponse, ListResourcesByKindApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/resources`,
-        params: {
-          kind: queryArg.kind,
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    updateResource: build.mutation<UpdateResourceApiResponse, UpdateResourceApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
-        method: "PUT",
-        body: queryArg.resourceUpdate,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    getResource: build.query<GetResourceApiResponse, GetResourceApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    deleteResource: build.mutation<DeleteResourceApiResponse, DeleteResourceApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/resources/${queryArg.resourceId}`,
-        method: "DELETE",
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1625,18 +1514,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    writeReport: build.mutation<WriteReportApiResponse, WriteReportApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/mcp/reports/write`,
-        method: "POST",
-        body: queryArg.writeReportRequest,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
     processDocumentsKnowledgeFlowV1ProcessDocumentsPost: build.mutation<
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse,
       ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg
@@ -1716,16 +1593,6 @@ export type AcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostApiArg = {
   run?: string | null;
   agent?: string | null;
 };
-export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiResponse =
-  /** status 200 Successful Response */ DocumentMetadata[];
-export type SearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  filters: {
-    [key: string]: any;
-  };
-};
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiResponse =
   /** status 200 Successful Response */ DocumentMetadata;
 export type GetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetApiArg = {
@@ -1803,6 +1670,7 @@ export type RemoveDocumentLabelApiArg = {
 };
 export type ListDocumentLabelsApiResponse = /** status 200 Successful Response */ string[];
 export type ListDocumentLabelsApiArg = {
+  teamId: string;
   person?: string | null;
   run?: string | null;
   agent?: string | null;
@@ -1810,6 +1678,7 @@ export type ListDocumentLabelsApiArg = {
 export type ListDocumentsByLabelApiResponse = /** status 200 Successful Response */ BrowseDocumentsResponse;
 export type ListDocumentsByLabelApiArg = {
   label: string;
+  teamId: string;
   person?: string | null;
   run?: string | null;
   agent?: string | null;
@@ -1817,6 +1686,9 @@ export type ListDocumentsByLabelApiArg = {
 export type ResolveDocumentsByLabelApiResponse = /** status 200 Successful Response */ LabelDocumentsPage;
 export type ResolveDocumentsByLabelApiArg = {
   label: string;
+  teamId: string;
+  folderIds?: string[] | null;
+  documentUids?: string[] | null;
   offset?: number;
   limit?: number;
   person?: string | null;
@@ -2096,30 +1968,6 @@ export type DeleteTagApiArg = {
   run?: string | null;
   agent?: string | null;
 };
-export type ListTagMembersApiResponse = /** status 200 Successful Response */ TagMembersResponse;
-export type ListTagMembersApiArg = {
-  tagId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type ShareTagApiResponse = unknown;
-export type ShareTagApiArg = {
-  tagId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  tagShareRequest: TagShareRequest;
-};
-export type UnshareTagApiResponse = unknown;
-export type UnshareTagApiArg = {
-  tagId: string;
-  targetId: string;
-  targetType: ShareTargetResource;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiResponse = /** status 200 Successful Response */ any;
 export type EchoSchemaKnowledgeFlowV1SchemasEchoPostApiArg = {
   person?: string | null;
@@ -2195,53 +2043,6 @@ export type ExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostApiArg 
   run?: string | null;
   agent?: string | null;
   extractDocumentRequest: ExtractDocumentRequest;
-};
-export type GetResourceCreationSchemaApiResponse = /** status 200 Successful Response */ {
-  [key: string]: any;
-};
-export type GetResourceCreationSchemaApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type CreateResourceApiResponse = /** status 201 Successful Response */ Resource;
-export type CreateResourceApiArg = {
-  /** Library tag id to attach this resource to */
-  libraryTagId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  resourceCreate: ResourceCreate;
-};
-export type ListResourcesByKindApiResponse = /** status 200 Successful Response */ Resource[];
-export type ListResourcesByKindApiArg = {
-  /** prompt | template */
-  kind: ResourceKind;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type UpdateResourceApiResponse = /** status 200 Successful Response */ Resource;
-export type UpdateResourceApiArg = {
-  resourceId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  resourceUpdate: ResourceUpdate;
-};
-export type GetResourceApiResponse = /** status 200 Successful Response */ Resource;
-export type GetResourceApiArg = {
-  resourceId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type DeleteResourceApiResponse = /** status 200 Successful Response */ any;
-export type DeleteResourceApiArg = {
-  resourceId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
 };
 export type LsApiResponse = /** status 200 Successful Response */ any;
 export type LsApiArg = {
@@ -2798,13 +2599,6 @@ export type PrometheusTargetsApiArg = {
   run?: string | null;
   agent?: string | null;
 };
-export type WriteReportApiResponse = /** status 200 Successful Response */ WriteReportResponse;
-export type WriteReportApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  writeReportRequest: WriteReportRequest;
-};
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiResponse =
   /** status 200 Successful Response */ ProcessDocumentsResponse;
 export type ProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostApiArg = {
@@ -2998,7 +2792,7 @@ export type DocSummary = {
   created_at?: string | null;
 };
 export type Tagging = {
-  /** Stable tag IDs (UUIDs) */
+  /** The single corpus folder ID; empty for a conversation attachment */
   tag_ids?: string[];
   /** Display names for chips */
   tag_names?: string[];
@@ -3020,6 +2814,7 @@ export type Processing = {
   };
 };
 export type DocumentMetadata = {
+  kind?: "corpus" | "attachment";
   identity: Identity;
   source: SourceInfo;
   file?: FileInfo;
@@ -3057,7 +2852,7 @@ export type BrowseDocumentsByTagRequest = {
   sort_order?: "asc" | "desc";
 };
 export type TagSizesResponse = {
-  /** Total document bytes per requested tag id (0 when unknown/empty) */
+  /** Total document bytes per authorized folder (0 when empty); unknown folders are refused */
   sizes: {
     [key: string]: number;
   };
@@ -3225,7 +3020,7 @@ export type LibrarySynchronizedBy = {
   /** Qualified reference to the machine that fills this library, e.g. "knowledge_base:ab12". Opaque to Fred: only its presence is acted on. */
   synchronized_by: string;
 };
-export type TagType = "document" | "prompt" | "template" | "chat-context";
+export type TagType = "document";
 export type TagPermission = "read" | "update" | "delete" | "share" | "owner" | "editor" | "viewer";
 export type TagWithPermissions = {
   id: string;
@@ -3272,31 +3067,11 @@ export type ResourceTypeStatsResponse = {
 };
 export type TagUpdate = {
   name: string;
+  /** Omit to retain the stored parent path when renaming. */
   path?: string | null;
   description?: string | null;
   type: TagType;
-  item_ids?: string[];
-};
-export type UserTagRelation = "owner" | "editor" | "viewer";
-export type UserSummary = {
-  id: string;
-  first_name?: string | null;
-  last_name?: string | null;
-  username?: string | null;
-};
-export type TagMemberUser = {
-  type?: "user";
-  relation: UserTagRelation;
-  user: UserSummary;
-};
-export type TagMembersResponse = {
-  users?: TagMemberUser[];
-};
-export type ShareTargetResource = "user";
-export type TagShareRequest = {
-  target_id: string;
-  target_type: ShareTargetResource;
-  relation: UserTagRelation;
+  item_ids?: string[] | null;
 };
 export type SearchPolicyName = "hybrid" | "strict" | "semantic";
 export type EchoEnvelope = {
@@ -3440,35 +3215,6 @@ export type ExtractDocumentResponse = {
 export type ExtractDocumentRequest = {
   /** What to extract exhaustively, e.g. 'every functional requirement', 'all deadlines and their context'. */
   instruction: string;
-};
-export type ResourceKind = "prompt" | "template" | "chat-context";
-export type Resource = {
-  id: string;
-  kind: ResourceKind;
-  version: string;
-  name?: string | null;
-  description?: string | null;
-  labels?: string[] | null;
-  author: string;
-  created_at: string;
-  updated_at: string;
-  /** Raw YAML text or other content */
-  content: string;
-  /** List of tags associated with the resource */
-  library_tags: string[];
-};
-export type ResourceCreate = {
-  kind: ResourceKind;
-  content: string;
-  name?: string | null;
-  description?: string | null;
-  labels?: string[] | null;
-};
-export type ResourceUpdate = {
-  content?: string | null;
-  name?: string | null;
-  description?: string | null;
-  labels?: string[] | null;
 };
 export type FileReadPage = {
   path: string;
@@ -3724,25 +3470,6 @@ export type PrometheusSeriesRequest = {
   /** Optional range end used to bound series discovery. */
   end?: string | number | number | null;
 };
-export type WriteReportResponse = {
-  document_uid: string;
-  md_url: string;
-  html_url?: string | null;
-  pdf_url?: string | null;
-};
-export type WriteReportRequest = {
-  /** Report title shown in UI */
-  title: string;
-  /** Canonical Markdown content (stored as-is) */
-  markdown: string;
-  /** Tag (library) this report belongs to */
-  tag_id: string;
-  /** Optional template identifier for traceability */
-  template_id?: string | null;
-  /** UI tags (chips) */
-  tags?: string[];
-  render_formats?: string[];
-};
 export type ProcessDocumentsResponse = {
   status: string;
   pipeline_name: string;
@@ -3795,7 +3522,6 @@ export const {
   useLazyStreamTaskEventsKnowledgeFlowV1TasksTaskIdEventsGetQuery,
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation,
   useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation,
-  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   useGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useLazyGetDocumentMetadataKnowledgeFlowV1DocumentsMetadataDocumentUidGetQuery,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
@@ -3858,10 +3584,6 @@ export const {
   useLazyGetTagQuery,
   useUpdateTagMutation,
   useDeleteTagMutation,
-  useListTagMembersQuery,
-  useLazyListTagMembersQuery,
-  useShareTagMutation,
-  useUnshareTagMutation,
   useEchoSchemaKnowledgeFlowV1SchemasEchoPostMutation,
   useSearchDocumentsUsingVectorizationMutation,
   useSimilaritySearchMutation,
@@ -3874,15 +3596,6 @@ export const {
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
   useExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostMutation,
-  useGetResourceCreationSchemaQuery,
-  useLazyGetResourceCreationSchemaQuery,
-  useCreateResourceMutation,
-  useListResourcesByKindQuery,
-  useLazyListResourcesByKindQuery,
-  useUpdateResourceMutation,
-  useGetResourceQuery,
-  useLazyGetResourceQuery,
-  useDeleteResourceMutation,
   useLsQuery,
   useLazyLsQuery,
   useStatFileOrDirectoryQuery,
@@ -3982,7 +3695,6 @@ export const {
   useLazyPrometheusLabelValuesQuery,
   usePrometheusTargetsQuery,
   useLazyPrometheusTargetsQuery,
-  useWriteReportMutation,
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation,
   useProcessLibraryKnowledgeFlowV1ProcessLibraryPostMutation,
 } = injectedRtkApi;

@@ -1890,6 +1890,7 @@ function DocumentWorkspace({
       )}
       {labelsTarget && (
         <ManageLabelsModal
+          teamId={teamId}
           open={!!labelsTarget}
           onClose={() => setLabelsTarget(null)}
           doc={labelsTarget}

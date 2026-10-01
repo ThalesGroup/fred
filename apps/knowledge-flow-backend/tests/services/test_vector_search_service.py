@@ -98,6 +98,16 @@ class DummyTag:
 
 
 class DummyTagService:
+    def __init__(self):
+        from types import SimpleNamespace
+
+        self.corpus_access = SimpleNamespace(folders=self)
+
+    async def get_tags_by_ids(self, folder_ids):
+        from types import SimpleNamespace
+
+        return [SimpleNamespace(id=folder_id, name="tag", full_path="tag") for folder_id in folder_ids]
+
     async def list_authorized_tags_ids(self, _user, _owner_filter=None, _team_id=None):
         # Non-empty authorized scope so corpus search path is exercised in unit tests.
         return {"tag-1"}
@@ -107,8 +117,13 @@ class DummyTagService:
 
 
 class DummyMetadataService:
-    async def filter_readable_document_uids(self, _user, document_uids):
-        return set(document_uids or [])
+    def __init__(self):
+        self.metadata_store = self
+
+    async def get_metadata_by_uids(self, document_uids):
+        from types import SimpleNamespace
+
+        return [SimpleNamespace(document_uid=uid, kind="corpus", tags=SimpleNamespace(tag_ids=["foreign-tag" if uid == "foreign" else "tag-1"])) for uid in document_uids]
 
 
 class DummyContext:
@@ -348,3 +363,29 @@ async def test_search_document_scope_only_does_not_widen_to_libraries(monkeypatc
     # ONLY the named document is returned; the library branch never ran.
     assert [hit.uid for hit in results] == ["doc-picked"]
     assert library_branch_calls == []
+
+
+async def test_selected_document_cannot_escape_team_and_does_not_filter_attachments(monkeypatch, test_user):
+    monkeypatch.setattr(vector_search_service.ApplicationContext, "get_instance", DummyContext)
+    monkeypatch.setattr(vector_search_service, "TagService", DummyTagService)
+    monkeypatch.setattr(vector_search_service, "MetadataService", DummyMetadataService)
+    service = VectorSearchService()
+    calls = []
+
+    async def search(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    service._hybrid = search
+    await service.search(question="test", user=test_user, document_library_tags_ids=None, document_uids=["doc-picked", "foreign"], team_id="team-a", session_id="session-a")
+    assert len(calls) == 2
+    assert calls[0]["metadata_terms_extra"] == {"user_id": [test_user.uid], "session_id": ["session-a"], "scope": ["session"]}
+    assert calls[1]["metadata_terms_extra"]["document_uid"] == ["doc-picked"]
+    calls.clear()
+
+    async def forbidden_corpus_call(*args, **kwargs):
+        raise AssertionError("Attachment-only search must not enumerate corpus rights")
+
+    service.tag_service.list_authorized_tags_ids = forbidden_corpus_call
+    await service.search(question="test", user=test_user, document_library_tags_ids=None, session_id="session-a", include_corpus_scope=False)
+    assert len(calls) == 1

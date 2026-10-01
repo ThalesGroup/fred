@@ -20,6 +20,7 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from fred_core.tasks.models import (
+    DeletionTaskEvent,
     IngestionDetail,
     IngestionTaskEvent,
     MigrationDetail,
@@ -243,3 +244,18 @@ def test_start_ingestion_request_parses() -> None:
     )
     assert isinstance(req, StartIngestionRequest)
     assert req.params.resource_ids == ["doc1", "doc2"]
+
+
+def test_deletion_event_round_trips_without_ingestion_or_erasure_details() -> None:
+    event = DeletionTaskEvent(
+        task_id="delete",
+        state=TaskState.running,
+        seq=1,
+        timestamp=_NOW,
+        progress=0.5,
+        step="Deleting documents",
+    )
+    parsed = _EVENT_ADAPTER.validate_json(event.model_dump_json())
+    assert isinstance(parsed, DeletionTaskEvent)
+    assert parsed.progress == 0.5
+    assert parsed.detail is None

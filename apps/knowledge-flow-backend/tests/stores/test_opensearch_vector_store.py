@@ -221,16 +221,19 @@ def test_set_document_name_logs_error_when_no_chunks_matched(monkeypatch, caplog
     assert any("matched 0 vector chunks" in r.message for r in caplog.records)
 
 
-def test_set_document_name_logs_error_on_reported_failures(monkeypatch, caplog):
+@pytest.mark.parametrize("operation", ["name", "retrievable"])
+@pytest.mark.parametrize("response", [{"updated": 2, "failures": [{"cause": "version_conflict"}]}, {"updated": 2, "timed_out": True}])
+def test_document_metadata_updates_raise_on_reported_incomplete_result(monkeypatch, operation, response):
     mapping = ovs.build_vector_index_mapping(4)
     fake_client = FakeOpenSearchClient(index_name="fred-vectors", index_body=mapping)
-    fake_client.update_by_query_response = {"updated": 2, "failures": [{"cause": "version_conflict"}]}
+    fake_client.update_by_query_response = response
     store = _make_store_for_existing_index(monkeypatch, fake_client)
-
-    with caplog.at_level("ERROR"):
-        store.set_document_name(document_uid="doc-1", document_name="new-name.pdf")
-
-    assert any("reported 1 failure" in r.message for r in caplog.records)
+    with pytest.raises(RuntimeError):
+        if operation == "name":
+            store.set_document_name(document_uid="doc-1", document_name="new-name.pdf")
+        else:
+            store.set_document_retrievable(document_uid="doc-1", value=False)
+    assert len(fake_client.update_by_query_calls) == 1
 
 
 def test_set_document_name_does_not_log_error_on_full_success(monkeypatch, caplog):

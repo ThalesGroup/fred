@@ -27,10 +27,12 @@ one folder never becomes being able to add folders to a team.
 from datetime import datetime, timezone
 
 import pytest
-from fred_core import AuthorizationError, Resource
+from fred_core import AuthorizationError, RelationType, Resource, TeamPermission
 from fred_core.security.structure import KeycloakUser
 
 import knowledge_flow_backend.features.tag.tag_service as tag_service_module
+from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
 from knowledge_flow_backend.features.tag.structure import Tag, TagCreate, TagType
 
 TagService = tag_service_module.TagService
@@ -56,11 +58,23 @@ def _tag(tag_id: str, name: str, path: str | None) -> Tag:
 class _FakeRebac:
     """Grants `update` on the tags named, and the team right only if told to."""
 
+    enabled = True
+
     def __init__(self, *, updatable: set[str], team_right: bool) -> None:
         self._updatable = updatable
         self._team_right = team_right
         self.team_checked = False
         self.relations: list[object] = []
+
+    async def require_active_account(self, user_id):
+        return None
+
+    async def has_direct_relation(self, subject, relation, resource):
+        return relation == RelationType.EDITOR and resource.id in self._updatable
+
+    async def check_user_permission_or_raise(self, user, permission, resource_id):
+        assert permission == TeamPermission.CAN_UPDATE_RESOURCES
+        await self.check_user_team_permission_or_raise(user=user, permission=permission, team_id=resource_id)
 
     async def has_user_permission(self, user, permission, resource_id) -> bool:
         return resource_id in self._updatable
@@ -94,11 +108,12 @@ def _service(rebac: _FakeRebac, store: _FakeTagStore) -> TagService:
     service = TagService.__new__(TagService)
     service.rebac = rebac
     service._tag_store = store
+    service.corpus_access = CorpusAccess(rebac, store)
     return service
 
 
-def _user() -> KeycloakUser:
-    return KeycloakUser(uid="pod", username="pod", roles=[], email=None)
+def _user(*, source=False) -> KeycloakUser:
+    return KeycloakUser(uid="pod", username="pod", roles=["service_agent"] if source else [], email=None)
 
 
 @pytest.mark.asyncio
@@ -109,7 +124,7 @@ async def test_writing_in_a_folder_is_enough_to_create_one_inside_it():
 
     await _service(rebac, store).create_tag_for_user(
         TagCreate(name="sub", path=PARENT_PATH, type=TagType.DOCUMENT, team_id=TEAM),
-        _user(),
+        _user(source=True),
     )
 
     assert store.created is not None
@@ -177,19 +192,9 @@ async def test_neither_right_creates_nothing():
 
 
 @pytest.mark.asyncio
-async def test_a_missing_parent_falls_back_to_the_team_right():
-    """An orphan nest was permitted before and stays permitted, on the team right.
-
-    Refusing it here would be a second behaviour change riding along with this
-    one, and the parent that is missing cannot authorize anything.
-    """
+async def test_a_missing_parent_is_refused():
     rebac = _FakeRebac(updatable=set(), team_right=True)
     store = _FakeTagStore([])
-
-    await _service(rebac, store).create_tag_for_user(
-        TagCreate(name="sub", path="Nowhere", type=TagType.DOCUMENT, team_id=TEAM),
-        _user(),
-    )
-
-    assert store.created is not None
-    assert rebac.team_checked is True
+    with pytest.raises(TagNotFoundError):
+        await _service(rebac, store).create_tag_for_user(TagCreate(name="sub", path="Nowhere", type=TagType.DOCUMENT, team_id=TEAM), _user())
+    assert store.created is None

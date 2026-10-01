@@ -21,6 +21,7 @@ export interface TaskKindMeta {
 // Earlier icon/ramp/pill fields were never rendered and were removed to avoid
 // dead, drifting metadata; add a field back here only when something reads it.
 export const TASK_KINDS: Record<string, TaskKindMeta> = {
+  deletion: { labelKey: "rework.tasks.kind.deletion" },
   ingestion: { labelKey: "rework.tasks.kind.ingestion" },
   erasure: { labelKey: "rework.tasks.kind.erasure" },
   migration: { labelKey: "rework.tasks.kind.migration" },

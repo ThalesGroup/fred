@@ -24,6 +24,7 @@ renders a corrupt document rather than failing visibly.
 import asyncio
 from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -61,6 +62,7 @@ class _FakeContentStore:
 
 def _build_service(document_name: str, original: bytes = b"fake source") -> ContentService:
     service = ContentService.__new__(ContentService)
+    service.corpus_access = AsyncMock()
     service.content_store = _FakeContentStore(original)
     service.metadata_store = SimpleNamespace(
         get_metadata_by_uid=_async(SimpleNamespace(document_name=document_name)),

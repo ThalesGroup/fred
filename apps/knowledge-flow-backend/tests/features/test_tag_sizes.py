@@ -43,15 +43,16 @@ def _doc(uid: str, size: int | None, tag_ids: list[str]) -> DocumentMetadata:
 async def test_total_size_by_tags_sums_per_tag_over_the_whole_folder():
     store = _InMemoryTestMetadataStore()
     await store.save_metadata(_doc("a", 100, ["t1"]))
-    # A document can belong to several folders — its size counts in each.
-    await store.save_metadata(_doc("b", 250, ["t1", "t2"]))
+    # Every document contributes to exactly one folder.
+    await store.save_metadata(_doc("b", 250, ["t1"]))
+    await store.save_metadata(_doc("d", 200, ["t2"]))
     # Missing size counts as 0, never raises.
     await store.save_metadata(_doc("c", None, ["t2"]))
 
     sizes = await store.total_size_by_tags(["t1", "t2", "t3"])
 
-    # t1 = 100 + 250, t2 = 250 + 0, t3 has no documents → 0 (present, not absent).
-    assert sizes == {"t1": 350, "t2": 250, "t3": 0}
+    # t1 = 100 + 250, t2 = 200 + 0, t3 has no documents → 0 (present, not absent).
+    assert sizes == {"t1": 350, "t2": 200, "t3": 0}
 
 
 @pytest.mark.asyncio

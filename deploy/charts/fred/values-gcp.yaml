@@ -114,8 +114,6 @@ applications:
           port: 5432
           database: fred
           username: fred
-        resource_store:
-          type: "postgres"
         tag_store:
           type: "postgres"
         metadata_store:

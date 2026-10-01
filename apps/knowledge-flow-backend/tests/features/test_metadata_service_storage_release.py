@@ -30,6 +30,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fred_core import KeycloakUser
 from fred_core.documents.document_structures import (
     AccessInfo,
@@ -122,6 +123,22 @@ class _FakeMetadataStore:
         self.save_sessions.append(session)
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def close_test_engines(monkeypatch):
+    engines = []
+    create_engine = create_async_engine
+
+    def tracked_engine(*args, **kwargs):
+        engine = create_engine(*args, **kwargs)
+        engines.append(engine)
+        return engine
+
+    monkeypatch.setitem(globals(), "create_async_engine", tracked_engine)
+    yield
+    for engine in engines:
+        await engine.dispose()
+
+
 def _install_fakes(monkeypatch, *, tag_owner: str, known_teams: set[str]) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
     """Wire the ambient singletons `_adjust_team_storage` reaches for.
 
@@ -206,7 +223,7 @@ async def test_deleting_a_team_document_releases_the_team_counter(monkeypatch) -
 async def test_deleting_a_personal_document_releases_the_owning_users_counter(monkeypatch) -> None:
     """AC2 — the bytes come off the counter of the user who OWNS the tag.
 
-    A real personal tag carries the owner's uid, not the literal "personal":
+    A personal folder carries the owner's canonical personal-team ID:
     `TagService` sets `owner_id = team_id or user.uid` (tag_service.py:208). The
     acting user differs from the owner here on purpose — the charge side bills the
     tag owner, so the release has to bill the same account, or deleting someone
@@ -214,7 +231,7 @@ async def test_deleting_a_personal_document_releases_the_owning_users_counter(mo
     """
     owner_uid = str(uuid4())
     deleter_uid = str(uuid4())
-    team_increments, user_increments = _install_fakes(monkeypatch, tag_owner=owner_uid, known_teams=set())
+    team_increments, user_increments = _install_fakes(monkeypatch, tag_owner=f"personal-{owner_uid}", known_teams=set())
     metadata = _make_metadata("doc-2", tag_ids=["tag-1"])
     service = _build_service(_FakeMetadataStore(metadata), _PermissiveRebac(team_owners=[]))
 

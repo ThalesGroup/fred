@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fred_core import KeycloakUser, RebacDisabledResult
 from fred_core.documents.document_structures import (
@@ -31,6 +33,7 @@ from knowledge_flow_backend.features.metadata.service import (
     InvalidMetadataRequest,
     MetadataNotFound,
     MetadataService,
+    MetadataUpdateError,
 )
 
 
@@ -106,6 +109,7 @@ def _service(
     store = _FakeMetadataStore(doc, siblings)
     service.metadata_store = store
     service.rebac = _FakeRebac()
+    service.corpus_access = AsyncMock()
     service.vector_store = vector_store
     return service, store
 
@@ -210,18 +214,19 @@ async def test_rename_document_skips_vector_store_when_not_vectorized():
 
 
 @pytest.mark.asyncio
-async def test_rename_document_succeeds_even_if_vector_store_does_not_support_it():
+async def test_rename_document_reports_partial_failure_when_vector_store_does_not_support_it():
     doc = _document(uid="doc-1", name="report.pdf", vectorized=True)
     vector_store = _FakeVectorStore(supported=False)
     service, store = _service(doc, vector_store=vector_store)
 
-    await service.rename_document(_user(), "doc-1", "Q3-Final.pdf", "u-1")
+    with pytest.raises(MetadataUpdateError, match="metadata was saved.*vector index update failed"):
+        await service.rename_document(_user(), "doc-1", "Q3-Final.pdf", "u-1")
 
     assert store.saved.identity.document_name == "Q3-Final.pdf"
 
 
 @pytest.mark.asyncio
-async def test_rename_document_succeeds_even_if_vector_store_raises():
+async def test_rename_document_reports_partial_failure_when_vector_store_raises():
     doc = _document(uid="doc-1", name="report.pdf", vectorized=True)
 
     class _ExplodingVectorStore:
@@ -230,6 +235,27 @@ async def test_rename_document_succeeds_even_if_vector_store_raises():
 
     service, store = _service(doc, vector_store=_ExplodingVectorStore())
 
-    await service.rename_document(_user(), "doc-1", "Q3-Final.pdf", "u-1")
+    with pytest.raises(MetadataUpdateError, match="metadata was saved.*vector index update failed"):
+        await service.rename_document(_user(), "doc-1", "Q3-Final.pdf", "u-1")
 
     assert store.saved.identity.document_name == "Q3-Final.pdf"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [RuntimeError("unavailable"), NotImplementedError("unsupported")])
+async def test_retrievable_reports_index_failure_and_preserves_saved_metadata(failure):
+    doc = _document(uid="doc-1", name="report.pdf", vectorized=True)
+
+    class VectorStore:
+        calls = 0
+
+        def set_document_retrievable(self, *, document_uid, value):
+            self.calls += 1
+            raise failure
+
+    vector_store = VectorStore()
+    service, store = _service(doc, vector_store=vector_store)
+    with pytest.raises(MetadataUpdateError, match="metadata was saved.*vector index update failed"):
+        await service.update_document_retrievable(_user(), "doc-1", False, "u-1")
+    assert store.saved.source.retrievable is False
+    assert vector_store.calls == 1

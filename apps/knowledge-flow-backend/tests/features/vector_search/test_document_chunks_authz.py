@@ -15,8 +15,7 @@
 """Authz gate for the ordered document-chunks route.
 
 The route hands back a document's raw stored text with no similarity filter, so it
-is gated on ReBAC DocumentPermission.READ for the requested document - the same
-per-document gate the rerank route uses, not an org-level capability.
+is gated by the persisted folder and its team permission through MetadataService.
 """
 
 from __future__ import annotations
@@ -24,7 +23,7 @@ from __future__ import annotations
 import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
-from fred_core import AuthorizationError, DocumentPermission, KeycloakUser, Resource, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, Resource, TeamPermission, get_current_user
 from fred_core.common import register_exception_handlers
 from fred_core.kpi import NoOpKPIWriter
 
@@ -56,7 +55,12 @@ def _build_client(monkeypatch, rebac: _FakeRebac) -> tuple[TestClient, _FakeServ
     service = _FakeService()
     monkeypatch.setattr(controller_module, "VectorSearchService", lambda: service)
     monkeypatch.setattr(controller_module, "get_kpi_writer", NoOpKPIWriter)
-    monkeypatch.setattr(controller_module, "get_rebac_engine", lambda: rebac)
+
+    class Metadata:
+        async def get_document_metadata(self, user, document_uid):
+            await rebac.check_user_permission_or_raise(user, TeamPermission.CAN_USE_TEAM_KNOWLEDGE_BASES, document_uid)
+
+    service.metadata_service = Metadata()
 
     router = APIRouter()
     VectorSearchController(router)
@@ -74,7 +78,7 @@ def test_route_checks_document_read(monkeypatch) -> None:
     response = client.get("/vector/document-chunks", params={"document_uid": "doc-1"})
 
     assert response.status_code == 200
-    assert (DocumentPermission.READ, "doc-1") in rebac.calls
+    assert (TeamPermission.CAN_USE_TEAM_KNOWLEDGE_BASES, "doc-1") in rebac.calls
     assert service.calls == [{"document_uid": "doc-1", "limit": 200}]
 
 

@@ -12,28 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Protocol
-
 from fred_core import KeycloakUser
 
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
-from knowledge_flow_backend.features.resources.service import ResourceService
-from knowledge_flow_backend.features.tag.structure import TagType
 
 
-class TagItemService(Protocol):
-    """Common interface between all different tag items"""
-
-    async def retrieve_items_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]: ...
-
-    async def retrieve_items_ids_for_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]: ...
-
-    async def add_tag_id_to_item(self, user: KeycloakUser, item_id: str, new_tag_id: str) -> None: ...
-
-    async def remove_tag_id_from_item(self, user: KeycloakUser, item_id: str, tag_id_to_remove: str) -> None: ...
-
-
-class DocumentTagItemService(TagItemService):
+class DocumentTagItemService:
     """Allow to use DocumentMetadata as tag items"""
 
     def __init__(self):
@@ -57,41 +41,3 @@ class DocumentTagItemService(TagItemService):
             # This can happen when metadata has been cleaned up after prior operations.
             return
         await self.document_metadata_service.remove_tag_id_from_document(user, doc, tag_id_to_remove)
-
-
-class ResourceTagItemService(TagItemService):
-    """Allow to use Resources as tag items"""
-
-    def __init__(self, tag_type: TagType):
-        self.resource_kind = tag_type.to_resource_kind()
-        self.resource_service = ResourceService()
-
-    async def retrieve_items_ids_for_tag(self, user: KeycloakUser, tag_id: str) -> list[str]:
-        all_resources = await self.resource_service.list_resources_by_kind(kind=self.resource_kind, user=user)
-        return [res.id for res in all_resources if tag_id in res.library_tags]
-
-    async def retrieve_items_ids_for_tags(self, user: KeycloakUser, tag_ids: list[str]) -> dict[str, list[str]]:
-        # One listing bucketed per tag: the per-tag variant re-lists the whole
-        # kind for each tag, and the listing does not depend on the tag.
-        all_resources = await self.resource_service.list_resources_by_kind(kind=self.resource_kind, user=user)
-        result: dict[str, list[str]] = {tag_id: [] for tag_id in tag_ids}
-        for res in all_resources:
-            for tag_id in res.library_tags:
-                if tag_id in result:
-                    result[tag_id].append(res.id)
-        return result
-
-    async def add_tag_id_to_item(self, user: KeycloakUser, item_id: str, new_tag_id: str) -> None:
-        await self.resource_service.add_tag_to_resource(user, item_id, new_tag_id)
-
-    async def remove_tag_id_from_item(self, user: KeycloakUser, item_id: str, tag_id_to_remove: str) -> None:
-        await self.resource_service.remove_tag_from_resource(user, item_id, tag_id_to_remove)
-
-
-def get_specific_tag_item_service(tag_type: TagType) -> TagItemService:
-    """Return the good implementation of BaseTagItemService for a given TagType"""
-    if tag_type == TagType.DOCUMENT:
-        return DocumentTagItemService()
-    else:
-        # For now, apart for documents, all the other item a tag can contain are `Resources`
-        return ResourceTagItemService(tag_type)

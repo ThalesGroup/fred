@@ -13,7 +13,6 @@
 # limitations under the License.
 from __future__ import annotations
 
-import logging
 from typing import Optional, Sequence
 
 from fastapi import BackgroundTasks
@@ -34,8 +33,6 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     PipelineDefinition,
 )
 from knowledge_flow_backend.features.scheduler.temporal_scheduler import TemporalScheduler
-
-logger = logging.getLogger(__name__)
 
 
 class IngestionTaskService:
@@ -84,9 +81,12 @@ class IngestionTaskService:
         files: Sequence[FileToProcessWithoutUser],
         background_tasks: Optional[BackgroundTasks] = None,
     ):
-        """
-        Kick off a document processing pipeline.
-        """
+        definition = await self.admit_documents(user=user, pipeline_name=pipeline_name, files=files)
+        handle = await self.deliver_documents(definition, background_tasks)
+        return definition, handle
+
+    async def admit_documents(self, *, user: KeycloakUser, pipeline_name: str, files: Sequence[FileToProcessWithoutUser], upload_only: bool = False) -> PipelineDefinition:
+        """Reserve the entire batch before callers write shared document data."""
         if not files:
             raise ValueError("At least one file is required")
         has_pull = any(file.is_pull() for file in files)
@@ -123,31 +123,17 @@ class IngestionTaskService:
             files=enriched_files,
             max_parallelism=self._max_parallelism,
         )
-        handle = await self._admit_and_deliver(user=user, definition=definition, background_tasks=background_tasks)
-        return definition, handle
+        if not upload_only and isinstance(self._scheduler, TemporalScheduler) and self._client_provider is not None:
+            # A failed initial connection must not reserve document tasks.
+            await self._client_provider.get_client()
+        await self._admit(user=user, definition=definition, upload_only=upload_only)
+        return definition
 
-    async def _admit_and_deliver(self, *, user: KeycloakUser, definition: PipelineDefinition, background_tasks: BackgroundTasks | None = None) -> WorkflowHandle:
-        from knowledge_flow_backend.features.ingestion.ingestion_controller import resolve_tag_owners
+    async def _admit(self, *, user: KeycloakUser, definition: PipelineDefinition, upload_only: bool = False) -> None:
+        await self.delivery().admit(user, definition, upload_only=upload_only)
 
-        owners: dict[tuple[str, ...], str | None] = {}
-        team_ids: dict[str, str | None] = {}
-        for file in definition.files:
-            key = tuple(sorted(file.tags))
-            if key not in owners:
-                teams, _ = await resolve_tag_owners(file.tags, user)
-                owners[key] = next(iter(teams)) if len(teams) == 1 else None
-            uid = file.to_virtual_metadata().document_uid if file.is_pull() else file.document_uid
-            if uid:
-                team_ids[uid] = owners[key]
-        delivery = self.delivery()
-        workflow_id = await delivery.admit(user, definition, team_ids)
-        try:
-            return await delivery.deliver(workflow_id, background_tasks)
-        except Exception:
-            # Admission already committed. A delivery/acknowledgement failure
-            # must not tell callers to discard the accepted document or task.
-            logger.warning("Accepted ingestion %s awaits delivery recovery", workflow_id, exc_info=True)
-            return WorkflowHandle(workflow_id=workflow_id)
+    async def deliver_documents(self, definition: PipelineDefinition, background_tasks: BackgroundTasks | None = None) -> WorkflowHandle:
+        return await self.delivery().deliver(definition, background_tasks)
 
     def delivery(self):
         from knowledge_flow_backend.application_context import ApplicationContext

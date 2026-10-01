@@ -26,7 +26,7 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.processing_profile_context import coerce_processing_profile, processing_profile_scope
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.core.processing_pipeline_manager import ProcessingPipelineManager
-from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
+from knowledge_flow_backend.features.metadata.service import MetadataService
 
 logger = logging.getLogger(__name__)
 
@@ -83,18 +83,16 @@ class IngestionService:
             versions.append(max(0, int(version)))
         return versions
 
-    async def _apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
+    async def apply_versioning(self, metadata: DocumentMetadata) -> DocumentMetadata:
         """
         Ensure the incoming document gets a suffix-based version within its primary folder/tag.
         """
         canonical_name, explicit_version = self._split_versioned_name(metadata.identity.document_name)
         primary_tag = self._select_primary_tag(metadata)
 
-        filters = {}
-        if primary_tag:
-            filters = {"tags": {"tag_ids": [primary_tag]}}
-
-        existing_docs = await self.metadata_service.metadata_store.get_all_metadata(filters)
+        if not primary_tag:
+            raise ValueError("A destination folder is required for corpus versioning")
+        existing_docs = await self.metadata_service.metadata_store.get_metadata_in_tag(primary_tag)
         existing_versions = self._existing_versions(canonical_name, primary_tag, existing_docs)
 
         # Prevent cascading (2), (3)… — keep at most one alternate version (1)
@@ -137,39 +135,17 @@ class IngestionService:
         return await self.metadata_service.save_document_metadata(user, metadata)
 
     async def save_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
-        """Same as `save_metadata`, but bypasses the per-tag permission check —
-        see `MetadataService.save_document_metadata_trusted` for why this is
-        safe: reachable only from the already-platform-authorized corpus-
-        revectorize migration path."""
+        """Save inside work already authorized at ingestion/migration admission."""
         logger.debug(f"Saving metadata (trusted) {metadata}")
         return await self.metadata_service.save_document_metadata_trusted(user, metadata)
 
-    async def persist_progress(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
-        """Persist an ingestion in flight, or clean up after a lost race (#2315).
-
-        The single seam every ingestion-progress write goes through. It never
-        creates a document: `update_document_metadata` is a conditional UPDATE,
-        so a document deleted meanwhile stays deleted and this returns False.
-
-        When that happens the caller has already written artifacts (content,
-        vectors, Parquet) for a document that no longer exists — its work runs
-        in a thread Python cannot kill, so it routinely finishes after a
-        cancellation erased the document. Those bytes are orphans nothing points
-        at, so the writer that lost the race discards its own output here rather
-        than leaving it for the corpus audit to report.
-
-        Returns whether the document is still there, for callers that want to
-        stop early.
-        """
-        return await self._persist_progress(self.metadata_service.update_document_metadata, user, metadata)
-
     async def persist_progress_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
-        """`persist_progress` without the per-tag permission check — same trust
-        rationale as `save_metadata_trusted`."""
-        return await self._persist_progress(self.metadata_service.update_document_metadata_trusted, user, metadata)
+        """Persist admitted work without creating a deleted document again.
 
-    async def _persist_progress(self, update, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
-        if await update(user, metadata):
+        Keep the existing late-writer cleanup: native activity cancellation may
+        leave a processing thread finishing after the document was deleted.
+        """
+        if await self.metadata_service.update_document_metadata_trusted(user, metadata):
             return True
         logger.info(
             "[INGESTION] document_uid=%s was deleted mid-flight; discarding the artifacts this attempt wrote",
@@ -178,26 +154,9 @@ class IngestionService:
         await self.metadata_service.purge_document_artifacts(metadata.document_uid)
         return False
 
-    async def get_metadata(self, user: KeycloakUser, document_uid: str) -> DocumentMetadata | None:
-        """
-        Retrieve the metadata associated with the given document UID.
-
-        Args:
-            document_uid (str): The unique identifier of the document.
-
-        Returns:
-            Optional[DocumentMetadata]: The metadata if found, or None if the document
-            does not exist in the metadata store.
-
-        Notes:
-            If the underlying metadata service raises a `MetadataNotFound` exception,
-            this method will return `None` instead of propagating the exception.
-        """
-
-        try:
-            return await self.metadata_service.get_document_metadata(user, document_uid)
-        except MetadataNotFound:
-            return None
+    async def get_metadata_trusted(self, document_uid: str) -> DocumentMetadata | None:
+        """Read the admitted document inside an ingestion activity."""
+        return await self.metadata_service.metadata_store.get_metadata_by_uid(document_uid)
 
     def get_local_copy(self, user: KeycloakUser, metadata: DocumentMetadata, target_dir: pathlib.Path) -> pathlib.Path:
         """
@@ -241,7 +200,7 @@ class IngestionService:
         metadata.identity.uploaded_by = user.uid
         metadata.processing.profile = normalized_profile
         if apply_versioning:
-            metadata = await self._apply_versioning(metadata)
+            metadata = await self.apply_versioning(metadata)
 
         # Step 2: enrich/clean metadata
         if source_config:

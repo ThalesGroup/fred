@@ -27,6 +27,7 @@ from knowledge_flow_backend.common.utils import log_exception
 from knowledge_flow_backend.features.metadata.service import (
     DocumentNameCollisionError,
     InvalidMetadataRequest,
+    MetadataIndexUpdateError,
     MetadataNotFound,
     MetadataService,
     MetadataUpdateError,
@@ -71,7 +72,7 @@ class TagSizesRequest(BaseModel):
 
 
 class TagSizesResponse(BaseModel):
-    sizes: Dict[str, int] = Field(..., description="Total document bytes per requested tag id (0 when unknown/empty)")
+    sizes: Dict[str, int] = Field(..., description="Total document bytes per authorized folder (0 when empty); unknown folders are refused")
 
 
 class LabelMutationRequest(BaseModel):
@@ -115,6 +116,8 @@ def handle_exception(e: Exception) -> HTTPException | Exception:
         return HTTPException(status_code=400, detail=str(e))
     elif isinstance(e, DocumentNameCollisionError):
         return HTTPException(status_code=409, detail=str(e))
+    elif isinstance(e, MetadataIndexUpdateError):
+        return HTTPException(status_code=500, detail=str(e))
     elif isinstance(e, MetadataUpdateError):
         return e  # Will be handled by generic_exception_handler as 500
 
@@ -166,25 +169,6 @@ class MetadataController:
         class VectorChunk(BaseModel):
             chunk_uid: str = Field(..., description="Unique identifier of the chunk")
             vector: List[float] = Field(..., description="Chunk embedding")
-
-        @router.post(
-            "/documents/metadata/search",
-            tags=["Documents"],
-            response_model=List[DocumentMetadata],
-            summary="List metadata for all ingested documents (optional filters)",
-            description=(
-                "Returns metadata for all ingested documents in the knowledge base. "
-                "You can optionally filter by metadata fields such as tags, title, source_tag, or retrievability.\n\n"
-                "**Note:** Only ingested documents have persisted metadata. "
-                "Discovered files (e.g., in pull-mode) are not returned by this endpoint — see `/documents/pull`."
-            ),
-        )
-        async def search_document_metadata(filters: Dict[str, Any] = Body(default={}), user: KeycloakUser = Depends(get_current_user)):
-            try:
-                return await self.service.get_documents_metadata(user, filters)
-            except Exception as e:
-                log_exception(e)
-                raise handle_exception(e)
 
         @router.get(
             "/documents/metadata/{document_uid}",
@@ -251,7 +235,8 @@ class MetadataController:
             description=(
                 "Updates the document's actual file name (`identity.document_name`), not just its "
                 "display title. Propagates to the vector index's copy of the name on each chunk "
-                "(best-effort — never fails the request) and to the content-store filename lookup. "
+                "and to the content-store filename lookup. Index failures return an explicit error "
+                "after metadata has been saved, without rollback or automatic repair. "
                 "Does not change `document_uid`, storage keys, or embeddings, and does not touch "
                 "existing chat/session citations, which keep referencing the name at the time they "
                 "were created. The extension cannot be changed by a rename."
@@ -376,11 +361,11 @@ class MetadataController:
             operation_id="list_document_labels",
             response_model=list[str],
             summary="List the distinct business labels in use",
-            description="Returns the distinct descriptive labels across the documents the user can read.",
+            description="Returns descriptive labels from authorized folders in the requested team.",
         )
-        async def list_document_labels(user: KeycloakUser = Depends(get_current_user)):
+        async def list_document_labels(team_id: str = Query(..., min_length=1), user: KeycloakUser = Depends(get_current_user)):
             try:
-                return await self.service.list_document_labels(user)
+                return await self.service.list_document_labels(user, team_id=team_id)
             except Exception as e:
                 raise handle_exception(e)
 
@@ -397,9 +382,9 @@ class MetadataController:
                 "for existing consumers; both routes resolve through the same MetadataService.get_documents_with_label."
             ),
         )
-        async def list_documents_by_label(label: str, user: KeycloakUser = Depends(get_current_user)):
+        async def list_documents_by_label(label: str, team_id: str = Query(..., min_length=1), user: KeycloakUser = Depends(get_current_user)):
             try:
-                docs = await self.service.get_documents_with_label(user, label)
+                docs = await self.service.get_documents_with_label(user, label, team_id=team_id)
                 return BrowseDocumentsResponse(documents=docs, total=len(docs))
             except Exception as e:
                 raise handle_exception(e)
@@ -414,7 +399,7 @@ class MetadataController:
                 "Canonical label resolution: the label rides as a query parameter, so it carries any Unicode "
                 "text with no character restriction — symmetric with the PATCH /documents/{document_uid}/labels "
                 "mutation transport. Paginated and deterministic (ordered by document_uid): a label can match "
-                "many documents spread across the whole corpus, and this route is the exhaustive, page-by-page "
+                "many documents within the authorized team and selected folders/documents, and this route is the exhaustive, page-by-page "
                 "way to enumerate them all. Resolves through the same MetadataService.get_document_uids_with_any_label "
                 "as the document_label_search capability's list_documents_by_label tool, not a second lookup "
                 "implementation. The path-segment GET /documents/by-label/{label} route above returns everything "
@@ -424,12 +409,15 @@ class MetadataController:
         )
         async def resolve_documents_by_label(
             label: str,
+            team_id: str = Query(..., min_length=1),
+            folder_ids: list[str] | None = Query(None),
+            document_uids: list[str] | None = Query(None),
             offset: int = Query(0, ge=0),
             limit: int = Query(50, gt=0, le=500),
             user: KeycloakUser = Depends(get_current_user),
         ):
             try:
-                docs, total = await self.service.get_documents_with_label_page(user, label, offset=offset, limit=limit)
+                docs, total = await self.service.get_documents_with_label_page(user, label, team_id=team_id, folder_ids=folder_ids, document_uids=document_uids, offset=offset, limit=limit)
                 next_offset = offset + len(docs)
                 return LabelDocumentsPage(
                     label=label,

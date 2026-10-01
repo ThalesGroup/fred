@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 from fred_core import KeycloakUser
@@ -42,6 +43,7 @@ def test_user():
 
 def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
     service = IngestionService()
+    service.metadata_service.corpus_access = AsyncMock()
 
     # 🔍 Extract metadata
     metadata = asyncio.run(
@@ -59,7 +61,7 @@ def test_extract_and_save_metadata(sample_docx, metadata_store, test_user):
 
     # 💾 Save metadata and reload it
     asyncio.run(service.save_metadata(test_user, metadata))
-    restored = asyncio.run(service.get_metadata(test_user, metadata.document_uid))
+    restored = asyncio.run(service.get_metadata_trusted(metadata.document_uid))
     assert restored is not None
     assert restored.document_uid == metadata.document_uid
     assert "test" in set(restored.tags.tag_ids + restored.tags.tag_names)

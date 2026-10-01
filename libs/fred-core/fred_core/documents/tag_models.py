@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import String
+from sqlalchemy import Index, String, case, or_
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql.expression import Grouping
 
 from fred_core.models.base import Base, JsonColumn, TimestampColumn
 
@@ -28,6 +29,7 @@ class TagRow(Base):
     __tablename__ = "tag"
 
     tag_id: Mapped[str] = mapped_column(String, primary_key=True)
+    deletion_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(TimestampColumn, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         TimestampColumn, index=True, nullable=True
@@ -38,3 +40,17 @@ class TagRow(Base):
     description: Mapped[str | None] = mapped_column(String, nullable=True)
     type: Mapped[str | None] = mapped_column(String, index=True, nullable=True)
     doc: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_tag_owner_full_path",
+            owner_id,
+            Grouping(
+                case(
+                    (or_(path.is_(None), path == ""), name),
+                    else_=path + "/" + name,
+                )
+            ),
+            unique=True,
+        ),
+    )

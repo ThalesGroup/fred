@@ -24,7 +24,6 @@ dependencies = [
   "opensearch-py==2.8.0",
   "python-docx==1.1.2",
   "pypandoc-binary==1.15",
-  "pypandoc==1.15",
   "pandas==2.2.3",
   "pypdf==6.19.0",
   "python-pptx==1.0.2",
@@ -72,7 +71,7 @@ dependencies = [
   "av>=14.0.0",
   "faster-whisper>=1.1.0",
   "paddleocr>=3.6.0",
-  "paddlepaddle>=3.3.1"
+  "paddlepaddle>=3.3.1",
 ]
 
 [project.optional-dependencies]

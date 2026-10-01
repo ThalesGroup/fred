@@ -208,7 +208,7 @@ def test_fs_page_returns_structured_payload(app_context, monkeypatch) -> None:
 
     with _build_filesystem_app(monkeypatch, service) as client:
         response = client.get(
-            "/knowledge-flow/v1/fs/page/corpus/documents/doc-1/preview.md",
+            "/knowledge-flow/v1/fs/page/teams/acme/shared/report.md",
             params={"offset": 0, "limit": 40, "max_chars": 20000},
         )
 

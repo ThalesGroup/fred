@@ -77,13 +77,13 @@ async def get_push_file_metadata(file: FileToProcess) -> DocumentMetadata:
     ingestion_service = get_ingestion_service()
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] push file uid={file.document_uid}.")
     assert file.document_uid, "Push files must have a document UID"
-    metadata = await ingestion_service.get_metadata(file.processed_by, file.document_uid)
+    metadata = await ingestion_service.get_metadata_trusted(file.document_uid)
     if metadata is None:
         logger.error(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata not found uid={file.document_uid}")
         raise RuntimeError(f"Metadata missing for push file: {file.document_uid}")
 
     metadata.processing.profile = file.profile
-    raise_if_document_deleted(await ingestion_service.persist_progress(file.processed_by, metadata=metadata), metadata.document_uid)
+    raise_if_document_deleted(await ingestion_service.persist_progress_trusted(file.processed_by, metadata=metadata), metadata.document_uid)
 
     logger.info(f"[SCHEDULER][ACTIVITY][GET_PUSH_FILE_METADATA] Metadata found for push file skipping extraction uid={file.document_uid}")
     emit_temporal_activity_result_kpis(
@@ -119,7 +119,7 @@ async def push_input_process(
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
-        raise_if_document_deleted(await ingestion_service.persist_progress(user, metadata=metadata), metadata.document_uid)
+        raise_if_document_deleted(await ingestion_service.persist_progress_trusted(user, metadata=metadata), metadata.document_uid)
 
         with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
             working_dir = pathlib.Path(tmpdir)
@@ -181,7 +181,7 @@ async def push_input_process(
 
         if not ingestion_service.context.is_tabular_file(metadata.document_name):
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-        await ingestion_service.persist_progress(user, metadata=metadata)
+        await ingestion_service.persist_progress_trusted(user, metadata=metadata)
         logger.info("[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
         emit_temporal_activity_result_kpis(
             phase="input",
@@ -194,7 +194,7 @@ async def push_input_process(
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         try:
-            await ingestion_service.persist_progress(user, metadata=metadata)
+            await ingestion_service.persist_progress_trusted(user, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][PUSH_INPUT_PROCESS] failed to persist error state uid=%s",

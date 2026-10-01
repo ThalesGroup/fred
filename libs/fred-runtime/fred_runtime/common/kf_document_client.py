@@ -234,6 +234,9 @@ class KfDocumentClient(KfBaseClient):
         self,
         *,
         label: str,
+        team_id: str,
+        folder_ids: Sequence[str] | None = None,
+        document_uids: Sequence[str] | None = None,
         offset: int = 0,
         limit: int = 50,
     ) -> DocumentLabelPageResult:
@@ -251,14 +254,25 @@ class KfDocumentClient(KfBaseClient):
           }
 
         `tree()` does no label filtering — this is the only label-search
-        surface on this client, returning EVERY document carrying `label`,
+        surface on this client, returning documents carrying `label` within
+        the authorized team and the union of selected folders/documents,
         page by page. See `DocumentTreePort.list_by_label`'s docstring.
         """
+        params: dict[str, Any] = {
+            "label": label,
+            "team_id": team_id,
+            "offset": offset,
+            "limit": limit,
+        }
+        if folder_ids:
+            params["folder_ids"] = list(folder_ids)
+        if document_uids:
+            params["document_uids"] = list(document_uids)
         r = await self._request_with_token_refresh(
             method="GET",
             path="/documents/by-label",
             phase_name="kf_document_list_by_label",
-            params={"label": label, "offset": offset, "limit": limit},
+            params=params,
         )
         r.raise_for_status()
         return DocumentLabelPageResult.model_validate(r.json())

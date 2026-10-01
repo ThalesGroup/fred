@@ -27,14 +27,12 @@ from knowledge_flow_backend.core.stores.tags.base_tag_store import (
     TagNotFoundError,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataNotFound
+from knowledge_flow_backend.features.tag.corpus_lifecycle import CorpusBusy
 from knowledge_flow_backend.features.tag.structure import (
     MissingTeamIdError,
     ResourceTypeStatsEntry,
     ResourceTypeStatsResponse,
-    ShareTargetResource,
     TagCreate,
-    TagMembersResponse,
-    TagShareRequest,
     TagType,
     TagUpdate,
     TagWithItemsId,
@@ -49,7 +47,7 @@ logger = logging.getLogger(__name__)
 class TagController:
     """
     Controller for CRUD operations on Tag resource.
-    Tags are used to group various items like documents and prompts.
+    Tags represent corpus folders belonging to one team.
     The TagController provides endpoints to easily retrieve tags with their items.
     """
 
@@ -60,6 +58,10 @@ class TagController:
 
     def _register_exception_handlers(self, app: FastAPI):
         """Register specific exception handlers for tag-related exceptions."""
+
+        @app.exception_handler(CorpusBusy)
+        async def corpus_busy_handler(request: Request, exc: CorpusBusy) -> JSONResponse:
+            return JSONResponse(status_code=409, content={"detail": str(exc)})
 
         @app.exception_handler(TagNotFoundError)
         async def tag_not_found_handler(request: Request, exc: TagNotFoundError) -> JSONResponse:
@@ -148,17 +150,6 @@ class TagController:
         async def get_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             return await self.service.get_tag_for_user(tag_id, user)
 
-        @router.get(
-            "/tags/{tag_id}/members",
-            response_model=TagMembersResponse,
-            tags=["Tags"],
-            summary="List users and groups who can access a tag",
-            operation_id="list_tag_members",
-        )
-        async def list_tag_members(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
-            users = await self.service.list_tag_members(tag_id, user)
-            return TagMembersResponse(users=users)
-
         @router.post(
             "/tags",
             response_model=TagWithItemsId,
@@ -193,38 +184,3 @@ class TagController:
         )
         async def delete_tag(tag_id: str, user: KeycloakUser = Depends(get_current_user)):
             await self.service.delete_tag_for_user(tag_id, user)
-
-        @router.post(
-            "/tags/{tag_id}/share",
-            status_code=status.HTTP_204_NO_CONTENT,
-            tags=["Tags"],
-            summary="Share a tag with another user",
-            operation_id="share_tag",
-        )
-        async def share_tag(
-            tag_id: str,
-            share_request: TagShareRequest,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            await self.service.share_tag_with_user(
-                user,
-                tag_id,
-                share_request.target_id,
-                share_request.target_type.to_resource(),
-                share_request.relation,
-            )
-
-        @router.delete(
-            "/tags/{tag_id}/share/{target_id}",
-            status_code=status.HTTP_204_NO_CONTENT,
-            tags=["Tags"],
-            summary="Stop sharing a tag with a user",
-            operation_id="unshare_tag",
-        )
-        async def unshare_tag(
-            tag_id: str,
-            target_id: str,
-            target_type: ShareTargetResource,
-            user: KeycloakUser = Depends(get_current_user),
-        ):
-            await self.service.unshare_tag_with_user(user, tag_id, target_id, target_type.to_resource())

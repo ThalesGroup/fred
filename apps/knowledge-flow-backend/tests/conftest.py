@@ -198,7 +198,6 @@ def app_context(monkeypatch, fake_embedder):
                 host="http://localhost:9200",
                 username="admin",
             ),
-            resource_store=duckdb,
             tag_store=duckdb,
             kpi_store=duckdb,
             metadata_store=duckdb,

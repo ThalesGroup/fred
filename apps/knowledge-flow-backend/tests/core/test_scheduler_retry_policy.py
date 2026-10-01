@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fred_core import KeycloakUser
@@ -56,7 +57,12 @@ async def test_submit_documents_embeds_temporal_retry_policy(app_context, monkey
             return SimpleNamespace(workflow_id="wf-123", run_id="run-123")
 
     service._scheduler = _StubScheduler()
-    service._admit_and_deliver = service._scheduler.start_document_processing
+    service._admit = AsyncMock()
+
+    async def deliver(definition, background_tasks=None):
+        return await service._scheduler.start_document_processing(user=definition.files[0].processed_by, definition=definition, background_tasks=background_tasks)
+
+    service.deliver_documents = deliver
 
     user = KeycloakUser(
         uid="test-user",

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import posixpath
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from enum import Enum
 
 from fred_core import FilesystemResourceInfo, FilesystemResourceInfoResult
@@ -25,7 +24,6 @@ from pydantic import BaseModel
 # Unified layout (FILES-04): everything non-platform is rooted at /teams/{team_id}/...
 # The team is the confidentiality perimeter; team_id is always the first segment.
 AREA_TEAMS = "teams"
-AREA_CORPUS = "corpus"
 
 # Sub-areas inside one team box: /teams/{team_id}/{sub-area}/...
 SUBAREA_USERS = "users"  # personal-in-team:  /teams/{t}/users/{uid}/...
@@ -38,14 +36,12 @@ SUBAREA_AGENT_CONFIG = "config"
 
 AREA_ALIASES = {
     AREA_TEAMS: AREA_TEAMS,
-    AREA_CORPUS: AREA_CORPUS,
 }
 
 
 class VirtualArea(str, Enum):
     ROOT = "root"
     TEAMS = AREA_TEAMS
-    CORPUS = AREA_CORPUS
 
 
 @dataclass(frozen=True)
@@ -83,7 +79,7 @@ class FileReadPage(BaseModel):
     - continue with `next_offset` until `has_more` becomes false
 
     Example:
-    - `page = format_numbered_file_page(path="/corpus/documents/doc-1/preview.md", content="a\\nb", limit=1, max_chars=20)`
+    - `page = format_numbered_file_page(path="/teams/acme/shared/report.md", content="a\\nb", limit=1, max_chars=20)`
     """
 
     path: str
@@ -95,24 +91,6 @@ class FileReadPage(BaseModel):
     has_more: bool
     next_offset: int | None
     truncated: bool
-
-
-def current_time_utc() -> datetime:
-    """
-    Return the current UTC timestamp for virtual filesystem metadata.
-
-    Why this exists:
-    - virtual files such as rendered corpus previews need a synthetic timestamp
-    - centralizing it keeps metadata generation consistent
-
-    How to use:
-    - call when building a synthetic `FilesystemResourceInfoResult` for a file
-
-    Example:
-    - `modified=current_time_utc()`
-    """
-
-    return datetime.now(timezone.utc)
 
 
 def dir_entry(path: str) -> FilesystemResourceInfoResult:
@@ -127,7 +105,7 @@ def dir_entry(path: str) -> FilesystemResourceInfoResult:
     - pass the visible path segment or path to expose as a directory
 
     Example:
-    - `dir_entry("corpus")`
+    - `dir_entry("teams")`
     """
 
     return FilesystemResourceInfoResult(
@@ -135,29 +113,6 @@ def dir_entry(path: str) -> FilesystemResourceInfoResult:
         size=None,
         type=FilesystemResourceInfo.DIRECTORY,
         modified=None,
-    )
-
-
-def file_entry(path: str, size: int) -> FilesystemResourceInfoResult:
-    """
-    Build one virtual file entry.
-
-    Why this exists:
-    - virtual filesystem implementations often synthesize files from metadata
-    - using one helper keeps file metadata shape consistent
-
-    How to use:
-    - pass the visible file path and its byte size
-
-    Example:
-    - `file_entry("preview.md", 128)`
-    """
-
-    return FilesystemResourceInfoResult(
-        path=path,
-        size=size,
-        type=FilesystemResourceInfo.FILE,
-        modified=current_time_utc(),
     )
 
 
@@ -216,14 +171,14 @@ def absolute_virtual_path(path: str) -> str:
     Why this exists:
     - search-style helpers and agent-facing APIs should expose one stable
       absolute-path convention
-    - it avoids mixing `corpus/x` and `/corpus/x` in returned results
+    - it avoids mixing `teams/acme/shared/x` and `/teams/acme/shared/x` in returned results
 
     How to use:
     - pass any visible virtual path accepted by the filesystem service
     - the result always starts with `/`
 
     Example:
-    - `absolute_virtual_path("corpus/CIR")` returns `"/corpus/CIR"`
+    - `absolute_virtual_path("teams/acme/shared")` returns `"/teams/acme/shared"`
     """
 
     normalized = normalize_virtual_path(path)
@@ -382,8 +337,7 @@ def resolve_virtual_path(path: str) -> ResolvedVirtualPath:
     Resolve one visible path to its canonical virtual area and local segments.
 
     Why this exists:
-    - the unified layout has exactly two top-level areas: `/teams/...` (everything
-      team-scoped) and `/corpus/...` (the read-only corpus view)
+    - the filesystem is rooted exclusively at `/teams/...`
     - every router/helper can share the same canonical area contract
 
     How to use:
@@ -403,5 +357,5 @@ def resolve_virtual_path(path: str) -> ResolvedVirtualPath:
     head = parts[0]
     area = AREA_ALIASES.get(head)
     if area is None:
-        raise ValueError(f"Unknown filesystem area: {head!r} (expected '{AREA_TEAMS}' or '{AREA_CORPUS}')")
+        raise ValueError(f"Unknown filesystem area: {head!r} (expected '{AREA_TEAMS}')")
     return ResolvedVirtualPath(area=VirtualArea(area), segments=parts[1:])

@@ -26,19 +26,24 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 import pytest_asyncio
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from fred_core import KeycloakUser, RebacDisabledResult, get_current_user
-from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType
+from fred_core.documents.document_structures import DocumentMetadata, Identity, ProcessingStage, ProcessingStatus, SourceInfo, SourceType, Tagging
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 from fred_core.models.base import Base
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from knowledge_flow_backend.application_context import ApplicationContext
+from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.features.metadata.controller import MetadataController
+from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 
 class _FakeRebac:
@@ -51,6 +56,7 @@ class _FakeRebac:
 
 def _doc(uid: str) -> DocumentMetadata:
     return DocumentMetadata(
+        tags=Tagging(tag_ids=["folder-a"]),
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=uid, modified=datetime.now(timezone.utc)),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred"),
     )
@@ -61,12 +67,16 @@ async def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'labels_controller.sqlite3'}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        now = datetime.now(timezone.utc)
+        folder = Tag(id="folder-a", name="A", owner_id="team-a", type=TagType.DOCUMENT, created_at=now, updated_at=now)
+        await conn.execute(insert(TagRow), {"tag_id": folder.id, "name": folder.name, "owner_id": folder.owner_id, "type": "document", "doc": folder.model_dump(mode="json")})
     store = PostgresDocumentMetadataStore(engine)
     await store.save_metadata(_doc("doc-1"))
 
     fake_context = SimpleNamespace(
         get_config=SimpleNamespace,
         get_metadata_store=lambda: store,
+        get_tag_store=lambda: PostgresTagStore(engine),
         get_content_store=lambda: None,
         get_rebac_engine=_FakeRebac,
         get_pg_async_engine=lambda: engine,
@@ -75,12 +85,13 @@ async def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     app = FastAPI()
     router = APIRouter(prefix="/knowledge-flow/v1")
-    MetadataController(router)
+    controller = MetadataController(router)
     app.include_router(router)
     app.dependency_overrides[get_current_user] = lambda: KeycloakUser(uid="u-1", username="u-1", email="u-1@localhost", roles=["admin"])
 
     with TestClient(app) as test_client:
         test_client.store = store  # type: ignore[attr-defined]
+        test_client.metadata_service = controller.service  # type: ignore[attr-defined]
         yield test_client
 
 
@@ -202,7 +213,7 @@ def test_query_param_route_round_trips_a_label_the_path_segment_route_could_not(
     assert patch_response.status_code == 200
     assert patch_response.json() == [label]
 
-    resolve_response = client.get("/knowledge-flow/v1/documents/by-label", params={"label": label})
+    resolve_response = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": label})
 
     assert resolve_response.status_code == 200
     body = resolve_response.json()
@@ -220,8 +231,8 @@ def test_query_param_route_and_path_segment_route_resolve_through_the_same_looku
     `LabelDocumentsPage` — but both must agree on which document matched."""
     client.post("/knowledge-flow/v1/documents/doc-1/labels/DAT")
 
-    by_path = client.get("/knowledge-flow/v1/documents/by-label/DAT")
-    by_query = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT"})
+    by_path = client.get("/knowledge-flow/v1/documents/by-label/DAT", params={"team_id": "team-a"})
+    by_query = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": "DAT"})
 
     assert by_path.status_code == by_query.status_code == 200
     assert by_path.json()["total"] == by_query.json()["total"] == 1
@@ -235,8 +246,8 @@ async def test_query_param_route_paginates_deterministically(client: TestClient)
     for uid in ("doc-1", "doc-2", "doc-3"):
         client.post(f"/knowledge-flow/v1/documents/{uid}/labels/DAT")
 
-    page1 = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "offset": 0, "limit": 2}).json()
-    page2 = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "offset": page1["next_offset"], "limit": 2}).json()
+    page1 = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": "DAT", "offset": 0, "limit": 2}).json()
+    page2 = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": "DAT", "offset": page1["next_offset"], "limit": 2}).json()
 
     assert page1["total"] == page2["total"] == 3
     assert len(page1["documents"]) == 2
@@ -252,13 +263,13 @@ async def test_query_param_route_paginates_deterministically(client: TestClient)
 def test_query_param_route_defaults_and_bounds_offset_and_limit(client: TestClient) -> None:
     client.post("/knowledge-flow/v1/documents/doc-1/labels/DAT")
 
-    default_params = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT"}).json()
+    default_params = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": "DAT"}).json()
     assert default_params["offset"] == 0
     assert default_params["limit"] == 50
 
-    rejected = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "limit": 0})
+    rejected = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": "DAT", "limit": 0})
     assert rejected.status_code == 422
-    rejected = client.get("/knowledge-flow/v1/documents/by-label", params={"label": "DAT", "offset": -1})
+    rejected = client.get("/knowledge-flow/v1/documents/by-label", params={"team_id": "team-a", "label": "DAT", "offset": -1})
     assert rejected.status_code == 422
 
 
@@ -267,3 +278,34 @@ def test_query_param_route_has_its_own_operation_id(client: TestClient) -> None:
 
     assert schema["paths"]["/knowledge-flow/v1/documents/by-label"]["get"]["operationId"] == "resolve_documents_by_label"
     assert schema["paths"]["/knowledge-flow/v1/documents/by-label/{label}"]["get"]["operationId"] == "list_documents_by_label"
+
+
+@pytest.mark.parametrize("path", ["/documents/labels", "/documents/by-label?label=DAT", "/documents/by-label/DAT"])
+def test_label_reads_require_explicit_team(client, path):
+    assert client.get("/knowledge-flow/v1" + path).status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["rename", "retrievable"])
+async def test_partial_index_failure_is_explicit_at_http_boundary(client, operation):
+    metadata = await client.store.get_metadata_by_uid("doc-1")
+    metadata.processing.stages[ProcessingStage.VECTORIZED] = ProcessingStatus.DONE
+    await client.store.save_metadata(metadata)
+    vector = Mock()
+    vector.set_document_name.side_effect = RuntimeError("index unavailable")
+    vector.set_document_retrievable.side_effect = RuntimeError("index unavailable")
+    client.metadata_service.vector_store = vector
+    if operation == "rename":
+        response = client.put("/knowledge-flow/v1/document/metadata/doc-1/name", json={"name": "new.pdf"})
+    else:
+        response = client.put("/knowledge-flow/v1/document/metadata/doc-1", params={"retrievable": False})
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Document metadata was saved, but the vector index update failed. Manual verification is required."}
+    saved = await client.store.get_metadata_by_uid("doc-1")
+    if operation == "rename":
+        assert saved.document_name == "new.pdf"
+        vector.set_document_name.assert_called_once()
+    else:
+        assert saved.source.retrievable is False
+        vector.set_document_retrievable.assert_called_once()
+    assert len(vector.mock_calls) == 1

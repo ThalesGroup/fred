@@ -25,7 +25,6 @@ ReBAC scoping matches `query_read`.
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from fred_core import KeycloakUser
@@ -42,15 +41,15 @@ from fred_core.documents.document_structures import (
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tabular.service import TabularService
 from knowledge_flow_backend.features.tabular.structures import TabularSearchRequest
+from tests.services.test_tabular_service import _tabular_service
 
 
 def _user() -> KeycloakUser:
     return KeycloakUser(uid="u-1", username="tester", email="tester@example.com", roles=["admin"])
 
 
-async def _ingest_csv(*, tmp_path: Path, document_uid: str, file_name: str, content: str) -> DocumentMetadata:
+async def _ingest_csv(*, tmp_path: Path, document_uid: str, file_name: str, content: str, tag_ids: list[str] | None = None) -> DocumentMetadata:
     """Run the real CSV tabular pipeline (Parquet artifact in the local store)."""
     csv_path = tmp_path / file_name
     csv_path.write_text(content, encoding="utf-8")
@@ -58,24 +57,11 @@ async def _ingest_csv(*, tmp_path: Path, document_uid: str, file_name: str, cont
         identity=Identity(document_name=file_name, document_uid=document_uid, title=file_name),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="uploads"),
         file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
-        tags=Tagging(tag_ids=[], tag_names=[]),
+        tags=Tagging(tag_ids=tag_ids or ["default-folder"], tag_names=[]),
     )
     processed = TabularProcessor().process(str(csv_path), metadata)
     await MetadataService().save_document_metadata(_user(), processed)
     return processed
-
-
-class _FakeRebac:
-    def __init__(self, readable_document_uids: set[str]):
-        self.readable_document_uids = readable_document_uids
-
-    async def lookup_user_resources(self, user, permission):
-        del user, permission
-        return [SimpleNamespace(id=uid) for uid in sorted(self.readable_document_uids)]
-
-    async def has_user_permission(self, user, permission, resource_id):
-        del user, permission
-        return resource_id in self.readable_document_uids
 
 
 @pytest.mark.asyncio
@@ -90,7 +76,7 @@ async def test_search_locates_value_case_accent_and_space_insensitive(tmp_path, 
         content="reference,fournisseur,quantite\nABC-123,Café de Paris,42\nXYZ-999,Boulangerie,7\n",
     )
 
-    service = TabularService()
+    service = _tabular_service()
 
     # Accent + case insensitive: search "CAFE" finds "Café de Paris".
     accent = await service.search_values(_user(), request=TabularSearchRequest(keyword="CAFE"))
@@ -123,7 +109,7 @@ async def test_search_matches_numeric_format_with_thousands_space_and_decimal_co
         content='produit,montant\nVis,"1 234,56"\nEcrou,"99,90"\n',
     )
 
-    service = TabularService()
+    service = _tabular_service()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="1234.56"))
     assert [match.document_uid for match in response.matches] == ["doc-montants"]
     assert response.matches[0].matched_columns == ["montant"]
@@ -143,7 +129,7 @@ async def test_search_caps_rows_per_table_and_flags_truncation(tmp_path, metadat
         content=f"id,status\n{rows}\n",
     )
 
-    service = TabularService()
+    service = _tabular_service()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="error", max_rows_per_table=2))
     assert len(response.matches) == 1
     match = response.matches[0]
@@ -165,7 +151,7 @@ async def test_search_caps_matching_tables_and_flags_truncation(tmp_path, metada
             content="label\nwidget\n",
         )
 
-    service = TabularService()
+    service = _tabular_service()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="widget", max_matching_tables=2))
     assert len(response.matches) == 2
     assert response.tables_truncated is True
@@ -185,7 +171,7 @@ async def test_search_returns_no_match_when_value_absent(tmp_path, metadata_stor
         content="reference,fournisseur\nABC-123,Café de Paris\n",
     )
 
-    service = TabularService()
+    service = _tabular_service()
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="introuvable-xyz"))
     assert response.matches == []
     assert response.tables_truncated is False
@@ -197,10 +183,9 @@ async def test_search_only_scans_rebac_authorized_documents(tmp_path, metadata_s
     content_store.clear()
 
     await _ingest_csv(tmp_path=tmp_path, document_uid="doc-visible", file_name="visible.csv", content="note\nsecret\n")
-    await _ingest_csv(tmp_path=tmp_path, document_uid="doc-hidden", file_name="hidden.csv", content="note\nsecret\n")
+    await _ingest_csv(tmp_path=tmp_path, document_uid="doc-hidden", tag_ids=["hidden-folder"], file_name="hidden.csv", content="note\nsecret\n")
 
-    service = TabularService()
-    service.rebac = _FakeRebac({"doc-visible"})
+    service = _tabular_service()
 
     response = await service.search_values(_user(), request=TabularSearchRequest(keyword="secret"))
     assert [match.document_uid for match in response.matches] == ["doc-visible"]
@@ -216,7 +201,7 @@ async def test_search_rejects_too_short_keyword(tmp_path, metadata_store):
 
     await _ingest_csv(tmp_path=tmp_path, document_uid="doc-catalogue", file_name="catalogue.csv", content="note\nhello\n")
 
-    service = TabularService()
+    service = _tabular_service()
     with pytest.raises(ValueError, match="at least 2 characters"):
         await service.search_values(_user(), request=TabularSearchRequest(keyword="a"))
 
@@ -243,7 +228,7 @@ async def test_search_caps_datasets_examined_even_when_nothing_matches(tmp_path,
             content="label\nsomethingelse\n",
         )
 
-    service = TabularService()
+    service = _tabular_service()
     service.tabular_config = service.tabular_config.model_copy(update={"query": service.tabular_config.query.model_copy(update={"max_selected_datasets": 2})})
 
     examined: list[str] = []
@@ -295,7 +280,7 @@ async def test_search_does_not_claim_to_have_searched_a_partially_scanned_docume
         content="label\nwidget\n",
     )
 
-    service = TabularService()
+    service = _tabular_service()
     all_datasets = await service._resolve_authorized_datasets(_user())
     workbook_tables = [dataset for dataset in all_datasets if dataset.metadata.document_uid == "doc-book"]
     assert len(workbook_tables) > 1, "fixture must produce a multi-table workbook"

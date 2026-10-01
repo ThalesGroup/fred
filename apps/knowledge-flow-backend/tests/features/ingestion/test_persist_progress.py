@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""`IngestionService.persist_progress` — the single seam every ingestion write
+"""`IngestionService.persist_progress_trusted` — the single seam every ingestion write
 goes through, and the one that compensates for a lost race (#2315).
 
 An activity's work runs in a thread Python cannot kill, so it routinely
@@ -78,7 +78,7 @@ def _service(metadata_service) -> IngestionService:
 async def test_a_landed_write_leaves_the_artifacts_alone():
     spy = _SpyMetadataService(persisted=True)
 
-    assert await _service(spy).persist_progress(_user(), _doc()) is True
+    assert await _service(spy).persist_progress_trusted(_user(), _doc()) is True
     assert spy.purged == []
 
 
@@ -88,7 +88,7 @@ async def test_a_lost_race_discards_the_artifacts_it_wrote():
     # orphan nothing points at, so the writer purges its own output.
     spy = _SpyMetadataService(persisted=False)
 
-    assert await _service(spy).persist_progress(_user(), _doc()) is False
+    assert await _service(spy).persist_progress_trusted(_user(), _doc()) is False
     assert spy.purged == ["doc-1"]
 
 

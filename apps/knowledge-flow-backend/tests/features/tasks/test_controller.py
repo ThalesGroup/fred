@@ -157,7 +157,9 @@ def test_every_other_task_route_keeps_human_admission(tasks: SimpleNamespace, pa
     assert get_current_user_or_service not in calls
 
 
-def test_ingestion_cancellation_is_explicitly_unsupported(tasks: SimpleNamespace) -> None:
+@pytest.mark.parametrize("kind", ["ingestion", "deletion"])
+def test_corpus_work_cancellation_is_explicitly_unsupported(tasks: SimpleNamespace, kind: str) -> None:
+    tasks.summary.kind = kind
     with _client(tasks, _service_identity(_CREATOR)) as client:
         response = client.post(f"/tasks/{_TASK_ID}/cancel")
     assert response.status_code == 409

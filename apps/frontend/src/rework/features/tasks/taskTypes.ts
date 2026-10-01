@@ -124,7 +124,26 @@ export interface ErasureTaskEvent {
   } | null;
 }
 
-export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent | ErasureTaskEvent;
+export interface DeletionTaskEvent {
+  kind: "deletion";
+  task_id: string;
+  state: TaskState;
+  seq: number;
+  timestamp: string;
+  progress: number | null;
+  step: string | null;
+  error: string | null;
+  target?: TaskTarget | null;
+  owner?: string | null;
+  detail: null;
+}
+
+export type AnyTaskEvent =
+  | DeletionTaskEvent
+  | IngestionTaskEvent
+  | MigrationTaskEvent
+  | EvaluationTaskEvent
+  | ErasureTaskEvent;
 
 export interface TaskViewModel {
   taskId: string;

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
@@ -104,14 +105,15 @@ class _TabularPreviewServiceStub:
         self.frame = frame
         self.calls: list[tuple[str, int]] = []
 
-    async def read_dataset_preview_frame(self, user, document_uid: str, *, max_rows: int = 200):
-        del user
+    async def read_dataset_preview_frame_trusted(self, metadata, *, max_rows: int = 200):
+        document_uid = metadata.document_uid
         self.calls.append((document_uid, max_rows))
         return self.frame
 
 
 def test_get_markdown_preview_does_not_hit_store_when_preview_stage_not_ready(app_context):
     service = ContentService()
+    service.corpus_access = AsyncMock()
     metadata = _metadata(preview_status=ProcessingStatus.NOT_STARTED)
     content_store = _ContentStoreStub()
     service.metadata_store = _MetadataStoreStub(metadata)
@@ -125,6 +127,7 @@ def test_get_markdown_preview_does_not_hit_store_when_preview_stage_not_ready(ap
 
 def test_get_markdown_preview_reads_output_when_preview_stage_is_done(app_context):
     service = ContentService()
+    service.corpus_access = AsyncMock()
     metadata = _metadata(preview_status=ProcessingStatus.DONE)
     content_store = _ContentStoreStub(payload=b"# Hello preview")
     service.metadata_store = _MetadataStoreStub(metadata)
@@ -138,6 +141,7 @@ def test_get_markdown_preview_reads_output_when_preview_stage_is_done(app_contex
 
 def test_get_markdown_preview_reads_csv_from_tabular_artifact_without_table_csv(app_context):
     service = ContentService()
+    service.corpus_access = AsyncMock()
     metadata = _metadata(
         file_name="sales.csv",
         mime_type="text/csv",
@@ -179,6 +183,7 @@ def test_get_markdown_preview_reads_csv_from_tabular_artifact_without_table_csv(
 
 def test_get_markdown_preview_escapes_pipe_characters_from_tabular_artifact(app_context):
     service = ContentService()
+    service.corpus_access = AsyncMock()
     metadata = _metadata(
         file_name="sales.csv",
         mime_type="text/csv",
@@ -216,11 +221,52 @@ def test_get_file_metadata_uses_db_document_name_not_stored_blob_name(app_contex
     # which never changes on a rename, instead of the DB record — so the
     # in-app preview/stream endpoint kept showing the old name forever.
     service = ContentService()
+    service.corpus_access = AsyncMock()
     metadata = _metadata(file_name="Q3-Final.pdf")
     content_store = _ContentStoreStub(stored_file_name="report_v1.pdf")
     service.metadata_store = _MetadataStoreStub(metadata)
     service.content_store = content_store
 
-    result = asyncio.run(service.get_file_metadata(_user(), "doc-1"))
+    result = asyncio.run(service.get_file_metadata_trusted(metadata))
 
     assert result.file_name == "Q3-Final.pdf"
+
+
+@pytest.mark.parametrize("range_header,expected,status", [(None, b"abcdef", 200), ("bytes=1-3", b"bcd", 206)])
+def test_stream_authorizes_once_before_headers_and_bytes(app_context, range_header, expected, status):
+    from io import BytesIO
+
+    from fastapi import APIRouter, FastAPI
+    from fastapi.testclient import TestClient
+    from fred_core import get_current_user
+
+    from knowledge_flow_backend.features.content.content_controller import ContentController
+
+    service = ContentService()
+    service.corpus_access = AsyncMock()
+    metadata = _metadata(file_name="renamed.pdf")
+    service.metadata_store = _MetadataStoreStub(metadata)
+
+    class Store:
+        def get_file_metadata(self, uid):
+            return FileMetadata(size=6, file_name="original.pdf", content_type="application/pdf")
+
+        def get_content(self, uid):
+            return BytesIO(b"abcdef")
+
+        def get_content_range(self, uid, *, start, length):
+            return BytesIO(b"abcdef"[start : start + length])
+
+    service.content_store = Store()
+    controller = ContentController.__new__(ContentController)
+    controller.service = service
+    router = APIRouter()
+    controller._register_routes(router)
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_current_user] = _user
+    response = TestClient(app).get("/raw_content/stream/doc-1", headers={"Range": range_header} if range_header else {})
+    assert response.status_code == status
+    assert response.content == expected
+    assert "renamed.pdf" in response.headers["content-disposition"]
+    service.corpus_access.check_document.assert_awaited_once_with(_user(), metadata)

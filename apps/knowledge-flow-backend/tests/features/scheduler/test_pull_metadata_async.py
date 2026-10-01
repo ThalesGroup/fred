@@ -30,7 +30,7 @@ def _prepare(monkeypatch, fetch):
     context.get_content_loader.return_value.fetch_by_relative_path = fetch
     monkeypatch.setattr(application_context.ApplicationContext, "get_instance", lambda: context)
     metadata = SimpleNamespace(document_uid="doc", source=SimpleNamespace())
-    service = SimpleNamespace(extract_metadata=AsyncMock(return_value=metadata), save_metadata=AsyncMock())
+    service = SimpleNamespace(extract_metadata=AsyncMock(return_value=metadata), save_metadata_trusted=AsyncMock())
     monkeypatch.setattr(ingestion_service, "get_ingestion_service", lambda: service)
     monkeypatch.setattr(pull_files_activities, "emit_temporal_activity_queue_wait_kpi", Mock())
     monkeypatch.setattr(pull_files_activities, "emit_temporal_activity_result_kpis", Mock())
@@ -73,7 +73,7 @@ def test_pull_download_leaves_event_loop_available(monkeypatch, temporal):
         assert entered.is_set() and callback_progressed == [True]
         assert result is metadata
         assert metadata.source.pull_location == file.external_path
-        service.save_metadata.assert_awaited_once_with(file.processed_by, metadata=metadata)
+        service.save_metadata_trusted.assert_awaited_once_with(file.processed_by, metadata=metadata)
         assert len(download_paths) == 1 and not download_paths[0].parent.exists()
         if temporal:
             assert heartbeats
@@ -95,6 +95,6 @@ def test_pull_download_preserves_error_and_skips_persistence(monkeypatch, tempor
                 await pull_files_activities.create_pull_file_metadata(file)
         assert caught.value is error
         service.extract_metadata.assert_not_awaited()
-        service.save_metadata.assert_not_awaited()
+        service.save_metadata_trusted.assert_not_awaited()
 
     asyncio.run(scenario())

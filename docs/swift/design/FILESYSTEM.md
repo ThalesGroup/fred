@@ -35,32 +35,26 @@ The UI labels are product names. The backend paths are implementation details.
 
 | UI root | Backend area | Writer |
 | --- | --- | --- |
-| Resources | `/corpus/...` | ingestion only |
+| Resources | dedicated corpus/document APIs | ingestion only |
 | Mon espace | `/teams/{team}/users/{uid}/...` | the owning user |
 | Espace d'equipe | `/teams/{team}/shared/...` | humans with team update permission |
 | Agents | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | the running agent for that user, via runtime adapter |
 | Agent config assets | `/teams/{team}/agents/{agent_instance_id}/config/...` | read: any team member (chat-time asset fetch); write: team update permission — capability upload slots store their binaries here at agent save (#1903, see docs/swift/capabilities/AUTHORING.md) |
 
-Earlier target notes described a `/teams/{team}/resources/...` path; the current
-shipped implementation exposes corpus content through the separate `/corpus/...`
-virtual area.
+Resources are not a filesystem area. Use the corpus navigation and document-read
+tools; the old `/corpus/...` filesystem path has been retired.
 
 ## Virtual Path Layout
 
-The active virtual filesystem has these top-level areas:
+The active virtual filesystem is rooted at `/teams`:
 
 ```text
-/
-├── teams/
-│   └── {team}/
-│       ├── users/{uid}/...
-│       ├── shared/...
-│       └── agents/{agent_instance_id}/
-│           ├── users/{uid}/...
-│           └── config/...
-└── corpus/
-    ├── documents/{document_uid}/preview.md
-    └── {library_or_tag}/...
+/teams/{team}/
+├── users/{uid}/...
+├── shared/...
+└── agents/{agent_instance_id}/
+    ├── users/{uid}/...
+    └── config/...
 ```
 
 Unknown top-level areas are rejected. The filesystem service does not implicitly
@@ -118,25 +112,11 @@ The adapter rejects writes and deletes that resolve outside the current agent's
 own subtree, including `shared/...`, another team, another user, or a sibling
 agent instance.
 
-### `/corpus`
+### Corpus access
 
-This is **Resources**.
-
-| Property | Behaviour |
-| --- | --- |
-| Read | governed by corpus/library permissions |
-| Write/delete/mkdir | rejected through filesystem contract |
-| Backend | virtual view over document metadata and extracted content |
-| Provenance | files derive as `origin=ingested`, `producer=ingestion` |
-
-Stable document reads use:
-
-```text
-/corpus/documents/{document_uid}/preview.md
-```
-
-Corpus binaries are not served by `/fs/download`; they continue to use the
-content/document APIs.
+Corpus navigation and document reads use their dedicated APIs and tools. The
+retired `/corpus/...` filesystem area is refused, with no compatibility adapter.
+Original document binaries remain available through the content/document APIs.
 
 ### Business labels vs. scope tags
 
@@ -332,7 +312,6 @@ Provenance is currently path-derived, not stored as separate metadata.
 | `/teams/{team}/shared/files/...` | `shared_copy` |
 | `/teams/{team}/shared/...` | `uploaded` |
 | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | `agent_generated` |
-| `/corpus/...` | `ingested` |
 
 Knowledge Flow stamps provenance on file-level list/stat responses. Directories
 are not stamped. The current SDK `FsEntry` type exposes only `path`, `size`, and

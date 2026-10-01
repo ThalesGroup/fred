@@ -80,7 +80,7 @@ class _ScopedAreaStub:
 
     async def cat_area(self, *args, **kwargs):
         self.calls.append(("cat_area", args, kwargs))
-        return "hello"
+        return "line1\nline2\nline3"
 
     async def read_bytes_area(self, *args, **kwargs):
         self.calls.append(("read_bytes_area", args, kwargs))
@@ -115,57 +115,33 @@ class _ScopedAreaStub:
         ]
 
 
-class _CorpusAreaStub:
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, tuple, dict]] = []
-
-    async def list_area(self, *args, **kwargs):
-        self.calls.append(("list_area", args, kwargs))
-        return [_dir("CIR")]
-
-    async def stat_area(self, *args, **kwargs):
-        self.calls.append(("stat_area", args, kwargs))
-        return _dir("CIR")
-
-    async def cat_area(self, *args, **kwargs):
-        self.calls.append(("cat_area", args, kwargs))
-        return "line1\nline2\nline3"
-
-    async def grep_area(self, *args, **kwargs):
-        self.calls.append(("grep_area", args, kwargs))
-        return ["corpus/CIR/report.md"]
-
-
-def _service() -> tuple[McpFilesystemService, _ScopedAreaStub, _CorpusAreaStub]:
+def _service() -> tuple[McpFilesystemService, _ScopedAreaStub]:
     """Build one MCP filesystem service with explicit collaborator stubs."""
 
     service = object.__new__(McpFilesystemService)
     scoped_areas = _ScopedAreaStub()
-    corpus_area = _CorpusAreaStub()
     service.scoped_areas = scoped_areas
-    service.corpus_area = corpus_area
     service.read_bounds = FilesystemReadBounds(
         default_limit=100,
         max_limit=500,
         default_max_chars=20_000,
         absolute_max_chars=50_000,
     )
-    return service, scoped_areas, corpus_area
+    return service, scoped_areas
 
 
 @pytest.mark.asyncio
-async def test_list_root_returns_teams_and_corpus(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+async def test_list_root_returns_only_teams(app_context):
+    service, _scoped_areas = _service()
 
     entries = await service.list(_user(), "")
 
-    # Top level of the unified layout: /teams (always) + /corpus (when it has content).
-    assert [entry.path for entry in entries] == ["teams", "corpus"]
+    assert [entry.path for entry in entries] == ["teams"]
 
 
 @pytest.mark.asyncio
 async def test_list_routes_teams_path_to_scoped_area(app_context):
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     await service.list(_user(), "/teams/acme/shared/reports")
 
@@ -183,7 +159,7 @@ async def test_list_reraises_authorization_error_without_error_log(app_context, 
     also emitting its own ERROR-level traceback (previously it did, via a bare
     `except Exception: logger.exception(...)`, producing a duplicate stack
     trace for a non-bug outcome)."""
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     async def raise_authorization_error(*args, **kwargs):
         raise AuthorizationError("u-1", "can_read", Resource.TEAM, "Not authorized")
@@ -199,27 +175,25 @@ async def test_list_reraises_authorization_error_without_error_log(app_context, 
 
 @pytest.mark.asyncio
 async def test_list_rejects_unknown_top_level_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.list(_user(), "/workspace/old")
 
 
 @pytest.mark.asyncio
-async def test_list_routes_corpus_paths_to_corpus_area(app_context):
-    service, _scoped_areas, corpus_area = _service()
-
-    entries = await service.list(_user(), "/corpus/CIR")
-
-    assert [entry.path for entry in entries] == ["CIR"]
-    assert corpus_area.calls[-1] == ("list_area", (_user(), ("CIR",)), {})
+async def test_list_rejects_retired_corpus_area(app_context):
+    service, scoped_areas = _service()
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
+        await service.list(_user(), "/corpus/CIR")
+    assert not scoped_areas.calls
 
 
 @pytest.mark.asyncio
 async def test_list_stamps_agent_provenance(app_context):
     # FILES-04 G4: a file listed under the agents subtree comes back tagged
     # agent_generated, derived from its full virtual path.
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     entries = await service.list(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs")
 
@@ -232,7 +206,7 @@ async def test_list_stamps_agent_provenance(app_context):
 
 @pytest.mark.asyncio
 async def test_list_stamps_mon_espace_provenance(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     entries = await service.list(_user(), "/teams/acme/users/u-1")
 
@@ -243,7 +217,7 @@ async def test_list_stamps_mon_espace_provenance(app_context):
 
 @pytest.mark.asyncio
 async def test_stat_stamps_provenance_from_requested_path(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     entry = await service.stat(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs/notes.txt")
 
@@ -253,7 +227,7 @@ async def test_stat_stamps_provenance_from_requested_path(app_context):
 
 @pytest.mark.asyncio
 async def test_list_root_entries_carry_no_provenance(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     entries = await service.list(_user(), "")
 
@@ -262,17 +236,17 @@ async def test_list_root_entries_carry_no_provenance(app_context):
 
 @pytest.mark.asyncio
 async def test_read_file_formats_numbered_excerpt(app_context):
-    service, _scoped_areas, corpus_area = _service()
+    service, scoped_areas = _service()
 
-    excerpt = await service.read_file(_user(), "/corpus/CIR/report.md", offset=1, limit=2)
+    excerpt = await service.read_file(_user(), "/teams/acme/shared/report.md", offset=1, limit=2)
 
     assert excerpt == "2 | line2\n3 | line3"
-    assert corpus_area.calls[-1] == ("cat_area", (_user(), ("CIR", "report.md")), {})
+    assert scoped_areas.calls[-1] == ("cat_area", (_user(), ("acme", "shared", "report.md")), {})
 
 
 @pytest.mark.asyncio
 async def test_read_file_page_returns_structured_page(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     async def _cat(user, path):
         del user, path
@@ -296,12 +270,12 @@ async def test_read_file_page_returns_structured_page(app_context):
 
 
 @pytest.mark.asyncio
-async def test_read_file_page_reads_corpus_document_uid_path(app_context):
-    service, _scoped_areas, corpus_area = _service()
+async def test_read_file_page_reads_workspace_path(app_context):
+    service, scoped_areas = _service()
 
     page = await service.read_file_page(
         _user(),
-        "/corpus/documents/doc-1/preview.md",
+        "/teams/acme/shared/report.md",
         offset=0,
         limit=2,
         max_chars=100,
@@ -309,12 +283,12 @@ async def test_read_file_page_reads_corpus_document_uid_path(app_context):
 
     assert page.content == "1 | line1\n2 | line2"
     assert page.next_offset == 2
-    assert corpus_area.calls[-1] == ("cat_area", (_user(), ("documents", "doc-1", "preview.md")), {})
+    assert scoped_areas.calls[-1] == ("cat_area", (_user(), ("acme", "shared", "report.md")), {})
 
 
 @pytest.mark.asyncio
 async def test_read_file_applies_default_bounds_when_caller_omits_them(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     async def _cat(user, path):
         del user, path
@@ -335,7 +309,7 @@ async def test_read_file_applies_default_bounds_when_caller_omits_them(app_conte
 
 @pytest.mark.asyncio
 async def test_read_file_rejects_limit_above_configured_max(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     with pytest.raises(ValueError, match="limit must be <= 500"):
         await service.read_file(_user(), "/teams/acme/shared/report.md", limit=501)
@@ -343,7 +317,7 @@ async def test_read_file_rejects_limit_above_configured_max(app_context):
 
 @pytest.mark.asyncio
 async def test_read_file_rejects_max_chars_above_configured_max(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     with pytest.raises(ValueError, match="max_chars must be <= 50000"):
         await service.read_file(_user(), "/teams/acme/shared/report.md", max_chars=50_001)
@@ -351,7 +325,7 @@ async def test_read_file_rejects_max_chars_above_configured_max(app_context):
 
 @pytest.mark.asyncio
 async def test_read_file_truncates_rendered_excerpt_to_max_chars(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     async def _cat(user, path):
         del user, path
@@ -366,7 +340,7 @@ async def test_read_file_truncates_rendered_excerpt_to_max_chars(app_context):
 
 @pytest.mark.asyncio
 async def test_read_file_remains_plain_text_compatible_when_page_metadata_exists(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     async def _cat(user, path):
         del user, path
@@ -384,7 +358,7 @@ async def test_read_file_remains_plain_text_compatible_when_page_metadata_exists
 async def test_copy_to_shared_places_file_and_tags_share_copy(app_context):
     # G5: copy a private file into Espace d'equipe; it lands under shared/files and
     # reads back as a share-copy (partagé).
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     entry = await service.copy_to_shared(_user(), "/teams/acme/users/u-1/outputs/q3.pptx")
 
@@ -397,7 +371,7 @@ async def test_copy_to_shared_places_file_and_tags_share_copy(app_context):
 async def test_copy_to_shared_suffixes_on_name_collision(app_context):
     # The stub's shared/files already contains "notes.txt", so a copy of the same
     # name is placed as "notes (2).txt" (no-clobber).
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     await service.copy_to_shared(_user(), "/teams/acme/users/u-1/notes.txt")
 
@@ -407,9 +381,9 @@ async def test_copy_to_shared_suffixes_on_name_collision(app_context):
 
 @pytest.mark.asyncio
 async def test_copy_to_shared_rejects_corpus_source(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
-    with pytest.raises(PermissionError):
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.copy_to_shared(_user(), "/corpus/CIR/report.md")
 
 
@@ -424,15 +398,15 @@ def test_unique_name_suffixing():
 
 @pytest.mark.asyncio
 async def test_write_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
-    with pytest.raises(PermissionError, match="Corpus area is read-only"):
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.write(_user(), "/corpus/CIR/report.md", "hello")
 
 
 @pytest.mark.asyncio
 async def test_read_bytes_routes_teams_path_to_scoped_area(app_context):
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     data = await service.read_bytes(_user(), "/teams/acme/shared/templates/deck.pptx")
 
@@ -442,15 +416,15 @@ async def test_read_bytes_routes_teams_path_to_scoped_area(app_context):
 
 @pytest.mark.asyncio
 async def test_read_bytes_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
-    with pytest.raises(PermissionError, match="Corpus binaries are served by the content API"):
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.read_bytes(_user(), "/corpus/CIR/original.pptx")
 
 
 @pytest.mark.asyncio
 async def test_write_bytes_routes_teams_path_to_scoped_area(app_context):
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     await service.write_bytes(_user(), "/teams/acme/users/u-1/outputs/q3.pptx", b"\x00\x01")
 
@@ -463,27 +437,26 @@ async def test_write_bytes_routes_teams_path_to_scoped_area(app_context):
 
 @pytest.mark.asyncio
 async def test_write_bytes_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
-    with pytest.raises(PermissionError, match="Corpus area is read-only"):
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.write_bytes(_user(), "/corpus/CIR/x.pptx", b"\x00")
 
 
 @pytest.mark.asyncio
-async def test_grep_root_combines_team_and_corpus_results(app_context):
-    service, scoped_areas, corpus_area = _service()
+async def test_grep_root_searches_only_team_workspaces(app_context):
+    service, scoped_areas = _service()
 
     matches = await service.grep(_user(), "report", "")
 
-    assert matches == ["/teams/acme/shared/notes.txt", "/corpus/CIR/report.md"]
+    assert matches == ["/teams/acme/shared/notes.txt"]
     # Root grep fans out once into the team area (which itself only reaches readable scopes).
     assert scoped_areas.calls == [("grep_area", (_user(), "report", ()), {})]
-    assert corpus_area.calls[-1] == ("grep_area", (_user(), "report", ()), {})
 
 
 @pytest.mark.asyncio
 async def test_glob_matches_against_visible_absolute_paths(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     async def _walk_visible_tree(user, path="/"):
         del user, path
@@ -502,7 +475,7 @@ async def test_glob_matches_against_visible_absolute_paths(app_context):
 
 @pytest.mark.asyncio
 async def test_edit_file_rewrites_content_and_returns_occurrence_count(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     async def _cat(user, path):
         del user, path
@@ -529,7 +502,7 @@ async def test_edit_file_rewrites_content_and_returns_occurrence_count(app_conte
 
 @pytest.mark.asyncio
 async def test_rename_routes_teams_path_to_scoped_area(app_context):
-    service, scoped_areas, _corpus_area = _service()
+    service, scoped_areas = _service()
 
     result = await service.rename(_user(), "/teams/acme/shared/notes.txt", "meeting-notes.txt")
 
@@ -542,15 +515,15 @@ async def test_rename_routes_teams_path_to_scoped_area(app_context):
 
 @pytest.mark.asyncio
 async def test_rename_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
-    with pytest.raises(PermissionError, match="Corpus area is read-only"):
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.rename(_user(), "/corpus/CIR/report.md", "final.md")
 
 
 @pytest.mark.asyncio
 async def test_rename_rejects_root(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     with pytest.raises(PermissionError, match="Cannot rename root"):
         await service.rename(_user(), "/", "anything")
@@ -558,7 +531,7 @@ async def test_rename_rejects_root(app_context):
 
 @pytest.mark.asyncio
 async def test_type_stats_buckets_files_by_extension_and_sums_size(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
     stats = await service.type_stats(_user(), "/teams/acme/shared")
 
@@ -568,7 +541,7 @@ async def test_type_stats_buckets_files_by_extension_and_sums_size(app_context):
 
 @pytest.mark.asyncio
 async def test_type_stats_rejects_corpus_area(app_context):
-    service, _scoped_areas, _corpus_area = _service()
+    service, _scoped_areas = _service()
 
-    with pytest.raises(PermissionError, match="Use GET /tags/stats"):
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
         await service.type_stats(_user(), "/corpus/CIR")

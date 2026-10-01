@@ -17,7 +17,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Protocol, Set, cast, runtime_checkable
+from typing import Any, List, Optional, Protocol, cast, runtime_checkable
 
 from fred_core import KeycloakUser
 from fred_core.common import OwnerFilter
@@ -27,7 +27,7 @@ from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, FullTextHit, HybridHit, SearchFilter
-from knowledge_flow_backend.features.metadata.service import MetadataService
+from knowledge_flow_backend.features.metadata.service import MetadataNotFound, MetadataService
 from knowledge_flow_backend.features.tag.tag_service import TagService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
@@ -239,35 +239,17 @@ class VectorSearchService:
 
     # ---------- helpers -------------------------------------------------------
 
-    async def _collect_document_ids_from_tags(self, tags_ids: Optional[List[str]], user: KeycloakUser) -> Set[str]:
-        """
-        Resolve UI tag_ids -> document_uids (library scoping).
-        Returns an empty set when no tags provided to keep call sites simple.
-        """
-        if not tags_ids:
-            return set()
-        doc_ids: Set[str] = set()
-        for tag_id in tags_ids:
-            tag = await self.tag_service.get_tag_for_user(tag_id, user)
-            # Tag.item_ids is expected to be a list[str] of document_uids
-            doc_ids.update(tag.item_ids or [])
-        return doc_ids
-
-    async def _tags_meta_from_ids(self, tag_ids: List[str], user: KeycloakUser) -> tuple[list[str], list[str]]:
-        """Resolve tag IDs to human-readable names for UI chips + full breadcrumb paths."""
-        if not tag_ids:
-            return [], []
-        names, full_paths = [], []
-        for tid in tag_ids:
-            try:
-                tag = await self.tag_service.get_tag_for_user(tid, user)
-                if not tag:
-                    continue
-                names.append(tag.name)
-                full_paths.append(tag.full_path)
-            except Exception as e:
-                logger.debug("Could not resolve tag id=%s: %s", tid, e)
-        return names, full_paths
+    async def _hydrate_hit_folders(self, hits: list[VectorSearchHit]) -> None:
+        """Decorate already-authorized results in one SQL lookup, without rechecking hits."""
+        folder_ids = {folder_id for hit in hits for folder_id in (hit.tag_ids or [])}
+        if not folder_ids:
+            return
+        folders = await self.tag_service.corpus_access.folders.get_tags_by_ids(list(folder_ids))
+        by_id = {folder.id: folder for folder in folders}
+        for hit in hits:
+            selected = [by_id[folder_id] for folder_id in (hit.tag_ids or []) if folder_id in by_id]
+            hit.tag_names = [folder.name for folder in selected]
+            hit.tag_full_paths = [folder.full_path for folder in selected]
 
     async def _to_hit(
         self,
@@ -275,7 +257,6 @@ class VectorSearchService:
         score: float,
         rank: int,
         user: KeycloakUser,
-        tags_meta: tuple[list[str], list[str]] | None = None,
     ) -> VectorSearchHit:
         """
         Convert a LangChain Document + score into a VectorSearchHit UI DTO.
@@ -286,7 +267,6 @@ class VectorSearchService:
 
         # Pull both ids and names (UI displays names; filters might use ids)
         tag_ids = md.get("tag_ids") or []
-        tag_names, tag_full_paths = tags_meta if tags_meta is not None else await self._tags_meta_from_ids(tag_ids, user)
         uid = md.get("document_uid") or "Unknown"
         vf = md.get("viewer_fragment")
         preview_url = f"/documents/{uid}"
@@ -331,8 +311,8 @@ class VectorSearchService:
             type=md.get("type") or "document",
             # tags
             tag_ids=tag_ids,
-            tag_names=tag_names,
-            tag_full_paths=tag_full_paths,
+            tag_names=[],
+            tag_full_paths=[],
             # link fields
             preview_url=preview_url,
             preview_at_url=preview_at_url,
@@ -641,31 +621,21 @@ class VectorSearchService:
                 logger.info("[VECTOR][SEARCH] both session and corpus scopes disabled; returning empty result.")
                 return []
 
-            # Resolve the set of tag IDs the user is authorized to search in
-            with self._phase_timer(
-                phase="vector_search_authorize_tags",
-                user=user,
-            ):
-                authorized_tag_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
-            if document_library_tags_ids:
-                # Explicit library scope: narrow to the requested tags.
-                authorized_tag_ids = set(document_library_tags_ids) & authorized_tag_ids
-            elif document_uids:
-                # Document-only scope: the caller named specific documents and no
-                # libraries. Do NOT widen back to all authorized libraries — the
-                # library branch must not run, so the search returns ONLY the named
-                # documents (the document branch). Without this, a document-scoped
-                # search (e.g. the comparison agent) leaks the whole tagged corpus.
-                authorized_tag_ids = set()
-
-            # Validate document_uids against ReBAC permissions
+            authorized_tag_ids: set[str] = set()
             authorized_document_uids: set[str] = set()
-            if document_uids:
-                with self._phase_timer(
-                    phase="vector_search_filter_document_uids",
-                    user=user,
-                ):
-                    authorized_document_uids = await self.metadata_service.filter_readable_document_uids(user, document_uids)
+            if include_corpus_scope:
+                with self._phase_timer(phase="vector_search_authorize_tags", user=user):
+                    team_folder_ids = await self.tag_service.list_authorized_tags_ids(user, owner_filter, team_id)
+                if document_library_tags_ids:
+                    authorized_tag_ids = set(document_library_tags_ids) & team_folder_ids
+                elif not document_uids:
+                    authorized_tag_ids = team_folder_ids
+                if document_uids:
+                    # Resolve only explicit selections before searching, never vector hits.
+                    # The already-authorized team folders bound these IDs as well.
+                    with self._phase_timer(phase="vector_search_filter_document_uids", user=user):
+                        selected = await self.metadata_service.metadata_store.get_metadata_by_uids(document_uids)
+                        authorized_document_uids = {document.document_uid for document in selected if document.kind == "corpus" and set(document.tags.tag_ids) & team_folder_ids}
 
             # Search function dispatch
             policy_key = policy_name or SearchPolicyName.hybrid
@@ -698,8 +668,6 @@ class VectorSearchService:
                     "session_id": [session_id],
                     "scope": ["session"],
                 }
-                if authorized_document_uids:
-                    attachment_metadata["document_uid"] = list(authorized_document_uids)
                 logger.debug(
                     "[VECTOR][SEARCH][ATTACH] session=%s user=%s policy=%s question=%r top_k=%d",
                     session_id,
@@ -838,6 +806,7 @@ class VectorSearchService:
                 len(corpus_hits),
                 [(h.title, round(h.score, 4), h.tag_names) for h in merged],
             )
+            await self._hydrate_hit_folders(merged)
             _log_visual_search_hits("MERGED", merged)
             return merged
 
@@ -864,8 +833,8 @@ class VectorSearchService:
 
         Returns the passages most similar to ``anchor``, restricted to the named
         targets (documents and/or library folders), ranked best-first. This is a
-        thin orchestration over the existing primitives: ``search`` does the
-        targeted retrieval (with ReBAC filtering), ``rerank_documents`` reorders
+        thin orchestration over the existing primitives: folder authorization precedes
+        targeted hybrid retrieval, and ``rerank_documents`` reorders
         with the cross-encoder. Targeting is REQUIRED — it is a comparison
         primitive, not a corpus-wide question-answering search.
 
@@ -895,15 +864,18 @@ class VectorSearchService:
             pool,
             min_score,
         )
-        hits = await self.search(
-            question=anchor,
-            user=user,
-            top_k=pool,
-            document_library_tags_ids=document_library_tags_ids,
-            document_uids=document_uids or None,
-            include_session_scope=False,  # comparison is over the corpus targets, not chat attachments
-            include_corpus_scope=True,
-        )
+        documents = await self.metadata_service.metadata_store.get_metadata_by_uids(document_uids) if document_uids else []
+        if {document.document_uid for document in documents} != set(document_uids):
+            raise MetadataNotFound("One or more comparison documents do not exist")
+        await self.tag_service.corpus_access.check_documents(user, documents, folder_ids=document_library_tags_ids)
+        # The named targets are already authorized. Query those scopes directly;
+        # the general search's default personal-team scope does not apply here.
+        groups: list[list[VectorSearchHit]] = []
+        if document_library_tags_ids:
+            groups.append(await self._hybrid(question=anchor, user=user, k=pool, library_tags_ids=document_library_tags_ids, metadata_terms_extra={"scope": ["!session"]}))
+        if document_uids:
+            groups.append(await self._hybrid(question=anchor, user=user, k=pool, library_tags_ids=None, metadata_terms_extra={"scope": ["!session"], "document_uid": document_uids}))
+        hits = _merge_corpus_scope_hits(*groups, top_k=pool)
         if rerank and hits:
             hits = self.rerank_documents(anchor, hits, top_r=top_k)
         if min_score is not None:
@@ -913,7 +885,9 @@ class VectorSearchService:
             len(hits),
             sorted({hit.uid for hit in hits}),
         )
-        return hits[:top_k]
+        result = hits[:top_k]
+        await self._hydrate_hit_folders(result)
+        return result
 
     def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
         """
@@ -999,20 +973,15 @@ class VectorSearchService:
         raw_chunks.sort(key=_order)
         truncated = len(raw_chunks) > limit
 
-        tags_cache: dict[tuple[str, ...], tuple[list[str], list[str]]] = {}
         hits: List[VectorSearchHit] = []
         for rank, entry in enumerate(raw_chunks[:limit]):
             metadata = entry.get("metadata") or {}
-            tag_ids = tuple(metadata.get("tag_ids") or [])
-            if tag_ids not in tags_cache:
-                tags_cache[tag_ids] = await self._tags_meta_from_ids(list(tag_ids), user)
             hits.append(
                 await self._to_hit(
                     Document(page_content=entry.get("text") or "", metadata=metadata),
                     score=0.0,
                     rank=rank,
                     user=user,
-                    tags_meta=tags_cache[tag_ids],
                 )
             )
         logger.info(
@@ -1022,4 +991,5 @@ class VectorSearchService:
             len(raw_chunks),
             truncated,
         )
+        await self._hydrate_hit_folders(hits)
         return hits

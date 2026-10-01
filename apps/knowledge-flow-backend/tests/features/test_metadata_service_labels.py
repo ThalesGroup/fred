@@ -28,6 +28,7 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fred_core import RebacDisabledResult
@@ -39,21 +40,31 @@ from fred_core.documents.document_structures import (
     Tagging,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 from fred_core.models.base import Base
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.features.metadata import service as service_module
 from knowledge_flow_backend.features.metadata.service import (
     InvalidMetadataRequest,
     MetadataNotFound,
     MetadataService,
 )
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
+from knowledge_flow_backend.features.tag.structure import Tag, TagType
 
 
-async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
-    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / filename}")
+async def _make_sqlite_engine(tmp_path: Path, filename: str, *, single_connection: bool = False) -> AsyncEngine:
+    pool_options = {"pool_size": 1, "max_overflow": 0, "pool_timeout": 0.2} if single_connection else {}
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / filename}", **pool_options)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        for suffix in ("a", "b"):
+            now = datetime.now(timezone.utc)
+            tag = Tag(id=f"folder-{suffix}", name=f"folder-{suffix}", owner_id=f"team-{suffix}", type=TagType.DOCUMENT, created_at=now, updated_at=now)
+            await conn.execute(insert(TagRow), {"tag_id": tag.id, "owner_id": tag.owner_id, "name": tag.name, "type": "document", "doc": tag.model_dump(mode="json")})
     return engine
 
 
@@ -66,7 +77,7 @@ def _doc(uid: str, *, tag_ids: list[str] | None = None) -> DocumentMetadata:
             modified=datetime.now(timezone.utc),
         ),
         source=SourceInfo(source_type=SourceType.PUSH, source_tag="fred"),
-        tags=Tagging(tag_ids=tag_ids or []),
+        tags=Tagging(tag_ids=tag_ids if tag_ids is not None else ["folder-a"]),
     )
 
 
@@ -84,6 +95,9 @@ class _FakeRebac:
         if resource_id in self._denied:
             raise PermissionError(f"denied: {resource_id}")
 
+    async def has_user_permission(self, user, permission, resource_id):
+        return self._disabled or resource_id == "team-a"
+
     async def lookup_user_resources(self, user, permission):
         if self._disabled:
             return RebacDisabledResult()
@@ -98,8 +112,12 @@ def _build_service(engine: AsyncEngine, rebac: _FakeRebac, monkeypatch: pytest.M
     service = MetadataService.__new__(MetadataService)
     service.metadata_store = PostgresDocumentMetadataStore(engine)  # type: ignore[assignment]
     service.rebac = rebac  # type: ignore[assignment]
+    service.corpus_access = CorpusAccess(rebac, PostgresTagStore(engine))
     service.vector_store = None
     service.content_store = None  # type: ignore[assignment]
+    # Label persistence is under test; folder timestamps and FGA writes are not.
+    service._set_tag_as_parent_in_rebac = AsyncMock()
+    service._update_tag_timestamps = AsyncMock()
 
     fake_context = SimpleNamespace(get_pg_async_engine=lambda: engine)
     monkeypatch.setattr(service_module.ApplicationContext, "get_instance", staticmethod(lambda: fake_context))
@@ -202,9 +220,9 @@ async def test_remove_is_idempotent_through_the_service(tmp_path, monkeypatch) -
 
 
 @pytest.mark.asyncio
-async def test_mutation_refused_without_document_update_permission(tmp_path, monkeypatch) -> None:
+async def test_mutation_refused_without_team_update_permission(tmp_path, monkeypatch) -> None:
     engine = await _make_sqlite_engine(tmp_path, "denied.sqlite3")
-    service = _build_service(engine, _FakeRebac(denied={"doc-1"}), monkeypatch)
+    service = _build_service(engine, _FakeRebac(denied={"team-a"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
 
     with pytest.raises(PermissionError):
@@ -312,11 +330,11 @@ async def test_get_documents_with_label_only_returns_readable_documents(tmp_path
     engine = await _make_sqlite_engine(tmp_path, "search_scoped.sqlite3")
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
-    await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
+    await service.metadata_store.save_metadata(_doc("doc-2", tag_ids=["folder-b"]))  # another team
     await service.metadata_store.add_label("doc-1", "DAT")
     await service.metadata_store.add_label("doc-2", "DAT")
 
-    results = await service.get_documents_with_label(_user(), "DAT")
+    results = await service.get_documents_with_label(_user(), "DAT", team_id="team-a")
 
     assert [d.identity.document_uid for d in results] == ["doc-1"]
 
@@ -328,7 +346,7 @@ async def test_get_documents_with_label_returns_everything_when_rebac_disabled(t
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.add_label("doc-1", "DAT")
 
-    results = await service.get_documents_with_label(_user(), "DAT")
+    results = await service.get_documents_with_label(_user(), "DAT", team_id="team-a")
 
     assert [d.identity.document_uid for d in results] == ["doc-1"]
 
@@ -344,7 +362,7 @@ async def test_get_document_uids_with_any_label_unions_multiple_labels(tmp_path,
     await service.metadata_store.add_label("doc-2", "MEX")
     await service.metadata_store.add_label("doc-3", "OTHER")
 
-    uids = await service.get_document_uids_with_any_label(_user(), ["DAT", "MEX"])
+    uids = await service.get_document_uids_with_any_label(_user(), ["DAT", "MEX"], team_id="team-a")
 
     assert uids == {"doc-1", "doc-2"}
 
@@ -354,11 +372,11 @@ async def test_get_document_uids_with_any_label_only_returns_readable_documents(
     engine = await _make_sqlite_engine(tmp_path, "any_label_scoped.sqlite3")
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
-    await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
+    await service.metadata_store.save_metadata(_doc("doc-2", tag_ids=["folder-b"]))  # another team
     await service.metadata_store.add_label("doc-1", "DAT")
     await service.metadata_store.add_label("doc-2", "DAT")
 
-    assert await service.get_document_uids_with_any_label(_user(), ["DAT"]) == {"doc-1"}
+    assert await service.get_document_uids_with_any_label(_user(), ["DAT"], team_id="team-a") == {"doc-1"}
 
 
 @pytest.mark.asyncio
@@ -368,8 +386,8 @@ async def test_get_document_uids_with_any_label_returns_empty_set_for_no_labels(
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.add_label("doc-1", "DAT")
 
-    assert await service.get_document_uids_with_any_label(_user(), []) == set()
-    assert await service.get_document_uids_with_any_label(_user(), ["", "  "]) == set()
+    assert await service.get_document_uids_with_any_label(_user(), [], team_id="team-a") == set()
+    assert await service.get_document_uids_with_any_label(_user(), ["", "  "], team_id="team-a") == set()
 
 
 @pytest.mark.asyncio
@@ -377,7 +395,7 @@ async def test_get_documents_by_uids_only_returns_readable_documents(tmp_path, m
     engine = await _make_sqlite_engine(tmp_path, "by_uids_scoped.sqlite3")
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
-    await service.metadata_store.save_metadata(_doc("doc-2"))  # not readable by this user
+    await service.metadata_store.save_metadata(_doc("doc-2", tag_ids=["folder-b"]))  # another team
 
     results = await service.get_documents_by_uids(_user(), ["doc-1", "doc-2"])
 
@@ -408,23 +426,23 @@ async def test_list_document_labels_never_reveals_a_label_only_on_unreadable_doc
     engine = await _make_sqlite_engine(tmp_path, "vocab_scoped.sqlite3")
     service = _build_service(engine, _FakeRebac(readable_uids={"doc-1"}), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
-    await service.metadata_store.save_metadata(_doc("doc-2"))
+    await service.metadata_store.save_metadata(_doc("doc-2", tag_ids=["folder-b"]))
     await service.metadata_store.add_label("doc-1", "VISIBLE")
     await service.metadata_store.add_label("doc-2", "SECRET-ON-UNREADABLE-DOC")
 
-    labels = await service.list_document_labels(_user())
+    labels = await service.list_document_labels(_user(), team_id="team-a")
 
     assert labels == ["VISIBLE"]
 
 
 @pytest.mark.asyncio
-async def test_list_document_labels_returns_empty_when_the_user_can_read_nothing(tmp_path, monkeypatch) -> None:
+async def test_list_document_labels_returns_empty_for_a_team_without_matching_documents(tmp_path, monkeypatch) -> None:
     engine = await _make_sqlite_engine(tmp_path, "vocab_none.sqlite3")
     service = _build_service(engine, _FakeRebac(readable_uids=set()), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
     await service.metadata_store.add_label("doc-1", "DAT")
 
-    assert await service.list_document_labels(_user()) == []
+    assert await service.list_document_labels(_user(), team_id="team-b") == []
 
 
 @pytest.mark.asyncio
@@ -474,3 +492,40 @@ async def test_a_stale_trusted_save_does_not_erase_a_label_added_after_the_snaps
     await service.save_document_metadata_trusted(_user(), stale_snapshot)
 
     assert await service.metadata_store.get_labels_for_document("doc-1") == ["MEX"]
+
+
+@pytest.mark.asyncio
+async def test_label_page_unions_selection_inside_authorized_team_before_count(tmp_path, monkeypatch):
+    engine = await _make_sqlite_engine(tmp_path, "label_union.sqlite3")
+    service = _build_service(engine, _FakeRebac(), monkeypatch)
+    now = datetime.now(timezone.utc)
+    folder = Tag(id="folder-c", name="C", owner_id="team-a", type=TagType.DOCUMENT, created_at=now, updated_at=now)
+    async with engine.begin() as conn:
+        await conn.execute(insert(TagRow), {"tag_id": folder.id, "name": folder.name, "owner_id": folder.owner_id, "type": "document", "doc": folder.model_dump(mode="json")})
+    for uid, folder_id in [("a", "folder-a"), ("b", "folder-b"), ("c", "folder-c"), ("d", "folder-c")]:
+        await service.metadata_store.save_metadata(_doc(uid, tag_ids=[folder_id]))
+        await service.metadata_store.add_label(uid, "SHARED")
+    await service.metadata_store.add_label("b", "FOREIGN")
+
+    first, total = await service.get_documents_with_label_page(_user(), "SHARED", team_id="team-a", folder_ids=["folder-a", "folder-b"], document_uids=["b", "c"], limit=1)
+    second, next_total = await service.get_documents_with_label_page(_user(), "SHARED", team_id="team-a", folder_ids=["folder-a", "folder-b"], document_uids=["b", "c"], offset=1, limit=1)
+    assert total == next_total == 2
+    assert [d.document_uid for d in first + second] == ["a", "c"]
+    assert await service.list_document_labels(_user(), team_id="team-a") == ["SHARED"]
+    docs, total = await service.get_documents_with_label_page(_user(), "SHARED", team_id="team-a", document_uids=["c", "b"])
+    assert total == 1
+    assert [d.document_uid for d in docs] == ["c"]
+    docs, total = await service.get_documents_with_label_page(_user(), "SHARED", team_id="team-a", folder_ids=["folder-b"])
+    assert (docs, total) == ([], 0)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_label_admission_does_not_hold_a_connection_while_loading_folder(tmp_path, monkeypatch):
+    engine = await _make_sqlite_engine(tmp_path, "single_connection.sqlite3", single_connection=True)
+    try:
+        service = _build_service(engine, _FakeRebac(), monkeypatch)
+        await service.metadata_store.save_metadata(_doc("doc-1"))
+        assert await service.mutate_document_labels(_user(), "doc-1", add=["DAT"], modified_by="u-1") == ["DAT"]
+    finally:
+        await engine.dispose()

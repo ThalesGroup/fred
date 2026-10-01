@@ -359,13 +359,14 @@ class ContextAwareTool(BaseTool):
                 session_id,
             )
 
-        # Force team_id depending on agent settings.
+        # Force the resolved conversation scope, including personal scope:
+        # a model-supplied team_id must not survive when the scope is personal.
         # Personal-space IDs ("personal-<uuid>") are not real ReBAC teams;
         # don't forward them to tools that look up team membership.
         effective_team_id = (
             settings.team_id if not is_personal_team_id(settings.team_id) else None
         )
-        if "team_id" in tool_properties and effective_team_id:
+        if "team_id" in tool_properties:
             kwargs["team_id"] = effective_team_id
             logger.info(
                 "ContextAwareTool(%s) injecting team_id: %s",

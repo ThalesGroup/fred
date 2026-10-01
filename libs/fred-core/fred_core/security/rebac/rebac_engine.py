@@ -141,15 +141,6 @@ class DocumentPermission(str, Enum):
     PROCESS = "process"
 
 
-class ResourcePermission(str, Enum):
-    """Actions allowed on non-document resources (files, templates, etc.)."""
-
-    READ = "read"
-    UPDATE = "update"
-    DELETE = "delete"
-    SHARE = "share"
-
-
 class TeamPermission(str, Enum):
     """Actions allowed at team scope.
 
@@ -335,7 +326,6 @@ class KnowledgeBaseDefinitionPermission(str, Enum):
 RebacPermission = (
     TagPermission
     | DocumentPermission
-    | ResourcePermission
     | TeamPermission
     | AgentPermission
     | OrganizationPermission
@@ -356,8 +346,6 @@ def _resource_for_permission(permission: RebacPermission) -> Resource:
         return Resource.TAGS
     if isinstance(permission, DocumentPermission):
         return Resource.DOCUMENTS
-    if isinstance(permission, ResourcePermission):
-        return Resource.RESOURCES
     if isinstance(permission, TeamPermission):
         return Resource.TEAM
     if isinstance(permission, AgentPermission):

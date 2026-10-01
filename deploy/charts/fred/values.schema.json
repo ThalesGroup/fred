@@ -6467,139 +6467,6 @@
                       "default": null,
                       "description": "Optional ClickHouse store"
                     },
-                    "resource_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "duckdb_path"
-                          ],
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "index"
-                          ],
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "level"
-                          ],
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Resource Store"
-                    },
                     "tag_store": {
                       "discriminator": {
                         "mapping": {
@@ -7206,7 +7073,6 @@
                   },
                   "required": [
                     "postgres",
-                    "resource_store",
                     "tag_store",
                     "metadata_store",
                     "vector_store"
@@ -7218,12 +7084,6 @@
                 "mcp": {
                   "description": "Feature toggles for MCP-only HTTP/MCP surfaces.\n\nThese do NOT affect core storage backends (e.g., using OpenSearch\nas vector store or metadata store). They only control whether\noptional monitoring/exploration controllers and their MCP servers\nare exposed.",
                   "properties": {
-                    "reports_enabled": {
-                      "default": true,
-                      "description": "Expose the Reports MCP server (Markdown-first report generation).",
-                      "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
                     "tabular_enabled": {
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
@@ -7234,18 +7094,6 @@
                       "default": true,
                       "description": "Expose the Text MCP server for semantic vector search.",
                       "title": "Text Enabled",
-                      "type": "boolean"
-                    },
-                    "templates_enabled": {
-                      "default": true,
-                      "description": "Expose the Template MCP server for prompts/templates.",
-                      "title": "Templates Enabled",
-                      "type": "boolean"
-                    },
-                    "resources_enabled": {
-                      "default": true,
-                      "description": "Expose the Resources MCP server for resource/tag management.",
-                      "title": "Resources Enabled",
                       "type": "boolean"
                     },
                     "opensearch_ops_enabled": {
@@ -11177,139 +11025,6 @@
                       "default": null,
                       "description": "Optional ClickHouse store"
                     },
-                    "resource_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "duckdb_path"
-                          ],
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "index"
-                          ],
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "level"
-                          ],
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "required": [
-                            "type"
-                          ],
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Resource Store"
-                    },
                     "tag_store": {
                       "discriminator": {
                         "mapping": {
@@ -11916,7 +11631,6 @@
                   },
                   "required": [
                     "postgres",
-                    "resource_store",
                     "tag_store",
                     "metadata_store",
                     "vector_store"
@@ -11928,12 +11642,6 @@
                 "mcp": {
                   "description": "Feature toggles for MCP-only HTTP/MCP surfaces.\n\nThese do NOT affect core storage backends (e.g., using OpenSearch\nas vector store or metadata store). They only control whether\noptional monitoring/exploration controllers and their MCP servers\nare exposed.",
                   "properties": {
-                    "reports_enabled": {
-                      "default": true,
-                      "description": "Expose the Reports MCP server (Markdown-first report generation).",
-                      "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
                     "tabular_enabled": {
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
@@ -11944,18 +11652,6 @@
                       "default": true,
                       "description": "Expose the Text MCP server for semantic vector search.",
                       "title": "Text Enabled",
-                      "type": "boolean"
-                    },
-                    "templates_enabled": {
-                      "default": true,
-                      "description": "Expose the Template MCP server for prompts/templates.",
-                      "title": "Templates Enabled",
-                      "type": "boolean"
-                    },
-                    "resources_enabled": {
-                      "default": true,
-                      "description": "Expose the Resources MCP server for resource/tag management.",
-                      "title": "Resources Enabled",
                       "type": "boolean"
                     },
                     "opensearch_ops_enabled": {
@@ -15769,124 +15465,6 @@
                       "default": null,
                       "description": "Optional ClickHouse store"
                     },
-                    "resource_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Resource Store"
-                    },
                     "tag_store": {
                       "discriminator": {
                         "mapping": {
@@ -16442,12 +16020,6 @@
                 "mcp": {
                   "description": "Feature toggles for MCP-only HTTP/MCP surfaces.\n\nThese do NOT affect core storage backends (e.g., using OpenSearch\nas vector store or metadata store). They only control whether\noptional monitoring/exploration controllers and their MCP servers\nare exposed.",
                   "properties": {
-                    "reports_enabled": {
-                      "default": true,
-                      "description": "Expose the Reports MCP server (Markdown-first report generation).",
-                      "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
                     "tabular_enabled": {
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
@@ -16458,18 +16030,6 @@
                       "default": true,
                       "description": "Expose the Text MCP server for semantic vector search.",
                       "title": "Text Enabled",
-                      "type": "boolean"
-                    },
-                    "templates_enabled": {
-                      "default": true,
-                      "description": "Expose the Template MCP server for prompts/templates.",
-                      "title": "Templates Enabled",
-                      "type": "boolean"
-                    },
-                    "resources_enabled": {
-                      "default": true,
-                      "description": "Expose the Resources MCP server for resource/tag management.",
-                      "title": "Resources Enabled",
                       "type": "boolean"
                     },
                     "opensearch_ops_enabled": {
@@ -20269,124 +19829,6 @@
                       "default": null,
                       "description": "Optional ClickHouse store"
                     },
-                    "resource_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Resource Store"
-                    },
                     "tag_store": {
                       "discriminator": {
                         "mapping": {
@@ -20942,12 +20384,6 @@
                 "mcp": {
                   "description": "Feature toggles for MCP-only HTTP/MCP surfaces.\n\nThese do NOT affect core storage backends (e.g., using OpenSearch\nas vector store or metadata store). They only control whether\noptional monitoring/exploration controllers and their MCP servers\nare exposed.",
                   "properties": {
-                    "reports_enabled": {
-                      "default": true,
-                      "description": "Expose the Reports MCP server (Markdown-first report generation).",
-                      "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
                     "tabular_enabled": {
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
@@ -20958,18 +20394,6 @@
                       "default": true,
                       "description": "Expose the Text MCP server for semantic vector search.",
                       "title": "Text Enabled",
-                      "type": "boolean"
-                    },
-                    "templates_enabled": {
-                      "default": true,
-                      "description": "Expose the Template MCP server for prompts/templates.",
-                      "title": "Templates Enabled",
-                      "type": "boolean"
-                    },
-                    "resources_enabled": {
-                      "default": true,
-                      "description": "Expose the Resources MCP server for resource/tag management.",
-                      "title": "Resources Enabled",
                       "type": "boolean"
                     },
                     "opensearch_ops_enabled": {
@@ -24769,124 +24193,6 @@
                       "default": null,
                       "description": "Optional ClickHouse store"
                     },
-                    "resource_store": {
-                      "discriminator": {
-                        "mapping": {
-                          "duckdb": "#/$defs/DuckdbStoreConfig",
-                          "log": "#/$defs/LogStoreConfig",
-                          "memory": "#/$defs/InMemoryStoreConfig",
-                          "opensearch": "#/$defs/OpenSearchIndexConfig",
-                          "postgres": "#/$defs/PostgresTableConfig"
-                        },
-                        "propertyName": "type"
-                      },
-                      "oneOf": [
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "duckdb",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "duckdb_path": {
-                              "description": "Path to the DuckDB database file.",
-                              "title": "Duckdb Path",
-                              "type": "string"
-                            }
-                          },
-                          "title": "DuckdbStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "opensearch",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "index": {
-                              "description": "OpenSearch index name",
-                              "title": "Index",
-                              "type": "string"
-                            }
-                          },
-                          "title": "OpenSearchIndexConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "log",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "level": {
-                              "description": "Logging level",
-                              "title": "Level",
-                              "type": "string"
-                            }
-                          },
-                          "title": "LogStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "properties": {
-                            "type": {
-                              "const": "postgres",
-                              "title": "Type",
-                              "type": "string"
-                            },
-                            "table": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Table name used by the store. Deprecated: stores now use fixed table names.",
-                              "title": "Table"
-                            },
-                            "prefix": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ],
-                              "default": null,
-                              "description": "Optional prefix applied to the table name. Deprecated: stores now use fixed table names.",
-                              "title": "Prefix"
-                            }
-                          },
-                          "title": "PostgresTableConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        },
-                        {
-                          "description": "Minimal config for in-memory stores (dev/test only).",
-                          "properties": {
-                            "type": {
-                              "const": "memory",
-                              "default": "memory",
-                              "title": "Type",
-                              "type": "string"
-                            }
-                          },
-                          "title": "InMemoryStoreConfig",
-                          "type": "object",
-                          "additionalProperties": false
-                        }
-                      ],
-                      "title": "Resource Store"
-                    },
                     "tag_store": {
                       "discriminator": {
                         "mapping": {
@@ -25442,12 +24748,6 @@
                 "mcp": {
                   "description": "Feature toggles for MCP-only HTTP/MCP surfaces.\n\nThese do NOT affect core storage backends (e.g., using OpenSearch\nas vector store or metadata store). They only control whether\noptional monitoring/exploration controllers and their MCP servers\nare exposed.",
                   "properties": {
-                    "reports_enabled": {
-                      "default": true,
-                      "description": "Expose the Reports MCP server (Markdown-first report generation).",
-                      "title": "Reports Enabled",
-                      "type": "boolean"
-                    },
                     "tabular_enabled": {
                       "default": true,
                       "description": "Expose the Tabular MCP server for SQL/table exploration.",
@@ -25458,18 +24758,6 @@
                       "default": true,
                       "description": "Expose the Text MCP server for semantic vector search.",
                       "title": "Text Enabled",
-                      "type": "boolean"
-                    },
-                    "templates_enabled": {
-                      "default": true,
-                      "description": "Expose the Template MCP server for prompts/templates.",
-                      "title": "Templates Enabled",
-                      "type": "boolean"
-                    },
-                    "resources_enabled": {
-                      "default": true,
-                      "description": "Expose the Resources MCP server for resource/tag management.",
-                      "title": "Resources Enabled",
                       "type": "boolean"
                     },
                     "opensearch_ops_enabled": {

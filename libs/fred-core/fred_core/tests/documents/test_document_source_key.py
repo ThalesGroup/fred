@@ -32,9 +32,12 @@ from fred_core.documents.document_structures import (
     Identity,
     SourceInfo,
     SourceType,
+    Tagging,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 from fred_core.models.base import Base
+from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -43,6 +46,10 @@ async def _make_sqlite_engine(tmp_path: Path) -> AsyncEngine:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'source-key.db'}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            insert(TagRow),
+            {"tag_id": "tag-a", "owner_id": "team-a", "type": "document"},
+        )
     return engine
 
 
@@ -55,6 +62,7 @@ def _doc(
     title: str = "original",
 ) -> DocumentMetadata:
     return DocumentMetadata(
+        tags=Tagging(tag_ids=["tag-a"]),
         identity=Identity(document_name=f"{uid}.md", document_uid=uid, title=title),
         source=SourceInfo(
             source_type=SourceType.PUSH,

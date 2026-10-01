@@ -103,7 +103,8 @@ def _metadata_to_dict(row: DocumentMetadataRow) -> dict:
         "document_uid": row.document_uid,
         "source_tag": row.source_tag,
         "date_added_to_kb": _dt(row.date_added_to_kb),
-        "tag_ids": list(row.tag_ids) if row.tag_ids else [],
+        "kind": row.kind,
+        "tag_ids": [row.folder_id] if row.folder_id else [],
         # A synchronized document is addressed by this pair, not by its uid: drop
         # it and the caller's next write would create a duplicate instead of
         # updating what it already wrote.

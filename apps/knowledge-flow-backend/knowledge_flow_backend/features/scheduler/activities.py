@@ -37,11 +37,7 @@ logger = logging.getLogger(__name__)
 
 @activity.defn
 async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
-    """Normal per-document ingestion output stage — persists metadata through
-    the permission-checked `save_metadata` (the calling user must hold
-    `TagPermission.UPDATE` on every tag the document carries). Used by the
-    ordinary `OutputProcess` workflow. For the corpus-revectorize migration
-    path, see `output_process_trusted` below."""
+    """Persist output for ingestion authorized before workflow admission."""
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 
     ingestion_service = get_ingestion_service()
@@ -50,24 +46,15 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
         metadata,
         accept_memory_storage,
         ingestion_service=ingestion_service,
-        persist_progress=ingestion_service.persist_progress,
+        persist_progress=ingestion_service.persist_progress_trusted,
     )
 
 
 @activity.defn(name="output_process_trusted")
 async def output_process_trusted(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
-    """Same as `output_process`, but persists metadata through the trusted,
-    permission-check-free `save_metadata_trusted` path.
+    """Retain the registered activity name used by revectorization histories.
 
-    Used only by the corpus-revectorize migration workflow
-    (`RevectorizeDocument` in `workflow.py`), whose scope was already
-    authorized once, at the platform level, before the workflow started
-    (`corpus_manager_controller._authorize_scope`) — see
-    `MetadataService.save_document_metadata_trusted` for the full rationale.
-    A distinct activity name (not a bool flag on `output_process`) so a
-    workflow author cannot accidentally get the trust level wrong via a
-    default argument — the ordinary `OutputProcess` ingestion workflow always
-    calls `output_process` above, never this one.
+    Both ingestion and revectorization are authorized before execution.
     """
     from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
 

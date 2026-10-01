@@ -2241,6 +2241,7 @@
         "details": "{{label}} — cliquer pour les détails"
       },
       "kind": {
+        "deletion": "Suppression du corpus",
         "default": "Tâche",
         "ingestion": "Traitement",
         "migration": "Migration",

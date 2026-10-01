@@ -204,3 +204,19 @@ def test_context_aware_tool_respects_agent_scoped_library() -> None:
     )
 
     assert injected["document_library_tags_ids"] == ["lib-agent"]
+
+
+@pytest.mark.parametrize("team_id", [None, "personal-alice", "team-1"])
+def test_context_scope_overrides_model_supplied_team(team_id: str | None) -> None:
+    settings = _FakeAgentSettings()
+    settings.team_id = team_id
+    wrapper = ContextAwareTool(
+        base_tool=_FakeSearchTool(),
+        context_provider=lambda: RuntimeContext(session_id="session-1"),
+        agent_settings_provider=lambda: settings,
+    )
+    injected = wrapper._inject_context_if_needed(
+        {"question": "hello", "team_id": "another-team"}
+    )
+    assert injected["team_id"] == ("team-1" if team_id == "team-1" else None)
+    assert injected["owner_filter"] == ("team" if team_id == "team-1" else "personal")

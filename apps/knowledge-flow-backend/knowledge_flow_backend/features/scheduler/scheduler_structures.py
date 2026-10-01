@@ -142,9 +142,8 @@ class FileToProcess(FileToProcessWithoutUser):
             language=None,
         )
 
-        # Tags: assuming incoming `tags` are display names.
-        # If they are tag IDs in your system, assign them to `tag_ids=` instead.
-        tagging = Tagging(tag_names=list(self.tags))
+        # Scheduler admission resolves and authorizes these folder IDs.
+        tagging = Tagging(tag_ids=list(self.tags))
 
         # Empty processing status; you can mark phases as you progress.
         processing = Processing()  # stages={}, errors={}

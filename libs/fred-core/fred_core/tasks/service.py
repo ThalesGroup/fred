@@ -25,6 +25,7 @@ from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.tasks.bus import IEventBus, MemoryEventBus, PostgresEventBus
 from fred_core.tasks.models import (
     AcknowledgeTaskResponse,
+    DeletionTaskEvent,
     ErasureTaskEvent,
     EvaluationTaskEvent,
     IngestionTaskEvent,
@@ -277,6 +278,16 @@ class TaskService:
         now = _utcnow()
         if run.kind == "ingestion":
             return IngestionTaskEvent(
+                task_id=run.task_id,
+                state=state,
+                seq=seq,
+                timestamp=now,
+                error=message,
+                target=target,
+                owner=run.created_by,
+            )
+        if run.kind == "deletion":
+            return DeletionTaskEvent(
                 task_id=run.task_id,
                 state=state,
                 seq=seq,

@@ -92,7 +92,6 @@ def _build_minimal_storage(tmp_path) -> StorageConfig:
 
     return StorageConfig(
         postgres=PostgresStoreConfig(host="localhost", database="fred"),
-        resource_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "resource.duckdb")),
         tag_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "tag.duckdb")),
         kpi_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "kpi.duckdb")),
         metadata_store=DuckdbStoreConfig(type="duckdb", duckdb_path=str(tmp_path / "metadata.duckdb")),

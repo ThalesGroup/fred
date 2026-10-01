@@ -1123,6 +1123,8 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 body=body,
                 params={"refresh": "true"},
             )
+            if resp.get("failures") or resp.get("timed_out"):
+                raise RuntimeError("OpenSearch reported an incomplete document metadata update.")
             updated = int(resp.get("updated", 0))
             logger.info(
                 "[VECTOR][OPENSEARCH] updated retrievable=%s on %s vector chunks for document_uid=%s.",
@@ -1154,23 +1156,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
                 body=body,
                 params={"refresh": "true"},
             )
+            if resp.get("failures") or resp.get("timed_out"):
+                raise RuntimeError("OpenSearch reported an incomplete document metadata update.")
             updated = int(resp.get("updated", 0))
-            failures = resp.get("failures") or []
-            if failures:
-                # update_by_query does not raise on a per-document script failure (e.g. a
-                # version conflict) — it reports it here instead, so a caller that only
-                # checked for a raised exception would call this a silent success.
-                logger.error(
-                    "[VECTOR][OPENSEARCH] document_name update_by_query reported %s failure(s) for document_uid=%s: %s",
-                    len(failures),
-                    document_uid,
-                    failures,
-                )
-            elif updated == 0:
-                # This is only called for a document known to be vectorized (see
-                # rename_document's ProcessingStage.VECTORIZED guard), so matching zero
-                # chunks here is unexpected — the rename didn't reach the vector index,
-                # and the caller's best-effort try/except means nothing else will surface it.
+            if updated == 0:
                 logger.error(
                     "[VECTOR][OPENSEARCH] document_name update matched 0 vector chunks for document_uid=%s — rename not reflected in search results.",
                     document_uid,

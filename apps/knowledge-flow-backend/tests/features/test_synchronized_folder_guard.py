@@ -26,7 +26,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-from fred_core import AuthorizationError, Resource
+from fred_core import AuthorizationError, RelationType, Resource, TeamPermission
 from fred_core.security.structure import SERVICE_AGENT_ROLE, KeycloakUser
 
 import knowledge_flow_backend.features.tag.tag_service as tag_service_module
@@ -56,6 +56,14 @@ def _tag(tag_id: str, name: str, path: str | None, synchronized_by: str | None =
 
 
 class _FakeRebac:
+    enabled = True
+
+    async def require_active_account(self, user_id):
+        return None
+
+    async def has_direct_relation(self, subject, relation, resource):
+        return relation == RelationType.EDITOR and resource.id in self._updatable
+
     def __init__(self, *, updatable: set[str], team_right: bool = True) -> None:
         self._updatable = updatable
         self._team_right = team_right
@@ -65,6 +73,8 @@ class _FakeRebac:
         return resource_id in self._updatable
 
     async def check_user_permission_or_raise(self, user, permission, resource_id, consistency_token=None) -> None:
+        if permission == TeamPermission.CAN_UPDATE_RESOURCES:
+            return await self.check_user_team_permission_or_raise(user=user, permission=permission, team_id=resource_id)
         if resource_id not in self._updatable:
             raise AuthorizationError(user.uid, str(permission), Resource.TAGS)
 
@@ -283,7 +293,7 @@ async def test_a_person_deletes_a_library_and_its_documents_are_released(monkeyp
     would leave a base nobody can take away.
     """
     item_service = _FakeItemService(["doc-1", "doc-2"])
-    monkeypatch.setattr(tag_service_module, "get_specific_tag_item_service", lambda tag_type: item_service)
+    monkeypatch.setattr(tag_service_module, "DocumentTagItemService", lambda: item_service)
 
     store = _FakeTagStore(_library_tree())
     service = _service(_FakeRebac(updatable={"lib", "sub"}), store)

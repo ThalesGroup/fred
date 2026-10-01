@@ -32,6 +32,7 @@ interface LabelPatch {
 }
 
 interface ManageLabelsModalProps {
+  teamId: string;
   open: boolean;
   onClose: () => void;
   doc: DocumentMetadata;
@@ -59,7 +60,7 @@ interface ManageLabelsModalProps {
  * confirm/cancel pair, but every action here already applies immediately —
  * see COMPONENT-UX.md for when reusing it would start paying off.
  */
-export default function ManageLabelsModal({ open, onClose, doc, onMutate }: ManageLabelsModalProps) {
+export default function ManageLabelsModal({ teamId, open, onClose, doc, onMutate }: ManageLabelsModalProps) {
   const { t } = useTranslation();
   const [labels, setLabels] = useState<string[]>(doc.labels ?? []);
   const [query, setQuery] = useState("");
@@ -70,7 +71,7 @@ export default function ManageLabelsModal({ open, onClose, doc, onMutate }: Mana
   // `await`, so the second call sees it immediately.
   const busyRef = useRef(false);
 
-  const { data: vocabulary, refetch: refetchVocabulary } = useListDocumentLabelsQuery({});
+  const { data: vocabulary, refetch: refetchVocabulary } = useListDocumentLabelsQuery({ teamId });
   const suggestions = vocabulary ?? [];
 
   useEffect(() => {

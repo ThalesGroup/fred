@@ -24,7 +24,7 @@ from alembic import context
 from knowledge_flow_backend.common.config_loader import load_configuration
 
 # Importing table_ownership registers every KFB ORM model with Base.metadata
-# (resource, kf_task_*) before autogenerate inspects it, and carries the
+# (kf_task_*) before autogenerate inspects it, and carries the
 # declared owned-table set.
 from knowledge_flow_backend.models.base import Base
 from knowledge_flow_backend.models.table_ownership import OWNED_TABLES

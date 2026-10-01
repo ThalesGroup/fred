@@ -21,6 +21,7 @@ from fred_core.scheduler import SchedulerBackend
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile, Status
 from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
+from tests.features.ingestion.test_upload_charges_after_content_store import _FakeSchedulerTaskService
 
 
 class _FakeKpi:
@@ -32,8 +33,11 @@ class _FakeKpi:
 
 
 class _FakeService:
-    async def extract_metadata(self, user, file_path: pathlib.Path, tags, source_tag, profile):
+    async def extract_metadata(self, user, file_path: pathlib.Path, tags, source_tag, profile, *, apply_versioning=True):
         return SimpleNamespace(document_uid="doc-1", file_type=file_path.suffix.lstrip("."))
+
+    async def apply_versioning(self, metadata):
+        return metadata
 
     def save_input(self, user, metadata, input_dir: pathlib.Path) -> None:
         assert input_dir.exists()
@@ -73,28 +77,13 @@ async def test_stream_upload_process_cleans_preloaded_upload_workdir(tmp_path, m
         roles=["admin"],
     )
 
-    async def _fake_push_input_process(*args, **kwargs):
-        return kwargs["metadata"]
-
-    async def _fake_output_process(*args, **kwargs):
-        return kwargs["metadata"]
-
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.ingestion.ingestion_controller.push_input_process",
-        _fake_push_input_process,
-    )
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.ingestion.ingestion_controller.output_process",
-        _fake_output_process,
-    )
-
     event_stream = controller._stream_upload_process(
         preloaded_files=[("sample.csv", input_temp_file)],
         user=user,
         tags=[],
         source_tag="fred",
         profile=IngestionProcessingProfile.medium,
-        scheduler_task_service=None,
+        scheduler_task_service=_FakeSchedulerTaskService(),
         background_tasks=None,
         kpi=_FakeKpi(),
         kpi_actor=SimpleNamespace(type="human"),
@@ -102,7 +91,7 @@ async def test_stream_upload_process_cleans_preloaded_upload_workdir(tmp_path, m
 
     events = [event async for event in event_stream]
 
-    assert any(f'"status":"{Status.FINISHED.value}"' in event for event in events)
+    assert any('"step": "done", "status": "success"' in event for event in events)
     assert not workdir.exists()
 
 
@@ -118,7 +107,7 @@ async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tm
     from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 
     class InvalidPdfService(_FakeService):
-        async def extract_metadata(self, user, file_path, tags, source_tag, profile):
+        async def extract_metadata(self, user, file_path, tags, source_tag, profile, *, apply_versioning=True):
             processor = PdfMarkdownProcessor.__new__(PdfMarkdownProcessor)
             return processor.process_metadata(file_path, tags, source_tag)
 
@@ -135,7 +124,7 @@ async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tm
         tags=[],
         source_tag="uploads",
         profile=IngestionProcessingProfile.medium,
-        scheduler_task_service=None,
+        scheduler_task_service=_FakeSchedulerTaskService(),
         background_tasks=None,
         kpi=_FakeKpi(),
         kpi_actor=SimpleNamespace(type="human"),
@@ -151,3 +140,37 @@ async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tm
     assert "InputValidationError" not in failure["error"]
     assert events[-1]["status"] == Status.FAILED.value
     assert not workdir.exists()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_start_error_reaches_upload_progress(tmp_path):
+    import json
+    from unittest.mock import AsyncMock
+
+    folder = tmp_path / "upload" / "input"
+    folder.mkdir(parents=True)
+    path = folder / "sample.csv"
+    path.write_text("city\nParis\n")
+    controller = IngestionController.__new__(IngestionController)
+    controller.service = _FakeService()
+    controller._scheduler_backend = lambda: SchedulerBackend.TEMPORAL
+    scheduler = _FakeSchedulerTaskService()
+    scheduler.deliver_documents = AsyncMock(side_effect=RuntimeError("Ingestion start not confirmed (workflow-id)."))
+    events = [
+        json.loads(event)
+        async for event in controller._stream_upload_process(
+            preloaded_files=[(path.name, path)],
+            user=KeycloakUser(uid="user", username="user", roles=[]),
+            tags=["folder"],
+            source_tag="uploads",
+            profile=IngestionProcessingProfile.medium,
+            scheduler_task_service=scheduler,
+            background_tasks=None,
+            kpi=_FakeKpi(),
+            kpi_actor=SimpleNamespace(type="human"),
+        )
+    ]
+    assert events[-1]["status"] == Status.FAILED.value
+    assert "start not confirmed" in events[-1]["error"]
+    assert any(event.get("filename") == path.name and event["status"] == Status.FAILED.value for event in events)
+    scheduler.deliver_documents.assert_awaited_once()

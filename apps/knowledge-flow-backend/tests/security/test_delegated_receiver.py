@@ -410,9 +410,18 @@ def test_a_tool_call_after_a_suspension_is_refused_by_its_serving_route() -> Non
 _LIBRARY = "library-a"
 
 
+class _PersonalTeamStatusStore(AccountStatusStore):
+    async def read(self, body, options):
+        assert (body.user, body.relation, body.object) == (_PERSON, "team_editor", "team:personal-person-a")
+        return SimpleNamespace(tuples=[SimpleNamespace(key=body)])
+
+
 class _TagStore:
     def __init__(self, tags: list[Tag]) -> None:
         self._tags = tags
+
+    async def list_by_owner(self, owner_id, **pagination) -> list[Tag]:
+        return [tag for tag in self._tags if tag.owner_id == owner_id]
 
     async def list_all_tags(self) -> list[Tag]:
         return list(self._tags)
@@ -421,10 +430,9 @@ class _TagStore:
 def _personal_library(app_context: ApplicationContext, store: AccountStatusStore) -> TestClient:
     """The real tag listing over one document library the person owns."""
     now = datetime.now(timezone.utc)
-    library = Tag(id=_LIBRARY, created_at=now, updated_at=now, owner_id="person-a", name="Library", type=TagType.DOCUMENT)
+    library = Tag(id=_LIBRARY, created_at=now, updated_at=now, owner_id="personal-person-a", name="Library", type=TagType.DOCUMENT)
     app_context._rebac_engine = _configure(store)
     app_context._tag_store_instance = _TagStore([library])  # pyright: ignore[reportAttributeAccessIssue]
-    app_context._resource_store_instance = SimpleNamespace()  # pyright: ignore[reportAttributeAccessIssue] - holds no document library item
     app = FastAPI()
     register_exception_handlers(app)
     router = APIRouter()
@@ -437,16 +445,16 @@ def _personal_library(app_context: ApplicationContext, store: AccountStatusStore
 
 def test_a_personal_library_listing_checks_account_status_once(app_context: ApplicationContext) -> None:
     owned = [f"tag:{_LIBRARY}"]
-    store = AccountStatusStore(objects={(_PERSON, relation, "tag"): owned for relation in ("read", "owner", "update", "delete", "share")})
+    store = _PersonalTeamStatusStore(objects={(_PERSON, relation, "tag"): owned for relation in ("read", "owner", "update", "delete", "share")})
 
     response = _personal_library(app_context, store).get("/tags", params={"team_id": "personal", **_GRANT}, headers={"authorization": _HEADERS["authorization"]})
 
     assert response.status_code == 200
     assert [tag["id"] for tag in response.json()] == [_LIBRARY]
     assert store.account_status_checks() == [(_PERSON, "HIGHER_CONSISTENCY")]
-    assert len(store.checks) == 1
-    # Each lookup keeps its caller's consistency; only the account status check asks for more.
-    assert [consistency for *_, consistency in store.list_objects_calls] == [None] * 9
+    assert len(store.checks) == 3
+    # One account-status check plus corpus read/edit decisions; no inventory lookup.
+    assert store.list_objects_calls == []
 
 
 def test_a_suspended_person_lists_no_library(app_context: ApplicationContext) -> None:
@@ -462,8 +470,7 @@ def test_a_suspended_person_lists_no_library(app_context: ApplicationContext) ->
 
 
 def test_ingestion_admitted_before_a_suspension_still_saves_its_output(app_context: ApplicationContext) -> None:
-    """The ingestion activity's save checks the submitter's tag permission and
-    makes no account status check of its own, so work admitted earlier finishes."""
+    """Work authorized at admission finishes without rechecking revoked rights."""
     store = AccountStatusStore(suspended={"person-a"})
     service = MetadataService()
     service.rebac = _configure(store)
@@ -480,6 +487,6 @@ def test_ingestion_admitted_before_a_suspension_still_saves_its_output(app_conte
         tags=Tagging(tag_ids=[_LIBRARY]),
     )
 
-    assert asyncio.run(service.update_document_metadata(KeycloakUser(uid="person-a", username="person", roles=[]), metadata)) is True
+    assert asyncio.run(service.update_document_metadata_trusted(KeycloakUser(uid="person-a", username="person", roles=[]), metadata)) is True
     assert saved == ["document-a"]
-    assert [(user, relation, obj) for user, relation, obj, _ in store.checks] == [(_PERSON, "update", f"tag:{_LIBRARY}")]
+    assert store.checks == []

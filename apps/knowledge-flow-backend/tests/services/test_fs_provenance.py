@@ -18,11 +18,9 @@ import pytest
 
 from knowledge_flow_backend.features.filesystem.provenance import (
     ORIGIN_AGENT_GENERATED,
-    ORIGIN_INGESTED,
     ORIGIN_SHARED_COPY,
     ORIGIN_UPLOADED,
     PRODUCER_HUMAN,
-    PRODUCER_INGESTION,
     derive_provenance,
 )
 
@@ -61,12 +59,8 @@ def test_shared_files_subdir_is_share_copy():
     assert p.producer == PRODUCER_HUMAN
 
 
-def test_corpus_is_ingested():
-    p = derive_provenance("/corpus/documents/doc-1/preview.md")
-    assert p is not None
-    assert p.origin == ORIGIN_INGESTED
-    assert p.producer == PRODUCER_INGESTION
-    assert p.created_by is None
+def test_retired_corpus_path_has_no_filesystem_provenance():
+    assert derive_provenance("/corpus/documents/doc-1/preview.md") is None
 
 
 def test_relative_path_is_normalized_before_derivation():

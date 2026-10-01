@@ -1826,9 +1826,17 @@ class DocumentTreeAdapter(DocumentTreePort):
         offset: int = 0,
         limit: int = 50,
     ) -> DocumentLabelPageResult:
+        context = self._binding.runtime_context
+        folders = get_document_library_tags_ids(context)
+        documents = get_document_uids(context)
         try:
             result = await self._client.list_by_label(
-                label=label, offset=offset, limit=limit
+                label=label,
+                offset=offset,
+                limit=limit,
+                team_id=context.team_id or self._settings.team_id or "personal",
+                folder_ids=folders or None,
+                document_uids=documents or None,
             )
         except httpx.HTTPError as exc:
             raise _wrap_document_port_error(exc) from exc

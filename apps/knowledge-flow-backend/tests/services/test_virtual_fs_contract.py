@@ -25,14 +25,13 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
 )
 
 
-def test_resolve_virtual_path_routes_teams_and_corpus():
+def test_resolve_virtual_path_routes_teams_and_refuses_retired_corpus():
     teams_result = resolve_virtual_path("/teams/acme/shared/reports/q3.md")
-    corpus_result = resolve_virtual_path("/corpus/CIR")
+    with pytest.raises(ValueError, match="Unknown filesystem area"):
+        resolve_virtual_path("/corpus/CIR")
 
     assert teams_result.area == VirtualArea.TEAMS
     assert teams_result.segments == ("acme", "shared", "reports", "q3.md")
-    assert corpus_result.area == VirtualArea.CORPUS
-    assert corpus_result.segments == ("CIR",)
 
 
 def test_resolve_virtual_path_rejects_unknown_top_level_area():

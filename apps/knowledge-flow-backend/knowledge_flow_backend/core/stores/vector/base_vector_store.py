@@ -107,7 +107,7 @@ class BaseVectorStore(ABC):
         """
         Optional capability: update the 'document_name' metadata field for all chunks
         of a document without deleting vectors or re-embedding. Concrete stores that
-        support this should override. Called (best-effort) after a document rename.
+        support this should override. Errors propagate after the metadata rename.
         """
         raise NotImplementedError("This vector store does not support renaming.")
 

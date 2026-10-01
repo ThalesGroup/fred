@@ -30,7 +30,7 @@ import sys
 import uuid as uuid_mod
 from uuid import UUID
 
-from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
+from fred_core.common.team_id import is_personal_team_id
 from fred_core.documents.document_models import DocumentMetadataRow as MetadataRow
 from fred_core.documents.tag_models import TagRow
 from fred_core.filesystem.structures import FilesystemResourceInfo
@@ -90,140 +90,27 @@ async def calculate_workspace_sizes(fs) -> tuple[dict[str, int], dict[str, int]]
     return user_workspace_sizes, team_workspace_sizes
 
 
-async def calculate_ingested_documents_sizes(session: AsyncSession, rebac) -> tuple[dict[str, int], dict[str, int]]:
-    """Query ingested documents, resolve their owners using tags & ReBAC, and return size aggregates."""
-    user_doc_sizes = {}
-    team_doc_sizes = {}
-
-    # Get all metadata documents
-    logger.info("Fetching ingested documents metadata from database...")
-    result = await session.execute(select(MetadataRow))
-    rows = result.scalars().all()
-    logger.info(f"Loaded {len(rows)} documents metadata.")
-
-    # Cache tags and team metadata existence to avoid duplicate queries
+async def calculate_ingested_documents_sizes(session: AsyncSession) -> tuple[dict[str, int], dict[str, int]]:
+    """Compute corpus storage from canonical SQL folder owners; no ReBAC lookup."""
+    user_doc_sizes: dict[str, int] = {}
+    team_doc_sizes: dict[str, int] = {}
+    rows = (await session.execute(select(MetadataRow))).scalars().all()
     tag_cache = {}
-    team_existence_cache = {}
-    sentinel_tags: set[str] = set()
-    skipped_untagged = 0
-    skipped_untagged_bytes = 0
-
     for row in rows:
-        doc = row.doc or {}
-        file_meta = doc.get("file", {})
-        doc_size = file_meta.get("file_size_bytes") or 0
-        if doc_size <= 0:
+        if not row.folder_id:
+            # Conversation attachments are outside corpus storage accounting.
             continue
-
-        tag_ids = row.tag_ids or []
-        if not tag_ids:
-            # Untagged documents are deliberately NOT counted.
-            #
-            # This branch used to read `row.author`, which raised AttributeError on
-            # the first untagged row — `DocumentMetadataRow` has no such column, so
-            # the whole reconciliation aborted for any deployment holding even one
-            # untagged document (#2149 review).
-            #
-            # It is not enough to read the author out of `doc` instead: that value
-            # comes from the file's own embedded metadata (a PDF's /Author), so it
-            # is caller-controlled and must never attribute quota. More
-            # fundamentally, an untagged document has no ReBAC parent, so nobody —
-            # not even its uploader — can delete it; charging it here would create
-            # usage that no route can ever release. The live accounting does not
-            # charge these documents either, so skipping keeps this script and the
-            # runtime in agreement. Making untagged documents impossible to
-            # create in the first place is not yet tracked as a GitHub issue.
-            skipped_untagged += 1
-            skipped_untagged_bytes += doc_size
-            continue
-
-        # Each document can be tagged. We adjust storage for the tag owner.
-        # If a document has multiple tags, its size is added to each owner.
-        for tag_id in tag_ids:
-            # 1. Get Tag
-            if tag_id not in tag_cache:
-                tag_row = await session.get(TagRow, tag_id)
-                tag_cache[tag_id] = tag_row
-            else:
-                tag_row = tag_cache[tag_id]
-
-            if not tag_row or not tag_row.owner_id:
-                continue
-
-            owner_id = tag_row.owner_id
-            if owner_id == "personal":
-                # Second instance of the same defect: `row.author` does not exist
-                # on the model, so this crashed on any tag carrying the legacy
-                # "personal" sentinel. Falling back to the document's embedded
-                # author is not the fix either — it is caller-controlled and must
-                # never attribute quota (#2149 review). A tag created through
-                # `TagService.create_tag_for_user` stores the owner's uid, never
-                # this sentinel, so reaching here means legacy or imported data
-                # whose real owner cannot be determined. Skip it loudly rather
-                # than charging the wrong account.
-                # This script has no acting user, so it cannot resolve the sentinel
-                # the way the runtime does — `_resolve_storage_deltas` maps
-                # `owner_id == "personal"` to the *acting* user and charges them.
-                # Skipping while still writing an ABSOLUTE counter below would
-                # erase usage the runtime charged, manufacturing free quota. Refuse
-                # to run instead, and name the tags so they can be repaired.
-                sentinel_tags.add(tag_id)
-                continue
-
-            # 2. Check ReBAC owner (teams)
-            team_ids = []
-            if rebac.enabled:
-                try:
-                    subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag_id), RelationType.OWNER, Resource.TEAM)
-                    if not isinstance(subjects, RebacDisabledResult) and subjects:
-                        for sub in subjects:
-                            if sub.id != "personal":
-                                team_ids.append(sub.id)
-                except Exception as exc:
-                    logger.warning(f"ReBAC owner lookup failed for tag {tag_id}: {exc}")
-
-            # 3. Fallback database lookup to confirm if owner_id is a team
-            if not team_ids:
-                if owner_id not in team_existence_cache:
-                    team_meta_row = await session.get(TeamMetadataRow, owner_id)
-                    team_existence_cache[owner_id] = team_meta_row is not None
-
-                if team_existence_cache[owner_id]:
-                    team_ids.append(owner_id)
-
-            # 4. Attribute size
-            if team_ids:
-                for team_id in team_ids:
-                    if team_id.startswith("personal-"):
-                        real_user_id = team_id[9:]
-                        user_doc_sizes[real_user_id] = user_doc_sizes.get(real_user_id, 0) + doc_size
-                    else:
-                        team_doc_sizes[team_id] = team_doc_sizes.get(team_id, 0) + doc_size
-            else:
-                if owner_id.startswith("personal-"):
-                    real_user_id = owner_id[9:]
-                    user_doc_sizes[real_user_id] = user_doc_sizes.get(real_user_id, 0) + doc_size
-                else:
-                    user_doc_sizes[owner_id] = user_doc_sizes.get(owner_id, 0) + doc_size
-
-    if sentinel_tags:
-        raise RuntimeError(
-            "Cannot compute storage usage: "
-            f"{len(sentinel_tags)} tag(s) carry the legacy 'personal' owner sentinel "
-            f"({', '.join(sorted(sentinel_tags))}). This script has no acting user, so it cannot "
-            "attribute their documents the way the runtime does, and it writes absolute counters — "
-            "proceeding would erase usage the runtime already charged. Repair those tags to carry a "
-            "real owner id (TagService stores the owner's uid) and re-run. Refusing rather than "
-            "writing a wrong value."
-        )
-
-    if skipped_untagged:
-        logger.warning(
-            "Skipped %d untagged document(s) totalling %d bytes: they have no ReBAC parent and no deletable route, so charging them would create unreleasable usage.",
-            skipped_untagged,
-            skipped_untagged_bytes,
-        )
-
+        if row.folder_id not in tag_cache:
+            tag_cache[row.folder_id] = await session.get(TagRow, row.folder_id)
+        folder = tag_cache[row.folder_id]
+        if not folder or not folder.owner_id or folder.owner_id in {"personal", "personal-"}:
+            raise RuntimeError(f"Cannot write absolute storage counters: folder {row.folder_id} has no canonical team owner. Complete the ownership migration first.")
+        size = ((row.doc or {}).get("file") or {}).get("file_size_bytes") or 0
+        if is_personal_team_id(folder.owner_id):
+            user_id = folder.owner_id.removeprefix("personal-")
+            user_doc_sizes[user_id] = user_doc_sizes.get(user_id, 0) + size
+        else:
+            team_doc_sizes[folder.owner_id] = team_doc_sizes.get(folder.owner_id, 0) + size
     return user_doc_sizes, team_doc_sizes
 
 
@@ -293,7 +180,6 @@ async def main() -> None:
         # Retrieve dependencies
         db_engine = ctx.get_async_sql_engine()
         fs = ctx.get_filesystem()
-        rebac = ctx.get_rebac_engine()
 
         # 1. Calculate S3 Workspace storage usage
         user_ws, team_ws = await calculate_workspace_sizes(fs)
@@ -301,7 +187,7 @@ async def main() -> None:
         # 2. Calculate S3 Ingested Documents storage usage
         sessions = make_session_factory(db_engine)
         async with use_session(sessions) as session:
-            user_docs, team_docs = await calculate_ingested_documents_sizes(session, rebac)
+            user_docs, team_docs = await calculate_ingested_documents_sizes(session)
 
             # 3. Aggregate results
             all_users = set(user_ws.keys()) | set(user_docs.keys())

@@ -5015,7 +5015,7 @@ cumulated tool description, measured by running `convert_openapi_to_mcp_tools`
 over `knowledge-flow-backend/openapi.json` filtered by each mount's
 `include_tags`. ≈ **19.5k tokens removed from every model call** on a pod
 exposing all five (17.7k from step 1, a further 1.8k from step 2). The three
-remaining mounts (`mcp-reports`, `mcp-resources`, `mcp-template`) are excluded
+remaining mounts at the time (`mcp-reports`, `mcp-resources`, `mcp-template`) were excluded
 because no `mcp_catalog.yaml` — local, Helm chart, or deployment-factory —
 references them, so no agent can reach them (see "Adjacent findings" below).
 
@@ -5046,13 +5046,13 @@ test module imports `prometheus_service`, never `main`).
 **Adjacent findings, not fixed here** (deliberately kept out per the
 consolidation phase's scope-discipline rule — each is its own change):
 
-1. **Three MCP mounts are unreachable.** `mcp-reports`, `mcp-resources` and
+1. **Historical finding: three MCP mounts were unreachable.** `mcp-reports`, `mcp-resources` and
    `mcp-template` are mounted but referenced by no catalog anywhere. Grep
    for their mount paths returns only the `mount_http` calls themselves.
    `mcp-resources` is the largest of the nine (15 tools, 30 774 chars).
    Either delete them or add catalog entries — but they should not sit in
    between.
-2. **`mcp-template` is misnamed** `"Knowledge Flow Text MCP"`, copy-pasted
+2. **Historical finding: `mcp-template` was misnamed** `"Knowledge Flow Text MCP"`, copy-pasted
    from `mcp_text`.
 3. **`mcp-fs` and `mcp-corpus` have essentially no descriptions — the single
    most valuable follow-up.** Their routes carry an `operation_id` and a
@@ -6360,3 +6360,13 @@ selects a renderer and nothing more, and a malformed value is dropped rather
 than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
+
+### 8.99 Legacy knowledge-flow resource retirement (2026-09-30)
+
+The older knowledge-flow resource REST API and the `mcp-resources` and empty
+`mcp-template` mounts are retired. This resolves the corresponding historical
+findings above. The unused `/mcp/reports/write` endpoint and `mcp-reports` mount
+are also retired, including their renderer and `mcp.reports_enabled` flag. Current
+control-plane prompts and generic document/content access remain available. The
+resource store and obsolete MCP flags are removed with regenerated contracts. Existing data must pass the explicit migration gate described in
+[the operator guide](../ops/migrations/retire-knowledge-flow-resources.md).

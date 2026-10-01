@@ -59,17 +59,14 @@ def _metadata(document_uid: str, *, preview_status: ProcessingStatus) -> Documen
     )
 
 
-class _RebacStub:
-    """Fails closed on any uid it holds no tuple for - which is every session
-    attachment, and is why the corpus lookup raises AuthorizationError rather
-    than FileNotFoundError on Swift. `readable=None` models ReBAC disabled."""
+class _CorpusAccessStub:
+    """Model the corpus authorization outcome independently of preview handling."""
 
     def __init__(self, readable: set[str] | None):
         self._readable = readable
 
-    async def check_user_permission_or_raise(self, user, permission, resource_id: str) -> None:
-        del permission
-        if self._readable is not None and resource_id not in self._readable:
+    async def check_document(self, user, metadata):
+        if self._readable is not None and metadata.document_uid not in self._readable:
             raise AuthorizationError(user.uid, "read", Resource.DOCUMENTS)
 
 
@@ -119,7 +116,7 @@ def _service(
     del app_context  # fixture only needed so ContentService() can build
     service = ContentService()
     service.metadata_store = _MetadataStoreStub(corpus or {})
-    service.rebac = _RebacStub(readable)
+    service.corpus_access = _CorpusAccessStub(readable)
     content_store = _ContentStoreStub(preview_payload)
     service.content_store = content_store
     vector_store = _VectorStoreStub(attachments or {}, error=vector_store_error)
@@ -156,10 +153,12 @@ def test_attachment_uid_falls_back_to_the_reconstructed_session_text(app_context
 def test_denial_surfaces_when_nothing_is_reconstructable(app_context):
     """Someone else's attachment, an unknown uid, or a denied corpus document:
     the original 403 must reach the caller, never an empty document."""
-    service, _, _ = _service(app_context, readable=set(), attachments={})
+    service, _, _ = _service(app_context, corpus={"doc-1": _metadata("doc-1", preview_status=ProcessingStatus.DONE)}, readable=set(), attachments={})
 
     with pytest.raises(AuthorizationError):
-        asyncio.run(service.get_markdown_preview(_user(), "att-1"))
+        asyncio.run(service.get_markdown_preview(_user(), "doc-1"))
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(service.get_markdown_preview(_user(), "unknown"))
 
 
 def test_rebac_disabled_path_still_falls_back_on_a_missing_metadata_record(app_context):
@@ -178,12 +177,13 @@ def test_a_broken_vector_store_does_not_rewrite_the_denial(app_context):
     carrying an infrastructure message."""
     service, _, _ = _service(
         app_context,
+        corpus={"doc-1": _metadata("doc-1", preview_status=ProcessingStatus.DONE)},
         readable=set(),
         vector_store_error=ValueError("Missing OpenSearch credentials"),
     )
 
     with pytest.raises(AuthorizationError):
-        asyncio.run(service.get_markdown_preview(_user(), "att-1"))
+        asyncio.run(service.get_markdown_preview(_user(), "doc-1"))
 
 
 def test_corpus_document_with_an_unready_preview_does_not_scan_the_vectors(app_context):

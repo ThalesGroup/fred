@@ -598,10 +598,6 @@ class MCPConfig(BaseModel):
     are exposed.
     """
 
-    reports_enabled: bool = Field(
-        default=True,
-        description="Expose the Reports MCP server (Markdown-first report generation).",
-    )
     tabular_enabled: bool = Field(
         default=True,
         description="Expose the Tabular MCP server for SQL/table exploration.",
@@ -609,14 +605,6 @@ class MCPConfig(BaseModel):
     text_enabled: bool = Field(
         default=True,
         description="Expose the Text MCP server for semantic vector search.",
-    )
-    templates_enabled: bool = Field(
-        default=True,
-        description="Expose the Template MCP server for prompts/templates.",
-    )
-    resources_enabled: bool = Field(
-        default=True,
-        description="Expose the Resources MCP server for resource/tag management.",
     )
     opensearch_ops_enabled: bool = Field(
         default=False,
@@ -892,7 +880,6 @@ class StorageConfig(BaseModel):
     postgres: PostgresStoreConfig
     opensearch: Optional[OpenSearchStoreConfig] = Field(default=None, description="Optional OpenSearch store")
     clickhouse: Optional[ClickHouseStoreConfig] = Field(default=None, description="Optional ClickHouse store")
-    resource_store: StoreConfig
     tag_store: StoreConfig
     metadata_store: StoreConfig
     tabular_store: "TabularStoreConfig" = Field(

@@ -56,7 +56,7 @@ _FOREIGN_TABLES = frozenset(
 
 
 def test_owned_set_covers_kfb_tables_and_nothing_foreign() -> None:
-    assert {"resource", "kf_task_run", "kf_task_event_log"} <= OWNED_TABLES
+    assert {"kf_task_run", "kf_task_event_log"} <= OWNED_TABLES
     assert SHARED_CORE_TABLES == {"tag", "metadata", "document_labels"}
     assert OWNED_TABLES.isdisjoint(_FOREIGN_TABLES)
     # Alembic-only, no ORM model: owning it would make autogenerate propose

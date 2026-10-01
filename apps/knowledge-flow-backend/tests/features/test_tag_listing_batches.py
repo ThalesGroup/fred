@@ -60,10 +60,20 @@ class _InMemoryTagStore(BaseTagStore):
     async def list_all_tags(self, session=None) -> list[Tag]:
         return list(self._tags.values())
 
+    async def list_by_owner(self, owner_id, *, path_prefix=None, limit=None, offset=0):
+        tags = [tag for tag in self._tags.values() if tag.owner_id == owner_id]
+        if path_prefix:
+            tags = [tag for tag in tags if tag.full_path == path_prefix or tag.full_path.startswith(path_prefix + "/")]
+        tags.sort(key=lambda tag: (tag.full_path.lower(), tag.id))
+        return tags[offset:] if limit is None else tags[offset : offset + limit]
+
     async def get_tag_by_id(self, tag_id: str, session=None) -> Tag:
         if tag_id not in self._tags:
             raise TagNotFoundError(tag_id)
         return self._tags[tag_id]
+
+    async def get_tags_by_ids(self, tag_ids):
+        return [tag for uid, tag in self._tags.items() if uid in tag_ids]
 
     async def get_by_owner_type_full_path(self, owner_id, tag_type, full_path, session=None):
         return None
@@ -104,7 +114,7 @@ async def _seed(service: TagService, user, tag_count: int) -> list[str]:
     tag_ids = []
     for i in range(tag_count):
         now = datetime.now(timezone.utc)
-        tag = Tag(id=str(uuid4()), name=f"lib{i}", type=TagType.DOCUMENT, owner_id=user.uid, created_at=now, updated_at=now)
+        tag = Tag(id=str(uuid4()), name=f"lib{i}", type=TagType.DOCUMENT, owner_id=f"personal-{user.uid}", created_at=now, updated_at=now)
         await service._tag_store.create_tag(tag)
         tag_ids.append(tag.id)
         await service.document_metadata_service.metadata_store.save_metadata(_doc(f"d{i}", f"d{i}.pdf", [tag.id]))
@@ -122,9 +132,6 @@ def counting_store(app_context):
     store = _CountingStore(ctx.get_metadata_store())
     ctx._metadata_store_instance = store
     ctx._tag_store_instance = _InMemoryTagStore()
-    # TagService builds a ResourceService, whose store the test configuration
-    # cannot construct either. Never touched: these tests list document tags.
-    ctx._resource_store_instance = object()
     return store
 
 

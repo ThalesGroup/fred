@@ -16,15 +16,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Index, String
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.types import JSON
 
 from fred_core.models.base import Base, JsonColumn, TimestampColumn
-
-# ARRAY(String) on PostgreSQL, plain JSON on SQLite (SQLite has no native array type).
-TagIdsColumn = ARRAY(String).with_variant(JSON(), "sqlite")
 
 
 class DocumentMetadataRow(Base):
@@ -37,8 +32,20 @@ class DocumentMetadataRow(Base):
     date_added_to_kb: Mapped[datetime | None] = mapped_column(
         TimestampColumn, nullable=True
     )
-    tag_ids: Mapped[list | None] = mapped_column(TagIdsColumn, nullable=True)
-    # Denormalized out of `doc` (like `source_tag` and `tag_ids`) because the pair
+    kind: Mapped[str] = mapped_column(
+        String, nullable=False, default="corpus", server_default="corpus"
+    )
+    folder_id: Mapped[str | None] = mapped_column(
+        ForeignKey("tag.tag_id"), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "(kind = 'corpus' AND folder_id IS NOT NULL) OR (kind = 'attachment' AND folder_id IS NULL)",
+            name="ck_metadata_kind_folder",
+        ),
+    )
+    # Denormalized out of `doc` (like `source_tag`) because the pair
     # carries a uniqueness rule the database has to enforce, and is the key a
     # synchronizing caller addresses its documents by. Both NULL for every
     # document not written through that surface — and NULLs never collide, so
@@ -47,15 +54,6 @@ class DocumentMetadataRow(Base):
     source_key: Mapped[str | None] = mapped_column(String, nullable=True)
     doc: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
 
-
-# GIN index for fast array containment queries on PostgreSQL.
-# Ignored on SQLite (no GIN support).
-# codeql[py/unused-global-variable]
-_tag_ids_gin_index = Index(
-    "idx_metadata_tag_ids_gin",
-    DocumentMetadataRow.tag_ids,
-    postgresql_using="gin",
-)
 
 # One document per (library, source key): re-writing a key updates the document
 # already there instead of adding a second. Also the index the lookup uses.

@@ -43,6 +43,13 @@ class _FakeTagStore:
     async def get_tag_by_id(self, tag_id: str) -> Tag:
         return self._tag
 
+    async def get_by_owner_type_full_path(self, **kwargs):
+        return None
+
+    async def rename_tag(self, tag_id: str, *, name: str, description: str | None) -> Tag:
+        self.saved = self._tag.model_copy(update={"name": name, "description": description})
+        return self.saved
+
     async def update_tag_by_id(self, tag_id: str, tag: Tag) -> Tag:
         self.saved = tag
         return tag
@@ -77,7 +84,7 @@ async def test_update_applies_name_and_path(monkeypatch):
         type=TagType.DOCUMENT,
     )
     store = _FakeTagStore(existing)
-    monkeypatch.setattr(tag_service_module, "get_specific_tag_item_service", lambda _type: _FakeItemService())
+    monkeypatch.setattr(tag_service_module, "DocumentTagItemService", lambda: _FakeItemService())
 
     svc = TagService.__new__(TagService)
     svc.rebac = _FakeRebac()
@@ -94,3 +101,25 @@ async def test_update_applies_name_and_path(monkeypatch):
     assert store.saved.path == "Archive"
     assert store.saved.description == "new"
     assert store.saved.full_path == "Archive/Rapports"
+
+
+@pytest.mark.asyncio
+async def test_rename_without_item_ids_preserves_membership(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    now = datetime.now(timezone.utc)
+    stored = Tag(id="root", name="Before", path="AlreadyRenamedParent", owner_id="team", type=TagType.DOCUMENT, created_at=now, updated_at=now)
+    items = _FakeItemService()
+    items.retrieve_items_ids_for_tag = AsyncMock(return_value=["existing-doc"])
+    items.add_tag_id_to_item = AsyncMock()
+    items.remove_tag_id_from_item = AsyncMock()
+    monkeypatch.setattr(tag_service_module, "DocumentTagItemService", lambda: items)
+    service = TagService.__new__(TagService)
+    service.rebac = _FakeRebac()
+    service._tag_store = _FakeTagStore(stored)
+    result = await service.update_tag_for_user("root", TagUpdate(name="After", type=TagType.DOCUMENT), _user())
+    assert result.name == "After" and result.item_ids == ["existing-doc"]
+    assert result.path == "AlreadyRenamedParent"
+    items.add_tag_id_to_item.assert_not_awaited()
+    items.remove_tag_id_from_item.assert_not_awaited()
+    items.retrieve_items_ids_for_tag.assert_awaited_once()

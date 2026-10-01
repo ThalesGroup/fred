@@ -18,6 +18,7 @@ import mimetypes
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from functools import cached_property
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO, NamedTuple, Tuple
@@ -25,7 +26,6 @@ from typing import BinaryIO, NamedTuple, Tuple
 import pandas as pd
 from fred_core import (
     AuthorizationError,
-    DocumentPermission,
     KeycloakUser,
     convert_office_file_to_pdf,
 )
@@ -35,6 +35,7 @@ from tabulate import tabulate
 
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
 from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +114,12 @@ class ContentService:
         # Per-document cold-render locks; see `_render_lock`.
         self._render_locks: dict[str, asyncio.Lock] = {}
 
+    @cached_property
+    def corpus_access(self) -> CorpusAccess:
+        from knowledge_flow_backend.application_context import ApplicationContext
+
+        return CorpusAccess(self.rebac, ApplicationContext.get_instance().get_tag_store())
+
     @staticmethod
     def _preview_status(metadata: DocumentMetadata) -> ProcessingStatus:
         return metadata.processing.stages.get(ProcessingStage.PREVIEW_READY, ProcessingStatus.NOT_STARTED)
@@ -186,9 +193,8 @@ class ContentService:
         - Call only once `SQL_INDEXED` is done and a `tabular_v1` artifact is
           present on the document metadata.
         """
-        preview_frame = await self._get_tabular_service().read_dataset_preview_frame(
-            user,
-            metadata.document_uid,
+        preview_frame = await self._get_tabular_service().read_dataset_preview_frame_trusted(
+            metadata,
             max_rows=200,
         )
         return self._dataframe_to_markdown_preview(preview_frame)
@@ -216,12 +222,11 @@ class ContentService:
         if not document_uid:
             raise ValueError("Document UID is required")
 
-        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
-
         metadata = await self.metadata_store.get_metadata_by_uid(document_uid)
         if metadata is None:
             # Let the controller map this to a 404
             raise FileNotFoundError(f"No metadata found for document {document_uid}")
+        await self.corpus_access.check_document(user, metadata)
         return metadata
 
     async def get_original_content(self, user: KeycloakUser, document_uid: str) -> Tuple[BinaryIO, str, str]:
@@ -242,7 +247,7 @@ class ContentService:
         """
         Returns media file associated with a document if it exists.
         """
-        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+        await self.get_document_metadata(user, document_uid)
         content_type = mimetypes.guess_type(media_id)[0] or "application/octet-stream"
 
         try:
@@ -258,7 +263,7 @@ class ContentService:
         document_uid: str,
         artifact_path: str,
     ) -> Tuple[BinaryIO, str, str]:
-        await self.rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+        await self.get_document_metadata(user, document_uid)
         artifact_name = (artifact_path or "").strip().lstrip("/")
         if not artifact_name:
             raise FileNotFoundError("Preview artifact path is empty.")
@@ -344,9 +349,9 @@ class ContentService:
         except FileNotFoundError:
             raise FileNotFoundError(f"No preview found for document {document_uid} of type {mime_type}.")
 
-    async def get_file_metadata(self, user: KeycloakUser, document_uid: str) -> FileMetadata:
-        metadata = await self.get_document_metadata(user, document_uid)
-        meta = self.content_store.get_file_metadata(document_uid)
+    async def get_file_metadata_trusted(self, metadata: DocumentMetadata) -> FileMetadata:
+        """File headers for metadata already authorized by the request entry point."""
+        meta = await asyncio.to_thread(self.content_store.get_file_metadata, metadata.document_uid)
         # The DB record is authoritative for the display name (it reflects a
         # rename); the content store's own file_name is just whatever the blob
         # was originally uploaded as and never changes.
@@ -358,15 +363,13 @@ class ContentService:
             meta.content_type = guessed or "application/octet-stream"
         return meta
 
-    async def get_full_stream(self, user: KeycloakUser, document_uid: str) -> BinaryIO:
-        await self.get_document_metadata(user, document_uid)
-        return self.content_store.get_content(document_uid)
+    async def get_full_stream_trusted(self, metadata: DocumentMetadata) -> BinaryIO:
+        return await asyncio.to_thread(self.content_store.get_content, metadata.document_uid)
 
-    async def get_range_stream(self, user: KeycloakUser, document_uid: str, *, start: int, length: int) -> BinaryIO:
-        await self.get_document_metadata(user, document_uid)
+    async def get_range_stream_trusted(self, metadata: DocumentMetadata, *, start: int, length: int) -> BinaryIO:
         if start < 0 or length <= 0:
             raise ValueError("Invalid byte range requested.")
-        return self.content_store.get_content_range(document_uid, start=start, length=length)
+        return await asyncio.to_thread(self.content_store.get_content_range, metadata.document_uid, start=start, length=length)
 
     def _render_office_to_pdf(self, document_uid: str, suffix: str) -> tuple[bytes, bool] | None:
         """Blocking: pull the original file, convert it with LibreOffice, cache the PDF.

@@ -12,200 +12,59 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""service_agent recognition in tabular dataset authorization (RFC EVAL-AUTH, Solution A).
+"""Tabular inventories require explicit source-root or human team rights."""
 
-The evaluation worker (service_agent) must read the TEAM's tabular corpus, scoped to
-team_id, even though it holds no per-user document relations — mirrors
-test_tag_service_service_agent.py, one layer up (documents instead of tags).
-"""
-
-from __future__ import annotations
-
-from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
-from fred_core import KeycloakUser
+from fred_core import KeycloakUser, RelationType
 from fred_core.common import OwnerFilter
-from fred_core.security.delegation import DelegationConfig, initialize_delegation, preserved_delegation
 
-from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.features.tabular.service import TabularService
-from tests.services.test_tabular_service import _FakeRebac, _FakeTagService, _ingest_csv
-
-
-def _user(roles: list[str]) -> KeycloakUser:
-    return KeycloakUser(uid="u", username="u", email="u@example.com", roles=roles)
-
-
-@pytest.mark.asyncio
-async def test_service_agent_sees_team_dataset_despite_empty_user_baseline(tmp_path: Path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-a",
-        file_name="sales-team-a.csv",
-        content="city,amount\nParis,10\n",
-        tag_ids=["tag-team-a"],
-        tag_names=["Team A"],
-    )
-
-    service = TabularService()
-    # A service_agent holds zero per-user document relations by design.
-    service.rebac = _FakeRebac(set())
-    service.tag_service = _FakeTagService(
-        readable_tag_ids=set(),
-        team_scopes={"team-a": {"tag-team-a"}},
-    )
-
-    datasets = await service.list_datasets(
-        _user(["service_agent"]),
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-    )
-    assert [dataset.document_uid for dataset in datasets] == ["doc-team-a"]
-
-    [schema] = await service.describe_documents(
-        _user(["service_agent"]),
-        ["doc-team-a"],
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-    )
-    assert schema.document_uid == "doc-team-a"
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
+from knowledge_flow_backend.features.tag.tag_service import TagService
+from tests.features.test_corpus_access import _folder
+from tests.services.test_tabular_service import _ingest_csv
 
 
 @pytest.mark.asyncio
-async def test_service_agent_without_team_fails_closed(tmp_path: Path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-a",
-        file_name="sales-team-a.csv",
-        content="city,amount\nParis,10\n",
-        tag_ids=["tag-team-a"],
-        tag_names=["Team A"],
-    )
-
+@pytest.mark.parametrize("granted", [False, True])
+async def test_service_role_requires_explicit_root_grant(tmp_path, metadata_store, granted):
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="doc-team-a", file_name="a.csv", content="city,amount\nParis,10\n", tag_ids=["root"])
+    await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="doc-other", file_name="b.csv", content="city,amount\nLyon,20\n", tag_ids=["other"])
+    rebac = AsyncMock()
+    rebac.enabled = True
+    rebac.has_direct_relation.side_effect = lambda subject, relation, resource: granted and resource.id == "root" and relation == RelationType.VIEWER
+    folders = SimpleNamespace(list_by_owner=AsyncMock(return_value=[_folder("root"), _folder("other")]))
+    tags = TagService.__new__(TagService)
+    tags.corpus_access = CorpusAccess(rebac, folders)
     service = TabularService()
-    service.rebac = _FakeRebac(set())
-    service.tag_service = _FakeTagService(
-        readable_tag_ids=set(),
-        team_scopes={"team-a": {"tag-team-a"}},
-    )
-
-    assert await service.list_datasets(_user(["service_agent"])) == []
-
-    with pytest.raises(PermissionError):
-        await service.describe_documents(
-            _user(["service_agent"]),
-            ["doc-team-a"],
-        )
+    service.tag_service = tags
+    user = KeycloakUser(uid="source", username="source", roles=["service_agent"])
+    datasets = await service.list_datasets(user, owner_filter=OwnerFilter.TEAM, team_id="team-a")
+    assert [dataset.document_uid for dataset in datasets] == (["doc-team-a"] if granted else [])
+    rebac.lookup_user_resources.assert_not_called()
+    rebac.has_user_permission.assert_not_called()
+    rebac.require_active_account.assert_awaited_once_with("source")
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "config",
-    [DelegationConfig(), DelegationConfig(accept_delegated_calls=True), DelegationConfig(act_for_people=True)],
-    ids=["off", "accepting", "acting-only"],
-)
-async def test_the_team_datasets_are_kept_for_a_service_identity_only(tmp_path: Path, metadata_store, config):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-a",
-        file_name="sales-team-a.csv",
-        content="city,amount\nParis,10\n",
-        tag_ids=["tag-team-a"],
-        tag_names=["Team A"],
-    )
-
+@pytest.mark.parametrize("count", [1001, 5001])
+async def test_human_tabular_listing_uses_one_team_decision_without_document_enumeration(tmp_path, metadata_store, count):
+    template = await _ingest_csv(tmp_path=tmp_path, metadata_store=metadata_store, document_uid="doc-0", file_name="template.csv", content="city,amount\nParis,10\n", tag_ids=["root"])
+    for index in range(1, count):
+        metadata = template.model_copy(deep=True)
+        metadata.identity.document_uid = f"doc-{index}"
+        await metadata_store.save_metadata(metadata)
+    rebac = AsyncMock()
+    folders = SimpleNamespace(list_by_owner=AsyncMock(return_value=[_folder("root")]))
+    tags = TagService.__new__(TagService)
+    tags.corpus_access = CorpusAccess(rebac, folders)
     service = TabularService()
-    service.rebac = _FakeRebac(set())
-    service.tag_service = _FakeTagService(
-        readable_tag_ids=set(),
-        team_scopes={"team-a": {"tag-team-a"}},
-    )
-    # A workload that speaks for people also holds the service role; as itself it reads nothing.
-    delegation_client = _user(["service_agent"]).model_copy(update={"client_id": "agents", "caller_roles": frozenset({"delegation_caller"})})
-
-    with preserved_delegation():
-        initialize_delegation(config)
-        evaluator = await service.list_datasets(_user(["service_agent"]), owner_filter=OwnerFilter.TEAM, team_id="team-a")
-        workload = await service.list_datasets(delegation_client, owner_filter=OwnerFilter.TEAM, team_id="team-a")
-
-    assert [dataset.document_uid for dataset in evaluator] == ["doc-team-a"]
-    assert workload == []
-
-
-@pytest.mark.asyncio
-async def test_normal_user_still_uses_per_user_rebac_lookup(tmp_path: Path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-a",
-        file_name="sales-team-a.csv",
-        content="city,amount\nParis,10\n",
-        tag_ids=["tag-team-a"],
-        tag_names=["Team A"],
-    )
-
-    service = TabularService()
-    # A regular user with no readable-document tuple must still be denied, even
-    # though the team owns the tag — the service_agent bypass must not leak to them.
-    service.rebac = _FakeRebac(set())
-    service.tag_service = _FakeTagService(
-        readable_tag_ids=set(),
-        team_scopes={"team-a": {"tag-team-a"}},
-    )
-
-    assert (
-        await service.list_datasets(
-            _user(["viewer"]),
-            owner_filter=OwnerFilter.TEAM,
-            team_id="team-a",
-        )
-        == []
-    )
-
-
-@pytest.mark.asyncio
-async def test_normal_user_with_rebac_relation_can_access_team_dataset(tmp_path: Path, metadata_store):
-    content_store = ApplicationContext.get_instance().get_content_store()
-    content_store.clear()
-
-    await _ingest_csv(
-        tmp_path=tmp_path,
-        metadata_store=metadata_store,
-        document_uid="doc-team-a",
-        file_name="sales-team-a.csv",
-        content="city,amount\nParis,10\n",
-        tag_ids=["tag-team-a"],
-        tag_names=["Team A"],
-    )
-
-    service = TabularService()
-    # A regular user must be allowed when an explicit per-user readable-document
-    # tuple exists; this confirms the normal ReBAC path still works.
-    service.rebac = _FakeRebac({"doc-team-a"})
-    service.tag_service = _FakeTagService(
-        readable_tag_ids=set(),
-        team_scopes={"team-a": {"tag-team-a"}},
-    )
-
-    datasets = await service.list_datasets(
-        _user(["viewer"]),
-        owner_filter=OwnerFilter.TEAM,
-        team_id="team-a",
-    )
-    assert [dataset.document_uid for dataset in datasets] == ["doc-team-a"]
+    service.tag_service = tags
+    datasets = await service.list_datasets(KeycloakUser(uid="alice", username="alice", roles=[]), team_id="team-a")
+    assert {dataset.document_uid for dataset in datasets} == {f"doc-{index}" for index in range(count)}
+    rebac.check_user_permission_or_raise.assert_awaited_once()
+    rebac.lookup_user_resources.assert_not_called()
+    rebac.has_user_permission.assert_not_called()

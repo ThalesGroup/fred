@@ -249,3 +249,22 @@ def test_markdown_preview_maps_tabular_execution_errors(content_client, raised, 
     response = client.get("/markdown/doc-1")
 
     assert response.status_code == expected_status, "a saturated pod must not turn a document preview into a 500"
+
+
+@pytest.mark.parametrize(
+    "method,path,service_method,kwargs",
+    [
+        ("get", "/tabular/documents", "list_documents", {}),
+        ("get", "/tabular/documents/schemas", "describe_documents", {"params": {"document_uids": "doc"}}),
+        ("post", "/tabular/query", "query_read", {"json": {"sql": "SELECT 1"}}),
+        ("post", "/tabular/search", "search_values", {"json": {"keyword": "Paris"}}),
+    ],
+)
+def test_team_authorization_failure_is_forbidden_not_internal_error(tabular_client, method, path, service_method, kwargs):
+    from unittest.mock import AsyncMock
+
+    from fred_core import AuthorizationError, Resource, TeamPermission
+
+    client, controller = tabular_client
+    setattr(controller.service, service_method, AsyncMock(side_effect=AuthorizationError("u-1", TeamPermission.CAN_USE_TEAM_KNOWLEDGE_BASES.value, Resource.TEAM)))
+    assert getattr(client, method)(path, **kwargs).status_code == 403

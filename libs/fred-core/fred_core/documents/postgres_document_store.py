@@ -25,6 +25,7 @@ from sqlalchemy import (
     bindparam,
     delete,
     func,
+    or_,
     select,
     text,
     update,
@@ -78,12 +79,20 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         # BaseDocumentMetadataStore's label methods). Dumping it here would
         # let a generic save (rename, retrievable toggle, ingestion, ...)
         # silently reintroduce a second, divergeable copy in the JSONB blob.
-        return md.model_dump(mode="json", exclude={"labels"})
+        return md.model_dump(
+            mode="json", exclude={"labels": True, "kind": True, "tags": {"tag_ids"}}
+        )
 
     @staticmethod
     def _from_row(row: DocumentMetadataRow) -> DocumentMetadata:
         try:
-            return DocumentMetadata.model_validate(row.doc or {})
+            payload = dict(row.doc or {})
+            payload["kind"] = row.kind
+            payload["tags"] = {
+                **payload.get("tags", {}),
+                "tag_ids": [row.folder_id] if row.folder_id else [],
+            }
+            return DocumentMetadata.model_validate(payload)
         except ValidationError as e:
             raise DocumentMetadataDeserializationError(
                 f"Invalid metadata JSON: {e}"
@@ -138,48 +147,15 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     async def count_by_team(
         self, team_id: str, session: AsyncSession | None = None
     ) -> int:
-        """Count documents owned by one team.
-
-        A document's team is indirect: `DocumentMetadataRow` has no `team_id`
-        column, only `tag_ids` — a document belongs to a team through the
-        `owner_id` of one of its tags (`TagRow`, same table/engine, no
-        cross-database join needed). `owner_id` is taken verbatim, including
-        personal-space ids (`personal-<uid>`) — the same convention
-        knowledge-flow already uses when stamping `document.created_total`/
-        `document.deleted_total` KPI events with `dims.team_id`
-        (`features/metadata/service.py`), so a document counts for a personal
-        space the same way it counts for a real team. See
-        `NOTES-OBSERV-02-FOLLOWUPS.md` #1.
-        """
+        """Count the corpus through its stored folder/team membership."""
         async with use_session(self._sessions, session) as s:
-            team_tag_ids = (
-                (
-                    await s.execute(
-                        select(TagRow.tag_id).where(TagRow.owner_id == team_id)
-                    )
-                )
-                .scalars()
-                .all()
+            result = await s.execute(
+                select(func.count())
+                .select_from(DocumentMetadataRow)
+                .join(TagRow, DocumentMetadataRow.folder_id == TagRow.tag_id)
+                .where(TagRow.owner_id == team_id)
             )
-            if not team_tag_ids:
-                return 0
-
-            if self._is_postgres:
-                cond: ColumnElement[bool] = cast(
-                    ColumnElement[bool],
-                    DocumentMetadataRow.tag_ids.overlap(list(team_tag_ids)),
-                )
-                result = await s.execute(
-                    select(func.count()).select_from(DocumentMetadataRow).where(cond)
-                )
-                return int(result.scalar_one())
-
-            # SQLite (tests): no native array overlap operator — filter in Python.
-            wanted = set(team_tag_ids)
-            rows = (
-                (await s.execute(select(DocumentMetadataRow.tag_ids))).scalars().all()
-            )
-            return sum(1 for tag_ids in rows if wanted.intersection(tag_ids or []))
+            return int(result.scalar_one())
 
     async def get_metadata_by_uid(
         self, document_uid: str, session: AsyncSession | None = None
@@ -300,23 +276,21 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     async def get_metadata_in_tag(
         self, tag_id: str, session: AsyncSession | None = None
     ) -> List[DocumentMetadata]:
-        if self._is_postgres:
-            cond: ColumnElement[bool] = cast(
-                ColumnElement[bool], DocumentMetadataRow.tag_ids.contains([tag_id])
-            )
-            async with use_session(self._sessions, session) as s:
-                rows = (
-                    (await s.execute(select(DocumentMetadataRow).where(cond)))
-                    .scalars()
-                    .all()
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(DocumentMetadataRow).where(
+                            DocumentMetadataRow.folder_id == tag_id
+                        )
+                    )
                 )
-                docs = [self._from_row(row) for row in rows]
-                await self._hydrate_labels(docs, s)
-            return docs
-
-        # SQLite: load all and filter in Python (get_all_metadata already hydrates)
-        docs = await self.get_all_metadata(filters={}, session=session)
-        return [md for md in docs if tag_id in (md.tags.tag_ids or [])]
+                .scalars()
+                .all()
+            )
+            docs = [self._from_row(row) for row in rows]
+            await self._hydrate_labels(docs, s)
+        return docs
 
     def _browse_order_by(self, sort_by: DocumentSortField, sort_order: SortOrder):
         """ORDER BY terms for a paginated tag browse.
@@ -358,7 +332,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
     ) -> tuple[list[DocumentMetadata], int]:
         if self._is_postgres:
             cond: ColumnElement[bool] = cast(
-                ColumnElement[bool], DocumentMetadataRow.tag_ids.contains([tag_id])
+                ColumnElement[bool], DocumentMetadataRow.folder_id == tag_id
             )
             async with use_session(self._sessions, session) as s:
                 total_result = await s.execute(
@@ -382,9 +356,8 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                 await self._hydrate_labels(docs, s)
             return docs, int(total)
 
-        # SQLite: filter and order in Python (get_all_metadata already hydrates)
-        docs = await self.get_all_metadata(filters={}, session=session)
-        filtered = [md for md in docs if tag_id in (md.tags.tag_ids or [])]
+        # SQLite uses the same folder query; only JSON sorting is in Python.
+        filtered = await self.get_metadata_in_tag(tag_id, session=session)
         ordered = sort_documents(filtered, sort_by, sort_order)
         return ordered[offset : offset + limit], len(filtered)
 
@@ -394,28 +367,20 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         unique = list(dict.fromkeys(tag_ids))
         if not unique:
             return {}
-        # SQLite in tests has no array overlap operator — fall back to the
-        # per-tag loop in the base class.
-        if not self._is_postgres:
-            return await super().document_uids_by_tags(unique, session=session)
-
-        wanted = set(unique)
         # Two columns, no JSONB blob and no label hydration: the caller only
         # needs uids, and this runs on every folder listing.
-        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.folder_id.in_(unique))
         result: dict[str, list[str]] = {tag_id: [] for tag_id in unique}
         async with use_session(self._sessions, session) as s:
             rows = (
                 await s.execute(
                     select(
-                        DocumentMetadataRow.document_uid, DocumentMetadataRow.tag_ids
+                        DocumentMetadataRow.document_uid, DocumentMetadataRow.folder_id
                     ).where(cond)
                 )
             ).all()
-        for uid, row_tags in rows:
-            for tag_id in row_tags or []:
-                if tag_id in wanted:
-                    result[tag_id].append(uid)
+        for uid, folder_id in rows:
+            result[folder_id].append(uid)
         return result
 
     async def metadata_in_tags(
@@ -424,10 +389,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         unique = list(dict.fromkeys(tag_ids))
         if not unique:
             return []
-        if not self._is_postgres:
-            return await super().metadata_in_tags(unique, session=session)
-
-        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.folder_id.in_(unique))
         async with use_session(self._sessions, session) as s:
             rows = (
                 (await s.execute(select(DocumentMetadataRow).where(cond)))
@@ -444,12 +406,10 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         unique = list(dict.fromkeys(tag_ids))
         if not unique:
             return {}
-        # SQLite in tests has no array overlap operator — fall back to the
-        # per-tag Python sum in the base class.
+        # SQLite does not support the PostgreSQL JSON size expression below.
         if not self._is_postgres:
             return await super().total_size_by_tags(unique, session=session)
 
-        wanted = set(unique)
         # `file_size_bytes` lives inside the JSONB `doc` blob; extract + cast so
         # the whole tag's size is summed in one query, no pagination, no per-doc
         # metadata deserialization.
@@ -459,20 +419,17 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             ),
             0,
         )
-        # Array overlap (`&&`) hits the GIN index, so only documents in one of the
-        # requested tags are scanned; a document may carry several of them.
-        cond = cast(ColumnElement[bool], DocumentMetadataRow.tag_ids.overlap(unique))
+        # The folder index restricts this query to the requested folders.
+        cond = cast(ColumnElement[bool], DocumentMetadataRow.folder_id.in_(unique))
         result: dict[str, int] = {tag_id: 0 for tag_id in unique}
         async with use_session(self._sessions, session) as s:
             rows = (
                 await s.execute(
-                    select(DocumentMetadataRow.tag_ids, size_expr).where(cond)
+                    select(DocumentMetadataRow.folder_id, size_expr).where(cond)
                 )
             ).all()
-        for row_tags, size in rows:
-            for tag_id in row_tags or []:
-                if tag_id in wanted:
-                    result[tag_id] += int(size or 0)
+        for folder_id, size in rows:
+            result[folder_id] += int(size or 0)
         return result
 
     async def get_all_metadata(
@@ -521,7 +478,6 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
                     .values(
                         source_tag=metadata.source.source_tag,
                         date_added_to_kb=metadata.source.date_added_to_kb,
-                        tag_ids=list(metadata.tags.tag_ids or []),
                         source_library_id=metadata.source.source_library_id,
                         source_key=metadata.source.source_key,
                         doc=self._to_dict(metadata),
@@ -531,11 +487,16 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             return result.rowcount > 0
 
     def _apply(self, row: DocumentMetadataRow, metadata: DocumentMetadata) -> None:
-        """Copy a metadata payload onto a row — the column list `update_metadata`
-        must stay in sync with."""
+        """Persist registration/membership; worker progress preserves membership."""
+        expected_folders = 1 if metadata.kind == "corpus" else 0
+        if len(metadata.tags.tag_ids) != expected_folders:
+            raise ValueError(
+                "Corpus documents require exactly one folder; attachments require none"
+            )
         row.source_tag = metadata.source.source_tag
         row.date_added_to_kb = metadata.source.date_added_to_kb
-        row.tag_ids = list(metadata.tags.tag_ids or [])
+        row.kind = metadata.kind
+        row.folder_id = metadata.tags.tag_ids[0] if metadata.tags.tag_ids else None
         row.source_library_id = metadata.source.source_library_id
         row.source_key = metadata.source.source_key
         row.doc = self._to_dict(metadata)
@@ -812,6 +773,7 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         labels: set[str],
         document_uids: set[str] | None = None,
         session: AsyncSession | None = None,
+        folder_ids: set[str] | None = None,
     ) -> List[str]:
         if not labels:
             return []
@@ -820,6 +782,13 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             .distinct()
             .where(DocumentLabelRow.label.in_(labels))
         )
+        if folder_ids is not None:
+            if not folder_ids:
+                return []
+            stmt = stmt.join(
+                DocumentMetadataRow,
+                DocumentMetadataRow.document_uid == DocumentLabelRow.document_uid,
+            ).where(DocumentMetadataRow.folder_id.in_(folder_ids))
         if document_uids is not None:
             if not document_uids:
                 return []
@@ -836,6 +805,8 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         offset: int = 0,
         limit: int = 50,
         session: AsyncSession | None = None,
+        folder_ids: set[str] | None = None,
+        selected_folder_ids: set[str] | None = None,
     ) -> tuple[List[str], int]:
         """Ordered, bounded sibling of `get_document_uids_with_any_label`: a
         real `ORDER BY ... OFFSET ... LIMIT ...` query plus a matching
@@ -849,7 +820,23 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
             .distinct()
             .where(DocumentLabelRow.label.in_(labels))
         )
-        if document_uids is not None:
+        if folder_ids is not None and not folder_ids:
+            return [], 0
+        if folder_ids is not None or selected_folder_ids is not None:
+            base = base.join(
+                DocumentMetadataRow,
+                DocumentMetadataRow.document_uid == DocumentLabelRow.document_uid,
+            )
+        if folder_ids is not None:
+            base = base.where(DocumentMetadataRow.folder_id.in_(folder_ids))
+        if selected_folder_ids is not None:
+            base = base.where(
+                or_(
+                    DocumentMetadataRow.folder_id.in_(selected_folder_ids),
+                    DocumentLabelRow.document_uid.in_(document_uids or set()),
+                )
+            )
+        elif document_uids is not None:
             if not document_uids:
                 return [], 0
             base = base.where(DocumentLabelRow.document_uid.in_(document_uids))
@@ -868,10 +855,18 @@ class PostgresDocumentMetadataStore(BaseDocumentMetadataStore):
         self,
         document_uids: set[str] | None = None,
         session: AsyncSession | None = None,
+        folder_ids: set[str] | None = None,
     ) -> List[str]:
         stmt = (
             select(DocumentLabelRow.label).distinct().order_by(DocumentLabelRow.label)
         )
+        if folder_ids is not None:
+            if not folder_ids:
+                return []
+            stmt = stmt.join(
+                DocumentMetadataRow,
+                DocumentMetadataRow.document_uid == DocumentLabelRow.document_uid,
+            ).where(DocumentMetadataRow.folder_id.in_(folder_ids))
         if document_uids is not None:
             if not document_uids:
                 return []

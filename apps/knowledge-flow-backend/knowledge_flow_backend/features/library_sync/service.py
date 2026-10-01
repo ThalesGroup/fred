@@ -29,18 +29,14 @@ import logging
 from typing import Optional
 
 from fastapi import BackgroundTasks, UploadFile
-from fred_core import KeycloakUser, TagPermission
+from fred_core import KeycloakUser
 from fred_core.documents.document_structures import DocumentMetadata
-from fred_core.tasks.models import IngestionProcessingProfile as TaskProfile
-from fred_core.tasks.models import StartIngestionParams, StartIngestionRequest, TaskTarget
 from fred_core.tasks.service import TaskService
-from sqlalchemy.exc import IntegrityError
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
 from knowledge_flow_backend.features.ingestion.ingestion_controller import (
     cleanup_uploaded_temp_file,
-    resolve_tag_owners,
     uploadfile_to_path,
 )
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
@@ -61,9 +57,9 @@ from knowledge_flow_backend.features.metadata.service import MetadataNotFound, M
 from knowledge_flow_backend.features.scheduler.ingestion_delivery import IngestionAlreadyActive
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcessWithoutUser
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
 from knowledge_flow_backend.features.tag.structure import Tag, TagCreate, TagType
 from knowledge_flow_backend.features.tag.tag_service import TagService
-from knowledge_flow_backend.models.task_models import ACTIVE_DOCUMENT_INDEX
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +71,7 @@ class LibrarySyncService:
         context = ApplicationContext.get_instance()
         self._tag_store = context.get_tag_store()
         self._metadata_store = context.get_metadata_store()
-        self._rebac = context.get_rebac_engine()
+        self._access = CorpusAccess(context.get_rebac_engine(), self._tag_store)
         self._metadata_service = MetadataService()
         self._tag_service = TagService()
         self._ingestion_service = get_ingestion_service()
@@ -114,7 +110,7 @@ class LibrarySyncService:
         """
         # Authorization first: what a caller with no right over this library is
         # told must not depend on how well formed its request was.
-        await self._rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, library_id)
+        library = await self._access.get_folder(user, library_id, write=True)
 
         source_key = validate_source_key(source_key)
         document_version = validate_version(document_version, label="A document version", code_prefix="document_version")
@@ -124,12 +120,8 @@ class LibrarySyncService:
             # that cannot process a document must not half-take it.
             raise SynchronizationUnavailable("This deployment has no scheduler enabled, so it cannot process documents.")
 
-        library = await self._tag_store.get_tag_by_id(library_id)
         folder_id = await self._resolve_folder(user, library, folders)
         existing = await self._metadata_store.get_metadata_by_source_key(library_id, source_key)
-        if existing is not None:
-            await self._refile(user, existing, folder_id)
-        owning_team_id = await self._owning_team_id(user, folder_id)
 
         # Both copy bytes — off the upload, then into the content store. On this
         # surface a whole source's worth of them arrives concurrently, so neither
@@ -159,41 +151,22 @@ class LibrarySyncService:
             metadata.source.source_key = source_key
             metadata.source.document_version = document_version
 
+            # Same admission as UI uploads, before shared input or membership writes.
+            definition = await self._scheduler.admit_documents(
+                user=user,
+                pipeline_name="library_sync",
+                files=[FileToProcessWithoutUser(source_tag=source_tag, tags=[folder_id], document_uid=metadata.document_uid, display_name=document_name, profile=profile)],
+            )
+            task_id = definition.files[0].task_id
+            assert task_id is not None, "Admission must assign an ingestion task"
+
             await asyncio.to_thread(self._ingestion_service.save_input, user, metadata, input_file.parent)
             await self._ingestion_service.save_metadata(user, metadata=metadata)
             if existing is not None:
                 await self._drop_previous_vectors(metadata.document_uid)
 
-            # The task comes first and is not optional: it is the only thing
-            # the caller gets back to follow the write with.
-            try:
-                task = await self._task_service.start(
-                    StartIngestionRequest(params=StartIngestionParams(resource_ids=[metadata.document_uid], profile=TaskProfile(profile.value))),
-                    created_by=user.uid,
-                    team_id=owning_team_id,
-                    target=TaskTarget(type="document", id=metadata.document_uid, label=document_name),
-                )
-            except IntegrityError as exc:
-                if ACTIVE_DOCUMENT_INDEX in str(exc.orig):
-                    raise IngestionAlreadyActive("Ingestion is already active for this document") from exc
-                raise
-            task_id = task.task_id
             submission_started = True
-            await self._scheduler.submit_documents(
-                user=user,
-                pipeline_name="library_sync",
-                files=[
-                    FileToProcessWithoutUser(
-                        source_tag=source_tag,
-                        tags=[folder_id],
-                        document_uid=metadata.document_uid,
-                        display_name=document_name,
-                        profile=profile,
-                        task_id=task_id,
-                    )
-                ],
-                background_tasks=background_tasks,
-            )
+            await self._scheduler.deliver_documents(definition, background_tasks)
 
             logger.info(
                 "[LIBRARY SYNC] library=%s key=%s created=%s task=%s by=%s",
@@ -215,12 +188,12 @@ class LibrarySyncService:
             # The existing admission owns this document; never discard its input.
             raise
         except Exception:
-            if task_id is not None:
+            if task_id is not None and not submission_started:
                 try:
-                    await self._task_service.fail_task(task_id, "Ingestion admission failed", only_if_unbound=True)
+                    await self._task_service.fail_task(task_id, "Ingestion preparation failed")
                 except Exception:
                     logger.warning("Could not settle unsubmitted ingestion task %s", task_id, exc_info=True)
-            if not submission_started and existing is None and metadata is not None:
+            if task_id is not None and not submission_started and existing is None and metadata is not None:
                 # Nothing was there before this call, so nothing of it should
                 # survive the failure. An update is left alone on purpose:
                 # discarding it would destroy a document the caller asked to
@@ -240,7 +213,7 @@ class LibrarySyncService:
         rename that folder by getting one field wrong, and two callers doing it
         would lose each other's work.
         """
-        await self._rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, library_id)
+        await self._access.get_folder(user, library_id, write=True)
         source_key = validate_source_key(source_key)
 
         existing = await self._metadata_store.get_metadata_by_source_key(library_id, source_key)
@@ -272,7 +245,7 @@ class LibrarySyncService:
         sync. Bounded, and honest about it — a page short of the whole library
         says so rather than passing for it.
         """
-        await self._rebac.check_user_permission_or_raise(user, TagPermission.READ, library_id)
+        await self._access.get_folder(user, library_id)
         # One past the page: enough to know there is more, without counting it all.
         rows = await self._metadata_store.list_by_source_library(library_id, limit=limit + 1)
         items = [
@@ -290,14 +263,12 @@ class LibrarySyncService:
     # ---------- the library's own source version ----------
 
     async def read_source_version(self, user: KeycloakUser, library_id: str) -> Optional[str]:
-        await self._rebac.check_user_permission_or_raise(user, TagPermission.READ, library_id)
-        library = await self._tag_store.get_tag_by_id(library_id)
+        library = await self._access.get_folder(user, library_id)
         return library.source_version
 
     async def record_source_version(self, user: KeycloakUser, library_id: str, source_version: Optional[str]) -> Optional[str]:
-        await self._rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, library_id)
+        library = await self._access.get_folder(user, library_id, write=True)
         source_version = validate_version(source_version, label="A source version", code_prefix="source_version")
-        library = await self._tag_store.get_tag_by_id(library_id)
         library.source_version = source_version
         # `updated_at` is left where it is: a cursor moves on every poll, and
         # bumping it would put the folder at the top of "recently changed" for
@@ -315,10 +286,9 @@ class LibrarySyncService:
         the second silently would leave the first writing into a folder it no
         longer owns. Re-recording the same one is not a move, so a retry is safe.
         """
-        await self._rebac.check_user_permission_or_raise(user, TagPermission.UPDATE, library_id)
+        library = await self._access.get_folder(user, library_id, write=True)
         synchronized_by = validate_synchronized_by(synchronized_by)
 
-        library = await self._tag_store.get_tag_by_id(library_id)
         if library.synchronized_by == synchronized_by:
             return synchronized_by
         if library.synchronized_by is not None:
@@ -333,15 +303,6 @@ class LibrarySyncService:
         return synchronized_by
 
     # ---------- internals ----------
-
-    async def _owning_team_id(self, user: KeycloakUser, folder_id: str) -> Optional[str]:
-        """The team a task for this folder is filed under; None for a personal space.
-
-        Resolved by the upload surface's own lookup, so a task from either
-        surface lands on the same team's activity page.
-        """
-        team_ids, _ = await resolve_tag_owners([folder_id], user)
-        return next(iter(team_ids)) if len(team_ids) == 1 else None
 
     async def _resolve_folder(self, user: KeycloakUser, library: Tag, folders: list[str]) -> str:
         """Walk the path inside the library, creating the folders that are missing.
@@ -374,7 +335,7 @@ class LibrarySyncService:
                     # library it starts from, above all. That is a bad request,
                     # not a server fault, and it must read as one.
                     raise InvalidSourceRequest("document_path_invalid", f"{full_path}: {exc}") from exc
-                created = await self._tag_service.create_tag_for_user(folder, user)
+                created = await self._tag_service.create_tag_trusted(folder, owner_id=owner_id)
                 folder_id = created.id
             else:
                 folder_id = existing.id
@@ -396,23 +357,6 @@ class LibrarySyncService:
         context = ApplicationContext.get_instance()
         vector_store = context.get_create_vector_store(context.get_embedder())
         await asyncio.to_thread(vector_store.delete_vectors_for_document, document_uid=document_uid)
-
-    async def _refile(self, user: KeycloakUser, existing: DocumentMetadata, folder_id: str) -> None:
-        """Put a document where its source now says it is.
-
-        Run before anything is written, so a folder the caller may not write in
-        refuses the whole call rather than half of it. Rewriting `tag_ids`
-        directly would be shorter and wrong: a document's permissions and its
-        storage charge both hang off one link per folder, and only these two
-        paths move them.
-        """
-        current = list(existing.tags.tag_ids or [])
-        if current == [folder_id]:
-            return
-        if folder_id not in current:
-            await self._metadata_service.add_tag_id_to_document(user, existing, folder_id)
-        for stale in [tag_id for tag_id in current if tag_id != folder_id]:
-            await self._metadata_service.remove_tag_id_from_document(user, existing, stale)
 
     async def _discard(self, actor_uid: str, document_uid: str) -> None:
         """Leave nothing behind from a write that never completed.

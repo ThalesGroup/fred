@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from types import SimpleNamespace
+
 import pytest
 from fred_core import FileTypeBucket, KeycloakUser
 from fred_core.documents.document_structures import (
@@ -49,13 +51,12 @@ def _document(*, uid: str, name: str, size_bytes: int, tag_ids: list[str]) -> Do
     )
 
 
-class _FakeMetadataService:
+class _FakeMetadataStore:
     def __init__(self, docs_by_tag: dict[str, list[DocumentMetadata]]) -> None:
         self._docs_by_tag = docs_by_tag
         self.calls: list[list[str]] = []
 
-    async def get_documents_metadata_in_tags(self, user, tag_ids: list[str]) -> list[DocumentMetadata]:
-        del user
+    async def metadata_in_tags(self, tag_ids: list[str]) -> list[DocumentMetadata]:
         # One call for the whole corpus, and the real store returns each
         # document once however many of the requested tags it carries.
         self.calls.append(list(tag_ids))
@@ -80,7 +81,7 @@ def _service(docs_by_tag: dict[str, list[DocumentMetadata]], tag_ids: set[str]) 
         return tag_ids
 
     service.list_authorized_tags_ids = _list_authorized_tags_ids
-    service.document_metadata_service = _FakeMetadataService(docs_by_tag)
+    service.document_metadata_service = SimpleNamespace(metadata_store=_FakeMetadataStore(docs_by_tag))
     return service
 
 
@@ -105,14 +106,16 @@ async def test_get_corpus_type_stats_buckets_and_sums_by_type():
 
 
 @pytest.mark.asyncio
-async def test_get_corpus_type_stats_dedupes_documents_shared_across_libraries():
-    shared_doc = _document(uid="doc-1", name="report.pdf", size_bytes=100, tag_ids=["lib-1", "lib-2"])
-    docs_by_tag = {"lib-1": [shared_doc], "lib-2": [shared_doc]}
+async def test_get_corpus_type_stats_sums_documents_from_distinct_folders():
+    docs_by_tag = {
+        "lib-1": [_document(uid="doc-1", name="report.pdf", size_bytes=100, tag_ids=["lib-1"])],
+        "lib-2": [_document(uid="doc-2", name="other.pdf", size_bytes=200, tag_ids=["lib-2"])],
+    }
     service = _service(docs_by_tag, tag_ids={"lib-1", "lib-2"})
 
     stats = await service.get_corpus_type_stats(_user(), "team-1")
 
-    assert stats[FileTypeBucket.PDF] == (1, 100)
+    assert stats[FileTypeBucket.PDF] == (2, 300)
 
 
 @pytest.mark.asyncio
@@ -138,6 +141,6 @@ async def test_get_corpus_type_stats_reads_every_library_in_one_batch():
 
     await service.get_corpus_type_stats(_user(), "team-1")
 
-    metadata_service = service.document_metadata_service
+    metadata_service = service.document_metadata_service.metadata_store
     assert len(metadata_service.calls) == 1
     assert sorted(metadata_service.calls[0]) == ["lib-1", "lib-2", "lib-3"]

@@ -52,9 +52,12 @@ class _RecordingService:
         self.calls: list[str] = []
         self._save_input_raises = save_input_raises
 
-    async def extract_metadata(self, user, file_path, tags, source_tag, profile):
+    async def extract_metadata(self, user, file_path, tags, source_tag, profile, *, apply_versioning=True):
         self.calls.append("extract_metadata")
         return SimpleNamespace(document_uid="doc-1", document_name=file_path.name, file_type=file_path.suffix.lstrip("."))
+
+    async def apply_versioning(self, metadata):
+        return metadata
 
     def save_input(self, user, metadata, input_dir) -> None:
         self.calls.append("save_input")
@@ -82,10 +85,13 @@ class _FakeTaskService:
 
 
 class _FakeSchedulerTaskService:
-    async def submit_documents(self, *, user, pipeline_name, files, background_tasks=None):
+    async def admit_documents(self, *, user, pipeline_name, files, upload_only=False):
         for file in files:
             file.task_id = "task-1"
-        return SimpleNamespace(files=files), SimpleNamespace(workflow_id="wf-1")
+        return SimpleNamespace(files=files)
+
+    async def deliver_documents(self, definition, background_tasks=None):
+        return SimpleNamespace(workflow_id="wf-1")
 
 
 def _user() -> KeycloakUser:
@@ -143,3 +149,67 @@ async def test_a_content_store_failure_never_charges_the_quota(monkeypatch, tmp_
 
     assert "save_metadata" not in service.calls, "an upload whose bytes never reached the content store was charged anyway"
     assert any("failed" in event for event in events), "the failed upload was not reported to the client"
+
+
+@pytest.mark.asyncio
+async def test_batch_keeps_sequential_versions_after_admission(tmp_path):
+    from unittest.mock import AsyncMock
+
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+
+    stored = []
+    versioning = IngestionService.__new__(IngestionService)
+    versioning.metadata_service = SimpleNamespace(metadata_store=SimpleNamespace(get_metadata_in_tag=AsyncMock(side_effect=lambda folder: list(stored))))
+
+    async def extract(user, *, file_path, apply_versioning, **kwargs):
+        assert apply_versioning is False
+        return SimpleNamespace(
+            document_uid=file_path.parent.parent.name,
+            identity=SimpleNamespace(document_name="report.pdf", canonical_name=None, version=None),
+            tags=SimpleNamespace(tag_ids=["folder"]),
+        )
+
+    async def save(user, *, metadata):
+        stored.append(metadata)
+
+    controller = IngestionController.__new__(IngestionController)
+    controller._scheduler_backend = lambda: SchedulerBackend.MEMORY
+    controller.service = SimpleNamespace(extract_metadata=extract, apply_versioning=versioning.apply_versioning, save_input=lambda *args, **kwargs: None, save_metadata=save)
+    preloaded = []
+    for index in range(2):
+        path = tmp_path / f"upload-{index}" / "input" / "report.pdf"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(str(index).encode())
+        preloaded.append((path.name, path))
+    events = [
+        event
+        async for event in controller._stream_upload_process(
+            preloaded_files=preloaded,
+            user=_user(),
+            tags=["folder"],
+            source_tag="fred",
+            profile=IngestionProcessingProfile.medium,
+            scheduler_task_service=_FakeSchedulerTaskService(),
+            background_tasks=None,
+            kpi=_FakeKpi(),
+            kpi_actor=SimpleNamespace(type="human"),
+        )
+    ]
+    assert [metadata.identity.version for metadata in stored] == [0, 1]
+    assert '"status": "success"' in events[-1]
+
+
+@pytest.mark.asyncio
+async def test_versioning_requires_folder_without_global_inventory():
+    from unittest.mock import AsyncMock
+
+    from knowledge_flow_backend.features.ingestion.ingestion_service import IngestionService
+
+    service = IngestionService.__new__(IngestionService)
+    store = SimpleNamespace(get_metadata_in_tag=AsyncMock(), get_all_metadata=AsyncMock())
+    service.metadata_service = SimpleNamespace(metadata_store=store)
+    metadata = SimpleNamespace(identity=SimpleNamespace(document_name="report.pdf"), tags=SimpleNamespace(tag_ids=[]))
+    with pytest.raises(ValueError, match="destination folder"):
+        await service.apply_versioning(metadata)
+    store.get_metadata_in_tag.assert_not_called()
+    store.get_all_metadata.assert_not_called()

@@ -35,6 +35,10 @@ describe("taskBackendFor", () => {
     expect(taskBackendFor("evaluation")).toBe("evaluation");
   });
 
+  it("routes corpus deletion to knowledge-flow", () => {
+    expect(taskBackendFor("deletion")).toBe("knowledge-flow");
+  });
+
   it("routes ingestion tasks to the knowledge-flow backend", () => {
     expect(taskBackendFor("ingestion")).toBe("knowledge-flow");
   });

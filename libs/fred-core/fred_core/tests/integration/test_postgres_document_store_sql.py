@@ -43,7 +43,7 @@ from typing import AsyncIterator
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from fred_core.documents.document_models import DocumentMetadataRow
@@ -60,6 +60,7 @@ from fred_core.documents.document_structures import (
 )
 from fred_core.documents.label_models import DocumentLabelRow
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 from fred_core.models.base import Base
 
 pytestmark = [pytest.mark.integration, pytest.mark.integration_postgres]
@@ -89,9 +90,14 @@ async def pg_store() -> AsyncIterator[PostgresDocumentMetadataStore]:
             await conn.run_sync(
                 Base.metadata.create_all,
                 tables=[
+                    Base.metadata.tables[TagRow.__tablename__],
                     Base.metadata.tables[DocumentMetadataRow.__tablename__],
                     Base.metadata.tables[DocumentLabelRow.__tablename__],
                 ],
+            )
+            await conn.execute(
+                insert(TagRow),
+                {"tag_id": "tag-a", "owner_id": "team-a", "type": "document"},
             )
         yield PostgresDocumentMetadataStore(engine)
     finally:
@@ -104,6 +110,7 @@ async def pg_store() -> AsyncIterator[PostgresDocumentMetadataStore]:
 
 def _doc(uid: str) -> DocumentMetadata:
     return DocumentMetadata(
+        tags=Tagging(tag_ids=["tag-a"]),
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=uid),
         source=SourceInfo(
             source_type=SourceType.PUSH, source_tag="fred", pull_location=None

@@ -18,8 +18,8 @@ Why this exists:
 - The Files UI shows where each file came from (deposé / généré / partagé). That
   signal is fully derivable from the virtual path area, because the FILES-04
   isolation rules make the path authoritative: only an agent writes its own
-  agents subtree, only the owner writes their Mon espace, ingestion is the sole
-  writer of the corpus. So v1 derives provenance from the path — no stored
+  agents subtree and only the owner writes their Mon espace. Provenance comes
+  from the path — no stored
   metadata, no migration (see docs/swift/design/FILESYSTEM.md).
 
 What is NOT derivable from the path alone:
@@ -39,7 +39,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
-    AREA_CORPUS,
     AREA_TEAMS,
     SUBAREA_AGENTS,
     SUBAREA_SHARED,
@@ -51,12 +50,10 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
 ORIGIN_UPLOADED = "uploaded"
 ORIGIN_AGENT_GENERATED = "agent_generated"
 ORIGIN_SHARED_COPY = "shared_copy"
-ORIGIN_INGESTED = "ingested"
 ORIGIN_SYSTEM = "system"
 
 # `producer` values.
 PRODUCER_HUMAN = "human"
-PRODUCER_INGESTION = "ingestion"
 
 # Sub-folder of Espace d'equipe where human share-by-copy lands (G5, RFC §9). Files
 # here are share-copies (partagé); other shared files are direct uploads (deposé).
@@ -88,16 +85,12 @@ def derive_provenance(virtual_path: str) -> Provenance | None:
       -> agent_generated, producer `agent:inst-7`, created_by `u-1`
     - `/teams/acme/users/u-1/notes.txt` -> uploaded, human, created_by `u-1`
     - `/teams/acme/shared/templates/brand.pptx` -> uploaded, human, created_by None
-    - `/corpus/documents/doc-1/preview.md` -> ingested, ingestion, created_by None
     """
     normalized = normalize_virtual_path(virtual_path)
     if not normalized:
         return None
     parts = normalized.split("/")
     head = parts[0]
-
-    if head == AREA_CORPUS:
-        return Provenance(origin=ORIGIN_INGESTED, producer=PRODUCER_INGESTION, created_by=None)
 
     if head != AREA_TEAMS or len(parts) < 3:
         # `/teams` or `/teams/{team}` alone, or any non-team area: no file provenance.

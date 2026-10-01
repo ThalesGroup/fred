@@ -38,9 +38,12 @@ from fred_core.documents.document_structures import (
     ProcessingStatus,
     SourceInfo,
     SourceType,
+    Tagging,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 from fred_core.models.base import Base
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
@@ -48,11 +51,16 @@ async def _make_sqlite_engine(tmp_path: Path) -> AsyncEngine:
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'update.db'}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            insert(TagRow),
+            {"tag_id": "tag-a", "owner_id": "team-a", "type": "document"},
+        )
     return engine
 
 
 def _doc(uid: str, title: str = "original") -> DocumentMetadata:
     return DocumentMetadata(
+        tags=Tagging(tag_ids=["tag-a"]),
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=title),
         source=SourceInfo(
             source_type=SourceType.PUSH, source_tag="uploads", pull_location=None
@@ -101,3 +109,18 @@ async def test_save_metadata_still_creates(tmp_path):
     await store.save_metadata(_doc("doc-new"))
 
     assert await store.get_metadata_by_uid("doc-new") is not None
+
+
+@pytest.mark.asyncio
+async def test_worker_progress_does_not_rewrite_folder_or_kind(tmp_path):
+    store = PostgresDocumentMetadataStore(await _make_sqlite_engine(tmp_path))
+    await store.save_metadata(_doc("doc-1"))
+    progress = _doc("doc-1", title="processed")
+    progress.tags.tag_ids = []
+    progress.kind = "attachment"
+    assert await store.update_metadata(progress) is True
+    stored = await store.get_metadata_by_uid("doc-1")
+    assert stored is not None
+    assert stored.kind == "corpus"
+    assert stored.tags.tag_ids == ["tag-a"]
+    assert stored.identity.title == "processed"

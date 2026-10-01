@@ -16,9 +16,7 @@
 `PostgresDocumentMetadataStore.count_by_team` — a document's team is indirect
 (via a tag's `owner_id`, not a column on `metadata`), so this exercises the
 `tag` <-> `metadata` join the `documents_total` KPI preset now relies on to be
-`team_scopable` (NOTES-OBSERV-02-FOLLOWUPS.md #1). Runs against SQLite, which
-takes the Python-fallback branch (no array `&&` operator) — the same branch
-every other array-based method in this store already falls back to.
+`team_scopable` (NOTES-OBSERV-02-FOLLOWUPS.md #1). Runs against SQLite using the same relational membership join as PostgreSQL.
 """
 
 from __future__ import annotations
@@ -82,19 +80,11 @@ async def test_count_by_team_counts_documents_via_tag_ownership(tmp_path: Path) 
     assert await store.count_by_team("team-2") == 1
 
 
-@pytest.mark.asyncio
-async def test_count_by_team_counts_a_document_once_even_with_multiple_team_tags(
-    tmp_path: Path,
-) -> None:
-    engine = await _make_sqlite_engine(tmp_path, "count_by_team_multi.sqlite3")
-    sessions = make_session_factory(engine)
-    store = PostgresDocumentMetadataStore(engine)
-    await _add_tag(sessions, "tag-a", "team-1")
-    await _add_tag(sessions, "tag-b", "team-1")
+def test_document_rejects_multiple_folders() -> None:
+    from pydantic import ValidationError
 
-    await store.save_metadata(_doc("doc-1", ["tag-a", "tag-b"]))
-
-    assert await store.count_by_team("team-1") == 1
+    with pytest.raises(ValidationError):
+        _doc("doc-1", ["tag-a", "tag-b"])
 
 
 @pytest.mark.asyncio

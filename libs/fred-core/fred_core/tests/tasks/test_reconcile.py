@@ -361,7 +361,7 @@ def test_build_failed_event_matches_run_kind_exhaustively():
     event on the client)."""
     service = TaskService(store=None, bus=None, control=None)  # type: ignore[arg-type]
 
-    for kind in ("ingestion", "migration", "evaluation", "erasure"):
+    for kind in ("ingestion", "deletion", "migration", "evaluation", "erasure"):
         run = TaskRunRow(
             task_id=f"t-{kind}",
             kind=kind,

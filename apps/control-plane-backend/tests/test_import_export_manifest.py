@@ -31,6 +31,7 @@ import json
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from control_plane_backend.import_export.bundle import (
@@ -40,12 +41,9 @@ from control_plane_backend.import_export.bundle import (
 from control_plane_backend.import_export.exporter import run_export
 from control_plane_backend.import_export.importer import MigrationReport, run_import
 from control_plane_backend.models.base import Base as CPBase
-from control_plane_backend.models.task_models import TASK_TABLES
 from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.models import Base as CoreBase
-from fred_core.scheduler import SchedulerBackend
 from fred_core.sql.async_session import make_session_factory
-from fred_core.tasks.models import StartMigrationRequest
 from fred_core.tasks.service import TaskService
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -139,27 +137,35 @@ async def _seed_metadata(engine: AsyncEngine, row: DocumentMetadataRow) -> None:
     session_factory = make_session_factory(engine)
     async with session_factory() as session:
         async with session.begin():
+            if row.folder_id:
+                from fred_core.documents.tag_models import TagRow
+
+                session.add(
+                    TagRow(tag_id=row.folder_id, owner_id="team-a", type="document")
+                )
+                await session.flush()
             session.add(row)
 
 
 async def _import(bundle_bytes: bytes, engine: AsyncEngine) -> MigrationReport:
-    task_service = TaskService.build(
-        engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY
-    )
-    start = await task_service.start(StartMigrationRequest(), created_by="tester")
+    # This test verifies snapshot storage, not task event persistence. SQLite
+    # cannot perform the independent progress writes during the import transaction.
+    task_service = AsyncMock(spec=TaskService)
     bundle = open_bundle(bundle_bytes)
     return await run_import(
         bundle=bundle,
         import_id="imp-1",
-        task_id=start.task_id,
+        task_id="import-test",
         task_service=task_service,
         engine=engine,
     )
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["corpus", "attachment"])
 async def test_export_populates_content_keys_and_import_resets_transported_stages(
     tmp_path: Path,
+    kind: str,
 ) -> None:
     source = await _make_engine(tmp_path, "source.sqlite3")
     dest = await _make_engine(tmp_path, "dest.sqlite3")
@@ -170,7 +176,8 @@ async def test_export_populates_content_keys_and_import_resets_transported_stage
                 document_uid="doc-1",
                 source_tag="uploads",
                 date_added_to_kb=datetime(2026, 1, 1, tzinfo=timezone.utc),
-                tag_ids=[],
+                kind=kind,
+                folder_id="folder-a" if kind == "corpus" else None,
                 doc={
                     "processing": {
                         "stages": {"preview": "done", "vector": "done", "sql": "done"},
@@ -200,6 +207,8 @@ async def test_export_populates_content_keys_and_import_resets_transported_stage
                 )
             ).scalar_one()
 
+        assert imported.kind == kind
+        assert imported.folder_id == ("folder-a" if kind == "corpus" else None)
         assert imported.doc is not None
         stages = imported.doc["processing"]["stages"]
         assert stages["vector"] == "not_started"

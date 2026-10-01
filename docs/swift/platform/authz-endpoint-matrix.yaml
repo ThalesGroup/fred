@@ -968,11 +968,6 @@ operations:
     required_permission: pending_review
   - service: knowledge-flow
     method: POST
-    path: /knowledge-flow/v1/documents/metadata/search
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
     path: /knowledge-flow/v1/documents/metadata/tag-sizes
     review_status: pending_review
     required_permission: pending_review
@@ -1172,11 +1167,6 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/mcp/reports/write
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/os/allocation/explain
     review_status: pending_review
@@ -1362,36 +1352,6 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/resources
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/resources
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/resources/schema
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: DELETE
-    path: /knowledge-flow/v1/resources/{resource_id}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/resources/{resource_id}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: PUT
-    path: /knowledge-flow/v1/resources/{resource_id}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/schemas/echo
     review_status: pending_review
@@ -1444,21 +1404,6 @@ operations:
   - service: knowledge-flow
     method: PUT
     path: /knowledge-flow/v1/tags/{tag_id}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/tags/{tag_id}/members
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/tags/{tag_id}/share
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: DELETE
-    path: /knowledge-flow/v1/tags/{tag_id}/share/{target_id}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

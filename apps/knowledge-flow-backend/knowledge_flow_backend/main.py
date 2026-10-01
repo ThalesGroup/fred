@@ -56,7 +56,6 @@ from knowledge_flow_backend.core.monitoring.monitoring_controller import (
     MonitoringController,
 )
 from knowledge_flow_backend.features.audio.audio_transcription_controller import AudioTranscriptionController
-from knowledge_flow_backend.features.content import report_controller
 from knowledge_flow_backend.features.content.content_controller import ContentController
 from knowledge_flow_backend.features.corpus_manager.corpus_manager_controller import CorpusManagerController
 from knowledge_flow_backend.features.corpus_tree.controller import CorpusTreeController
@@ -71,7 +70,6 @@ from knowledge_flow_backend.features.kpi.prometheus_controller import (
 )
 from knowledge_flow_backend.features.library_sync.controller import LibrarySyncController
 from knowledge_flow_backend.features.metadata.controller import MetadataController
-from knowledge_flow_backend.features.resources.controller import ResourceController
 from knowledge_flow_backend.features.scheduler.scheduler_controller import SchedulerController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.tabular.controller import TabularController
@@ -216,19 +214,7 @@ def create_app() -> FastAPI:
         if _task_service is not None:
             from fred_core.tasks.service import run_reconcile_sweeper
 
-            from knowledge_flow_backend.features.metadata.service import MetadataService
-            from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
-
-            retry_submissions = None
-            if configuration.scheduler.enabled:
-                ingestion_scheduler = IngestionTaskService(
-                    scheduler_config=configuration.scheduler,
-                    processing_config=configuration.processing,
-                    metadata_service=MetadataService(),
-                    max_parallelism=configuration.scheduler.temporal.ingestion_workflow_parallelism,
-                )
-                retry_submissions = ingestion_scheduler.delivery().retry_pending
-            task_sweeper_task = asyncio.create_task(run_reconcile_sweeper(_task_service, before_reconcile=retry_submissions))
+            task_sweeper_task = asyncio.create_task(run_reconcile_sweeper(_task_service))
 
         try:
             yield
@@ -309,7 +295,6 @@ def create_app() -> FastAPI:
     CorpusTreeController(router)
     SummarizeController(app, router)
     ExtractController(app, router)
-    ResourceController(router)
     McpFilesystemController(router)
     CorpusManagerController(router)
 
@@ -331,12 +316,6 @@ def create_app() -> FastAPI:
         logger.info("%s PrometheusOpsController registered (mcp.prometheus_ops_enabled=true)", LOG_PREFIX)
     else:
         logger.info("%s PrometheusOpsController disabled via configuration.mcp.prometheus_ops_enabled=false", LOG_PREFIX)
-
-    if configuration.mcp.reports_enabled:
-        logger.info("%s ReportsController registered (mcp.reports_enabled=true)", LOG_PREFIX)
-        router.include_router(report_controller.router)
-    else:
-        logger.warning("%s ReportsController disabled via configuration.mcp.reports_enabled=false", LOG_PREFIX)
 
     if configuration.scheduler.enabled:
         logger.info("%s Activating ingestion scheduler controller.", LOG_PREFIX)
@@ -386,17 +365,6 @@ def create_app() -> FastAPI:
     # describes data the model receives milliseconds later anyway. If a response
     # field genuinely needs explaining, put the sentence in the route's docstring —
     # that is the part that reaches the model.
-    mcp_reports = _without_response_docs(
-        DelegatedFastApiMCP(
-            app,
-            name="Knowledge Flow Reports MCP",
-            description="Create Markdown-first reports and get downloadable artifacts.",
-            include_tags=["Reports"],  # ← export only these routes as tools
-            auth_config=_mcp_auth(),
-        )
-    )
-    mcp_reports.mount_http(mount_path=f"{mcp_prefix}/mcp-reports")
-
     # Optional MCP servers: they export only the tagged routes above.
     if configuration.mcp.opensearch_ops_enabled:
         mcp_opensearch_ops = _without_response_docs(
@@ -475,39 +443,6 @@ def create_app() -> FastAPI:
         mcp_text.mount_http(mount_path=f"{mcp_prefix}/mcp-text")
     else:
         logger.info("%s MCP Text disabled via configuration.mcp.text_enabled=false", LOG_PREFIX)
-
-    if configuration.mcp.templates_enabled:
-        mcp_template = _without_response_docs(
-            DelegatedFastApiMCP(
-                app,
-                name="Knowledge Flow Text MCP",
-                description="MCP server for Knowledge Flow Text",
-                include_tags=["Templates", "Prompts"],
-                auth_config=_mcp_auth(),
-            )
-        )
-        mcp_template.mount_http(mount_path=f"{mcp_prefix}/mcp-template")
-    else:
-        logger.info("%s MCP Templates disabled via configuration.mcp.templates_enabled=false", LOG_PREFIX)
-
-    if configuration.mcp.resources_enabled:
-        mcp_resources = _without_response_docs(
-            DelegatedFastApiMCP(
-                app,
-                name="Knowledge Flow Resources MCP",
-                description=(
-                    "Access to reusable resources for agents. "
-                    "Provides prompts, templates, and other content assets that can be used "
-                    "to customize agent behavior or generate well-structured custom reports. "
-                    "Use this MCP to browse, retrieve, and apply predefined resources when composing answers or building workflows."
-                ),
-                include_tags=["Resources", "Tags"],
-                auth_config=_mcp_auth(),
-            )
-        )
-        mcp_resources.mount_http(mount_path=f"{mcp_prefix}/mcp-resources")
-    else:
-        logger.info("%s MCP Resources disabled via configuration.mcp.resources_enabled=false", LOG_PREFIX)
 
     if configuration.mcp.filesystem_enabled:
         mcp_fs = _without_response_docs(

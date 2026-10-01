@@ -15,7 +15,6 @@
 import { useCallback, useState } from "react";
 import {
   useUpdateTagMutation,
-  useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation,
   TagWithItemsId,
   DocumentMetadata,
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation,
@@ -25,7 +24,7 @@ import {
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useTranslation } from "react-i18next";
 import { downloadFile, fetchAuthedBlob } from "../../../utils/downloadUtils";
-import { collectDescendantTags, rewriteTagUnderFolder, type TagNode } from "../../../shared/utils/tagTree";
+import { type TagNode } from "../../../shared/utils/tagTree";
 
 type DocumentRefreshers = {
   refetchTags?: () => Promise<any>;
@@ -46,13 +45,12 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation();
   const [renameDocumentMutation] = useRenameDocumentKnowledgeFlowV1DocumentMetadataDocumentUidNamePutMutation();
   const [mutateLabelsMutation] = useMutateDocumentLabelsMutation();
-  const [fetchAllDocuments] = useSearchDocumentMetadataKnowledgeFlowV1DocumentsMetadataSearchPostMutation();
   const [previewTarget, setPreviewTarget] = useState<DocumentPreviewTarget | null>(null);
   const refresh = useCallback(
     async (tagId?: string) => {
-      await Promise.all([refetchTags?.(), refetchDocs ? refetchDocs(tagId) : fetchAllDocuments({ filters: {} })]);
+      await Promise.all([refetchTags?.(), refetchDocs?.(tagId)]);
     },
-    [refetchTags, refetchDocs, fetchAllDocuments],
+    [refetchTags, refetchDocs],
   );
 
   // Returns the new retrievable value on success (undefined on failure) so callers
@@ -211,30 +209,16 @@ export function useDocumentCommands({ refetchTags, refetchDocs }: DocumentRefres
     },
     [fetchBlob, showError],
   );
-  // Corpus folder rename (RFC §13.8) — reuses the existing tag-update path
-  // (`PUT /tags/{tag_id}`), no new endpoint. A folder is a path PREFIX, not a
-  // single tag: renaming it must rewrite the leading segment of EVERY tag
-  // at-or-under the node (the tag ending there AND every descendant), else the
-  // descendants keep the old path and re-materialize the old folder — the rename
-  // then appears to do nothing. `refresh` re-derives the tag tree afterward.
+  // The backend owns the subtree inventory and renames it atomically.
   const renameFolder = useCallback(
     async (node: TagNode, newName: string) => {
-      const oldFull = node.full;
-      const cut = oldFull.lastIndexOf("/");
-      const parentPath = cut >= 0 ? oldFull.slice(0, cut) : "";
-      const newFull = parentPath ? `${parentPath}/${newName}` : newName;
-      const tags = collectDescendantTags(node);
       try {
-        // Independent per-id updates (each carries its final name/path), so order
-        // does not matter; a mid-way failure leaves a partial rename the user can
-        // retry (no folder-rename transaction exists server-side).
-        for (const tag of tags) {
-          const { name, path } = rewriteTagUnderFolder(tag, oldFull, newFull);
-          await updateTag({
-            tagId: tag.id,
-            tagUpdate: { name, path, description: tag.description, type: tag.type, item_ids: tag.item_ids },
-          }).unwrap();
-        }
+        if (node.tagsHere.length !== 1) throw new Error("Folder identity is missing or ambiguous. Refresh the corpus.");
+        const tag = node.tagsHere[0];
+        await updateTag({
+          tagId: tag.id,
+          tagUpdate: { name: newName, description: tag.description, type: tag.type },
+        }).unwrap();
         await refresh();
       } catch (e: any) {
         showError?.({

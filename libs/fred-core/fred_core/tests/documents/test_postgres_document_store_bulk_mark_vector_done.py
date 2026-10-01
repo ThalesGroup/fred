@@ -42,10 +42,13 @@ from fred_core.documents.document_structures import (
     ProcessingStatus,
     SourceInfo,
     SourceType,
+    Tagging,
 )
 from fred_core.documents.postgres_document_store import PostgresDocumentMetadataStore
+from fred_core.documents.tag_models import TagRow
 from fred_core.models.base import Base
 from fred_core.sql.async_session import make_session_factory
+from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 
@@ -54,11 +57,16 @@ async def _make_sqlite_engine(tmp_path: Path, filename: str) -> AsyncEngine:
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            insert(TagRow),
+            {"tag_id": "tag-a", "owner_id": "team-a", "type": "document"},
+        )
     return engine
 
 
 def _doc(uid: str, source_tag: str = "fred") -> DocumentMetadata:
     return DocumentMetadata(
+        tags=Tagging(tag_ids=["tag-a"]),
         identity=Identity(document_name=f"{uid}.pdf", document_uid=uid, title=uid),
         source=SourceInfo(
             source_type=SourceType.PUSH, source_tag=source_tag, pull_location=None
@@ -80,7 +88,7 @@ async def _insert_raw_row(
                 DocumentMetadataRow(
                     document_uid=document_uid,
                     source_tag=source_tag,
-                    tag_ids=[],
+                    folder_id="tag-a",
                     doc=doc,
                 )
             )
@@ -121,7 +129,7 @@ async def test_bulk_mark_vector_done_touches_only_the_two_allowed_json_paths(
     md.processing.stages[ProcessingStage.RAW_AVAILABLE] = ProcessingStatus.DONE
     md.processing.stages[ProcessingStage.PREVIEW_READY] = ProcessingStatus.IN_PROGRESS
     md.processing.errors[ProcessingStage.SQL_INDEXED] = "unrelated tabular failure"
-    md.tags.tag_ids = ["tag-a", "tag-b"]
+    md.tags.tag_ids = ["tag-a"]
     before = await store.save_metadata(md) or md
 
     await store.bulk_mark_vector_done("fred", ["doc-1"])
@@ -130,7 +138,7 @@ async def test_bulk_mark_vector_done_touches_only_the_two_allowed_json_paths(
     assert after is not None
     assert after.identity == before.identity
     assert after.source == before.source
-    assert after.tags.tag_ids == ["tag-a", "tag-b"]
+    assert after.tags.tag_ids == ["tag-a"]
     assert (
         after.processing.stages[ProcessingStage.RAW_AVAILABLE] == ProcessingStatus.DONE
     )

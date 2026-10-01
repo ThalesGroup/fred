@@ -85,7 +85,7 @@ class TemporalScheduler(BaseScheduler):
                 id=handle.workflow_id,
                 task_queue=self._scheduler_config.temporal.task_queue,
                 id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
-                rpc_timeout=_rpc_timeout(min(self._scheduler_config.temporal.rpc_timeout_seconds or 10, 10)),
+                rpc_timeout=_rpc_timeout(self._scheduler_config.temporal.rpc_timeout_seconds),
             )
         except WorkflowAlreadyStartedError:
             # A delivery retry may arrive after the original execution completed.

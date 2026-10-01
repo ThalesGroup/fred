@@ -14,25 +14,15 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal, Optional
+from typing import Optional
 
-from fred_core import RelationType, Resource, TagPermission
+from fred_core import TagPermission
 from fred_core.common import BaseModelWithId
 from pydantic import BaseModel, Field, field_validator
-
-from knowledge_flow_backend.features.resources.structures import ResourceKind
-from knowledge_flow_backend.features.users.users_structures import UserSummary
 
 
 class TagType(str, Enum):
     DOCUMENT = "document"
-    PROMPT = ResourceKind.PROMPT.value
-    TEMPLATE = ResourceKind.TEMPLATE.value
-    CHAT_CONTEXT = ResourceKind.CHAT_CONTEXT.value
-
-    def to_resource_kind(self):
-        """Convert TagType to ResourceKind. Can raise a ValueError if TagType is not a valid ResourceKind"""
-        return ResourceKind(self.value)
 
 
 # Ceiling on the depth of a tag's FULL path (parent path + its own name).
@@ -40,13 +30,8 @@ class TagType(str, Enum):
 # creates one tag per subdirectory, so an unbounded drop could nest tags
 # arbitrarily deep. The frontend pre-filters against the same limit.
 #
-# 15 is bounded by ReBAC, not taste: every nested tag carries a PARENT tuple
-# and the OpenFGA schema inherits permissions through that chain (`read from
-# parent`, schema.fga), so a check on a depth-N tag resolves up to N hops —
-# against OpenFGA's default 25-hop resolution limit, which the chain's other
-# branches (owner/team_member) also draw from. Raising this materially means
-# retuning OpenFGA (OPENFGA_RESOLVE_NODE_LIMIT) and re-checking the btree
-# index on tag.path (~2.7KB max indexed value).
+# Preserve the existing UI/API depth limit. Corpus authorization now checks
+# the owning team or explicit source-root grant, not a recursive FGA parent chain.
 MAX_TAG_PATH_DEPTH = 15
 
 
@@ -114,15 +99,15 @@ class TagCreate(BaseModel):
 
 class TagUpdate(BaseModel):
     name: str
-    path: Optional[str] = None
+    path: Optional[str] = Field(default=None, description="Omit to retain the stored parent path when renaming.")
     description: Optional[str] = None
     type: TagType
-    item_ids: list[str] = []
+    item_ids: list[str] | None = None
 
     @field_validator("item_ids")
     @classmethod
     def _no_none_ids(cls, v):
-        return [i for i in v if i]
+        return [i for i in v if i] if v is not None else None
 
     @field_validator("name")
     @classmethod
@@ -161,6 +146,7 @@ class Tag(BaseModelWithId):
     # nested resolves its own state from that root, so the two cannot disagree.
     # Never parsed here: presence is the whole question.
     synchronized_by: Optional[str] = None
+    deletion_task_id: str | None = Field(default=None, exclude=True)
 
     @property
     def is_synchronized(self) -> bool:
@@ -189,40 +175,6 @@ class TagWithPermissions(TagWithItemsId):
     @classmethod
     def from_tag_with_items(cls, tag: TagWithItemsId, permissions: list[TagPermission]) -> "TagWithPermissions":
         return cls(**tag.model_dump(), permissions=permissions)
-
-
-# Subset of RelationType for user-tag relations
-class UserTagRelation(str, Enum):
-    OWNER = RelationType.OWNER.value
-    EDITOR = RelationType.EDITOR.value
-    VIEWER = RelationType.VIEWER.value
-
-    def to_relation(self) -> RelationType:
-        return RelationType(self.value)
-
-
-# Subset of valid Resource you can share a tag with
-class ShareTargetResource(str, Enum):
-    USER = Resource.USER.value
-
-    def to_resource(self) -> Resource:
-        return Resource(self.value)
-
-
-class TagShareRequest(BaseModel):
-    target_id: str
-    target_type: ShareTargetResource
-    relation: UserTagRelation
-
-
-class TagMemberUser(BaseModel):
-    type: Literal["user"] = "user"
-    relation: UserTagRelation
-    user: UserSummary
-
-
-class TagMembersResponse(BaseModel):
-    users: list[TagMemberUser] = Field(default_factory=list)
 
 
 class ResourceTypeStatsEntry(BaseModel):

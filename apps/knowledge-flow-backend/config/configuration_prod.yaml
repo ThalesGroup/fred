@@ -450,8 +450,6 @@ storage:
   #   secure: false
   #   verify: true
 
-  resource_store:
-    type: "postgres"
   tag_store:
     type: "postgres"
   metadata_store:
@@ -496,11 +494,8 @@ storage:
 #     verify_ssl: false
 #     timeout_seconds: 15.0
 mcp:
-  reports_enabled: true
   tabular_enabled: true
   text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
   opensearch_ops_enabled: true
   prometheus_ops_enabled: false
   filesystem_enabled: true

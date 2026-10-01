@@ -109,7 +109,7 @@ async def create_pull_file_metadata(file: FileToProcess) -> DocumentMetadata:
         metadata.source.pull_location = file.external_path
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] metadata={metadata}")
 
-        await ingestion_service.save_metadata(file.processed_by, metadata=metadata)
+        await ingestion_service.save_metadata_trusted(file.processed_by, metadata=metadata)
 
         logger.info(f"[SCHEDULER][ACTIVITY][CREATE_PULL_FILE_METADATA] Metadata extracted and saved uid={metadata.document_uid}")
         emit_temporal_activity_result_kpis(
@@ -143,7 +143,7 @@ async def pull_input_process(
 
     try:
         metadata.set_stage_status(ProcessingStage.PREVIEW_READY, ProcessingStatus.IN_PROGRESS)
-        raise_if_document_deleted(await ingestion_service.persist_progress(user, metadata=metadata), metadata.document_uid)
+        raise_if_document_deleted(await ingestion_service.persist_progress_trusted(user, metadata=metadata), metadata.document_uid)
 
         with tempfile.TemporaryDirectory(prefix=f"doc-{metadata.document_uid}-") as tmpdir:
             working_dir = pathlib.Path(tmpdir)
@@ -199,7 +199,7 @@ async def pull_input_process(
 
         if not ingestion_service.context.is_tabular_file(metadata.document_name):
             metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
-        await ingestion_service.persist_progress(user, metadata=metadata)
+        await ingestion_service.persist_progress_trusted(user, metadata=metadata)
         logger.info("[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] completed uid=%s", metadata.document_uid)
         emit_temporal_activity_result_kpis(
             phase="input",
@@ -212,7 +212,7 @@ async def pull_input_process(
         error_message = f"{type(exc).__name__}: {str(exc).strip() or 'No error message'}"
         metadata.mark_stage_error(ProcessingStage.PREVIEW_READY, error_message)
         try:
-            await ingestion_service.persist_progress(user, metadata=metadata)
+            await ingestion_service.persist_progress_trusted(user, metadata=metadata)
         except Exception:
             logger.exception(
                 "[SCHEDULER][ACTIVITY][PULL_INPUT_PROCESS] failed to persist error state uid=%s",

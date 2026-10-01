@@ -27,16 +27,11 @@ from fred_core import (
 )
 
 from knowledge_flow_backend.application_context import ApplicationContext
-from knowledge_flow_backend.features.content.content_service import ContentService
-from knowledge_flow_backend.features.filesystem.corpus_virtual_filesystem import (
-    CorpusVirtualFilesystem,
-)
 from knowledge_flow_backend.features.filesystem.provenance import SHARED_COPY_SUBDIR, derive_provenance
 from knowledge_flow_backend.features.filesystem.scoped_area_filesystem import (
     ScopedAreaFilesystem,
 )
 from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
-    AREA_CORPUS,
     AREA_TEAMS,
     SUBAREA_SHARED,
     FileReadPage,
@@ -51,8 +46,6 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
 from knowledge_flow_backend.features.filesystem.workspace_filesystem import (
     WorkspaceFilesystem,
 )
-from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tag.tag_service import TagService
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +125,6 @@ class McpFilesystemService:
 
     Areas (unified layout — FILES-04):
     - `/teams/{team_id}/...` : team box — `users/{uid}`, `shared`, `agents/{id}/users/{uid}`
-    - `/corpus/...`          : read-only corpus virtual tree
 
     There is no implicit/default area and no legacy alias: an unknown top-level
     segment is rejected by `resolve_virtual_path`.
@@ -167,34 +159,6 @@ class McpFilesystemService:
             default_max_chars=mcp_config.filesystem_read_default_max_chars,
             absolute_max_chars=mcp_config.filesystem_read_absolute_max_chars,
         )
-        self.corpus_area = CorpusVirtualFilesystem(
-            metadata_service=MetadataService(),
-            content_service=ContentService(),
-            tag_service=TagService(),
-        )
-
-    async def _root_entries(
-        self,
-        user: KeycloakUser,
-    ) -> list[FilesystemResourceInfoResult]:
-        """
-        Return the visible top-level directories of the virtual filesystem.
-
-        Why this exists:
-        - the virtual root should expose only areas that make sense for the current user
-        - one helper keeps that visibility policy centralized across callers
-
-        How to use:
-        - call when a resolved path belongs to `VirtualArea.ROOT`
-
-        Example:
-        - `await _root_entries(user)`
-        """
-
-        entries = [dir_entry(AREA_TEAMS)]
-        if await self.corpus_area.list_area(user, ()):
-            entries.append(dir_entry(AREA_CORPUS))
-        return entries
 
     async def _walk_visible_tree(
         self,
@@ -212,7 +176,7 @@ class McpFilesystemService:
         - pass any visible path accepted by the filesystem service
 
         Example:
-        - `await _walk_visible_tree(user, "/corpus")`
+        - `await _walk_visible_tree(user, "/teams/acme/shared")`
         """
 
         current_path = absolute_virtual_path(path)
@@ -244,10 +208,10 @@ class McpFilesystemService:
         - `ls(...)` is the standard mental model for folder inspection
 
         How to use:
-        - pass any visible path such as `/workspace`, `/corpus/CIR`, or `/team/<id>`
+        - pass any visible path such as `/workspace`, `/teams/acme/shared`, or `/team/<id>`
 
         Example:
-        - `await ls(user, "/corpus")`
+        - `await ls(user, "/teams/acme/shared")`
         """
 
         return await self.list(user, normalize_virtual_path(path))
@@ -306,7 +270,7 @@ class McpFilesystemService:
         - continue with `next_offset` while `has_more` is true
 
         Example:
-        - `await read_file_page(user, "/corpus/documents/doc-1/preview.md", offset=0, limit=40, max_chars=20000)`
+        - `await read_file_page(user, "/teams/acme/shared/report.md", offset=0, limit=40, max_chars=20000)`
         """
 
         effective_limit, effective_max_chars = self.read_bounds.resolve(
@@ -414,15 +378,13 @@ class McpFilesystemService:
         - pass a visible path or an empty string for the filesystem root
 
         Example:
-        - `await list(user, "corpus/CIR")`
+        - `await list(user, "teams/acme/shared")`
         """
 
         try:
             resolved = resolve_virtual_path(prefix)
             if resolved.area == VirtualArea.ROOT:
-                entries = await self._root_entries(user)
-            elif resolved.area == VirtualArea.CORPUS:
-                entries = await self.corpus_area.list_area(user, resolved.segments)
+                entries = [dir_entry(AREA_TEAMS)]
             else:
                 entries = await self.scoped_areas.list_area(user, resolved.segments)
             # Entries carry relative child names; stamp provenance from each child's
@@ -446,7 +408,7 @@ class McpFilesystemService:
         """Attach server-derived provenance to one file entry, in place (FILES-04 G4).
 
         Only files are stamped — provenance badges are file-level, so navigation
-        directories (including the corpus root) stay unbadged.
+        directories stay unbadged.
         """
         if not entry.is_file():
             return
@@ -481,10 +443,7 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 return dir_entry("/")
-            if resolved.area == VirtualArea.CORPUS:
-                entry = await self.corpus_area.stat_area(user, resolved.segments)
-            else:
-                entry = await self.scoped_areas.stat_area(user, resolved.segments)
+            entry = await self.scoped_areas.stat_area(user, resolved.segments)
             # Stat targets one known path: derive provenance from it directly.
             self._stamp_provenance(absolute_virtual_path(path), entry)
             return entry
@@ -499,23 +458,19 @@ class McpFilesystemService:
         Read one visible virtual file as text.
 
         Why this exists:
-        - callers should not need to know whether a file comes from scoped storage
-          or from the synthesized corpus area
-        - routing here keeps file reads uniform across the visible filesystem
+        - routing here keeps file reads uniform across team workspaces
 
         How to use:
         - pass any visible file path
 
         Example:
-        - `await cat(user, "/corpus/CIR/offer.docx/preview.md")`
+        - `await cat(user, "/teams/acme/shared/report.md")`
         """
 
         try:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise FileNotFoundError("Cannot read root as file")
-            if resolved.area == VirtualArea.CORPUS:
-                return await self.corpus_area.cat_area(user, resolved.segments)
             return await self.scoped_areas.cat_area(user, resolved.segments)
         except AuthorizationError:
             raise
@@ -543,8 +498,6 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise FileNotFoundError("Cannot read filesystem root as a file")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus binaries are served by the content API, not /fs")
             return await self.scoped_areas.read_bytes_area(user, resolved.segments)
         except AuthorizationError:
             raise
@@ -564,8 +517,6 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise PermissionError("Cannot write at filesystem root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.write_bytes_area(user, resolved.segments, data)
         except AuthorizationError:
             raise
@@ -613,7 +564,6 @@ class McpFilesystemService:
 
         Why this exists:
         - writable areas share one public filesystem contract
-        - corpus stays read-only even though it is part of the same visible tree
 
         How to use:
         - pass a visible writable path plus the text content to store
@@ -626,8 +576,6 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise PermissionError("Cannot write at filesystem root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.write_area(user, resolved.segments, data)
         except AuthorizationError:
             raise
@@ -641,7 +589,6 @@ class McpFilesystemService:
 
         Why this exists:
         - writable areas share one public filesystem contract
-        - corpus stays read-only even though it is part of the same visible tree
 
         How to use:
         - pass one visible writable path
@@ -654,8 +601,6 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise PermissionError("Cannot delete root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.delete_area(user, resolved.segments)
         except AuthorizationError:
             raise
@@ -676,8 +621,8 @@ class McpFilesystemService:
 
         try:
             resolved = resolve_virtual_path(path)
-            if resolved.area in (VirtualArea.ROOT, VirtualArea.CORPUS):
-                raise PermissionError("Use GET /tags/stats for corpus usage stats")
+            if resolved.area == VirtualArea.ROOT:
+                raise PermissionError("Select a team workspace for filesystem usage stats")
             entries = await self.scoped_areas.list_recursive_files_area(user, resolved.segments)
             totals: dict[FileTypeBucket, list[int]] = {}
             for entry in entries:
@@ -698,7 +643,6 @@ class McpFilesystemService:
 
         Why this exists:
         - writable areas share one public rename contract
-        - corpus stays read-only even though it is part of the same visible tree
 
         How to use:
         - pass one visible writable path plus the new leaf name (no slashes)
@@ -711,8 +655,6 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise PermissionError("Cannot rename root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
             return await self.scoped_areas.rename_area(user, resolved.segments, new_name)
         except AuthorizationError:
             raise
@@ -726,31 +668,16 @@ class McpFilesystemService:
 
         Why this exists:
         - agents need one search entrypoint that matches the visible filesystem layout
-        - corpus and writable areas use different backends but should return the same path shape
 
         How to use:
         - pass a regex pattern plus an optional visible path prefix
 
         Example:
-        - `await grep(user, "invoice", "/corpus/CIR")`
+        - `await grep(user, "invoice", "/teams/acme/shared")`
         """
 
         try:
             resolved = resolve_virtual_path(prefix)
-            if resolved.area == VirtualArea.ROOT:
-                matches: list[str] = []
-                matches.extend(await self.scoped_areas.grep_area(user, pattern, ()))
-                matches.extend(f"/{path.lstrip('/')}" for path in await self.corpus_area.grep_area(user, pattern, ()))
-                return matches
-            if resolved.area == VirtualArea.CORPUS:
-                return [
-                    f"/{path.lstrip('/')}"
-                    for path in await self.corpus_area.grep_area(
-                        user,
-                        pattern,
-                        resolved.segments,
-                    )
-                ]
             return await self.scoped_areas.grep_area(
                 user,
                 pattern,
@@ -768,7 +695,6 @@ class McpFilesystemService:
 
         Why this exists:
         - writable areas share one public directory-creation contract
-        - corpus stays read-only even though it is part of the same visible tree
 
         How to use:
         - pass one visible writable directory path
@@ -781,8 +707,6 @@ class McpFilesystemService:
             resolved = resolve_virtual_path(path)
             if resolved.area == VirtualArea.ROOT:
                 raise PermissionError("Cannot create root")
-            if resolved.area == VirtualArea.CORPUS:
-                raise PermissionError("Corpus area is read-only")
             await self.scoped_areas.mkdir_area(user, resolved.segments)
         except AuthorizationError:
             raise

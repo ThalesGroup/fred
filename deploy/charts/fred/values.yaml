@@ -373,9 +373,6 @@ x-kf-storage: &kf-storage
     secure: true
     verify_certs: false
     username: admin
-  resource_store:
-    type: "duckdb"
-    duckdb_path: "/home/fred-user/.fred/knowledge-flow/resource.duckdb"
   log_store:
     type: "in_memory"
   tag_store:
@@ -399,11 +396,8 @@ x-kf-storage: &kf-storage
       max_rows: 1000
 
 x-kf-mcp: &kf-mcp
-  reports_enabled: true
   tabular_enabled: true
   text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
   filesystem_enabled: false
   opensearch_ops_enabled: false
   prometheus_ops_enabled: false

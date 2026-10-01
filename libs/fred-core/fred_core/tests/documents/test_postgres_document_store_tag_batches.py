@@ -16,9 +16,7 @@
 `document_uids_by_tags` / `metadata_in_tags` — the batched reads that let a
 folder listing resolve N libraries in one query instead of N.
 
-Runs against SQLite, which takes the Python-fallback branch (no array `&&`
-operator), like every other array-based method in this store. What is pinned
-here is therefore the contract both branches must satisfy, not the SQL.
+Runs against SQLite using the same folder-column queries as PostgreSQL.
 """
 
 from __future__ import annotations
@@ -59,7 +57,7 @@ def _doc(uid: str, tag_ids: list[str]) -> DocumentMetadata:
 
 async def _seed(store: PostgresDocumentMetadataStore) -> None:
     await store.save_metadata(_doc("d1", ["t1"]))
-    await store.save_metadata(_doc("d2", ["t1", "t2"]))
+    await store.save_metadata(_doc("d2", ["t2"]))
     await store.save_metadata(_doc("d3", ["t3"]))
 
 
@@ -70,7 +68,7 @@ async def test_uids_by_tags_groups_each_requested_tag(tmp_path: Path) -> None:
 
     result = await store.document_uids_by_tags(["t1", "t2"])
 
-    assert sorted(result["t1"]) == ["d1", "d2"]
+    assert sorted(result["t1"]) == ["d1"]
     assert result["t2"] == ["d2"]
     # A tag that was not asked for contributes nothing, even though d3 exists.
     assert "t3" not in result
@@ -88,7 +86,7 @@ async def test_uids_by_tags_reports_empty_tags_and_ignores_duplicates(
     result = await store.document_uids_by_tags(["t1", "t1", "empty"])
 
     assert result["empty"] == []
-    assert sorted(result["t1"]) == ["d1", "d2"]
+    assert sorted(result["t1"]) == ["d1"]
     assert await store.document_uids_by_tags([]) == {}
 
 
@@ -97,8 +95,8 @@ async def test_metadata_in_tags_returns_the_union_once_each(tmp_path: Path) -> N
     store = await _make_store(tmp_path)
     await _seed(store)
 
-    # d2 carries both requested tags — a corpus aggregate must not count it twice.
-    docs = await store.metadata_in_tags(["t1", "t2"])
+    # Repeated requested folders must not duplicate documents.
+    docs = await store.metadata_in_tags(["t1", "t2", "t1"])
 
     assert sorted(d.identity.document_uid for d in docs) == ["d1", "d2"]
     assert await store.metadata_in_tags([]) == []

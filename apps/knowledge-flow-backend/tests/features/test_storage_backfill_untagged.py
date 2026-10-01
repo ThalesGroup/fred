@@ -21,10 +21,8 @@ sentinel. That matters beyond the crash: the backfill is the documented remedy
 for drifted counters, so a deployment holding one untagged document had no way
 to run it.
 
-Untagged documents are now skipped rather than charged. They have no ReBAC parent
-and no deletable route, so charging them would create usage nothing can release —
-and the live accounting does not charge them either, so skipping keeps script and
-runtime in agreement.
+Conversation attachments have no corpus folder and do not consume corpus quotas.
+Canonical SQL folder owners determine every corpus document’s storage account.
 """
 
 import importlib.util
@@ -53,7 +51,7 @@ class _Row:
 
     def __init__(self, uid: str, tag_ids: list[str] | None, size: int):
         self.document_uid = uid
-        self.tag_ids = tag_ids
+        self.folder_id = tag_ids[0] if tag_ids else None
         self.doc = {"file": {"file_size_bytes": size}, "identity": {"author": "Jane Doe"}}
 
 
@@ -76,13 +74,6 @@ class _Session:
         return self._tags.get(key)
 
 
-class _Rebac:
-    enabled = False
-
-    async def lookup_subjects(self, *_a, **_k):
-        return []
-
-
 @pytest.mark.asyncio
 async def test_untagged_documents_are_skipped_instead_of_crashing() -> None:
     """The load-bearing case: an untagged row must not abort the run, and must
@@ -90,7 +81,7 @@ async def test_untagged_documents_are_skipped_instead_of_crashing() -> None:
     module = _load_backfill_module()
     session = _Session([_Row("doc-untagged", [], 4096)])
 
-    user_sizes, team_sizes = await module.calculate_ingested_documents_sizes(session, _Rebac())
+    user_sizes, team_sizes = await module.calculate_ingested_documents_sizes(session)
 
     assert user_sizes == {}
     assert team_sizes == {}
@@ -100,11 +91,8 @@ async def test_untagged_documents_are_skipped_instead_of_crashing() -> None:
 async def test_a_legacy_personal_owner_sentinel_refuses_to_run() -> None:
     """Second crash site, and it must not degrade into a silent wrong answer.
 
-    The runtime resolves `owner_id == "personal"` to the *acting* user and charges
-    them; this script has no acting user, so it cannot reproduce that. Because it
-    writes ABSOLUTE counters, quietly skipping such a tag would erase usage the
-    runtime already charged and manufacture free quota. It refuses instead, naming
-    the offending tags (#2149 review finding).
+    Both runtime and migration require canonical team owners. Because this script
+    writes absolute counters, missing ownership must abort without writing totals.
     """
     module = _load_backfill_module()
     session = _Session(
@@ -113,7 +101,7 @@ async def test_a_legacy_personal_owner_sentinel_refuses_to_run() -> None:
     )
 
     with pytest.raises(RuntimeError) as exc:
-        await module.calculate_ingested_documents_sizes(session, _Rebac())
+        await module.calculate_ingested_documents_sizes(session)
 
     assert "tag-legacy" in str(exc.value)
     assert "absolute" in str(exc.value).lower()
@@ -130,6 +118,6 @@ async def test_untagged_rows_do_not_stop_tagged_rows_from_being_counted() -> Non
         teams=["team-a"],
     )
 
-    _user_sizes, team_sizes = await module.calculate_ingested_documents_sizes(session, _Rebac())
+    _user_sizes, team_sizes = await module.calculate_ingested_documents_sizes(session)
 
     assert team_sizes.get("team-a") == 1024

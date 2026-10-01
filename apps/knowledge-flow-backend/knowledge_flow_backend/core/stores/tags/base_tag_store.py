@@ -49,12 +49,19 @@ class BaseTagStore(ABC):
         pass
 
     @abstractmethod
+    async def list_by_owner(self, owner_id: str, *, path_prefix: str | None = None, limit: int | None = None, offset: int = 0) -> list[Tag]:
+        """List one stored team's folders, applying scope before pagination."""
+
+    @abstractmethod
     async def get_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> Tag:
-        """
-        Retrieve a tag by its ID.
+        """Retrieve a tag by its ID.
         Raises:
             TagNotFoundError: If the tag does not exist.
         """
+
+    @abstractmethod
+    async def get_tags_by_ids(self, tag_ids: list[str]) -> list[Tag]:
+        """Fetch only the requested folder rows."""
 
     @abstractmethod
     async def get_by_owner_type_full_path(self, owner_id: str, tag_type: TagType, full_path: str, session: AsyncSession | None = None) -> Tag | None:
@@ -67,6 +74,14 @@ class BaseTagStore(ABC):
     @abstractmethod
     async def update_tag_by_id(self, tag_id: str, tag: Tag, session: AsyncSession | None = None) -> Tag:
         pass
+
+    async def rename_tag(self, tag_id: str, *, name: str, description: str | None) -> Tag:
+        """Rename one folder and its descendant paths in one transaction."""
+        raise NotImplementedError
+
+    async def touch_tag(self, tag_id: str) -> None:
+        """Update only the folder timestamp after a document write."""
+        raise NotImplementedError
 
     @abstractmethod
     async def delete_tag_by_id(self, tag_id: str, session: AsyncSession | None = None) -> None:

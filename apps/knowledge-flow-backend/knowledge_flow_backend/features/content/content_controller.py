@@ -425,7 +425,8 @@ class ContentController:
             range_header: Optional[str] = Header(None, alias="Range"),
         ):
             try:
-                file_meta = await self.service.get_file_metadata(user, document_uid)
+                metadata = await self.service.get_document_metadata(user, document_uid)
+                file_meta = await self.service.get_file_metadata_trusted(metadata)
                 total_size = file_meta.size
                 file_name = file_meta.file_name
                 content_type = file_meta.content_type or "application/octet-stream"
@@ -440,7 +441,7 @@ class ContentController:
 
                 # No Range → full file with Content-Length
                 if window is None:
-                    raw_stream = await self.service.get_full_stream(user, document_uid)
+                    raw_stream = await self.service.get_full_stream_trusted(metadata)
 
                     # FIX: Wrap the non-iterable raw_stream object in an iterable generator
                     def stream_generator_200():
@@ -461,7 +462,7 @@ class ContentController:
                 length = end - start + 1
 
                 # Ask store for a stream that *clamps* to exactly `length` bytes
-                raw_stream = await self.service.get_range_stream(user, document_uid, start=start, length=length)
+                raw_stream = await self.service.get_range_stream_trusted(metadata, start=start, length=length)
 
                 # FIX: Wrap the non-iterable raw_stream object in an iterable generator
                 def stream_generator_206():

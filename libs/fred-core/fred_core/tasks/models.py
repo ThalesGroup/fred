@@ -140,6 +140,13 @@ class IngestionTaskEvent(_TaskEventBase):
     detail: IngestionDetail | None = None
 
 
+class DeletionTaskEvent(_TaskEventBase):
+    """Corpus deletion uses the common progress and error fields."""
+
+    kind: Literal["deletion"] = "deletion"
+    detail: None = None
+
+
 class EvaluationTaskEvent(_TaskEventBase):
     kind: Literal["evaluation"] = "evaluation"
     detail: EvaluationDetail | None = None
@@ -234,6 +241,7 @@ class ErasureTaskEvent(_TaskEventBase):
 TaskEvent = Annotated[
     Union[
         IngestionTaskEvent,
+        DeletionTaskEvent,
         EvaluationTaskEvent,
         TaskLogEvent,
         MigrationTaskEvent,

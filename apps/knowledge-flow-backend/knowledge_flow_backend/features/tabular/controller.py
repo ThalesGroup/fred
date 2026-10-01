@@ -16,7 +16,7 @@ import logging
 from typing import Annotated, List
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fred_core import KeycloakUser, get_current_user
+from fred_core import AuthorizationError, KeycloakUser, get_current_user
 from fred_core.common import OwnerFilter
 
 from knowledge_flow_backend.features.tabular.execution import (
@@ -83,7 +83,7 @@ class TabularController:
               aliases are exposed.
 
             How to use:
-            - Call without parameters to retrieve every readable document.
+            - Call without parameters to read the personal corpus; pass team_id for a team corpus.
             - Follow up with `/tabular/documents/schemas` for a spreadsheet's
               catalog and every document's typed tables.
             """
@@ -114,6 +114,8 @@ class TabularController:
                     )
                     for document in documents
                 ]
+            except AuthorizationError as e:
+                raise HTTPException(status_code=403, detail=str(e))
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except Exception as e:
@@ -178,6 +180,8 @@ class TabularController:
                     owner_filter=owner_filter,
                     team_id=team_id,
                 )
+            except AuthorizationError as e:
+                raise HTTPException(status_code=403, detail=str(e))
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except PermissionError as e:
@@ -228,6 +232,8 @@ class TabularController:
 
             try:
                 return await self.service.query_read(user, request=request)
+            except AuthorizationError as e:
+                raise HTTPException(status_code=403, detail=str(e))
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except PermissionError as e:
@@ -283,6 +289,8 @@ class TabularController:
 
             try:
                 return await self.service.search_values(user, request=request)
+            except AuthorizationError as e:
+                raise HTTPException(status_code=403, detail=str(e))
             except MissingTeamIdError as e:
                 raise HTTPException(status_code=400, detail=str(e))
             except PermissionError as e:

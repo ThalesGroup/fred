@@ -1109,12 +1109,9 @@ class DocumentTreePort(ABC):
         the two into one size-budgeted response was the exact design mistake
         this split undoes.
 
-        KNOWN GAP: does NOT accept `library_tag_ids` — Knowledge Flow's label
-        resolution (`MetadataService.get_document_uids_with_any_label`)
-        narrows only by the caller's document-level READ permission, never by
-        folder/library scope. Flagged, not silently implemented as a no-op
-        parameter; narrowing this is follow-up work, not yet built. Raises
-        `DocumentPortCallError` on transport failure.
+        The runtime adapter supplies the conversation team and current folder/document
+        selections privately. The backend filters that authorized scope before
+        pagination and totals. Raises `DocumentPortCallError` on transport failure.
         """
 
 

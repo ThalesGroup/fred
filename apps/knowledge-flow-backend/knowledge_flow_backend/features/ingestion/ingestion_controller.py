@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, List, Literal, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
@@ -34,12 +35,11 @@ from fred_core import (
     OrganizationPermission,
     RebacEngine,
     Resource,
-    TagPermission,
     TeamMetadataStore,
     TeamPermission,
     get_current_user,
 )
-from fred_core.common.team_id import TeamId
+from fred_core.common.team_id import TeamId, is_personal_team_id
 from fred_core.documents.document_structures import (
     DocumentMetadata,
     FileInfo,
@@ -54,6 +54,7 @@ from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.delegation import holds_caller_role
 from fred_core.security.structure import is_service_agent
+from fred_core.tasks.models import IngestionTaskEvent, TaskState
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
@@ -102,14 +103,12 @@ from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     BaseVectorStore,
 )
 from knowledge_flow_backend.features.ingestion.ingestion_service import get_ingestion_service
-from knowledge_flow_backend.features.scheduler.activities import output_process
-from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
 from knowledge_flow_backend.features.scheduler.scheduler_service import IngestionTaskService
 from knowledge_flow_backend.features.scheduler.scheduler_structures import (
-    FileToProcess,
     FileToProcessWithoutUser,
 )
 from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
+from knowledge_flow_backend.features.tag.corpus_access import CorpusAccess
 from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized_by_id
 
 logger = logging.getLogger(__name__)
@@ -166,19 +165,12 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
 
 
 async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None:
-    """Every target folder must be one this caller may write in, and not a machine's.
-
-    Every right is checked before any folder is read, so a caller holding none is
-    told that and never learns from a refusal which folders a machine fills. A
-    machine writing into its own library needs no second pass at all.
-    """
-    for tag_id in tags:
-        await get_rebac_engine().check_user_permission_or_raise(user, TagPermission.UPDATE, tag_id)
-    if not tags or (is_service_agent(user) and not holds_caller_role(user)):
-        return
-
+    """Authorize stored team/source roots before applying the source-folder rule."""
     tag_store = ApplicationContext.get_instance().get_tag_store()
-    for tag_id in tags:
+    await CorpusAccess(get_rebac_engine(), tag_store).check_folders(user, tags, write=True)
+    if is_service_agent(user) and not holds_caller_role(user):
+        return
+    for tag_id in set(tags):
         await refuse_if_synchronized_by_id(tag_store, tag_id, user)
 
 
@@ -345,65 +337,18 @@ def cleanup_uploaded_temp_file(file_path: pathlib.Path) -> None:
 
 
 async def resolve_tag_owners(tags: List[str], user: KeycloakUser) -> tuple[set[str], set[str]]:
-    """Resolve the owning team(s) and personal-space user(s) for a list of tag ids.
-
-    Team ownership prefers ReBAC, falling back to team metadata by `tag.owner_id`;
-    a tag resolving to neither is personal. One path, so quota enforcement and
-    task `team_id` tagging agree on who owns a tag, whichever surface asks.
-    """
+    """Read canonical SQL folder owners for quota and task attribution."""
     tag_store = ApplicationContext.get_instance().get_tag_store()
-    rebac = ApplicationContext.get_instance().get_rebac_engine()
-
     team_ids: set[str] = set()
     user_ids: set[str] = set()
-    for tag_id in tags:
+    for tag_id in set(tags):
         tag = await tag_store.get_tag_by_id(tag_id)
-        if not tag or not tag.owner_id:
-            continue
-
-        resolved_for_tag: list[str] = []
-        try:
-            from fred_core import RebacDisabledResult, RebacReference, RelationType, Resource
-
-            subjects = await rebac.lookup_subjects(RebacReference(type=Resource.TAGS, id=tag.id), RelationType.OWNER, Resource.TEAM)
-            if not isinstance(subjects, RebacDisabledResult) and subjects:
-                for sub in subjects:
-                    resolved_for_tag.append(sub.id)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Could not resolve team owners via ReBAC for tag '%s'; falling back to team metadata lookup: %s",
-                tag.id,
-                exc,
-            )
-
-        if not resolved_for_tag:
-            try:
-                engine = ApplicationContext.get_instance().get_pg_async_engine()
-                store = TeamMetadataStore(engine)
-                meta = await store.get_by_team_id(TeamId(tag.owner_id))
-                if meta is not None:
-                    resolved_for_tag.append(tag.owner_id)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Could not confirm team ownership for tag '%s' via team metadata lookup: %s",
-                    tag.id,
-                    exc,
-                )
-
-        if resolved_for_tag:
-            for t_id in resolved_for_tag:
-                if t_id.startswith("personal-"):
-                    user_ids.add(t_id[len("personal-") :])
-                else:
-                    team_ids.add(t_id)
+        if not tag or not tag.owner_id or tag.owner_id in {"personal", "personal-"}:
+            raise ValueError(f"Folder {tag_id} has no canonical team owner")
+        if is_personal_team_id(tag.owner_id):
+            user_ids.add(tag.owner_id.removeprefix("personal-"))
         else:
-            owner_id = tag.owner_id
-            if owner_id == "personal" or owner_id is None:
-                owner_id = user.uid
-            elif owner_id.startswith("personal-"):
-                owner_id = owner_id[len("personal-") :]
-            user_ids.add(owner_id)
-
+            team_ids.add(tag.owner_id)
     return team_ids, user_ids
 
 
@@ -551,7 +496,7 @@ class IngestionController:
         - Reuses `document_uid` from the fast-ingest vector chunks so the one
           bracketed id the agent is given works for both search and SQL.
         - Persists metadata with no tags, so no ReBAC tuple is created —
-          `TabularService._resolve_owned_attachment_dataset` authorizes this
+          `TabularService._as_owned_attachment_dataset` authorizes this
           document class by ownership metadata instead.
         - Builds `DocumentMetadata` directly rather than going through
           `IngestionService.extract_metadata()`/`process_metadata()`: those
@@ -577,6 +522,7 @@ class IngestionController:
             identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
             source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py) -- same false positive as scripts/seed_synthetic_corpus.py:119
             file=FileInfo(file_type=FileType.CSV, mime_type="text/csv"),
+            kind="attachment",
             tags=Tagging(tag_ids=[]),
         )
         await asyncio.to_thread(self._tabular_processor.process, str(raw_path), metadata, emit_pointer_chunk=False)
@@ -640,7 +586,7 @@ class IngestionController:
         orphaned and nothing left to retry it.
 
         Re-verifies ownership itself rather than trusting the caller's
-        authorization (same test as `TabularService._resolve_owned_attachment_dataset`),
+        authorization (same test as `TabularService._as_owned_attachment_dataset`),
         including the tags check, since `_authorize_fast_ingest_delete`'s
         chunk-count fallback was designed for a different document class and
         `is_platform_bypass` must be threaded in rather than re-derived — see
@@ -795,83 +741,91 @@ class IngestionController:
         tags: list[str],
         source_tag: str,
         profile: IngestionProcessingProfile,
-        scheduler_task_service: IngestionTaskService | None,
+        scheduler_task_service: IngestionTaskService,
         background_tasks: BackgroundTasks | None,
         kpi: KPIWriter,
         kpi_actor: KPIActor,
+        upload_only: bool = False,
     ):
-        success = 0
-        last_error: str | None = None
-        total = len(preloaded_files)
-        scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
+        try:
+            success = 0
+            last_error: str | None = None
+            total = len(preloaded_files)
+            scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
 
-        for filename, input_temp_file in preloaded_files:
-            file_started = time.perf_counter()
-            file_status = "error"
-            file_type = pathlib.Path(filename).suffix.lstrip(".") or None
-            current_step = STEP_UPLOAD_PREPARATION
-            try:
-                output_temp_dir = input_temp_file.parent.parent
-
-                yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                metadata = await self.service.extract_metadata(
-                    user,
-                    file_path=input_temp_file,
-                    tags=tags,
-                    source_tag=source_tag,
-                    profile=profile,
-                )
-                metadata_file_type = getattr(metadata, "file_type", None)
-                file_type = metadata_file_type or file_type
-                self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-
-                if scheduler_task_service is None:
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        ).model_dump_json()
-                        + "\n"
+            prepared: dict[pathlib.Path, DocumentMetadata] = {}
+            extraction_durations: dict[pathlib.Path, float] = {}
+            for filename, input_temp_file in preloaded_files:
+                started = time.perf_counter()
+                try:
+                    yield ProcessingProgress(step=STEP_UPLOAD_PREPARATION, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                    prepared[input_temp_file] = await self.service.extract_metadata(user, file_path=input_temp_file, tags=tags, source_tag=source_tag, profile=profile, apply_versioning=False)
+                    extraction_durations[input_temp_file] = time.perf_counter() - started
+                except Exception as exc:
+                    last_error = self._format_exception_message(exc)
+                    yield self._progress_event(step=STEP_UPLOAD_PREPARATION, status=Status.FAILED, filename=filename, error=last_error)
+                    kpi.emit(
+                        name="ingestion.document_duration_ms",
+                        type="timer",
+                        value=(time.perf_counter() - started) * 1000,
+                        unit="ms",
+                        dims={"file_type": pathlib.Path(filename).suffix.lstrip(".") or None, "status": "error", "source": "api"},
+                        actor=kpi_actor,
                     )
 
-                    current_step = STEP_PROCESSING
-                    yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
-                    metadata = await push_input_process(user=user, metadata=metadata, input_file=str(input_temp_file), profile=profile)
-                    file_to_process = FileToProcess(
-                        document_uid=metadata.document_uid,
-                        external_path=None,
-                        source_tag=source_tag,
-                        tags=tags,
-                        profile=profile,
-                        processed_by=user,
+            candidates = [(filename, path) for filename, path in preloaded_files if path in prepared]
+            definition = None
+            if candidates:
+                try:
+                    definition = await scheduler_task_service.admit_documents(
+                        user=user,
+                        pipeline_name="upload_ui_async",
+                        upload_only=upload_only,
+                        files=[
+                            FileToProcessWithoutUser(source_tag=source_tag, tags=tags, document_uid=prepared[path].document_uid, display_name=filename, profile=profile)
+                            for filename, path in candidates
+                        ],
                     )
-                    metadata = await output_process(file=file_to_process, metadata=metadata, accept_memory_storage=True)
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                    yield (
-                        ProcessingProgress(
-                            step=STEP_FINISHED,
-                            status=Status.FINISHED,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                    success += 1
-                    file_status = "ok"
-                else:
+                except Exception as exc:
+                    last_error = self._format_exception_message(exc)
+                    for filename, _ in candidates:
+                        yield self._progress_event(step=STEP_UPLOAD_PREPARATION, status=Status.FAILED, filename=filename, error=last_error)
+                    yield json.dumps({"step": "done", "status": Status.FAILED, "error": last_error}) + "\n"
+                    return
+            task_ids = {file.document_uid: file.task_id for file in definition.files} if definition else {}
+
+            for filename, input_temp_file in candidates:
+                file_started = time.perf_counter()
+                file_status = "error"
+                file_type = pathlib.Path(filename).suffix.lstrip(".") or None
+                current_step = STEP_UPLOAD_PREPARATION
+                try:
+                    output_temp_dir = input_temp_file.parent.parent
+
+                    metadata = await self.service.apply_versioning(prepared[input_temp_file])
+                    metadata_file_type = getattr(metadata, "file_type", None)
+                    file_type = metadata_file_type or file_type
+                    await asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input")
+
                     await self.service.save_metadata(user, metadata=metadata)
 
-                    file_task_id: Optional[str] = None
+                    file_task_id = task_ids[metadata.document_uid]
+                    assert file_task_id is not None, "Admission must assign an ingestion task"
+                    if upload_only:
+                        await (
+                            ApplicationContext.get_instance()
+                            .get_task_service()
+                            .record(
+                                IngestionTaskEvent(
+                                    task_id=file_task_id, state=TaskState.succeeded, seq=0, timestamp=datetime.now(timezone.utc), step="Upload complete; processing not requested", progress=1.0
+                                )
+                            )
+                        )
+                        yield self._progress_event(step=current_step, status=Status.SUCCESS, filename=filename, document_uid=metadata.document_uid)
+                        yield self._progress_event(step=STEP_FINISHED, status=Status.FINISHED, filename=filename, document_uid=metadata.document_uid)
+                        success += 1
+                        file_status = "success"
+                        continue
 
                     yield (
                         ProcessingProgress(
@@ -886,92 +840,81 @@ class IngestionController:
 
                     scheduled_candidates.append((filename, metadata.document_uid, file_type, file_task_id))
                     file_status = "queued"
-            except Exception as e:
-                error_message = self._format_exception_message(e)
-                last_error = error_message
-                logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
-                yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
-            finally:
-                cleanup_uploaded_temp_file(input_temp_file)
-                duration_ms = (time.perf_counter() - file_started) * 1000.0
-                kpi.emit(
-                    name="ingestion.document_duration_ms",
-                    type="timer",
-                    value=duration_ms,
-                    unit="ms",
-                    dims={"file_type": file_type, "status": file_status, "source": "api"},
-                    actor=kpi_actor,
-                )
+                except Exception as e:
+                    error_message = self._format_exception_message(e)
+                    last_error = error_message
+                    await ApplicationContext.get_instance().get_task_service().fail_task(task_ids[prepared[input_temp_file].document_uid], error_message)
+                    logger.exception("Ingestion error during '%s' for file '%s'", current_step, filename, exc_info=True)
+                    yield self._progress_event(step=current_step, status=Status.FAILED, filename=filename, error=error_message)
+                finally:
+                    duration_ms = (extraction_durations[input_temp_file] + time.perf_counter() - file_started) * 1000.0
+                    kpi.emit(
+                        name="ingestion.document_duration_ms",
+                        type="timer",
+                        value=duration_ms,
+                        unit="ms",
+                        dims={"file_type": file_type, "status": file_status, "source": "api"},
+                        actor=kpi_actor,
+                    )
 
-        if scheduler_task_service is not None and scheduled_candidates:
-            current_step = STEP_QUEUED_FOR_PROCESSING
-            try:
-                files_to_schedule = [
-                    FileToProcessWithoutUser(
-                        source_tag=source_tag,
-                        tags=tags,
-                        document_uid=document_uid,
-                        display_name=filename,
-                        profile=profile,
-                        task_id=task_id,
-                    )
-                    for filename, document_uid, _, task_id in scheduled_candidates
-                ]
-                scheduler_background_tasks = background_tasks
-                # For streaming responses, FastAPI BackgroundTasks run only after
-                # the stream completes; this would prevent live progress updates
-                # with the in-memory scheduler.
-                if self._scheduler_backend() == SchedulerBackend.MEMORY:
-                    scheduler_background_tasks = None
-                definition, handle = await scheduler_task_service.submit_documents(
-                    user=user,
-                    pipeline_name="upload_ui_async",
-                    files=files_to_schedule,
-                    background_tasks=scheduler_background_tasks,
-                )
-                logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
-                task_ids = {file.document_uid: file.task_id for file in definition.files}
-                scheduled_candidates = [(name, uid, kind, task_ids[uid]) for name, uid, kind, _ in scheduled_candidates]
-                for filename, document_uid, _, task_id in scheduled_candidates:
-                    # Canonical progress event carrying task_id, like the preparation
-                    # and processing steps — so the UI can correlate every step of the
-                    # sequence to its task. workflow_id is bound server-side (above) and
-                    # is not consumed by the client, so it is no longer put on the wire.
-                    yield (
-                        ProcessingProgress(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=document_uid,
-                            task_id=task_id,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                # Emit queued processing status so the UI can track via SSE task events.
-                for filename, document_uid, _, task_id in scheduled_candidates:
-                    yield (
-                        ProcessingProgress(
-                            step=STEP_PROCESSING,
-                            status=Status.IN_PROGRESS,
-                            filename=filename,
-                            document_uid=document_uid,
-                            task_id=task_id,
-                        ).model_dump_json()
-                        + "\n"
-                    )
-                success += len(scheduled_candidates)
-            except Exception as e:
-                error_message = self._format_exception_message(e)
-                last_error = error_message
-                logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
-                for filename, _, _, _ in scheduled_candidates:
-                    yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
+            if definition is not None and scheduled_candidates:
+                current_step = STEP_QUEUED_FOR_PROCESSING
+                try:
+                    ready_uids = {uid for _, uid, _, _ in scheduled_candidates}
+                    definition.files = [file for file in definition.files if file.document_uid in ready_uids]
+                    scheduler_background_tasks = background_tasks
+                    # For streaming responses, FastAPI BackgroundTasks run only after
+                    # the stream completes; this would prevent live progress updates
+                    # with the in-memory scheduler.
+                    if self._scheduler_backend() == SchedulerBackend.MEMORY:
+                        scheduler_background_tasks = None
+                    handle = await scheduler_task_service.deliver_documents(definition, scheduler_background_tasks)
+                    logger.info("Queued scheduler workflow %s from /upload-process-documents", handle.workflow_id)
+                    task_ids = {file.document_uid: file.task_id for file in definition.files}
+                    scheduled_candidates = [(name, uid, kind, task_ids[uid]) for name, uid, kind, _ in scheduled_candidates]
+                    for filename, document_uid, _, task_id in scheduled_candidates:
+                        # Canonical progress event carrying task_id, like the preparation
+                        # and processing steps — so the UI can correlate every step of the
+                        # sequence to its task. workflow_id is bound server-side (above) and
+                        # is not consumed by the client, so it is no longer put on the wire.
+                        yield (
+                            ProcessingProgress(
+                                step=current_step,
+                                status=Status.SUCCESS,
+                                filename=filename,
+                                document_uid=document_uid,
+                                task_id=task_id,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+                    # Emit queued processing status so the UI can track via SSE task events.
+                    for filename, document_uid, _, task_id in scheduled_candidates:
+                        yield (
+                            ProcessingProgress(
+                                step=STEP_PROCESSING,
+                                status=Status.IN_PROGRESS,
+                                filename=filename,
+                                document_uid=document_uid,
+                                task_id=task_id,
+                            ).model_dump_json()
+                            + "\n"
+                        )
+                    success += len(scheduled_candidates)
+                except Exception as e:
+                    error_message = self._format_exception_message(e)
+                    last_error = error_message
+                    logger.exception("Scheduler submission failed for /upload-process-documents", exc_info=True)
+                    for filename, _, _, _ in scheduled_candidates:
+                        yield self._progress_event(step=current_step, status=Status.FAILED, error=error_message, filename=filename)
 
-        overall_status = Status.SUCCESS if success == total else Status.FAILED
-        done_payload: dict = {"step": "done", "status": overall_status}
-        if last_error:
-            done_payload["error"] = last_error
-        yield json.dumps(done_payload) + "\n"
+            overall_status = Status.SUCCESS if success == total else Status.FAILED
+            done_payload: dict = {"step": "done", "status": overall_status}
+            if last_error:
+                done_payload["error"] = last_error
+            yield json.dumps(done_payload) + "\n"
+        finally:
+            for _, path in preloaded_files:
+                cleanup_uploaded_temp_file(path)
 
     def __init__(self, router: APIRouter):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -984,14 +927,13 @@ class IngestionController:
         scheduler_cfg = ApplicationContext.get_instance().get_config().scheduler
         processing_cfg = ApplicationContext.get_instance().get_config().processing
         max_parallelism = ApplicationContext.get_instance().get_config().scheduler.temporal.ingestion_workflow_parallelism
-        self.scheduler_task_service: IngestionTaskService | None = None
-        if scheduler_cfg.enabled:
-            self.scheduler_task_service = IngestionTaskService(
-                scheduler_config=scheduler_cfg,
-                processing_config=processing_cfg,
-                metadata_service=self.service.metadata_service,
-                max_parallelism=max_parallelism,
-            )
+        self.upload_task_service = IngestionTaskService(
+            scheduler_config=scheduler_cfg,
+            processing_config=processing_cfg,
+            metadata_service=self.service.metadata_service,
+            max_parallelism=max_parallelism,
+        )
+        self.scheduler_task_service = self.upload_task_service if scheduler_cfg.enabled else None
         logger.info("IngestionController initialized.")
 
         @router.post(
@@ -1003,9 +945,12 @@ class IngestionController:
             files: List[UploadFile] = File(...),
             metadata_json: str = Form(...),
             user: KeycloakUser = Depends(get_current_user),
+            kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
+            if len(tags) != 1:
+                raise HTTPException(400, "Choose exactly one destination folder before uploading documents")
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
@@ -1014,60 +959,25 @@ class IngestionController:
 
             preloaded_files = self._preload_uploaded_files(files)
 
-            total = len(preloaded_files)
-
-            async def event_stream():
-                success = 0
-                for filename, input_temp_file in preloaded_files:
-                    current_step = STEP_UPLOAD_PREPARATION
-                    try:
-                        yield self._progress_event(step=current_step, status=Status.IN_PROGRESS, filename=filename)
-                        metadata = await self.service.extract_metadata(
-                            user,
-                            file_path=input_temp_file,
-                            tags=tags,
-                            source_tag=source_tag,
-                            profile=profile,
-                        )
-                        output_temp_dir = input_temp_file.parent.parent
-                        self.service.save_input(user, metadata=metadata, input_dir=output_temp_dir / "input")
-                        await self.service.save_metadata(user, metadata=metadata)
-                        yield self._progress_event(
-                            step=current_step,
-                            status=Status.SUCCESS,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        )
-                        yield self._progress_event(
-                            step=STEP_FINISHED,
-                            status=Status.FINISHED,
-                            filename=filename,
-                            document_uid=metadata.document_uid,
-                        )
-
-                        success += 1
-
-                    except Exception as e:
-                        error_message = self._format_exception_message(e)
-                        yield self._progress_event(
-                            step=current_step,
-                            status=Status.FAILED,
-                            filename=filename,
-                            error=error_message,
-                        )
-                    finally:
-                        cleanup_uploaded_temp_file(input_temp_file)
-
-                overall_status = Status.SUCCESS if success == total else Status.FAILED
-                yield json.dumps({"step": "done", "status": overall_status}) + "\n"
-
-            return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+            event_stream = self._stream_upload_process(
+                preloaded_files=preloaded_files,
+                user=user,
+                tags=tags,
+                source_tag=source_tag,
+                profile=profile,
+                scheduler_task_service=self.upload_task_service,
+                background_tasks=None,
+                kpi=kpi,
+                kpi_actor=to_kpi_actor(user),
+                upload_only=True,
+            )
+            return StreamingResponse(event_stream, media_type="application/x-ndjson")
 
         @router.post(
             "/upload-process-documents",
             tags=["Processing"],
             summary="Upload and process documents immediately (end-to-end)",
-            description="Ingest and process one or more documents synchronously in a single step.",
+            description="Admit an upload batch before shared writes, then submit processing to the configured scheduler.",
         )
         async def process_documents_sync(
             background_tasks: BackgroundTasks,
@@ -1076,9 +986,13 @@ class IngestionController:
             user: KeycloakUser = Depends(get_current_user),
             kpi: KPIWriter = Depends(get_kpi_writer),
         ) -> StreamingResponse:
+            if self.scheduler_task_service is None:
+                raise HTTPException(status_code=503, detail="Ingestion scheduler is unavailable.")
             kpi_actor = to_kpi_actor(user)
             parsed_input = IngestionInput(**json.loads(metadata_json))
             tags = parsed_input.tags
+            if len(tags) != 1:
+                raise HTTPException(400, "Choose exactly one destination folder before uploading documents")
             source_tag = parsed_input.source_tag
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
@@ -1093,7 +1007,7 @@ class IngestionController:
                 source_tag=source_tag,
                 profile=profile,
                 scheduler_task_service=self.scheduler_task_service,
-                background_tasks=background_tasks if self.scheduler_task_service is not None else None,
+                background_tasks=background_tasks,
                 kpi=kpi,
                 kpi_actor=kpi_actor,
             )

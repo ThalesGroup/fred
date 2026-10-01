@@ -330,8 +330,6 @@ storage:
   #   secure: false
   #   verify: true
 
-  resource_store:
-    type: "postgres"
   tag_store:
     type: "postgres"
   metadata_store:
@@ -376,11 +374,8 @@ storage:
 #     timeout_seconds: 15.0
 #     username: admin  # optional; defaults to admin, password comes from PROMETHEUS_PASSWORD
 mcp:
-  reports_enabled: true
   tabular_enabled: true
   text_enabled: true
-  templates_enabled: true
-  resources_enabled: true
   opensearch_ops_enabled: true
   prometheus_ops_enabled: false
   filesystem_enabled: true

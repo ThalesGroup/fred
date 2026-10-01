@@ -23,16 +23,19 @@ from __future__ import annotations
 
 import io
 import pathlib
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi import BackgroundTasks, UploadFile
-from fred_core import AuthorizationError, KeycloakUser, RebacReference, RelationType, Resource, TagPermission
+from fred_core import AuthorizationError, KeycloakUser, RebacReference, RelationType, Resource, TagPermission, TeamPermission
+from fred_core.documents.document_models import DocumentMetadataRow
 from fred_core.documents.document_structures import ProcessingStage, ProcessingStatus
+from fred_core.documents.tag_models import TagRow
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.structure import SERVICE_AGENT_ROLE
 from fred_core.tasks.bus import MemoryEventBus
@@ -45,7 +48,7 @@ import knowledge_flow_backend.features.library_sync.service as service_module
 import knowledge_flow_backend.features.metadata.service as metadata_service_module
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
+from knowledge_flow_backend.core.stores.tags.postgres_tag_store import PostgresTagStore
 from knowledge_flow_backend.features.library_sync.structures import InvalidSourceRequest, SynchronizationUnavailable
 from knowledge_flow_backend.features.scheduler.base_scheduler import WorkflowHandle
 from knowledge_flow_backend.features.scheduler.document_failure import mark_in_progress_stages_failed, on_reconciled_terminal
@@ -57,38 +60,28 @@ from knowledge_flow_backend.models.task_models import TASK_TABLES
 TEAM = "team-1"
 
 
-class InMemoryTagStore:
-    """Enough of the tag store for folders under a library to be found and made."""
+class SqlTagStore(PostgresTagStore):
+    """Real SQL folders, with a test-only inventory for assertion readability."""
 
-    def __init__(self) -> None:
+    def __init__(self, engine):
+        super().__init__(engine)
         self.tags: dict[str, Tag] = {}
 
-    def add(self, tag: Tag) -> Tag:
-        self.tags[tag.id] = tag
-        return tag
-
-    async def list_all_tags(self, session=None) -> list[Tag]:
-        return list(self.tags.values())
-
-    async def get_tag_by_id(self, tag_id: str, session=None) -> Tag:
-        if tag_id not in self.tags:
-            raise TagNotFoundError(tag_id)
-        return self.tags[tag_id]
-
-    async def get_by_owner_type_full_path(self, owner_id, tag_type, full_path, session=None):
-        for tag in self.tags.values():
-            if tag.owner_id == owner_id and tag.type == tag_type and tag.full_path == full_path:
-                return tag
-        return None
+    async def add(self, tag: Tag) -> Tag:
+        return await self.create_tag(tag)
 
     async def create_tag(self, tag: Tag, session=None) -> Tag:
-        return self.add(tag)
+        result = await super().create_tag(tag, session=session)
+        self.tags[tag.id] = tag
+        return result
 
     async def update_tag_by_id(self, tag_id: str, tag: Tag, session=None) -> Tag:
+        result = await super().update_tag_by_id(tag_id, tag, session=session)
         self.tags[tag_id] = tag
-        return tag
+        return result
 
     async def delete_tag_by_id(self, tag_id: str, session=None) -> None:
+        await super().delete_tag_by_id(tag_id, session=session)
         self.tags.pop(tag_id, None)
 
 
@@ -100,8 +93,11 @@ class GrantedLibraryRebac:
     a folder in another library must not be.
     """
 
-    def __init__(self, store: InMemoryTagStore, *, writable: set[str] = frozenset(), readable: set[str] = frozenset()) -> None:
+    enabled = True
+
+    def __init__(self, store: SqlTagStore, *, writable: set[str] = frozenset(), readable: set[str] = frozenset(), editor_teams: set[str] = frozenset()) -> None:
         self._store = store
+        self._editor_teams = set(editor_teams)
         self._writable = set(writable)
         self._readable = set(readable) | set(writable)
         self.relations: list[object] = []
@@ -121,8 +117,16 @@ class GrantedLibraryRebac:
         return False
 
     def _allows(self, permission, resource_id: str) -> bool:
+        if permission == TeamPermission.CAN_UPDATE_RESOURCES:
+            return resource_id in self._editor_teams
         granted = self._writable if permission == TagPermission.UPDATE else self._readable
         return self._reaches(granted, resource_id)
+
+    async def require_active_account(self, user_id):
+        return None
+
+    async def has_direct_relation(self, subject, relation, resource):
+        return relation == RelationType.EDITOR and resource.id in self._writable
 
     async def has_user_permission(self, user, permission, resource_id, consistency_token=None) -> bool:
         return self._allows(permission, resource_id)
@@ -170,9 +174,9 @@ class RecordingKpiWriter:
         return [actor for emitted, actor in self.events if emitted == name]
 
 
-def library(store: InMemoryTagStore, name: str = "Mirror", owner_id: str = TEAM) -> Tag:
+async def library(store: SqlTagStore, name: str = "Mirror", owner_id: str = TEAM) -> Tag:
     now = datetime.now(timezone.utc)
-    return store.add(
+    return await store.add(
         Tag(
             id=str(uuid4()),
             created_at=now,
@@ -272,25 +276,27 @@ def storage_accounting(app_context, monkeypatch) -> None:
 
 
 @pytest_asyncio.fixture
-async def task_service(app_context, storage_accounting) -> TaskService:
+async def task_service(app_context, storage_accounting) -> AsyncIterator[TaskService]:
     """A real task ledger over the same inert engine, so a write's task can be read back."""
     ctx = app_context.get_instance()
     engine = ctx.get_pg_async_engine()
     async with engine.begin() as connection:
         await connection.run_sync(KFBase.metadata.create_all)
+        await connection.run_sync(TagRow.__table__.create)
+        await connection.run_sync(DocumentMetadataRow.__table__.create)
     service = TaskService.build(engine=engine, tables=TASK_TABLES, backend=SchedulerBackend.MEMORY)
     ctx._task_service_instance = service
-    return service
+    try:
+        yield service
+    finally:
+        await engine.dispose()
 
 
 @pytest.fixture
-def tag_store(app_context, scheduler, storage_accounting, task_service) -> InMemoryTagStore:
+def tag_store(app_context, scheduler, storage_accounting, task_service) -> SqlTagStore:
     ctx = app_context.get_instance()
-    store = InMemoryTagStore()
+    store = SqlTagStore(ctx.get_pg_async_engine())
     ctx._tag_store_instance = store
-    # TagService builds a ResourceService whose store the test configuration
-    # cannot construct. Never touched: this surface only writes documents.
-    ctx._resource_store_instance = object()
     return store
 
 
@@ -318,7 +324,7 @@ def _metadata_store():
 
 @pytest.mark.asyncio
 async def test_rewriting_a_key_updates_one_document_and_keeps_its_identifier(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -356,7 +362,7 @@ async def test_rewriting_a_key_updates_one_document_and_keeps_its_identifier(tag
 @pytest.mark.asyncio
 async def test_a_third_write_still_updates_the_same_document(tag_store):
     """The upload surface refuses a third same-named file; a mirror must not."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -376,7 +382,7 @@ async def test_a_third_write_still_updates_the_same_document(tag_store):
 
 @pytest.mark.asyncio
 async def test_a_caller_maintains_its_documents_with_its_own_key_alone(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     key = "specs/../odd ?name.md"
@@ -393,7 +399,7 @@ async def test_a_caller_maintains_its_documents_with_its_own_key_alone(tag_store
 async def test_a_document_uploaded_by_a_person_is_never_adopted_by_a_key(tag_store):
     from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
 
-    lib = library(tag_store)
+    lib = await library(tag_store)
     await _metadata_store().save_metadata(
         DocumentMetadata(
             identity=Identity(document_name="readme.md", document_uid="uploaded-by-hand"),
@@ -412,8 +418,8 @@ async def test_a_document_uploaded_by_a_person_is_never_adopted_by_a_key(tag_sto
 
 @pytest.mark.asyncio
 async def test_two_libraries_use_the_same_key_independently(tag_store):
-    first = library(tag_store, name="First")
-    second = library(tag_store, name="Second")
+    first = await library(tag_store, name="First")
+    second = await library(tag_store, name="Second")
     service = _service(GrantedLibraryRebac(tag_store, writable={first.id, second.id}))
     caller = pod()
 
@@ -434,7 +440,7 @@ async def test_two_libraries_use_the_same_key_independently(tag_store):
 
 @pytest.mark.asyncio
 async def test_one_grant_reaches_the_whole_subtree(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     rebac = GrantedLibraryRebac(tag_store, writable={lib.id})
     service = _service(rebac)
 
@@ -460,7 +466,7 @@ async def test_one_grant_reaches_the_whole_subtree(tag_store):
 
 @pytest.mark.asyncio
 async def test_a_folder_a_previous_write_made_is_reused(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -481,7 +487,7 @@ async def test_a_folder_a_previous_write_made_is_reused(tag_store):
 @pytest.mark.asyncio
 async def test_a_folder_carries_the_library_s_owner_not_the_caller_s(tag_store):
     """A folder owned by the pod would sit outside the library's own namespace."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     await service.write_document(pod(), library_id=lib.id, path="specs/api.md", source_key="specs/api.md", document_version=None, source_tag="fred", upload=upload())
@@ -493,7 +499,7 @@ async def test_a_folder_carries_the_library_s_owner_not_the_caller_s(tag_store):
 
 @pytest.mark.asyncio
 async def test_a_path_that_would_leave_the_library_creates_nothing(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     with pytest.raises(InvalidSourceRequest):
@@ -513,7 +519,7 @@ async def test_a_path_that_would_leave_the_library_creates_nothing(tag_store):
 
 @pytest.mark.asyncio
 async def test_a_document_follows_its_source_when_the_source_moves_it(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -533,7 +539,7 @@ async def test_a_document_follows_its_source_when_the_source_moves_it(tag_store)
 
 @pytest.mark.asyncio
 async def test_removing_a_document_does_not_disturb_the_library(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     before = lib.model_copy(deep=True)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
@@ -551,7 +557,7 @@ async def test_removing_a_document_does_not_disturb_the_library(tag_store):
 
 @pytest.mark.asyncio
 async def test_removing_what_is_already_gone_is_not_an_error(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     outcome = await service.remove_document(pod(), library_id=lib.id, source_key="never-written.md")
@@ -562,7 +568,7 @@ async def test_removing_what_is_already_gone_is_not_an_error(tag_store):
 @pytest.mark.asyncio
 async def test_silence_is_not_a_removal(tag_store):
     """A run that mentions one document leaves every other one where it is."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -582,7 +588,7 @@ async def test_silence_is_not_a_removal(tag_store):
 
 @pytest.mark.asyncio
 async def test_a_service_identity_with_no_grant_over_the_library_is_refused(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable=set()))
     caller = pod()
     assert "service_agent" in caller.roles
@@ -597,8 +603,8 @@ async def test_a_service_identity_with_no_grant_over_the_library_is_refused(tag_
 
 @pytest.mark.asyncio
 async def test_a_grant_over_one_library_authorizes_nothing_in_another(tag_store):
-    mine = library(tag_store, name="Mine")
-    theirs = library(tag_store, name="Theirs")
+    mine = await library(tag_store, name="Mine")
+    theirs = await library(tag_store, name="Theirs")
     service = _service(GrantedLibraryRebac(tag_store, writable={mine.id}))
 
     with pytest.raises(AuthorizationError):
@@ -614,7 +620,7 @@ async def test_a_grant_over_one_library_authorizes_nothing_in_another(tag_store)
 
 @pytest.mark.asyncio
 async def test_a_library_that_never_recorded_a_source_version_reports_its_absence(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     assert await service.read_source_version(pod(), lib.id) is None
@@ -624,7 +630,7 @@ async def test_a_library_that_never_recorded_a_source_version_reports_its_absenc
 @pytest.mark.parametrize("version", ["9d2f1a7", "2026-w03", "AAECAwQFBgc=", "r7"])
 async def test_a_source_version_comes_back_exactly_as_it_was_given(tag_store, version):
     """Unordered, undated, non-numeric: Fred stores it and reads nothing into it."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -635,7 +641,7 @@ async def test_a_source_version_comes_back_exactly_as_it_was_given(tag_store, ve
 
 @pytest.mark.asyncio
 async def test_recording_a_source_version_leaves_the_library_otherwise_alone(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     before = lib.model_copy(deep=True)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
@@ -652,7 +658,7 @@ async def test_recording_a_source_version_leaves_the_library_otherwise_alone(tag
 
 @pytest.mark.asyncio
 async def test_reading_a_source_version_needs_permission_over_that_library(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable=set(), readable=set()))
 
     with pytest.raises(AuthorizationError):
@@ -666,7 +672,7 @@ async def test_reading_a_source_version_needs_permission_over_that_library(tag_s
 
 @pytest.mark.asyncio
 async def test_recording_the_machine_marks_the_library(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
@@ -678,7 +684,7 @@ async def test_recording_the_machine_marks_the_library(tag_store):
 @pytest.mark.asyncio
 async def test_recording_the_same_machine_again_is_not_a_change(tag_store):
     """Creation can be retried after a failure further along, so this must be safe."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
 
@@ -687,7 +693,7 @@ async def test_recording_the_same_machine_again_is_not_a_change(tag_store):
 
 @pytest.mark.asyncio
 async def test_moving_a_library_to_another_machine_is_refused(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     await service.record_synchronized_by(pod(), lib.id, "knowledge_base:ab12")
 
@@ -701,7 +707,7 @@ async def test_moving_a_library_to_another_machine_is_refused(tag_store):
 @pytest.mark.asyncio
 async def test_recording_the_machine_needs_permission_over_that_library(tag_store):
     """The grant comes first, so marking before it exists is refused rather than applied."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable=set(), readable=set()))
 
     with pytest.raises(AuthorizationError):
@@ -713,7 +719,7 @@ async def test_recording_the_machine_needs_permission_over_that_library(tag_stor
 @pytest.mark.asyncio
 @pytest.mark.parametrize("blank", ["", "   "])
 async def test_a_blank_machine_reference_is_refused(tag_store, blank):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     with pytest.raises(InvalidSourceRequest):
@@ -730,7 +736,7 @@ async def test_a_blank_machine_reference_is_refused(tag_store, blank):
 @pytest.mark.asyncio
 async def test_a_write_by_a_service_is_not_recorded_as_a_person_s(tag_store, kpi_writer):
     """Counting scheduled machine volume as human activity is wrong by exactly that volume."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -746,8 +752,8 @@ async def test_a_write_by_a_service_is_not_recorded_as_a_person_s(tag_store, kpi
 @pytest.mark.asyncio
 async def test_a_person_s_write_is_still_recorded_as_a_person_s(tag_store, kpi_writer):
     """Only the actor type moves: a human uploading through this surface is a human."""
-    lib = library(tag_store)
-    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
+    lib = await library(tag_store)
+    service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}, editor_teams={TEAM}))
     person = KeycloakUser(uid="alice", username="alice", roles=["admin"], email=None)
 
     await service.write_document(person, library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
@@ -764,7 +770,7 @@ async def test_a_person_s_write_is_still_recorded_as_a_person_s(tag_store, kpi_w
 @pytest.mark.asyncio
 @pytest.mark.parametrize("profile", [None, *IngestionProcessingProfile])
 async def test_a_write_is_one_task_and_one_push_file_on_the_shared_pipeline(tag_store, scheduler, task_service, monkeypatch, profile):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     config = ApplicationContext.get_instance().get_config()
     monkeypatch.setattr(config.processing, "default_profile", IngestionProcessingProfile.fast)
@@ -828,7 +834,7 @@ async def test_the_pipeline_client_is_built_the_way_the_upload_surface_builds_it
 
 @pytest.mark.asyncio
 async def test_the_document_exists_before_the_pipeline_is_asked_for_it(tag_store, scheduler):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
@@ -850,10 +856,14 @@ async def test_the_upload_s_copy_is_gone_once_the_write_is_answered(tag_store, s
 
     monkeypatch.setattr(service_module, "uploadfile_to_path", _recording)
     scheduler.fails = pipeline_refuses
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
-    await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
+    if pipeline_refuses:
+        with pytest.raises(RuntimeError, match="Ingestion start not confirmed"):
+            await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
+    else:
+        await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
 
     [path] = written
     assert not path.parent.parent.exists()
@@ -862,7 +872,7 @@ async def test_the_upload_s_copy_is_gone_once_the_write_is_answered(tag_store, s
 @pytest.mark.asyncio
 async def test_a_stack_that_cannot_schedule_refuses_the_write_before_taking_anything(tag_store, scheduler, task_service, monkeypatch):
     monkeypatch.setattr(ApplicationContext.get_instance().get_config().scheduler, "enabled", False)
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
 
     with pytest.raises(SynchronizationUnavailable):
@@ -875,34 +885,39 @@ async def test_a_stack_that_cannot_schedule_refuses_the_write_before_taking_anyt
 
 
 # --------------------------------------------------------------------------
-# A write the pipeline refuses says so, and leaves nothing behind
+# An unconfirmed start reports an error and retains its admitted task
 # --------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_temporal_outage_keeps_an_accepted_write_and_its_pending_task(tag_store, scheduler, task_service):
-    lib = library(tag_store)
+async def test_unconfirmed_start_reports_error_and_keeps_its_pending_task(tag_store, scheduler, task_service):
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     scheduler.fails = True
-    accepted = await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
+    with pytest.raises(RuntimeError, match="Ingestion start not confirmed"):
+        await service.write_document(pod(), library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
     assert await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md") is not None
-    run = await task_service.get_run(accepted.task_id)
+    [pending] = (await task_service.list_tasks()).tasks
+    run = await task_service.get_run(pending.task_id)
     assert run.state == TaskState.pending
     assert run.execution_id is not None
 
 
 @pytest.mark.asyncio
 async def test_a_failed_rewrite_does_not_destroy_the_document_it_was_replacing(tag_store, scheduler, task_service):
-    """The caller asked to replace a document, not to remove it; its next run converges."""
-    lib = library(tag_store)
+    """Unconfirmed submission retains metadata and reservation for manual diagnosis."""
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="etag-1", source_tag="fred", upload=upload())
 
     scheduler.fails = True
-    accepted = await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="etag-2", source_tag="fred", upload=upload())
+    with pytest.raises(RuntimeError, match="Ingestion start not confirmed"):
+        await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version="etag-2", source_tag="fred", upload=upload())
     assert await _metadata_store().get_metadata_by_source_key(lib.id, "readme.md") is not None
-    assert (await task_service.get_run(accepted.task_id)).state == TaskState.pending
+    pending = [task for task in (await task_service.list_tasks()).tasks if task.state == TaskState.pending]
+    assert len(pending) == 1
+    assert (await task_service.get_run(pending[0].task_id)).execution_id is not None
 
 
 @pytest.mark.asyncio
@@ -923,7 +938,7 @@ async def test_rewriting_a_key_takes_the_previous_revision_out_of_the_index(tag_
     monkeypatch.setattr(ctx, "get_create_vector_store", lambda embedder: _VectorStore())
     monkeypatch.setattr(ctx, "get_embedder", object)
 
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
 
@@ -954,7 +969,7 @@ async def test_removing_a_keyed_document_that_sits_in_no_folder_still_removes_it
     """
     from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
 
-    lib = library(tag_store)
+    lib = await library(tag_store)
     await _metadata_store().save_metadata(
         DocumentMetadata(
             identity=Identity(document_name="orphan.md", document_uid="imported-orphan"),
@@ -1003,7 +1018,7 @@ async def _state_of(service: service_module.LibrarySyncService, caller: Keycloak
 
 @pytest.mark.asyncio
 async def test_a_library_lists_its_keyed_documents_in_key_order(tag_store):
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     second = await _write(service, caller, lib, "specs/b.md", "etag-b")
@@ -1021,7 +1036,7 @@ async def test_a_library_lists_its_keyed_documents_in_key_order(tag_store):
 @pytest.mark.asyncio
 async def test_a_write_is_in_progress_until_the_pipeline_s_last_stage_lands(tag_store):
     """Accepted is not done: the bytes are stored, a preview is halfway, vectors are the end."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     accepted = await _write(service, caller, lib, "readme.md")
@@ -1036,7 +1051,7 @@ async def test_a_write_is_in_progress_until_the_pipeline_s_last_stage_lands(tag_
 @pytest.mark.asyncio
 async def test_a_write_the_pipeline_lost_reads_failed(tag_store):
     """The repair that closes a timed-out run's stages is what this listing then reads."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     accepted = await _write(service, caller, lib, "readme.md")
@@ -1051,7 +1066,7 @@ async def test_a_write_the_pipeline_lost_reads_failed(tag_store):
 async def test_a_write_no_worker_ever_picked_up_reads_failed(tag_store, task_service, scheduler):
     scheduler.complete = False
     """Reconciliation, not an activity, ends a task the worker fleet never ran — the document must follow."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     accepted = await _write(service, caller, lib, "readme.md")
@@ -1073,7 +1088,7 @@ async def test_a_write_no_worker_ever_picked_up_reads_failed(tag_store, task_ser
 @pytest.mark.asyncio
 async def test_a_rewritten_key_is_in_progress_again(tag_store):
     """The previous run's stages do not carry over: new bytes are owed a new outcome."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     first = await _write(service, caller, lib, "readme.md", "etag-1")
@@ -1091,7 +1106,7 @@ async def test_a_person_s_upload_in_the_library_is_not_listed(tag_store):
     """No key, so the caller could neither address it nor say whether it is in sync."""
     from fred_core.documents.document_structures import DocumentMetadata, Identity, SourceInfo, SourceType, Tagging
 
-    lib = library(tag_store)
+    lib = await library(tag_store)
     await _metadata_store().save_metadata(
         DocumentMetadata(
             identity=Identity(document_name="notes.md", document_uid="uploaded-by-hand"),
@@ -1110,8 +1125,8 @@ async def test_a_person_s_upload_in_the_library_is_not_listed(tag_store):
 
 @pytest.mark.asyncio
 async def test_another_library_s_keys_are_not_listed(tag_store):
-    mine = library(tag_store, name="Mine")
-    theirs = library(tag_store, name="Theirs")
+    mine = await library(tag_store, name="Mine")
+    theirs = await library(tag_store, name="Theirs")
     service = _service(GrantedLibraryRebac(tag_store, writable={mine.id, theirs.id}))
     caller = pod()
     kept = await _write(service, caller, mine, "readme.md", "mine")
@@ -1125,7 +1140,7 @@ async def test_another_library_s_keys_are_not_listed(tag_store):
 @pytest.mark.asyncio
 async def test_a_listing_is_bounded_and_says_when_it_is(tag_store):
     """A run reconciling against part of a library must know it is a part."""
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
     for key in ("a.md", "b.md", "c.md"):
@@ -1141,8 +1156,8 @@ async def test_a_listing_is_bounded_and_says_when_it_is(tag_store):
 @pytest.mark.asyncio
 async def test_listing_a_library_is_a_read_of_it(tag_store):
     """A grant that reads the library lists it; one that holds nothing over it is refused."""
-    lib = library(tag_store)
-    reader = _service(GrantedLibraryRebac(tag_store, writable=set(), readable={lib.id}))
+    lib = await library(tag_store)
+    reader = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     stranger = _service(GrantedLibraryRebac(tag_store, writable=set(), readable=set()))
 
     assert (await reader.list_documents(pod(), library_id=lib.id, limit=10)).items == []
@@ -1151,34 +1166,46 @@ async def test_listing_a_library_is_a_read_of_it(tag_store):
 
 
 @pytest.mark.asyncio
-async def test_owner_resolution_failure_before_admission_does_not_wedge_the_document(tag_store, task_service, monkeypatch):
-    from knowledge_flow_backend.features.ingestion import ingestion_controller
+async def test_folder_read_failure_before_admission_does_not_wedge_the_document(tag_store, task_service, monkeypatch):
+    from knowledge_flow_backend.features.tag.corpus_lifecycle import CorpusLifecycle
 
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     caller = pod()
-    resolve = ingestion_controller.resolve_tag_owners
-    monkeypatch.setattr(ingestion_controller, "resolve_tag_owners", AsyncMock(side_effect=RuntimeError("owner lookup unavailable")))
-    with pytest.raises(RuntimeError, match="owner lookup unavailable"):
+    service._discard = AsyncMock()
+    resolve = CorpusLifecycle.lock_folders
+    monkeypatch.setattr(CorpusLifecycle, "lock_folders", AsyncMock(side_effect=RuntimeError("folder lookup unavailable")))
+    with pytest.raises(RuntimeError, match="folder lookup unavailable"):
         await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
-    [failed] = (await task_service.list_tasks()).tasks
-    assert failed.state == TaskState.failed
-    assert (await task_service.get_run(failed.task_id)).execution_id is None
-    monkeypatch.setattr(ingestion_controller, "resolve_tag_owners", resolve)
+    assert (await task_service.list_tasks()).tasks == []
+    service._discard.assert_not_awaited()
+    monkeypatch.setattr(CorpusLifecycle, "lock_folders", resolve)
     accepted = await service.write_document(caller, library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred", upload=upload())
-    assert accepted.task_id != failed.task_id
+    assert accepted.task_id
 
 
 @pytest.mark.asyncio
-async def test_active_source_ingestion_is_a_conflict(tag_store, task_service, scheduler):
+@pytest.mark.parametrize("next_path", ["readme.md", "another/readme.md"])
+async def test_active_source_ingestion_is_a_conflict(tag_store, task_service, scheduler, monkeypatch, next_path):
     from knowledge_flow_backend.features.scheduler.ingestion_delivery import IngestionAlreadyActive
 
-    lib = library(tag_store)
+    lib = await library(tag_store)
     service = _service(GrantedLibraryRebac(tag_store, writable={lib.id}))
     scheduler.complete = False
     args = dict(library_id=lib.id, path="readme.md", source_key="readme.md", document_version=None, source_tag="fred")
     accepted = await service.write_document(pod(), **args, upload=upload())
+    before = await _metadata_store().get_metadata_by_uid(accepted.document_uid)
+    original_folders = list(before.tags.tag_ids)
+    save_input = MagicMock()
+    save_metadata = AsyncMock()
+    monkeypatch.setattr(service._ingestion_service, "save_input", save_input)
+    monkeypatch.setattr(service._ingestion_service, "save_metadata", save_metadata)
+    args["path"] = next_path
     with pytest.raises(IngestionAlreadyActive):
         await service.write_document(pod(), **args, upload=upload())
+    save_input.assert_not_called()
+    save_metadata.assert_not_awaited()
+    after = await _metadata_store().get_metadata_by_uid(accepted.document_uid)
+    assert after.tags.tag_ids == original_folders
     assert not TaskState((await task_service.get_run(accepted.task_id)).state).is_terminal
     assert (await service.list_documents(pod(), library_id=lib.id, limit=10)).items

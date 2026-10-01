@@ -18,16 +18,17 @@ from typing import List, Literal, Union
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.concurrency import run_in_threadpool
 from fred_core import (
-    DocumentPermission,
+    AuthorizationError,
     KeycloakUser,
-    TagPermission,
     get_current_user,
 )
 from fred_core.kpi import phase_timer
 from fred_core.store import VectorSearchHit
 from pydantic import BaseModel, Field
 
-from knowledge_flow_backend.application_context import get_kpi_writer, get_rebac_engine
+from knowledge_flow_backend.application_context import get_kpi_writer
+from knowledge_flow_backend.core.stores.tags.base_tag_store import TagNotFoundError
+from knowledge_flow_backend.features.metadata.service import MetadataNotFound
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import RerankRequest, SearchPolicyName, SearchRequest, SimilaritySearchRequest, VisualEvidenceArtifactResponse
 
@@ -97,6 +98,8 @@ class VectorSearchController:
                         include_corpus_scope=request.include_corpus_scope,
                     )
                 return hits
+            except AuthorizationError:
+                raise
             except Exception as e:
                 logger.exception("[VECTOR][SEARCH] Unexpected error during vector search")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -118,15 +121,6 @@ class VectorSearchController:
             request: SimilaritySearchRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            # AUTHZ-05 §27: team-scoped via the request's own targets (at least
-            # one of document_uids/document_library_tags_ids is required by the
-            # request's own validator) instead of the org-level CAN_READ_CONTENT
-            # gate.
-            rebac = get_rebac_engine()
-            for tag_id in request.document_library_tags_ids:
-                await rebac.check_user_permission_or_raise(user, TagPermission.READ, tag_id)
-            for document_uid in request.document_uids:
-                await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
             try:
                 async with phase_timer(self.kpi, "vector_similarity_search"):
                     return await self.service.similarity_search(
@@ -138,6 +132,10 @@ class VectorSearchController:
                         rerank=request.rerank,
                         min_score=request.min_score,
                     )
+            except AuthorizationError:
+                raise
+            except (MetadataNotFound, TagNotFoundError) as e:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
             except Exception as e:
@@ -156,9 +154,10 @@ class VectorSearchController:
             artifact_path: str,
             user: KeycloakUser = Depends(get_current_user),
         ) -> VisualEvidenceArtifactResponse:
-            # AUTHZ-05 §27: team-scoped via the target document instead of the
-            # org-level CAN_READ_CONTENT gate.
-            await get_rebac_engine().check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+            try:
+                await self.service.metadata_service.get_document_metadata(user, document_uid)
+            except (MetadataNotFound, TagNotFoundError) as exc:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
             artifact_name = (artifact_path or "").strip().lstrip("/")
             if not artifact_name:
                 raise HTTPException(
@@ -224,8 +223,10 @@ class VectorSearchController:
             limit: int = Query(default=200, ge=1, le=1000),
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            rebac = get_rebac_engine()
-            await rebac.check_user_permission_or_raise(user, DocumentPermission.READ, document_uid)
+            try:
+                await self.service.metadata_service.get_document_metadata(user, document_uid)
+            except (MetadataNotFound, TagNotFoundError) as exc:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
             async with phase_timer(self.kpi, "vector_document_chunks"):
                 return await self.service.get_document_chunks_ordered(
                     user=user,
@@ -246,12 +247,11 @@ class VectorSearchController:
             request: RerankRequest,
             user: KeycloakUser = Depends(get_current_user),
         ) -> List[VectorSearchHit]:
-            # AUTHZ-05 §27: team-scoped via the documents being reranked instead
-            # of the org-level CAN_PROCESS_CONTENT gate. PROCESS (not READ)
-            # preserves the original capability's editor-level strictness.
-            rebac = get_rebac_engine()
-            for document_uid in {hit.uid for hit in request.documents}:
-                await rebac.check_user_permission_or_raise(user, DocumentPermission.PROCESS, document_uid)
+            # Preserve the endpoint's existing editor-level requirement.
+            try:
+                await self.service.metadata_service.require_documents(user, list({hit.uid for hit in request.documents}), write=True)
+            except (MetadataNotFound, TagNotFoundError) as exc:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
             async with phase_timer(self.kpi, "vector_rerank"):
                 documents = await run_in_threadpool(
                     self.service.rerank_documents,
