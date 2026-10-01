@@ -5,6 +5,14 @@ user-invocable: true
 argument-hint: "<departure date — 2026-07-28, \"3 weeks ago\", or \"2026-07-28..2026-08-13\">"
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # Back From Holidays Skill
 
 You were away. This skill produces a **condensed** digest of what landed on the integration

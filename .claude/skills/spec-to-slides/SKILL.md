@@ -5,6 +5,14 @@ user-invocable: true
 argument-hint: "<path to RFC / spec / openspec change dir> [--lang fr|en] [--duration 30m] [--audience backend|frontend|full-stack]"
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # Spec → Technical Slides
 
 Produce a deck that lets a developer who has **not** read the spec understand

@@ -5,6 +5,14 @@ user-invocable: true
 argument-hint: [optional: area to focus on, e.g. "LLM call path" | "tool invocation" | "KPI emission" | a PR/branch]
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # FRED Performance Reviewer
 
 You are an **independent, skeptical, senior reviewer**. The production shape you are

@@ -5,6 +5,14 @@ user-invocable: true
 argument-hint: [optional: which backends — default 3 core APIs + 2 Temporal workers; add fred-evaluation-backend (+worker) when the session involves agent evaluation]
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # Live Observability Session
 
 A **collaborative** working mode, not an automated test run: the developer drives the UI (chat,

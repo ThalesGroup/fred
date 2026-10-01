@@ -10,6 +10,15 @@ metadata:
     version: 0.1.0
 name: gh-stack
 ---
+
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # gh-stack
 
 `gh stack` is a [GitHub CLI](https://cli.github.com/) extension for stacked branches and pull

@@ -3,6 +3,14 @@ name: push-release
 description: Cut a Fred release on the current release branch — prepare user-facing notes and the operator migration guide, enforce the operational version minimum, then (after developer sign-off) tag code/vX.Y.Z + chart/vX.Y.Z and push. Stops for approval before any tag is placed.
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # Push Release Skill
 
 Cut a release on the **current release branch** (`swift`). A Fred release is

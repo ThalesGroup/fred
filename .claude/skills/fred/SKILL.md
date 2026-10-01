@@ -3,6 +3,14 @@ name: fred
 description: Démarrer les composants Fred locaux et, sur demande, un pod fred-samples et son serveur de test ; observer leurs logs pendant que le développeur teste dans l’UI. Utiliser pour une session locale de démarrage, arrêt ou diagnostic par les logs, sans campagne de tests ni collecte KPI.
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # Fred — démarrage et observation locale
 
 Le développeur pilote l’UI et gère Docker Compose (Keycloak, Postgres,

@@ -3,6 +3,14 @@ name: fred-performance-campaign-runner
 description: Run guarded, repeatable local performance campaigns against FRED's Swift managed-SSE question/answer path using the canonical mock OpenAI server. Use after instrumentation or hot-path changes, when consolidating a simple agent exchange, comparing a branch to a baseline, checking concurrency from 1 to 50 clients, or explicitly probing overload and recovery. Produces durable redacted artifacts and a fact-versus-hypothesis report. Do not use against shared, staging, or production endpoints.
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # FRED Performance Campaign Runner
 
 Run the campaign with the bundled `scripts/run_campaign.py`; do not recreate

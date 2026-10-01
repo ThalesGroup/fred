@@ -5,6 +5,14 @@ user-invocable: true
 argument-hint: [team display name] [library count, default 100] [document count, default 20000]
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # Seed a synthetic corpus for local repair/audit testing
 
 Drives `apps/knowledge-flow-backend/knowledge_flow_backend/scripts/seed_synthetic_corpus.py`:

@@ -4,6 +4,14 @@ description: Author a new Fred agent capability (manifest + tools/middleware) bu
 user-invocable: true
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 Add a new Fred **capability** — one modular agent feature carried end to end by one
 object (declaration + `tools()`, its execution-model-agnostic runtime), not a feature
 scattered across the codebase.

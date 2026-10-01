@@ -5,6 +5,14 @@ user-invocable: true
 argument-hint: <query or intent>
 ---
 
+## Fred design constraint
+
+For work on Fred, read and apply [the failure and concurrency policy](../../../AGENTS.md#fred-failure-and-concurrency-design--developer-review-first)
+before planning, implementing, or recommending changes. Prefer explicit rejection
+over recovery machinery. Never add protection for a failure or concurrency scenario
+without the developer's explicit review of that scenario and its complexity. This
+policy takes precedence over defensive or resilience recommendations below.
+
 # PostgreSQL CLI Skill
 
 You help the user query and inspect the PostgreSQL databases running in the local dev stack.

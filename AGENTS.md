@@ -28,6 +28,37 @@ Conflict resolution order:
 
 If a conflict cannot be resolved using this order, ask before changing files.
 
+## Fred failure and concurrency design — developer review first
+
+Keep Fred responsible for its business rules, not for compensating for unreliable
+infrastructure or speculative edge cases. Prefer explicit rejection of an operation
+whose prerequisites are not met, with an actionable error, over accepting it and
+adding recovery machinery. For example, reject folder deletion while ingestion is
+active instead of orchestrating cancellation or deferred deletion.
+
+Never add or expand application-level fallback, compensation, retry loops, rescue
+queues, reconciliation sweepers, dual writes, or race-handling protocols without
+first reviewing the concrete scenario with the developer and receiving explicit
+agreement. A general request to fix a bug, improve robustness, or implement a
+feature is not approval for these strategies. Before proposing one, explain:
+
+- The observable failure or concurrency scenario and whether it is actually in scope.
+- The simpler alternative: reject, report the failure, or accept a temporary limitation.
+- The extra code, state, operational burden, and realistic testing required.
+
+Use the responsible component's established execution contract (for example,
+Temporal execution and replay) rather than building a second recovery system in
+Fred. Preserve ordinary validation, authorization, database integrity constraints,
+and explicit error propagation; this rule does not mean ignoring errors or
+reporting success after failure. Native component behavior is not blanket approval
+to add Fred-side recovery logic. Do not silently remove existing protections:
+identify them and review any behavior change with the developer.
+
+For reviews and audits, an unusual failure scenario is a design question to raise,
+not an automatic requirement to add resilience. This policy takes precedence over
+skill advice encouraging defensive mechanisms. Apply it to planning, implementation,
+and review, including future skills.
+
 ## OpenSpec — team choice, under evaluation
 
 OpenSpec is the team's chosen default for substantial development, and remains
