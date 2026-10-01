@@ -161,7 +161,7 @@ class DocumentLabelSearchCapability(
         wraps this for `create_agent()`; no ReAct-loop-specific hook is
         needed.
 
-        Return-convention note (Phase 1, NOTES-GRAPH-CAPABILITY-BRIDGE.md):
+        Return-convention note:
         kept as `@tool(..., response_format="content_and_artifact")`
         returning a `(content, ToolInvocationResult)` tuple — see
         `document_access`'s `tools()` docstring for the full rationale;

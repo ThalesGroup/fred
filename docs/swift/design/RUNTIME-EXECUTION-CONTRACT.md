@@ -2611,9 +2611,9 @@ the `folder:` form. Regression tests:
 > delayed-Keycloak, two-SSE-stream pod test. That one is not merely unrun — it
 > is currently *unrunnable*, because `_authorize_and_resolve` nulls
 > body-supplied refresh tokens and no producer supplies one, so nothing can
-> drive a real refresh end to end. It stays owed until
-> `DELEGATED-DOWNSTREAM-AUTH-RFC.md` lands or the criterion is formally
-> revised. See the TURN-07 dossier for the full accounting.
+> drive a real refresh end to end. Delegated execution
+> ([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md)) removes the
+> need for it when `act_for_people` is on. See the TURN-07 dossier for the full accounting.
 
 **Enforces §0.2 invariant #2 on the last path that violated it.**
 `refresh_user_access_token_from_keycloak` was a synchronous `httpx.post(...,
@@ -2690,9 +2690,10 @@ Two consequences, and the second is the one that matters:
 Restoring delegated refresh is **not** simply re-adding the producer: F-B
 neutralizes body-supplied refresh tokens deliberately, and giving a pod a user's
 long-lived refresh token is a security decision, not a bug fix. The design for
-closing the root cause is `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`
-(token exchange at admission) — written, not implemented, awaiting its own
-issue. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
+The root cause was closed differently: with `act_for_people` on, downstream
+calls present a renewable workload token plus a person grant instead of the
+person's bearer ([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md));
+with it off, the person's bearer is still forwarded. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
 change.
 
 **Contract-visible signature changes** (all internal to `fred-runtime`; the
@@ -2769,8 +2770,8 @@ bookkeeping. Any last-waiter-cancels scheme races the waiters' own resumption
 401-recovery handler misses — killing turns instead of degrading them. The
 accepted cost is a rotation nobody consumes (the exchange completes, Keycloak
 invalidates the presented token, the replacement is dropped): the
-protocol-inherent lost-rotation race already recorded as
-`DELEGATED-DOWNSTREAM-AUTH-RFC.md` open question 8, which degrades to one
+protocol-inherent lost-rotation race (Keycloak invalidates the presented
+refresh token before the response arrives), which degrades to one
 `invalid_grant` retry. Each waiter also receives its **own** copy of the
 payload, since one task resolves to one object and a shared mutable dict would
 let the first mutator corrupt what its peers already read.
@@ -2779,7 +2780,7 @@ let the first mutator corrupt what its peers already read.
 earlier refresh completed finds no in-flight entry and presents a token Keycloak
 has already consumed, so it still gets `invalid_grant`. Closing that needs a
 cached result keyed on the pre-rotation token — live credentials held in pod
-memory, an AUTH-TX decision rather than a refresher one.
+memory, which delegated execution avoids by holding no refresh token.
 
 **A 2xx is not a promise of a token.** The success path validates the response
 shape — JSON object, non-empty string `access_token`, and an `expires_in` that
@@ -2979,12 +2980,11 @@ server still accepts. And
 `createKeycloakInstance` registers `onAuthLogout` to drop the persisted copy
 the moment Keycloak ends the session. The removal is hygiene against the app's
 own fallback, not a boundary — anything running in the page could keep a copy
-of the token regardless; only the 300 s TTL (and, eventually, the RFC's
-server-side exchange) actually bounds a leaked bearer.
+of the token regardless; only the 300 s TTL actually bounds a leaked bearer.
 
 This narrows the window; it does not close it (a turn can still outlive a
-120–300 s token). The close is `DELEGATED-DOWNSTREAM-AUTH-RFC.md` (token
-exchange at admission), deliberately not implemented here.
+120–300 s token). The close is delegated execution with `act_for_people` on
+([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md)).
 
 Regression tests: `useChatSse.test.tsx` (refusal below the hard floor, degraded
 proceed above it, HITL refusal reporting not-reached with no optimistic

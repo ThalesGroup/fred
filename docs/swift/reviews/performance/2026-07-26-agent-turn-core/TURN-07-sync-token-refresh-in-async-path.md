@@ -90,7 +90,7 @@ call in an unbounded thread pool.
   against httpx's real wording, pod shutdown completing under a per-step
   guarded `finally`, `agent.tool_latency_ms` reduced to `status` (first-sample
   label pinning made richer dims unreachable), and the wire-time token gate
-  rescuing once before refusing. AC5 unchanged: still owed to AUTH-TX.
+  rescuing once before refusing. AC5 unchanged: still owed.
 - **2026-08-09:** second external review round. Confirmed and fixed: the
   cleared-session fail-open on the frontend (`isTokenExpired` throws a bare
   string after keycloak-js `clearToken()`; `GetTokenSecondsLeft` reported the
@@ -246,10 +246,7 @@ turn on a downstream failure, and the chat send path preflights 120 s of token
 headroom and refuses to start a turn whose refresh failed over a nearly-dead
 token, instead of silently launching it.
 
-The root-cause design — token exchange at admission, replacing the forwarded
-user bearer with a pod-derived, audience-scoped, longer-lived credential — is
-written up in
-[`DELEGATED-DOWNSTREAM-AUTH-RFC.md`](../../../rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md),
-with the deployment preconditions verified (Keycloak 26.3, confidential
-`agentic` M2M client, soft-vs-c3 audience validation) and the open questions
-listed. Not implemented; awaiting its own issue.
+The root cause was later closed by delegated execution rather than token
+exchange: with `act_for_people` on, downstream calls present a renewable
+workload token plus a person grant
+([`DELEGATED-EXECUTION.md`](../../../platform/DELEGATED-EXECUTION.md)).
