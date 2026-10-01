@@ -766,3 +766,98 @@ def _one(audit: _AuditSink) -> dict[str, Any]:
     for canary in (_CALLER, _OTHER_CALLER, _BEARER, *_GRANT.values()):
         assert canary not in str(emitted)
     return emitted
+
+
+@pytest.mark.parametrize(
+    "mode", ["accepted", "malformed", "oversized", "disabled", "person", "untrusted"]
+)
+def test_logging_context_requires_admission_and_keeps_receiver_identity(
+    client: TestClient, caller: KeycloakUser, monkeypatch: pytest.MonkeyPatch, mode: str
+) -> None:
+    import base64
+    import json
+    from typing import cast
+
+    from fred_core.logs.context import current_context
+    from fred_core.logs.http import RequestLoggingMiddleware
+    from fred_core.logs.propagation import CONTEXT_HEADER
+
+    app = cast(FastAPI, client.app)
+    app.add_middleware(RequestLoggingMiddleware)
+
+    @app.get("/logging-context", operation_id="logging_context")
+    async def context(user=Depends(oidc.get_current_user)) -> dict[str, Any]:
+        return {"context": current_context(), "principal": user.uid}
+
+    if mode != "disabled":
+        _accept_delegated_calls()
+    else:
+        _switch_on(DelegationConfig())
+    if mode == "person":
+        monkeypatch.setattr(
+            oidc,
+            "decode_jwt",
+            lambda token: caller.model_copy(
+                update={
+                    "uid": "ordinary-person",
+                    "roles": [],
+                    "client_id": _LOGIN_CLIENT,
+                    "caller_roles": frozenset(),
+                }
+            ),
+        )
+    elif mode == "untrusted":
+        _without_the_role(monkeypatch, caller)
+    header = (
+        base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "v": 1,
+                    "context": {
+                        "correlation_id": "parent-journey",
+                        "request_id": "parent-request",
+                        "user_id": "spoof-person",
+                        "run_id": "spoof-run",
+                        "agent_id": "spoof-agent",
+                        "service": "spoof-service",
+                        "severity": "spoof-severity",
+                        "custom": {"phase": 2},
+                    },
+                }
+            ).encode()
+        )
+        .decode()
+        .rstrip("=")
+    )
+    if mode == "malformed":
+        header = "credential-canary!"
+    elif mode == "oversized":
+        header = "x" * 8193
+    response = client.get(
+        "/logging-context",
+        params={} if mode == "person" else _GRANT,
+        headers={**_HEADERS, CONTEXT_HEADER: header},
+    )
+    if mode == "untrusted":
+        assert response.status_code == 403
+        return
+    assert response.status_code == 200
+    values = response.json()["context"]
+    assert values["request_id"] == response.headers["X-Request-ID"]
+    assert values["request_id"] != "parent-request"
+    assert "service" not in values and "severity" not in values
+    if mode == "accepted":
+        assert values["correlation_id"] == "parent-journey"
+        assert values["custom"] == {"phase": 2}
+    else:
+        assert values["correlation_id"] != "parent-journey"
+        assert "custom" not in values
+    if mode in {"accepted", "malformed", "oversized"}:
+        assert {name: values[name] for name in ("user_id", "run_id", "agent_id")} == {
+            "user_id": "p-1",
+            "run_id": "r-1",
+            "agent_id": "a-1",
+        }
+    else:
+        assert "run_id" not in values and "agent_id" not in values
+    assert current_context() == {}

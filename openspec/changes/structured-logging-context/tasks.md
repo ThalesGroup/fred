@@ -20,9 +20,9 @@ Apply the agreed source specification and [design](design.md) sequentially. Fini
 
 ## 3. P1 — Delegated downstream correlation
 
-- [ ] 3.1 Add the next stack layer and shared versioned bounded context encoding/validation with documented exact byte/type/depth/count limits and reserved fields; verify boundary values and event-extra collision behavior through focused observable checks.
-- [ ] 3.2 Attach safe bound context per invocation in existing delegated first-party REST/MCP adapters and accept it only after existing receiver principal/grant admission; extend existing delegation receiver/outbound/MCP tests for inherited fields, authoritative local identities, ordinary user bearer/disabled mode and malformed/oversized input.
-- [ ] 3.3 Verify shared-client calls cannot leak context to subsequent calls, external providers, authentication endpoints or untrusted redirects; preserve existing authentication failures and sanitized diagnostics without serializing credentials or event-only extra.
+- [x] 3.1 Add the next stack layer and shared versioned bounded context encoding/validation with documented exact byte/type/depth/count limits and reserved fields; verify boundary values and event-extra collision behavior through focused observable checks.
+- [x] 3.2 Attach safe bound context per invocation in existing delegated first-party REST/MCP adapters and accept it only after existing receiver principal/grant admission; extend existing delegation receiver/outbound/MCP tests for inherited fields, authoritative local identities, ordinary user bearer/disabled mode and malformed/oversized input.
+- [x] 3.3 Verify shared-client calls cannot leak context to subsequent calls, external providers, authentication endpoints or untrusted redirects; preserve existing authentication failures and sanitized diagnostics without serializing credentials or event-only extra.
 - [ ] 3.4 Document the transport and precedence in the existing observability/delegation guidance, add the migration note, complete independent trusted-propagation/performance review and publish the assigned draft PR; attach it and verify focused checks and CI on the current head.
 
 ## 4. P2 — Workers and ingestion

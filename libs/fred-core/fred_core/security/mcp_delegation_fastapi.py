@@ -16,7 +16,8 @@ from fred_core.common.fastapi_handlers import (
     ACCOUNT_STATUS_UNAVAILABLE_CAUSE,
     DENIAL_CAUSE_HEADER,
 )
-from fred_core.security.mcp_delegation import apply_verified_grant
+from fred_core.logs.propagation import CONTEXT_HEADER, outbound_context_headers
+from fred_core.security.mcp_delegation import apply_verified_grant, verified_grant
 
 try:
     from fastapi_mcp import FastApiMCP
@@ -65,9 +66,28 @@ class DelegatedFastApiMCP(FastApiMCP):
             for name, value in http_request_info.headers.items():
                 if name.lower() in self._forward_headers:
                     headers[name] = value
-        response = await self._request(
-            client, method, path, query, headers, values or None
-        )
+        headers = {
+            name: value
+            for name, value in headers.items()
+            if name.lower() != CONTEXT_HEADER.lower()
+        }
+        if verified_grant() is not None:
+            headers.update(outbound_context_headers())
+        if verified_grant() is not None:
+            response = await client.request(
+                method,
+                path,
+                params=query,
+                headers=headers,
+                json=(values or None)
+                if method.lower() in {"post", "put", "patch"}
+                else None,
+                follow_redirects=False,
+            )
+        else:
+            response = await self._request(
+                client, method, path, query, headers, values or None
+            )
         if response.status_code in (401, 403) or (
             response.status_code == 503
             and response.headers.get(DENIAL_CAUSE_HEADER)
