@@ -842,6 +842,7 @@ function DocumentWorkspace({
         // landed on this row must not bubble up and hit that target too.
         event.stopPropagation();
         setDragOverFolder(null);
+        setPageDragOver(false);
         openDrawerWithDroppedFiles(event, node);
       },
     };
