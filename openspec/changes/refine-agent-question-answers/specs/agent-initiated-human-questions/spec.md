@@ -1,0 +1,83 @@
+## MODIFIED Requirements
+
+### Requirement: An interactive agent can ask one question through a platform tool
+
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+
+#### Scenario: Single choice
+
+- **GIVEN** an interactive agent with agent questions enabled
+- **WHEN** it asks a question with one option and no free text
+- **THEN** the person can select that option and the same turn resumes
+
+#### Scenario: Multiple choices and free text
+
+- **GIVEN** an interactive agent with agent questions enabled
+- **WHEN** it asks a question with two to four options and sets `allow_free_text` to false
+- **THEN** the person can select exactly one offered option or submit nonempty text without an option identifier, and the same turn resumes
+
+#### Scenario: Free text
+
+- **GIVEN** an interactive agent with agent questions enabled
+- **WHEN** it asks a question with free text and no options
+- **THEN** the person can submit nonempty text and the same turn resumes
+
+#### Scenario: Choice with comment
+
+- **GIVEN** an interactive agent with agent questions enabled
+- **WHEN** it asks a question with options and free text allowed
+- **THEN** the person can submit one option together with an optional comment in a single answer
+
+#### Scenario: Choices in managed chat
+
+- **WHEN** an agent asks a question with multiple choices
+- **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row whose localized placeholder is "Other" in English or "Autre" in French
+- **AND** the text-input row submits a text answer without fabricating an option identifier
+
+#### Scenario: Too many options
+
+- **WHEN** an agent calls `ask_user` with more than four choices
+- **THEN** the call fails validation before pausing and no choices are silently removed
+
+#### Scenario: Choice descriptions in managed chat
+
+- **WHEN** a choice has a description
+- **THEN** managed chat shows it beneath the label inside the same selectable choice
+
+#### Scenario: Answered question summary in managed chat
+
+- **GIVEN** an agent question has been answered or skipped
+- **WHEN** the conversation renders or reloads
+- **THEN** a compact card below the matching `ask_user` tool line shows its question and selected choice label, text answer, or skipped state, including an optional comment, without waiting for reload
+- **AND** the `ask_user` tool detail drawer lists the offered choices and highlights the selected one when the response is available
+
+#### Scenario: No-LLM Graph test assistant uses the question tool
+
+- **GIVEN** an interactive Graph test assistant with agent questions enabled
+- **WHEN** a person runs its confirmation, choice, free-text, or choice-with-comment HITL scenario
+- **THEN** the step calls the platform `ask_user` tool without an LLM call and managed chat shows the question and response under the matching tool line
+- **AND** disabling the control prevents a new question tool call
+
+#### Scenario: Pending question tool state and text actions
+
+- **WHEN** an `ask_user` call waits for a human answer
+- **THEN** its tool line remains in progress until the person answers or skips, without showing an error result for the pause
+- **AND** a free-text question shows a compact raised Send button directly left of Skip at the bottom right; tool approvals keep their separate approval actions
+
+#### Scenario: Earlier tool failure followed by an agent question
+
+- **GIVEN** a tool call failed before a later valid `ask_user` call in the same turn
+- **WHEN** the valid question pauses for a human answer
+- **THEN** the turn emits the pending question without a final answer containing the earlier tool failure
+
+#### Scenario: Composer waits for an agent question
+
+- **GIVEN** an `ask_user` question is pending or its answer is being submitted
+- **WHEN** the person tries to send a new chat message or command in that conversation
+- **THEN** the composer and send path block the new turn until the question is answered or skipped and its resume completes
+- **AND** another conversation remains usable
+
+#### Scenario: Invalid question form
+
+- **WHEN** the agent calls `ask_user` with neither options nor free text enabled, or with duplicate or empty option identifiers
+- **THEN** the call returns a tool error without pausing the conversation
