@@ -24,6 +24,8 @@ a localized drawer close label and semantic KPI tones after the UI package relea
 
 In the evaluation application, activate a run row with Enter, close the case drawer
 using its localized close action, and inspect outcome KPI values in both themes.
+Open the agent selector in a scrolled hosted form and navigate its options: only
+the options list should scroll, while the form and Fred host retain their position.
 
 ## Rollback
 

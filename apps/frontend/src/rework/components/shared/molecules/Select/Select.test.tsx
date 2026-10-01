@@ -61,12 +61,31 @@ function pressKey(key: string) {
   });
 }
 
-function captureOptionScroll() {
-  const scrolled: Element[] = [];
-  const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
-    scrolled.push(this);
+function mockMenuGeometry() {
+  const original = Element.prototype.getBoundingClientRect;
+  const rectangles = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.getAttribute("role") === "listbox") {
+      Object.defineProperties(this, {
+        clientHeight: { value: 100, configurable: true },
+        clientTop: { value: 1, configurable: true },
+      });
+      return new DOMRect(0, 99, 200, 102);
+    }
+    if (this.parentElement?.getAttribute("role") === "listbox") {
+      const list = this.parentElement;
+      const index = [...list.children].indexOf(this);
+      return new DOMRect(0, 100 + index * 60 - list.scrollTop, 200, 60);
+    }
+    return original.call(this);
   });
-  return { scrolled, restore: () => spy.mockRestore() };
+  const ancestorScroll = vi.spyOn(Element.prototype, "scrollIntoView");
+  return {
+    ancestorScroll,
+    restore: () => {
+      rectangles.mockRestore();
+      ancestorScroll.mockRestore();
+    },
+  };
 }
 
 function activeDescendantLabel(options: OptionModel<string>[]): string | undefined {
@@ -106,18 +125,26 @@ describe("Select option keys remain opaque DOM IDs", () => {
       { key: "team:alpha", value: "alpha", label: "Alpha" },
       { key: "team.alpha", value: "beta", label: "Beta" },
     ];
-    const scroll = captureOptionScroll();
+    const scroll = mockMenuGeometry();
     try {
       render(<Select options={options} onChange={onChange} size="medium" />);
       expect(() => pressKey("ArrowDown")).not.toThrow();
       const firstId = trigger().getAttribute("aria-activedescendant");
       expect(firstId).toContain("team:alpha");
-      expect(scroll.scrolled).toEqual([document.getElementById(firstId!)]);
+      const list = document.querySelector('ul[role="listbox"]') as HTMLUListElement;
+      expect(list.contains(document.getElementById(firstId!))).toBe(true);
+      expect(list.scrollTop).toBe(0);
 
       pressKey("ArrowDown");
       const secondId = trigger().getAttribute("aria-activedescendant");
       expect(secondId).toContain("team.alpha");
-      expect(scroll.scrolled[scroll.scrolled.length - 1]).toBe(document.getElementById(secondId!));
+      expect(list.contains(document.getElementById(secondId!))).toBe(true);
+      expect(list.scrollTop).toBe(20);
+      pressKey("Home");
+      expect(list.scrollTop).toBe(0);
+      pressKey("End");
+      expect(list.scrollTop).toBe(20);
+      expect(scroll.ancestorScroll).not.toHaveBeenCalled();
       pressKey("Enter");
       expect(onChange).toHaveBeenCalledExactlyOnceWith("beta");
     } finally {
@@ -128,12 +155,15 @@ describe("Select option keys remain opaque DOM IDs", () => {
   it("opens and scrolls to a period-bearing key before Enter selects its generic value", () => {
     const value = { team: "alpha" };
     const onChange = vi.fn();
-    const scroll = captureOptionScroll();
+    const scroll = mockMenuGeometry();
     try {
       render(<Select options={[{ key: "team.alpha", value, label: "Alpha" }]} onChange={onChange} size="small" />);
       expect(() => pressKey("ArrowDown")).not.toThrow();
       const activeId = trigger().getAttribute("aria-activedescendant");
-      expect(scroll.scrolled).toEqual([document.getElementById(activeId!)]);
+      const list = document.querySelector('ul[role="listbox"]') as HTMLUListElement;
+      expect(list.contains(document.getElementById(activeId!))).toBe(true);
+      expect(list.scrollTop).toBe(0);
+      expect(scroll.ancestorScroll).not.toHaveBeenCalled();
       pressKey("Enter");
       expect(onChange).toHaveBeenCalledExactlyOnceWith(value);
     } finally {
@@ -142,7 +172,7 @@ describe("Select option keys remain opaque DOM IDs", () => {
   });
 
   it("scrolls only the active option in each owning menu when two menus are mounted", () => {
-    const scroll = captureOptionScroll();
+    const scroll = mockMenuGeometry();
     try {
       render(
         <>
@@ -162,7 +192,8 @@ describe("Select option keys remain opaque DOM IDs", () => {
       }
       const lists = [...document.querySelectorAll<HTMLUListElement>('ul[role="listbox"]')];
       expect(lists).toHaveLength(2);
-      expect(scroll.scrolled).toEqual([lists[0].children[0], lists[1].children[0]]);
+      expect(lists.map((list) => list.scrollTop)).toEqual([0, 0]);
+      expect(scroll.ancestorScroll).not.toHaveBeenCalled();
       expect(lists[0].contains(document.getElementById(triggers[0].getAttribute("aria-activedescendant")!))).toBe(true);
       expect(lists[1].contains(document.getElementById(triggers[1].getAttribute("aria-activedescendant")!))).toBe(true);
     } finally {

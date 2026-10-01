@@ -88,6 +88,8 @@ Portaled listbox with virtual focus (DOM focus stays on the trigger,
 value type and unique key; `emptyMessage` overrides the default empty wording.
 The menu portals into the nearest consumer-owned `.fred-ui` root when present,
 or retains the legacy FRED body portal.
+Opening the menu and moving its active option scroll only the listbox, preserving
+the surrounding form and iframe host page's scroll position.
 
 **Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
 the same token `TextInput` uses, so a `Select` and a text field placed in one
