@@ -193,3 +193,49 @@ def test_to_thread_cancel_drain_gives_up_after_the_bound(monkeypatch):
 
     asyncio.run(_scenario())
     assert events == ["activity-cancelled", "thread-stopped"]
+
+
+def test_activity_context_survives_thread_work_and_retries_without_leaking(monkeypatch):
+    from types import SimpleNamespace
+
+    from fred_core import KeycloakUser
+    from fred_core.logs.context import current_context, log_context
+    from fred_core.logs.propagation import encode_log_context
+
+    from knowledge_flow_backend.features.scheduler import logging_context as scoped
+
+    info = SimpleNamespace(workflow_id="workflow-a", workflow_run_id="execution-a", activity_id="extract-a", attempt=1)
+    monkeypatch.setattr(scoped.activity, "in_activity", lambda: True)
+    monkeypatch.setattr(scoped.activity, "info", lambda: info)
+    monkeypatch.setattr(activity_utils.activity, "heartbeat", lambda details: None)
+    header = encode_log_context(
+        {"correlation_id": "upload-journey", "team_id": "team-a", "custom": "retained", "user_id": "spoof", "document_uid": "wrong-document", "task_id": "wrong-task", "workflow_id": "wrong-workflow"}
+    )
+
+    @scoped.ingestion_activity
+    async def run(user, metadata, logging_context=None, task_id=None):
+        return await activity_utils.to_thread_with_heartbeat(current_context)
+
+    async def scenario():
+        with log_context(correlation_id="unrelated", user_id="other-person"):
+            first = await run(KeycloakUser(uid="person-a", username="synthetic", roles=[]), SimpleNamespace(document_uid="document-a"), header, "task-a")
+            info.attempt = 2
+            second = await run(KeycloakUser(uid="person-a", username="synthetic", roles=[]), SimpleNamespace(document_uid="document-a"), header, "task-a")
+            assert current_context() == {"correlation_id": "unrelated", "user_id": "other-person"}
+        assert current_context() == {}
+        return first, second
+
+    first, second = asyncio.run(scenario())
+    assert first == {
+        "correlation_id": "upload-journey",
+        "user_id": "person-a",
+        "team_id": "team-a",
+        "custom": "retained",
+        "document_uid": "document-a",
+        "task_id": "task-a",
+        "workflow_id": "workflow-a",
+        "workflow_run_id": "execution-a",
+        "activity_id": "extract-a",
+        "activity_attempt": 1,
+    }
+    assert second == {**first, "activity_attempt": 2}

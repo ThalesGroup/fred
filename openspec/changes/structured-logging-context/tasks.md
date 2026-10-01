@@ -27,9 +27,9 @@ Apply the agreed source specification and [design](design.md) sequentially. Fini
 
 ## 4. P2 — Workers and ingestion
 
-- [ ] 4.1 Add the next stack layer and apply common logging setup/format/service role to active worker entrypoints, starting with Knowledge Flow `main_worker.py` and Control Plane `main_worker.py`; verify representative worker startup output without Temporal or another external service.
-- [ ] 4.2 Capture optional bounded safe context before `IngestionDelivery.admit` persists `PipelineDefinition`, carry it through existing scheduler/delivery handoff, and restore scopes around activities with workflow/run/activity/document/task/attempt references; extend an existing ingestion delivery/activity test for durable handoff and retry identity.
-- [ ] 4.3 Preserve absent-envelope jobs and fresh scheduled correlations, keeping generation/export out of workflow code and respecting replay-aware logging; verify a legacy payload still executes and deterministic workflow behavior remains compatible using existing focused worker tests.
+- [x] 4.1 Add the next stack layer and apply common logging setup/format/service role to active worker entrypoints, starting with Knowledge Flow `main_worker.py` and Control Plane `main_worker.py`; verify representative worker startup output without Temporal or another external service.
+- [x] 4.2 Capture optional bounded safe context before `IngestionDelivery.admit` persists `PipelineDefinition`, carry it through existing scheduler/delivery handoff, and restore scopes around activities with workflow/run/activity/document/task/attempt references; extend an existing ingestion delivery/activity test for durable handoff and retry identity.
+- [x] 4.3 Preserve absent-envelope jobs and fresh scheduled correlations, keeping generation/export out of workflow code and respecting replay-aware logging; verify a legacy payload still executes and deterministic workflow behavior remains compatible using existing focused worker tests.
 - [ ] 4.4 Update existing ingestion/observability guidance and the worker migration note, complete independent concurrency/performance review, commit and publish the assigned draft PR; attach it and verify focused checks plus CI, explicitly distinguishing offline verification from rollout verification.
 
 ## 5. P3 — Frontend pod

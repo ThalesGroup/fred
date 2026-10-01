@@ -49,6 +49,11 @@ from multiprocessing.process import BaseProcess
 from typing import Any
 
 from fred_core.documents.document_structures import DocumentMetadata
+from fred_core.logs.context import current_context, request_log_scope
+from fred_core.logs.log_setup import log_setup
+from fred_core.logs.null_log_store import NullLogStore
+from fred_core.logs.propagation import bind_received_log_context, encode_log_context
+from fred_pod.common.structures import LogOutputFormat
 from temporalio import exceptions
 
 from knowledge_flow_backend.common.processing_metrics import processing_metrics_scope
@@ -121,6 +126,9 @@ class ExtractionRequest:
     metadata_json: str
     profile: str | None
     config_file: str | None
+    logging_context: str | None = None
+    log_format: LogOutputFormat = "text"
+    log_level: str = "INFO"
 
 
 def _install_parent_death_signal(expected_parent_pid: int) -> None:
@@ -228,12 +236,14 @@ class _ChildGroup:
 
 
 def _child_with_kpis(request: ExtractionRequest, result_pipe: Connection, parent_pid: int, *, sender: socket.socket, target: Callable[..., None]) -> None:
+    log_setup(service_name="knowledge-flow-worker", service_role="worker", log_format=request.log_format, log_level=request.log_level, store=NullLogStore(), use_rich=False, include_uvicorn=False)
     from knowledge_flow_backend.features.scheduler.kpi_utils import extraction_kpi_socket, processor_activity_timer
 
     sender.setblocking(False)
     token = extraction_kpi_socket.set(sender)
     try:
-        with processing_metrics_scope(processor_activity_timer):
+        with request_log_scope(), processing_metrics_scope(processor_activity_timer):
+            bind_received_log_context(request.logging_context)
             target(request, result_pipe, parent_pid)
     finally:
         extraction_kpi_socket.reset(token)
@@ -600,12 +610,19 @@ async def extract_document(
 
     await inject_ingestion_fault(stage="extraction", document_name=metadata.document_name, document_uid=metadata.document_uid)
 
+    from knowledge_flow_backend.application_context import ApplicationContext
+
+    app = ApplicationContext.get_instance().get_config().app
+
     request = ExtractionRequest(
         input_path=str(input_path),
         output_dir=str(output_dir),
         metadata_json=metadata.model_dump_json(),
         profile=getattr(profile, "value", profile) if profile is not None else None,
         config_file=os.environ.get("CONFIG_FILE"),
+        logging_context=encode_log_context(current_context()),
+        log_format=app.log_format,
+        log_level=app.log_level,
     )
     details = {"stage": stage, "document_uid": metadata.document_uid}
 
