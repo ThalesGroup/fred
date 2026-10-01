@@ -140,8 +140,10 @@ from fred_sdk.contracts.runtime import (
     FinalRuntimeEvent,
     HistoryStorePort,
     HumanInputRequest,
+    InterruptedAction,
     RuntimeErrorEvent,
     RuntimeEvent,
+    RuntimeEventKind,
     RuntimeServices,
     parse_human_input_answer,
 )
@@ -792,6 +794,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             context=context_dict,
             resume_payload=None,
             invocation_turns=request.prior_turns,
+            # A child has no user to offer "continue" to.
+            interrupted_action="restart",
         )
 
         # Each child names itself on the run it shares with its parent, so a
@@ -1171,6 +1175,8 @@ class _AgentExecuteRequest(BaseModel):
         default=(),
         description="Prior conversation turns forwarded by the calling agent.",
     )
+    interrupted_action: InterruptedAction | None = None
+    interruption_id: str | None = Field(default=None, min_length=1)
     inline_tuning: dict[str, TuningValue] | None = Field(
         default=None,
         description="Optional inline tuning overrides. Honored only in agent_id (direct template) mode.",
@@ -1207,7 +1213,11 @@ class _AgentExecuteRequest(BaseModel):
 
         if bool(self.agent_id) == bool(self.agent_instance_id):
             raise ValueError("Provide exactly one of agent_id or agent_instance_id")
-        if self.resume_payload is None and not self.message.strip():
+        if (
+            self.resume_payload is None
+            and self.interrupted_action != "continue"
+            and not self.message.strip()
+        ):
             raise ValueError("message is required when resume_payload is not set")
         return self
 
@@ -1235,6 +1245,8 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         occurrence_id=r.occurrence_id,
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
+        interrupted_action=r.interrupted_action,
+        interruption_id=r.interruption_id,
         inline_tuning=r.inline_tuning,
         turn_options=r.turn_options,
     )
@@ -2734,6 +2746,15 @@ def _turn_command(ctx: dict[str, Any]) -> CommandDescriptor | None:
         return None
 
 
+def _ran_no_turn(payloads: list[dict[str, Any]]) -> bool:
+    """An interrupted execution was only reported; the user's message returns
+    to the composer, so the turn leaves no history row and no KPI."""
+    return any(
+        payload.get("kind") == RuntimeEventKind.EXECUTION_INTERRUPTED.value
+        for payload in payloads
+    )
+
+
 async def _write_turn_history(
     *,
     session_id: str,
@@ -2798,6 +2819,8 @@ async def _write_turn_history(
     )
     from fred_core.store.vector_search import VectorSearchHit
 
+    if _ran_no_turn(payloads):
+        return
     try:
         base_rank: int = await history_store.next_rank(session_id)
     except Exception:
@@ -3287,6 +3310,8 @@ def _emit_turn_completed(
       Incremented only on execution_error turns.  Lets Prometheus alert on
       the error rate without filtering histograms by label value.
     """
+    if _ran_no_turn(payloads):
+        return
     try:
         kpi = get_runtime_context().get_kpi_writer()
         outcome = _parse_turn_outcome(payloads, turn_start)
@@ -4235,6 +4260,8 @@ async def _iterate_runtime_event_payloads_inner(
         interrupt_id=request.interrupt_id,
         resume_payload=request.resume_payload,
         invocation_turns=getattr(request, "invocation_turns", ()),
+        interrupted_action=request.interrupted_action,
+        interruption_id=request.interruption_id,
     )
 
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
@@ -4294,7 +4321,8 @@ async def _iterate_runtime_event_payloads_inner(
             # On a HITL resume the runtime ignores input entirely (state is loaded
             # from the checkpoint), so bypass validation with model_construct.
             input_cls = definition.input_model()
-            if request.resume_payload is not None:
+            continuing = request.interrupted_action == "continue"
+            if request.resume_payload is not None or continuing:
                 graph_input = input_cls.model_construct(message="")
             else:
                 graph_input = input_cls.model_validate(
@@ -4314,6 +4342,14 @@ async def _iterate_runtime_event_payloads_inner(
                     interrupt_id=request.interrupt_id,
                     occurrence_id=request.occurrence_id,
                 )
+            elif isinstance(executor, GraphExecutor) and continuing:
+                # The HITL single-use claim, keyed by the interruption, admits
+                # one continue across replicas.
+                graph_claim = await _claim_hitl_resume_before_invocation(
+                    session_id=executor.thread_id(execution_config),
+                    checkpoint_ns="",
+                    interrupt_id=f"continue:{request.interruption_id}",
+                )
             async for event in executor.stream(graph_input, execution_config):
                 payload = event.model_dump(mode="json")
                 if not isinstance(payload, dict):
@@ -4324,6 +4360,8 @@ async def _iterate_runtime_event_payloads_inner(
             if graph_claim is not None:
                 await graph_claim.consume()
         else:
+            if request.interrupted_action == "continue":
+                raise RuntimeError("Only Graph agents can continue an interrupted run.")
             # DeepAgentDefinition is-a ReActAgentDefinition (same typed
             # input/output, same event contract), so it shares this branch's
             # ReActInput plumbing below — only the runtime class differs.
