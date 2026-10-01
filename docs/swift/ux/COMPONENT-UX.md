@@ -2682,6 +2682,8 @@ what surfaced it here (this dialog's `Annuler` button, `color="on-surface"`).
 Fixed at the shared-component level (`--btn-border: var(--outline)` in both
 `Button.module.scss` and `IconButton.module.scss`), so every existing
 `variant="outlined"` call site is corrected without touching call sites.
+`IconButton`'s outlined border has since moved to the lighter `outline-muted`
+token (2026-10-01); `Button` keeps `outline`.
 
 #### Open UX issues
 
