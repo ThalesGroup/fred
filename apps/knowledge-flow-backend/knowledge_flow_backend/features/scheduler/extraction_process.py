@@ -256,7 +256,8 @@ async def run_extraction_in_process(
         receiver, sender = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
     except OSError:
         logger.warning("[EXTRACTION][KPI] Could not create telemetry channel", exc_info=True)
-        return await _run_extraction_in_process(request=request, budget_seconds=budget_seconds, heartbeat=heartbeat, target=target, start_method=start_method)
+        await _run_extraction_in_process(request=request, budget_seconds=budget_seconds, heartbeat=heartbeat, target=target, start_method=start_method)
+        return
     with receiver, sender:
         receiver.setblocking(False)
 

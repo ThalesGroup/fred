@@ -44,6 +44,16 @@ describe("importPhaseLabel", () => {
     expect(importPhaseLabel(task({ stage: "decision", state: "pending" }), t)).toBeNull();
   });
 
+  it("says a transferred file waits, rather than naming a phase nothing runs yet", () => {
+    const queued = task({ stage: "analysis", state: "pending" });
+    expect(importPhaseLabel(queued, t)).toBe("rework.imports.stepper.waiting");
+    expect(importPhaseHintFor(queued, t)).toBe("rework.imports.stepper.hint.waiting");
+    // Once a worker reports it, the phase is named again.
+    expect(importPhaseLabel(task({ stage: "analysis", state: "running", step: "uploading" }), t)).toBe(
+      "rework.tasks.ingestionStep.uploading",
+    );
+  });
+
   it("says the file was sent, not ingested, when nothing was going to ingest it", () => {
     // Upload-only mode never hands the file to the server's half. Calling that
     // "ingestion complete" claimed something that never happened.

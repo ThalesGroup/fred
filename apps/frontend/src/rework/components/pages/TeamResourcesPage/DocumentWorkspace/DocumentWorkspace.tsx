@@ -842,6 +842,7 @@ function DocumentWorkspace({
         // landed on this row must not bubble up and hit that target too.
         event.stopPropagation();
         setDragOverFolder(null);
+        setPageDragOver(false);
         openDrawerWithDroppedFiles(event, node);
       },
     };
@@ -1432,11 +1433,11 @@ function DocumentWorkspace({
   // Only present when some row actually has a state to report — a folder of
   // settled documents shows nothing here, and an always-there track would just
   // be 8rem of blank on every row. Fixed rather than "auto" for the same
-  // dual-grid reason as the actions column below; sized for the widest chip,
-  // FR "Traitement..." with its spinner, which 6rem clipped.
+  // dual-grid reason as the actions column below. Its usual width fits the
+  // widest chip (FR "Traitement..."); it shrinks beside a wide import panel.
   const statusColumn: DataTableColumn<Row> = {
     label: "",
-    size: "8rem",
+    size: "minmax(0, 8rem)",
     cellRenderer: (row) => {
       // Folder rollup (#2384). Precedence is processing > failures > done:
       // while anything is still running the folder is not settled yet, and
@@ -1471,7 +1472,7 @@ function DocumentWorkspace({
     {
       label: columnLabel("name"),
       sortable: true,
-      size: "2fr",
+      size: "minmax(8rem, 2fr)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
           return (
@@ -1509,7 +1510,7 @@ function DocumentWorkspace({
     {
       label: columnLabel("size"),
       sortable: true,
-      size: "6.5rem",
+      size: "minmax(0, 6.5rem)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
           const ids = folderDescendantTagIds.get(row.node.full) ?? [];
@@ -1529,7 +1530,7 @@ function DocumentWorkspace({
       // Pydantic default_factory, base_input_processor.py) and always set.
       label: columnLabel("created"),
       sortable: true,
-      size: "9rem",
+      size: "minmax(0, 9rem)",
       cellRenderer: (row) => (
         <span className={styles.nowrapCell}>
           {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.source.date_added_to_kb)}
@@ -1544,7 +1545,7 @@ function DocumentWorkspace({
       // ingested before this field existed has no uploaded_by and renders
       // "—", same as a folder (folders have no uploader concept at all).
       label: t("rework.resources.columns.author"),
-      size: "9rem",
+      size: "minmax(0, 9rem)",
       cellRenderer: (row) => {
         const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
         if (!uid) return <span className={styles.nowrapCell}>—</span>;

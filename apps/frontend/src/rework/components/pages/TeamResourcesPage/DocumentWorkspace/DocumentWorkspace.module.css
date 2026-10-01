@@ -94,6 +94,11 @@
 /* Taille/Création/Auteur: always readable on one line, never squeezed
  * to a second line under a fixed-width column. */
 .nowrapCell {
+  /* These columns shrink beside a wide import panel: end in "…", not mid-glyph. */
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

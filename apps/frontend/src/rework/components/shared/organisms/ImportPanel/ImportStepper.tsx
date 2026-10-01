@@ -40,7 +40,14 @@ function Marker({ state }: { state: PhaseState }) {
   // The phase carries the accessible name, state included — a second
   // "Loading" per phase would only crowd it.
   if (state === "current") return <Spinner size={12} decorative />;
-  const type = state === "done" ? "check_circle" : state === "failed" ? "error_outline" : "radio_button_unchecked";
+  const type =
+    state === "done"
+      ? "check_circle"
+      : state === "failed"
+        ? "error_outline"
+        : state === "waiting"
+          ? "pending"
+          : "radio_button_unchecked";
   return <Icon category="outlined" type={type} />;
 }
 
