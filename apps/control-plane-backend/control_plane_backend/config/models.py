@@ -29,8 +29,8 @@ from fred_core.common import (
     TemporalSchedulerConfig,
 )
 from fred_core.scheduler import SchedulerBackend
-from fred_sdk.contracts.models import TuningValue
 from fred_pod.common.structures import LogOutputFormat
+from fred_sdk.contracts.models import TuningValue
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from control_plane_backend.applications.catalog import ApplicationSourceConfig

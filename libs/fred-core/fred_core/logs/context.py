@@ -16,9 +16,9 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import TypeAlias
 
 from structlog.contextvars import bind_contextvars, get_contextvars, reset_contextvars
@@ -169,7 +169,7 @@ def current_context() -> LogContext:
 
 
 @contextmanager
-def log_context(*, clear: tuple[str, ...] = (), **values: LogValue) -> Iterator[None]:
+def log_context(*, clear: tuple[str, ...] = (), **values: object) -> Iterator[None]:
     """Bind nested metadata and restore it on all exits, including cancellation."""
     validated = safe_context(values)
     tokens = bind_contextvars(**{**dict.fromkeys(clear), **validated})

@@ -28,11 +28,11 @@ import uvicorn
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_mcp import AuthConfig, FastApiMCP
-from fred_core.logs.null_log_store import NullLogStore
 from fred_core import enforce_account_status, get_config, initialize_user_security, log_setup
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
+from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.security.mcp_delegation import (
     declare_delegation_parameters,

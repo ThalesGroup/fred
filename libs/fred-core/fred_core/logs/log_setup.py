@@ -18,10 +18,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
-import threading
-import sys
 import os
+import re
+import sys
+import threading
+
+from fred_pod.common.config_files import flush_startup_logs
+from fred_pod.common.structures import LogOutputFormat
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 from fred_core.logs.log_structures import (
@@ -29,14 +32,11 @@ from fred_core.logs.log_structures import (
     KPI_LOGGER_NAME,
     LogCategory,
 )
-
-from fred_pod.common.structures import LogOutputFormat
-from fred_pod.common.config_files import flush_startup_logs
 from fred_core.logs.processors import (
     ContextSnapshotFilter,
     event_properties,
-    output_formatter,
     install_context_capture,
+    output_formatter,
 )
 
 logger = logging.getLogger(__name__)
