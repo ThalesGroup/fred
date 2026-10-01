@@ -41,9 +41,16 @@
 /* ── More menu ──────────────────────────────────────────────────────────────── */
 
 .moreMenu {
+  display: flex;
   position: absolute;
   top: var(--spacing-2xs);
   right: var(--spacing-2xs);
+  gap: var(--spacing-3xs);
+}
+
+/* Two buttons in the corner instead of one: keep the header text clear of both. */
+.card[data-has-favorite="true"] .header {
+  padding-right: calc(var(--spacing-xl) + var(--spacing-l));
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */

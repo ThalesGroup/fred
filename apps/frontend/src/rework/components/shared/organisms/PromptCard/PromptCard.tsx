@@ -13,6 +13,8 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
 import { type PromptSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
@@ -48,6 +50,8 @@ export interface PromptCardProps {
   onDelete?: () => void;
   onImport?: () => void;
   onRemoveFromMarketplace?: () => void;
+  /** Shows the favorite star; omitted where favorites do not apply (marketplace, `/` picker). */
+  onToggleFavorite?: () => void;
 }
 
 export default function PromptCard({
@@ -67,11 +71,13 @@ export default function PromptCard({
   onDelete,
   onImport,
   onRemoveFromMarketplace,
+  onToggleFavorite,
 }: PromptCardProps) {
   const { t } = useTranslation();
   const body = prompt.description && prompt.description !== prompt.name ? prompt.description : null;
   const preview = !body && prompt.text_preview ? prompt.text_preview : null;
   const isMarketplace = variant === "marketplace";
+  const isFavorite = prompt.is_favorite === true;
 
   // Header label: the author team on the marketplace (each team has its own
   // categories, so a category label is meaningless there), the category in the
@@ -150,26 +156,44 @@ export default function PromptCard({
   return (
     <div
       className={styles.card}
+      data-has-favorite={Boolean(onToggleFavorite)}
       onClick={onView}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onView()}
     >
-      {/* ── More menu (top-right) ── */}
-      {options.length > 0 && (
-        // The card itself is a button; stop the menu's clicks from opening the
+      {/* ── Favorite star + more menu (top-right) ── */}
+      {(onToggleFavorite || options.length > 0) && (
+        // The card itself is a button; stop these clicks from opening the
         // read-only view behind it.
         <div className={styles.moreMenu} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          <IconButtonMenu<MoreAction>
-            iconButton={{
-              color: "on-surface-retreat",
-              variant: "icon",
-              size: "small",
-              icon: { category: "outlined", type: "more_vert" },
-            }}
-            options={options}
-            onSelect={handleMoreSelect}
-          />
+          {onToggleFavorite && (
+            <Tooltip
+              text={t(isFavorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add")}
+            >
+              <IconButton
+                variant="icon"
+                size="small"
+                color={isFavorite ? "warning" : "on-surface-retreat"}
+                icon={{ category: "outlined", type: "star", filled: isFavorite }}
+                aria-label={t("rework.teams.prompts.favorite.filter")}
+                aria-pressed={isFavorite}
+                onClick={onToggleFavorite}
+              />
+            </Tooltip>
+          )}
+          {options.length > 0 && (
+            <IconButtonMenu<MoreAction>
+              iconButton={{
+                color: "on-surface-retreat",
+                variant: "icon",
+                size: "small",
+                icon: { category: "outlined", type: "more_vert" },
+              }}
+              options={options}
+              onSelect={handleMoreSelect}
+            />
+          )}
         </div>
       )}
 

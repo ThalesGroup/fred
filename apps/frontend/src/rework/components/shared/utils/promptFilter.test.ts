@@ -103,4 +103,12 @@ describe("filterPrompts", () => {
   it("does not let a query span the name/description boundary", () => {
     expect(filterPrompts([WEEKLY], { ...ALL, search: "reportsummarises" })).toEqual([]);
   });
+
+  it("keeps only favorites when asked, combined with the category", () => {
+    const starred = [{ ...WEEKLY, is_favorite: true }, ONBOARD, { ...LOOSE, is_favorite: true }];
+
+    expect(ids(filterPrompts(starred, { ...ALL, favoritesOnly: true }))).toEqual(["p-1", "p-3"]);
+    expect(ids(filterPrompts(starred, { search: "", categoryId: "cat-report", favoritesOnly: true }))).toEqual(["p-1"]);
+    expect(ids(filterPrompts(starred, { search: "", categoryId: "cat-hr", favoritesOnly: true }))).toEqual([]);
+  });
 });

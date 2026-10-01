@@ -2920,7 +2920,15 @@
           "message": "This prompt is published on the marketplace. Your changes will be immediately visible there to every user.",
           "confirm": "Save"
         },
-        "titlePersonal": "Your personal prompts"
+        "titlePersonal": "Your personal prompts",
+        "favorite": {
+          "add": "Add to favorites",
+          "remove": "Remove from favorites",
+          "filter": "Favorites",
+          "empty": "No favorite prompts here. Star a prompt to find it here.",
+          "errorSummary": "Could not update favorites",
+          "errorDetail": "The change was not saved. Please try again."
+        }
       }
     },
     "userSettings": {

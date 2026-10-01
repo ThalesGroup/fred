@@ -24,6 +24,10 @@ import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import type { OptionModel } from "@models/Option.model.ts";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
+import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip.tsx";
+import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle.ts";
 import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
 import {
   useGetContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGetQuery,
@@ -71,6 +75,7 @@ export default function PromptSelectionChatPanel({
   const [space, setSpace] = useState<Space>(isPersonalChat ? "personal" : "team");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [insertingId, setInsertingId] = useState<string | null>(null);
 
   // Reopening starts clean: a search left over from last time would otherwise
@@ -80,6 +85,7 @@ export default function PromptSelectionChatPanel({
     setSpace(isPersonalChat ? "personal" : "team");
     setSearch("");
     setCategory(null);
+    setFavoritesOnly(false);
   }, [open, isPersonalChat]);
 
   // Prompt categories are team-owned, so each space has its own set — the
@@ -91,6 +97,7 @@ export default function PromptSelectionChatPanel({
   // The space the list and the chips read from. A personal chat only ever has
   // one, and it is the chat's own team id.
   const spaceTeamId = isPersonalChat || space === "team" ? teamId : personalTeamId;
+  const toggleFavorite = usePromptFavoriteToggle(spaceTeamId);
 
   // Every query is skipped while closed: the panel is mounted for every chat,
   // but most sessions never open it.
@@ -161,8 +168,8 @@ export default function PromptSelectionChatPanel({
   );
 
   const visiblePrompts = useMemo(
-    () => filterPrompts(prompts, { search, categoryId: category, knownCategoryIds }),
-    [prompts, search, category, knownCategoryIds],
+    () => filterPrompts(prompts, { search, categoryId: category, knownCategoryIds, favoritesOnly }),
+    [prompts, search, category, knownCategoryIds, favoritesOnly],
   );
 
   const handlePick = async (prompt: ContextPromptSummary) => {
@@ -201,13 +208,21 @@ export default function PromptSelectionChatPanel({
       {/* Search and category are one group — both narrow the same list — so they
           sit tighter than the panel body's own spacing between blocks. */}
       <div className={styles.filters}>
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
-          clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
-          size="xs"
-        />
+        <div className={styles.searchRow}>
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={t("chatbot.promptSelectionPanel.searchPlaceholder")}
+            clearAriaLabel={t("chatbot.promptSelectionPanel.clearSearch")}
+            size="xs"
+          />
+          <FavoritesFilterChip
+            size="xs"
+            label={t("rework.teams.prompts.favorite.filter")}
+            active={favoritesOnly}
+            onToggle={() => setFavoritesOnly((on) => !on)}
+          />
+        </div>
 
         {categories.length > 0 && (
           <Select<string>
@@ -231,12 +246,14 @@ export default function PromptSelectionChatPanel({
                 box untouched — "no match for this search" would be a lie. */}
           {prompts.length === 0
             ? t("chatbot.promptSelectionPanel.empty")
-            : t("chatbot.promptSelectionPanel.emptyFilters")}
+            : favoritesOnly
+              ? t("rework.teams.prompts.favorite.empty")
+              : t("chatbot.promptSelectionPanel.emptyFilters")}
         </p>
       ) : (
         <ul className={styles.list}>
           {visiblePrompts.map((prompt) => (
-            <li key={prompt.id}>
+            <li key={prompt.id} className={styles.item}>
               <button
                 type="button"
                 className={styles.row}
@@ -247,6 +264,24 @@ export default function PromptSelectionChatPanel({
                 <span className={styles.name}>{prompt.name}</span>
                 {prompt.description && <span className={styles.description}>{prompt.description}</span>}
               </button>
+              {/* A sibling of the row, not inside it: a button cannot hold a button. */}
+              <span className={styles.favorite}>
+                <Tooltip
+                  text={t(
+                    prompt.is_favorite ? "rework.teams.prompts.favorite.remove" : "rework.teams.prompts.favorite.add",
+                  )}
+                >
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    color={prompt.is_favorite ? "warning" : "on-surface-retreat"}
+                    icon={{ category: "outlined", type: "star", filled: prompt.is_favorite === true }}
+                    aria-label={t("rework.teams.prompts.favorite.filter")}
+                    aria-pressed={prompt.is_favorite === true}
+                    onClick={() => void toggleFavorite(prompt)}
+                  />
+                </Tooltip>
+              </span>
             </li>
           ))}
         </ul>

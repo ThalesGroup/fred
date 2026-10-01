@@ -31,6 +31,15 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
   promptsByTeam: {} as Record<string, unknown[]>,
   categoriesByTeam: {} as Record<string, unknown[]>,
+  toggleFavorite: vi.fn(),
+  favoriteTeamIds: [] as (string | undefined)[],
+}));
+
+vi.mock("@core/hooks/usePromptFavoriteToggle.ts", () => ({
+  usePromptFavoriteToggle: (teamId: string | undefined) => {
+    h.favoriteTeamIds.push(teamId);
+    return h.toggleFavorite;
+  },
 }));
 
 vi.mock("react-i18next", () => ({
@@ -106,6 +115,8 @@ beforeEach(() => {
     ],
     [PERSONAL_ID]: [prompt({ id: "p1", name: "My scratch prompt", scope: "personal" })],
   };
+  h.toggleFavorite.mockReset();
+  h.favoriteTeamIds = [];
   h.categoriesByTeam = { [TEAM_ID]: [{ id: "cat-a", name: "Reports" }], [PERSONAL_ID]: [] };
 });
 
@@ -240,5 +251,42 @@ describe("PromptSelectionChatPanel", () => {
     await click(buttonWithText("Weekly report"));
     await click(buttonWithText("Bug triage"));
     expect(onInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it("narrows the list to favorites from the chip beside the search", async () => {
+    h.promptsByTeam[TEAM_ID] = [
+      prompt({ id: "t1", name: "Weekly report", category_id: "cat-a", is_favorite: true }),
+      prompt({ id: "t2", name: "Bug triage", category_id: null }),
+    ];
+    mount();
+    const chip = container.querySelector<HTMLButtonElement>("button[aria-pressed][data-size='xs']");
+    expect(chip?.getAttribute("aria-pressed")).toBe("false");
+
+    await click(chip ?? undefined);
+
+    expect(chip?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("Weekly report");
+    expect(container.textContent).not.toContain("Bug triage");
+  });
+
+  it("says how to add a favorite when the space has none", async () => {
+    mount();
+    await click(container.querySelector("button[data-size='xs']") ?? undefined);
+
+    expect(container.textContent).toContain("rework.teams.prompts.favorite.empty");
+  });
+
+  it("stars a prompt of the space it is listed in, without inserting it", async () => {
+    const onInsert = vi.fn(async () => true);
+    mount({ onInsert });
+    const star = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="rework.teams.prompts.favorite.filter"][aria-pressed="false"]',
+    );
+
+    await click(star ?? undefined);
+
+    expect(h.toggleFavorite).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
+    expect(h.favoriteTeamIds.at(-1)).toBe(TEAM_ID);
+    expect(onInsert).not.toHaveBeenCalled();
   });
 });
