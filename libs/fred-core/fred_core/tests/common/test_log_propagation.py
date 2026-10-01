@@ -68,7 +68,6 @@ async def test_mcp_inner_request_uses_admitted_context_and_a_fresh_request_id(
     from fred_core.security import mcp_delegation, oidc
     from fred_core.security.delegation import AssertedUser
     from fred_core.security.mcp_delegation_fastapi import DelegatedFastApiMCP
-    from mcp import types
 
     app = FastAPI()
     app.add_middleware(RequestLoggingMiddleware)
@@ -91,7 +90,8 @@ async def test_mcp_inner_request_uses_admitted_context_and_a_fresh_request_id(
     monkeypatch.setattr(oidc, "resolve_request_principal", principal)
     monkeypatch.setattr(oidc, "decode_jwt", lambda token: None)
     auth = mcp_delegation.mcp_mount_auth(
-        request=Request({"type": "http", "headers": []}), token="synthetic-bearer"
+        request=Request({"type": "http", "headers": []}),
+        token="synthetic-bearer",  # nosec B106 - synthetic fixture, never a credential
     )
     await anext(auth)
     try:
@@ -127,8 +127,8 @@ async def test_mcp_inner_request_uses_admitted_context_and_a_fresh_request_id(
     finally:
         await anext(auth, None)
     assert isinstance(result, list)
-    assert isinstance(result[0], types.TextContent)
-    payload = json.loads(result[0].text)
+    assert getattr(result[0], "type") == "text"
+    payload = json.loads(getattr(result[0], "text"))
     assert payload["query"] == {
         "person": "person-a",
         "run": "run-a",
