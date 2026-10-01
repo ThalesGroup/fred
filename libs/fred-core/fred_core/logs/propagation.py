@@ -97,6 +97,15 @@ def decode_log_context(header: str) -> tuple[LogContext | None, str | None]:
             return None, "invalid_context"
         if len(values) > MAX_FIELDS:
             return None, "invalid_context"
+        correlation = values.get("correlation_id")
+        if "correlation_id" in values and (
+            not isinstance(correlation, str)
+            or not correlation
+            or not all("!" <= char <= "~" for char in correlation)
+        ):
+            # This reference is returned in an HTTP header. JSON-safe alone
+            # permits Unicode/control characters that could break a response.
+            return None, "invalid_context"
         return safe_context(
             {key: value for key, value in values.items() if key not in RECEIVER_FIELDS}
         ), None
@@ -118,12 +127,24 @@ def admit_delegated_log_context(
     header: str | None, *, user_id: str, run_id: str, agent_id: str
 ) -> None:
     """Apply only after principal/grant admission; grant identity always wins."""
+    bind_operation_context(user_id=user_id, run_id=run_id, agent_id=agent_id)
     if header is not None:
         values, reason = decode_log_context(header)
         if values is not None:
-            bind_operation_context(values)
-        else:
+            values = {
+                key: value
+                for key, value in values.items()
+                if key not in {"user_id", "run_id", "agent_id"}
+            }
+            try:
+                # Reserve the receiver's references and admitted identity before
+                # inheriting metadata. A full bag cannot suppress trusted IDs.
+                safe_context({**current_context(), **values})
+            except ValueError:
+                reason = "invalid_context"
+            else:
+                bind_operation_context(values)
+        if reason is not None:
             logger.warning(
                 "Delegated logging metadata dropped", extra={"reason": reason}
             )
-    bind_operation_context(user_id=user_id, run_id=run_id, agent_id=agent_id)

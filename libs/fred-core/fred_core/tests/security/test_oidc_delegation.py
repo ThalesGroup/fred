@@ -769,7 +769,20 @@ def _one(audit: _AuditSink) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize(
-    "mode", ["accepted", "malformed", "oversized", "disabled", "person", "untrusted"]
+    "mode",
+    [
+        "accepted",
+        "capacity",
+        "byte_capacity",
+        "unicode",
+        "control",
+        "non_string",
+        "malformed",
+        "oversized",
+        "disabled",
+        "person",
+        "untrusted",
+    ],
 )
 def test_logging_context_requires_admission_and_keeps_receiver_identity(
     client: TestClient, caller: KeycloakUser, monkeypatch: pytest.MonkeyPatch, mode: str
@@ -833,6 +846,44 @@ def test_logging_context_requires_admission_and_keeps_receiver_identity(
         header = "credential-canary!"
     elif mode == "oversized":
         header = "x" * 8193
+    elif mode == "capacity":
+        header = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "v": 1,
+                        "context": {
+                            "correlation_id": "parent-journey",
+                            "user_id": "spoof-person",
+                            "run_id": "spoof-run",
+                            "agent_id": "spoof-agent",
+                            **{f"custom_{index}": index for index in range(28)},
+                        },
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+    elif mode in {"unicode", "control", "non_string", "byte_capacity"}:
+        values = {
+            "correlation_id": {
+                "unicode": "journey-😀",
+                "control": "journey\r\nInjected: field",
+                "non_string": 2,
+            }.get(mode, "parent-journey")
+        }
+        if mode == "byte_capacity":
+            values.update(user_id="spoof-person", custom=["x" * 1024] * 3 + ["x" * 850])
+        header = (
+            base64.urlsafe_b64encode(json.dumps({"v": 1, "context": values}).encode())
+            .decode()
+            .rstrip("=")
+        )
+    if mode in {"capacity", "byte_capacity"}:
+        from fred_core.logs.propagation import decode_log_context
+
+        assert decode_log_context(header)[0] is not None
     response = client.get(
         "/logging-context",
         params={} if mode == "person" else _GRANT,
@@ -852,7 +903,16 @@ def test_logging_context_requires_admission_and_keeps_receiver_identity(
     else:
         assert values["correlation_id"] != "parent-journey"
         assert "custom" not in values
-    if mode in {"accepted", "malformed", "oversized"}:
+    if mode in {
+        "accepted",
+        "capacity",
+        "byte_capacity",
+        "unicode",
+        "control",
+        "non_string",
+        "malformed",
+        "oversized",
+    }:
         assert {name: values[name] for name in ("user_id", "run_id", "agent_id")} == {
             "user_id": "p-1",
             "run_id": "r-1",
