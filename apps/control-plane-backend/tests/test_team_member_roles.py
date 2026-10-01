@@ -64,6 +64,15 @@ from fred_core.common import TeamId
 from fred_core.teams.metadata_store import TeamMetadata
 
 
+class _NoFavoritesPromptStore:
+    """Records the favorites cleanup a member removal runs."""
+
+    cleared: list[tuple[str, str]] = []
+
+    async def delete_favorites_for_team(self, user_id: str, team_id: object) -> None:
+        self.cleared.append((user_id, str(team_id)))
+
+
 class _FakeRebac:
     """In-memory role store: user_id -> the set of roles they hold on the one
     team these tests use. `add_relation`/`delete_relations` mutate it exactly
@@ -264,7 +273,7 @@ def _deps(
         get_team_metadata_store=cast(Any, lambda: store),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
-        get_prompt_store=cast(Any, object),
+        get_prompt_store=cast(Any, lambda: _NoFavoritesPromptStore()),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),
         get_session_store=get_session_store,
@@ -701,10 +710,13 @@ async def test_remove_team_member_self_removal_skips_permission_check(
         get_purge_queue_store=lambda: _FakePurgeQueueStore(),
     )
 
+    _NoFavoritesPromptStore.cleared.clear()
     await remove_team_member(_user(), TeamId("fredlab"), "caller", deps)
 
     assert rebac.team_permission_checks == []
     assert rebac.roles["caller"] == set()
+    # Leaving takes the member's favorites on this team's prompts with it.
+    assert _NoFavoritesPromptStore.cleared == [("caller", "fredlab")]
 
 
 @pytest.mark.asyncio
