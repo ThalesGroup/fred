@@ -102,7 +102,7 @@ export default function AgentsWorkspace({ fsTeamId, userId }: AgentsWorkspacePro
   const columns: DataTableColumn<FilesystemResourceInfoResult>[] = [
     {
       label: t("rework.resources.columns.name"),
-      size: "2fr",
+      size: "minmax(8rem, 2fr)",
       cellRenderer: (entry) => {
         const label = labelById.get(entry.path) ?? t("rework.resources.roots.removedAgent");
         return (
@@ -119,9 +119,9 @@ export default function AgentsWorkspace({ fsTeamId, userId }: AgentsWorkspacePro
         );
       },
     },
-    { label: t("rework.resources.columns.size"), size: "6.5rem", cellRenderer: () => <span>—</span> },
-    { label: t("rework.resources.columns.created"), size: "9rem", cellRenderer: () => <span>—</span> },
-    { label: t("rework.resources.columns.author"), size: "9rem", cellRenderer: () => <span>—</span> },
+    { label: t("rework.resources.columns.size"), size: "minmax(0, 6.5rem)", cellRenderer: () => <span>—</span> },
+    { label: t("rework.resources.columns.created"), size: "minmax(0, 9rem)", cellRenderer: () => <span>—</span> },
+    { label: t("rework.resources.columns.author"), size: "minmax(0, 9rem)", cellRenderer: () => <span>—</span> },
     { label: "", size: "6rem", cellRenderer: () => null },
   ];
 
