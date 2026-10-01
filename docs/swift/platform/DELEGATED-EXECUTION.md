@@ -9,6 +9,10 @@ Activation and rollback: [migration guide](../ops/migrations/2808-delegated-exec
 
 ## Model
 
+Delegation is opt-in: everything below applies only with
+`security.delegation.act_for_people` on (see [Switches](#switches)). By default
+it is off, and the runtime forwards the person's live bearer to every call.
+
 Three questions, three mechanisms:
 
 | Question | Answered by |
