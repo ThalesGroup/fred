@@ -61,6 +61,7 @@ class FileToProcessWithoutUser(BaseModel):
 
 class FileToProcess(FileToProcessWithoutUser):
     processed_by: KeycloakUser
+    logging_context: Optional[str] = None  # bounded diagnostic envelope, never authority
     # Set at submission from the file's profile, and read back by the workflow to
     # route this document's extraction activity. Absent on the in-process paths
     # that call the activities directly, which never reach a Temporal queue.
@@ -167,6 +168,7 @@ class PipelineDefinition(BaseModel):
     name: str
     files: List[FileToProcess]
     max_parallelism: int = 1
+    logging_context: Optional[str] = None
 
 
 class ProcessDocumentsRequest(BaseModel):
