@@ -394,6 +394,17 @@ def test_log_setup_gives_audit_logger_a_dedicated_non_propagating_json_handler()
     assert len(audit_logger.handlers) == 1
     assert isinstance(audit_logger.handlers[0].formatter, CompactJsonFormatter)
 
+    from fred_core.logs.context import log_context
+    from fred_core.logs.processors import ContextSnapshot
+
+    with log_context(user_id="person-canary", tool_name="tool-canary"):
+        record = audit_logger.makeRecord(
+            AUDIT_LOGGER_NAME, logging.INFO, __file__, 1, "audit", (), None
+        )
+    snapshot = getattr(record, "_fred_snapshot")
+    assert isinstance(snapshot, ContextSnapshot)
+    assert snapshot.values == {}
+
 
 def test_store_emit_handler_hard_drops_audit_logger_records() -> None:
     """Issue #2009: belt-and-braces alongside AUDIT_LOGGER_NAME's own
