@@ -10,6 +10,7 @@ Tracked by [#2899](https://github.com/ThalesGroup/fred/issues/2899).
 - After an answered question, Mistral tool-call text with the existing typed marker can still route a registered `ask_user` call when its JSON question contains literal line breaks. Validate the public arguments and the full question rules with a temporary call ID before LangChain injects the real one.
 - Agent questions with two or more choices always accept a text answer, regardless of the model's `allow_free_text` argument. The four-choice limit remains.
 - Managed chat places a localized gray "Other" / "Autre" label beside the editable last row of the choice list and renders question Markdown. Text-only questions and tool approvals retain their existing forms.
+- When multiple `ask_user` calls wait together, managed chat groups their pending questions in one card with subject tabs. The first question is selected initially, each tab keeps its draft, and completed questions stay in the trace.
 
 ## Capabilities
 

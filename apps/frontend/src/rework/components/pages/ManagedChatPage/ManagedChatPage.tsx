@@ -766,6 +766,9 @@ export default function ManagedChatPage() {
                       <ConversationThread
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
+                        pendingHitlTabs={chat.pendingHitlTabs}
+                        onSelectHitlTab={chat.selectHitlTab}
+                        hitlBusy={chat.resumingAgentQuestionSessionId === chat.sessionId}
                         isLoading={conversationUnresolved}
                         isStreaming={chat.waitResponse}
                         scrollContainerRef={scrollContainerRef}

@@ -179,7 +179,11 @@ def _ask_user_tool(
             func=None,
             coroutine=invoke,
             name="ask_user",
-            description="Ask the user a question and continue after their answer.",
+            description=(
+                "Ask the user one question and continue after their answer. "
+                "Hard limit: at most four choices. Select the four best matches before calling; "
+                "multiple choices always include an Other free-text answer."
+            ),
             args_schema=AskUserArgs,
             response_format="content_and_artifact",
         ),

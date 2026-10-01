@@ -15,6 +15,7 @@
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
@@ -26,6 +27,9 @@ import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
   event: RuntimeAwaitingHumanEvent;
+  siblingQuestions?: RuntimeAwaitingHumanEvent[];
+  onSelectQuestion?: (event: RuntimeAwaitingHumanEvent) => void;
+  busy?: boolean;
   onAnswer: (
     answer: string | boolean | undefined,
     freeText?: string,
@@ -38,8 +42,23 @@ interface HitlPromptProps {
   onFreeTextChange?: (value: string) => void;
 }
 
+function questionTabLabel(event: RuntimeAwaitingHumanEvent, index: number, fallback: string): string {
+  const subject =
+    event.payload.title?.trim() ||
+    event.payload.question
+      ?.replace(/\[[^\]]+\]\([^)]*\)/g, (match) => match.slice(1, match.indexOf("]")))
+      .replace(/[*_`#]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  if (!subject) return `${fallback} ${index + 1}`;
+  return subject.length > 36 ? `${subject.slice(0, 35).trimEnd()}…` : subject;
+}
+
 export function HitlPrompt({
   event,
+  siblingQuestions = [],
+  onSelectQuestion,
+  busy = false,
   onAnswer,
   readonly = false,
   maxChatInputChars,
@@ -49,13 +68,21 @@ export function HitlPrompt({
   const { t } = useTranslation();
   const payload = event.payload;
   const isAgentQuestion = payload.stage === "agent_question";
+  const hasQuestionTabs = !readonly && isAgentQuestion && siblingQuestions.length > 1;
+  const selectedQuestionIndex = siblingQuestions.findIndex((question) =>
+    question.payload.occurrence_id
+      ? question.payload.occurrence_id === event.payload.occurrence_id
+      : question.payload.interrupt_id === event.payload.interrupt_id,
+  );
   const hasChoiceTextRow = isAgentQuestion && payload.free_text && (payload.choices?.length ?? 0) > 0;
   const [localFreeText, setLocalFreeText] = useState("");
   const freeText = freeTextValue ?? localFreeText;
   const characterInfoId = useId();
   const characterCount = countUnicodeCodePoints(freeText);
   const isOverLimit = maxChatInputChars !== undefined && characterCount > maxChatInputChars;
-  const skipQuestion = () => onAnswer(undefined, undefined, true);
+  const skipQuestion = () => {
+    if (!busy) onAnswer(undefined, undefined, true);
+  };
   const setFreeText = (value: string) => {
     if (onFreeTextChange) onFreeTextChange(value);
     else setLocalFreeText(value);
@@ -67,6 +94,21 @@ export function HitlPrompt({
       role="group"
       aria-label={t("chatbot.hitlWaitingAria")}
     >
+      {hasQuestionTabs && (
+        <div className={styles.questionTabs}>
+          <ButtonGroup
+            variant="tabs"
+            size="small"
+            color="primary"
+            aria-label={t("chatbot.hitlQuestionTabsAria")}
+            selectedIndex={Math.max(0, selectedQuestionIndex)}
+            onSelectedIndexChange={(index) => onSelectQuestion?.(siblingQuestions[index])}
+            items={siblingQuestions.map((question, index) => ({
+              label: questionTabLabel(question, index, t("chatbot.hitlQuestionTabFallback")),
+            }))}
+          />
+        </div>
+      )}
       {isAgentQuestion && !readonly && (
         <IconButton
           className={styles.skipClose}
@@ -76,9 +118,10 @@ export function HitlPrompt({
           aria-label={t("chatbot.skipHitlQuestionAria")}
           title={t("chatbot.skipHitlQuestionAria")}
           onClick={skipQuestion}
+          disabled={busy}
         />
       )}
-      {payload.title && <p className={styles.title}>{payload.title}</p>}
+      {payload.title && !hasQuestionTabs && <p className={styles.title}>{payload.title}</p>}
       {payload.question && (
         <div className={styles.question}>
           <MarkdownRenderer text={payload.question} />
@@ -106,7 +149,7 @@ export function HitlPrompt({
                 color="primary"
                 variant="outlined"
                 size="medium"
-                disabled={isOverLimit}
+                disabled={isOverLimit || busy}
                 onClick={() => onAnswer(c.id, freeText.trim() ? freeText : undefined)}
               >
                 {c.description ? (
@@ -126,9 +169,10 @@ export function HitlPrompt({
               <input
                 type="text"
                 value={freeText}
+                disabled={busy}
                 onChange={(e) => setFreeText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing && freeText.trim() && !isOverLimit) {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && freeText.trim() && !isOverLimit && !busy) {
                     e.preventDefault();
                     onAnswer(undefined, freeText);
                   }
@@ -146,6 +190,7 @@ export function HitlPrompt({
                 color="primary"
                 variant="outlined"
                 size="medium"
+                disabled={busy}
                 onClick={() => onAnswer("proceed", undefined, false, true)}
               >
                 {t("chatbot.approveForConversation")}
@@ -163,9 +208,10 @@ export function HitlPrompt({
           <TextArea
             label={t("chatbot.hitlFreeTextLabel")}
             value={freeText}
+            disabled={busy}
             onChange={(e) => setFreeText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && freeText.trim() && !isOverLimit) {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && freeText.trim() && !isOverLimit && !busy) {
                 e.preventDefault();
                 onAnswer(undefined, freeText);
               }
@@ -185,14 +231,14 @@ export function HitlPrompt({
               color="primary"
               variant="filled"
               size="small"
-              disabled={!freeText.trim() || isOverLimit}
+              disabled={!freeText.trim() || isOverLimit || busy}
               onClick={() => onAnswer(undefined, freeText)}
             >
               {t("chatbot.sendHitlAnswer")}
             </Button>
           )}
           {isAgentQuestion && (
-            <Button color="on-surface-retreat" variant="text" size="small" onClick={skipQuestion}>
+            <Button color="on-surface-retreat" variant="text" size="small" disabled={busy} onClick={skipQuestion}>
               {t("chatbot.skipHitlQuestion")}
             </Button>
           )}

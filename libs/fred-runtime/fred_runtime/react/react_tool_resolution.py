@@ -224,9 +224,11 @@ class ReActRuntimeToolResolver:
                     runtime_name="ask_user",
                     description=(
                         "Ask the user one question and continue after their answer. "
-                        "Provide up to four of the most relevant choices, allow_free_text, or both. "
-                        "Two or more choices always allow a free-text answer. "
-                        "Select the choices before calling; do not truncate a longer list."
+                        "Give it a short subject title when possible. "
+                        "Hard limit: choices must contain no more than four items. "
+                        "If you have five or more candidates, first select the four that best satisfy the user's constraints; "
+                        "the interface always offers an Other free-text answer alongside multiple choices. "
+                        "Use allow_free_text for questions without choices."
                     ),
                     args_schema=AskUserArgs,
                     tool_ref="platform.ask_user",

@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { groupTraceEntries, isCancelledByUser, traceSummary } from "../../../utils/traceUtils";
-import { hitlResponseKey, reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
+import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
   return {
@@ -179,6 +179,19 @@ describe("reconstructPendingHitl", () => {
   it("returns null when the last exchange's gate was already answered", () => {
     const messages = [hitlRequestMsg("e1"), hitlResponseMsg("e1")];
     expect(reconstructPendingHitl(messages)).toBeNull();
+  });
+
+  it("reconstructs unanswered sibling questions in request order", () => {
+    const messages = [
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-a", question: "Destination?" }, 1),
+      hitlRequestMsg("e1", { stage: "agent_question", occurrence_id: "call-b", question: "Budget?" }, 2),
+      hitlResponseMsg("e1", { occurrence_id: "call-a" }, 3),
+    ];
+    expect(reconstructPendingHitls(messages).map((event) => event.payload.occurrence_id)).toEqual(["call-b"]);
+    expect(reconstructPendingHitls(messages.slice(0, 2)).map((event) => event.payload.occurrence_id)).toEqual([
+      "call-a",
+      "call-b",
+    ]);
   });
 
   it("reconstructs a full, resumable event for a still-open trailing gate", () => {

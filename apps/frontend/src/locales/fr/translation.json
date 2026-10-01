@@ -530,6 +530,8 @@
     },
     "hitlOtherAnswerPlaceholder": "Autre",
     "hitlFreeTextLabel": "Votre réponse",
+    "hitlQuestionTabsAria": "Questions",
+    "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "L'agent attend votre réponse",
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {

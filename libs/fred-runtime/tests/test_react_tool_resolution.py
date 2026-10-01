@@ -247,6 +247,7 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
     schema = cast(type[BaseModel], bound[0].tool.tool_call_schema)
     assert set(schema.model_fields) == {
         "question",
+        "title",
         "choices",
         "allow_free_text",
     }
@@ -308,6 +309,44 @@ def test_ask_user_accepts_four_selected_choices_and_exposes_the_limit() -> None:
         {"question": "Choose", "choices": choices, "tool_call_id": "call-1"}
     )
     assert len(args.choices) == 4
+
+
+def test_ask_user_accepts_a_short_subject_title() -> None:
+    from fred_runtime.runtime_support.ask_user import AskUserArgs
+
+    args = AskUserArgs.model_validate(
+        {
+            "question": "How long?",
+            "title": "Trip duration",
+            "allow_free_text": True,
+            "tool_call_id": "call-1",
+        }
+    )
+    assert args.title == "Trip duration"
+
+
+@pytest.mark.asyncio
+async def test_ask_user_persists_the_subject_title(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_runtime.runtime_support.ask_user import ask_user
+
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> dict[str, str]:
+        requests.append(request)
+        return {"text": "A week"}
+
+    monkeypatch.setattr("fred_runtime.runtime_support.ask_user.interrupt", answer)
+    await ask_user(
+        {
+            "question": "How long?",
+            "title": "Trip duration",
+            "allow_free_text": True,
+            "tool_call_id": "call-1",
+        }
+    )
+    assert requests[0]["title"] == "Trip duration"
 
 
 @pytest.mark.asyncio

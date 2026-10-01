@@ -31,6 +31,9 @@ import { hitlResponseKey } from "../toThreadMessages";
 interface ConversationThreadProps {
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
+  pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
+  onSelectHitlTab?: (event: RuntimeAwaitingHumanEvent) => void;
+  hitlBusy?: boolean;
   isLoading: boolean;
   isStreaming: boolean;
   emptyState?: ReactNode;
@@ -56,6 +59,9 @@ interface ConversationThreadProps {
 export const ConversationThread = memo(function ConversationThread({
   messages,
   pendingHitl,
+  pendingHitlTabs = [],
+  onSelectHitlTab,
+  hitlBusy = false,
   isLoading,
   isStreaming,
   emptyState,
@@ -131,6 +137,9 @@ export const ConversationThread = memo(function ConversationThread({
       {pendingHitl && (
         <HitlPrompt
           event={pendingHitl}
+          siblingQuestions={pendingHitlTabs}
+          onSelectQuestion={onSelectHitlTab}
+          busy={hitlBusy}
           onAnswer={onHitlAnswer}
           maxChatInputChars={maxChatInputChars}
           freeTextValue={hitlFreeText}

@@ -116,38 +116,42 @@ function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Ma
  * Returns `null` when the last exchange's `hitl_request` (if any) already has
  * a matching `hitl_response` — i.e. nothing is actually still pending.
  */
-export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaitingHumanEvent | null {
+export function reconstructPendingHitls(messages: ChatMessage[]): RuntimeAwaitingHumanEvent[] {
   const { order, groups } = groupByExchange(messages);
   const lastEid = order[order.length - 1];
-  if (lastEid === undefined) return null;
-  const lastMsgs = groups.get(lastEid)!;
+  if (lastEid === undefined) return [];
 
-  const pendingPair = pairHitlHistory(lastMsgs).find(({ response }) => response === undefined);
-  if (!pendingPair) return null;
-  const hitlReqMsg = pendingPair.request;
+  return pairHitlHistory(groups.get(lastEid)!)
+    .filter(({ response }) => response === undefined)
+    .flatMap(({ request }) => {
+      const part = hitlRequestPart(request);
+      if (!part) return [];
+      return [
+        {
+          type: "awaiting_human" as const,
+          session_id: request.session_id,
+          exchange_id: lastEid,
+          payload: {
+            title: part.title ?? null,
+            question: part.question ?? null,
+            choices: part.choices ?? [],
+            free_text: part.free_text ?? false,
+            stage: part.stage ?? null,
+            interrupt_id: part.interrupt_id ?? null,
+            occurrence_id: part.occurrence_id ?? null,
+            pending_calls: (part.pending_calls ?? []).map((c) => ({
+              tool_call_id: c.tool_call_id ?? "",
+              tool_name: c.tool_name ?? "",
+              args_preview: c.args_preview ?? "",
+            })),
+          },
+        },
+      ];
+    });
+}
 
-  const part = hitlRequestPart(hitlReqMsg);
-  if (!part) return null;
-
-  return {
-    type: "awaiting_human",
-    session_id: hitlReqMsg.session_id,
-    exchange_id: lastEid,
-    payload: {
-      title: part.title ?? null,
-      question: part.question ?? null,
-      choices: part.choices ?? [],
-      free_text: part.free_text ?? false,
-      stage: part.stage ?? null,
-      interrupt_id: part.interrupt_id ?? null,
-      occurrence_id: part.occurrence_id ?? null,
-      pending_calls: (part.pending_calls ?? []).map((c) => ({
-        tool_call_id: c.tool_call_id ?? "",
-        tool_name: c.tool_name ?? "",
-        args_preview: c.args_preview ?? "",
-      })),
-    },
-  };
+export function reconstructPendingHitl(messages: ChatMessage[]): RuntimeAwaitingHumanEvent | null {
+  return reconstructPendingHitls(messages)[0] ?? null;
 }
 
 /**

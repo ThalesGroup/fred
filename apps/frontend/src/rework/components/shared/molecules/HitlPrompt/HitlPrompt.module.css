@@ -35,6 +35,22 @@
   border-color: var(--primary);
 }
 
+.questionTabs {
+  margin-right: 2rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.questionTabs :global([role="tab"]) {
+  max-width: 13rem;
+  white-space: nowrap;
+}
+
+.questionTabs :global([role="tab"] span) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .title {
   margin: 0;
   color: var(--primary);

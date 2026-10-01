@@ -99,6 +99,40 @@ describe("HitlPrompt agent questions", () => {
   });
 });
 
+describe("HitlPrompt question tabs", () => {
+  it("uses compact subjects and switches the selected question", () => {
+    const first = {
+      ...event,
+      payload: { stage: "agent_question", title: "Trip duration", question: "How long?", occurrence_id: "call-a" },
+    };
+    const second = {
+      ...event,
+      payload: { stage: "agent_question", question: "What budget?", occurrence_id: "call-b" },
+    };
+    const onSelectQuestion = vi.fn();
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onSelectQuestion={onSelectQuestion}
+          onAnswer={() => undefined}
+        />,
+      );
+    });
+    const tabs = container.querySelectorAll('[role="tab"]');
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0].textContent).toBe("Trip duration");
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[1].textContent).toBe("What budget?");
+    act(() => (tabs[1] as HTMLButtonElement).click());
+    expect(onSelectQuestion).toHaveBeenCalledWith(second);
+    act(() => root.unmount());
+  });
+});
+
 describe("HitlPrompt choice descriptions", () => {
   it("renders each description below its label inside one selectable button", () => {
     const question = {

@@ -31,10 +31,15 @@ from pydantic import BaseModel, Field, model_validator
 
 class AskUserArgs(BaseModel):
     question: str = Field(min_length=1)
+    title: str | None = Field(
+        default=None,
+        max_length=60,
+        description="A short subject for a question tab, preferably two to five words.",
+    )
     choices: tuple[HumanChoiceOption, ...] = Field(
         default=(),
         max_length=4,
-        description="Select up to four of the most relevant options before asking; do not submit a longer list.",
+        description="Hard limit: at most four choices. Select the four best matches before calling; use the free-text option for other answers.",
     )
     allow_free_text: bool = False
     tool_call_id: Annotated[str, InjectedToolCallId]
@@ -43,6 +48,8 @@ class AskUserArgs(BaseModel):
     def validate_question(self) -> AskUserArgs:
         if not self.question.strip():
             raise ValueError("question must not be blank")
+        if self.title is not None and not self.title.strip():
+            raise ValueError("title must not be blank")
         if not self.choices and not self.allow_free_text:
             raise ValueError("ask_user requires choices or free text")
         ids = [choice.id for choice in self.choices]
@@ -64,6 +71,7 @@ async def ask_user(payload: dict[str, object], *, language: str | None = None) -
     args = AskUserArgs.model_validate(payload)
     request = HumanInputRequest(
         stage="agent_question",
+        title=args.title,
         question=args.question,
         choices=args.choices,
         free_text=args.allow_free_text or len(args.choices) >= 2,

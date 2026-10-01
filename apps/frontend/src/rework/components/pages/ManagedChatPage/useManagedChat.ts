@@ -31,12 +31,20 @@ import { useSessionHistory } from "./useSessionHistory";
 import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
-import { reconstructPendingHitl, toThreadMessages } from "./toThreadMessages";
+import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 import type { ChatMessage, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { AttachmentSource } from "@rework/types/attachments";
+
+function hitlKey(event: RuntimeAwaitingHumanEvent): string {
+  return [
+    event.session_id,
+    event.exchange_id,
+    event.payload.occurrence_id ?? event.payload.interrupt_id ?? event.payload.question,
+  ].join(":");
+}
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
@@ -54,7 +62,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
   const submittedDraftRef = useRef<{ sessionId: string; draft: string } | null>(null);
-  const [pendingHitl, setPendingHitl] = useState<RuntimeAwaitingHumanEvent | null>(null);
+  const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
+  const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
+  const [selectedHitlKey, setSelectedHitlKey] = useState<string | null>(null);
+  const lastHitlExchangeRef = useRef<string | null>(null);
+  const hitlDraftsRef = useRef<Map<string, string>>(new Map());
+  const replacePendingHitls = useCallback((events: RuntimeAwaitingHumanEvent[]) => {
+    pendingHitlsRef.current = events;
+    setPendingHitls(events);
+  }, []);
+  const pendingHitl = pendingHitls.find((event) => hitlKey(event) === selectedHitlKey) ?? pendingHitls[0] ?? null;
+  const pendingHitlTabs = pendingHitl?.payload.stage === "agent_question" ? pendingHitls : [];
   const [resumingAgentQuestionSessionId, setResumingAgentQuestionSessionId] = useState<string | null>(null);
   const hitlResumeOwnerRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
   const autoApprovalAttemptedRef = useRef(new Set<string>());
@@ -62,6 +80,21 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // Identifies the HITL prompt that owns `hitlFreeText`. A resume can settle
   // after another prompt has arrived; only its own draft may be cleared.
   const hitlDraftOwnerRef = useRef(0);
+  const setSelectedHitlFreeText = useCallback(
+    (value: string) => {
+      const selected =
+        pendingHitlsRef.current.find((event) => hitlKey(event) === selectedHitlKey) ?? pendingHitlsRef.current[0];
+      if (selected) hitlDraftsRef.current.set(hitlKey(selected), value);
+      setHitlFreeText(value);
+    },
+    [selectedHitlKey],
+  );
+  const selectHitlTab = useCallback((event: RuntimeAwaitingHumanEvent) => {
+    if (!pendingHitlsRef.current.some((candidate) => hitlKey(candidate) === hitlKey(event))) return;
+    setSelectedHitlKey(hitlKey(event));
+    setHitlFreeText(hitlDraftsRef.current.get(hitlKey(event)) ?? "");
+    hitlDraftOwnerRef.current += 1;
+  }, []);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   // Ordered chat-context prompts attached to this session (PROMPT-05). Source of
   // truth is the control-plane session; hydrated from sessionData and persisted
@@ -245,11 +278,26 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // composer keystroke — would silently invalidate that memoization on every
   // keystroke too, cascading into handleHitlAnswer below and defeating
   // ConversationThread's React.memo (#2221).
-  const handleAwaitingHuman = useCallback((event: RuntimeAwaitingHumanEvent) => {
-    hitlDraftOwnerRef.current += 1;
-    setHitlFreeText("");
-    setPendingHitl(event);
-  }, []);
+  const handleAwaitingHuman = useCallback(
+    (event: RuntimeAwaitingHumanEvent) => {
+      const current = pendingHitlsRef.current;
+      const sameGroup = event.payload.stage === "agent_question" && lastHitlExchangeRef.current === event.exchange_id;
+      if (sameGroup && current.some((candidate) => hitlKey(candidate) === hitlKey(event))) return;
+      const next =
+        sameGroup && current.every((candidate) => candidate.payload.stage === "agent_question")
+          ? [...current, event]
+          : [event];
+      if (!sameGroup) hitlDraftsRef.current.clear();
+      if (!sameGroup || current.length === 0) {
+        setSelectedHitlKey(null);
+        setHitlFreeText(hitlDraftsRef.current.get(hitlKey(event)) ?? "");
+        hitlDraftOwnerRef.current += 1;
+      }
+      lastHitlExchangeRef.current = event.exchange_id;
+      replacePendingHitls(next);
+    },
+    [replacePendingHitls],
+  );
   const handleChatError = useCallback((msg: string) => showError({ summary: "Agent error", detail: msg }), [showError]);
   // Fires only once prepare-execution has actually succeeded and the turn is
   // really starting — clearing the composer any earlier would lose the
@@ -342,7 +390,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // effect running later in this same commit, whose isTurnActive() must
     // already see "no live turn" or a cached thread would refuse to render.
     waitResponseRef.current = false;
-    setPendingHitl(null);
+    replacePendingHitls([]);
+    lastHitlExchangeRef.current = null;
+    hitlDraftsRef.current.clear();
+    setSelectedHitlKey(null);
     hitlDraftOwnerRef.current += 1;
     setHitlFreeText("");
     setInput("");
@@ -356,7 +407,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     // — not only inside send() — so the composer control slot isn't empty
     // until the first message. Safe with no session yet (sessionId null).
     void prepareChatControls(sessionId).catch(() => {});
-  }, [sessionId, reset, composer.reset, prepareChatControls]);
+  }, [sessionId, reset, composer.reset, prepareChatControls, replacePendingHitls]);
 
   useEffect(() => {
     if (sessionData?.title != null) setSessionTitle(sessionData.title);
@@ -397,10 +448,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     (msgs: ChatMessage[]) => {
       replaceAllMessages(msgs);
       hitlDraftOwnerRef.current += 1;
+      hitlDraftsRef.current.clear();
       setHitlFreeText("");
-      setPendingHitl(reconstructPendingHitl(msgs));
+      setSelectedHitlKey(null);
+      const pending = reconstructPendingHitls(msgs);
+      lastHitlExchangeRef.current = pending[0]?.exchange_id ?? null;
+      replacePendingHitls(pending);
     },
-    [replaceAllMessages],
+    [replaceAllMessages, replacePendingHitls],
   );
 
   const { isLoading: isLoadingHistory, isSettled: isHistorySettled } = useSessionHistory({
@@ -632,7 +687,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // onTurnStarted, once prepare-execution inside send() has actually
         // succeeded. A prepare-execution failure (404/503/network) must never
         // wipe text the user still needs to retry with; see useChatSse.ts.
-        setPendingHitl(null);
+        replacePendingHitls([]);
+        lastHitlExchangeRef.current = null;
+        hitlDraftsRef.current.clear();
+        setSelectedHitlKey(null);
         console.debug(`[useManagedChat] sendTurn() — calling send() with sid=${sid}`);
         const { runtimeContext, turnOptions } = buildTurnContext();
         touchSessionActivity(sid);
@@ -653,6 +711,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       inputTooLong,
       waitResponse,
       pendingHitl,
+      replacePendingHitls,
       sessionId,
       buildTurnContext,
       composer.bindSession,
@@ -695,7 +754,19 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       hitlResumeOwnerRef.current = prompt;
       if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(prompt.session_id);
       const draftOwner = hitlDraftOwnerRef.current;
-      setPendingHitl(null);
+      const promptsBeforeResume = pendingHitlsRef.current;
+      const remaining =
+        prompt.payload.stage === "agent_question"
+          ? promptsBeforeResume.filter((event) => hitlKey(event) !== hitlKey(prompt))
+          : [];
+      replacePendingHitls(remaining);
+      if (remaining.length > 0) {
+        const answeredIndex = promptsBeforeResume.findIndex((event) => hitlKey(event) === hitlKey(prompt));
+        const next = remaining[Math.min(answeredIndex, remaining.length - 1)];
+        setSelectedHitlKey(hitlKey(next));
+        setHitlFreeText(hitlDraftsRef.current.get(hitlKey(next)) ?? "");
+        hitlDraftOwnerRef.current += 1;
+      }
       // Restore the prompt when the resume never reached the backend: the
       // checkpoint is still paused, so dropping it would strand the turn with
       // no way to answer.
@@ -720,7 +791,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         if (last && last.exchange_id !== prompt.exchange_id) return;
         // Functional update: a newer awaiting_human that arrived meanwhile owns
         // the slot and must not be stomped.
-        setPendingHitl((current) => current ?? prompt);
+        if (pendingHitlsRef.current === remaining || pendingHitlsRef.current.length === 0) {
+          replacePendingHitls(promptsBeforeResume);
+          lastHitlExchangeRef.current = prompt.exchange_id;
+          setSelectedHitlKey(hitlKey(prompt));
+          setHitlFreeText(hitlDraftsRef.current.get(hitlKey(prompt)) ?? "");
+        }
       };
       const { runtimeContext, turnOptions } = buildTurnContextRef.current();
       const toolNames = (prompt.payload.pending_calls ?? []).map((call) => call.tool_name);
@@ -746,6 +822,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       void resume
         .then((reached) => {
           if (reached) {
+            hitlDraftsRef.current.delete(hitlKey(prompt));
             if (hitlDraftOwnerRef.current === draftOwner) setHitlFreeText("");
             return;
           }
@@ -765,7 +842,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(null);
         });
     },
-    [agentInstanceId, maxChatInputChars, pendingHitl, sendHitlResume, showError, t],
+    [agentInstanceId, maxChatInputChars, pendingHitl, replacePendingHitls, sendHitlResume, showError, t],
   );
 
   useEffect(() => {
@@ -791,7 +868,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, [agentInstanceId, handleHitlAnswer, pendingHitl, waitResponse]);
 
   const startNewConversation = useCallback(() => {
-    setPendingHitl(null);
+    replacePendingHitls([]);
+    lastHitlExchangeRef.current = null;
+    hitlDraftsRef.current.clear();
+    setSelectedHitlKey(null);
     hitlDraftOwnerRef.current += 1;
     setHitlFreeText("");
     setSearchParams(
@@ -802,7 +882,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       },
       { replace: true },
     );
-  }, [setSearchParams]);
+  }, [setSearchParams, replacePendingHitls]);
 
   const commitTitle = useCallback(
     (title: string) => {
@@ -885,9 +965,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     inputTooLong,
     maxChatInputChars,
     pendingHitl,
+    pendingHitlTabs,
+    selectHitlTab,
     resumingAgentQuestionSessionId,
     hitlFreeText,
-    setHitlFreeText,
+    setHitlFreeText: setSelectedHitlFreeText,
     selectedLibraryIds: composer.selectedLibraryIds,
     attachments: attachments.attachments,
     persistedAttachments: attachments.persistedAttachments,

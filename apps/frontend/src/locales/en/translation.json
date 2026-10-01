@@ -530,6 +530,8 @@
     },
     "hitlOtherAnswerPlaceholder": "Other",
     "hitlFreeTextLabel": "Your answer",
+    "hitlQuestionTabsAria": "Questions",
+    "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
