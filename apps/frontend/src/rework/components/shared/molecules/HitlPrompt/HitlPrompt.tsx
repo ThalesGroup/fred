@@ -43,15 +43,7 @@ interface HitlPromptProps {
 }
 
 function questionTabLabel(event: RuntimeAwaitingHumanEvent, index: number, fallback: string): string {
-  const subject =
-    event.payload.title?.trim() ||
-    event.payload.question
-      ?.replace(/\[[^\]]+\]\([^)]*\)/g, (match) => match.slice(1, match.indexOf("]")))
-      .replace(/[*_`#]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  if (!subject) return `${fallback} ${index + 1}`;
-  return subject.length > 36 ? `${subject.slice(0, 35).trimEnd()}…` : subject;
+  return event.payload.title?.match(/[\p{L}\p{N}]+/u)?.[0] ?? `${fallback}${index + 1}`;
 }
 
 export function HitlPrompt({
@@ -105,6 +97,7 @@ export function HitlPrompt({
             onSelectedIndexChange={(index) => onSelectQuestion?.(siblingQuestions[index])}
             items={siblingQuestions.map((question, index) => ({
               label: questionTabLabel(question, index, t("chatbot.hitlQuestionTabFallback")),
+              title: question.payload.title || question.payload.question,
             }))}
           />
         </div>

@@ -6378,7 +6378,7 @@ text is the record of what was sent.
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
 `RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
 platform tool explicitly under that control. An absent value or `false` leaves
-the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional short subject title, up to
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional one-word subject title, up to
 four distinct single-choice options, and/or free text. Two or more choices
 automatically allow a text answer even when the agent sets `allow_free_text=false`;
 zero- and one-choice questions follow that flag. The agent selects the most
@@ -6412,9 +6412,10 @@ emits a tool result. The no-LLM Graph test assistant exercises confirmation,
 choice, free text, and choice with comment through this platform tool.
 
 Managed chat groups simultaneous agent questions in one HITL card with compact
-subject tabs in call order. The first unanswered question is selected initially;
-older questions without titles use a shortened question as their tab label.
-Each tab keeps its own draft. Answering or skipping one question selects the
+subject tabs in call order. The model is asked for one word; longer titles are
+reduced to the first word without failing the tool call. The tabs wrap inside
+the card and older questions without titles use localized numbered labels.
+The first unanswered question is selected initially. Each tab keeps its own draft. Answering or skipping one question selects the
 next unanswered tab while the runtime resumes, and the card stays open until
 all questions are resolved. Reload reconstructs every unanswered sibling from
 history by occurrence ID.

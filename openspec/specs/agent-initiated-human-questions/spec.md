@@ -6,7 +6,7 @@ Lets an interactive ReAct or Deep agent ask its user a question during a turn, r
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional short subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional one-word subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
@@ -43,7 +43,7 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **GIVEN** several `ask_user` calls in one exchange are awaiting answers
 - **WHEN** managed chat receives their pauses or reloads their history
 - **THEN** it displays one HITL card with a tab for each unanswered question in call order, selecting the first by default
-- **AND** each tab has a compact subject label from the question title, or a shortened question when no title exists
+- **AND** each tab displays one word from its subject title, or a localized numbered fallback when no title exists, and tabs wrap within the card instead of scrolling horizontally
 - **AND** switching tabs preserves each question’s draft and answering the selected tab resumes its own call
 - **AND** answering or skipping a question keeps the card open on the next unanswered tab until no questions remain
 - **AND** answered questions remain in the trace while remaining questions stay available

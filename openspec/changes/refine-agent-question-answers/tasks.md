@@ -7,7 +7,7 @@
 
 - [x] 1.4 Recover marked Mistral `ask_user` calls whose JSON question contains literal line breaks after HITL resume. Validate the public and full question schemas, retain other rejection guards, and verify ReAct and Deep routing.
 
-- [x] 1.5 Accept an optional compact subject title on `ask_user` and persist it on its question request; verify existing title-free calls still work.
+- [x] 1.5 Accept an optional one-word subject title on `ask_user` and persist it on its question request; verify existing title-free calls still work.
 
 ## 2. Managed chat
 

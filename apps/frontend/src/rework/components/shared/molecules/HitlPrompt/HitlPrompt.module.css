@@ -37,13 +37,24 @@
 
 .questionTabs {
   margin-right: 2rem;
+  min-width: 0;
+}
+
+.questionTabs :global([role="tablist"]) {
+  flex-wrap: wrap;
+  width: 100%;
   max-width: 100%;
-  overflow-x: auto;
 }
 
 .questionTabs :global([role="tab"]) {
-  max-width: 13rem;
+  min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
+}
+
+.questionTabs :global([role="tab"] > div) {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .questionTabs :global([role="tab"] span) {

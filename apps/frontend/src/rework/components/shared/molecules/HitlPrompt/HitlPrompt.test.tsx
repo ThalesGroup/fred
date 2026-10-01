@@ -124,9 +124,10 @@ describe("HitlPrompt question tabs", () => {
     });
     const tabs = container.querySelectorAll('[role="tab"]');
     expect(tabs).toHaveLength(2);
-    expect(tabs[0].textContent).toBe("Trip duration");
+    expect(tabs[0].textContent).toBe("Trip");
+    expect(tabs[0].getAttribute("title")).toBe("Trip duration");
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-    expect(tabs[1].textContent).toBe("What budget?");
+    expect(tabs[1].textContent).toBe("chatbot.hitlQuestionTabFallback2");
     act(() => (tabs[1] as HTMLButtonElement).click());
     expect(onSelectQuestion).toHaveBeenCalledWith(second);
     act(() => root.unmount());
