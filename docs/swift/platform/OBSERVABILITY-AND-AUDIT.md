@@ -228,6 +228,9 @@ bytes, 32 fields, 64 ASCII characters per key, 1,024 UTF-8 bytes per string, thr
 levels, signed 64-bit integers and finite floats. Validation also shares a 4,096-byte/
 128-node aggregate budget. Duplicate keys, credentials/content keys, opaque objects and
 invalid/oversized envelopes are dropped without echoing input or failing business calls.
+An imported correlation reference must be a nonempty string of visible ASCII characters
+so returning it in an HTTP response header remains safe. Inherited metadata that exceeds
+the available local context budget is dropped after reserving receiver/grant identities.
 
 The receiver creates its own request ID and local service/role/process/task/time/severity/
 source/category/tracing metadata. Admitted principal and grant override forwarded
