@@ -123,6 +123,48 @@ describe("HitlPrompt choice descriptions", () => {
   });
 });
 
+describe("HitlPrompt Other answer row", () => {
+  it("places a localized text input after four choices", () => {
+    const question = {
+      ...event,
+      payload: {
+        stage: "agent_question",
+        free_text: true,
+        choices: [
+          { id: "one", label: "One" },
+          { id: "two", label: "Two" },
+          { id: "three", label: "Three" },
+          { id: "four", label: "Four" },
+        ],
+      },
+    };
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    const input = container.querySelector("input");
+    expect(input?.getAttribute("placeholder")).toBe("chatbot.hitlOtherAnswerPlaceholder");
+    expect(input?.getAttribute("aria-label")).toBe("chatbot.hitlOtherAnswerPlaceholder");
+    const rows = input?.parentElement?.parentElement?.parentElement?.parentElement;
+    expect(rows?.children).toHaveLength(5);
+    expect(
+      Array.from(rows?.children ?? [])
+        .slice(0, 4)
+        .map((row) => row.textContent),
+    ).toEqual(["One", "Two", "Three", "Four"]);
+    expect(rows?.lastElementChild?.contains(input ?? null)).toBe(true);
+    expect(container.querySelector("textarea")).toBeNull();
+  });
+
+  it("keeps the multiline field for a text-only question", () => {
+    const question = {
+      ...event,
+      payload: { stage: "agent_question", free_text: true, choices: [] },
+    };
+    const html = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    expect(html).toContain("<textarea");
+    expect(html).not.toContain("chatbot.hitlOtherAnswerPlaceholder");
+  });
+});
+
 describe("HitlPrompt tool approval", () => {
   it("uses the same choice presentation and approves the current call when remembering", () => {
     const container = document.createElement("div");
@@ -171,9 +213,7 @@ describe("HitlPrompt answer actions", () => {
     act(() => choice?.click());
     expect(onAnswer).toHaveBeenLastCalledWith("proceed", " note ");
     act(() =>
-      container
-        .querySelector("textarea")
-        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true })),
+      container.querySelector("input")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
     );
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, " note ");
     act(() => skip?.click());

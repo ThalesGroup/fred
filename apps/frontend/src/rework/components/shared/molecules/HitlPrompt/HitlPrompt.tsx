@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextArea from "@shared/atoms/TextArea/TextArea";
+import TextInput from "@shared/atoms/TextInput/TextInput";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
@@ -48,6 +49,7 @@ export function HitlPrompt({
   const { t } = useTranslation();
   const payload = event.payload;
   const isAgentQuestion = payload.stage === "agent_question";
+  const hasChoiceTextRow = isAgentQuestion && payload.free_text && (payload.choices?.length ?? 0) > 0;
   const [localFreeText, setLocalFreeText] = useState("");
   const freeText = freeTextValue ?? localFreeText;
   const characterInfoId = useId();
@@ -114,6 +116,26 @@ export function HitlPrompt({
               </Button>
             );
           })}
+          {hasChoiceTextRow && (
+            <div className={styles.otherChoice}>
+              <TextInput
+                compact
+                size="small"
+                aria-label={t("chatbot.hitlOtherAnswerPlaceholder")}
+                placeholder={t("chatbot.hitlOtherAnswerPlaceholder")}
+                value={freeText}
+                onChange={(e) => setFreeText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && freeText.trim() && !isOverLimit) {
+                    e.preventDefault();
+                    onAnswer(undefined, freeText);
+                  }
+                }}
+                aria-invalid={isOverLimit || undefined}
+                aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
+              />
+            </div>
+          )}
           {payload.stage === "tool_approval" &&
             (payload.pending_calls?.length ?? 0) > 0 &&
             payload.pending_calls?.every((call) => call.tool_name) &&
@@ -130,7 +152,11 @@ export function HitlPrompt({
         </div>
       )}
 
-      {payload.free_text && !readonly && (
+      {hasChoiceTextRow && !readonly && (
+        <CharacterLimitNotice id={characterInfoId} count={characterCount} limit={maxChatInputChars} />
+      )}
+
+      {payload.free_text && !readonly && !hasChoiceTextRow && (
         <div className={styles.freeText}>
           <TextArea
             label={t("chatbot.hitlFreeTextLabel")}

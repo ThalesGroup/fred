@@ -528,6 +528,7 @@
       "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
       "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
+    "hitlOtherAnswerPlaceholder": "Autre",
     "hitlFreeTextLabel": "Votre réponse",
     "hitlWaitingAria": "L'agent attend votre réponse",
     "loadingHistory": "Chargement de l'historique...",

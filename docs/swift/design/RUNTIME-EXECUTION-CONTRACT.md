@@ -6376,12 +6376,18 @@ An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
 `RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
 platform tool explicitly under that control. An absent value or `false` leaves
 the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, up to
-four distinct single-choice options, and/or free text. The agent selects the
-most relevant options before calling; a longer list is rejected, never trimmed.
+four distinct single-choice options, and/or free text. Two or more choices
+automatically allow a text answer even when the agent sets `allow_free_text=false`;
+zero- and one-choice questions follow that flag. The agent selects the most
+relevant options before calling; a longer list is rejected, never trimmed.
 Its injected tool call ID is hidden from
 the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
 `stage="agent_question"`. A collision with a declared, provider or capability
 tool named `ask_user` rejects executor construction.
+
+A pending human interrupt is the turn's result until the person responds. If an
+earlier tool call failed and the agent recovered by asking a valid question, the
+stream retains the failed tool trace but emits no stale failure as a final answer.
 
 The tool pauses through LangGraph before any external effect. A resume must carry
 the pending interrupt and occurrence IDs. After authorization and before the
