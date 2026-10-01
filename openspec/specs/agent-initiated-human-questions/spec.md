@@ -6,13 +6,19 @@ Lets an interactive ReAct or Deep agent ask its user a question during a turn, r
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, zero to four single-choice options, and whether free text is allowed. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
 - **GIVEN** an interactive agent with agent questions enabled
-- **WHEN** it asks a question with three options and no free text
-- **THEN** the person can select exactly one of those options and the same turn resumes
+- **WHEN** it asks a question with one option and no free text
+- **THEN** the person can select that option and the same turn resumes
+
+#### Scenario: Multiple choices and free text
+
+- **GIVEN** an interactive agent with agent questions enabled
+- **WHEN** it asks a question with two to four options and sets `allow_free_text` to false
+- **THEN** the person can select exactly one offered option or submit nonempty text without an option identifier, and the same turn resumes
 
 #### Scenario: Free text
 
@@ -29,7 +35,8 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 #### Scenario: Choices in managed chat
 
 - **WHEN** an agent asks a question with multiple choices
-- **THEN** managed chat displays them in their given order, one per centered row
+- **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row whose localized placeholder is "Other" in English or "Autre" in French
+- **AND** the text-input row submits a text answer without fabricating an option identifier
 
 #### Scenario: Too many options
 
@@ -60,6 +67,12 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** an `ask_user` call waits for a human answer
 - **THEN** its tool line remains in progress until the person answers or skips, without showing an error result for the pause
 - **AND** a free-text question shows a compact raised Send button directly left of Skip at the bottom right; tool approvals keep their separate approval actions
+
+#### Scenario: Earlier tool failure followed by an agent question
+
+- **GIVEN** a tool call failed before a later valid `ask_user` call in the same turn
+- **WHEN** the valid question pauses for a human answer
+- **THEN** the turn emits the pending question without a final answer containing the earlier tool failure
 
 #### Scenario: Composer waits for an agent question
 

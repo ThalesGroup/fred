@@ -221,6 +221,56 @@ async def test_question_resumes_its_tool_call(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["react", "deep"])
+async def test_multiple_choices_allow_text_even_when_agent_disables_it(
+    kind: str,
+) -> None:
+    model = _Model(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ask_user",
+                        "args": {
+                            "question": "Which destination?",
+                            "choices": [
+                                {"id": "city", "label": "City"},
+                                {"id": "beach", "label": "Beach"},
+                            ],
+                            "allow_free_text": False,
+                        },
+                        "id": "call-other",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="continued"),
+        ]
+    )
+    agent = _compile(kind, model)
+    thread = f"other-answer-{kind}"
+    pending = await _drive(agent, {"messages": [HumanMessage("Ask me")]}, thread)
+
+    assert len(pending) == 1
+    assert pending[0].value["free_text"] is True
+    assert (
+        await _drive(
+            agent, Command(resume={pending[0].id: {"text": "Mountains"}}), thread
+        )
+        == []
+    )
+    assert any(
+        message.tool_call_id == "call-other"
+        and json.loads(str(message.content))
+        == {"status": "answered", "text": "Mountains"}
+        for call in model.calls
+        for message in call
+        if isinstance(message, ToolMessage)
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["react", "deep"])
 async def test_sibling_questions_keep_distinct_tool_call_ids(kind: str) -> None:
     model = _Model(
         script=[

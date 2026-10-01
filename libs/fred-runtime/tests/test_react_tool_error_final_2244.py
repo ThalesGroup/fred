@@ -44,8 +44,8 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
-    ExecutionConfig,
     AwaitingHumanRuntimeEvent,
+    ExecutionConfig,
     FinalRuntimeEvent,
     ToolResultRuntimeEvent,
 )
@@ -393,7 +393,14 @@ async def test_error_then_recovery_in_later_round_restores_synthesis() -> None:
 async def test_failed_tool_then_human_pause_has_no_stale_final() -> None:
     events = [
         ("updates", {"agent": {"messages": [_tool_calls_message("failed")]}}),
-        ("updates", {"tools": {"messages": [_raw_status_error_result("failed", "invalid choices")]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [_raw_status_error_result("failed", "invalid choices")]
+                }
+            },
+        ),
         (
             "updates",
             {
@@ -402,7 +409,11 @@ async def test_failed_tool_then_human_pause_has_no_stale_final() -> None:
                         AIMessage(
                             content="",
                             tool_calls=[
-                                {"id": "question", "name": "ask_user", "args": {"question": "Choose"}}
+                                {
+                                    "id": "question",
+                                    "name": "ask_user",
+                                    "args": {"question": "Choose"},
+                                }
                             ],
                         )
                     ]
