@@ -99,6 +99,15 @@ describe("ImportStepper", () => {
     ]);
   });
 
+  it("shows a transferred file as waiting for a worker, with nothing spinning", () => {
+    const queued = vm({ stage: "analysis", state: "pending" });
+    expect(phases(queued)).toEqual(["done", "waiting", "pending", "pending"]);
+    expect(links(queued)).toEqual(["waiting", "pending", "pending"]);
+    const html = renderToStaticMarkup(<ImportStepper task={queued} />);
+    expect(html).toContain(">pending<");
+    expect(html).not.toContain("<svg");
+  });
+
   it("holds the transfer as done, with nothing running, while a name waits on an answer", () => {
     // Nothing is moving: the bytes arrived and the server declined to write.
     expect(phases(vm({ stage: "decision", state: "pending" }))).toEqual(["done", "pending", "pending", "pending"]);

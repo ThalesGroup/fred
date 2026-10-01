@@ -1571,17 +1571,20 @@
         "current": "in progress",
         "done": "done",
         "failed": "failed",
-        "pending": "waiting"
+        "pending": "waiting",
+        "waiting": "queued"
       },
       "stepper": {
         "label": "Import progress",
+        "waiting": "Waiting…",
         "hint": {
           "upload": "The file leaves your computer for its destination. This is the only phase that depends on your connection.",
           "uploading": "The kind of document is worked out, and what it takes to process it is set aside.",
           "processing": "The text is pulled out of the document, page by page, so it can be used.",
           "done": "The document is ready. Agents can now find it and quote it.",
           "doneUpload": "The file has arrived. It was not analysed — this mode only sends it.",
-          "indexing": "The content is filed away so agents can find it and quote it in their answers."
+          "indexing": "The content is filed away so agents can find it and quote it in their answers.",
+          "waiting": "The file has arrived. Its analysis starts as soon as a slot frees up."
         }
       },
       "resend": {

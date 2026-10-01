@@ -43,6 +43,13 @@
   color: var(--on-surface-muted);
 }
 
+/* Queued for a worker: where the file is, with nothing running yet. Same grey
+   as the card's status line in that state. */
+.phase[data-state="waiting"],
+.link[data-state="waiting"] {
+  color: var(--on-surface-retreat);
+}
+
 .phase[data-state="current"],
 .link[data-state="current"] {
   color: var(--info);

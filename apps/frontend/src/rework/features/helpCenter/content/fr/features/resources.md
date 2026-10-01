@@ -66,6 +66,11 @@ repères qui se cochent l'un après l'autre, et nomme celui en cours :
    minutes.
 4. **Indexation** — Fred range ce qu'il a lu pour pouvoir le retrouver.
 
+Fred analyse quelques fichiers à la fois. Quand vous en importez plusieurs, ceux
+qui attendent leur tour affichent **En attente…**, en gris, avec un repère
+immobile : le fichier est bien arrivé, son analyse démarrera dès qu'une place se
+libère.
+
 **C'est à la fin du dernier temps, et pas à la fin de l'envoi, que le document
 devient utilisable par un agent.**
 
