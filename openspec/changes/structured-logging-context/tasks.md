@@ -16,7 +16,7 @@ Apply the agreed source specification and [design](design.md) sequentially. Fini
 - [x] 2.2 Bind authenticated/admitted user and resolved team/session/exchange/run/template/instance context at shared conversation, runtime turn and upload/attachment orchestration; align SDK/runtime traceability to ingress references and add tool scopes/outcomes at existing `ToolExecution`. Verify representative normal/resumed chat, ReAct/Deep/Graph tool and upload journeys without a test matrix for every route.
 - [x] 2.3 Implement explicit scope clearing/restoration and safe retained-task ownership, including a request-owned completion snapshot; add one deliberately interleaved request isolation/error-or-cancellation/subsequent-request scenario and verify actual sync/thread and delayed-sink transitions used by Fred.
 - [x] 2.4 Reconcile observability §6/§7, the active delegated-execution neutral-access requirement/scenarios and affected runtime/product contract notes with admitted metadata-only logs; verify existing sensitive-data, audit-isolation and metric-label checks still protect their original boundaries.
-- [ ] 2.5 Add the slice migration note, complete independent correctness/performance review, commit and publish the assigned draft PR; attach it and verify focused checks and CI on its current head before advancing.
+- [x] 2.5 Add the slice migration note, complete independent correctness/performance review, commit and publish the assigned draft PR; attach it and verify focused checks and CI on its current head before advancing.
 
 ## 3. P1 — Delegated downstream correlation
 
