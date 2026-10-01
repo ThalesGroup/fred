@@ -11,7 +11,7 @@ See proposal.md. `AskUserArgs` already rejects more than four choices. `ask_user
 ## Decisions
 
 1. In `ask_user`, make `HumanInputRequest.free_text` true whenever there are at least two choices. Keep the model argument for zero- and one-choice questions. This also makes stored pause state and server-side answer validation agree. Merely showing an input in the frontend would create a text answer that the backend rejects.
-2. For agent questions with choices and free text, render the existing `TextInput` atom as the last row inside the choice column, with a localized placeholder and an accessible label. Match the choice outline, width and height with scoped CSS. Keep the Send action and existing optional comment behavior when an option is selected. Text-only questions retain the multiline `TextArea`; approval cards are unchanged.
+2. For agent questions with choices and free text, render a labeled text input as the last row inside the choice column, with a fixed gray "Other" / "Autre" label beside the editable area. Match the choice outline, width and height with scoped CSS, and render the question through the shared sanitized `MarkdownRenderer`. Keep the Send action and existing optional comment behavior when an option is selected. Text-only questions retain the multiline `TextArea`; approval cards are unchanged.
 3. Track whether a valid human interrupt was emitted during a ReAct stream. Finish collecting stream metadata and sibling events, but omit `FinalRuntimeEvent` for the paused turn. This leaves ordinary all-failed tool rounds on the current safe-error path.
 
 ## Risks / Trade-offs

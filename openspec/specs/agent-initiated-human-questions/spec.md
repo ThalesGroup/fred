@@ -35,8 +35,13 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 #### Scenario: Choices in managed chat
 
 - **WHEN** an agent asks a question with multiple choices
-- **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row whose localized placeholder is "Other" in English or "Autre" in French
+- **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row with a fixed gray label "Other" in English or "Autre" in French to the left of the editable area
 - **AND** the text-input row submits a text answer without fabricating an option identifier
+
+#### Scenario: Question Markdown in managed chat
+
+- **WHEN** an agent question contains Markdown emphasis
+- **THEN** managed chat renders the formatted text in the question card instead of showing Markdown markers
 
 #### Scenario: Too many options
 

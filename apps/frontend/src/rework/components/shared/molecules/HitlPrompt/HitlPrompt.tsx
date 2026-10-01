@@ -17,8 +17,8 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextArea from "@shared/atoms/TextArea/TextArea";
-import TextInput from "@shared/atoms/TextInput/TextInput";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
+import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { hitlRendererForTool } from "@rework/features/capabilities/hitlRendererRegistry";
@@ -79,7 +79,11 @@ export function HitlPrompt({
         />
       )}
       {payload.title && <p className={styles.title}>{payload.title}</p>}
-      {payload.question && <p className={styles.question}>{payload.question}</p>}
+      {payload.question && (
+        <div className={styles.question}>
+          <MarkdownRenderer text={payload.question} />
+        </div>
+      )}
 
       {/* What the gate carries is a tool name and 1 200 characters of argument
           preview — enough to say WHICH call, never enough to judge it. A
@@ -117,12 +121,10 @@ export function HitlPrompt({
             );
           })}
           {hasChoiceTextRow && (
-            <div className={styles.otherChoice}>
-              <TextInput
-                compact
-                size="small"
-                aria-label={t("chatbot.hitlOtherAnswerPlaceholder")}
-                placeholder={t("chatbot.hitlOtherAnswerPlaceholder")}
+            <label className={styles.otherChoice}>
+              <span className={styles.otherChoiceLabel}>{t("chatbot.hitlOtherAnswerPlaceholder")}</span>
+              <input
+                type="text"
                 value={freeText}
                 onChange={(e) => setFreeText(e.target.value)}
                 onKeyDown={(e) => {
@@ -134,7 +136,7 @@ export function HitlPrompt({
                 aria-invalid={isOverLimit || undefined}
                 aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
               />
-            </div>
+            </label>
           )}
           {payload.stage === "tool_approval" &&
             (payload.pending_calls?.length ?? 0) > 0 &&

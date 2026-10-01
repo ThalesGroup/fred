@@ -45,7 +45,11 @@
   margin: 0;
   color: var(--on-surface);
   font: var(--font-body-medium);
-  white-space: pre-wrap;
+}
+
+.question :global([data-copyable-content]) {
+  max-width: none;
+  font: inherit;
 }
 
 .choices {
@@ -108,19 +112,35 @@
 }
 
 .otherChoice {
-  width: 100%;
-}
-
-.otherChoice [data-compact="true"] input {
-  border-color: var(--outline);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: text;
+  border: 1px solid var(--outline);
   border-radius: var(--radius-s);
   background-color: transparent;
-  color: var(--on-surface);
-  font: var(--font-title-small);
-  text-align: center;
+  padding-inline: var(--spacing-s);
+  width: 100%;
+  min-height: 2.5rem;
 }
 
-.otherChoice input::placeholder {
-  opacity: 1;
-  color: var(--primary);
+.otherChoice:focus-within {
+  outline: 2px solid var(--primary);
+  border-color: transparent;
+}
+
+.otherChoiceLabel {
+  flex: 0 0 auto;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.otherChoice input {
+  flex: 1;
+  outline: none;
+  border: 0;
+  background: transparent;
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
 }

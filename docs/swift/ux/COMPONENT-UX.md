@@ -5062,7 +5062,7 @@ question stays answerable after the row is switched off. The existing HITL
 card shows a single-choice list, a free-text field, or both. For an agent
 question with two or more choices, free text is always available. It appears
 as the final row in the centered choice column, styled like the outlined
-choices with an "Other" / "Autre" placeholder; Enter submits that text.
+choices with a fixed gray "Other" / "Autre" label to the left of the editable text; Enter submits that text. The question uses the shared Markdown renderer, so emphasis displays as formatting.
 A choice may carry the typed comment. Text-only questions retain the multiline
 field and Ctrl+Enter or Cmd+Enter submission. Tool approvals keep their choice
 layout. An optional choice description appears beneath its label inside the

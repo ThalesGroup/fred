@@ -124,7 +124,7 @@ describe("HitlPrompt choice descriptions", () => {
 });
 
 describe("HitlPrompt Other answer row", () => {
-  it("places a localized text input after four choices", () => {
+  it("places a gray Other label beside an editable fifth row", () => {
     const question = {
       ...event,
       payload: {
@@ -141,9 +141,10 @@ describe("HitlPrompt Other answer row", () => {
     const container = document.createElement("div");
     container.innerHTML = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
     const input = container.querySelector("input");
-    expect(input?.getAttribute("placeholder")).toBe("chatbot.hitlOtherAnswerPlaceholder");
-    expect(input?.getAttribute("aria-label")).toBe("chatbot.hitlOtherAnswerPlaceholder");
-    const rows = input?.parentElement?.parentElement?.parentElement?.parentElement;
+    expect(input?.getAttribute("placeholder")).toBeNull();
+    expect(input?.parentElement?.tagName).toBe("LABEL");
+    expect(input?.previousElementSibling?.textContent).toBe("chatbot.hitlOtherAnswerPlaceholder");
+    const rows = input?.parentElement?.parentElement;
     expect(rows?.children).toHaveLength(5);
     expect(
       Array.from(rows?.children ?? [])
@@ -152,6 +153,25 @@ describe("HitlPrompt Other answer row", () => {
     ).toEqual(["One", "Two", "Three", "Four"]);
     expect(rows?.lastElementChild?.contains(input ?? null)).toBe(true);
     expect(container.querySelector("textarea")).toBeNull();
+  });
+
+  it("renders question emphasis as Markdown", () => {
+    const question = {
+      ...event,
+      payload: {
+        stage: "agent_question",
+        free_text: true,
+        choices: [
+          { id: "train", label: "Train" },
+          { id: "plane", label: "Plane" },
+        ],
+        question: "Dates validées : **20 au 27 décembre**.\n\nPassons aux **transports**.",
+      },
+    };
+    const html = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    expect(html).toContain("<strong>20 au 27 décembre</strong>");
+    expect(html).toContain("<strong>transports</strong>");
+    expect(html).not.toContain("**");
   });
 
   it("keeps the multiline field for a text-only question", () => {
