@@ -5406,8 +5406,7 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
 
 def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     """
-    Ensure `_build_capability_block` builds a non-empty block for a Graph agent
-    (Phase 3, NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+    Ensure `_build_capability_block` builds a non-empty block for a Graph agent.
 
     Why this exists:
     - `_build_capability_block` and `_effective_capability_ids` used to gate

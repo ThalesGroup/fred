@@ -87,7 +87,7 @@ export default function TablePagination({
             <span className={styles["footer-label"]}>{text.itemsPerPage}</span>
             <div className={styles["footer-rows-per-page-select"]}>
               <Select<number>
-                size="small"
+                size="xs"
                 compact
                 value={rowsPerPage}
                 options={rowsPerPageOptions}
@@ -96,41 +96,43 @@ export default function TablePagination({
             </div>
           </>
         )}
-        <IconButton
-          variant="icon"
-          size="medium"
-          icon={{ category: "outlined", type: "first_page" }}
-          aria-label={text.first}
-          disabled={currentPage <= 0}
-          onClick={onFirst}
-        />
-        <IconButton
-          variant="icon"
-          size="medium"
-          icon={{ category: "outlined", type: "chevron_left" }}
-          aria-label={text.prev}
-          disabled={currentPage <= 0}
-          onClick={onPrev}
-        />
-        <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-          {text.pageNumber(currentPage + 1, pageCount)}
-        </span>
-        <IconButton
-          variant="icon"
-          size="medium"
-          icon={{ category: "outlined", type: "chevron_right" }}
-          aria-label={text.next}
-          disabled={currentPage >= pageCount - 1}
-          onClick={onNext}
-        />
-        <IconButton
-          variant="icon"
-          size="medium"
-          icon={{ category: "outlined", type: "last_page" }}
-          aria-label={text.last}
-          disabled={currentPage >= pageCount - 1}
-          onClick={onLast}
-        />
+        <div className={styles["footer-nav"]}>
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "first_page" }}
+            aria-label={text.first}
+            disabled={currentPage <= 0}
+            onClick={onFirst}
+          />
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "chevron_left" }}
+            aria-label={text.prev}
+            disabled={currentPage <= 0}
+            onClick={onPrev}
+          />
+          <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
+            {text.pageNumber(currentPage + 1, pageCount)}
+          </span>
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "chevron_right" }}
+            aria-label={text.next}
+            disabled={currentPage >= pageCount - 1}
+            onClick={onNext}
+          />
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "last_page" }}
+            aria-label={text.last}
+            disabled={currentPage >= pageCount - 1}
+            onClick={onLast}
+          />
+        </div>
       </div>
     </div>
   );

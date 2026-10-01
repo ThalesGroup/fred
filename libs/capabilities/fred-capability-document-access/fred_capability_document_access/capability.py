@@ -542,7 +542,7 @@ class DocumentAccessCapability(
         capability — `AgentCapability.middleware()`'s default wraps this for
         `create_agent()`; no ReAct-loop-specific hook is needed.
 
-        Return-convention note (Phase 1, NOTES-GRAPH-CAPABILITY-BRIDGE.md):
+        Return-convention note:
         kept as `@tool(..., response_format="content_and_artifact")` returning
         a `(content, ToolInvocationResult)` tuple. Verified empirically
         (`test_capability_tool_return_convention.py`) that this is correct for the only

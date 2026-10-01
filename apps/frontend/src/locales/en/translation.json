@@ -1556,7 +1556,7 @@
         "quotaExceededPersonal": "Your storage is full.",
         "quotaUnknown": "Available storage could not be checked. Worth retrying.",
         "serverUnavailable": "The server did not answer.",
-        "ambiguousName": "This folder already holds two documents of that name. Remove the duplicate before importing again.",
+        "ambiguousName": "This folder already holds two documents of that name. Rename or delete one of them before importing again.",
         "unreported": "Failed, with no cause reported.",
         "unsupportedType": "This file type is not supported.",
         "upload": "Sending this file failed."

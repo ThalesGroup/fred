@@ -13,9 +13,8 @@
 # limitations under the License.
 
 """
-End-to-end proof of the Graph <-> AgentCapability bridge
-(NOTES-GRAPH-CAPABILITY-BRIDGE.md Phase 6) on a real, user-recognizable
-agent: `test_assistant`'s "document" scenario.
+End-to-end proof of the Graph <-> AgentCapability bridge on a real,
+user-recognizable agent: `test_assistant`'s "document" scenario.
 
 Why this file exists:
 - Phases 1-5 (`libs/fred-runtime`) proved every link of the bridge in

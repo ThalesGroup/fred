@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """
-Return-shape investigation for `AgentCapability.tools()` (Phase 1,
-NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+Return-shape investigation for `AgentCapability.tools()`.
 
 Why this file exists:
 - the bridge plan assumed a capability tool's `content_and_artifact` tuple

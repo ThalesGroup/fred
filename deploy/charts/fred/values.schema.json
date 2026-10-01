@@ -26832,6 +26832,7 @@
                           "ingress_prefix": {
                             "anyOf": [
                               {
+                                "pattern": "^/[A-Za-z0-9._~/-]+$",
                                 "type": "string"
                               },
                               {
@@ -26839,7 +26840,7 @@
                               }
                             ],
                             "default": null,
-                            "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+                            "description": "Canonical root-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. Absolute URLs, encoded characters, and path traversal are rejected.",
                             "title": "Ingress Prefix"
                           }
                         },
@@ -28981,6 +28982,7 @@
                           "ingress_prefix": {
                             "anyOf": [
                               {
+                                "pattern": "^/[A-Za-z0-9._~/-]+$",
                                 "type": "string"
                               },
                               {
@@ -28988,7 +28990,7 @@
                               }
                             ],
                             "default": null,
-                            "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+                            "description": "Canonical root-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. Absolute URLs, encoded characters, and path traversal are rejected.",
                             "title": "Ingress Prefix"
                           }
                         },

@@ -149,6 +149,14 @@ async function drop(target: HTMLElement, dataTransfer: Record<string, unknown>) 
   });
 }
 
+function dragEnter(target: HTMLElement, dataTransfer: Record<string, unknown>) {
+  act(() => {
+    const event = new Event("dragenter", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    target.dispatchEvent(event);
+  });
+}
+
 function filesTransfer(files: File[]): Record<string, unknown> {
   return { files, types: files.length ? ["Files"] : [] };
 }
@@ -299,6 +307,22 @@ describe("DocumentWorkspace full-page drop (one folder per page)", () => {
     await drop(folderToggle("Sub"), filesTransfer([new File(["a"], "a.pdf")]));
 
     expect(lastDrawerProps().destinationPath).toBe("CIR/Sub");
+  });
+
+  it("clears the page drop overlay after a file is dropped on a subfolder row", async () => {
+    await navigateInto("CIR");
+    const workspace = container.firstElementChild as HTMLElement;
+    const row = folderToggle("Sub");
+    const transfer = filesTransfer([new File(["a"], "a.pdf")]);
+
+    dragEnter(workspace, transfer);
+    expect(workspace.getAttribute("data-page-drag-over")).toBe("true");
+
+    dragEnter(row, transfer);
+    await drop(row, transfer);
+
+    expect(lastDrawerProps().destinationPath).toBe("CIR/Sub");
+    expect(workspace.hasAttribute("data-page-drag-over")).toBe(false);
   });
 });
 

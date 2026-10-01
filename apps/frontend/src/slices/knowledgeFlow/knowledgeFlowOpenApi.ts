@@ -2959,10 +2959,6 @@ export type Identity = {
   document_name: string;
   /** Stable unique id across the system */
   document_uid: string;
-  /** Base file name without transient version suffix (e.g., 'report.docx' for 'report.docx (1)') */
-  canonical_name?: string | null;
-  /** Version number within a folder/tag. 0 means canonical/original name, 1 -> 'name (1)', etc. */
-  version?: number;
   /** Human-friendly title for UI */
   title?: string | null;
   /** DESCRIPTIVE only — extracted from the file's own embedded metadata (e.g. a PDF's /Author), so it is caller-supplied and untrusted. Never use it to identify an account or to attribute storage quota. */
