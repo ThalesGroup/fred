@@ -56,7 +56,7 @@ export function credentialExpiryScenario(input: CredentialExpiryInput = {}): Sce
     try {
       if (signal.aborted) return;
       const session = await runStep(report, "session-token", "Use the current SSO session", async () => {
-        if (!KeyCloakService.GetKeycloakRealmConfig()) throw new SkipStep("a secure SSO session is required");
+        if (!KeyCloakService.GetToken()) throw new SkipStep("a secure SSO session is required");
         let fresh: boolean;
         try {
           fresh = await KeyCloakService.ensureFreshToken(30);

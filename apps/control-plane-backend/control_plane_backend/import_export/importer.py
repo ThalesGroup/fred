@@ -37,7 +37,8 @@ Scope (current snapshot):
              (after it, so role grants may reference teams the same bundle
              just created).
              Phase 1 (identity) creates a Keycloak user for any bundle entry
-             that has no existing identity AND carries a `password` — an
+             that has no existing identity AND carries a `password` in Keycloak
+             mode; local mode refuses that creation with an explicit reason. An
              entry with no `password` is assumed to already exist and is
              never force-created. Phase 2 (role) resolves username → sub and
              grants every team/platform role the bundle declares. A
@@ -123,7 +124,10 @@ from control_plane_backend.teams.service import (
     resolve_granted_team_relation,
 )
 from control_plane_backend.users.dependencies import UserServiceDependencies
-from control_plane_backend.users.schemas import CreateUserRequest
+from control_plane_backend.users.schemas import (
+    CreateUserRequest,
+    IdentityManagedByProviderError,
+)
 from control_plane_backend.users.service import create_user, find_user_subs_bulk
 
 logger = logging.getLogger(__name__)
@@ -534,7 +538,7 @@ async def _provision_bundle_identities(
     platform_admin: KeycloakUser,
     report: MigrationReport,
 ) -> None:
-    """Create a Keycloak identity for each bundle entry that needs one.
+    """Create missing Keycloak identities or refuse provider-managed creation.
 
     Runs before username resolution so the role phase below can then resolve
     every entry, including the ones just created here. An entry is only
@@ -544,8 +548,9 @@ async def _provision_bundle_identities(
     `users/service.py::create_user` (already Keycloak-Admin-M2M-gated); if M2M
     credentials are not configured, `create_user` raises
     `KeycloakM2MUserOperationDisabledError`, which is left to propagate rather
-    than swallowed — this makes Keycloak Admin M2M configuration an explicit
-    precondition of importing a bundle that creates identities.
+    than swallowed. In local-directory mode, `create_user` instead raises
+    `IdentityManagedByProviderError`; this phase names all unresolved entries
+    with passwords and aborts before any authorization write.
 
     Resolution goes through the shared `resolver` (bulk-prefetched once per
     run, see `UserSubResolver`) instead of a bare `find_user_sub_by_username`
@@ -558,17 +563,26 @@ async def _provision_bundle_identities(
             continue  # already exists — identity phase never overwrites
         if entry.password is None:
             continue  # no password supplied — cannot create, role phase will report it missing
-        created = await create_user(
-            platform_admin,
-            CreateUserRequest(
-                username=entry.username,
-                email=entry.email or f"{entry.username}@example.com",
-                password=entry.password,
-                first_name=entry.first_name,
-                last_name=entry.last_name,
-            ),
-            user_deps,
-        )
+        try:
+            created = await create_user(
+                platform_admin,
+                CreateUserRequest(
+                    username=entry.username,
+                    email=entry.email or f"{entry.username}@example.com",
+                    password=entry.password,
+                    first_name=entry.first_name,
+                    last_name=entry.last_name,
+                ),
+                user_deps,
+            )
+        except IdentityManagedByProviderError as exc:
+            unresolved = [
+                candidate.username
+                for candidate in bundle_users
+                if candidate.password is not None
+                and await resolver.find_sub(candidate.username) is None
+            ]
+            raise IdentityManagedByProviderError(", ".join(unresolved)) from exc
         resolver.remember(entry.username, created.id)
         report.identities_created += 1
 

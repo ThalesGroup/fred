@@ -27,9 +27,9 @@ from fred_core import (
     OrganizationPermission,
     RebacEngine,
     get_current_user,
-    get_current_user_without_gcu,
 )
 from fred_core.common import personal_team_id
+from fred_core.security.oidc import get_current_user_before_gcu
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
@@ -62,6 +62,7 @@ from control_plane_backend.users.platform_roles import (
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
     GrantPlatformRoleRequest,
+    IdentityManagedByProviderError,
     KeycloakM2MUserOperationDisabledError,
     PlatformAdminRootOnlyError,
     PlatformBootstrapNotCompletedError,
@@ -145,6 +146,18 @@ def register_exception_handlers(app: FastAPI) -> None:
         exc: KeycloakM2MUserOperationDisabledError,
     ) -> JSONResponse:
         return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(IdentityManagedByProviderError)
+    async def identity_managed_by_provider_handler(
+        _request, exc: IdentityManagedByProviderError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "reason": "managed_by_identity_provider",
+            },
+        )
 
     @app.exception_handler(UserAlreadyExistsError)
     async def user_already_exists_handler(
@@ -387,6 +400,11 @@ async def delete_user(
     # "*" is the wildcard subject and "#" marks a userset: neither names a person.
     if user_id == "*" or "#" in user_id:
         raise UserNotFoundError(user_id)
+    if deps.configuration.security.user_directory == "local":
+        if rebac.requires_active_accounts:
+            await rebac.suspend_account(user_id)
+        return
+
     admin = _get_keycloak_admin_for_user_operations(deps)
     # The ban alone ends access, so the person's other relations stay. It comes before
     # the identity-provider account: a failure after it leaves the person refused, and
@@ -408,7 +426,7 @@ class UserDetails(BaseModel):
 )
 async def get_user_details(
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     """Return the personal team through the shared team resolver.
@@ -438,7 +456,7 @@ async def get_user_details(
 async def validate_gcu(
     deps: UserDependencies,
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
     """

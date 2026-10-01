@@ -183,6 +183,7 @@ value is served by a separate **public (unauthenticated)** surface:
     - `enabled`
     - `realm_url` — emitted only when `enabled`
     - `client_id` — emitted only when `enabled`
+    - `provider`, `scope`, `user_directory`, `uid_claim`, `roles_claim` — added 2026-09-30 for the common browser OIDC flow; public provider and identity mapping only, with Keycloak defaults when authentication is disabled.
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.

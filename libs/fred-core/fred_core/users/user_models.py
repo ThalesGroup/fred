@@ -15,7 +15,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, Uuid
+from sqlalchemy import BigInteger, DateTime, Enum, Index, String, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -27,9 +27,19 @@ class GcuVersionsType(enum.Enum):
 
 class UserRow(Base):
     __tablename__ = "users"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        Index("ix_users_lower_username", text("lower(username)")),
+        {"extend_existing": True},
+    )
 
     id: Mapped[Uuid] = mapped_column(Uuid, primary_key=True)
+    username: Mapped[str | None] = mapped_column(String, nullable=True)
+    email: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     gcuVersionAccepted: Mapped[GcuVersionsType | None] = mapped_column(
         Enum(GcuVersionsType, name="gcu_version_type"), nullable=True
     )

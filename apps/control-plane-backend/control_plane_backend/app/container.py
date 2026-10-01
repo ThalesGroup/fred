@@ -40,7 +40,13 @@ def build_application_container(configuration: Configuration) -> ControlPlaneCon
     Example:
     - `container = build_application_container(configuration)`
     """
-    return ApplicationContext(configuration)
+    container = ApplicationContext(configuration)
+    if (
+        configuration.security.m2m.enabled
+        and configuration.security.m2m.provider == "oidc"
+    ):
+        container.get_service_token_provider()
+    return container
 
 
 def initialize_shared_stores(container: ControlPlaneContainer) -> None:

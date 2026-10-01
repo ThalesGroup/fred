@@ -45,6 +45,7 @@ from fred_core.store import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -340,10 +341,17 @@ class ApplicationContext:
         """
         if self._service_token_provider is None:
             m2m = self.configuration.security.m2m
+            token_endpoint = resolve_endpoints(
+                provider=m2m.provider,
+                realm_url=str(m2m.realm_url).rstrip("/"),
+                token_url=str(m2m.token_url) if m2m.token_url else None,
+            ).token_endpoint
             self._service_token_provider = M2MTokenProvider(
                 M2MAuthConfig(
                     keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
                     client_id=m2m.client_id,
+                    scope=m2m.scope,
+                    token_url_override=token_endpoint,
                     secret_env=m2m.secret_env_var,
                 )
             )

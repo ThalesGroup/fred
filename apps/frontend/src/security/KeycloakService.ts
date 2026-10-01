@@ -12,64 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Keycloak, { KeycloakInstance } from "keycloak-js";
+import { v5 } from "uuid";
+import { OidcBrowserSession } from "./OidcBrowserSession";
 
-let keycloakInstance: KeycloakInstance | null = null;
 let isSecurityEnabled = false;
+let oidcSession: OidcBrowserSession | null = null;
+let identityProvider: "keycloak" | "oidc" = "keycloak";
+let identityIssuer = "";
+let identityClientId = "";
+let uidClaim = "sub";
+let rolesClaim: string[] | null = null;
 
-// keycloak-js's own floor: `updateToken` does `minValidity = minValidity || 5`,
-// so 0 does NOT mean "don't check" — it means five seconds. `isTokenExpired`
-// disagrees (0 is falsy there and subtracts nothing), so any threshold we test
-// must be coerced the same way before the two are compared.
-const KEYCLOAK_MIN_VALIDITY_FLOOR_S = 5;
-// keycloak-js's sentinel for "refresh regardless of what the token looks like"
-// (`if (minValidity == -1) { refreshToken = true; }`). The only force path it
-// offers.
-const KEYCLOAK_FORCE_REFRESH = -1;
-// Work rank for a forced refresh: strictly above any headroom threshold, so a
-// forced caller never reuses another chain and every other caller may reuse a
-// forced one (it produces a full-lifetime token).
-const KEYCLOAK_FORCE_WORK = Number.POSITIVE_INFINITY;
+export interface BrowserAuthOptions {
+  provider?: "keycloak" | "oidc";
+  scope?: string | null;
+  user_directory?: "keycloak" | "local";
+  uid_claim?: string;
+  roles_claim?: string[] | null;
+  redirect_uri?: string;
+}
 
-// single-flight so concurrent calls don’t trigger multiple refreshes
-let refreshInFlight: Promise<boolean> | null = null;
-// True once the session has genuinely ended — either keycloak-js ended it
-// itself (clearToken → onAuthLogout, e.g. after a refresh answered HTTP 400)
-// or the app deliberately ended it (explicit Logout/CallLogout). Distinguishes
-// "session died" from "not logged in yet": keycloak-js sets
-// `authenticated = false` in BOTH states, so the fields alone cannot tell them
-// apart, and GetTokenSecondsLeft must report the first as dead (0) without
-// reporting app bootstrap the same way.
-// Reset when a refreshed token is stored; a full login resets it with the page.
 let sessionInvalidated = false;
-
-// The ONE owner of "the persisted token dies with the session". Every path
-// that ends a session (keycloak-js's own clearToken via onAuthLogout, Logout,
-// CallLogout) must go through this — a teardown path that skips it leaves an
-// orphaned bearer that GetToken()'s localStorage fallback will re-present and
-// the backend will accept via offline JWT validation.
+let authEpoch = 0;
 const clearPersistedToken = () => {
   sessionInvalidated = true;
   authEpoch += 1;
   localStorage.removeItem("keycloak_token");
 };
-// The headroom the in-flight refresh was started with. A caller needing MORE
-// headroom cannot reuse a weaker in-flight check: a turn preflight asking for
-// 120 s would otherwise inherit an ordinary fetch's 30 s check and be told
-// "fresh" with only 30 s of validity.
-let refreshInFlightWork = 0;
-// Bumped whenever the session is deliberately torn down, so a refresh that
-// settles afterwards can tell it has been superseded.
-let authEpoch = 0;
-
-// keycloak-js's updateToken() has no built-in timeout — a dropped connection
-// or unresponsive Keycloak leaves it pending forever. Since `refreshInFlight`
-// is a shared singleton, every other in-flight or future request awaits that
-// same never-settling promise, wedging every authenticated call in the app
-// (dynamicBaseQuery awaits ensureFreshToken before every fetch). Bound it so
-// a hung refresh fails fast instead, falling through to the existing 401 ->
-// retry -> logout recovery path in dynamicBaseQuery.tsx.
-const TOKEN_REFRESH_TIMEOUT_MS = 8_000;
 
 // ---------- Insecure-mode dev token support ----------
 // Fred rationale: even when security is off, the frontend + backend contracts
@@ -172,32 +141,27 @@ function parseKeycloakUrl(fullUrl: string): { url: string; realm: string } {
   return { url: match[1] + "/", realm: match[2] };
 }
 
-export function createKeycloakInstance(keycloak_url: string, keycloak_client_id: string) {
-  if (!keycloakInstance) {
+export function createKeycloakInstance(
+  keycloak_url: string,
+  keycloak_client_id: string,
+  options: BrowserAuthOptions = {},
+) {
+  if (!oidcSession) {
     isSecurityEnabled = true;
-    const { url, realm } = parseKeycloakUrl(keycloak_url);
-
-    keycloakInstance = new Keycloak({ url, realm, clientId: keycloak_client_id });
-
-    // keycloak-js clears its live token itself when a refresh comes back
-    // HTTP 400 (clearToken → onAuthLogout). Drop the persisted copy in the
-    // same breath: GetToken() falls back to localStorage, and an
-    // unexpired-but-orphaned bearer would otherwise keep authenticating
-    // requests (the backend validates JWTs offline) after Keycloak has
-    // already ended the session.
-    keycloakInstance.onAuthLogout = () => {
-      clearPersistedToken();
-    };
-
-    // Proactive refresh when KC tells us the token is expired
-    keycloakInstance.onTokenExpired = () => {
-      // try to refresh quietly; if it fails, KC will push to login on next API call
-      ensureFreshToken(30).catch(() => {
-        // no-op; the baseQuery will handle 401 -> logout
-      });
-    };
+    identityProvider = options.provider ?? "keycloak";
+    identityIssuer = keycloak_url.replace(/\/+$/, "");
+    identityClientId = keycloak_client_id;
+    uidClaim = options.uid_claim ?? "sub";
+    rolesClaim = options.roles_claim ?? null;
+    localStorage.removeItem("keycloak_token");
+    oidcSession = new OidcBrowserSession(
+      identityIssuer,
+      identityClientId,
+      options.scope ?? undefined,
+      options.redirect_uri ?? `${window.location.origin}/`,
+    );
   }
-  return keycloakInstance!;
+  return oidcSession.manager;
 }
 
 /**
@@ -217,23 +181,12 @@ const Login = (onAuthenticatedCallback: Function) => {
     return;
   }
 
-  keycloakInstance!
-    .init({
-      onLoad: "login-required",
-      pkceMethod: "S256",
-      checkLoginIframe: false,
+  void oidcSession!
+    .login(() => {
+      sessionInvalidated = false;
+      onAuthenticatedCallback();
     })
-    .then((authenticated) => {
-      if (authenticated) {
-        localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
-        onAuthenticatedCallback();
-      } else {
-        alert("User not authenticated");
-      }
-    })
-    .catch((e) => {
-      console.error("[Keycloak] init error:", e);
-    });
+    .catch((error) => console.error("[OIDC] login error:", error));
 };
 
 const Logout = () => {
@@ -250,13 +203,9 @@ const Logout = () => {
     return;
   }
 
-  if (!keycloakInstance) return;
-  try {
-    sessionStorage.clear();
-    clearPersistedToken();
-  } finally {
-    keycloakInstance.logout({ redirectUri: window.location.origin + "/" });
-  }
+  // Preserve oidc-client-ts callback state in sessionStorage.
+  clearPersistedToken();
+  void oidcSession?.logout().catch((error) => console.error("[OIDC] logout error:", error));
 };
 
 /**
@@ -267,154 +216,69 @@ const Logout = () => {
  * intentionally long-lived to avoid surprising dev UX during demos.
  */
 export async function ensureFreshToken(minValidity = 30): Promise<boolean> {
-  if (!isSecurityEnabled || !keycloakInstance) return true;
-
-  // Already enough headroom: keycloak-js would no-op anyway (it only refreshes
-  // when isTokenExpired(minValidity)), and settling it here means a caller
-  // needing MORE headroom never blocks on a weaker refresh.
-  //
-  // isTokenExpired THROWS (a bare string, 'Not authenticated') once
-  // clearToken() has run — keycloak-js does that itself after a refresh
-  // rejected with HTTP 400 ends the session. That state has no live token and
-  // no refresh token left to exchange, so it is this function's `false`, not
-  // an exception: dynamicBaseQuery awaits us with no catch, and an escaping
-  // throw would abort ordinary requests before their 401→logout recovery ran.
-  //
-  // `minValidity <= 0` means FORCE — the caller has already seen a 401, so the
-  // browser's own view of the token is exactly what it must not trust (clock
-  // skew against admission's `leeway=0`, an SSO logout elsewhere, realm key
-  // rotation). keycloak-js expresses that as `updateToken(-1)`, its only
-  // unconditional path; coercing 0 up to the 5 s floor merely moved the hole.
-  const forced = minValidity <= 0;
-  const effectiveMinValidity = forced ? KEYCLOAK_FORCE_REFRESH : Math.max(minValidity, KEYCLOAK_MIN_VALIDITY_FLOOR_S);
-
-  if (!forced) {
-    let hasHeadroom: boolean;
-    try {
-      hasHeadroom = !keycloakInstance.isTokenExpired(effectiveMinValidity);
-    } catch {
-      return false;
-    }
-    if (hasHeadroom) return true;
-  }
-
-  // Whether the token we hold NOW satisfies this particular caller. Deliberately
-  // evaluated per caller rather than baked into the shared chain: the chain
-  // answers only "did a refresh complete", and a caller's headroom is its own
-  // business. Folding the two together is what made a SUCCESSFUL refresh report
-  // failure to a post-401 caller (because some other caller's 120 s threshold
-  // was not met by a 60 s realm) and log the user out mid-session.
-  const satisfiedNow = (refreshed: boolean): boolean => {
-    if (!refreshed) return false;
-    // A forced refresh's contract is "you contacted Keycloak", not a lifetime.
-    if (forced) return true;
-    try {
-      return !keycloakInstance!.isTokenExpired(effectiveMinValidity);
-    } catch {
-      return false;
-    }
-  };
-
-  // Reuse an in-flight refresh only when it does at least as much WORK as this
-  // caller needs — ranked by work, not by threshold. A forced refresh is the
-  // most work there is, so it both reuses nothing and satisfies everyone.
-  // Ranking by threshold put force at 5 s, the weakest rung, so a forced caller
-  // silently piggy-backed on any chain in flight and never contacted Keycloak
-  // at all — the retry then replayed the dying bearer straight into a logout.
-  const requiredWork = forced ? KEYCLOAK_FORCE_WORK : effectiveMinValidity;
-  if (refreshInFlight && refreshInFlightWork >= requiredWork) {
-    return satisfiedNow(await refreshInFlight);
-  }
-
-  // Install our own chain, replacing any weaker one (whose waiters keep their
-  // promise). keycloak-js coalesces concurrent refreshes through its
-  // refreshQueue, so this costs no extra token request, and the
-  // ownership-checked finally below stops the older chain clearing this slot.
-  // Raced against a timeout so a hung refresh resolves "failed", not forever.
-  refreshInFlightWork = requiredWork;
-  // The session generation this refresh belongs to. A logout bumps it, so a
-  // response arriving after the user signed out cannot re-persist a live bearer
-  // over the copy `clearPersistedToken` just removed — the window is real
-  // because `logout()` navigates without cancelling in-flight XHRs.
+  if (!isSecurityEnabled) return true;
+  if (!oidcSession) return false;
   const epochAtStart = authEpoch;
-  // Cleared when the race settles either way. Without this the loser timer
-  // still fired, logging "token refresh timed out" 8 s after every SUCCESSFUL
-  // refresh — noise in precisely the area (#2125) this work exists to make
-  // diagnosable, plus one stray timer retained per refresh for the tab's life.
-  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-  const chain: Promise<boolean> = Promise.race([
-    keycloakInstance.updateToken(effectiveMinValidity).then(() => {
-      if (authEpoch !== epochAtStart) {
-        // Superseded by a logout while this was in flight. Do not resurrect the
-        // persisted token and do not clear `sessionInvalidated`.
-        return false;
-      }
-      sessionInvalidated = false;
-      localStorage.setItem("keycloak_token", keycloakInstance!.token || "");
-      return true;
-    }),
-    new Promise<boolean>((resolve) => {
-      timeoutHandle = setTimeout(() => {
-        console.warn("[Keycloak] token refresh timed out after", TOKEN_REFRESH_TIMEOUT_MS, "ms");
-        resolve(false);
-      }, TOKEN_REFRESH_TIMEOUT_MS);
-    }),
-  ])
-    .catch(() => {
-      console.warn("[Keycloak] token refresh failed");
-      return false;
-    })
-    .finally(() => {
-      if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-      // Clear only if this chain still owns the slot, so a settling chain can
-      // never null out a newer one installed behind it.
-      if (refreshInFlight === chain) {
-        refreshInFlight = null;
-        refreshInFlightWork = 0;
-      }
-    });
-  refreshInFlight = chain;
-
-  return satisfiedNow(await chain);
+  const fresh = await oidcSession.ensureFreshToken(minValidity);
+  return fresh && epochAtStart === authEpoch && !sessionInvalidated;
 }
 
 // ========================= Getters =========================
 
+const claimPath = (payload: Record<string, any>, path: string[]): unknown =>
+  path.reduce<unknown>(
+    (value, key) => (value && typeof value === "object" ? (value as Record<string, unknown>)[key] : null),
+    payload,
+  );
+
 const GetRealmRoles = (): string[] => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return ["admin"];
-  return keycloakInstance.tokenParsed.realm_access?.roles || [];
+  if (!isSecurityEnabled) return ["admin"];
+  const value = GetTokenParsed()?.realm_access?.roles;
+  return Array.isArray(value) ? value : [];
 };
 
 const GetUserRoles = (): string[] => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return ["admin"];
-  const clientId = (keycloakInstance as any).clientId as string;
-  const clientRoles = keycloakInstance.tokenParsed.resource_access?.[clientId]?.roles || [];
-  return [...clientRoles];
+  if (!isSecurityEnabled) return ["admin"];
+  const payload = GetTokenParsed();
+  if (!payload) return [];
+  const value = rolesClaim ? claimPath(payload, rolesClaim) : payload.resource_access?.[identityClientId]?.roles;
+  return Array.isArray(value) ? [...value] : [];
 };
 
 const GetUserName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).preferred_username || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  return GetTokenParsed()?.preferred_username || null;
 };
 
 const GetUserFullName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).name || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  return GetTokenParsed()?.name || null;
 };
 
 const GetUserGivenName = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).given_name || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  return GetTokenParsed()?.given_name || null;
 };
 
 const GetUserMail = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return `${DEV_USERNAME}@localhost`;
-  return (keycloakInstance.tokenParsed as any).email || null;
+  if (!isSecurityEnabled) return `${DEV_USERNAME}@localhost`;
+  return GetTokenParsed()?.email || null;
 };
 
+// Match Python uuid.UUID() acceptance, including hyphenless and braced UUIDs.
+const isPythonUuid = (value: string): boolean =>
+  /^[0-9a-fA-F]{32}$/.test(
+    value
+      .replace(/^urn:uuid:/i, "")
+      .replace(/^\{|\}$/g, "")
+      .replace(/-/g, ""),
+  );
+
 const GetUserId = (): string | null => {
-  if (!isSecurityEnabled || !keycloakInstance?.tokenParsed) return DEV_USERNAME;
-  return (keycloakInstance.tokenParsed as any).sub || null;
+  if (!isSecurityEnabled) return DEV_USERNAME;
+  const value = GetTokenParsed()?.[uidClaim];
+  if (typeof value !== "string" || !value) return null;
+  return identityProvider === "oidc" && !isPythonUuid(value) ? v5(`${identityIssuer}#${value}`, v5.URL) : value;
 };
 
 /**
@@ -433,13 +297,8 @@ const GetToken = (): string | null => {
     localStorage.setItem("keycloak_token", tok);
     return tok;
   }
-  // A refresh that settles after the session ended can resurrect
-  // keycloakInstance.token in memory (keycloak-js's setToken() runs
-  // synchronously, before our epoch check even sees the response) — once the
-  // session is invalidated, never hand that back, and never fall through to
-  // the localStorage copy either, since clearPersistedToken already removed it.
   if (sessionInvalidated) return null;
-  return keycloakInstance?.token || localStorage.getItem("keycloak_token");
+  return oidcSession?.token ?? null;
 };
 const GetRefreshToken = (): string | null => {
   if (!isSecurityEnabled) {
@@ -447,8 +306,7 @@ const GetRefreshToken = (): string | null => {
     return "dev-refresh-token-dummy";
   }
   if (sessionInvalidated) return null;
-  // 🔑 Access the refreshToken property on the KeycloakInstance
-  return keycloakInstance?.refreshToken || null;
+  return oidcSession?.refreshToken ?? null;
 };
 const GetTokenParsed = (): any => {
   if (!isSecurityEnabled) {
@@ -456,61 +314,14 @@ const GetTokenParsed = (): any => {
     return parseJwtPayload(tok); // <- decode and return payload JSON
   }
   if (sessionInvalidated) return null;
-  return keycloakInstance?.tokenParsed ?? null;
+  return oidcSession?.tokenParsed ?? null;
 };
 
-/**
- * Seconds until the current access token's `exp`, or null when there is no
- * expiry constraint to enforce (security disabled, no token, no exp claim).
- *
- * Why: `ensureFreshToken` resolves false on refresh failure/timeout instead of
- * rejecting, so callers about to start long-running work (an SSE agent turn)
- * need to know whether the token they are left with is nearly dead — starting
- * a turn with seconds of validity fails mid-stream with no recovery path.
- * Applies keycloak-js's `timeSkew` so a drifting client clock does not report
- * a dead token as alive (or vice versa), matching how its own
- * `isTokenExpired` compares. Still intended for floor checks rather than exact
- * scheduling — the skew estimate is refreshed only when a token is received.
- */
+/** Remaining access-token lifetime, or zero after explicit logout. */
 const GetTokenSecondsLeft = (): number | null => {
-  if (!isSecurityEnabled) return null; // dev token: intentionally long-lived
-  // Session ENDED (keycloak-js clearToken(), e.g. after a refresh HTTP 400, or
-  // the app itself deliberately logging out via clearPersistedToken): there is
-  // no live token to trust. Report it DEAD (0), not unconstrained (null) —
-  // callers use null as "no floor to enforce", and the turn preflight would
-  // otherwise proceed on a resurrected or stale token.
-  // `sessionInvalidated` ALONE — no `!tokenParsed` conjunct — distinguishes
-  // "session died" from "not logged in yet" (app bootstrap, reload with
-  // check-sso in flight): the flag defaults to false and is never set true
-  // until a real session actually ends, so bootstrap never trips it. A
-  // `!tokenParsed` conjunct used to sit here to guard that same distinction,
-  // but it was never needed for it and instead opened a hole: a refresh that
-  // settles after logout resurrects keycloakInstance.tokenParsed in memory
-  // (keycloak-js's setToken() runs synchronously before our epoch check even
-  // sees the response), which made `!tokenParsed` false and suppressed the
-  // dead-session report for an already-invalidated session.
+  if (!isSecurityEnabled) return null;
   if (sessionInvalidated) return 0;
-  const exp = GetTokenParsed()?.exp;
-  if (typeof exp !== "number") return null;
-  // `timeSkew` cancels client-clock drift exactly as keycloak-js's own
-  // `isTokenExpired` does; without it a client running minutes fast reports a
-  // negative remaining life for a token the server still considers valid.
-  //
-  // A NULL skew is not zero skew — it is keycloak-js declaring the answer
-  // undeterminable (it only sets the field once a token arrives with a local
-  // timestamp, and its own isTokenExpired bails out in that window). Defaulting
-  // to 0 there turned a fast client clock into a large negative and hard-refused
-  // every turn with "expires in 0s" for a bearer the server still accepts, so
-  // report "no floor to enforce" instead and let the refresh decide.
-  // A NULL skew is keycloak-js declaring the answer undeterminable (it sets the
-  // field only once a token arrives with a local timestamp). Neither `?? 0` nor
-  // `null` is right: the first turns a fast client clock into a large negative,
-  // the second reads to callers as "no floor to enforce" — and keycloak-js
-  // itself treats this state as EXPIRED (`isTokenExpired` returns true when
-  // timeSkew == null). Report it DEAD so the caller's fail-closed floor fires.
-  const skew = keycloakInstance?.timeSkew;
-  if (typeof skew !== "number") return 0;
-  return exp - Date.now() / 1000 + skew;
+  return oidcSession?.tokenSecondsLeft ?? null;
 };
 
 export interface KeycloakRealmConfig {
@@ -529,14 +340,9 @@ export interface KeycloakRealmConfig {
  * `null` in insecure/dev-token mode: there is no real Keycloak to target.
  */
 const GetKeycloakRealmConfig = (): KeycloakRealmConfig | null => {
-  if (!isSecurityEnabled || !keycloakInstance) return null;
-  const { authServerUrl, realm, clientId } = keycloakInstance as unknown as {
-    authServerUrl?: string;
-    realm?: string;
-    clientId?: string;
-  };
-  if (!authServerUrl || !realm || !clientId) return null;
-  return { url: authServerUrl.endsWith("/") ? authServerUrl : `${authServerUrl}/`, realm, clientId };
+  if (!isSecurityEnabled || identityProvider !== "keycloak") return null;
+  const { url, realm } = parseKeycloakUrl(identityIssuer);
+  return { url, realm, clientId: identityClientId };
 };
 
 export const KeyCloakService = {

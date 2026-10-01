@@ -1,0 +1,24 @@
+# Security-only Entra example. Supply public IDs with the preparation script.
+# Set ENTRA_AGENTIC_CLIENT_SECRET in the local environment (secret value omitted).
+security:
+  user_directory: local
+  user:
+    provider: oidc
+    realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+    client_id: FRED_UI_CLIENT_ID
+    audience: FRED_API_CLIENT_ID_GUID
+    scope: api://fred-api/access_as_user
+    roles_claim: [roles]
+    claims:
+      uid: oid
+  m2m:
+    provider: oidc
+    realm_url: https://login.microsoftonline.com/TENANT_ID/v2.0
+    client_id: FRED_AGENTIC_CLIENT_ID
+    scope: api://fred-api/.default
+    secret_env_var: ENTRA_AGENTIC_CLIENT_SECRET # pragma: allowlist secret (environment variable name only)
+  delegation:
+    act_for_people: true
+    caller_roles_claim: [roles]
+    audience: FRED_API_CLIENT_ID_GUID
+    service_accounts_only: false

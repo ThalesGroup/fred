@@ -51,6 +51,7 @@ from fred_core.logs.audit_log import emit_audit_log
 from fred_core.scheduler import SchedulerBackend
 from fred_core.store import ContentStore
 from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
+from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
 
 from control_plane_backend.product.prompt_starter_kit import (
@@ -2111,7 +2112,13 @@ async def count_all_personal_spaces(deps: TeamServiceDependencies) -> int:
     "unknown" rather than "no personal spaces".
     """
 
-    admin = create_keycloak_admin(deps.configuration.security.m2m)
+    if deps.configuration.security.user_directory == "local":
+        return await get_user_store().count_identities()
+
+    admin = create_keycloak_admin(
+        deps.configuration.security.m2m,
+        user_directory=deps.configuration.security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; user count unavailable.")
         return 0

@@ -62,7 +62,7 @@ const startApp = async () => {
   try {
     await loadConfig(); // <-- await config loading FIRST
     console.info("Configuration loaded successfully");
-    KeyCloakService.CallLogin(() => {
+    const renderApp = () => {
       const root = createRoot(document.getElementById("root"), { onCaughtError: reportCaughtReactError });
       root.render(
         <StrictMode>
@@ -71,7 +71,12 @@ const startApp = async () => {
           </Provider>
         </StrictMode>,
       );
-    });
+    };
+    if (/\/help(?:\/|$)/.test(window.location.pathname)) {
+      renderApp();
+    } else {
+      KeyCloakService.CallLogin(renderApp);
+    }
   } catch (error) {
     console.error("Failed to load config:", error);
     // Optionally render a fatal error page
