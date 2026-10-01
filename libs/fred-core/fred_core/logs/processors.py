@@ -32,6 +32,7 @@ from fred_core.logs.context import (
     safe_value,
     ValueBudget,
     MAX_FIELDS,
+    LogContext,
 )
 
 from fred_core.logs.log_structures import KPI_LOGGER_NAME
@@ -47,7 +48,7 @@ STANDARD_ATTRIBUTES = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), Non
 
 @dataclass(frozen=True)
 class ContextSnapshot:
-    values: dict[str, object]
+    values: LogContext
     task_name: str
 
 
@@ -150,7 +151,7 @@ class EventProcessor:
             },
             "process": record.process,
             "thread": record.threadName,
-            "task_name": record._fred_snapshot.task_name,
+            "task_name": getattr(record, "_fred_snapshot").task_name,
         }
         if self.role is not None:
             result["service_role"] = self.role
