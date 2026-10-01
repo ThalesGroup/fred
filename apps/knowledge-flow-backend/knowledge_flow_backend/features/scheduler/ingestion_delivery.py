@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
+from knowledge_flow_backend.features.scheduler.logging_context import capture_ingestion_context
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 from knowledge_flow_backend.models.task_models import ACTIVE_DOCUMENT_INDEX, IngestionSubmissionRow, KfTaskRunRow
 
@@ -52,6 +53,7 @@ class IngestionDelivery:
         if not definition.files:
             raise ValueError("At least one document is required")
         definition.workflow_id = f"ingestion-{uuid4()}"
+        capture_ingestion_context(user, definition, team_ids)
         try:
             async with self.sessions.begin() as session:
                 for file in definition.files:

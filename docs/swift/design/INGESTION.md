@@ -192,6 +192,13 @@ resource pressure. The initial table values are not measured sizing recommendati
 | Parent workflow is Completed but a document failed | Document status and parent's `{total, processed, failed}` | Parent completion does not mean every document succeeded |
 
 Use role/queue startup logs, workflow IDs and document IDs to follow the path.
+Worker/child output uses `app.log_format` and role `worker`. Admission captures a bounded
+optional diagnostic envelope before the durable pending submission; delivery retries retain
+it after the request ends. Metadata, extraction and output activities bind correlation and
+person/document/task plus actual workflow/run/activity/attempt references, including thread
+work and spawned extraction. Legacy payloads remain executable. See the
+[observability contract §6.2](../platform/OBSERVABILITY-AND-AUDIT.md#62-worker-and-ingestion-diagnostic-context)
+and [worker migration guide](../ops/migrations/structured-logging-workers.md).
 The [metrics reference](../../../apps/knowledge-flow-backend/docs/metrics/WORKFLOW_SCHEDULER.md)
 describes actual emission coverage and label filtering. Per-queue/stage Prometheus
 labels are not available yet; the queue-wait helper currently covers metadata only.

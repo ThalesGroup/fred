@@ -30,12 +30,14 @@ from knowledge_flow_backend.features.scheduler.activity_utils import raise_if_do
 from knowledge_flow_backend.features.scheduler.kpi_utils import (
     emit_temporal_activity_result_kpis,
 )
+from knowledge_flow_backend.features.scheduler.logging_context import ingestion_activity
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
 logger = logging.getLogger(__name__)
 
 
 @activity.defn
+@ingestion_activity
 async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
     """Normal per-document ingestion output stage — persists metadata through
     the permission-checked `save_metadata` (the calling user must hold
@@ -55,6 +57,7 @@ async def output_process(file: FileToProcess, metadata: DocumentMetadata, accept
 
 
 @activity.defn(name="output_process_trusted")
+@ingestion_activity
 async def output_process_trusted(file: FileToProcess, metadata: DocumentMetadata, accept_memory_storage: bool = False) -> DocumentMetadata:
     """Same as `output_process`, but persists metadata through the trusted,
     permission-check-free `save_metadata_trusted` path.
