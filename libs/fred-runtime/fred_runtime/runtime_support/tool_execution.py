@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from typing import Optional, TypeVar
@@ -25,6 +26,7 @@ from typing import Optional, TypeVar
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.logs.audit_log import emit_audit_log
+from fred_core.logs.context import operation_log_scope
 from fred_core.security.models import AuthorizationError, Resource
 from fred_core.security.rebac.rebac_engine import RebacReference, TeamPermission
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
@@ -116,6 +118,56 @@ class ToolExecution:
             raise
 
     async def run(
+        self,
+        invoke: Callable[[], Awaitable[_Result]],
+        *,
+        tool_name: str,
+        source: str,
+        span: SpanPort | None = None,
+    ) -> _Result:
+        started = time.perf_counter()
+        outcome = "failed"
+        with operation_log_scope(tool_name=tool_name):
+            try:
+                result = await self._run(
+                    invoke, tool_name=tool_name, source=source, span=span
+                )
+                outcome = "failed" if self._result_is_error(result)[0] else "succeeded"
+                return result
+            except GraphBubbleUp:
+                outcome = "awaiting_human"
+                raise
+            except asyncio.CancelledError:
+                outcome = "cancelled"
+                raise
+            finally:
+                logger.info(
+                    "Tool invocation completed",
+                    extra={
+                        "outcome": outcome,
+                        "duration_ms": (time.perf_counter() - started) * 1000,
+                    },
+                )
+
+    @staticmethod
+    def _result_is_error(result: object) -> tuple[bool, str]:
+        artifact = (
+            result
+            if isinstance(result, ToolInvocationResult)
+            else getattr(result, "artifact", None)
+        )
+        artifact_is_error = (
+            bool(artifact.get("is_error"))
+            if isinstance(artifact, dict)
+            else bool(getattr(artifact, "is_error", False))
+        )
+        status_is_error = isinstance(result, ToolMessage) and result.status == "error"
+        return (
+            status_is_error or artifact_is_error,
+            "tool_error_status" if status_is_error else "tool_error_artifact",
+        )
+
+    async def _run(
         self,
         invoke: Callable[[], Awaitable[_Result]],
         *,
@@ -220,26 +272,8 @@ class ToolExecution:
                     )
                 raise
             else:
-                artifact = (
-                    result
-                    if isinstance(result, ToolInvocationResult)
-                    else getattr(result, "artifact", None)
-                )
-                artifact_is_error = (
-                    bool(artifact.get("is_error"))
-                    if isinstance(artifact, dict)
-                    else bool(getattr(artifact, "is_error", False))
-                )
-                status_is_error = (
-                    isinstance(result, ToolMessage) and result.status == "error"
-                )
-                failed = status_is_error or artifact_is_error
+                failed, error_code = self._result_is_error(result)
                 if failed:
-                    error_code = (
-                        "tool_error_status"
-                        if status_is_error
-                        else "tool_error_artifact"
-                    )
                     if span is not None:
                         span.set_attribute("status", "error")
                         span.set_attribute("error_type", error_code)

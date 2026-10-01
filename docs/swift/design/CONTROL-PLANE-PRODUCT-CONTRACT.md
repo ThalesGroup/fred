@@ -4258,3 +4258,11 @@ enabled default. `false` disables questions on new turns; an absent descriptor
 sends no field. A question already pending remains
 answerable when the control is switched off during its pause. Asserted-person
 preparation does not offer the control.
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Conversation creation and execution preparation bind resolved team/session/instance
+references to the request's diagnostic context. Attachment persistence additionally
+binds attachment/document references after ownership validation. Generic completion
+uses a shared ASGI lifecycle event and never treats logging metadata as authority.
+See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md).

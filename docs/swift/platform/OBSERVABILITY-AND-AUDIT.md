@@ -198,21 +198,35 @@ logger does). Real audit events (Stream 3) never appear in this store at all —
 `fred.security.audit` does not propagate to the root logger, and the store's ingestion handler
 independently drops any record from that logger by name.
 
-With either delegation switch on, request access lines carry only a neutral event, outcome, method
-and status; the request route is available through the KPI `route` dimension (§3).
+HTTP uses one shared ASGI completion event at response/stream termination. It carries
+method, safe route template when resolved, numeric duration, outcome and status only
+when a response was sent. Successful health/readiness probes are suppressed; failures
+remain visible. Raw paths, queries, client addresses, headers, bodies and redirect
+locations are excluded. Each ingress creates fresh `request_id` and root `correlation_id`;
+`X-Request-ID` and `X-Correlation-ID` response headers are exposed through CORS.
+
+Scoped diagnostic context may carry authenticated/admitted `user_id` and resolved
+team/session/exchange/run/agent/document/task references. Identity is bound after
+admission/resolution, never decoded from an access-log bearer preview. Nested tool/run
+scopes restore on exit; retained tasks cannot reuse closed scope identities. A request-owned
+snapshot makes explicit business bindings visible to completion across middleware task
+boundaries. Per-event `extra` cannot override bound identity or core event fields.
+Normal turns get fresh operation references; HITL resumes retain their existing exchange
+identity with a new ingress request reference. Runtime/SDK traceability uses ingress
+references when present, with fresh references for standalone invocations.
 
 ## 7. Data protection summary
 
 | Field category | Example fields | Where it may appear |
 |---|---|---|
 | Directly identifying | user email, full name | **Nowhere** — Fred uses opaque platform identifiers everywhere an identity reference is needed |
-| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Product analytics (Stream 2, access-scoped) and the audit trail (Stream 3, per delegation setting as §5 details) — never in operational metrics (Stream 1) |
+| Pseudonymous / opaque identity | `user_id`, `session_id`, `team_id` | Scoped generic diagnostic logs (§6), product analytics (Stream 2, access-scoped) and the audit trail (Stream 3, per delegation setting as §5 details) — never in operational metrics (Stream 1) |
 | Content | prompts, tool arguments/results, documents, attachments | **Nowhere** in any observability or audit stream — content lives only in the product's own storage, under the product's own access control. One deliberate, default-off local exception: `observability.langfuse.capture_content` (see below) |
 | Secrets | tokens, cookies, signed URLs | **Nowhere**, ever |
 | Technical/bounded | tool name, error code, HTTP status, model name | All streams as relevant — none of this is personal data |
 
-**Practical reading for an RSSI:** the only stream that intentionally carries user identity is
-Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the audit trail, whose
+**Practical reading for an RSSI:** scoped generic diagnostic logs intentionally carry opaque
+identity references for investigations, alongside Stream 2 (product analytics, itself access-scoped per viewer) and Stream 3 (the audit trail, whose
 entire purpose is to attribute an action to a principal). With a delegation switch on, runtime,
 grant and account status audit events carry no identity; relation-write events still do (§5). Stream 1
 (what a platform-wide Grafana audience can see) is designed to never carry it at all — not
