@@ -5945,6 +5945,8 @@ def create_agent_app(
         log_setup(
             service_name=config.app.runtime_id,
             log_level=config.app.log_level,
+            log_format=config.app.log_format,
+            service_role="api",
             store=build_log_store(
                 log_store_config=config.storage.log_store,
                 opensearch_config=config.storage.opensearch,

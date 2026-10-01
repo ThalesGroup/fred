@@ -162,6 +162,18 @@ an infrastructure guarantee, not an application one.
 
 ## 6. Generic application / diagnostic logs
 
+Python APIs select `app.log_format: json | text` explicitly. Chart reference values
+select JSON; omitted settings and local examples select readable text. JSON stdout
+uses `severity`, `message`, creation-time `timestamp` (seconds/nanoseconds), `logger`,
+existing stable `service`, API role, source location and structural category. Context
+and safe event properties are top-level JSON fields; collisions cannot replace core
+metadata or bound identity. The optional generic store keeps its existing DTO shape.
+Readable text has no terminal-width wrapping and disables colors when redirected.
+Audit output remains independently formatted and excluded from generic context/store
+processing. Dependency warnings/errors are console-only to avoid sink recursion.
+Collector timestamp/severity recognition requires a rollout canary.
+
+
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
 index from — product analytics, with no long-retention requirement. Their diagnostic value

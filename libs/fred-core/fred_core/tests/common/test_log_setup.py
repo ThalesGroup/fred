@@ -485,3 +485,52 @@ def test_store_emit_handler_categorizes_reserved_kpi_logger_as_kpi() -> None:
 
     assert len(store.indexed) == 1
     assert store.indexed[0].category == "kpi"
+
+
+def test_shared_output_contract_and_repeat_setup(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from fred_core.logs.context import log_context
+
+    root = logging.getLogger()
+    saved = (root.level, list(root.handlers))
+    store = _StubLogStore()
+    try:
+        for _ in range(2):
+            log_setup(
+                service_name="contract-test",
+                store=store,
+                log_format="json",
+                service_role="api",
+                include_uvicorn=False,
+            )
+        with log_context(user_id="person-a", correlation_id="operation-a"):
+            logging.getLogger("contract.event").warning(
+                "first\nsecond",
+                extra={"count": 3, "user_id": "spoof", "severity": "spoof"},
+            )
+        lines = capsys.readouterr().out.splitlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["severity"] == "WARNING"
+        assert event["message"] == "first\nsecond"
+        assert event["user_id"] == "person-a"
+        assert event["count"] == 3
+        assert event["service_role"] == "api"
+        assert event["timestamp"]["seconds"] == int(store.indexed[0].ts)
+        assert 0 <= event["timestamp"]["nanos"] < 1_000_000_000
+        assert store.indexed[0].extra["correlation_id"] == "operation-a"
+        assert "\x1b" not in lines[0]
+        log_setup(
+            service_name="contract-test",
+            store=store,
+            log_format="text",
+            include_uvicorn=False,
+        )
+        logging.getLogger("contract.event").info("intentional\nmultiline")
+        readable = capsys.readouterr().out
+        assert "intentional\nmultiline" in readable
+        assert "\x1b" not in readable
+    finally:
+        root.handlers[:] = saved[1]
+        root.setLevel(saved[0])

@@ -20,15 +20,19 @@ import json
 import logging
 import re
 import threading
+import sys
+import os
 from typing import Any, Optional
 
 from fred_core.logs.base_log_store import BaseLogStore, LogEventDTO
 from fred_core.logs.log_structures import LogCategory
 
-try:
-    from rich.logging import RichHandler
-except Exception:  # optional in prod images
-    RichHandler = None  # type: ignore
+from fred_pod.common.structures import LogOutputFormat
+from fred_core.logs.processors import (
+    ContextSnapshotFilter,
+    event_properties,
+    output_formatter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +84,14 @@ class CompactJsonFormatter(logging.Formatter):
             for k, v in record.__dict__.items()
             if k not in _STANDARD_LOG_RECORD_ATTRS
         }
+        if record.name != AUDIT_LOGGER_NAME:
+            extra = event_properties(record)
+        else:
+            extra = {
+                key: value
+                for key, value in extra.items()
+                if not key.startswith("_fred_")
+            }
         if extra:
             base["extra"] = extra
         return json.dumps(base, ensure_ascii=False, default=str)
@@ -284,6 +296,21 @@ class UvicornSensitiveQueryFilter(logging.Filter):
         return True
 
 
+class DependencyDiagnosticFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Keep dependency failures useful without exporting upstream text under delegation."""
+        if _delegation_in_use():
+            record.msg = "Dependency diagnostic"
+            record.args = ()
+            record.exc_info = None
+            record.exc_text = None
+            record.stack_info = None
+            for key in tuple(record.__dict__):
+                if key not in _STANDARD_LOG_RECORD_ATTRS:
+                    record.__dict__.pop(key, None)
+        return True
+
+
 def log_setup(
     *,
     service_name: str,
@@ -291,6 +318,8 @@ def log_setup(
     store: BaseLogStore,
     include_uvicorn: bool = True,
     use_rich: bool = True,
+    log_format: LogOutputFormat = "text",
+    service_role: str | None = None,
 ) -> None:
     """
     Configure Fred root logging plus targeted third-party noise suppression.
@@ -315,37 +344,22 @@ def log_setup(
     for h in list(root.handlers):
         root.removeHandler(h)
     marker = f"_fred_handlers_{service_name}"
-    if getattr(root, marker, False):
-        return
-
-    # 1) Human console (Rich or plain)
-    formatter = logging.Formatter(
-        # Include process ID, task name, thread name, and the logger's own
-        # dotted module name for concurrency diagnostics *and* provenance —
-        # %(name)s is why a message needs no hand-invented [TAG] to say where
-        # it came from. Reserve bracket prefixes in message text for the two
-        # real routed channels ([SECURITY] via emit_audit_log, [KPI] via
-        # logging.getLogger("KPI")); everything else should rely on this.
-        fmt="%(asctime)s | %(levelname)s | [pid=%(process)d %(threadName)s/%(task_name)s] | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-    if use_rich and RichHandler is not None:
-        console_handler: logging.Handler = RichHandler(
-            rich_tracebacks=False,
-            show_time=False,  # Time is now in the custom formatter
-            show_level=True,
-            show_path=True,
-            log_time_format="%Y-%m-%d %H:%M:%S",
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(
+        output_formatter(
+            service_name,
+            service_role,
+            json_output=log_format == "json",
+            colors=use_rich and sys.stdout.isatty() and "NO_COLOR" not in os.environ,
         )
-    else:
-        console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.addFilter(TaskNameFilter())
+    )
+    console_handler.addFilter(ContextSnapshotFilter())
     console_handler.setLevel(log_level.upper())
     root.addHandler(console_handler)
 
     # 3) Store (machine) — optional for sandbox compatibility
     store_h = StoreEmitHandler(service_name=service_name, store=store)
+    store_h.addFilter(ContextSnapshotFilter())
     store_h.setLevel(log_level.upper())
     store_h.setFormatter(CompactJsonFormatter(service_name))
     root.addHandler(store_h)
@@ -376,8 +390,12 @@ def log_setup(
     for noisy in noisy_libs:
         lg = logging.getLogger(noisy)
         lg.handlers.clear()  # their own handlers (if any) → gone
-        lg.addHandler(logging.NullHandler())
-        lg.setLevel(logging.WARNING)
+        lg.addHandler(console_handler)
+        lg.filters[:] = [
+            f for f in lg.filters if not isinstance(f, DependencyDiagnosticFilter)
+        ]
+        lg.addFilter(DependencyDiagnosticFilter())
+        lg.setLevel(max(logging.WARNING, root.level))
         lg.propagate = False  # <-- key: do NOT bubble up to root
     extra_noisy = (
         "pdfminer",
@@ -391,6 +409,18 @@ def log_setup(
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             lg = logging.getLogger(name)
             lg.handlers.clear()  # remove uvicorn’s own console handlers
+            lg.filters[:] = [
+                f
+                for f in lg.filters
+                if not isinstance(
+                    f,
+                    (
+                        UvicornAccessProbeFilter,
+                        UvicornSensitiveQueryFilter,
+                        UvicornWebsocketNoiseFilter,
+                    ),
+                )
+            ]
             if name == "uvicorn.access":
                 # Reads the raw request path, which the sensitive filter below can drop.
                 lg.addFilter(UvicornAccessProbeFilter(("/healthz", "/ready")))
@@ -408,7 +438,7 @@ def log_setup(
     # that console handler.
     audit_logger = logging.getLogger(AUDIT_LOGGER_NAME)
     audit_logger.handlers.clear()
-    audit_handler = logging.StreamHandler()
+    audit_handler = logging.StreamHandler(sys.stdout)
     audit_handler.setFormatter(CompactJsonFormatter(service_name))
     audit_logger.addHandler(audit_handler)
     audit_logger.setLevel(log_level.upper())
