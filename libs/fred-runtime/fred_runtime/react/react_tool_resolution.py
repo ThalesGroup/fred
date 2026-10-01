@@ -225,6 +225,7 @@ class ReActRuntimeToolResolver:
                     description=(
                         "Ask the user one question and continue after their answer. "
                         "Provide up to four of the most relevant choices, allow_free_text, or both. "
+                        "Two or more choices always allow a free-text answer. "
                         "Select the choices before calling; do not truncate a longer list."
                     ),
                     args_schema=AskUserArgs,

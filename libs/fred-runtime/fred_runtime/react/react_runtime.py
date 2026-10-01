@@ -499,6 +499,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # also contradicted the §8.27 tool-failure-recovery prompt suffix that
         # tells the model to answer from what succeeded).
         last_tool_error: str | None = None
+        awaiting_human = False
         suppress_assistant_deltas: bool = False
         # Tracks whether the current round (the batch of tool calls requested
         # by the latest AIMessage) has produced at least one successful result.
@@ -803,6 +804,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
 
                 interrupt_request = _extract_interrupt_request(update)
                 if interrupt_request is not None:
+                    awaiting_human = True
                     yield AwaitingHumanRuntimeEvent(
                         sequence=sequence,
                         request=interrupt_request,
@@ -1039,7 +1041,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             if closed is not None:
                 yield closed
 
-            if last_tool_error is not None or last_assistant_message is not None:
+            if not awaiting_human and (
+                last_tool_error is not None or last_assistant_message is not None
+            ):
                 final_content = (
                     last_tool_error
                     if last_tool_error is not None

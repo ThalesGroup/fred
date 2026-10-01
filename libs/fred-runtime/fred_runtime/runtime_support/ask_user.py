@@ -66,7 +66,7 @@ async def ask_user(payload: dict[str, object], *, language: str | None = None) -
         stage="agent_question",
         question=args.question,
         choices=args.choices,
-        free_text=args.allow_free_text,
+        free_text=args.allow_free_text or len(args.choices) >= 2,
         occurrence_id=args.tool_call_id,
     )
     decision = interrupt(request.model_dump(mode="json"))

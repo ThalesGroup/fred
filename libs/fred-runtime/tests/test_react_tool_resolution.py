@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import json
 from types import SimpleNamespace
 from typing import cast
 
@@ -307,6 +308,39 @@ def test_ask_user_accepts_four_selected_choices_and_exposes_the_limit() -> None:
         {"question": "Choose", "choices": choices, "tool_call_id": "call-1"}
     )
     assert len(args.choices) == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("choice_count", [1, 2, 4])
+async def test_ask_user_always_accepts_text_with_multiple_choices(
+    monkeypatch: pytest.MonkeyPatch, choice_count: int
+) -> None:
+    from fred_runtime.runtime_support.ask_user import ask_user
+
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> dict[str, str]:
+        requests.append(request)
+        return {"text": "Other answer"} if choice_count >= 2 else {"choice_id": "0"}
+
+    monkeypatch.setattr("fred_runtime.runtime_support.ask_user.interrupt", answer)
+    result = await ask_user(
+        {
+            "question": "Choose",
+            "choices": [
+                {"id": str(index), "label": str(index)} for index in range(choice_count)
+            ],
+            "allow_free_text": False,
+            "tool_call_id": "call-1",
+        }
+    )
+
+    assert requests[0]["free_text"] is (choice_count >= 2)
+    assert json.loads(result) == (
+        {"status": "answered", "text": "Other answer"}
+        if choice_count >= 2
+        else {"status": "answered", "choice_id": "0"}
+    )
 
 
 def test_ask_user_colliding_with_provider_tool_is_rejected() -> None:
