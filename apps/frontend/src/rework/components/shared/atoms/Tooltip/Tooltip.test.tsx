@@ -61,6 +61,32 @@ function renderTooltip() {
 }
 
 describe("Tooltip", () => {
+  // A hint too long for one line and a panel bringing its own layout need
+  // opposite things from the container: the first keeps the standard padding
+  // and wraps, the second gets out of the way. Callers used to restate the
+  // first by hand, which is how one of them ended up red and 420px wide.
+  it("tells a text hint apart from a panel that owns its layout", () => {
+    const classesFor = (content: React.ReactNode) => {
+      act(() => {
+        root.render(
+          <Tooltip content={content}>
+            <button>Trigger</button>
+          </Tooltip>,
+        );
+      });
+      act(() => {
+        (container.querySelector("button") as HTMLButtonElement).dispatchEvent(
+          new MouseEvent("mouseover", { bubbles: true }),
+        );
+      });
+      const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+      return panel.className;
+    };
+
+    expect(classesFor("A sentence that has to wrap")).toContain("prose");
+    expect(classesFor(<div>A panel</div>)).toContain("rich");
+  });
+
   it("does not render the tooltip content until hovered", () => {
     renderTooltip();
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
@@ -313,8 +339,55 @@ describe("Tooltip", () => {
     // Both coordinates are the panel's own edges: no transform to reason about.
     expect(parseFloat(panel.style.top)).toBe(46);
     expect(panel.style.transform).toBe("");
-    // Left-aligned with the trigger, so the panel visibly comes from it.
-    expect(parseFloat(panel.style.left)).toBe(400);
+    // Centred on the trigger: 400 + 60/2 - 200/2.
+    expect(parseFloat(panel.style.left)).toBe(330);
+  });
+
+  it("centres on the trigger, and shifts only as far as the edge demands", () => {
+    // The default placement. A wide panel on a small trigger near the edge was
+    // the case the old left-aligned rule existed for: centring plus the clamp
+    // handles it, and everywhere else the panel sits where it is expected.
+    Object.defineProperty(document.documentElement, "clientHeight", { value: 800, configurable: true });
+    Object.defineProperty(document.documentElement, "clientWidth", { value: 1000, configurable: true });
+
+    const leftFor = (triggerLeft: number, triggerWidth: number) => {
+      act(() => {
+        root.render(
+          <Tooltip content={<div>Detail</div>}>
+            <button>Trigger</button>
+          </Tooltip>,
+        );
+      });
+      const wrapper = container.firstElementChild as HTMLElement;
+      wrapper.getBoundingClientRect = () =>
+        ({
+          top: 400,
+          bottom: 420,
+          left: triggerLeft,
+          right: triggerLeft + triggerWidth,
+          width: triggerWidth,
+          height: 20,
+        }) as DOMRect;
+      act(() => {
+        (container.querySelector("button") as HTMLButtonElement).dispatchEvent(
+          new MouseEvent("mouseover", { bubbles: true }),
+        );
+      });
+      const panel = document.querySelector('[role="tooltip"]') as HTMLElement;
+      panel.getBoundingClientRect = () => ({ width: 250, height: 60 }) as DOMRect;
+      act(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+      return parseFloat(panel.style.left);
+    };
+
+    // Room on both sides: dead centre. 500 + 20/2 - 250/2.
+    expect(leftFor(500, 20)).toBe(385);
+    // A 12px marker hard against the left edge: shifted to the margin, never
+    // off-screen, and no further than it has to be.
+    expect(leftFor(6, 12)).toBe(4);
+    // And against the right edge: 1000 - 4 - 250.
+    expect(leftFor(982, 12)).toBe(746);
   });
 
   it("keeps a panel too tall to sit above fully on screen", () => {

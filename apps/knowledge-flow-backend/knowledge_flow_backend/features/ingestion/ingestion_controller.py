@@ -22,6 +22,7 @@ import shutil
 import tempfile
 import time
 import uuid
+from enum import Enum
 from typing import Dict, List, Literal, Optional, Type
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
@@ -182,6 +183,82 @@ async def _authorize_upload_targets(user: KeycloakUser, tags: List[str]) -> None
         await refuse_if_synchronized_by_id(tag_store, tag_id, user)
 
 
+class ImportConflictDecision(str, Enum):
+    """What the user answered about a file whose name the folder already holds."""
+
+    OVERWRITE = "overwrite"
+    SKIP = "skip"
+
+
+@dataclasses.dataclass(frozen=True)
+class ImportPlan:
+    """What each file of one import is to become, decided before any write.
+
+    Names absent from every field are ordinary new documents. The plan is
+    resolved once per request rather than per file: the question is one query
+    for the whole batch, and a decision taken mid-batch would already be as
+    stale as one taken at its start.
+    """
+
+    overwrite_uid: Dict[str, str]
+    """File name → the document uid it replaces, keeping that document's identity."""
+
+    skipped: List[str]
+    """The user chose to keep the document already there; import nothing."""
+
+    undecided: List[str]
+    """Conflicts with no answer — most often a name taken since the user was
+    asked. Never resolved on their behalf."""
+
+    ambiguous: List[str]
+    """The folder holds more than one document under that name, so "the
+    existing document" does not identify one. Possible only while alternate
+    versions exist."""
+
+
+EMPTY_IMPORT_PLAN = ImportPlan(overwrite_uid={}, skipped=[], undecided=[], ambiguous=[])
+
+
+async def _plan_import(filenames: List[str], tags: List[str], decisions: Dict[str, ImportConflictDecision]) -> ImportPlan:
+    """Ask the destination folder which of these names it already holds, and
+    pair each answer with what the user decided about it.
+
+    Scoped to the folder the documents land in — its first tag, the one
+    versioning already treated as the document's home.
+    """
+    destination = tags[0] if tags else None
+    if not destination:
+        return EMPTY_IMPORT_PLAN
+
+    store = ApplicationContext.get_instance().get_metadata_store()
+    held = await store.document_uids_by_name_in_tag(destination, filenames)
+    if not held:
+        return EMPTY_IMPORT_PLAN
+
+    overwrite_uid: Dict[str, str] = {}
+    skipped: List[str] = []
+    undecided: List[str] = []
+    ambiguous: List[str] = []
+    for filename in dict.fromkeys(filenames):
+        uids = held.get(filename)
+        if not uids:
+            continue
+        decision = decisions.get(filename)
+        if decision is None:
+            undecided.append(filename)
+        elif decision is ImportConflictDecision.SKIP:
+            skipped.append(filename)
+        elif len(uids) > 1:
+            ambiguous.append(filename)
+        else:
+            overwrite_uid[filename] = uids[0]
+    return ImportPlan(overwrite_uid=overwrite_uid, skipped=skipped, undecided=undecided, ambiguous=ambiguous)
+
+
+UNDECIDED_CONFLICT_MESSAGE = "A document named '{filename}' already exists in this folder. Choose to overwrite it or to keep it."
+AMBIGUOUS_CONFLICT_MESSAGE = "This folder holds more than one document named '{filename}'. Delete or promote the alternate version before importing again."
+
+
 STEP_UPLOAD_PREPARATION = "upload preparation"
 STEP_QUEUED_FOR_PROCESSING = "queued for processing"
 STEP_PROCESSING = "processing"
@@ -192,6 +269,9 @@ class IngestionInput(BaseModel):
     tags: List[str] = []
     source_tag: str = "fred"
     profile: IngestionProcessingProfile | None = None
+    # Keyed by file name: a batch never repeats one (the client splits a
+    # repeated leaf name across batches), so the name identifies the file.
+    conflict_decisions: Dict[str, ImportConflictDecision] = {}
 
 
 class QuotaPrecheckRequest(BaseModel):
@@ -219,6 +299,35 @@ class QuotaPrecheckResponse(BaseModel):
     owner_id: Optional[str] = None
     current: Optional[int] = None
     limit: Optional[int] = None
+
+
+class ImportDestinationNames(BaseModel):
+    """The names one import wants to write into one destination folder.
+
+    An import can target several folders at once (a dropped directory becomes
+    one folder per subdirectory), so the check is asked per destination.
+    """
+
+    tag_id: str
+    names: List[str] = []
+
+
+class ImportNameConflicts(BaseModel):
+    """The subset of `names` that folder `tag_id` already holds."""
+
+    tag_id: str
+    names: List[str]
+
+
+class ImportNameCheckRequest(BaseModel):
+    destinations: List[ImportDestinationNames] = []
+
+
+class ImportNameCheckResponse(BaseModel):
+    """Only the destinations with at least one conflict are listed; an import
+    with nothing to resolve gets an empty list."""
+
+    conflicts: List[ImportNameConflicts] = []
 
 
 class FastIngestResponse(BaseModel):
@@ -489,6 +598,50 @@ class IngestionController:
             logger.info(f"File {filename} saved to temp storage at {input_temp_file}")
             preloaded_files.append((filename, input_temp_file))
         return preloaded_files
+
+    @staticmethod
+    def _plan_events(plan: ImportPlan) -> list[str]:
+        """One event per file the plan excludes, emitted before the import starts.
+
+        A skip and an unanswered conflict are both outcomes, not failures: the
+        client shows the first as "kept the existing document" and the second
+        as still awaiting an answer.
+        """
+        events: list[str] = []
+        for filename in plan.skipped:
+            events.append(IngestionController._progress_event(step=STEP_UPLOAD_PREPARATION, status=Status.IGNORED, filename=filename))
+        for filename in plan.undecided:
+            events.append(
+                IngestionController._progress_event(
+                    step=STEP_UPLOAD_PREPARATION,
+                    status=Status.CONFLICT,
+                    filename=filename,
+                    error=UNDECIDED_CONFLICT_MESSAGE.format(filename=filename),
+                )
+            )
+        for filename in plan.ambiguous:
+            events.append(
+                IngestionController._progress_event(
+                    step=STEP_UPLOAD_PREPARATION,
+                    status=Status.FAILED,
+                    filename=filename,
+                    error=AMBIGUOUS_CONFLICT_MESSAGE.format(filename=filename),
+                )
+            )
+        return events
+
+    @staticmethod
+    def _files_to_import(preloaded_files: list[tuple[str, pathlib.Path]], plan: ImportPlan) -> list[tuple[str, pathlib.Path]]:
+        """Drop the files the plan excludes, releasing their temporary copies —
+        nothing downstream will reach the `finally` that normally does it."""
+        excluded = set(plan.skipped) | set(plan.undecided) | set(plan.ambiguous)
+        kept: list[tuple[str, pathlib.Path]] = []
+        for filename, input_temp_file in preloaded_files:
+            if filename in excluded:
+                cleanup_uploaded_temp_file(input_temp_file)
+            else:
+                kept.append((filename, input_temp_file))
+        return kept
 
     def _scheduler_backend(self) -> SchedulerBackend:
         if self.scheduler_task_service is None:
@@ -780,14 +933,39 @@ class IngestionController:
 
         return QuotaPrecheckResponse(allowed=True)
 
-    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser) -> None:
+    @staticmethod
+    async def _replaced_bytes(plan: ImportPlan) -> int:
+        """How much the documents this import replaces already occupy.
+
+        Read at the same moment as the rest of the check, so a document deleted
+        since the plan was drawn simply credits nothing.
+        """
+        if not plan.overwrite_uid:
+            return 0
+        store = ApplicationContext.get_instance().get_metadata_store()
+        total = 0
+        for document_uid in plan.overwrite_uid.values():
+            replaced = await store.get_metadata_by_uid(document_uid)
+            if replaced and replaced.file:
+                total += replaced.file.file_size_bytes or 0
+        return total
+
+    async def _check_quota_before_upload(self, files: List[UploadFile], tags: List[str], user: KeycloakUser, plan: ImportPlan = EMPTY_IMPORT_PLAN) -> None:
         """Reject (400) an upload that would exceed the owning team's or user's
         quota. Post-receive enforcement point — the sizes are read from the
         actually-received files, unlike the client-declared precheck. Kept even
         with the precheck in place: declared sizes can lie.
+
+        What the import costs is not what it carries: a file the plan leaves out
+        is never stored, and one replacing a document costs the difference
+        between the two. Charging the whole batch refused replacements that free
+        space, on exactly the teams closest to their limit.
         """
+        excluded = set(plan.skipped) | set(plan.undecided) | set(plan.ambiguous)
         total_upload_size = 0
         for f in files:
+            if upload_basename(f.filename) in excluded:
+                continue
             file_size = getattr(f, "size", None)
             if file_size is not None:
                 total_upload_size += file_size
@@ -795,6 +973,8 @@ class IngestionController:
                 f.file.seek(0, 2)
                 total_upload_size += f.file.tell()
                 f.file.seek(0)
+
+        total_upload_size = max(0, total_upload_size - await self._replaced_bytes(plan))
 
         verdict = await self._evaluate_quota(total_upload_size, tags, user)
         if not verdict.allowed:
@@ -809,6 +989,7 @@ class IngestionController:
         self,
         *,
         preloaded_files: list[tuple[str, pathlib.Path]],
+        plan: ImportPlan = EMPTY_IMPORT_PLAN,
         user: KeycloakUser,
         tags: list[str],
         source_tag: str,
@@ -823,6 +1004,9 @@ class IngestionController:
         total = len(preloaded_files)
         scheduled_candidates: list[tuple[str, str, str | None, str | None]] = []
 
+        for event in self._plan_events(plan):
+            yield event
+
         for filename, input_temp_file in preloaded_files:
             file_started = time.perf_counter()
             file_status = "error"
@@ -833,13 +1017,17 @@ class IngestionController:
                 output_temp_dir = input_temp_file.parent.parent
 
                 yield ProcessingProgress(step=current_step, status=Status.IN_PROGRESS, filename=filename).model_dump_json() + "\n"
+                overwrites = plan.overwrite_uid.get(filename)
                 metadata = await self.service.extract_metadata(
                     user,
                     file_path=input_temp_file,
                     tags=tags,
                     source_tag=source_tag,
                     profile=profile,
+                    apply_versioning=overwrites is None,
                 )
+                if overwrites:
+                    metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
                 metadata_file_type = getattr(metadata, "file_type", None)
                 file_type = metadata_file_type or file_type
                 pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
@@ -1030,26 +1218,35 @@ class IngestionController:
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             await _authorize_upload_targets(user, tags)
-            await self._check_quota_before_upload(files, tags, user)
+            plan = await _plan_import([upload_basename(f.filename) for f in files], tags, parsed_input.conflict_decisions)
+            await self._check_quota_before_upload(files, tags, user, plan)
 
             preloaded_files = self._preload_uploaded_files(files)
+            plan_events = self._plan_events(plan)
+            preloaded_files = self._files_to_import(preloaded_files, plan)
 
             total = len(preloaded_files)
 
             async def event_stream():
                 success = 0
+                for event in plan_events:
+                    yield event
                 for filename, input_temp_file in preloaded_files:
                     current_step = STEP_UPLOAD_PREPARATION
                     pending_save: asyncio.Future[None] | None = None
                     try:
                         yield self._progress_event(step=current_step, status=Status.IN_PROGRESS, filename=filename)
+                        overwrites = plan.overwrite_uid.get(filename)
                         metadata = await self.service.extract_metadata(
                             user,
                             file_path=input_temp_file,
                             tags=tags,
                             source_tag=source_tag,
                             profile=profile,
+                            apply_versioning=overwrites is None,
                         )
+                        if overwrites:
+                            metadata = await self.service.adopt_existing_document(user, metadata, overwrites)
                         output_temp_dir = input_temp_file.parent.parent
                         pending_save = asyncio.ensure_future(asyncio.to_thread(self.service.save_input, user, metadata=metadata, input_dir=output_temp_dir / "input"))
                         await asyncio.shield(pending_save)
@@ -1105,11 +1302,13 @@ class IngestionController:
             profile = parsed_input.profile or ApplicationContext.get_instance().get_config().processing.default_profile
 
             await _authorize_upload_targets(user, tags)
-            await self._check_quota_before_upload(files, tags, user)
+            plan = await _plan_import([upload_basename(f.filename) for f in files], tags, parsed_input.conflict_decisions)
+            await self._check_quota_before_upload(files, tags, user, plan)
 
             preloaded_files = self._preload_uploaded_files(files)
             event_stream = self._stream_upload_process(
-                preloaded_files=preloaded_files,
+                preloaded_files=self._files_to_import(preloaded_files, plan),
+                plan=plan,
                 user=user,
                 tags=tags,
                 source_tag=source_tag,
@@ -1153,6 +1352,39 @@ class IngestionController:
                 user,
                 extra_team_ids={team_id} if team_id else None,
             )
+
+        @router.post(
+            "/documents/name-check",
+            tags=["Processing"],
+            summary="Which of these names does each destination folder already hold?",
+            description=(
+                "Answers, before any byte is sent, which of the given file names already "
+                "identify a document in each destination folder, so the user can decide to "
+                "overwrite or skip once for the whole import. Advisory only: the upload "
+                "endpoints re-check at write time, since a teammate can create the same "
+                "name in between."
+            ),
+        )
+        async def import_name_check(
+            request: ImportNameCheckRequest,
+            user: KeycloakUser = Depends(get_current_user),
+        ) -> ImportNameCheckResponse:
+            # Same authorization as an import into those folders: a caller who
+            # could not write there learns nothing about what they contain.
+            await _authorize_upload_targets(user, [destination.tag_id for destination in request.destinations])
+
+            store = ApplicationContext.get_instance().get_metadata_store()
+            conflicts: List[ImportNameConflicts] = []
+            for destination in request.destinations:
+                if not destination.names:
+                    continue
+                held = await store.document_uids_by_name_in_tag(destination.tag_id, destination.names)
+                # Keep the caller's order rather than the store's, and drop the
+                # duplicates a single import can legitimately carry.
+                names = list(dict.fromkeys(name for name in destination.names if name in held))
+                if names:
+                    conflicts.append(ImportNameConflicts(tag_id=destination.tag_id, names=names))
+            return ImportNameCheckResponse(conflicts=conflicts)
 
         @router.post(
             "/fast/text",

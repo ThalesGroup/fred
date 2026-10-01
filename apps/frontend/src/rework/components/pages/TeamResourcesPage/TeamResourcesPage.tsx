@@ -37,6 +37,7 @@ import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import FilesystemWorkspace from "./FilesystemWorkspace/FilesystemWorkspace.tsx";
 import AgentsWorkspace from "./AgentsWorkspace/AgentsWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
+import { ImportPanel } from "@shared/organisms/ImportPanel/ImportPanel.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
 type ResourceRootTab = "resources" | "mine" | "team" | "agents";
@@ -226,38 +227,41 @@ export default function TeamResourcesPage() {
       )}
 
       <div className={styles.panel}>
-        {activeTab === "resources" && (
-          <DocumentWorkspace
-            teamId={teamId}
-            isPersonalTeam={isPersonalTeam}
-            // Guarded: DocumentWorkspace's useNotifyOnNewTaskTarget does a
-            // catch-up fire on mount for any task target already in the
-            // store — in the same commit where activeTab just switched to
-            // "resources", DocumentWorkspace (child) mounts and can run this
-            // effect before these queries' own subscribing effects (parent)
-            // have dispatched their initial fetch, since React flushes child
-            // effects before parent effects. Calling .refetch() on a query
-            // that was never started throws and takes down the whole app.
-            // Safe to just skip in that case — the query's own mount fetch
-            // is already about to run.
-            onDocumentsChanged={() => {
-              if (!corpusStats.isUninitialized) void corpusStats.refetch();
-              if (!teamUninitialized) void refetchTeam();
-            }}
-          />
-        )}
+        <div className={styles.workspace}>
+          {activeTab === "resources" && (
+            <DocumentWorkspace
+              teamId={teamId}
+              importScopeId={fsTeamId}
+              isPersonalTeam={isPersonalTeam}
+              // These guards are only about a query that is genuinely off:
+              // corpusStats is skipped while the stats panel is closed, and a
+              // skipped query has nothing to refetch. They say nothing about
+              // whether a started query is ready — useNotifyOnNewTaskTarget is
+              // what keeps its callers out of the mount commit, where refetch()
+              // throws.
+              onDocumentsChanged={() => {
+                if (!corpusStats.isUninitialized) void corpusStats.refetch();
+                if (!teamUninitialized) void refetchTeam();
+              }}
+            />
+          )}
 
-        {activeTab === "mine" && <FilesystemWorkspace root={userRoot} rootLabel={t("rework.resources.roots.mine")} />}
+          {activeTab === "mine" && <FilesystemWorkspace root={userRoot} rootLabel={t("rework.resources.roots.mine")} />}
 
-        {activeTab === "team" && !isPersonalTeam && (
-          <FilesystemWorkspace
-            root={sharedRoot}
-            rootLabel={t("rework.resources.roots.team")}
-            canWrite={canCreateFolder}
-          />
-        )}
+          {activeTab === "team" && !isPersonalTeam && (
+            <FilesystemWorkspace
+              root={sharedRoot}
+              rootLabel={t("rework.resources.roots.team")}
+              canWrite={canCreateFolder}
+            />
+          )}
 
-        {activeTab === "agents" && <AgentsWorkspace fsTeamId={fsTeamId} userId={userId} />}
+          {activeTab === "agents" && <AgentsWorkspace fsTeamId={fsTeamId} userId={userId} />}
+        </div>
+
+        {/* A rail beside the documents card until it is opened, when it
+            widens in place into the panel itself. */}
+        <ImportPanel teamId={fsTeamId} />
       </div>
     </div>
   );

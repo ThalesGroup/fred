@@ -63,6 +63,15 @@
   color: var(--primary);
 }
 
+/* A folder name truncates like a document's rather than wrapping onto a second
+   line when the column narrows — same treatment as DocumentNameCell's label,
+   which is what it sits next to in the list. */
+.nameButton span:not([class*="rowIcon"]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The file/folder icon's own color wrapper (the <span style={{color}}> in
  * DocumentWorkspace.tsx): a genuine fixed 18x18 box, not just an 18px
  * font-size on the glyph itself — width/height + flex-shrink: 0 mean this
@@ -115,4 +124,13 @@
   outline: 1.5px dashed var(--primary);
   outline-offset: -1.5px;
   background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+/* A document whose name a pending import is waiting on. The marker goes after
+   the name and never grows the row: the name still truncates first. */
+.contestedName {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
 }

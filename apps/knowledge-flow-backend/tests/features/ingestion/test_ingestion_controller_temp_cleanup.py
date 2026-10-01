@@ -34,7 +34,7 @@ class _FakeKpi:
 
 
 class _FakeService:
-    async def extract_metadata(self, user, file_path: pathlib.Path, tags, source_tag, profile):
+    async def extract_metadata(self, user, file_path: pathlib.Path, tags, source_tag, profile, *, apply_versioning=True):
         return SimpleNamespace(document_uid="doc-1", file_type=file_path.suffix.lstrip("."))
 
     def save_input(self, user, metadata, input_dir: pathlib.Path) -> None:
@@ -173,7 +173,7 @@ async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tm
     from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 
     class InvalidPdfService(_FakeService):
-        async def extract_metadata(self, user, file_path, tags, source_tag, profile):
+        async def extract_metadata(self, user, file_path, tags, source_tag, profile, *, apply_versioning=True):
             processor = PdfMarkdownProcessor.__new__(PdfMarkdownProcessor)
             return processor.process_metadata(file_path, tags, source_tag)
 

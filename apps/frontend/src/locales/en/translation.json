@@ -684,6 +684,16 @@
     "confirmDeleteFolderTitle": "Delete folder?",
     "confirmRemoveMessage": "Remove « {{doc}} » from « {{folder}} »?",
     "confirmRemoveTitle": "Remove from library?",
+    "conflictDecisionFor": "What to do with “{{name}}”",
+    "conflictReplace": "Replace",
+    "conflictReplaceAll": "Replace all",
+    "conflictSkip": "Skip",
+    "conflictSkipAll": "Skip all",
+    "conflictSkippedSummary_one": "{{count}} file was skipped: the folder keeps the document it already had.",
+    "conflictSkippedSummary_other": "{{count}} files were skipped: the folder keeps the documents it already had.",
+    "conflictsMessage": "Choose whether to replace the existing document or skip the file. A replaced document keeps its links and its place in the folder.",
+    "conflictsTitle_one": "{{count}} file already exists in this folder",
+    "conflictsTitle_other": "{{count}} files already exist in this folder",
     "currentUsage": "Current Usage: ",
     "documents": "{{count}} document(s)",
     "download": "Download",
@@ -723,8 +733,11 @@
     "removeSuccess": "Documents Removed",
     "removedManyDocuments": "Documents removed from library.",
     "removedOneDocument": "Document removed from library.",
-    "save": "Save",
-    "saving": "Saving...",
+    "sameNameTwice_one": "Two files would land in this folder under the name {{names}}. Remove one of them: a folder cannot hold two documents of the same name.",
+    "sameNameTwice_other": "Several files would land in this folder under names already used by another selected file: {{names}}. Remove the duplicates: a folder cannot hold two documents of the same name.",
+    "import": "Import",
+    "importCount_one": "Import {{count}} file",
+    "importCount_other": "Import {{count}} files",
     "searchOff": "Search off",
     "searchOn": "Search on",
     "searchPlaceholder": "Search a document",
@@ -739,7 +752,7 @@
     "tooDeepTitle": "Folder too deep",
     "uploadAndProcess": "Upload & process",
     "uploadDestination": "Files will be added to",
-    "uploadDrawerTitle": "Upload a document",
+    "uploadDrawerTitle": "Add documents",
     "uploadInLibrary": "Add files",
     "uploadOnly": "Upload only",
     "viewOriginalPdf": "View Original PDF"
@@ -1513,6 +1526,72 @@
         "empty": "No team conversations in this period.",
         "title": "Teams with most conversations",
         "valueLabel": "Conversations"
+      }
+    },
+    "imports": {
+      "cancel": {
+        "action": "Cancel the transfer",
+        "tooLate": "This file is already on its way and can no longer be cancelled."
+      },
+      "conflict": {
+        "question": "A document of this name is already in this folder.",
+        "replace": "Replace",
+        "rowHint": "A file waiting on a decision has this name. Open the imports panel.",
+        "skip": "Skip"
+      },
+      "failure": {
+        "analysis": "Analysing this file failed.",
+        "attemptsExhausted": "Several attempts failed.",
+        "connectionLost": "The connection was lost during the transfer.",
+        "extraction": "This file's content could not be read.",
+        "indexing": "The file was read, but indexing it failed.",
+        "noAnswer": "The upload ended without the server saying what became of this file.",
+        "notSent": "Import interrupted",
+        "notSentDetail": "This file never left: the import stopped before it was sent. Send it again to finish.",
+        "interrupted": "Processing stopped before finishing.",
+        "notAllowed": "You are not allowed to import into this folder.",
+        "preparation": "Preparing this file failed.",
+        "quotaExceeded": "The team's storage is full.",
+        "quotaExceededPersonal": "Your storage is full.",
+        "quotaUnknown": "Available storage could not be checked. Worth retrying.",
+        "serverUnavailable": "The server did not answer.",
+        "ambiguousName": "This folder already holds two documents of that name. Remove the duplicate before importing again.",
+        "unreported": "Failed, with no cause reported.",
+        "unsupportedType": "This file type is not supported.",
+        "upload": "Sending this file failed."
+      },
+      "panel": {
+        "collapse": "Hide imports",
+        "empty": "Nothing being imported. Files you add show up here while they are processed.",
+        "expand": "Show imports",
+        "resize": "Resize the imports panel",
+        "title": "Imports"
+      },
+      "phaseState": {
+        "current": "in progress",
+        "done": "done",
+        "failed": "failed",
+        "pending": "waiting"
+      },
+      "stepper": {
+        "label": "Import progress",
+        "hint": {
+          "upload": "The file leaves your computer for its destination. This is the only phase that depends on your connection.",
+          "uploading": "The kind of document is worked out, and what it takes to process it is set aside.",
+          "processing": "The text is pulled out of the document, page by page, so it can be used.",
+          "done": "The document is ready. Agents can now find it and quote it.",
+          "doneUpload": "The file has arrived. It was not analysed — this mode only sends it.",
+          "indexing": "The content is filed away so agents can find it and quote it in their answers."
+        }
+      },
+      "resend": {
+        "action": "Send again",
+        "wrongFile": "None of the files picked is named {{name}}."
+      },
+      "retry": {
+        "action": "Try again",
+        "relaunchFromRow": "This document has already arrived: relaunch its processing from its row in the table.",
+        "unavailable": "This file has to be picked again before it can be retried."
       }
     },
     "tokenUsageImpact": {
@@ -2313,11 +2392,19 @@
         "terminalCount": "Completed ({{count}})",
         "title": "Tasks"
       },
+      "importStage": {
+        "upload": "Sending the file",
+        "uploadDone": "Upload complete",
+        "analysis": "Analysing the document"
+      },
       "ingestionStep": {
         "uploading": "Document preparation",
         "processing": "Content extraction",
         "indexing": "Indexing",
-        "done": "Processing complete"
+        "listed": "Document preparation",
+        "vectorized": "Content indexed",
+        "skip": "Already up to date",
+        "done": "Ingestion complete"
       },
       "popover": {
         "acknowledge": "Dismiss",
@@ -2337,6 +2424,7 @@
         "succeeded": "Done"
       },
       "time": {
+        "daysAgo": "{{count}}d ago",
         "hoursAgo": "{{count}}h ago",
         "justNow": "just now",
         "minAgo": "{{count}} min ago"

@@ -12,18 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Pins down scheduleFiles' contract — see its doc comment in DocumentUploadDrawer.tsx.
+// Pins down scheduleFiles' contract — see its doc comment in importRun.ts.
 
 import { describe, expect, it, vi } from "vitest";
-import type { ScheduledTask } from "../../../../../slices/streamDocumentUpload";
+import type { ScheduledTask } from "../../../slices/streamDocumentUpload";
 
 const streamMock = vi.fn();
-vi.mock("../../../../../slices/streamDocumentUpload", () => ({
+vi.mock("../../../slices/streamDocumentUpload", () => ({
   leafFileName: (file: File) => file.name.split("/").pop() || file.name,
   streamUploadOrProcessDocument: (...args: unknown[]) => streamMock(...args),
 }));
 
-import { chunkFilesByLeafName, runWithConcurrencyLimit, scheduleFiles } from "./DocumentUploadDrawer";
+const noteStarted = vi.fn();
+vi.mock("./unfinishedImports", () => ({
+  noteImportStarted: (...args: unknown[]) => noteStarted(...args),
+  noteImportSettled: vi.fn(),
+}));
+
+import { chunkFilesByLeafName, runImport, runWithConcurrencyLimit, scheduleFiles } from "./importRun";
 
 describe("scheduleFiles", () => {
   it("resolves once its single file is discovered, without waiting for the request to settle", async () => {
@@ -207,6 +213,66 @@ describe("scheduleFiles", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(onBackgroundError).not.toHaveBeenCalled();
+  });
+
+  it("fails the files a cleanly-ended stream never spoke about", async () => {
+    // A truncated body or a gateway timing out mid-response ends the read with
+    // no error and no line for the rest. Nothing else will ever report on
+    // those, so leaving them pending parks them in the panel as "sending" for
+    // as long as the tab is open.
+    streamMock.mockImplementation((_files, _mode, _meta, discover) => {
+      discover({ taskId: "t-1", documentUid: "doc-1", filename: "a.pdf" });
+      return Promise.resolve([]);
+    });
+
+    const onFailed = vi.fn();
+    const onBackgroundError = vi.fn();
+    await scheduleFiles(
+      [new File(["x"], "a.pdf"), new File(["x"], "b.pdf")],
+      "process",
+      {},
+      vi.fn(),
+      onBackgroundError,
+      undefined,
+      { onFailed, onFinished: vi.fn() },
+    );
+
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(onFailed.mock.calls[0][0]).toBe("b.pdf");
+    // a.pdf got its task and is the task's to report on from here.
+    expect(onFailed.mock.calls[0][1]).toContain("no word from the server");
+    // Nothing failed at the request level, so nothing is raised globally —
+    // the file's own card carries it.
+    expect(onBackgroundError).not.toHaveBeenCalled();
+  });
+});
+
+describe("runImport", () => {
+  it("writes the record once for the whole import, not once per batch", async () => {
+    // Each write rewrites the record whole, so one per batch made a large
+    // import quadratic in its own size — on the main thread, before the first
+    // byte left. One call covers every file just as durably.
+    noteStarted.mockClear();
+    streamMock.mockImplementation((files: File[], _mode, _meta, discover) => {
+      for (const file of files) {
+        discover({ taskId: `t-${file.name}`, documentUid: `doc-${file.name}`, filename: file.name });
+      }
+      return Promise.resolve([]);
+    });
+    const batches = Array.from({ length: 5 }, (_, i) => ({
+      files: [new File(["x"], `f${i}-a.pdf`), new File(["x"], `f${i}-b.pdf`)],
+      requestMetadata: { tags: ["tag-1"] },
+    }));
+
+    await runImport(batches, {
+      dispatch: vi.fn(),
+      uploadMode: "process",
+      teamId: "team-1",
+      onError: vi.fn(),
+    });
+
+    expect(noteStarted).toHaveBeenCalledTimes(1);
+    expect(noteStarted.mock.calls[0][0]).toHaveLength(10);
   });
 });
 

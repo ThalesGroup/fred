@@ -109,6 +109,53 @@ class IngestionService:
         metadata.identity.document_name = display_name
         return metadata
 
+    async def adopt_existing_document(self, user: KeycloakUser, metadata: DocumentMetadata, existing_uid: str) -> DocumentMetadata:
+        """Make a freshly-extracted document *be* the one it replaces.
+
+        Keeping the uid is the whole reason to prefer replacing to
+        delete-then-create: every citation and link already pointing at that
+        document keeps resolving, and now resolves to the new content.
+
+        Replacing content is not moving the document: it keeps every library it
+        was in, plus the one it is being imported into. Dropping the others
+        would remove it from them, quota and ReBAC grants included, which
+        nobody asked for.
+
+        Order matters. The row is marked unprocessed *before* the index is
+        dropped, so a failure between the two leaves a document that says it
+        has nothing indexed — which is then true — rather than one claiming
+        vectors it no longer has. The bytes themselves stay until `save_input`
+        overwrites them, so the document is never without content.
+
+        Returns the metadata unchanged when the document has been deleted since
+        the import was planned — there is then nothing to replace.
+        """
+        previous = await self.metadata_service.metadata_store.get_metadata_by_uid(existing_uid)
+        if previous is None:
+            return metadata
+
+        # Probe before adopting anything. Taking the uid and the libraries first
+        # would leave the bail-out below returning metadata that impersonates a
+        # document someone just deleted — saving it recreates that row and puts
+        # it back in every library it was in, none of them asked for.
+        # What it had indexed, kept before the row stops claiming it:
+        # purge_document_artifacts skips a store for a stage the document never
+        # reached, so handing it the cleared row would skip every one of them
+        # and leave the old vectors answering under the new content's uid.
+        indexed = previous.model_copy(deep=True)
+
+        previous.processing.stages = {}
+        if not await self.persist_progress(user, previous):
+            # Deleted between the read above and this write: nothing to replace,
+            # and nothing of ours to purge.
+            return metadata
+
+        metadata.identity.document_uid = existing_uid
+        metadata.processing.stages = {}
+        metadata.tags.tag_ids = list(dict.fromkeys([*(previous.tags.tag_ids or []), *(metadata.tags.tag_ids or [])]))
+        await self.metadata_service.purge_document_artifacts(existing_uid, metadata=indexed, include_content=False)
+        return metadata
+
     def save_input(self, user: KeycloakUser, metadata: DocumentMetadata, input_dir: pathlib.Path) -> None:
         self.content_store.save_input(metadata.document_uid, input_dir)
         metadata.mark_stage_done(ProcessingStage.RAW_AVAILABLE)

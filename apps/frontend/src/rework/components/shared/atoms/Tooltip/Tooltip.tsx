@@ -43,9 +43,11 @@ export interface TooltipProps {
    * a one-line hint should not linger or swallow clicks.
    */
   interactive?: boolean;
-  /** Rich content instead of a plain text hint (e.g. a multi-row info panel).
-   *  Unlike `text`, the tooltip widens to fit and wraps instead of forcing a
-   *  single nowrap line. Takes precedence over `text` when both are set. */
+  /** More than `text` can carry. A string is a hint that wraps within a
+   *  readable width, keeping the panel's own padding; any other node is a
+   *  panel owning its layout, and the padding is left to it. Either way the
+   *  tooltip sizes to its content instead of forcing a single nowrap line.
+   *  Takes precedence over `text` when both are set. */
   content?: ReactNode;
   /**
    * Where the panel sits relative to the trigger.
@@ -285,11 +287,11 @@ export const Tooltip = ({
       const desiredTop = fitsAbove ? triggerRect.top - gapPx - height : triggerRect.bottom + gapPx;
       top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, viewportHeight() - VIEWPORT_MARGIN_PX - height));
 
-      // Aligned on the trigger's own left edge (no centring transform): centring
-      // a wide panel on a small chip detaches it from the trigger and leaves it
-      // floating after the clamp. Anchoring the edge keeps it visibly attached.
-      const fitsLeftAligned = triggerRect.left + width <= viewportWidth() - VIEWPORT_MARGIN_PX;
-      const desiredLeft = fitsLeftAligned ? triggerRect.left : triggerRect.left + triggerRect.width - width;
+      // Centred on the trigger, then shifted only as far as the viewport
+      // demands. No centring transform: `left` stays the panel's own left edge,
+      // so the clamp below is the single thing deciding where it lands.
+      const center = triggerRect.left + triggerRect.width / 2;
+      const desiredLeft = center - width / 2;
       left = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredLeft, viewportWidth() - VIEWPORT_MARGIN_PX - width));
     }
 
@@ -314,7 +316,10 @@ export const Tooltip = ({
     : children;
 
   const contentClasses = [styles["tooltip-content"]];
-  if (content) contentClasses.push(styles["tooltip-content-rich"]);
+  // A string is a hint that needs to wrap, not a panel bringing its own
+  // layout: it keeps the standard padding rather than having to restate it.
+  if (content)
+    contentClasses.push(styles[typeof content === "string" ? "tooltip-content-prose" : "tooltip-content-rich"]);
   if (interactive) contentClasses.push(styles["tooltip-content-interactive"]);
 
   return (

@@ -26,10 +26,22 @@ const t = ((key: string, opts?: { count?: number }) => {
   if (key.endsWith("justNow")) return "just now";
   if (key.endsWith("minAgo")) return `${opts?.count} min ago`;
   if (key.endsWith("hoursAgo")) return `${opts?.count}h ago`;
+  if (key.endsWith("daysAgo")) return `${opts?.count}d ago`;
   return key;
 }) as unknown as TFunction;
 
+const DAY = 24 * HOUR;
+
 describe("relativeTime", () => {
+  it("counts in days past a day, never in three-figure hours", () => {
+    // The unfinished-imports record is kept for a week, so a card can legitimately
+    // be days old; "168h ago" is not something anyone reads as a week.
+    const now = Date.now();
+    expect(relativeTime(now - 23 * HOUR, t, now)).toBe("23h ago");
+    expect(relativeTime(now - 3 * DAY, t, now)).toBe("3d ago");
+    expect(relativeTime(now - 7 * DAY, t, now)).toBe("7d ago");
+  });
+
   it("returns 'just now' for less than 60 seconds ago", () => {
     const now = Date.now();
     expect(relativeTime(now - 30 * SEC, t, now)).toBe("just now");
@@ -72,9 +84,24 @@ describe("relativeTime", () => {
 });
 
 describe("ingestion support labels", () => {
+  it("names the stage instead of leaking a pipeline identifier into the page", () => {
+    // Nothing describes the transfer on the task feed — it is over before the
+    // first event arrives.
+    expect(stepLabel({ kind: "ingestion", step: null, stage: "upload" }, t)).toBe("rework.tasks.importStage.upload");
+    // A step the pipeline reports and we have no wording for must not print
+    // its English identifier into a French page.
+    expect(stepLabel({ kind: "ingestion", step: "resolving scope", stage: "analysis" }, t)).toBe(
+      "rework.tasks.importStage.analysis",
+    );
+    // A chat attachment carries its own already-translated step and no stage.
+    expect(stepLabel({ kind: "ingestion", step: "Préparation…", stage: null }, t)).toBe("Préparation…");
+  });
+
   it("translates known ingestion steps without changing other task kinds", () => {
-    expect(stepLabel({ kind: "ingestion", step: "indexing" }, t)).toBe("rework.tasks.ingestionStep.indexing");
-    expect(stepLabel({ kind: "migration", step: "indexing" }, t)).toBe("indexing");
+    expect(stepLabel({ kind: "ingestion", step: "indexing", stage: "analysis" }, t)).toBe(
+      "rework.tasks.ingestionStep.indexing",
+    );
+    expect(stepLabel({ kind: "migration", step: "indexing", stage: null }, t)).toBe("indexing");
   });
 
   it("copies the document, task reference, stage and failure together", () => {
@@ -86,6 +113,9 @@ describe("ingestion support labels", () => {
         kind: "ingestion",
         target: { type: "document", id: "doc-456", label: "report.pdf" },
         step: "indexing",
+        stage: "analysis",
+        conflict: null,
+        teamId: null,
         error: "Configured attempts exhausted.",
         owner: null,
         localOnly: false,

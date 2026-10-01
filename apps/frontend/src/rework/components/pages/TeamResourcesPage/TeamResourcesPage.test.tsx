@@ -101,6 +101,11 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     return { data: { entries: [] }, isLoading: false, isError: false };
   },
 }));
+// Reads the task store; this suite renders the page without a Provider and is
+// about the tab switcher, not the import rail — which has its own tests.
+vi.mock("@shared/organisms/ImportPanel/ImportPanel.tsx", () => ({
+  ImportPanel: () => <aside data-testid="import-panel" />,
+}));
 vi.mock("./DocumentWorkspace/DocumentWorkspace.tsx", () => ({
   default: (props: { onDocumentsChanged?: () => void }) => {
     probe.onDocumentsChanged = props.onDocumentsChanged;

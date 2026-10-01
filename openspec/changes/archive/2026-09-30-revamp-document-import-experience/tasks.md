@@ -1,0 +1,69 @@
+## 1. Give the application back
+
+- [x] 1.1 Close the dialog as soon as the selection is accepted, instead of awaiting every batch outcome. What must be settled first (quota, folders, the name question) stays awaited; the transfer does not.
+- [x] 1.2 Keep the upload running after the dialog unmounts, and make sure its per-file outcomes still reach the panel — `runImport` is detached and holds only the store and the toast provider, both of which outlive the dialog.
+- [x] 1.3 Test: confirming an import of 50 files returns control without a perceptible wait — the dialog is closed while the transfer is deliberately held open, every file still reaches the panel afterwards, and the folder refreshes only at the end.
+
+## 2. Mount the panel
+
+- [x] 2.1 Mount the panel beside the documents card on the resources page, as a dedicated rail that widens in place into the panel — one element with two widths, the same button opening and closing it, carrying the card's surface, radius and full height. `TaskTray` was not reused: it is a floating popover anchored to a trigger, a different object. It also opens itself when an import hands off (`importPanelOpenRequested`), so the work is visible instead of hidden behind a closed rail.
+- [x] 2.2 Audit of what the panel rendered for an import before section 3, and what was missing:
+  - A file appeared only once the server had accepted it and named a task. Batches run a few at a time, so on a large import most files were invisible for most of the wait.
+  - The card showed name, state badge, progress bar and `step`. `stepLabel` translated only `uploading|processing|indexing|done`, while the task feed also carries `listed`, `vectorized` and `skip` — those reached the page as raw English identifiers.
+  - Nothing distinguished the transfer from the analysis, so "how far along is this file" had no answer.
+- [x] 2.3 Test: an import started on Resources is still listed after the panel unmounts and remounts (`ImportPanel.test.tsx`). Surviving a reload is the rehydration path, which re-registers non-terminal server tasks; a transfer cut off by the reload is section 6's subject, not this one's.
+
+## 3. Make the two stages legible
+
+- [x] 3.1 `ImportStage` on the task view model, set by `uploadStarted` (the browser's half, no server task yet) and `uploadHandedOff` (the server named the task). Every file is listed before a byte moves. `stepLabel` names the stage rather than printing a pipeline identifier, and the steps the feed actually emits are all translated now.
+- [x] 3.2 Handing off resets the entry to `pending`: only the ingestion task's own `succeeded` settles it. The transfer's `finished` line settles a file only when it never got a task — upload-only mode, or one the server skipped.
+- [x] 3.3 Test: `taskSlice.test.ts` "the two stages of an import" — a transferred file is `analysis`/`pending`, the end-of-transfer line does not settle it, and only the task event does.
+
+## 4. Make failures survivable
+
+- [x] 4.1 A failed entry stays listed until retried or dismissed (`selectVisibleTasks` keeps unacknowledged failures indefinitely) and carries a retry. The import engine moved out of the dialog into `features/imports/importRun.ts` — the dialog is gone long before the transfer is, and the panel, not the dialog, is where a retry is asked for.
+- [x] 4.2 `importFailure` maps the sentences the backend actually writes (quota guard, `_wf_file_terminal_event_args`) onto one line the reader can act on, keeping the original as hover detail. `Execution failed` and `No failure details were reported` are treated as no cause at all, because that is what they mean.
+- [x] 4.3 The file behind a failed entry is held in a module-level vault — a `File` handle, not its bytes — released as soon as it is no longer ours to send, and gone on reload. No held file, no retry button: the panel says the file has to be picked again instead.
+- [x] 4.4 Test: `ImportPanel.failures.test.tsx` — six cases over the real `TaskCard`, including the failure surviving an unmount/remount and its neighbour in the same batch being untouched.
+
+## 5. Conflicts awaiting a decision
+
+- [x] 5.1 A third `ImportStage`, `decision`: `pending`, no error, holding the name and the folder it clashes in. The panel opens itself when one arrives — a question no one sees is not one. The end-of-run toast that used to say "import it again to choose what to do" is gone, along with its strings: the panel is the report now.
+- [x] 5.2 Replace and Skip under the entry in the panel. `resolveConflict` sends the same file to the same folder with `conflict_decisions` attached for Replace, and sends nothing at all for Skip — the point of asking is not to transfer bytes the answer makes useless.
+- [x] 5.3 A warning marker after the contested document's name, opening the panel on click. It carries no decision. Matched on (folder, name) from the store, so a same-named document in another folder is untouched.
+- [x] 5.4 Same rule as a retry: no held file, no Replace and no Skip — the panel says the import has to be started again.
+- [x] 5.5 Test: `ImportPanel.conflicts.test.tsx` (six cases, including Replace's request metadata and Skip sending nothing) and `DocumentWorkspace.conflictMarker.test.tsx` (the row points, and offers nothing).
+
+## 6. Interruption and cancellation
+
+- [x] 6.1 `unfinishedImports` writes the names and where they were headed to `localStorage` before the first byte moves, and strikes each one off as it gets there. On return the panel names whatever is still listed — minus anything it is already following, since coming back to the page re-reads the record. The offer is `resumeUnfinishedImports`: the user picks the files again (the browser cannot reopen what it no longer holds), and only the missing ones are sent, to the folder they were headed for, with the mode and profile they were being sent with. Anything else picked is left alone.
+- [x] 6.2 `canCancelImport` is true only while a file's request has not left — batches go four at a time, so on a large import most files are still queued. `cancelImport` takes it back and `sendBatch` filters it out; a batch emptied that way is never sent. A file already on the wire is the server's and is not offered.
+- [x] 6.3 Test: `ImportPanel.interruption.test.tsx` — six cases, including the received file being struck off while the lost one is named, resuming sending only the missing file with its original destination and mode, and cancelling a queued file without touching the four in flight.
+
+## 7. The dialog itself
+
+- [x] 7.1 The action button says what it does and to how many files, with the plural forms in both languages. Nothing picked yet: just "Importer" / "Import", rather than a count of zero.
+- [x] 7.2 "Ajouter des documents" / "Add documents" — the dialog has taken several files at a time for a long time.
+- [x] 7.3 `save` and `saving` are gone. There was nothing to say while loading either: the button is disabled, and the dialog now closes as soon as the checks pass.
+- [x] 7.4 560px instead of 480px.
+- [x] 7.5 Mode and profile share a row. At 560px each is about 256px wide, which the longest option label ("Importer et traiter", "Upload & process") clears comfortably.
+
+## 8. Help Center
+
+- [x] 8.1 `features/resources.md` in fr and en gained "Suivre vos imports" / "Following your imports": the panel and how to fold, reopen and resize it, the four phases it ticks off and which one makes a document usable, what a failure offers, what can still be cancelled, and what happens on return after a tab closed mid-import. Two existing passages were corrected rather than left standing: the late-conflict note told the reader to import the file again, and "After the upload" described one preparation instead of two stages.
+
+## 9. Verify and close out
+
+- [x] 9.1 `make code-quality` clean; `make test` 3053 passed / 7 skipped (3060). 48 tests added across the change.
+- [x] 9.2 Reviewed the diff independently. Nine findings, seven fixed, one accepted, one turned into a design correction:
+  - **Silent loss, fixed.** The `localStorage` record was keyed by leaf filename. One import can carry the same name to two folders (`a/README.md`, `b/README.md`); only one record was written and the first arrival struck off both, so the second file was lost with nothing said on the next visit. Keyed by entry id now.
+  - **Silent loss, fixed.** "Give up" wiped the whole record, including the files of an import running at that moment. It now drops only the entries it is showing.
+  - **Fixed.** Re-picking only some of the missing files cleared the whole prompt; the rest were never offered again. Only what was actually resumed leaves the block.
+  - **Fixed.** Dismissing a failed file did not strike it off, so it came back as "did not arrive" on every later visit.
+  - **Fixed.** Relaunching ingestion on existing documents filled the panel with "imports" of files nobody imported. A stage is now what makes an entry an import; a relaunch registers without one.
+  - **Fixed.** Quota refusals never reached their wording: the check answers HTTP 400 before the stream opens and the client discarded the body, so the user read "Upload failed: 400 Bad Request". The server's own `detail` is kept now.
+  - **Fixed.** Cancelling a file whose request had just left was a silent no-op; it says so.
+  - **Fixed, at the developer's instruction.** The panel listed every team's imports. It is scoped to the team whose page it is on, carried on the entry and taken from `TaskSummary.team_id` on rehydration.
+  - **Accepted.** A failed file's `File` handle stays held if the entry is dismissed from the task tray rather than the panel. A handle, not its bytes, and only until the tab closes.
+- [x] 9.3 `docs/swift/ops/migrations/import-progress-panel.md`, impact `none`: frontend only, no backend, database, API or permission change. It declares the one thing an operator could be surprised by — the browser now keeps `fred.imports.unfinished` in `localStorage` (file names and destination tag ids, never contents) — and the two honest limits: resuming needs the files picked again, and cancellation only covers files whose request has not left. The sibling note for `add-import-conflict-resolution` was corrected at the same time: it still said the dialog offers **Replace** / **Keep**.
+- [x] 9.4 No manual session was run against a live stack for this slice, so there is nothing observed to record. What the code shows, unchanged by this change and still the lifecycle work's to fix: a task that never reaches a terminal state is shown as running forever, and the panel has no timeout of its own by design (`design.md`, Risks). `importFailure` now names the two backend sentences that carry no cause at all (`Execution failed`, `No failure details were reported`) — every occurrence of either is a lifecycle defect made visible, not a wording problem.

@@ -58,15 +58,15 @@ vi.mock("../../../../../slices/streamDocumentUpload", () => ({
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // Precheck answers "allowed" so saves proceed; the denial path has its own
   // coverage in DocumentUploadDrawer.quotaPrecheck.test.tsx.
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation: () => [
+    () => ({ unwrap: () => Promise.resolve({ conflicts: [] }) }),
+  ],
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation: () => [
     () => ({ unwrap: () => Promise.resolve({ allowed: true }) }),
   ],
 }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: undefined }),
-}));
-vi.mock("../../../../features/tasks/taskSlice", () => ({
-  taskRegistered: (payload: unknown) => ({ type: "tasks/taskRegistered", payload }),
 }));
 
 import { DocumentUploadDrawer } from "./DocumentUploadDrawer";
@@ -102,7 +102,9 @@ function fileAt(name: string, path?: string): File {
 }
 
 async function clickSave() {
-  const save = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("documentLibrary.save"));
+  const save = [...container.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("documentLibrary.importCount"),
+  );
   if (!save) throw new Error("save button not rendered");
   await act(async () => {
     save.click();
