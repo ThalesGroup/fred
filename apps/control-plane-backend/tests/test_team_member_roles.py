@@ -461,7 +461,12 @@ async def test_revoke_team_member_role_allows_admin_revoke_when_another_admin_ex
 async def test_revoke_sole_admin_still_blocks_last_active_admin_without_writes() -> (
     None
 ):
-    rebac = _FakeRebac(roles={"bob": {UserTeamRelation.TEAM_ADMIN}})
+    rebac = _FakeRebac(
+        roles={
+            "bob": {UserTeamRelation.TEAM_ADMIN},
+            "alice": {UserTeamRelation.PENDING_TEAM_ADMIN},
+        }
+    )
 
     with pytest.raises(TeamAdminConstraintError):
         await revoke_team_member_role(
@@ -473,8 +478,61 @@ async def test_revoke_sole_admin_still_blocks_last_active_admin_without_writes()
         )
 
     assert rebac.roles["bob"] == {UserTeamRelation.TEAM_ADMIN}
+    assert rebac.roles["alice"] == {UserTeamRelation.PENDING_TEAM_ADMIN}
     assert rebac.added_relations == []
     assert rebac.deleted_relations == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("caller_is_active_admin", [True, False])
+async def test_pending_admin_revocation_requires_active_admin(
+    caller_is_active_admin: bool,
+) -> None:
+    class CheckAdminPermissionRebac(_FakeRebac):
+        async def check_user_team_permissions_or_raise(
+            self, *, user, team_id, permissions
+        ) -> str | None:
+            if TeamPermission.CAN_ADMINISTER_ADMINS in permissions and (
+                UserTeamRelation.TEAM_ADMIN not in self.roles.get(user.uid, set())
+            ):
+                raise PermissionError("admin role required")
+            return await super().check_user_team_permissions_or_raise(
+                user=user, team_id=team_id, permissions=permissions
+            )
+
+    caller_role = (
+        UserTeamRelation.TEAM_ADMIN
+        if caller_is_active_admin
+        else UserTeamRelation.PENDING_TEAM_ADMIN
+    )
+    rebac = CheckAdminPermissionRebac(
+        roles={
+            "caller": {caller_role},
+            "bob": {UserTeamRelation.PENDING_TEAM_ADMIN},
+        }
+    )
+
+    if caller_is_active_admin:
+        await revoke_team_member_role(
+            _user(),
+            TeamId("fredlab"),
+            "bob",
+            UserTeamRelation.PENDING_TEAM_ADMIN,
+            _deps(rebac, "fredlab"),
+        )
+        assert rebac.roles["bob"] == {UserTeamRelation.TEAM_MEMBER}
+    else:
+        with pytest.raises(PermissionError, match="admin role required"):
+            await revoke_team_member_role(
+                _user(),
+                TeamId("fredlab"),
+                "bob",
+                UserTeamRelation.PENDING_TEAM_ADMIN,
+                _deps(rebac, "fredlab"),
+            )
+        assert rebac.roles["bob"] == {UserTeamRelation.PENDING_TEAM_ADMIN}
+        assert rebac.added_relations == []
+        assert rebac.deleted_relations == []
 
 
 @pytest.mark.asyncio

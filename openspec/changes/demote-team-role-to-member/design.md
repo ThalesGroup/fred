@@ -18,7 +18,7 @@ The OpenFGA `team_member` relation is both a directly stored baseline and a comp
 
 ### Convert the sole elevated role in the existing revoke service
 
-After reading the target's direct roles, the service identifies a sole elevated role. It runs the existing last-admin guard for `team_admin` and checks both the permission for the requested revoke and `can_administer_members` before any write. These permissions currently both derive from `team_admin`. It then grants a direct `team_member` relation and revokes the elevated relation. If another stored role exists, it keeps the current single-role revoke path. A sole `team_member` still raises `TeamMemberLastRoleError`.
+After reading the target's direct roles, the service identifies a sole elevated role. It runs the existing last-admin guard for `team_admin` and checks both the permission for the requested revoke and `can_administer_members` before any write. These permissions currently both derive from `team_admin`, so cancelling a pending nomination requires an active administrator. A pending nomination does not count toward the existing last-active-admin guard. It then grants a direct `team_member` relation and revokes the elevated relation. If another stored role exists, it keeps the current single-role revoke path. A sole `team_member` still raises `TeamMemberLastRoleError`.
 
 This keeps the frontend's existing one-click toggle and the API's existing request shape. A frontend-only grant-then-revoke sequence was rejected: the member-list projection hides a direct baseline tuple whenever an elevated role is present, so the client cannot safely decide whether a grant would duplicate a tuple. A new endpoint would duplicate the existing revoke surface for this one outcome.
 

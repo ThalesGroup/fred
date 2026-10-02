@@ -32,12 +32,22 @@ When an authorized actor revokes a member's only stored elevated team role, the 
 
 ### Requirement: Role revocation preserves authorization and explicit removal
 
-The control-plane MUST enforce the existing permission for the role being revoked and, when it creates a direct `team_member` relation, the permission to administer members. It MUST prevent removal of the team's last active `team_admin`. It MUST NOT remove a person from the team through role revocation. Removing the person entirely SHALL remain an explicit member-removal action. Revoking a sole direct `team_member` relation MUST remain refused.
+The control-plane MUST enforce the existing permission for the role being revoked and, when it creates a direct `team_member` relation, the permission to administer members. Only an active `team_admin` MAY revoke a `pending_team_admin` nomination. It MUST prevent removal of the team's last active `team_admin`, even when pending nominations exist. It MUST NOT remove a person from the team through role revocation. Removing the person entirely SHALL remain an explicit member-removal action. Revoking a sole direct `team_member` relation MUST remain refused.
 
 #### Scenario: Last active administrator is protected
 
 - **WHEN** a request would revoke the team's last active `team_admin`
 - **THEN** the request fails and the target's stored relations remain unchanged
+
+#### Scenario: Pending nominee does not satisfy last-admin guard
+
+- **WHEN** the only active `team_admin` is revoked while another person holds `pending_team_admin`
+- **THEN** the request fails and both stored relations remain unchanged
+
+#### Scenario: Pending nomination requires an active administrator
+
+- **WHEN** a caller with only `pending_team_admin` attempts to cancel another pending nomination and no active `team_admin` exists
+- **THEN** the request fails and the nominee's stored relations remain unchanged
 
 #### Scenario: Unauthorized revocation is refused
 
