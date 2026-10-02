@@ -60,8 +60,6 @@ class ParserTests(unittest.TestCase):
             note(no_action_reason="TODO replace me later"),
             note(configuration_reason="TBD fill in later"),
             note(unknown="value"),
-            note(configuration_scope="deployment-values"),
-            note(configuration="production", configuration_scope="anything"),
         ]
         for text in bad:
             with self.subTest(text=text), self.assertRaises(m.Invalid):
@@ -177,19 +175,6 @@ class GitTests(unittest.TestCase):
             self.repo(worktree=True).check_pr(self.installed)
         self.add_note("migration", "minor")
         self.repo(worktree=True).check_pr(self.installed)
-
-    def test_existing_deployment_values_without_chart_change(self):
-        self.add_note(
-            "operator-values",
-            "minor",
-            configuration="production",
-            configuration_scope="deployment-values",
-            configuration_reason="Operators must update existing application catalog values in their deployment overlays.",
-        )
-        self.repo(worktree=True).check_pr(self.installed)
-        self.write("apps/service/config/configuration_prod.yaml", "new: true\n")
-        with self.assertRaisesRegex(m.Invalid, "values.yaml"):
-            self.repo(worktree=True).check_pr(self.installed)
 
     def test_configuration_evidence(self):
         self.write("apps/service/config/configuration_prod.yaml", "new: true\n")

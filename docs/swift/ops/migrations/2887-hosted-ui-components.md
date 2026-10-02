@@ -2,9 +2,8 @@
 schema: 1
 title: "Shared UI components and retirement of the built-in evaluator"
 impact: minor
-configuration: production
-configuration_scope: deployment-values
-configuration_reason: "Affected deployments must update existing production Helm application catalog, FRONTEND_APPLICATIONS_JSON and ingress/proxy values to register and expose the external evaluator."
+configuration: none
+configuration_reason: "No configuration keys or defaults change. Deployments using built-in evaluations must register the external evaluator using the existing application configuration."
 ---
 ## Applicability
 
@@ -28,7 +27,7 @@ Only after the authorization prerequisite is verified, validate that an authoriz
 
 Confirm Apps opens the evaluator for an authorized team. Independently verify that direct API requests from authenticated users without the target team membership or application grant are denied, through both the application gateway and legacy `/evaluation/` path. For a member of a granted team, also verify denial of viewing without `CAN_READ`, creation/cancellation without `CAN_UPDATE_AGENTS`, and real-conversation evaluation without `CAN_READ_CONVERSATIONS`, through both paths; verify permitted operations succeed for appropriately authorized users. An Apps admission check alone is insufficient; failed or missing API authorization blocks rollout. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.
 
-In the evaluation application, activate a run row with Enter, close the case drawer using its localized close action, and inspect outcome KPI values in both themes.
+In the evaluation application, click a run row to open its preview, close the case drawer using its localized close action, and inspect outcome KPI values in both themes.
 
 ## Rollback
 
