@@ -38,6 +38,11 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row with a fixed gray label "Other" in English or "Autre" in French to the left of the editable area
 - **AND** the text-input row submits a text answer without fabricating an option identifier
 
+#### Scenario: Compact active question card
+
+- **WHEN** managed chat displays an active agent question
+- **THEN** the card uses compact width, spacing, and typography, while keeping choice descriptions, free-text input, and actions readable
+
 #### Scenario: Simultaneous questions in one card
 
 - **GIVEN** several `ask_user` calls in one exchange are awaiting answers

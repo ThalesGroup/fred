@@ -5070,7 +5070,9 @@ same button. After an agent question is answered or skipped, a compact card belo
 the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
 While the person is answering, the `ask_user` tool line stays in progress.
-Simultaneous questions share one card with short subject tabs that scroll
+Active agent-question cards use a compact width, spacing, and text size; choice
+descriptions and actions stay readable. Simultaneous questions share one card
+with short subject tabs that scroll
 horizontally when needed. The mouse wheel and trackpad scroll overflowing
 titles without dragging the scrollbar; page scrolling continues at the ends. A choice or Skip records a local draft and advances
 to the next unanswered tab. Nonblank free text counts as an answer while typing,

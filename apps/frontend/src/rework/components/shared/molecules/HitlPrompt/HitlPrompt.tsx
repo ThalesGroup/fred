@@ -185,7 +185,7 @@ export function HitlPrompt({
                   .join(" ")}
                 color="primary"
                 variant="outlined"
-                size="medium"
+                size={isAgentQuestion ? "small" : "medium"}
                 disabled={isOverLimit || busy}
                 aria-pressed={collectingAnswers ? stagedAnswer?.answer === c.id && !stagedAnswer.skipped : undefined}
                 onClick={() => answerQuestion(c.id, freeText.trim() ? freeText : undefined)}

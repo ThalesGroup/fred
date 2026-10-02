@@ -35,6 +35,13 @@
   border-color: var(--primary);
 }
 
+.card.skippable {
+  align-self: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-s);
+  width: min(100%, 38rem);
+}
+
 .questionTabs {
   margin-right: 2rem;
   max-width: 100%;
@@ -49,6 +56,10 @@
 .questionTabs :global([role="tab"] span) {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.skippable .questionTabs :global([role="tab"]) {
+  font-size: 0.8125rem;
 }
 
 .title {
@@ -68,6 +79,11 @@
   font: inherit;
 }
 
+.skippable .title,
+.skippable .question {
+  font-size: 0.8125rem;
+}
+
 .choices {
   display: flex;
   flex-direction: column;
@@ -76,9 +92,22 @@
   width: min(100%, 32rem);
 }
 
+.skippable .choices {
+  gap: var(--spacing-2xs);
+  width: min(100%, 30rem);
+}
+
+.skippable .choices :global(button > div) {
+  font-size: 0.8125rem;
+}
+
 .choiceWithDescription {
   height: auto;
   min-height: 2.5rem;
+}
+
+.skippable .choiceWithDescription {
+  height: auto;
 }
 
 .choiceContent {
@@ -159,6 +188,15 @@
   min-width: 0;
   color: var(--on-surface);
   font: var(--font-body-medium);
+}
+
+.skippable .otherChoice {
+  min-height: 2rem;
+}
+
+.skippable .otherChoiceLabel,
+.skippable .otherChoice input {
+  font-size: 0.8125rem;
 }
 
 .selectedChoice {

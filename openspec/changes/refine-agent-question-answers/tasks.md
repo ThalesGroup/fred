@@ -22,6 +22,7 @@
 - [x] 2.6 Count nonblank free text as a draft during typing without requiring Next, and make closing the grouped card skip every pending question in one batch; verify both behaviors in focused frontend tests.
 - [x] 2.7 Remove submitted tabs when the runtime accepts a batch, before the resumed stream ends, while preserving any later questions in the same exchange; verify the SSE ordering regression.
 - [x] 2.8 Scroll overflowing subject tabs with wheel or trackpad input without dragging the scrollbar, and release vertical page scrolling at the strip ends; verify the focused card interaction.
+- [x] 2.9 Reduce active agent-question card width, typography, padding, and choice spacing slightly while retaining readable descriptions and controls; verify focused component tests and frontend quality.
 
 ## 3. Close-out
 
