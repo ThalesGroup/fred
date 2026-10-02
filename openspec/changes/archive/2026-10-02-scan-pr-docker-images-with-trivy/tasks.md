@@ -12,11 +12,11 @@
 
 - [x] 3.1 Remove the changed-file filter so every pull request scans the four publishable final images after building all five images; keep release publication and the `ws-bench` exception unchanged.
 - [x] 3.2 Report all severities and all detected packages, print every finding in the GitHub job logs, and emit warnings only for critical findings.
-- [ ] 3.3 Scan every tracked Python and npm lockfile with development dependencies included; verify that expected lockfiles appear in the report.
-- [ ] 3.4 Build and scan the frontend builder stage, reusing the existing Buildx cache and showing a separate result check.
+- [x] 3.3 Scan every tracked Python and npm lockfile with development dependencies included; verify that expected lockfiles appear in the report.
+- [x] 3.4 Build and scan the frontend builder stage, reusing the existing Buildx cache and showing a separate result check.
 
 ## 4. Visible Trivy checks
 
 - [x] 4.1 Add one report job per scanned image and verify the resolved matrix excludes `ws-bench` and release runs.
-- [ ] 4.2 Verify on the draft PR that the Trivy jobs appear separately, annotate findings as warnings, and stay successful when CVEs are present.
-- [ ] 4.3 Validate workflow syntax, scan report parsing, full lockfile coverage, and the updated operator migration note; inspect the new PR CI run.
+- [x] 4.2 Verify on the draft PR that the Trivy jobs appear separately, annotate findings as warnings, and stay successful when CVEs are present.
+- [x] 4.3 Validate workflow syntax, scan report parsing, full lockfile coverage, and the updated operator migration note; inspect the new PR CI run.
