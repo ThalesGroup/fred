@@ -24,4 +24,5 @@
 - [x] 4.2 Update the surface token section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (rule, tones, `surface-floating`, role table) and the surface row of `docs/swift/ux/COMPONENT-UX.md`; verify no doc still describes the old ordering
 - [x] 4.3 Add the English migration note (patch, no operator action) per `docs/swift/ops/MIGRATION-GUIDES.md`; verify it follows the template
 - [x] 4.4 Add a token migration section to `libs/frontend/design-tokens/README.md` (rule, value table, old → new token by role, steps an assistant can follow), built from the final diff; verify every remap in the diff appears in it
-- [ ] 4.5 Run `/code-review` on the diff and record exact verification evidence in this change; then archive it with `openspec archive` and close #2915
+- [x] 4.5 Run `/code-review` on the diff and record exact verification evidence in `verification.md`; verify every finding is fixed or answered
+- [ ] 4.6 After the developer's in-app check in both themes, archive the change with `openspec archive` and close #2915 once the PR is merged
