@@ -301,3 +301,10 @@ const mixedTextArea = (
   <TextArea label="Notes" value="abc" defaultValue="abc" readOnly />
 );
 export { mixedTextArea };
+
+// @ts-expect-error Native input elements cannot contain children.
+export const badSwitchChildren = <Switch aria-label="Switch">text</Switch>;
+export const badSwitchHtml = (
+  // @ts-expect-error Native input elements cannot accept inner HTML.
+  <Switch aria-label="Switch" dangerouslySetInnerHTML={{ __html: "text" }} />
+);

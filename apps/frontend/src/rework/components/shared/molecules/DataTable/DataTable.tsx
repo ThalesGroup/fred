@@ -211,7 +211,7 @@ export default function DataTable<T>({
   sortClearable = true,
 }: DataTableProps<T>) {
   const tableId = useId();
-  const columnKeys = useRef(new WeakMap<object, number>());
+  const columnKeys = useRef(new WeakMap<object, string>());
   const nextColumnKey = useRef(0);
   const objectKeys = useRef(new WeakMap<object, number>());
   const primitiveKeys = useRef(new Map<unknown, number>());
@@ -291,13 +291,19 @@ export default function DataTable<T>({
   if (columns.some((column) => column.sortable && duplicateLabels.has(column.label))) {
     throw new Error("DataTable: sortable column labels must be unique across all columns.");
   }
+  const assignedColumnKeys = new Set(columns.map((column) => columnKeys.current.get(column)));
   const columnKey = (column: DataTableColumn<T>) => {
     if (column.key !== undefined) return `key:${column.key}`;
-    if (duplicateLabels.has(column.label) || columnKeys.current.has(column)) {
-      if (!columnKeys.current.has(column)) columnKeys.current.set(column, nextColumnKey.current++);
-      return `object:${columnKeys.current.get(column)}`;
-    }
-    return `label:${column.label}`;
+    const assigned = columnKeys.current.get(column);
+    if (assigned !== undefined) return assigned;
+    const labelKey = `label:${column.label}`;
+    const key =
+      duplicateLabels.has(column.label) || assignedColumnKeys.has(labelKey)
+        ? `object:${nextColumnKey.current++}`
+        : labelKey;
+    columnKeys.current.set(column, key);
+    assignedColumnKeys.add(key);
+    return key;
   };
   if (new Set(columns.map(columnKey)).size !== columns.length) {
     throw new Error("DataTable: column keys must be unique.");

@@ -1166,3 +1166,20 @@ it.each(["primitive", "object"])("separates repeated %s occurrences across clien
   expect(container.querySelector("input")).not.toBe(second);
   expect((container.querySelector("input") as HTMLInputElement).value).toBe("original");
 });
+
+it.each([true, false])("retains a unique column when a duplicate is inserted before=%s", (before) => {
+  const a = { label: "Same", cellRenderer: () => <input defaultValue="A" /> };
+  const b = { label: "Same", cellRenderer: () => <input defaultValue="B" /> };
+  const data = [{ id: 1 }];
+  render(<DataTable data={data} columns={[a]} rowKey={(row) => row.id} />);
+  const input = container.querySelector("input") as HTMLInputElement;
+  input.value = "Edited A";
+  input.focus();
+  act(() => root.render(<DataTable data={data} columns={before ? [b, a] : [a, b]} rowKey={(row) => row.id} />));
+  expect([...container.querySelectorAll("input")]).toContain(input);
+  expect(input.value).toBe("Edited A");
+  expect(document.activeElement).toBe(input);
+  act(() => root.render(<DataTable data={data} columns={[a]} rowKey={(row) => row.id} />));
+  expect(container.querySelector("input")).toBe(input);
+  expect(document.activeElement).toBe(input);
+});
