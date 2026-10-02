@@ -426,6 +426,24 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
       }),
     }),
+    addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: build.mutation<
+      AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiResponse,
+      AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/favorite`,
+        method: "PUT",
+      }),
+    }),
+    removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: build.mutation<
+      RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiResponse,
+      RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/prompts/${queryArg.promptId}/favorite`,
+        method: "DELETE",
+      }),
+    }),
     postPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePost: build.mutation<
       PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse,
       PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiArg
@@ -1801,6 +1819,16 @@ export type PostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostAp
   teamId: string;
   promptId: string;
 };
+export type AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiResponse = unknown;
+export type AddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutApiArg = {
+  teamId: string;
+  promptId: string;
+};
+export type RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiResponse = unknown;
+export type RemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteApiArg = {
+  teamId: string;
+  promptId: string;
+};
 export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiResponse =
   /** status 201 Successful Response */ PromptSummary;
 export type PostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostApiArg = {
@@ -2820,8 +2848,6 @@ export type ApplicationList = {
   items: ApplicationSummary[];
 };
 export type FrontendFeatureFlags = {
-  enableK8Features?: boolean;
-  enableElecWarfare?: boolean;
   /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled. */
   enableApplications?: boolean;
   /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */
@@ -3179,6 +3205,7 @@ export type PromptSummary = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
 };
 export type CreatePromptRequest = {
   name: string;
@@ -3206,6 +3233,7 @@ export type ContextPromptSummary = {
   version: number;
   session_count: number;
   score?: number | null;
+  is_favorite?: boolean;
 };
 export type PromptDetail = {
   id: string;
@@ -3226,6 +3254,7 @@ export type PromptDetail = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
   team_id: string;
   text: string;
 };
@@ -3264,6 +3293,7 @@ export type MarketplacePromptSummary = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
   team_id: string;
   team_name: string;
 };
@@ -3286,6 +3316,7 @@ export type MarketplacePromptDetail = {
   avg_output_tokens?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
+  is_favorite?: boolean;
   team_id: string;
   text: string;
   team_name: string;
@@ -4337,6 +4368,8 @@ export const {
   useDeleteTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdDeleteMutation,
   usePatchTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPatchMutation,
   usePostRecordPromptUseControlPlaneV1TeamsTeamIdPromptsPromptIdUsePostMutation,
+  useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation,
+  useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation,
   usePostPromotePromptControlPlaneV1TeamsTeamIdPromptsPromptIdPromotePostMutation,
   usePostPublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPublishPostMutation,
   usePostUnpublishPromptControlPlaneV1TeamsTeamIdPromptsPromptIdUnpublishPostMutation,

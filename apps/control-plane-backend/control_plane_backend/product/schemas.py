@@ -591,6 +591,8 @@ class PromptSummary(BaseModel):
     avg_output_tokens: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # For the caller only; set on the team listing, False elsewhere.
+    is_favorite: bool = False
 
 
 class PromptCommandSummary(BaseModel):
@@ -652,6 +654,7 @@ class ContextPromptSummary(BaseModel):
     version: int
     session_count: int
     score: float | None = None
+    is_favorite: bool = False
 
 
 class PromptScoreUpdateRequest(BaseModel):

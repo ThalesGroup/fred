@@ -165,9 +165,9 @@ async function openStream(
               backoffMs = BASE_BACKOFF_MS; // successful event — reset backoff
 
               if (TERMINAL_STATES.has(event.state)) {
-                // Terminal: stop streaming. Succeeded tasks are kept in the store
-                // for the session (admin history); the floating tray hides old ones
-                // via `selectVisibleTasks`, and the user clears them explicitly.
+                // Terminal: stop streaming. Succeeded tasks remain in the
+                // store for session history; `selectVisibleTasks` applies the
+                // age cutoff where that selector is used.
                 return; // clean terminal close — do not reconnect
               }
             }

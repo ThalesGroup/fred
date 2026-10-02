@@ -3527,8 +3527,8 @@ Two call sites remain, both dedicated Activity surfaces rather than embeds insid
 dashboard: `TasksPage` (`/admin/tasks`, `scope="platform"`) and `TeamSettingsPage`'s Activity tab
 (`/team/:teamId/settings/activity`, `scope="team"`). This organism's own rows have no ack/dismiss
 affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives in
-`TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a different,
-non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
+`TaskCard`/`TaskDetailPopover` in `MigrationPage`, a different consumer of the
+same `acknowledged_at`/`acknowledged_by` fields.
 
 **Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
 `AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
@@ -3547,7 +3547,7 @@ organism's missing ack affordance ever getting fixed for the duplicate. See
   populated at once.
 - **No ack affordance in this organism's own rows** — a platform/team admin reading
   Activités here has no one-click way to mark a failed/cancelled row seen; only the
-  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Lower urgency now
+  migration task cards (`TaskCard`/`TaskDetailPopover`) offer that today. Lower urgency now
   that the only two call sites are the dedicated Activity tabs, not a dashboard embed
   seen incidentally.
 
@@ -3563,7 +3563,7 @@ _(none yet)_
 `src/rework/components/shared/molecules/TaskDetailPopover/TaskDetailPopover.tsx`
 **Status:** `Functional`
 
-The personal-tray task surface (`TaskTray`, `MigrationPage`'s active/terminal grids) —
+The migration task surface (`MigrationPage`'s active/terminal grids):
 `TaskCard` renders one row per task with the ack/dismiss affordance referenced above; clicking
 its status indicator opens `TaskDetailPopover`, a floating detail panel showing state,
 progress %, step, elapsed time, and the raw `task.error` on failure.
@@ -4097,11 +4097,9 @@ is absent. Their stage names are translated (for example, `preview` becomes
 "Content extraction"); copied fallback details retain the technical stage keys
 for support. The document reference remains available.
 
-One coupling worth knowing: terminal tasks are never evicted today because
-`taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
-from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts
-applying and both the session "done" mark and any task-sourced failure would
-begin disappearing on that timer. The snapshot-sourced half is unaffected.
+One coupling worth knowing: task-sourced status can remain in Redux for the
+session. A new task for the same document supersedes an earlier outcome; the
+snapshot-sourced half of the rollup remains independent.
 
 `countUniqueDocs` was deleted in the same change: it had lost its last caller in
 #2173 and its DFS is now `collectDescendantDocUids`.

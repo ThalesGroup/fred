@@ -2440,14 +2440,6 @@
         "justNow": "à l'instant",
         "minAgo": "il y a {{count}} min"
       },
-      "tray": {
-        "empty": "Aucune tâche récente",
-        "failed": "{{count}} en échec",
-        "progress": "Progression des tâches",
-        "running": "{{count}} en cours",
-        "title": "Tâches récentes",
-        "trigger": "Tâches"
-      },
       "due": {
         "imminent": "imminent",
         "inMinutes": "dans {{count}} min",
@@ -2927,7 +2919,15 @@
           "message": "Ce prompt est publié sur la marketplace. Vos modifications y seront immédiatement visibles pour tous les utilisateurs.",
           "confirm": "Enregistrer"
         },
-        "titlePersonal": "Vos prompts personnels"
+        "titlePersonal": "Vos prompts personnels",
+        "favorite": {
+          "add": "Ajouter aux favoris",
+          "remove": "Retirer des favoris",
+          "filter": "Favoris",
+          "empty": "Aucun prompt en favori ici. Cliquez sur l'étoile d'un prompt pour le retrouver ici.",
+          "errorSummary": "Impossible de modifier les favoris",
+          "errorDetail": "La modification n'a pas été enregistrée. Réessayez."
+        }
       }
     },
     "userSettings": {

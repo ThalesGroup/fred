@@ -176,9 +176,7 @@ export default function RunCreate({ teamId, evaluationId, evaluationName, onCanc
           })),
         },
       }).unwrap();
-      // Register the launched run into the shared task store so it streams via
-      // useTaskSseManager. (TaskTray is currently unmounted from Sidebar.tsx, see
-      // BACKLOG.md P4 — this store registration is otherwise unaffected.)
+      // Register the launched run in the shared store for task SSE updates.
       if (result.task_id) {
         dispatch(
           taskRegistered({
