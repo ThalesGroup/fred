@@ -33,11 +33,12 @@
   --on-surface-retreat: var(--core-cold-grey-70);
   --on-surface-muted: var(--core-cold-grey-50);
   --surface-main: var(--core-cold-grey-06);
-  --surface-container-highest: var(--core-cold-grey-14);
-  --surface-container-high: var(--core-cold-grey-12);
-  --surface-container: var(--core-cold-grey-10);
-  --surface-container-low: var(--core-cold-grey-08);
-  --surface-container-lowest: var(--core-cold-grey-04);
+  --surface-container-highest: var(--core-cold-grey-18);
+  --surface-container-high: var(--core-cold-grey-15);
+  --surface-container: var(--core-cold-grey-12);
+  --surface-container-low: var(--core-cold-grey-10);
+  --surface-container-lowest: var(--core-cold-grey-08);
+  --surface-floating: var(--core-cold-grey-15);
   --error: var(--core-red-75);
   --on-error: var(--core-red-10);
   --error-container: var(--core-red-20);

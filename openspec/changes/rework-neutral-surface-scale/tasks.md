@@ -4,8 +4,8 @@
 
 ## 2. Semantic tokens
 
-- [ ] 2.1 Set `surface-main` and the five `surface-container-*` tokens in `colors-semantic-light.css` (100 / 99 / 97.5 / 96 / 94.5 / 93) and `colors-semantic-dark.css` (6 / 8 / 10 / 12 / 15 / 18); verify by reading the computed values in the running app in both themes
-- [ ] 2.2 Add `--surface-floating` (light 100, dark 15) to both files; verify it resolves in both themes
+- [x] 2.1 Set `surface-main` and the five `surface-container-*` tokens in `colors-semantic-light.css` (100 / 99 / 97.5 / 96 / 94.5 / 93) and `colors-semantic-dark.css` (6 / 8 / 10 / 12 / 15 / 18); verify by reading the computed values in the running app in both themes
+- [x] 2.2 Add `--surface-floating` (light 100, dark 15) to both files; verify it resolves in both themes
 
 ## 3. Usage remap
 
