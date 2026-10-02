@@ -1467,6 +1467,10 @@ async def remove_team_member(
     """
     rebac = deps.rebac
 
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+
     # AUTHZ-06 (RFC Part 7 §35): a member may hold several roles at once — a
     # full removal must be checked against every one of them, not just a
     # single "primary" role, and the last-admin guard applies whenever
@@ -1474,7 +1478,9 @@ async def remove_team_member(
     async with deps.get_team_metadata_store().advisory_lock(
         _team_member_role_lock_key(team_id, user_id)
     ):
-        target_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
+        target_roles = await _get_user_roles_in_team(
+            rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
+        )
         if UserTeamRelation.TEAM_ADMIN in target_roles:
             await _ensure_team_keeps_at_least_one_admin(
                 rebac=rebac,
@@ -1497,6 +1503,7 @@ async def remove_team_member(
             permissions_to_check,
             deps,
             skip_permission_check=user.uid == user_id,
+            metadata=metadata,
         )
         await _remove_all_team_member_relations(rebac, team_id, user_id)
 
@@ -1632,10 +1639,16 @@ async def revoke_team_member_role(
     """
     rebac = deps.rebac
 
+    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        raise TeamNotFoundError(team_id)
+
     async with deps.get_team_metadata_store().advisory_lock(
         _team_member_role_lock_key(team_id, user_id)
     ):
-        current_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
+        current_roles = await _get_user_roles_in_team(
+            rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
+        )
         if relation not in current_roles:
             raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
         sole_elevated_role = (
@@ -1666,6 +1679,7 @@ async def revoke_team_member_role(
             rebac,
             permissions_to_check,
             deps,
+            metadata=metadata,
         )
         if sole_elevated_role:
             await _add_team_member_relation(
@@ -2194,6 +2208,7 @@ async def _validate_team_and_check_permission(
     deps: TeamServiceDependencies,
     *,
     skip_permission_check: bool = False,
+    metadata: TeamMetadata | None = None,
 ) -> tuple[TeamMetadata, str | None]:
     """
     Load one team's metadata and verify the caller has the requested permissions.
@@ -2206,6 +2221,7 @@ async def _validate_team_and_check_permission(
     - pass the current user, target team id, required permissions, and the
       explicit team-service dependency bundle
     - expect `TeamNotFoundError` on an unknown team id
+    - pass preloaded metadata when a caller holds a database advisory lock
     - pass `skip_permission_check=True` for a same-identity action that needs
       no "administer" permission (AUTHZ-09, RFC Part 9 §43-44 — a
       self-removal from a team): team existence is still verified, only the
@@ -2214,7 +2230,8 @@ async def _validate_team_and_check_permission(
     Example:
     - `metadata, token = await _validate_team_and_check_permission(user, team_id, rebac, permissions, deps)`
     """
-    metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
+    if metadata is None:
+        metadata = await deps.get_team_metadata_store().get_by_team_id(team_id)
     if metadata is None:
         raise TeamNotFoundError(team_id)
 
@@ -2328,6 +2345,8 @@ async def _get_user_roles_in_team(
     rebac: RebacEngine,
     team_id: TeamId,
     user_id: str,
+    *,
+    consistency_token: str | None = None,
 ) -> set[UserTeamRelation]:
     """AUTHZ-06 (RFC Part 7 §35): the full set of roles `user_id` currently
     holds on `team_id` — a member may hold several simultaneously (e.g.
@@ -2350,6 +2369,7 @@ async def _get_user_roles_in_team(
     relations = await rebac.list_direct_relations(
         RebacReference(Resource.TEAM, team_id),
         subject=RebacReference(Resource.USER, user_id),
+        consistency_token=consistency_token,
     )
     return _fold_team_role_relations(relations).get(user_id, set())
 

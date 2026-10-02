@@ -24,7 +24,7 @@ This keeps the frontend's existing one-click toggle and the API's existing reque
 
 ### Serialize demotion with full member removal
 
-Both role revocation and explicit member removal hold the same Postgres advisory lock for the target team and user from the first direct-role read through their relation writes. This prevents a stale demotion from granting `team_member` after a concurrent full removal has deleted the person's roles. It works across control-plane replicas. The lock is scoped to one team member; concurrent revocations of two different administrators still need the separate last-admin concurrency fix.
+Both role revocation and explicit member removal hold the same Postgres advisory lock for the target team and user from the first direct-role read through their relation writes. They force a higher-consistency OpenFGA role read after acquiring the lock, so a waiting revoke cannot see roles that a completed removal has deleted. Team metadata is loaded before acquiring the lock to avoid taking a second database connection inside the critical section. This prevents a stale demotion from granting `team_member` after a concurrent full removal. It works across control-plane replicas. The lock is scoped to one team member; concurrent revocations of two different administrators still need the separate last-admin concurrency fix.
 
 ### Add the baseline before removing the elevated role
 

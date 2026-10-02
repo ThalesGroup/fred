@@ -228,14 +228,24 @@ class _FakeMetadataStore:
     def __init__(self, team_id: str, name: str = "Fredlab") -> None:
         self._metadata = TeamMetadata(id=TeamId(team_id), name=name)
         self._locks: dict[str, asyncio.Lock] = {}
+        self._lock_owners: set[asyncio.Task[Any]] = set()
 
     async def get_by_team_id(self, team_id, session=None):
+        if asyncio.current_task() in self._lock_owners:
+            raise AssertionError("metadata read while holding advisory lock")
         return self._metadata if str(team_id) == str(self._metadata.id) else None
 
     @asynccontextmanager
     async def advisory_lock(self, key: str):
         async with self._locks.setdefault(key, asyncio.Lock()):
-            yield
+            task = asyncio.current_task()
+            if task is not None:
+                self._lock_owners.add(task)
+            try:
+                yield
+            finally:
+                if task is not None:
+                    self._lock_owners.discard(task)
 
 
 def _user() -> KeycloakUser:
@@ -883,6 +893,87 @@ async def test_role_revoke_cannot_restore_member_after_concurrent_removal(
     await revoke
     await removal
     assert rebac.roles["bob"] == set()
+
+
+@pytest.mark.asyncio
+async def test_revocation_after_removal_ignores_stale_openfga_roles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.scheduler.policies.policy_models import (
+        PolicyEvaluationResult,
+        PurgeMode,
+    )
+
+    removed = asyncio.Event()
+    resume_removal = asyncio.Event()
+
+    class StaleReadRebac(_FakeRebac):
+        stale_relations: list[Relation] = []
+
+        async def list_direct_relations(
+            self, resource, *, subject=None, consistency_token=None
+        ) -> list[Relation]:
+            if removed.is_set() and consistency_token is None:
+                return self.stale_relations
+            return await super().list_direct_relations(
+                resource, subject=subject, consistency_token=consistency_token
+            )
+
+        async def delete_relations(self, relations: list[Relation]) -> None:
+            await super().delete_relations(relations)
+            if len(relations) == 5:
+                removed.set()
+                await resume_removal.wait()
+
+    class EmptySessionStore:
+        async def get_for_user(self, _user_id, _team_id, db_session=None):
+            return []
+
+    class EmptyPurgeQueueStore:
+        async def enqueue(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.evaluate_policy_for_request",
+        lambda *_a, **_k: PolicyEvaluationResult(
+            mode=PurgeMode.IMMEDIATE_DELETE,
+            retention="PT0S",
+            retention_seconds=0,
+            cancel_on_rejoin=True,
+            matched_rule_id=None,
+            matched_rule_specificity=0,
+        ),
+    )
+    rebac = StaleReadRebac(roles={"bob": {UserTeamRelation.TEAM_EDITOR}})
+    rebac.stale_relations = await rebac.list_direct_relations(
+        RebacReference(Resource.TEAM, "fredlab"),
+        subject=RebacReference(Resource.USER, "bob"),
+    )
+    deps = _deps(
+        rebac,
+        "fredlab",
+        get_session_store=lambda: EmptySessionStore(),
+        get_purge_queue_store=lambda: EmptyPurgeQueueStore(),
+    )
+
+    removal = asyncio.create_task(
+        remove_team_member(_user(), TeamId("fredlab"), "bob", deps)
+    )
+    await removed.wait()
+    revoke = asyncio.create_task(
+        revoke_team_member_role(
+            _user(), TeamId("fredlab"), "bob", UserTeamRelation.TEAM_EDITOR, deps
+        )
+    )
+    await asyncio.sleep(0)
+    assert not revoke.done()
+
+    resume_removal.set()
+    await removal
+    with pytest.raises(TeamMemberRoleNotHeldError):
+        await revoke
+    assert rebac.roles["bob"] == set()
+    assert rebac.added_relations == []
 
 
 # --------------------------- self-service leave (AUTHZ-09) ---------------

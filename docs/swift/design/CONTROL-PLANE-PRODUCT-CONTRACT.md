@@ -1218,8 +1218,9 @@ RFC):
   Full removal uses `DELETE /teams/{team_id}/members/{user_id}`. The "team must
   keep at least one `team_admin`" guard applies exactly when `team_admin` is
   the role being revoked, by either endpoint. Both endpoints serialize their
-  role reads and writes for the same team member with a Postgres advisory lock,
-  so a concurrent demotion cannot recreate membership after full removal.
+  role reads and writes for the same team member with a Postgres advisory lock
+  and force a higher-consistency direct-role read after acquiring it, so a
+  concurrent demotion cannot recreate membership after full removal.
 
 `AddTeamMemberRequest` (`POST /teams/{team_id}/members`, for a brand-new
 member) and `DELETE /teams/{team_id}/members/{user_id}` (full removal) are
