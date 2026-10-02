@@ -432,3 +432,37 @@ it("accepts floating push panels", () => {
     'data-floating="true"',
   );
 });
+
+it("keeps an overlay above a later responsive modal push drawer", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const overlayClose = vi.fn();
+  const pushClose = vi.fn();
+  vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+  try {
+    act(() =>
+      root.render(
+        <>
+          <InlineDrawer open title="Overlay" onClose={overlayClose} />
+          <InlineDrawer open layout="push" title="Push" onClose={pushClose} />
+        </>,
+      ),
+    );
+    const [overlay, push] = host.querySelectorAll("aside");
+    expect(overlay.dataset.modal).toBe("true");
+    expect(push.dataset.modal).toBe("true");
+    expect(push.inert).toBe(true);
+    expect(overlay.inert).toBe(false);
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(overlayClose).toHaveBeenCalledOnce();
+    expect(pushClose).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  }
+});

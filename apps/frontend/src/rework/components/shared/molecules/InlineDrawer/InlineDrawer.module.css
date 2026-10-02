@@ -26,6 +26,10 @@
   background: var(--scrim);
 }
 
+.backdrop[data-layout="push"] {
+  z-index: 2;
+}
+
 .backdrop[data-open="true"] {
   visibility: visible;
   opacity: 1;
@@ -201,7 +205,7 @@
 @media (max-width: 720px) {
   .drawer[data-layout="push"] {
     position: fixed;
-    z-index: 10;
+    z-index: 3;
     inset: 0;
     border-left: none;
   }
@@ -210,11 +214,14 @@
     width: 100%;
   }
 
-  .drawer[data-layout="push"] .panel {
-    top: 0;
-    bottom: 0;
+  .drawer[data-layout="push"] .panel,
+  .drawer[data-floating="true"][data-layout="push"] .panel {
+    inset: 0;
+    box-shadow: none;
+    border: none;
     /* Full-screen panel: no left divider, edge to edge. */
     border-left: none;
+    border-radius: 0;
     width: 100%;
   }
 

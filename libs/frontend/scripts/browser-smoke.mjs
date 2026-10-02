@@ -1233,6 +1233,24 @@ async function verifyHostedComponents(page) {
   const mobileDrawer = hosted.getByRole("dialog", { name: "Hosted drawer" });
   await mobileDrawer.waitFor({ state: "visible" });
   assert.equal(await mobileDrawer.getAttribute("aria-modal"), "true");
+  await mobileDrawer.evaluate(async (el) => {
+    await Promise.all(
+      el.getAnimations().map((animation) => animation.finished),
+    );
+  });
+  // Exercise the floating variant's CSS at the responsive modal breakpoint.
+  const floatingBounds = await mobileDrawer.evaluate((el) => {
+    el.setAttribute("data-floating", "true");
+    const panel = el.querySelector("[class*=panel]").getBoundingClientRect();
+    return { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
+  });
+  assert.ok(Math.abs(floatingBounds.x) < 2 && Math.abs(floatingBounds.y) < 2);
+  assert.ok(
+    Math.abs(floatingBounds.width - 375) < 2,
+    JSON.stringify(floatingBounds),
+  );
+  assert.ok(Math.abs(floatingBounds.height - 812) < 2);
+  await mobileDrawer.evaluate((el) => el.removeAttribute("data-floating"));
   const mobileField = mobileDrawer.getByRole("button", {
     name: "Open nested dialog",
   });

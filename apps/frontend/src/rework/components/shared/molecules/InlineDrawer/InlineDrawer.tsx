@@ -24,7 +24,7 @@ function topDrawer(document: Document): HTMLElement | undefined {
   return [...openDrawers]
     .filter((node) => node.ownerDocument === document && node.isConnected)
     .sort((a, b) => {
-      const layer = (node: HTMLElement) => (node.dataset.modal === "true" ? 1 : 0);
+      const layer = (node: HTMLElement) => (node.dataset.layout === "overlay" ? 1 : 0);
       return layer(a) - layer(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     })
     .pop();
@@ -371,6 +371,7 @@ export function InlineDrawer({
         <div
           ref={backdropRef}
           className={styles.backdrop}
+          data-layout={layout}
           data-open={open}
           aria-hidden="true"
           inert={!open}
