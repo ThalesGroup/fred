@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // Licensed under the Apache License, Version 2.0.
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Breadcrumb,
   DataTable,
@@ -413,6 +414,14 @@ export function HostedComponents() {
         onClose={() => setOverlay(false)}
       >
         <span>Overlay content</span>
+        {overlay &&
+          createPortal(
+            <div>
+              <button type="button">Portal first</button>
+              <button type="button">Portal last</button>
+            </div>,
+            document.querySelector(".fred-ui")!,
+          )}
         <details>
           <summary>Editor details</summary>
           <span>Details</span>

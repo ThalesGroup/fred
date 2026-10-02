@@ -74,6 +74,15 @@ export function usePaneResize({
   dragging: boolean;
   handleProps: PaneResizeHandleProps;
 } {
+  if (
+    ![initialWidth, minWidth, maxWidth].every((value) => Number.isFinite(value) && value > 0) ||
+    minWidth > maxWidth
+  ) {
+    throw new Error("usePaneResize: widths must be finite positive numbers with minWidth <= maxWidth.");
+  }
+  if (!Number.isFinite(maxViewportFraction) || maxViewportFraction <= 0 || maxViewportFraction > 1) {
+    throw new Error("usePaneResize: maxViewportFraction must be in (0, 1].");
+  }
   const [storedWidth, setWidth] = useLocalStorageState(storageKey, initialWidth);
   const width = typeof storedWidth === "number" && Number.isFinite(storedWidth) ? storedWidth : initialWidth;
   const [dragging, setDragging] = useState(false);

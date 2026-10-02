@@ -1233,6 +1233,20 @@ async function verifyHostedComponents(page) {
   const mobileDrawer = hosted.getByRole("dialog", { name: "Hosted drawer" });
   await mobileDrawer.waitFor({ state: "visible" });
   assert.equal(await mobileDrawer.getAttribute("aria-modal"), "true");
+  const mobileField = mobileDrawer.getByRole("button", {
+    name: "Open nested dialog",
+  });
+  await mobileField.focus();
+  await page.setViewportSize(desktopViewport);
+  await drawer.waitFor({ state: "visible" });
+  assert.equal(
+    await drawer
+      .getByRole("button", { name: "Open nested dialog" })
+      .evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.setViewportSize({ width: 375, height: 812 });
+  await mobileDrawer.waitFor({ state: "visible" });
   await page.keyboard.press("Escape");
   await mobileDrawer.waitFor({ state: "hidden" });
   await page.setViewportSize(desktopViewport);
@@ -1287,6 +1301,25 @@ async function verifyHostedComponents(page) {
   await overlayDialog.waitFor({ state: "hidden" });
   assert.equal(
     await overlayDialogTrigger.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  const portalFirst = page.getByRole("button", {
+    name: "Portal first",
+    exact: true,
+  });
+  const portalLast = page.getByRole("button", {
+    name: "Portal last",
+    exact: true,
+  });
+  await portalFirst.focus();
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await portalLast.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await overlayClose.evaluate((el) => el === document.activeElement),
     true,
   );
   const previousViewport = page.viewportSize();

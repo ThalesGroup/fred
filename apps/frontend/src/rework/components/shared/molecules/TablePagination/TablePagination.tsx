@@ -75,6 +75,9 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
+  if (!Number.isSafeInteger(totalItems) || totalItems < 0) {
+    throw new Error("TablePagination: totalItems must be a nonnegative safe integer.");
+  }
   if (!Number.isSafeInteger(pageCount) || pageCount < 0) {
     throw new Error("TablePagination: pageCount must be a nonnegative safe integer.");
   }

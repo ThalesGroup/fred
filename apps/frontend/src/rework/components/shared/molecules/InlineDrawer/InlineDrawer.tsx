@@ -175,6 +175,8 @@ export function InlineDrawer({
   }, []);
   const modal = layout === "overlay" || mobile;
   const drawerRef = useRef<HTMLElement | null>(null);
+  const ownedKeyEvents = useRef(new WeakSet<Event>());
+  const hadModal = useRef(false);
   const ownedFocusEvents = useRef(new WeakSet<Event>());
   const lastOwnedFocus = useRef<HTMLElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
@@ -259,16 +261,35 @@ export function InlineDrawer({
   }, [open, modal]);
 
   useLayoutEffect(() => {
+    if (!open) return;
+    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    hadModal.current = false;
+    return () => {
+      const restore = hadModal.current;
+      queueMicrotask(() => {
+        if (restore && origin?.isConnected && !origin.closest("[inert]")) origin.focus();
+      });
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
     if (!open || !modal) return;
+    hadModal.current = true;
     const drawer = drawerRef.current!;
     const doc = drawer.ownerDocument;
-    const origin = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
+    let tabDirection: "forward" | "backward" | undefined;
     const focusable = () =>
       [...drawer.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => isVisibleFocusable(node, drawer));
     const focusInside = () => (focusable()[0] ?? drawer).focus();
     const onFocus = (event: FocusEvent) => {
       if (topDrawer(doc) !== drawer || ownedFocusEvents.current.has(event) || drawer.contains(event.target as Node))
         return;
+      if (tabDirection) {
+        const nodes = focusable();
+        (tabDirection === "backward" ? (nodes[nodes.length - 1] ?? drawer) : (nodes[0] ?? drawer)).focus();
+        tabDirection = undefined;
+        return;
+      }
       const last = lastOwnedFocus.current;
       if (last?.isConnected && isVisibleFocusable(last, drawer)) last.focus();
       else focusInside();
@@ -278,9 +299,23 @@ export function InlineDrawer({
         event.key !== "Tab" ||
         event.defaultPrevented ||
         topDrawer(doc) !== drawer ||
-        !drawer.contains(event.target as Node)
+        (!drawer.contains(event.target as Node) && !ownedKeyEvents.current.has(event))
       )
         return;
+      tabDirection = event.shiftKey ? "backward" : "forward";
+      if (!drawer.contains(event.target as Node)) {
+        const documentNodes = [...doc.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) =>
+          isVisibleFocusable(node, doc.documentElement),
+        );
+        const index = documentNodes.indexOf(event.target as HTMLElement);
+        if (index < 0 || (event.shiftKey ? index === 0 : index === documentNodes.length - 1)) {
+          event.preventDefault();
+          const inside = focusable();
+          (event.shiftKey ? (inside[inside.length - 1] ?? drawer) : (inside[0] ?? drawer)).focus();
+          tabDirection = undefined;
+        }
+        return;
+      }
       const nodes = focusable();
       const first = nodes[0];
       const last = nodes[nodes.length - 1];
@@ -293,6 +328,11 @@ export function InlineDrawer({
         (event.shiftKey ? (last ?? drawer) : (first ?? drawer)).focus();
       }
     };
+    const clearTab = () => {
+      tabDirection = undefined;
+    };
+    doc.defaultView!.addEventListener("keyup", clearTab);
+    doc.defaultView!.addEventListener("pointerdown", clearTab);
     doc.defaultView!.addEventListener("focusin", onFocus);
     doc.defaultView!.addEventListener("keydown", onTab);
     const focusOnOpen = () => {
@@ -313,13 +353,11 @@ export function InlineDrawer({
     return () => {
       drawer.removeEventListener("transitionend", onTransitionEnd);
       doc.defaultView!.cancelAnimationFrame(focusFrame);
+      doc.defaultView!.removeEventListener("keyup", clearTab);
+      doc.defaultView!.removeEventListener("pointerdown", clearTab);
       doc.defaultView!.removeEventListener("focusin", onFocus);
       doc.defaultView!.removeEventListener("keydown", onTab);
       lastOwnedFocus.current = null;
-      // Registration cleanup restores underlying drawers before focus returns.
-      queueMicrotask(() => {
-        if (origin?.isConnected && !origin.closest("[inert]")) origin.focus();
-      });
     };
   }, [open, modal]);
 
@@ -338,6 +376,7 @@ export function InlineDrawer({
       <aside
         ref={drawerRef}
         tabIndex={-1}
+        onKeyDownCapture={(event) => ownedKeyEvents.current.add(event.nativeEvent)}
         onFocusCapture={(event) => {
           ownedFocusEvents.current.add(event.nativeEvent);
           lastOwnedFocus.current = event.target as HTMLElement;

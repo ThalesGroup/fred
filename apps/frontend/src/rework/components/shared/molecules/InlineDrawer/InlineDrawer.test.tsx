@@ -407,3 +407,17 @@ it.each(["{}", "[]", "null", '"500"', "true", "1e999"])("ignores malformed persi
   expect(host.querySelector('[role="separator"]')?.getAttribute("aria-valuenow")).toBe("480");
   localStorage.removeItem("localHook:inline-drawer:width-test:width");
 });
+
+it.each([
+  { minWidth: NaN },
+  { maxWidth: Infinity },
+  { minWidth: -1 },
+  { minWidth: 600, maxWidth: 300 },
+  { maxViewportFraction: -1 },
+  { maxViewportFraction: 0 },
+  { maxViewportFraction: 1.1 },
+])("rejects invalid resize bounds %s", (bounds) => {
+  expect(() =>
+    renderToStaticMarkup(<InlineDrawer {...props} resizable={{ persistKey: "invalid", ...bounds }} />),
+  ).toThrow("usePaneResize:");
+});

@@ -198,3 +198,10 @@ it("accepts an atomic page-count shrink with a corrected index", () => {
   act(() => root.render(<TablePagination {...baseProps} pageCount={2} currentPage={1} />));
   expect(container.textContent).toContain("Page 2 of 2");
 });
+
+it.each([-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])("rejects invalid totalItems %s", (totalItems) => {
+  render(<TablePagination {...baseProps} />);
+  expect(() => renderToStaticMarkup(<TablePagination {...baseProps} totalItems={totalItems} />)).toThrow(
+    "totalItems must be a nonnegative safe integer",
+  );
+});
