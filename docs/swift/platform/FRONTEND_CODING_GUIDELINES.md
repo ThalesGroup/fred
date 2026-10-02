@@ -200,36 +200,41 @@ Verify that a token exists before using it. The authoritative token files are:
 
 ### Surface tokens
 
-One rule in both themes: each `surface-container-*` level sits further from
-`surface-main` than the one below it (darker in light, lighter in dark), so a
-component keeps its rank when the theme switches. `surface-floating` is the
-single exception, for everything that floats above the page. Tones (CIE L\*)
-of the neutral ramp:
+`--surface-main` is the background of a surface that shows main content (the
+page, a reading pane): it carries the strongest text contrast. In light it sits
+just under `surface-container-highest` and the lower container levels get
+darker; in dark each `surface-container-*` level sits further from
+`surface-main` (lighter). `surface-floating` is for everything that floats
+above the page. Tones (CIE L\*) of the neutral ramp:
 
 | Token                         | Light | Dark |
 | ----------------------------- | ----- | ---- |
-| `--surface-main`              | 100   | 6    |
-| `--surface-container-lowest`  | 99    | 8    |
-| `--surface-container-low`     | 97.5  | 10   |
+| `--surface-container-highest` | 100   | 18   |
+| `--surface-main`              | 99.5  | 6    |
+| `--surface-container-high`    | 97.5  | 15   |
 | `--surface-container`         | 96    | 12   |
-| `--surface-container-high`    | 94.5  | 15   |
-| `--surface-container-highest` | 93    | 18   |
+| `--surface-container-low`     | 94.5  | 10   |
+| `--surface-container-lowest`  | 93    | 8    |
 | `--surface-floating`          | 100   | 20   |
 
-Pick the token by the element's role, not by how it looks in one theme:
+Design a page with `--surface-main` and `--surface-container` first; reach for
+the other levels only when those two are not enough. Pick the token by the
+element's role, not by how it looks in one theme:
 
-| Role                                                        | Token                                      |
-| ----------------------------------------------------------- | ------------------------------------------ |
-| Page background                                             | `--surface-main`                           |
-| Form fields (bordered), bordered content sheet, nav rail    | `--surface-container-lowest`               |
-| Sidebar, chips, zebra rows                                  | `--surface-container-low`                  |
-| Cards, inset wells (code, raw output, tables)               | `--surface-container`                      |
-| List rows, hover                                            | `--surface-container-high`                 |
-| Tracks, badges, focus of raised search bars                 | `--surface-container-highest`              |
-| Menus, popovers, tooltips, dialogs, toasts, floating panels | `--surface-floating` (with a `--shadow-*`) |
+| Role                                                                      | Token                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------ |
+| Background of a surface showing main content (page, reading pane)         | `--surface-main`                           |
+| Bordered content sheet                                                    | `--surface-container-lowest`               |
+| Form fields (bordered), chips, zebra rows                                 | `--surface-container-low`                  |
+| Tiles and cards (small components) on `--surface-main`, `-low`, `-lowest` | `--surface-container`                      |
+| Inset wells (code, raw output, tables), nav rail                          | `--surface-container`                      |
+| List rows, hover, chat side panels (push, floating card)                  | `--surface-container-high`                 |
+| Tracks, badges, focus of raised search bars                               | `--surface-container-highest`              |
+| Menus, popovers, tooltips, dialogs, toasts, overlay drawers               | `--surface-floating` (with a `--shadow-*`) |
 
-Every container level reads darker than `--surface-floating` in both themes, so
-any of them can be nested in a floating element.
+In dark every container level reads darker than `--surface-floating`, so any of
+them can be nested in a floating element; in light `--surface-container-highest`
+matches it.
 
 Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
 in `libs/frontend/design-tokens/README.md` (Token migrations).
@@ -243,7 +248,7 @@ in `libs/frontend/design-tokens/README.md` (Token migrations).
 | `--on-surface-muted`   | Meta text, placeholders (AA on the page)       | 45    | 60   |
 | `--outline`            | Form control hover, focus outlines (3:1)       | 50    | 60   |
 | `--outline-variant`    | Form control borders, scrollbar thumb          | 80    | 40   |
-| `--outline-muted`      | Default borders and dividers                   | 88    | 30   |
+| `--outline-muted`      | Default borders and dividers                   | 88    | 25   |
 
 Borders and dividers use an `--outline-*` token, never a surface token.
 

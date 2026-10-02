@@ -145,7 +145,7 @@
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
-  background: var(--drawer-background, var(--surface-floating));
+  background: var(--drawer-background, var(--surface-container-high));
   width: calc(var(--drawer-width) - var(--spacing-s) - var(--spacing-xs));
   overflow: hidden;
 }

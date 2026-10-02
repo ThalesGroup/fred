@@ -20,7 +20,7 @@ The neutral text tokens SHALL resolve to these tones of the neutral ramp, and `o
 
 ### Requirement: Three outline levels
 
-The frontend SHALL define exactly three outline tokens, ordered from strongest to faintest: `outline` (light 50, dark 60), `outline-variant` (light 80, dark 40) and `outline-muted` (light 88, dark 30). Borders and dividers SHALL use an outline token, not a surface token.
+The frontend SHALL define exactly three outline tokens, ordered from strongest to faintest: `outline` (light 50, dark 60), `outline-variant` (light 80, dark 40) and `outline-muted` (light 88, dark 25). Borders and dividers SHALL use an outline token, not a surface token.
 
 #### Scenario: No fourth outline token
 - **WHEN** the semantic token files are read

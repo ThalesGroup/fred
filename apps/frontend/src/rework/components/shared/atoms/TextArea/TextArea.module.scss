@@ -25,8 +25,8 @@
     --input-border: var(--outline-variant);
     outline: 2px solid var(--input-outline);
     border: 1px solid var(--input-border);
-    border-radius: var(--spacing-xs);
-    background-color: var(--surface-container-lowest);
+    border-radius: var(--radius-s);
+    background-color: var(--surface-container-low);
     padding: var(--spacing-xs) var(--spacing-s);
     height: 100%;
     resize: none;

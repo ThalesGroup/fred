@@ -31,13 +31,13 @@
   --on-tertiary-container: var(--core-light-blue-10);
   --on-surface: var(--core-cold-grey-10);
   --on-surface-retreat: var(--core-cold-grey-40);
-  --surface-main: var(--core-cold-grey-100);
+  --surface-main: var(--core-cold-grey-99-5);
   --on-surface-muted: var(--core-cold-grey-45);
-  --surface-container-highest: var(--core-cold-grey-93);
-  --surface-container-high: var(--core-cold-grey-94-5);
+  --surface-container-highest: var(--core-cold-grey-100);
+  --surface-container-high: var(--core-cold-grey-97-5);
   --surface-container: var(--core-cold-grey-96);
-  --surface-container-low: var(--core-cold-grey-97-5);
-  --surface-container-lowest: var(--core-cold-grey-99);
+  --surface-container-low: var(--core-cold-grey-94-5);
+  --surface-container-lowest: var(--core-cold-grey-93);
   --surface-floating: var(--core-cold-grey-100);
   --error: var(--core-red-40);
   --on-error: var(--core-red-99);

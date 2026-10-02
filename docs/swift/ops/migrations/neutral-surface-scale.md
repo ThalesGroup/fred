@@ -29,9 +29,9 @@ some tokens were removed (for example `--outline-retreat`).
 
 ## Validation
 
-Open the application in the light theme: the page background is white, menus
-and dialogs are white with a shadow, input fields are white with a grey border, and
-secondary text is a mid grey rather than near black.
+Open the application in the light theme: the page background is near white,
+menus and dialogs are white with a shadow, input fields are light grey with a grey
+border, and secondary text is a mid grey rather than near black.
 
 ## Rollback
 

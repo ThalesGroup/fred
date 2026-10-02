@@ -26,7 +26,7 @@
   // its value; the value then truncates (see .value).
   min-width: 0;
   --border-color: var(--outline-variant);
-  --bg-color: var(--surface-container-lowest);
+  --bg-color: var(--surface-container-low);
   display: flex;
   position: relative;
   flex-direction: column;
@@ -57,7 +57,7 @@
   box-sizing: border-box;
   outline: 2px solid var(--select-outline);
   border: 1px solid var(--border-color);
-  border-radius: var(--spacing-xs);
+  border-radius: var(--radius-s);
   background-color: var(--bg-color);
   padding: 0 8px 0 12px;
   min-width: 0;

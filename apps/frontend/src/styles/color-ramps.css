@@ -117,6 +117,7 @@
   --core-cold-grey-20: #2f3032;
   --core-cold-grey-21: #323335;
   --core-cold-grey-22: #343537;
+  --core-cold-grey-25: #3a3b3d;
   --core-cold-grey-30: #464749;
   --core-cold-grey-40: #5d5e60;
   --core-cold-grey-45: #6a6b6d;
@@ -139,5 +140,6 @@
   --core-cold-grey-97-5: #f7f8fb;
   --core-cold-grey-98: #f8f9fc;
   --core-cold-grey-99: #fbfcff;
+  --core-cold-grey-99-5: #fcfdff;
   --core-cold-grey-100: #ffffff;
 }

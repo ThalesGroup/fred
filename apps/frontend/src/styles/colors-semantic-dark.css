@@ -61,7 +61,7 @@
   --folder: var(--core-mustard-80);
   --outline: var(--core-cold-grey-60);
   --outline-variant: var(--core-cold-grey-40);
-  --outline-muted: var(--core-cold-grey-30);
+  --outline-muted: var(--core-cold-grey-25);
   --scrim: rgba(0, 0, 0, 0.64);
   --surface-picture: var(--core-cold-grey-100);
 }

@@ -47,7 +47,7 @@ on these tokens. Newest change first.
 
 **Changed values, no action needed:** `--on-surface-retreat` light 30 → 40,
 dark 70 → 75; `--on-surface-muted` light 40 → 45, dark 50 → 60;
-`--outline-variant` light 70 → 80; `--outline-muted` light 80 → 88, dark 20 → 30.
+`--outline-variant` light 70 → 80; `--outline-muted` light 80 → 88, dark 20 → 25.
 New ramp step `--core-cold-grey-45`.
 
 Also replace any surface token used as a border color (for example a table
