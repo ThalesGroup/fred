@@ -594,7 +594,6 @@ def test_startup_diagnostics_wait_for_selected_output(
     from fred_pod.common import config_files
     from fred_pod.common.config_files import ConfigFiles
 
-    # Simulate a fresh process: logging is not configured and its buffer is empty.
     monkeypatch.setattr(config_files, "_logging_ready", False)
     monkeypatch.setattr(config_files, "_startup_events", deque(maxlen=32))
     files = ConfigFiles(logger=logging.getLogger("config-test"))
@@ -613,7 +612,6 @@ def test_startup_diagnostics_wait_for_selected_output(
         include_uvicorn=False,
     )
     output = capsys.readouterr().out
-    # Setup flushes buffered events through the selected output and the store.
     assert "private-value" not in output
     assert store.indexed[-1].extra == {
         "env_file": str(env_file),
@@ -630,7 +628,6 @@ def test_startup_diagnostics_wait_for_selected_output(
         assert f"env_file={env_file}" in output
         assert f"config_file={config_file}" in output
 
-    # Once setup is complete, later configuration events must emit immediately.
     lazy_config_file = str(tmp_path / "lazy-configuration.yaml")
     files.mark_config_loaded(lazy_config_file)
     output = capsys.readouterr().out
