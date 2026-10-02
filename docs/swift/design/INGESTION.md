@@ -232,8 +232,8 @@ Temporal orchestration errors to expose the cause. Exhausted activity attempts
 are named only when Temporal reports them. Resource error details include a
 copyable document reference; task details include the task reference as well.
 Resources reads terminal history after reload, including explicit failed/succeeded
-queries for personal space. The global task tray still restores only active tasks;
-restoring its historical failures and retrying its initial fetch remain separate.
+queries for personal space. The import panel rehydrates non-terminal user tasks;
+completed tasks remain available through Resources history.
 
 **User cancellation is deferred.** The document menu has no Stop ingestion action;
 the task cancellation endpoint rejects ingestion tasks with HTTP 409 after the

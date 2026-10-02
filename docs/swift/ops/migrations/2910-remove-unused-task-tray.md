@@ -1,0 +1,34 @@
+---
+schema: 1
+title: "Remove unused task tray and retired frontend flags"
+impact: minor
+configuration: production
+configuration_reason: "The control-plane and worker Helm configuration schemas now accept only supported frontend flags. Bundled values now list the supported default-off flags and meet the stricter generated schema."
+---
+## Applicability
+
+Existing Fred deployments upgrading to this release.
+
+## Prerequisites
+
+Review private control-plane backend and worker values overlays for `platform.frontend.feature_flags` before installing the new chart.
+
+## Configuration
+
+Keep only `enableApplications`, `enableAllResourceSpaces`, and `enableInformationSystems` under `platform.frontend.feature_flags`. Remove any other keys from both application overlays. The bundled Helm values already contain the supported default-off flags.
+
+## Upgrade
+
+Apply the overlay cleanup, validate the values against the new chart schema, then deploy the paired Fred chart and code normally. There is no data migration or special restart order.
+
+## Validation
+
+Confirm chart values validation passes. Check that `/control-plane/v1/frontend/bootstrap` exposes the three supported flags and that the admin Tasks and migration task pages still show task rows, statuses, and acknowledgements.
+
+## Rollback
+
+Restore the previous paired chart and code using the normal rollback procedure. Pruned overlay keys do not need to be restored.
+
+## Limitations
+
+Any private overlay that still sets an unsupported frontend flag fails strict chart validation until the key is removed.

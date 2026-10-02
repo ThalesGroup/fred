@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Platform admin activity view. It renders the one shared `TaskActivity` surface
-// at platform scope — the exact same component a team admin sees at team scope
-// (OPS-04 §3.4). The client's own in-flight tasks live in the floating task tray,
-// not here, so both admin levels get an identical, scope-only-different view.
+// Platform and team admins share `TaskActivity` with different scopes.
+// Personal document imports are shown in the resources import panel.
 
 import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import styles from "./TasksPage.module.css";

@@ -318,9 +318,8 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
   it("clears a failure once the same document is re-ingested successfully", async () => {
     // A document uid is derived from content, so re-uploading a file that
     // failed produces a SECOND task for the same uid. Nothing removes the old
-    // one from the store (taskEvicted is only dispatched by the unmounted
-    // TaskTray), so only the latest terminal task may count — otherwise the
-    // folder stays flagged for the rest of the session with no way to clear it.
+    // one from the store, so only the latest terminal task may count;
+    // otherwise the folder stays flagged after the re-ingestion succeeds.
     tasks = [
       { ...task("t-broken", "doc-broken", "failed", "Broken report.pdf"), terminalAt: 1000 },
       { ...task("t-retry", "doc-broken", "succeeded", "Broken report.pdf"), terminalAt: 2000 },

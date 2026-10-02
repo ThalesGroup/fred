@@ -52,8 +52,8 @@ async function errorDetail(response: Response): Promise<string> {
  *
  * Every file gets exactly one outcome callback, fired the moment its own line
  * appears in the stream (not after the whole batch finishes): `onTaskDiscovered`
- * (it got a task_id — the tray/Activity owns any later failure for that task
- * from here on), `onFileFailed` (it failed before ever getting one),
+ * (it got a task_id; its task stream owns later failures),
+ * `onFileFailed` (it failed before ever getting one),
  * `onFileConflicted` (the folder gained a document of that name while the
  * import was under way, so the file still needs the user's overwrite-or-keep
  * answer — an outcome, not a failure), or `onFileResolved` (its terminal
@@ -102,8 +102,8 @@ export async function streamUploadOrProcessDocument(
   const tasks: ScheduledTask[] = [];
   const seenTaskIds = new Set<string>();
   // Filenames that got a task_id at some point — any later failure for one of
-  // these is that task's own failure to report, via the tray/Activity, forever
-  // exempt from onFileFailed regardless of event order.
+  // these belongs to the task SSE feed and must not trigger onFileFailed
+  // regardless of event order.
   const taskFilenames = new Set<string>();
   // Last known failed/not per filename that never got a task_id — used only for
   // the final "did anything in the batch actually succeed" decision below, since
