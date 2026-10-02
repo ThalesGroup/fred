@@ -23,7 +23,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_plane_backend.models.prompt_models import PromptRow
+from control_plane_backend.models.prompt_models import PromptFavoriteRow, PromptRow
 
 
 def _utcnow() -> datetime:
@@ -468,6 +468,13 @@ class PromptStore:
                     PromptRow.team_id == str(team_id),
                 )
             )
+            # The foreign key cascades on Postgres; SQLite enforces none.
+            if result.rowcount > 0:
+                await s.execute(
+                    delete(PromptFavoriteRow).where(
+                        PromptFavoriteRow.prompt_id == prompt_id
+                    )
+                )
         return result.rowcount > 0
 
     async def set_published(
@@ -682,3 +689,74 @@ class PromptStore:
         ]
         results.sort(key=lambda r: (-r.session_count, r.name))
         return results
+
+    async def set_favorite(
+        self,
+        user_id: str,
+        prompt_id: str,
+        favorite: bool,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Mark or unmark one prompt as a favorite of `user_id`; idempotent."""
+
+        try:
+            async with use_session(self._sessions, session) as s:
+                exists = await s.get(PromptFavoriteRow, (user_id, prompt_id))
+                if favorite and exists is None:
+                    s.add(PromptFavoriteRow(user_id=user_id, prompt_id=prompt_id))
+                elif not favorite and exists is not None:
+                    await s.delete(exists)
+        except IntegrityError:
+            # A concurrent request inserted the same favorite first.
+            if not favorite:
+                raise
+
+    async def favorite_ids(
+        self,
+        user_id: str,
+        prompt_ids: list[str],
+        session: AsyncSession | None = None,
+    ) -> set[str]:
+        """Which of `prompt_ids` `user_id` marked as favorites, in one query."""
+
+        if not prompt_ids:
+            return set()
+        async with use_session(self._sessions, session) as s:
+            rows = await s.execute(
+                select(PromptFavoriteRow.prompt_id).where(
+                    PromptFavoriteRow.user_id == user_id,
+                    PromptFavoriteRow.prompt_id.in_(prompt_ids),
+                )
+            )
+        return set(rows.scalars().all())
+
+    async def delete_favorites_for_team(
+        self,
+        user_id: str,
+        team_id: TeamId,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Drop `user_id`'s favorites on `team_id`'s prompts (leaving the team)."""
+
+        team_prompts = select(PromptRow.prompt_id).where(
+            PromptRow.team_id == str(team_id)
+        )
+        async with use_session(self._sessions, session) as s:
+            await s.execute(
+                delete(PromptFavoriteRow).where(
+                    PromptFavoriteRow.user_id == user_id,
+                    PromptFavoriteRow.prompt_id.in_(team_prompts),
+                )
+            )
+
+    async def delete_favorites_for_user(
+        self,
+        user_id: str,
+        session: AsyncSession | None = None,
+    ) -> None:
+        """Drop every favorite of `user_id` (account deletion)."""
+
+        async with use_session(self._sessions, session) as s:
+            await s.execute(
+                delete(PromptFavoriteRow).where(PromptFavoriteRow.user_id == user_id)
+            )

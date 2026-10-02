@@ -1,3 +1,14 @@
+**v3.1.1** - 2026-10-02
+
+- **Summary**
+
+  You can answer several agent questions together and see your tool approval decisions in the conversation. Paused exchanges resume more reliably.
+
+- **Bug Fixes**
+
+  - Answer several agent questions together, including a custom answer, without losing progress (#2899)
+  - Tool approval decisions appear immediately in chat and remain visible after reload (#2916)
+
 **v3.1.0** - 2026-10-01
 
 - **Summary**

@@ -84,7 +84,7 @@ async def test_test_assistant_questions_use_real_tool_and_resume(
     assert pause.request.stage == "agent_question"
     assert pause.request.occurrence_id == calls[0].call_id
     assert len(pause.request.choices) == expected_choice_count
-    assert pause.request.free_text is (scenario in {"hitl text", "hitl comment"})
+    assert pause.request.free_text is True
     assert not any(isinstance(event, ToolResultRuntimeEvent) for event in pending)
 
     resumed = [

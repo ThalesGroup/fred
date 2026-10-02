@@ -51,6 +51,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.messages.tool import ToolMessage
 from langgraph.types import Command
 
+from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.support.thinking import content_to_text
 
 
@@ -280,6 +281,9 @@ def graph_input_from_react_input(
     """
 
     if config.resume_payload is not None:
+        batch = parse_batched_human_answers(config.resume_payload)
+        if batch is not None:
+            return Command(resume={item.interrupt_id: item.answer for item in batch})
         if not config.interrupt_id:
             raise RuntimeError(
                 "ReAct V2 resume requires config.interrupt_id (LangGraph's "

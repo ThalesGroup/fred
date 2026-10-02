@@ -575,6 +575,16 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/favorite
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/favorite
+    review_status: pending_review
+    required_permission: pending_review
+  - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/prompts/{prompt_id}/promote
     review_status: pending_review

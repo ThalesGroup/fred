@@ -6,13 +6,19 @@ Lets an interactive ReAct or Deep agent ask its user a question during a turn, r
 
 ### Requirement: An interactive agent can ask one question through a platform tool
 
-The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, zero to four single-choice options, and whether free text is allowed. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
+The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep agent, and to Graph steps that invoke it explicitly, when the conversation enables agent questions. The tool SHALL accept a question, an optional short subject title, and zero to four single-choice options. An agent question with two or more choices SHALL also allow free text, regardless of the agent's `allow_free_text` argument; other question forms SHALL follow that argument. The agent SHALL select the most relevant options before calling; the runtime SHALL reject more than four rather than truncate them. A question SHALL allow at least one answer form. Its prompt SHALL use the existing human-input contract and carry the raising tool call's occurrence identity.
 
 #### Scenario: Single choice
 
 - **GIVEN** an interactive agent with agent questions enabled
-- **WHEN** it asks a question with three options and no free text
-- **THEN** the person can select exactly one of those options and the same turn resumes
+- **WHEN** it asks a question with one option and no free text
+- **THEN** the person can select that option and the same turn resumes
+
+#### Scenario: Multiple choices and free text
+
+- **GIVEN** an interactive agent with agent questions enabled
+- **WHEN** it asks a question with two to four options and sets `allow_free_text` to false
+- **THEN** the person can select exactly one offered option or submit nonempty text without an option identifier, and the same turn resumes
 
 #### Scenario: Free text
 
@@ -29,7 +35,32 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 #### Scenario: Choices in managed chat
 
 - **WHEN** an agent asks a question with multiple choices
-- **THEN** managed chat displays them in their given order, one per centered row
+- **THEN** managed chat displays them in their given order, one per centered row, followed by a matching text-input row with a fixed gray label "Other" in English or "Autre" in French to the left of the editable area
+- **AND** the text-input row submits a text answer without fabricating an option identifier
+
+#### Scenario: Compact active question card
+
+- **WHEN** managed chat displays an active agent question
+- **THEN** the card uses compact width, spacing, and typography, while keeping choice descriptions, free-text input, and actions readable
+
+#### Scenario: Simultaneous questions in one card
+
+- **GIVEN** several `ask_user` calls in one exchange are awaiting answers
+- **WHEN** managed chat receives their pauses or reloads their history
+- **THEN** it displays one HITL card with a tab for each unanswered question in call order, selecting the first by default
+- **AND** each tab displays a short subject title, or a localized numbered fallback when no title exists; overflowing titles scroll horizontally with the mouse wheel or trackpad without dragging the scrollbar, while vertical page scrolling remains available at the ends
+- **AND** selecting a choice records a draft answer and advances to the next question without resuming the agent
+- **AND** nonblank free text counts as a draft answer while the person types, without requiring Next or changing the active tab; clearing it removes that draft unless a choice remains selected
+- **AND** the person can revisit a tab, change its choice or text answer, and skip an individual question
+- **AND** closing the grouped card submits a skip for every pending question, including tabs with drafted answers, in one batch
+- **AND** once every tab has a draft answer or skip, one Send action submits all answers together to their own calls
+- **AND** the card stays open until the batch is accepted, then removes the submitted tabs even while the resumed stream continues; later questions in that exchange appear without the submitted tabs
+- **AND** failed submission preserves editable answers
+
+#### Scenario: Question Markdown in managed chat
+
+- **WHEN** an agent question contains Markdown emphasis
+- **THEN** managed chat renders the formatted text in the question card instead of showing Markdown markers
 
 #### Scenario: Too many options
 
@@ -47,6 +78,15 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** the conversation renders or reloads
 - **THEN** a compact card below the matching `ask_user` tool line shows its question and selected choice label, text answer, or skipped state, including an optional comment, without waiting for reload
 - **AND** the `ask_user` tool detail drawer lists the offered choices and highlights the selected one when the response is available
+- **AND** a free-text answer to a question with choices appears once as a highlighted localized "Other: <answer>" row in that drawer, even when the agent offered an option named Other
+
+#### Scenario: Tool execution approval response in managed chat
+
+- **GIVEN** a tool execution confirmation is awaiting a person's choice
+- **WHEN** the runtime accepts approval, refusal, or skip
+- **THEN** managed chat shows the localized user response below the confirmation card without waiting for history reload
+- **AND** the same response remains visible after history reload
+- **AND** a resume rejected before acceptance leaves no response in the chat
 
 #### Scenario: No-LLM Graph test assistant uses the question tool
 
@@ -60,6 +100,25 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** an `ask_user` call waits for a human answer
 - **THEN** its tool line remains in progress until the person answers or skips, without showing an error result for the pause
 - **AND** a free-text question shows a compact raised Send button directly left of Skip at the bottom right; tool approvals keep their separate approval actions
+
+#### Scenario: Earlier tool failure followed by an agent question
+
+- **GIVEN** a tool call failed before a later valid `ask_user` call in the same turn
+- **WHEN** the valid question pauses for a human answer
+- **THEN** the turn emits the pending question without a final answer containing the earlier tool failure
+
+#### Scenario: Tool output before a question pause
+
+- **GIVEN** an agent turn has produced sources, UI parts, or model usage before asking a question
+- **WHEN** the question pauses and the person later answers it
+- **THEN** the pre-pause metadata remains visible and persisted with the completed exchange, without emitting the earlier tool failure as an answer
+
+#### Scenario: Marked follow-up question after a HITL answer
+
+- **GIVEN** a Mistral assistant response contains the existing typed tool-call marker and a registered `ask_user` name
+- **WHEN** its JSON question contains a literal line break inside the quoted string after an earlier question is answered
+- **THEN** the runtime validates the public arguments and complete question rules, then routes the call through the ordinary HITL pause, including valid sibling calls, rather than publishing encoded call syntax as the final answer
+- **AND** unmarked text, unknown tools, and other malformed argument content remain ineligible for recovery
 
 #### Scenario: Composer waits for an agent question
 
@@ -145,7 +204,7 @@ Managed chat SHALL expose a platform-owned control for agent questions, initiall
 
 ### Requirement: Multiple questions remain individually answerable
 
-Several `ask_user` calls in one turn SHALL each retain a distinct occurrence identity, and each answer SHALL return to its own call. History and reload SHALL preserve answered questions and restore the unanswered one.
+Several `ask_user` calls in one turn SHALL each retain a distinct occurrence identity, and each answer SHALL return to its own call. A complete set of simultaneous agent-question answers SHALL be accepted in one resume request only when every answer matches a pending occurrence; rejection SHALL leave the checkpoint and editable answers intact. History and reload SHALL preserve each response and any remaining pending questions.
 
 #### Scenario: Sibling questions
 
@@ -158,6 +217,14 @@ Several `ask_user` calls in one turn SHALL each retain a distinct occurrence ide
 - **GIVEN** the first question in a turn was answered and a second is pending
 - **WHEN** the conversation is reloaded
 - **THEN** the second question is restored as the only pending question
+
+#### Scenario: Complete batch of sibling answers
+
+- **GIVEN** several agent questions are pending on one checkpoint
+- **WHEN** the person submits one answer or skip for every pending occurrence
+- **THEN** the runtime validates and claims the complete set atomically, resumes the graph once, and stores a separate answer for each occurrence
+- **AND** an incomplete or invalid batch leaves every pending question answerable
+
 
 ### Requirement: Graph choice questions preserve their response contract
 

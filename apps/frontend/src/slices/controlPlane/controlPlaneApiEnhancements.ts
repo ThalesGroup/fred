@@ -18,6 +18,31 @@ import {
   UploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPostApiArg,
 } from "./controlPlaneOpenApi";
 
+type FavoriteArg = { teamId: string; promptId: string };
+type FavoriteLifecycle = {
+  dispatch: (action: unknown) => unknown;
+  queryFulfilled: Promise<unknown>;
+};
+
+/** Flips the star in both prompt listings at once, and back if the call fails. */
+async function patchFavorite({ teamId, promptId }: FavoriteArg, favorite: boolean, lifecycle: FavoriteLifecycle) {
+  const flip = (draft: { id: string; is_favorite?: boolean }[]) => {
+    const prompt = draft.find((p) => p.id === promptId);
+    if (prompt) prompt.is_favorite = favorite;
+  };
+  const patches = [
+    lifecycle.dispatch(api.util.updateQueryData("getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet", { teamId }, flip)),
+    lifecycle.dispatch(
+      api.util.updateQueryData("getContextPromptsEarlyControlPlaneV1TeamsTeamIdPromptsContextGet", { teamId }, flip),
+    ),
+  ] as { undo: () => void }[];
+  try {
+    await lifecycle.queryFulfilled;
+  } catch {
+    patches.forEach((patch) => patch.undo());
+  }
+}
+
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: [
     "ControlPlaneTeam",
@@ -493,6 +518,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlanePrompt", id: "MARKETPLACE" },
       ],
     },
+    // Patched in place rather than invalidated: a refetch of every listing per
+    // star click would flicker when several are clicked in a row.
+    addTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePut: {
+      onQueryStarted: (arg, lifecycle) => patchFavorite(arg, true, lifecycle),
+    },
+    removeTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDelete: {
+      onQueryStarted: (arg, lifecycle) => patchFavorite(arg, false, lifecycle),
+    },
     // Prompts marketplace (PROMPT-06). The community listing is a live view of
     // published team rows, so it shares the ControlPlanePrompt tag family: the
     // shared "MARKETPLACE" id refreshes it, while per-prompt ids keep the team
@@ -578,6 +611,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
+  useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
+    useRemovePromptFavoriteMutation,
   // A team's Knowledge Bases: what fills a library, and how often.
   useListKnowledgeBaseInstancesControlPlaneV1KnowledgeBasesInstancesGetQuery: useKnowledgeBasesQuery,
   useGetKnowledgeBaseInstanceControlPlaneV1KnowledgeBasesInstancesInstanceIdGetQuery: useKnowledgeBaseQuery,

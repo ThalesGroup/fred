@@ -21,6 +21,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -113,4 +114,27 @@ class PromptRow(Base):
         nullable=False,
         default=utcnow,
         onupdate=utcnow,
+    )
+
+
+class PromptFavoriteRow(Base):
+    """ORM model for the ``prompt_favorite`` table.
+
+    One row per prompt a user marked as a favorite. Personal: never read on
+    behalf of anyone but ``user_id``. Removed with the prompt (cascade), when
+    the user leaves the prompt's team, and when the account is deleted.
+    """
+
+    __tablename__ = "prompt_favorite"
+
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    prompt_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("prompt.prompt_id", ondelete="CASCADE"),
+        primary_key=True,
+        # The cascade from a deleted prompt looks rows up by prompt_id alone.
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
     )

@@ -177,3 +177,92 @@ async def test_shared_interrupt_id_validates_the_matching_sibling(monkeypatch) -
     assert exc.value.status_code == 422
     request.resume_payload = {"choice_id": "second"}
     assert await app._validate_agent_question_answer(request) is True
+
+
+@pytest.mark.asyncio
+async def test_batch_question_answers_validate_every_pending_prompt(
+    monkeypatch,
+) -> None:
+    pending = [
+        (
+            f"task-{index}",
+            "__interrupt__",
+            {
+                "id": f"interrupt-{index}",
+                "value": {
+                    "stage": "agent_question",
+                    "occurrence_id": f"call-{index}",
+                    "question": f"Question {index}?",
+                    "choices": [{"id": "yes", "label": "Yes"}],
+                    "free_text": True,
+                },
+            },
+        )
+        for index in (1, 2)
+    ]
+    monkeypatch.setattr(app, "load_checkpoint", AsyncMock(return_value=({}, pending)))
+    monkeypatch.setattr(
+        app,
+        "get_runtime_context",
+        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+    )
+    answers = [
+        {
+            "interrupt_id": "interrupt-1",
+            "occurrence_id": "call-1",
+            "answer": {"choice_id": "yes"},
+        },
+        {
+            "interrupt_id": "interrupt-2",
+            "occurrence_id": "call-2",
+            "answer": {"skipped": True},
+        },
+    ]
+    request = RuntimeExecuteRequest(
+        agent_id="test",
+        input="",
+        session_id="session-1",
+        resume_payload={"answers": answers},
+    )
+    assert await app._validate_agent_question_answer(request) is True
+    assert await app._validate_session_checkpoint_access(request) == (
+        "call-1",
+        "call-2",
+    )
+
+    request.resume_payload = {"answers": answers[:1]}
+    with pytest.raises(app.HTTPException):
+        await app._validate_session_checkpoint_access(request)
+
+
+@pytest.mark.asyncio
+async def test_batch_answers_are_persisted_as_separate_history_rows() -> None:
+    store = AsyncMock()
+    store.next_rank.return_value = 0
+    await app._write_turn_history(
+        session_id="session-1",
+        user_id="user-1",
+        request_message=None,
+        payloads=[],
+        history_store=store,
+        resume_payload={
+            "answers": [
+                {
+                    "interrupt_id": "interrupt-1",
+                    "occurrence_id": "call-1",
+                    "answer": {"text": "Paris"},
+                },
+                {
+                    "interrupt_id": "interrupt-2",
+                    "occurrence_id": "call-2",
+                    "answer": {"skipped": True},
+                },
+            ]
+        },
+        occurrence_id=None,
+    )
+    rows = store.save.call_args.kwargs["messages"]
+    assert [(row.parts[0].occurrence_id, row.parts[0].skipped) for row in rows] == [
+        ("call-1", False),
+        ("call-2", True),
+    ]
