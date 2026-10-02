@@ -14,4 +14,4 @@
 
 - [x] 3.1 Run type-check, Prettier, ESLint and vitest; verify they pass (known `useChatSse` failures excepted)
 - [x] 3.2 Update `FRONTEND_CODING_GUIDELINES.md`, `COMPONENT-UX.md`, `CHAT-COMPONENT-SPECS.md` and the design-tokens README migration section; fold the change into the branch migration note
-- [ ] 3.3 Run `/code-review`, record evidence in `verification.md`
+- [x] 3.3 Run `/code-review`, record evidence in `verification.md`
