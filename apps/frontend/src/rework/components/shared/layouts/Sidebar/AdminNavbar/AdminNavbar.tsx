@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import NavigationMenu from "@shared/molecules/NavigationMenu/NavigationMenu.tsx";
+import NavPanelHeader from "@shared/molecules/NavPanelHeader/NavPanelHeader.tsx";
 import type { NavigationMenuItemProps } from "@shared/molecules/NavigationMenu/NavigationMenuItem/NavigationMenuItem.tsx";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
@@ -107,7 +108,7 @@ export default function AdminNavbar() {
 
   return (
     <div className={styles.adminNavbarContainer}>
-      <div className={styles.adminNavbarTitle}>{t("rework.sidebar.admin.title")}</div>
+      <NavPanelHeader title={t("rework.sidebar.admin.title")} />
       <NavigationMenu items={navigationItems} />
     </div>
   );

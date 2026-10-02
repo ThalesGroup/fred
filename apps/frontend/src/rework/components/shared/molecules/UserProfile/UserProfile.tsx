@@ -30,7 +30,7 @@ import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
  * of this menu to the mainNavBar (#2298); team admin stays on the team banner
  * gear. This menu is global only.
  */
-export default function UserProfile() {
+export default function UserProfile({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { contactSupportLink } = useFrontendProperties();
@@ -65,7 +65,7 @@ export default function UserProfile() {
   return (
     <div className={styles.container} ref={containerRef}>
       {open && (
-        <div className={styles.popoverWrap}>
+        <div className={compact ? styles.popoverWrapCompact : styles.popoverWrap}>
           <MenuPopover
             className={styles.popoverBox}
             headerTitle={userFullName}
@@ -106,22 +106,35 @@ export default function UserProfile() {
         </div>
       )}
 
-      <button
-        type="button"
-        className={styles.trigger}
-        onClick={() => setOpen((value) => !value)}
-        aria-expanded={open}
-        aria-haspopup="menu"
-      >
-        <UserAvatar name={userFullName} size="medium" />
-        <span className={styles.identity}>
-          <span className={styles.identityName}>{userFullName}</span>
-          <span className={styles.identityId}>{username}</span>
-        </span>
-        <span className={styles.chevron} aria-hidden>
-          <Icon category="outlined" type={open ? "expand_more" : "expand_less"} />
-        </span>
-      </button>
+      {compact ? (
+        <button
+          type="button"
+          className={styles.triggerCompact}
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label={userFullName}
+        >
+          <UserAvatar name={userFullName} size="small" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className={styles.trigger}
+          onClick={() => setOpen((value) => !value)}
+          aria-expanded={open}
+          aria-haspopup="menu"
+        >
+          <UserAvatar name={userFullName} size="medium" />
+          <span className={styles.identity}>
+            <span className={styles.identityName}>{userFullName}</span>
+            <span className={styles.identityId}>{username}</span>
+          </span>
+          <span className={styles.chevron} aria-hidden>
+            <Icon category="outlined" type={open ? "expand_more" : "expand_less"} />
+          </span>
+        </button>
+      )}
     </div>
   );
 }

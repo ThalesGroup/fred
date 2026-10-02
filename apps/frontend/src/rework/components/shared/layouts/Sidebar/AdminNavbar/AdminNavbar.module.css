@@ -14,18 +14,8 @@
  * limitations under the License.
  */
 
-/* 272px: kept in sync with the other nav panels (see TeamContentNavbar) — they
+/* 254px: kept in sync with the other nav panels (see TeamContentNavbar) — they
  * swap in the same grid column, a mismatch makes the column jump. */
 .adminNavbarContainer {
-  width: 272px;
-}
-
-.adminNavbarTitle {
-  display: flex;
-  align-items: end;
-  padding: 0 0 var(--spacing-xs) var(--spacing-m);
-  height: 56px;
-  color: var(--on-surface);
-
-  font: var(--font-title-medium);
+  width: 254px;
 }

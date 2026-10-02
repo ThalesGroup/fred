@@ -13,21 +13,18 @@
  * limitations under the License.
  */
 
-/* 272px: kept in sync with the other nav panels (see TeamContentNavbar) — they
+/* 254px: kept in sync with the other nav panels (see TeamContentNavbar) — they
  * swap in the same grid column, a mismatch makes the column jump. */
 .panel {
   display: flex;
   flex-direction: column;
-  width: 272px;
+  width: 254px;
   height: 100%;
   min-height: 0;
 }
 
-/* Dividers above and below frame the personal space apart from the team list. */
 .personalSpace {
-  border-top: 1px solid var(--outline-muted);
-  border-bottom: 1px solid var(--outline-muted);
-  padding: var(--spacing-2xs) 0;
+  padding: 0 var(--spacing-xs);
 }
 
 .teamList {
@@ -64,7 +61,7 @@
   right: 0;
   left: 0;
   align-items: center;
-  background: var(--surface-container-low);
+  background: var(--surface-container);
   padding: 0 var(--spacing-s);
   height: 100%;
 
@@ -78,7 +75,7 @@
 
 /* Sort dropdown — same horizontal inset and width as the search field above. */
 .teamSort {
-  padding: 0 var(--spacing-s) var(--spacing-xs);
+  padding: 0 var(--spacing-xs) var(--spacing-xs);
 }
 
 /* The team list fills the remaining height and scrolls on overflow.
@@ -87,6 +84,7 @@
  * stays constant whether or not it is scrolling. */
 .scroll {
   flex: 1;
+  padding: 0 var(--spacing-xs);
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
