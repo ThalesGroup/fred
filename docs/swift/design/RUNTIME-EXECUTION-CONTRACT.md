@@ -6433,3 +6433,13 @@ remain valid.
 A skipped question writes a response row even without choice or text. Graph
 choice helpers expose the same typed answer through `choice_step_response`;
 `choice_step` keeps its string return contract for existing authors.
+
+### Structured request and journey diagnostics (2026-10-01)
+
+Runtime logging binds ingress request/correlation references into PortableContext
+and RuntimeContext, with fresh references for standalone execution. Resolved session,
+exchange, team, instance/template and admitted run references scope generic execution
+and tool diagnostics; tool/run outcomes remain distinct from successful SSE transport.
+HITL resumes keep the existing exchange identity. Scope teardown retires retained-task
+metadata. See [observability §6/§7](../platform/OBSERVABILITY-AND-AUDIT.md) for field,
+sensitive-data and audit boundaries.

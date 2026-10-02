@@ -32,6 +32,7 @@ from fred_core import enforce_account_status, get_config, initialize_user_securi
 from fred_core.common import read_env_bool, register_exception_handlers
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.kpi import KPIMiddleware, emit_process_kpis, emit_sql_pool_kpis
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingMiddleware
 from fred_core.logs.null_log_store import NullLogStore
 from fred_core.scheduler import SchedulerBackend, TemporalClientProvider
 from fred_core.security.mcp_delegation import (
@@ -48,7 +49,6 @@ from knowledge_flow_backend.application_context import ApplicationContext, get_c
 from knowledge_flow_backend.common.config_loader import (
     load_configuration,
 )
-from knowledge_flow_backend.common.http_logging import RequestResponseLogger
 from knowledge_flow_backend.common.structures import Configuration
 from knowledge_flow_backend.compat import fastapi_mcp_patch  # noqa: F401
 from knowledge_flow_backend.core.monitoring.monitoring_controller import (
@@ -284,6 +284,7 @@ def create_app() -> FastAPI:
         allow_origins=allowed_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
+        expose_headers=REFERENCE_HEADERS,
     )
     initialize_user_security(configuration.security.user)
     # Enforce the hardened security profile (C3) at startup — fails closed (RUNTIME-07
@@ -293,8 +294,8 @@ def create_app() -> FastAPI:
 
     apply_security_profile(configuration.security)
 
-    app.add_middleware(RequestResponseLogger)
     app.add_middleware(KPIMiddleware, kpi=application_context.get_kpi_writer)
+    app.add_middleware(RequestLoggingMiddleware)
     monitoring_router = APIRouter(prefix=configuration.app.base_url)
     router = APIRouter(
         prefix=configuration.app.base_url,

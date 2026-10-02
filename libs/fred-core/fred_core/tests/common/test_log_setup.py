@@ -37,8 +37,45 @@ from fred_core.security.delegation import DelegationConfig, initialize_delegatio
 
 
 @pytest.fixture(autouse=True)
-def _reset_delegation() -> None:
+def _reset_delegation() -> Iterator[None]:
     initialize_delegation(DelegationConfig())
+    loggers = [
+        logging.getLogger(),
+        *[
+            entry
+            for entry in logging.Logger.manager.loggerDict.values()
+            if isinstance(entry, logging.Logger)
+        ],
+    ]
+    saved = [
+        (
+            entry,
+            entry.level,
+            list(entry.handlers),
+            list(entry.filters),
+            entry.propagate,
+            entry.disabled,
+        )
+        for entry in loggers
+    ]
+    factory = logging.getLogRecordFactory()
+    try:
+        yield
+    finally:
+        logging.setLogRecordFactory(factory)
+        for entry, level, handlers, filters, propagate, disabled in saved:
+            entry.setLevel(level)
+            entry.handlers[:] = handlers
+            entry.filters[:] = filters
+            entry.propagate = propagate
+            entry.disabled = disabled
+        for entry in list(logging.Logger.manager.loggerDict.values()):
+            if isinstance(entry, logging.Logger) and entry not in loggers:
+                entry.handlers.clear()
+                entry.filters.clear()
+                entry.disabled = False
+                entry.propagate = True
+                entry.setLevel(logging.NOTSET)
 
 
 class _StubLogStore:
@@ -269,7 +306,7 @@ _DELEGATION_SWITCHES = [
         ),
     ],
 )
-def test_delegation_access_line_is_neutral_for_every_request(
+def test_duplicate_uvicorn_access_is_suppressed_under_delegation(
     config: DelegationConfig, path: str
 ) -> None:
     initialize_delegation(config)
@@ -277,10 +314,7 @@ def test_delegation_access_line_is_neutral_for_every_request(
         _log_uvicorn_access(path)
         assert logging.getLogger("uvicorn.access").handlers == []
 
-    assert [record.getMessage() for record in info_sink.records] == [
-        "access event=request outcome=responded method=GET status=200"
-    ]
-    assert "CANARY" not in repr(info_sink.records[0].__dict__)
+    assert info_sink.records == []
 
 
 @pytest.mark.parametrize(
@@ -298,17 +332,14 @@ def test_health_probes_stay_below_the_default_level(
         _log_uvicorn_access(path)
 
     assert info_sink.records == []
-    assert [record.levelno for record in all_sink.records] == [logging.DEBUG]
+    assert all_sink.records == []
 
 
-def test_without_delegation_access_line_keeps_request_details() -> None:
+def test_duplicate_uvicorn_access_is_suppressed_without_delegation() -> None:
     with _wired_uvicorn_logging() as (info_sink, _):
         _log_uvicorn_access("/documents?token=synthetic-token&ordinary=visible")
 
-    assert [record.getMessage() for record in info_sink.records] == [
-        '127.0.0.1:5000 - "GET /documents?token=<redacted>&ordinary=visible '
-        'HTTP/1.1" 200'
-    ]
+    assert info_sink.records == []
 
 
 def test_log_setup_suppresses_aiosqlite_debug_noise() -> None:
@@ -332,6 +363,7 @@ def test_compact_json_formatter_surfaces_extra_fields() -> None:
     "extra"), and what audit events depend on to carry their structured
     fields instead of being reduced to a bare message string."""
     logger = logging.getLogger("test-compact-json-formatter")
+    logger.setLevel(logging.INFO)
     logger.propagate = False
     logger.handlers.clear()
     lines: list[str] = []
@@ -362,6 +394,7 @@ def test_compact_json_formatter_surfaces_extra_fields() -> None:
 
 def test_compact_json_formatter_omits_extra_key_when_absent() -> None:
     logger = logging.getLogger("test-compact-json-formatter-no-extra")
+    logger.setLevel(logging.INFO)
     logger.propagate = False
     logger.handlers.clear()
     lines: list[str] = []
@@ -710,3 +743,233 @@ def test_startup_diagnostics_wait_for_selected_output(
         assert json.loads(output)["config_file"] == lazy_config_file
     else:
         assert f"config_file={lazy_config_file}" in output
+
+
+@pytest.mark.asyncio
+async def test_interleaved_request_context_survives_stream_and_thread_then_retires(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import asyncio
+    import threading
+    from types import SimpleNamespace
+
+    from fred_core.common.resilient_sink import ResilientSinkStore
+    from fred_core.logs.context import bind_operation_context, operation_log_scope
+    from fred_core.logs.http import RequestLoggingMiddleware
+
+    store_release = threading.Event()
+    delivered = threading.Event()
+    expected_count = [0]
+
+    class DelayedStore(_StubLogStore):
+        def index_event(self, event: LogEventDTO) -> None:
+            assert store_release.wait(timeout=2)
+            super().index_event(event)
+            if len(self.indexed) == expected_count[0]:
+                delivered.set()
+
+    store = DelayedStore()
+    log_setup(
+        service_name="request-test",
+        store=ResilientSinkStore(store),
+        log_format="json",
+        include_uvicorn=False,
+    )
+
+    both_ready = asyncio.Event()
+    release_late = asyncio.Event()
+    arrivals = 0
+    retained: list[asyncio.Task[None]] = []
+    responses: dict[str, list[dict]] = {}
+
+    async def app(scope, receive, send):
+        nonlocal arrivals
+        person = scope["person"]
+        bind_operation_context(user_id=person, session_id=f"session-{person}")
+
+        async def late():
+            await release_late.wait()
+            logging.getLogger("late").info("Retained task")
+
+        retained.append(asyncio.create_task(late()))
+        await asyncio.to_thread(logging.getLogger("thread").info, "Sync work")
+        if person != "third":
+            arrivals += 1
+            if arrivals == 2:
+                both_ready.set()
+            await asyncio.wait_for(both_ready.wait(), timeout=2)
+        if person == "failed":
+            raise asyncio.CancelledError()
+        if person == "first":
+
+            async def run():
+                with operation_log_scope(completion=True):
+                    bind_operation_context(
+                        template_agent_id="root-template",
+                        agent_instance_id="root-instance",
+                    )
+                    bind_operation_context(document_uid="x" * 1025)
+
+                    async def child():
+                        with operation_log_scope(
+                            completion=False, clear=("agent_instance_id",)
+                        ):
+                            bind_operation_context(template_agent_id="child-template")
+                            logging.getLogger("child").info("Child work")
+
+                    await asyncio.create_task(child())
+                    yield None
+
+            iterator = run()
+            await anext(iterator)
+            await asyncio.create_task(iterator.aclose())
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"first", "more_body": True})
+        assert not any(
+            event.get("logger") == "http" and event.get("user_id") == person
+            for event in captured()
+        )
+        await send({"type": "http.response.body", "body": b"last"})
+
+    seen: list[dict] = []
+
+    def captured():
+        seen.extend(json.loads(line) for line in capsys.readouterr().out.splitlines())
+        return seen
+
+    async def request(person):
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message):
+            responses.setdefault(person, []).append(message)
+
+        await RequestLoggingMiddleware(app)(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/untrusted/raw",
+                "person": person,
+                "route": SimpleNamespace(path="/items/{item}"),
+            },
+            receive,
+            send,
+        )
+
+    results = await asyncio.wait_for(
+        asyncio.gather(request("first"), request("failed"), return_exceptions=True),
+        timeout=3,
+    )
+    assert isinstance(results[1], asyncio.CancelledError)
+    await asyncio.wait_for(request("third"), timeout=3)
+    release_late.set()
+    await asyncio.wait_for(asyncio.gather(*retained), timeout=3)
+    events = captured()
+    expected_count[0] = len(events)
+    assert store.indexed == []
+    store_release.set()
+    assert await asyncio.to_thread(delivered.wait, timeout=2)
+    persisted = [event for event in store.indexed if event.logger == "http"]
+    assert len(persisted) == 3
+    assert all(
+        event.extra is not None
+        and event.extra["session_id"] == f"session-{event.extra['user_id']}"
+        for event in persisted
+    )
+    completions = [event for event in events if event["logger"] == "http"]
+    assert len(completions) == 3
+    assert len({event["request_id"] for event in completions}) == 3
+    assert all(
+        event["session_id"] == f"session-{event['user_id']}" for event in completions
+    )
+    failed = next(event for event in completions if event["user_id"] == "failed")
+    assert failed["outcome"] == "cancelled"
+    assert "http_status" not in failed
+    assert all(event["route"] == "/items/{item}" for event in completions)
+    assert all(
+        event["session_id"] == f"session-{event['user_id']}"
+        for event in events
+        if event["logger"] == "thread"
+    )
+    assert all(
+        "user_id" not in event and "request_id" not in event
+        for event in events
+        if event["logger"] == "late"
+    )
+    first = next(event for event in completions if event["user_id"] == "first")
+    assert first["template_agent_id"] == "root-template"
+    assert first["agent_instance_id"] == "root-instance"
+    assert "document_uid" not in first
+    child = next(event for event in events if event["logger"] == "child")
+    assert child["template_agent_id"] == "child-template"
+    for person in ("first", "third"):
+        headers = dict(responses[person][0]["headers"])
+        completion = next(event for event in completions if event["user_id"] == person)
+        assert headers[b"x-request-id"].decode() == completion["request_id"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case", ["disconnect", "failed-probe", "successful-probe", "unmatched"]
+)
+async def test_completion_handles_real_stream_disconnect_and_probe_failures(
+    capsys: pytest.CaptureFixture[str], case: str
+) -> None:
+    from fred_core.logs.http import RequestLoggingMiddleware
+    from starlette.requests import ClientDisconnect
+    from starlette.responses import Response, StreamingResponse
+
+    log_setup(
+        service_name="completion-test",
+        store=_StubLogStore(),
+        log_format="json",
+        include_uvicorn=False,
+    )
+
+    async def body():
+        yield b"part"
+
+    async def app(scope, receive, send):
+        response = (
+            StreamingResponse(body())
+            if case == "disconnect"
+            else Response(
+                status_code=200
+                if case == "successful-probe"
+                else 503
+                if case == "failed-probe"
+                else 404
+            )
+        )
+        await response(scope, receive, send)
+
+    async def receive():
+        return {"type": "http.request", "body": b""}
+
+    async def send(message):
+        if case == "disconnect" and message["type"] == "http.response.body":
+            raise OSError("synthetic transport failure")
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/api/healthz" if "probe" in case else "/raw-canary",
+        "asgi": {"spec_version": "2.4"},
+    }
+    if case == "disconnect":
+        with pytest.raises(ClientDisconnect):
+            await RequestLoggingMiddleware(app)(scope, receive, send)
+    else:
+        await RequestLoggingMiddleware(app)(scope, receive, send)
+    output = capsys.readouterr().out
+    if case == "successful-probe":
+        assert output == ""
+        return
+    event = json.loads(output)
+    assert "route" not in event
+    assert "raw-canary" not in output
+    assert event["http_status"] == (
+        200 if case == "disconnect" else 503 if case == "failed-probe" else 404
+    )
+    assert event["severity"] == ("ERROR" if case == "failed-probe" else "WARNING")
+    assert event["outcome"] == ("disconnected" if case == "disconnect" else "responded")

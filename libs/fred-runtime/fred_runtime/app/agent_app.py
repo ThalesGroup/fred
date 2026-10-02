@@ -77,6 +77,12 @@ from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.logs.audit_log import emit_audit_log
+from fred_core.logs.context import (
+    bind_operation_context,
+    current_context,
+    operation_log_scope,
+)
+from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingMiddleware
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
@@ -2371,7 +2377,7 @@ async def _authorize_and_resolve(
         else:
             ctx.pop("is_service_agent", None)
         internal_req.context = ctx
-        binding_request_id = str(uuid4())
+        binding_request_id = str(current_context().get("request_id") or uuid4())
         async with runtime_stage_timer(
             container.get_kpi_writer(), "runtime_binding", trace_id=binding_request_id
         ):
@@ -3668,7 +3674,7 @@ def _build_capability_save_services(
       strings against the agent's space at save time (#1903 image support)
     """
 
-    request_id = str(uuid4())
+    request_id = str(current_context().get("request_id") or uuid4())
     actor = f"capability:{capability_id}"
     binding = BoundRuntimeContext(
         runtime_context=RuntimeContext(
@@ -3679,7 +3685,7 @@ def _build_capability_save_services(
         ),
         portable_context=PortableContext(
             request_id=request_id,
-            correlation_id=request_id,
+            correlation_id=str(current_context().get("correlation_id") or uuid4()),
             actor=user_id,
             tenant="default",
             environment=PortableEnvironment.DEV,
@@ -4191,7 +4197,23 @@ async def _iterate_runtime_event_payloads(
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
     )
-    with RunScope.open() as scope:
+    started = time.perf_counter()
+    outcome = "succeeded"
+    with (
+        operation_log_scope(
+            completion=owns_run_record,
+            clear=(
+                "tool_name",
+                "document_uid",
+                "task_id",
+                "run_id",
+                "agent_instance_id",
+                "template_agent_id",
+                "exchange_id",
+            ),
+        ),
+        RunScope.open() as scope,
+    ):
         if owns_run_record:
             scope.set_delegated_credentials(
                 credential_provider is not None and credential_provider.delegated
@@ -4201,30 +4223,48 @@ async def _iterate_runtime_event_payloads(
             )
         try:
             async for payload in iterator:
+                if payload.get("kind") == "execution_error":
+                    outcome = "failed"
+                elif payload.get("kind") == "awaiting_human" and outcome != "failed":
+                    outcome = "awaiting_human"
                 yield payload
         except asyncio.CancelledError:
+            outcome = "cancelled"
             if owns_run_record:
                 _mark_run_terminal(credential_provider)
             scope.cancel_children()
             raise
         except GeneratorExit:
+            outcome = "disconnected"
             # Closed at a `yield`: the response is gone, so the run ends as on a
             # cancel. A child's stream closing never ends the run it shares.
             if owns_run_record:
                 _mark_run_terminal(credential_provider)
                 scope.cancel_children()
             raise
+        except Exception:
+            outcome = "failed"
+            raise
         finally:
-            if owns_run_record:
-                _mark_run_terminal(credential_provider)
             try:
-                await complete_cleanup(iterator.aclose())
-            finally:
                 if owns_run_record:
-                    try:
-                        await complete_cleanup(scope.cancel_and_wait())
-                    finally:
-                        _discard_run_record(credential_provider)
+                    _mark_run_terminal(credential_provider)
+                try:
+                    await complete_cleanup(iterator.aclose())
+                finally:
+                    if owns_run_record:
+                        try:
+                            await complete_cleanup(scope.cancel_and_wait())
+                        finally:
+                            _discard_run_record(credential_provider)
+            finally:
+                logger.info(
+                    "Agent execution completed",
+                    extra={
+                        "outcome": outcome,
+                        "duration_ms": (time.perf_counter() - started) * 1000,
+                    },
+                )
 
 
 async def _iterate_runtime_event_payloads_inner(
@@ -4271,9 +4311,9 @@ async def _iterate_runtime_event_payloads_inner(
       child; handed to every adapter this turn builds
     """
 
-    request_id = str(uuid4())
+    request_id = str(current_context().get("request_id") or uuid4())
     ctx = request.context or {}
-    correlation_id = ctx.get("correlation_id", request_id)
+    correlation_id = str(current_context().get("correlation_id") or uuid4())
     resolved_team_id = team_id or ctx.get("team_id")
     delegated_turn = credential_provider is not None and credential_provider.delegated
     if delegated_turn:
@@ -4285,6 +4325,25 @@ async def _iterate_runtime_event_payloads_inner(
             for key, value in ctx.items()
             if key not in ("access_token", "refresh_token", "access_token_expires_at")
         }
+    bind_operation_context(
+        **{
+            key: value
+            for key, value in {
+                "request_id": request_id,
+                "correlation_id": correlation_id,
+                "user_id": None
+                if ctx.get("is_service_agent") == "true"
+                else ctx.get("user_id"),
+                "session_id": ctx.get("session_id"),
+                "team_id": resolved_team_id,
+                "exchange_id": exchange_id,
+                "agent_instance_id": request.agent_instance_id,
+                "template_agent_id": definition.agent_id,
+                "run_id": getattr(credential_provider, "run_id", None),
+            }.items()
+            if value is not None
+        }
+    )
     # kind="model" enforcement (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md §8.7):
     # computed ONCE per turn, here — never inside model-routing resolution,
     # which runs multiple times per turn and must never itself make a ReBAC
@@ -6326,6 +6385,7 @@ def create_agent_app(
             allow_origins=authorized_origins,
             allow_methods=["GET", "POST"],
             allow_headers=["Content-Type", "Authorization"],
+            expose_headers=REFERENCE_HEADERS,
         )
         logger.debug("[fred-runtime] CORS allow_origins=%s", authorized_origins)
 
@@ -6335,6 +6395,8 @@ def create_agent_app(
         KPIMiddleware,
         kpi=lambda: get_pod_container_from_app(app).get_kpi_writer(),
     )
+
+    app.add_middleware(RequestLoggingMiddleware)
 
     api_router = APIRouter(prefix=base_url)
     api_router.include_router(

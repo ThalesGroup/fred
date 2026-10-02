@@ -18,15 +18,139 @@ from __future__ import annotations
 import math
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from itertools import islice
 from typing import TypeAlias
 
-from structlog.contextvars import bind_contextvars, get_contextvars, reset_contextvars
+from structlog.contextvars import (
+    bind_contextvars,
+    clear_contextvars,
+    get_contextvars,
+    reset_contextvars,
+)
 
 LogValue: TypeAlias = (
     str | int | float | bool | None | list["LogValue"] | dict[str, "LogValue"]
 )
 LogContext: TypeAlias = dict[str, LogValue]
+
+
+@dataclass
+class RequestLogScope:
+    """Request-owned snapshot; replace values explicitly, never mutate a shared bag."""
+
+    values: LogContext
+    closed: bool = False
+
+
+_request_scope: ContextVar[RequestLogScope | None] = ContextVar(
+    "fred_log_request", default=None
+)
+_operation_lifetimes: ContextVar[tuple[RequestLogScope, ...]] = ContextVar(
+    "fred_log_operations", default=()
+)
+_completion_binding: ContextVar[bool] = ContextVar(
+    "fred_log_completion_binding", default=True
+)
+
+
+@contextmanager
+def completion_log_scope(values: Mapping[str, object]) -> Iterator[None]:
+    """Emit the owned request snapshot after streaming run scopes have retired."""
+    token = _operation_lifetimes.set(())
+    try:
+        with log_context(values):
+            yield
+    finally:
+        _operation_lifetimes.reset(token)
+
+
+@contextmanager
+def operation_log_scope(
+    *, clear: tuple[str, ...] = (), completion: bool | None = None, **values: object
+) -> Iterator[None]:
+    """Retire inherited run metadata in tasks retained beyond the run's lifetime."""
+    lifetime = RequestLogScope({})
+    token = _operation_lifetimes.set((*_operation_lifetimes.get(), lifetime))
+    completion_token = _completion_binding.set(
+        _completion_binding.get() if completion is None else completion
+    )
+    try:
+        with log_context(values, clear=clear):
+            yield
+    finally:
+        lifetime.closed = True
+        try:
+            _operation_lifetimes.reset(token)
+            _completion_binding.reset(completion_token)
+        except ValueError:
+            # Streaming teardown can run in its dedicated cleanup task. The
+            # shared lifetime still retires the producer's inherited metadata.
+            pass
+
+
+def bind_operation_context(
+    values: Mapping[str, object] | None = None,
+    *,
+    clear: tuple[str, ...] = (),
+    **fields: object,
+) -> None:
+    """Retain resolved request IDs for completion; diagnostic limits fail open.
+
+    Call after business admission/resolution, e.g. ``bind_operation_context(session_id=id)``.
+    Use ``log_context(tool_name=name)`` for temporary fields that should restore on exit.
+    Neither helper is an authorization source.
+    """
+    validated: LogContext = {}
+    for key, value in islice({**(values or {}), **fields}.items(), MAX_FIELDS):
+        try:
+            candidate = safe_context({**validated, key: value})
+        except ValueError:
+            continue
+        validated = candidate
+    owner = _request_scope.get()
+    try:
+        local = safe_context({**current_context(), **dict.fromkeys(clear), **validated})
+        completion = safe_context(
+            {
+                **{
+                    key: value
+                    for key, value in (
+                        owner.values if owner is not None else {}
+                    ).items()
+                    if key not in clear
+                },
+                **validated,
+            }
+        )
+    except ValueError:
+        return
+    bind_contextvars(**local)
+    if owner is not None and not owner.closed and _completion_binding.get():
+        owner.values = completion
+
+
+@contextmanager
+def request_log_scope(**values: object) -> Iterator[RequestLogScope]:
+    """Start an isolated scope and retire it even when a retained task outlives it."""
+    previous = get_contextvars()
+    clear_contextvars()
+    owner = RequestLogScope(safe_context(values))
+    token = _request_scope.set(owner)
+    operation_token = _operation_lifetimes.set(())
+    completion_token = _completion_binding.set(True)
+    bind_contextvars(**owner.values)
+    try:
+        yield owner
+    finally:
+        owner.closed = True
+        clear_contextvars()
+        bind_contextvars(**previous)
+        _request_scope.reset(token)
+        _operation_lifetimes.reset(operation_token)
+        _completion_binding.reset(completion_token)
+
 
 # Event and receiver metadata cannot be supplied by business context.
 RESERVED_FIELDS = frozenset(
@@ -156,6 +280,11 @@ def safe_context(values: Mapping[str, object]) -> LogContext:
 
 def current_context() -> LogContext:
     """Snapshot the producing task's validated context for delayed delivery."""
+    owner = _request_scope.get()
+    if (owner is not None and owner.closed) or any(
+        scope.closed for scope in _operation_lifetimes.get()
+    ):
+        return {}
     context: LogContext = {}
     budget = ValueBudget()
     for key, value in get_contextvars().items():
@@ -169,11 +298,21 @@ def current_context() -> LogContext:
 
 
 @contextmanager
-def log_context(*, clear: tuple[str, ...] = (), **values: object) -> Iterator[None]:
+def log_context(
+    values: Mapping[str, object] | None = None,
+    *,
+    clear: tuple[str, ...] = (),
+    **fields: object,
+) -> Iterator[None]:
     """Bind nested metadata and restore it on all exits, including cancellation."""
-    validated = safe_context(values)
+    validated = safe_context({**(values or {}), **fields})
     tokens = bind_contextvars(**{**dict.fromkeys(clear), **validated})
     try:
         yield
     finally:
-        reset_contextvars(**tokens)
+        try:
+            reset_contextvars(**tokens)
+        except ValueError:
+            # A suspended generator may be closed by a dedicated cleanup task.
+            # Its operation lifetime handles retirement in the producing task.
+            pass
