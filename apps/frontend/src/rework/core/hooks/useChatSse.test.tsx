@@ -1132,6 +1132,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(reached).toBe(false);
     expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(0);
     fetchSpy.mockRestore();
   });
 
@@ -1239,6 +1240,93 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       ],
     });
     expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(2);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    { answer: "proceed", skipped: false, expectedChoice: "proceed" },
+    { answer: "cancel", skipped: false, expectedChoice: "cancel" },
+    { answer: undefined, skipped: true, expectedChoice: null },
+  ])(
+    "shows an accepted tool approval response for $answer (skipped: $skipped)",
+    async ({ answer, skipped, expectedChoice }) => {
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+      mount();
+      const approval = {
+        ...hitlEvent,
+        payload: {
+          ...hitlEvent.payload,
+          stage: "tool_approval",
+          question: "Execute Summarize Document?",
+          choices: [
+            { id: "proceed", label: "Continue" },
+            { id: "cancel", label: "Cancel" },
+          ],
+        },
+      } as RuntimeAwaitingHumanEvent;
+
+      await act(async () => {
+        await latest.sendHitlResume(approval, answer, undefined, undefined, undefined, skipped);
+      });
+
+      expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+      expect(latest.messages.find((message) => message.channel === "hitl_request")?.parts[0]).toMatchObject({
+        stage: "tool_approval",
+        interrupt_id: "interrupt-a",
+      });
+      expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+      expect(latest.messages.find((message) => message.channel === "hitl_response")?.parts[0]).toMatchObject({
+        choice_id: expectedChoice,
+        skipped,
+      });
+      fetchSpy.mockRestore();
+    },
+  );
+
+  it("does not duplicate an existing tool approval prompt when showing its answer", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+    mount();
+    const approval = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "tool_approval",
+        question: "Execute Summarize Document?",
+        choices: [{ id: "proceed", label: "Continue" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    act(() => {
+      latest.replaceAllMessages([
+        {
+          session_id: "session-1",
+          exchange_id: "exch-1",
+          rank: 1,
+          timestamp: new Date().toISOString(),
+          role: "system",
+          channel: "hitl_request",
+          parts: [
+            {
+              type: "hitl_request",
+              stage: "tool_approval",
+              question: "Execute Summarize Document?",
+              interrupt_id: "interrupt-a",
+              choices: [{ id: "proceed", label: "Continue" }],
+            },
+          ],
+        } as Parameters<typeof latest.replaceAllMessages>[0][number],
+      ]);
+    });
+
+    await act(async () => {
+      await latest.sendHitlResume(approval, "proceed");
+    });
+
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
     fetchSpy.mockRestore();
   });
 
