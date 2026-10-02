@@ -106,6 +106,22 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
+## Author review before readiness
+
+Before declaring implementation ready or requesting final PR review, apply
+[the branch review procedure](.agents/skills/audit-branch/SKILL.md) to the full
+change against its actual target branch, including affected consumers and docs.
+Passing lint, compilation and tests does not replace this review. Scale depth
+to risk; localized documentation/mechanical changes need only relevant checks.
+
+For non-trivial logic or public-contract changes, obtain an independent,
+read-only review using a separate agent or reviewer with fresh context when
+available. This rule authorizes that bounded delegation for repository work;
+provide requirements and the diff, not expected findings. Record the reviewed
+base/head, coverage, findings and dispositions, verification, and exclusions in
+the existing PR or task response. If independent review is unavailable, state
+that limitation. Do not present a focused patch review as a full PR review.
+
 ## Branch and draft PR workflow
 
 For implementation work, identify or create the tracking GitHub issue and use
