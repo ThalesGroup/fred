@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-/* Corporate UI theme: overrides the Fred semantic tokens when <html> carries
-   data-ui-theme="corporate". Colors come from LCh seeds (neutral 265/2.5 in
+/* Cobalt UI theme: overrides the default (Pebble) semantic tokens when <html> carries
+   data-ui-theme="cobalt". Colors come from LCh seeds (neutral 265/2.5 in
    light, 226/2.5 in dark; primary 298/90; tertiary 226/39) with the accent
    rules of the token rework. */
 /* :root raises specificity above the :root blocks of radius.css and typography.css. */
-:root[data-ui-theme="corporate"] {
+:root[data-ui-theme="cobalt"] {
   --font-family-base: "Inter", sans-serif;
   /* Near-square controls (buttons, inputs), soft menus; cards keep --radius-l. */
   --radius-xs: 4px;
@@ -35,7 +35,7 @@
 
 /* Light ladder rises toward white; surface-main sits just under the highest
    container so the main content keeps the strongest text contrast. */
-[data-ui-theme="corporate"][data-theme="light"] {
+[data-ui-theme="cobalt"][data-theme="light"] {
   --primary: #002789;
   --on-primary: #fcfcff;
   --primary-container: #e4dfff;
@@ -81,7 +81,7 @@
   --outline-muted: #dadde1;
 }
 
-[data-ui-theme="corporate"][data-theme="dark"] {
+[data-ui-theme="cobalt"][data-theme="dark"] {
   --primary: #c8bfff;
   --on-primary: #001454;
   --primary-container: #3d3e8b;

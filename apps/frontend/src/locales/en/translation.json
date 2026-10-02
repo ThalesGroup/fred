@@ -2931,8 +2931,10 @@
         "light": "Light",
         "system": "System",
         "themeAria": "Theme",
-        "defaultTheme": "Default",
+        "themeCobalt": "Cobalt",
+        "themePebble": "Pebble",
         "uiThemeAria": "UI theme",
+        "interfaceTitle": "Interface: theme and mode",
         "languageAria": "Language"
       },
       "conversationProfile": {

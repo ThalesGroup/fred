@@ -16,9 +16,11 @@ import styles from "./UserSettingsPage.module.scss";
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useTranslation } from "react-i18next";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
+import type { UiTheme } from "../../../../app/ApplicationContextStruct.tsx";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
@@ -70,19 +72,22 @@ export default function UserSettingsPage() {
             )}
           </div>
         </div>
-        <div className={styles.userSettingsApplication}>
-          <div className={styles.userSettingsApplicationRow}>
-            <ButtonGroup
-              variant="radio"
-              aria-label={t("rework.userSettings.app.uiThemeAria")}
-              defaultSelectedIndex={uiTheme === "corporate" ? 1 : 0}
-              items={[
-                { label: t("rework.userSettings.app.defaultTheme"), onClick: () => setUiTheme("fred") },
-                { label: "Corporate", onClick: () => setUiTheme("corporate") },
-              ]}
-              size={"small"}
-              color={"secondary"}
-            ></ButtonGroup>
+        <section className={styles.userSettingsCard}>
+          <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.interfaceTitle")}</h2>
+          <div className={styles.userSettingsCardRow}>
+            <div className={styles.userSettingsThemeSelect}>
+              <Select<UiTheme>
+                size="xs"
+                compact
+                options={[
+                  { key: "pebble", value: "pebble", label: t("rework.userSettings.app.themePebble") },
+                  { key: "cobalt", value: "cobalt", label: t("rework.userSettings.app.themeCobalt") },
+                ]}
+                value={uiTheme}
+                onChange={setUiTheme}
+                ariaLabel={t("rework.userSettings.app.uiThemeAria")}
+              />
+            </div>
             <ButtonGroup
               variant="radio"
               aria-label={t("rework.userSettings.app.themeAria")}
@@ -106,8 +111,11 @@ export default function UserSettingsPage() {
               ]}
               size={"small"}
               color={"secondary"}
+              backgroundColor="var(--surface-container-lowest)"
             ></ButtonGroup>
           </div>
+        </section>
+        <div className={styles.userSettingsApplication}>
           <ButtonGroup
             variant="radio"
             aria-label={t("rework.userSettings.app.languageAria")}

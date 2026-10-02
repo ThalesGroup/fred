@@ -20,7 +20,7 @@ export type ThemeMode = "light" | "system" | "dark";
 /**
  * UI theme (palette, font, radii); each one has a light and a dark mode.
  */
-export type UiTheme = "fred" | "corporate";
+export type UiTheme = "pebble" | "cobalt";
 
 /**
  * The Application context keeps track of all the clusters known to frugal IT.

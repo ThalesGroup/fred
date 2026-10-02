@@ -2931,8 +2931,10 @@
         "light": "Clair",
         "system": "Système",
         "themeAria": "Thème",
-        "defaultTheme": "Défaut",
+        "themeCobalt": "Cobalt",
+        "themePebble": "Galet",
         "uiThemeAria": "Thème graphique",
+        "interfaceTitle": "Interface : thème et mode",
         "languageAria": "Langue"
       },
       "conversationProfile": {

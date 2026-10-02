@@ -31,6 +31,8 @@ const getSystemDarkMode = (): boolean => {
 /**
  * Computes the effective dark mode based on theme mode and system preference
  */
+const UI_THEMES: UiTheme[] = ["pebble", "cobalt"];
+
 export const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
   if (themeMode === "system") {
     return systemDarkMode;
@@ -46,7 +48,9 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
   // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
   const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
-  const [uiTheme, setUiTheme] = useLocalStorageState<UiTheme>("ApplicationContextProvider.uiTheme", "fred");
+  const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme>("ApplicationContextProvider.uiTheme", "pebble");
+  // A stored value from an older theme list falls back to the default theme.
+  const uiTheme: UiTheme = UI_THEMES.includes(storedUiTheme) ? storedUiTheme : "pebble";
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
   const darkMode = computeDarkMode(themeMode, systemDarkMode);
 
