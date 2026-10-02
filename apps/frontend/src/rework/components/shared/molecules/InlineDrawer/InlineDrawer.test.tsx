@@ -375,3 +375,24 @@ it.each(["overlay", "push"] as const)("announces %s drawer semantics", (layout) 
   expect(drawer.getAttribute("aria-modal")).toBe(layout === "overlay" ? "true" : null);
   expect(host.querySelector('[id="' + drawer.getAttribute("aria-labelledby") + '"]')?.textContent).toBe("Details");
 });
+
+it("retains a pending Escape across a parent rerender and calls the latest handler", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const first = vi.fn();
+  const latest = vi.fn();
+  try {
+    act(() => root.render(<InlineDrawer open title="Panel" onClose={first} />));
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+    act(() => root.render(<InlineDrawer open title="Updated panel" onClose={latest} />));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(first).not.toHaveBeenCalled();
+    expect(latest).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

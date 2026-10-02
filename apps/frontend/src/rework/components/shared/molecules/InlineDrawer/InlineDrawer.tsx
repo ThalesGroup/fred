@@ -211,6 +211,11 @@ export function InlineDrawer({
     onClose();
   }, [onClose]);
 
+  const closeRef = useRef(handleClose);
+  useLayoutEffect(() => {
+    closeRef.current = handleClose;
+  }, [handleClose]);
+
   useLayoutEffect(() => {
     if (!open) return;
     const drawer = drawerRef.current!;
@@ -226,7 +231,7 @@ export function InlineDrawer({
       // for every listener, including a nested Dialog, to consume the event.
       clearTimeout(pendingClose);
       pendingClose = setTimeout(() => {
-        if (!e.defaultPrevented && topDrawer(drawer.ownerDocument) === drawer) handleClose();
+        if (!e.defaultPrevented && topDrawer(drawer.ownerDocument) === drawer) closeRef.current();
       }, 0);
     };
     window.addEventListener("keydown", handleKey);
@@ -236,7 +241,7 @@ export function InlineDrawer({
       syncDrawerInteraction(drawer.ownerDocument);
       window.removeEventListener("keydown", handleKey);
     };
-  });
+  }, [open, layout]);
 
   useLayoutEffect(() => {
     if (!open || layout !== "overlay") return;
