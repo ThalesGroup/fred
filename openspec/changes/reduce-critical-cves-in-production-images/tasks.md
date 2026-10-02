@@ -11,5 +11,5 @@
 ## 3. Integration and delivery
 
 - [x] 3.1 Add a migration note and verify deployment and rollback instructions are present.
-- [ ] 3.2 Run repository quality checks and verify the production dependency set and container builds.
-- [ ] 3.3 Run the PR Trivy scanner, compare critical findings against the baseline JSON reports, and record residual risks in the draft PR.
+- [x] 3.2 Run repository quality checks and verify the production dependency set and container builds. The targeted checks and all PR workflows passed; local root quality stopped on the existing uv bootstrap issue.
+- [x] 3.3 Run the PR Trivy scanner, compare critical findings against the baseline JSON reports, and record residual risks in the draft PR.
