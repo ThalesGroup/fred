@@ -17,7 +17,7 @@ The light theme reads heavy and greyish, and switching between light and dark lo
   | `surface-container-highest` | 93 | 18 |
 
 - Add `--surface-floating` (light 100, dark 15) for elements that float above the page: menus, popovers, tooltips, modals, editor popups. It is the one named exception to the scale.
-- Remap the usages of `surface-container-lowest` and `surface-container-highest` whose visual role flips under the new scale (filled fields, code wells, page backgrounds, floating elements, the main nav). Usages of `surface-container-low`, `surface-container` and `surface-container-high` keep their token; only their tone changes.
+- Remap the usages of `surface-container-lowest` and `surface-container-highest` whose visual role flips under the new scale (filled fields, code wells, page backgrounds), and move every floating element to `surface-floating` whatever its current token. Usages of `surface-container-low`, `surface-container` and `surface-container-high` keep their token; only their tone changes.
 
 Non-goals (follow-up changes): secondary text tones, outline levels, `secondary-container` vs `primary-container`, dead and undefined tokens.
 
@@ -36,5 +36,6 @@ None.
 - `apps/frontend/src/styles/color-ramps.css`, `colors-semantic-light.css`, `colors-semantic-dark.css`.
 - About 60 CSS/SCSS/TSX usages of `surface-container-lowest` / `-highest` under `apps/frontend/src/rework/`, plus `apps/frontend/src/styles.css` (body background).
 - Visual change only: no API, contract, or data change. Borders currently drawn with `surface-container-highest` (DataTable, TablePagination) become visible grey lines in light; that is accepted here and revisited with the outline follow-up.
+- `@fred-oss/design-tokens` consumers (custom UI built by other teams) get the new values on upgrade and need the same role remap; the package README carries the token migration table for them and their coding assistants.
 - Docs: `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (surface token section), `docs/swift/ux/COMPONENT-UX.md` (surface row).
 - Migration note required (patch: no operator action).

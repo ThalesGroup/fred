@@ -9,18 +9,19 @@
 
 ## 3. Usage remap
 
-- [ ] 3.1 Move page and content backgrounds from `surface-container-lowest` to `surface-main` (`styles.css` body, GdprPage, GcuPage, ReleaseNotesPage, BootstrapPage, TeamAdminCharterPage, DocumentViewerPage); verify each page in both themes
-- [ ] 3.2 Repoint blend-with-background usages (HorizontalScrollRow fade, TraceEntryRow dot ring, ChatList group header) to the token of the surface they sit on; verify no visible seam in both themes
-- [ ] 3.3 Move filled fields from `surface-container-lowest` to `surface-container-highest` (TextInput incl. autofill shadow, TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea); verify on a form page in both themes
-- [ ] 3.4 Move inset wells from `surface-container-lowest` to `surface-container` (CodeBlock CSS and `customStyle`, TabularToolDetail, PlatformPromptPage instructions, MindMapBlock chart pane, LibraryTreePlayground card); verify a code block in chat in both themes
-- [ ] 3.5 Move MarkdownRenderer zebra rows and MainNavBar to `surface-container-low`; verify a markdown table and the nav in both themes
-- [ ] 3.6 Move floating elements to `surface-floating` (Menu, Tooltip, WritableDocumentPane popup and tooltip, SourceDetailModal); verify a menu, a tooltip and a modal in both themes
-- [ ] 3.7 Classify the remaining `surface-container-lowest` and `surface-container-highest` usages listed in design.md (TeamSettings panels, AgentCard disabled icon, DocumentUploadDrawer and CreateFolderModal path, WikiEditor toolbar, MindMapBlock gradient) with the design.md role table; verify each in both themes and record the choice in verification evidence
-- [ ] 3.8 Re-run the `surface-container-lowest` and `surface-container-highest` usage inventory; verify every remaining occurrence matches a role from the design.md table
+- [x] 3.1 Move page backgrounds from `surface-container-lowest` to `surface-main` (`styles.css` body, DocumentViewerPage); bordered content sheets keep `surface-container-lowest` (design.md); verify each page in both themes
+- [x] 3.2 Repoint blend-with-background usages (HorizontalScrollRow fade, TraceEntryRow dot ring; ChatList group header kept, see design.md) to the token of the surface they sit on; verify no visible seam in both themes
+- [x] 3.3 Move filled fields from `surface-container-lowest` to `surface-container-highest` (TextInput incl. autofill shadow, TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea); verify on a form page in both themes
+- [x] 3.4 Move inset wells from `surface-container-lowest` to `surface-container` (CodeBlock CSS and `customStyle`, TabularToolDetail, PlatformPromptPage instructions, LibraryTreePlayground card; MindMapBlock kept, see design.md); verify a code block in chat in both themes
+- [x] 3.5 Move MarkdownRenderer zebra rows to `surface-container-low` (MainNavBar rail kept on `surface-container-lowest`, developer decision); verify a markdown table and the nav in both themes
+- [x] 3.6 Move every floating element to `surface-floating` (full list in design.md, found by scanning positioned + shadowed rules); verify a menu, a tooltip, a dialog and a toast in both themes
+- [x] 3.7 Classify the remaining `surface-container-lowest` and `surface-container-highest` usages listed in design.md (TeamSettings panels, AgentCard disabled icon, DocumentUploadDrawer and CreateFolderModal path, WikiEditor toolbar, MindMapBlock gradient) with the design.md role table; verify each in both themes and record the choice in verification evidence
+- [x] 3.8 Re-run the `surface-container-lowest` and `surface-container-highest` usage inventory; verify every remaining occurrence matches a role from the design.md table
 
 ## 4. Quality and docs
 
 - [ ] 4.1 Run `make code-quality` and `make test` from the repo root (warn first: they restart Vite); verify both pass
 - [ ] 4.2 Update the surface token section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (rule, tones, `surface-floating`, role table) and the surface row of `docs/swift/ux/COMPONENT-UX.md`; verify no doc still describes the old ordering
 - [ ] 4.3 Add the English migration note (patch, no operator action) per `docs/swift/ops/MIGRATION-GUIDES.md`; verify it follows the template
-- [ ] 4.4 Run `/code-review` on the diff and record exact verification evidence in this change; then archive it with `openspec archive` and close #2915
+- [ ] 4.4 Add a token migration section to `libs/frontend/design-tokens/README.md` (rule, value table, old → new token by role, steps an assistant can follow), built from the final diff; verify every remap in the diff appears in it
+- [ ] 4.5 Run `/code-review` on the diff and record exact verification evidence in this change; then archive it with `openspec archive` and close #2915

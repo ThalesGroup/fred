@@ -184,7 +184,7 @@
   flex: 1;
   border: 1px solid var(--outline-retreat);
   border-radius: var(--radius-s);
-  background: var(--surface-container-lowest);
+  background: var(--surface-container);
   padding: var(--spacing-s);
   min-height: 0;
   overflow: auto;

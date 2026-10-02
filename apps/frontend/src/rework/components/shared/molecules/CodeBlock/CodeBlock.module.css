@@ -72,7 +72,7 @@
 }
 
 .body {
-  background: var(--surface-container-lowest);
+  background: var(--surface-container);
   padding: var(--spacing-m);
   overflow-x: auto;
 }

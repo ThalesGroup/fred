@@ -35,7 +35,7 @@
   box-shadow: var(--shadow-s);
   border-left: 3px solid var(--toast-accent);
   border-radius: var(--radius-xs);
-  background: var(--surface-container);
+  background: var(--surface-floating);
   width: 340px;
   pointer-events: auto;
   color: var(--on-surface);

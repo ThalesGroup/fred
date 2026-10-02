@@ -45,7 +45,7 @@
     outline: 2px solid var(--input-outline);
     border: 1px solid var(--input-border);
     border-radius: var(--spacing-xs);
-    background-color: var(--surface-container-lowest);
+    background-color: var(--surface-container-highest);
     padding: 0 var(--spacing-xs) 0 var(--spacing-s);
     height: 3rem;
     color: var(--on-surface);
@@ -58,7 +58,7 @@
     &:-webkit-autofill,
     &:-webkit-autofill:hover,
     &:-webkit-autofill:focus {
-      -webkit-box-shadow: 0 0 0 100px var(--surface-container-lowest) inset;
+      -webkit-box-shadow: 0 0 0 100px var(--surface-container-highest) inset;
       -webkit-text-fill-color: var(--on-surface);
     }
   }

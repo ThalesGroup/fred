@@ -293,7 +293,6 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
             variant="radio"
             size="small"
             color="secondary"
-            backgroundColor="var(--surface-container-lowest)"
             aria-label={t("rework.teamSettings.parameters.visibility.label")}
             selectedIndex={VISIBILITIES.indexOf(visibility)}
             onSelectedIndexChange={handleSelectVisibility}
@@ -328,7 +327,6 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
               variant="radio"
               size="small"
               color="secondary"
-              backgroundColor="var(--surface-container-lowest)"
               aria-label={t("rework.teamSettings.parameters.joiningMode.label")}
               selectedIndex={JOINING_MODES.indexOf(joiningMode)}
               onSelectedIndexChange={handleSelectJoiningMode}

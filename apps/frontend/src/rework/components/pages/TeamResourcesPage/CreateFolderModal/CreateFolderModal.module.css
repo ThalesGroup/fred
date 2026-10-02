@@ -29,7 +29,7 @@
   flex-direction: column;
   box-shadow: var(--shadow-l);
   border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-floating);
   width: min(440px, 90vw);
   color: var(--on-surface);
 }

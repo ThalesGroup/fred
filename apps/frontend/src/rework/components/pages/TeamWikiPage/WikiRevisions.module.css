@@ -34,7 +34,7 @@
     opacity var(--duration-short-3) var(--easing-standard);
   box-shadow: var(--shadow-m);
   border-left: 1px solid var(--outline-muted);
-  background: var(--surface-container-low);
+  background: var(--surface-floating);
   padding: var(--spacing-m);
   width: 340px;
   overflow-y: auto;

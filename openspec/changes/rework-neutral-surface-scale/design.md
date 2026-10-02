@@ -18,20 +18,24 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 
 **Ramp generated once, committed as hex.** Each step is CIE LCh(L = tone, C = 1.5, H = 280°) converted to sRGB (D65), then nudged to the nearest 8-bit color so rounding does not swing the hue at such low chroma. Values are computed once and written to `color-ramps.css` with a 2-line comment giving the formula; no generator script is added. Tone 0 and 100 stay pure black and white. Half steps are named `--core-cold-grey-97-5` and `--core-cold-grey-94-5`. No existing step is removed, even unused ones.
 
-**Remap by role, not by token name.** Each `surface-container-lowest` and `surface-container-highest` usage is reassigned by what the element is:
+**Remap by role, not by token name.** Each `surface-container-lowest` and `surface-container-highest` usage, plus every floating element whatever its token, is reassigned by what the element is:
 
 | Role | Today | New token | Examples |
 |---|---|---|---|
-| Page or content background | `surface-container-lowest` | `surface-main` | `styles.css` body, Gdpr/Gcu/ReleaseNotes/Bootstrap/TeamAdminCharter contents, DocumentViewerPage |
-| Element that must blend with the page behind it | `surface-container-lowest` | the token of that page (usually `surface-main`) | HorizontalScrollRow fade, TraceEntryRow dot ring, ChatList sticky group header |
+| Page background | `surface-container-lowest` | `surface-main` | `styles.css` body, DocumentViewerPage |
+| Element that must blend with the page behind it | `surface-container-lowest` | `surface-main` (the chat page) | HorizontalScrollRow fade, TraceEntryRow dot ring |
+| Bordered content sheet on the page | `surface-container-lowest` | unchanged | Gdpr/Gcu/ReleaseNotes/Bootstrap/TeamAdminCharter contents, TeamSettingsResponsibilities |
 | Filled field | `surface-container-lowest` | `surface-container-highest` | TextInput (incl. autofill), TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea |
-| Inset well (code, raw output, tables) | `surface-container-lowest` | `surface-container` | CodeBlock (CSS and `customStyle`), TabularToolDetail, PlatformPromptPage instructions, MindMapBlock chart pane, LibraryTreePlayground card |
+| Inset well (code, raw output, tables) | `surface-container-lowest` | `surface-container` | CodeBlock (CSS and `customStyle`), TabularToolDetail, PlatformPromptPage instructions, LibraryTreePlayground card |
 | Zebra row | `surface-container-lowest` | `surface-container-low` | MarkdownRenderer even rows |
-| Main nav | `surface-container-lowest` | `surface-container-low` | MainNavBar |
-| Floating element | `surface-container-highest` or `surface-container-lowest` | `surface-floating` | Menu, Tooltip, WritableDocumentPane mdx popup and tooltip, SourceDetailModal |
-| Track, badge, hover, focus, pending row | `surface-container-highest` | unchanged | ProgressBar, TaskProgressBar, badges, TimeRangeSelector hover, RichInputField/HomeSearch focus, CleanupDialog header, TaskTray/UserProfile trigger, AddTeamMembers pending row |
+| Main nav rail | `surface-container-lowest` | unchanged (sits closer to the page than the `surface-container-low` sidebar) | MainNavBar |
+| Floating element | `surface-container-highest`, `-high`, `-low`, `surface-container`, `surface-container-lowest` | `surface-floating` | Menu, MenuPopover, CommandMenu, Tooltip, Toast, TaskDetailPopover, TaskTray panel, HelpSearch panel, TimeRangeSelector dropdown, HomeSearch menu, WikiRevisions panel, WritableDocumentPane popup and tooltip, Dialog, ConfirmationDialog, CodenameModal, SourceDetailModal, DocumentUploadDrawer, AddTeamMembersDialog, ManageLabels/Rename/CreateFolder modals, DuplicatePrompt/DuplicateAgent dialogs |
+| Track, badge, hover, focus, pending row, path chip, editor toolbar | `surface-container-highest` | unchanged | ProgressBar, TaskProgressBar, badges, TimeRangeSelector hover, RichInputField/HomeSearch focus, CleanupDialog header, TaskTray/UserProfile trigger, AddTeamMembers pending row, DocumentUploadDrawer/CreateFolderModal path, WikiEditor toolbar |
+| Decorative low-contrast blocks | `surface-container-lowest` | unchanged | AgentCard disabled icon, ChatList group header, MindMapBlock gradient and chart pane (its `surface-container` glow needs the lower base) |
 
-Usages not listed (TeamSettings panels, AgentCard disabled icon, DocumentUploadDrawer/CreateFolderModal path, WikiEditor toolbar, MindMapBlock gradient) are classified with the same table during apply, by looking at the element in both themes.
+`ButtonGroup` overrides to `surface-container-lowest` in TeamSettingsParameters are removed: the component default (`surface-container`) keeps the track visible. Full-screen modals that already sit on `surface-main` (FullPageModal, SettingsModal, PromptsPage modal card) and inline panels (ImportPanel, InlineDrawer) are not floating and keep their token.
+
+Floating elements were found by scanning every rule with `position: absolute|fixed` plus a `--shadow`/`--elevation` box-shadow and a surface background.
 
 ## Risks / Trade-offs
 

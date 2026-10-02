@@ -100,7 +100,7 @@
   z-index: 1;
   /* Thin mask only: a 3px ring punched a 12px hole in a 24px row, which broke
      the timeline into dashes instead of one line threading the dots. */
-  box-shadow: 0 0 0 1.5px var(--surface-container-lowest);
+  box-shadow: 0 0 0 1.5px var(--surface-main);
   border-radius: 50%;
   width: 9px;
   height: 9px;
