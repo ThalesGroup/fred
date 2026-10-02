@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act } from "react";
+import { act, useState } from "react";
 import type { DataTableProps } from "./DataTable.tsx";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createPortal } from "react-dom";
@@ -1065,4 +1065,32 @@ it.each([
       />,
     ),
   ).toThrow("offset must be a multiple of limit");
+});
+
+it("resets server offset when changing size through the rendered selector", () => {
+  function Harness() {
+    const [offset, setOffset] = useState(20);
+    const [limit, setLimit] = useState(10);
+    return (
+      <>
+        <output>
+          {offset}:{limit}
+        </output>
+        <DataTable
+          data={makeRows(2)}
+          columns={columns}
+          serverPagination={{ totalCount: 100, offset, limit, onOffsetChange: setOffset, onLimitChange: setLimit }}
+        />
+      </>
+    );
+  }
+  render(<Harness />);
+  act(() => container.querySelector<HTMLButtonElement>('[aria-haspopup="listbox"]')!.click());
+  const option = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find(
+    (el) => el.textContent === "50",
+  )!;
+  expect(option).toBeDefined();
+  act(() => option.click());
+  expect(container.querySelector("output")!.textContent).toBe("0:50");
+  expect(container.querySelector('[aria-haspopup="listbox"]')!.textContent).toContain("50");
 });

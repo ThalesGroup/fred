@@ -556,6 +556,7 @@ export default function DataTable<T>({
             !serverPagination || serverPagination.onLimitChange
               ? (value) => {
                   if (serverPagination?.onLimitChange) {
+                    serverPagination.onOffsetChange(0);
                     serverPagination.onLimitChange(value);
                   } else {
                     setRowsPerPage(value);
