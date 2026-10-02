@@ -23,3 +23,15 @@ with headings or a count of findings.
 
 A successful replay is limited evidence for those cases, not proof that review
 is complete. New defect families need independent examples.
+
+
+For claims that an instruction change improves review quality, compare the old
+and revised procedures on equivalent held-out cases, with separate fresh
+contexts and the same scope/time allowance. Keep known examples used to write
+the procedure out of this comparison. Include fixed controls to reveal invented
+findings, and a composition or lifecycle case different from the motivating bug.
+Record supported detections, misses and unsupported findings against the same
+case set. More findings alone is not improvement. If fresh reviewers are
+unavailable, report the evaluation as pending; a self-replay cannot substitute
+for it. Do not claim knowledge of a remote reviewer's model, prompt or method
+without evidence.

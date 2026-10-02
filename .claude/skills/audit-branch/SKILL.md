@@ -33,11 +33,26 @@ Read the applicable existing specs/contracts, then compare them with the actual
 implementation and representative consumers. Load runtime/product contracts
 only for changes touching those boundaries; use package contracts for SDK work.
 
-For each new or changed public API/export, identify accepted inputs, defaults,
-required combinations and observable outputs. Try a valid-looking use outside
-its current first-party caller. An optional property in the type must either
-work when omitted or be rejected by the contract. Do not claim a defect solely
-because a type is broad: demonstrate the failing input and resulting behavior.
+Before following implementation details, state the observable invariants from
+user requirements, existing valid usages and the contract. Do not infer the
+expected behavior solely from the new types or tests: both may encode the same
+mistake. For each changed public boundary, trace inputs through state owners and
+consumers to observable results, including unchanged dependencies.
+
+Review one coherent responsibility to completion before handing off its first
+fix. Collect all supported findings in that pass; do not repeatedly switch from
+one review comment to its patch and call that a review of the responsibility.
+For externally reported defects, first identify the failed assumption and check
+its other uses in the bounded surface. Review every operand of an arithmetic
+contract, every participant sharing an event, or every consumer relying on the
+same identity; choose variants from that mechanism, not from the example's nouns.
+
+Try to disprove each invariant with a valid-looking consumer outside the current
+happy path. Use stateful children for identity claims, a second participant for
+exclusive ownership, and changed inputs for lifecycle claims. Explain why the
+chosen scenario exercises the assumption; a long list of tests is not evidence
+that it does. An optional property must work when omitted or be rejected by the
+contract. Demonstrate failing behavior rather than reporting broad types alone.
 
 Use the relevant questions below, not a mandatory matrix for unrelated work:
 
@@ -111,6 +126,9 @@ Put concise evidence in the existing PR or task response, not a new tracking
 file by default:
 
 - **Scope:** base/head, local changes, reviewed responsibilities and exclusions.
+  For substantial reviews, include a compact responsibility-to-evidence mapping
+  in the existing response/PR: invariant, challenged scenario, result, untested
+  boundary. Do not create a parallel tracking document.
 - **Findings:** severity, location, reproduction/trigger and user impact;
   distinguish confirmed defects from questions. Include disposition on follow-up.
 - **Verification:** commands/results actually obtained, with relevant limitations.
