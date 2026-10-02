@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from knowledge_flow_backend.features.scheduler.base_scheduler import BaseScheduler, WorkflowHandle
+from knowledge_flow_backend.features.scheduler.logging_context import capture_ingestion_context, ingestion_delivery_scope
 from knowledge_flow_backend.features.scheduler.scheduler_structures import PipelineDefinition
 from knowledge_flow_backend.models.task_models import ACTIVE_DOCUMENT_INDEX, IngestionSubmissionRow, KfTaskRunRow
 
@@ -52,6 +53,7 @@ class IngestionDelivery:
         if not definition.files:
             raise ValueError("At least one document is required")
         definition.workflow_id = f"ingestion-{uuid4()}"
+        capture_ingestion_context(user, definition, team_ids)
         try:
             async with self.sessions.begin() as session:
                 for file in definition.files:
@@ -112,20 +114,21 @@ class IngestionDelivery:
                 row.last_error = "Invalid persisted ingestion payload"
                 logger.warning("Invalid pending ingestion %s", workflow_id)
                 return WorkflowHandle(workflow_id=workflow_id)
-            try:
-                handle = await self.scheduler.start_document_processing(
-                    user=definition.files[0].processed_by,
-                    definition=definition,
-                    background_tasks=background_tasks,
-                )
-            except Exception as exc:
-                # A timeout can mean Temporal accepted the workflow. Keep both
-                # the reservation and its immutable payload for an idempotent retry.
-                row.last_error = type(exc).__name__
-                logger.warning("Ingestion delivery deferred for %s", workflow_id, exc_info=True)
-                return WorkflowHandle(workflow_id=workflow_id)
-            await session.execute(delete(IngestionSubmissionRow).where(IngestionSubmissionRow.workflow_id == workflow_id))
-            return handle
+            with ingestion_delivery_scope(definition):
+                try:
+                    handle = await self.scheduler.start_document_processing(
+                        user=definition.files[0].processed_by,
+                        definition=definition,
+                        background_tasks=background_tasks,
+                    )
+                except Exception as exc:
+                    # A timeout can mean Temporal accepted the workflow. Keep both
+                    # the reservation and its immutable payload for an idempotent retry.
+                    row.last_error = type(exc).__name__
+                    logger.warning("Ingestion delivery deferred for %s", workflow_id, exc_info=True)
+                    return WorkflowHandle(workflow_id=workflow_id)
+                await session.execute(delete(IngestionSubmissionRow).where(IngestionSubmissionRow.workflow_id == workflow_id))
+                return handle
 
     async def _deliver_memory(self, workflow_id: str) -> WorkflowHandle:
         # Memory mode is local-only. Serialize its deliveries without holding
@@ -137,17 +140,18 @@ class IngestionDelivery:
                 if row is None:
                     return WorkflowHandle(workflow_id=workflow_id)
                 definition = PipelineDefinition.model_validate(row.definition)
-            pending = []
-            for file in definition.files:
-                run = await self.tasks.store.get_run(file.task_id) if file.task_id else None
-                if run is not None and not TaskState(run.state).is_terminal:
-                    pending.append(file)
-            definition.files = pending
-            if pending:
-                await self.scheduler.start_document_processing(user=pending[0].processed_by, definition=definition)
-            async with self.sessions.begin() as session:
-                await session.execute(delete(IngestionSubmissionRow).where(IngestionSubmissionRow.workflow_id == workflow_id))
-            return WorkflowHandle(workflow_id=workflow_id)
+            with ingestion_delivery_scope(definition):
+                pending = []
+                for file in definition.files:
+                    run = await self.tasks.store.get_run(file.task_id) if file.task_id else None
+                    if run is not None and not TaskState(run.state).is_terminal:
+                        pending.append(file)
+                definition.files = pending
+                if pending:
+                    await self.scheduler.start_document_processing(user=pending[0].processed_by, definition=definition)
+                async with self.sessions.begin() as session:
+                    await session.execute(delete(IngestionSubmissionRow).where(IngestionSubmissionRow.workflow_id == workflow_id))
+                return WorkflowHandle(workflow_id=workflow_id)
 
     async def retry_pending(self) -> None:
         seen: set[str] = set()
