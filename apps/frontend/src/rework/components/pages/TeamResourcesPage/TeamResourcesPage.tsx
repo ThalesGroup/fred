@@ -241,8 +241,17 @@ export default function TeamResourcesPage() {
             // Safe to just skip in that case — the query's own mount fetch
             // is already about to run.
             onDocumentsChanged={() => {
-              if (!corpusStats.isUninitialized) void corpusStats.refetch();
-              if (!teamUninitialized) void refetchTeam();
+              // A cached query may have no subscription yet; its mount fetch will run anyway.
+              if (!corpusStats.isUninitialized) {
+                try {
+                  void corpusStats.refetch();
+                } catch {}
+              }
+              if (!teamUninitialized) {
+                try {
+                  void refetchTeam();
+                } catch {}
+              }
             }}
           />
         )}

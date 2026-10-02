@@ -255,6 +255,21 @@ describe("TeamResourcesPage onDocumentsChanged — refetch guard", () => {
     expect(probe.corpusStatsRefetch).not.toHaveBeenCalled();
   });
 
+  it("does not throw when cached queries have no hook subscription yet", () => {
+    const error = new Error("Cannot refetch a query that has not been started yet.");
+    probe.corpusStatsRefetch = vi.fn(() => {
+      throw error;
+    });
+    probe.teamRefetch = vi.fn(() => {
+      throw error;
+    });
+    render();
+
+    expect(() => probe.onDocumentsChanged?.()).not.toThrow();
+    expect(probe.corpusStatsRefetch).toHaveBeenCalledOnce();
+    expect(probe.teamRefetch).toHaveBeenCalledOnce();
+  });
+
   it("calls refetch once corpusStats has started", () => {
     probe.corpusStatsUninitialized = false;
     render();
