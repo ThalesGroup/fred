@@ -123,6 +123,7 @@ from control_plane_backend.product.service import (
     promote_prompt,
     record_marketplace_prompt_use,
     record_prompt_use,
+    set_prompt_favorite,
     set_prompt_published,
     unenroll_agent_instance,
     update_agent_instance,
@@ -650,7 +651,7 @@ async def get_team_prompts(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_prompts(team_id, deps)
+    return await list_prompts(team_id, deps, user_id=user.uid)
 
 
 @router.get(
@@ -896,6 +897,62 @@ async def put_team_prompt(
             detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
         )
     return result
+
+
+async def _set_team_prompt_favorite(
+    team_id: TeamId,
+    prompt_id: str,
+    favorite: bool,
+    deps: ProductDependencies,
+    user: KeycloakUser,
+) -> None:
+    # Reading a prompt is enough to favorite it: read-only members can too.
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    try:
+        await set_prompt_favorite(user, team_id, prompt_id, favorite, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
+
+
+@router.put(
+    "/teams/{team_id}/prompts/{prompt_id}/favorite",
+    status_code=204,
+    response_model=None,
+    summary="Mark one of the team's prompts as a favorite of the caller.",
+)
+async def add_team_prompt_favorite(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Idempotent. `PUT /control-plane/v1/teams/personal/prompts/1234/favorite`"""
+
+    await _set_team_prompt_favorite(team_id, prompt_id, True, deps, user)
+
+
+@router.delete(
+    "/teams/{team_id}/prompts/{prompt_id}/favorite",
+    status_code=204,
+    response_model=None,
+    summary="Remove one of the team's prompts from the caller's favorites.",
+)
+async def remove_team_prompt_favorite(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Idempotent. `DELETE /control-plane/v1/teams/personal/prompts/1234/favorite`"""
+
+    await _set_team_prompt_favorite(team_id, prompt_id, False, deps, user)
 
 
 @router.delete(

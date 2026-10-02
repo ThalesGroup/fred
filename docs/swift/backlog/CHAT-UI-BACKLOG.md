@@ -841,7 +841,7 @@ by commit `f2fba80726e3516a4fb8716d55dfd575c4749c07`:
 - `TaskStateBadge` for compact upload / processing state
 - `TaskProgressBar` when a task exposes progress
 - `TaskIndicator` for inline task status affordances
-- `TaskTray` / `TaskTrayTrigger` for active and historical scheduler tasks
+- `TaskActivity`, `TaskCard`, and `TaskDetailPopover` for scheduler tasks
 - `useTaskSseManager` and the task slice for scheduler event subscription
 
 No duplicate upload progress modal or bespoke attachment drawer should be

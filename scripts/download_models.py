@@ -26,7 +26,8 @@ _parser.add_argument("--models-dir", default="./models",
 _args, _ = _parser.parse_known_args()
 os.environ["PADDLE_PDX_CACHE_HOME"] = os.path.abspath(_args.models_dir)
 
-from paddlex import create_model
+from paddlex.inference.models.utils.model_config import load_model_config
+from paddlex.inference.utils.official_models import official_models
 
 MODELS_PP_OCR = [
     "latin_PP-OCRv5_mobile_rec",
@@ -45,9 +46,9 @@ def is_model_present(name: str, target_dir: Path) -> bool:
     return False
 
 
-def write_rec_dict(model) -> None:
-    character_dict = model.config["PostProcess"]["character_dict"]
-    dict_path = os.path.join(model.model_dir, "dict.txt")
+def write_rec_dict(model_dir: Path) -> None:
+    character_dict = load_model_config(model_dir)["PostProcess"]["character_dict"]
+    dict_path = model_dir / "dict.txt"
     with open(dict_path, "w", encoding="utf-8") as f:
         for char in character_dict:
             f.write((char if char is not None else "") + "\n")
@@ -61,9 +62,10 @@ def paddle_ocr_model(models_dir: Path) -> None:
         if is_model_present(name, target_dir):
             continue
         print(f"\nDownloading: {name}")
-        model = create_model(name, engine="onnxruntime")
+        # Download the ONNX package without starting an inference session at build time.
+        model_dir = Path(official_models.get_model_path(name, model_formats=("onnx",)))
         if name.endswith("_rec"):
-            write_rec_dict(model)
+            write_rec_dict(model_dir)
 
 
 def docling_model(models_dir: Path) -> None:

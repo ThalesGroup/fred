@@ -351,5 +351,5 @@ All previously open questions are resolved by RFC v2. See `docs/swift/rfc/AGENT-
 | Phase 3 — Evaluation worker | Not started | Depends on Phase 1 + 2 |
 | Phase 4 — Frontend | Not started | Depends on Phase 2 + 3 |
 | Phase 5 — OTel export | Not started | Depends on Phase 3 |
-| EVAL-02 — Task-event adoption | Proposed | RFC EVAL-02; standalone evaluator + multi-source tray |
+| EVAL-02 — Task-event adoption | Proposed | RFC EVAL-02; standalone evaluator + multi-source task events; campaign UI placement to decide |
 | Phase 6 — Live validation | Not started | Depends on Phase 3 + 4 |

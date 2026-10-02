@@ -673,6 +673,18 @@ snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
   only), `POST /marketplace/prompts/{id}/import` (per-target
   `can_update_resources`, `_imported-N` naming)
 
+Per-user favorites (2026-10-01, OpenSpec `add-prompt-favorites`):
+
+- table `prompt_favorite (user_id, prompt_id → prompt ON DELETE CASCADE)`;
+  personal data, never read on behalf of another user
+- `PUT` / `DELETE /teams/{team_id}/prompts/{prompt_id}/favorite`: idempotent,
+  `204`, `can_use_team_agents` (reading the prompt is enough), `404` for a
+  prompt outside the team
+- `PromptSummary.is_favorite` (team listing) and `ContextPromptSummary.is_favorite`
+  (chat picker) are computed for the caller; other payloads carry `false`
+- removed with the prompt, when the user leaves or is removed from the
+  prompt's team (`remove_team_member`), and on account deletion (`DELETE /users/{id}`)
+
 ### 3.7 Feedback
 
 Feedback must align with managed execution semantics:

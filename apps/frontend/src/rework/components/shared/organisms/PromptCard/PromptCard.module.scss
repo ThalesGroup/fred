@@ -41,9 +41,15 @@
 /* ── More menu ──────────────────────────────────────────────────────────────── */
 
 .moreMenu {
+  display: flex;
   position: absolute;
   top: var(--spacing-2xs);
   right: var(--spacing-2xs);
+}
+
+/* Two buttons in the corner instead of one: keep the header text clear of both. */
+.card[data-has-favorite="true"] .header {
+  padding-right: calc(var(--spacing-xl) + var(--spacing-l));
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
@@ -76,8 +82,12 @@
 
 /* ── Body ───────────────────────────────────────────────────────────────────── */
 
+/* Always two lines tall, so every card in the grid has the same height whatever
+   the filter leaves on a row. */
 .body {
   flex: 1;
+  min-height: calc(2em * 1.45);
+  font: var(--font-body-medium);
 }
 
 .description {
@@ -106,12 +116,15 @@
 
 /* ── Footer: usage count + published badge ─────────────────────────────────── */
 
+/* Bottom-aligned and as tall as the published chip, so the usage count sits in the
+   same place, and the card keeps its height, whether the chip is there or not. */
 .footer {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--spacing-xs);
   margin-top: var(--spacing-2xs);
+  min-height: 1.25rem;
 }
 
 .uses {

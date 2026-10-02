@@ -108,7 +108,7 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   // success is a panel nobody reads. It stays long enough to be seen finishing,
   // then leaves — this list only. The task itself stays in the store for its
   // own five-minute window, which the documents table reads to mark a row as
-  // just completed and the tray reads to show it at all.
+  // just completed.
   const [settled, setSettled] = useState<ReadonlySet<string>>(() => new Set());
   // What the panel still has to show: everything it follows, minus the
   // successes it has already let go of.
@@ -249,7 +249,7 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
       releaseHeldImport(task.taskId);
       noteImportSettled(task.taskId);
       // The server still gets its acknowledgement, but the entry goes now
-      // rather than lingering for the tray's eviction window: dismissing it
+      // rather than waiting for the visible-task cutoff: dismissing it
       // here means being done with it.
       void acknowledge(task.taskId, task.kind, task.localOnly);
       dispatch(taskEvicted(task.taskId));

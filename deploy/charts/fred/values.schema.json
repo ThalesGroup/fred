@@ -26711,16 +26711,6 @@
                         "feature_flags": {
                           "description": "Typed feature flags exposed to the frontend bootstrap.",
                           "properties": {
-                            "enableK8Features": {
-                              "default": false,
-                              "title": "Enablek8Features",
-                              "type": "boolean"
-                            },
-                            "enableElecWarfare": {
-                              "default": false,
-                              "title": "Enableelecwarfare",
-                              "type": "boolean"
-                            },
                             "enableApplications": {
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
@@ -28861,16 +28851,6 @@
                         "feature_flags": {
                           "description": "Typed feature flags exposed to the frontend bootstrap.",
                           "properties": {
-                            "enableK8Features": {
-                              "default": false,
-                              "title": "Enablek8Features",
-                              "type": "boolean"
-                            },
-                            "enableElecWarfare": {
-                              "default": false,
-                              "title": "Enableelecwarfare",
-                              "type": "boolean"
-                            },
                             "enableApplications": {
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",

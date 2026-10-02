@@ -35,6 +35,7 @@ from pydantic import BaseModel
 
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
+from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
@@ -110,6 +111,10 @@ def _get_rebac_engine(request: Request) -> RebacEngine:
 
 def _get_platform_bootstrap_store(request: Request) -> PlatformBootstrapStore:
     return get_application_container(request).get_platform_bootstrap_store()
+
+
+def _get_prompt_store(request: Request) -> PromptStore:
+    return get_application_container(request).get_prompt_store()
 
 
 def _parse_user_uuid(user: KeycloakUser) -> UUID:
@@ -372,6 +377,7 @@ async def delete_user(
     bootstrap_store: Annotated[
         PlatformBootstrapStore, Depends(_get_platform_bootstrap_store)
     ],
+    prompt_store: Annotated[PromptStore, Depends(_get_prompt_store)],
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
     await rebac.check_user_permission_or_raise(
@@ -393,6 +399,8 @@ async def delete_user(
     # a retry rewrites the same ban.
     if rebac.requires_active_accounts:
         await rebac.suspend_account(user_id)
+    # Before the account, so a failure here is retried rather than orphaned.
+    await prompt_store.delete_favorites_for_user(user_id)
     await delete_user_from_service(admin, user_id)
 
 
