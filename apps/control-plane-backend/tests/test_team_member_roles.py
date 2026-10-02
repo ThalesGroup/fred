@@ -273,7 +273,7 @@ def _deps(
         get_team_metadata_store=cast(Any, lambda: store),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
-        get_prompt_store=cast(Any, lambda: _NoFavoritesPromptStore()),
+        get_prompt_store=cast(Any, _NoFavoritesPromptStore),
         get_prompt_category_store=cast(Any, object),
         get_content_store=cast(Any, object),
         get_session_store=get_session_store,

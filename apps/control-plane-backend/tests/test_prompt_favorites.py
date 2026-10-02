@@ -72,7 +72,8 @@ async def test_deleting_a_prompt_drops_its_favorites(store: PromptStore) -> None
     a = await _prompt(store, "team-1", "a")
     await store.set_favorite("alice", a, True)
 
-    assert await store.delete(a, TeamId("team-1"))
+    deleted = await store.delete(a, TeamId("team-1"))
+    assert deleted
     await _prompt(store, "team-1", "a")  # same id again, a new prompt
 
     assert await store.favorite_ids("alice", [a]) == set()

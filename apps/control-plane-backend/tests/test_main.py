@@ -6394,7 +6394,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         get_team_metadata_store=lambda: cast(Any, object()),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
-        get_prompt_store=cast(Any, lambda: _FakePromptStore()),
+        get_prompt_store=cast(Any, _FakePromptStore),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),
@@ -8121,13 +8121,20 @@ async def test_prompt_favorite_toggles_and_shows_in_the_listing(
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        assert (await client.get(url)).json()[0]["is_favorite"] is False
-        assert (await client.put(f"{url}/prompt-1/favorite")).status_code == 204
-        assert (await client.put(f"{url}/prompt-1/favorite")).status_code == 204
-        assert (await client.get(url)).json()[0]["is_favorite"] is True
-        assert (await client.delete(f"{url}/prompt-1/favorite")).status_code == 204
-        assert (await client.delete(f"{url}/prompt-1/favorite")).status_code == 204
-        assert (await client.get(url)).json()[0]["is_favorite"] is False
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is False
+        response = await client.put(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.put(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is True
+        response = await client.delete(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.delete(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is False
 
 
 @pytest.mark.asyncio
