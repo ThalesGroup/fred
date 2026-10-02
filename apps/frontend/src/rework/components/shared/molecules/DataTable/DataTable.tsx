@@ -217,9 +217,6 @@ export default function DataTable<T>({
   const primitiveKeys = useRef(new Map<unknown, number>());
   const nextObjectKey = useRef(0);
   const fallbackKey = (row: T): string => {
-    if (onRowClick && columns.length === 0) {
-      throw new Error("DataTable: row activation requires at least one column.");
-    }
     if ((typeof row === "object" && row !== null) || typeof row === "function") {
       const object = row as object;
       let key = objectKeys.current.get(object);
@@ -236,6 +233,9 @@ export default function DataTable<T>({
     }
     return `primitive:${key}`;
   };
+  if (onRowClick && columns.length === 0) {
+    throw new Error("DataTable: row activation requires at least one column.");
+  }
   if ((controlledSortState !== undefined) !== (onSortChange !== undefined)) {
     throw new Error("DataTable: sortState and onSortChange must be supplied together.");
   }

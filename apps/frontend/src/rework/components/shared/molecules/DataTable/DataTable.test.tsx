@@ -1132,9 +1132,14 @@ it.each([undefined, () => null])("names row actions independently of empty cell 
   act(() => actions[1].click());
   expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 2 });
 });
-it("rejects row activation without a column for its keyboard action", () => {
+it.each([
+  { data: [], rowKey: undefined },
+  { data: [{ id: 1 }], rowKey: undefined },
+  { data: [], rowKey: (row: Row) => row.id },
+  { data: [{ id: 1 }], rowKey: (row: Row) => row.id },
+])("rejects columnless activation regardless of data and key strategy %j", ({ data, rowKey }) => {
   render(<DataTable data={[]} columns={[]} />);
-  expect(() => renderToStaticMarkup(<DataTable data={[{ id: 1 }]} columns={[]} onRowClick={() => {}} />)).toThrow(
-    "row activation requires at least one column",
-  );
+  expect(() =>
+    renderToStaticMarkup(<DataTable data={data} rowKey={rowKey} columns={[]} onRowClick={() => {}} />),
+  ).toThrow("row activation requires at least one column");
 });
