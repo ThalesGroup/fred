@@ -52,8 +52,8 @@ answer stays identical.
 6. **Tuple migration is copy-only in this step.** A startup reconciliation,
    under the existing advisory lock, copies each platform-level tuple from
    `organization:fred` to `platform:fred`, idempotently. The old tuples stay,
-   inert, so a rollback to the previous version still works; step 2 deletes
-   them.
+   inert, so a rollback to the previous version still works. A cleanup change,
+   once release 1 has run in production, deletes them.
 
 ## Risks / Trade-offs
 

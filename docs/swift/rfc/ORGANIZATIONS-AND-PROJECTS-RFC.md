@@ -121,8 +121,17 @@ see them, on the admin pages.
 2. Explicit organization (MG1–MG5); `org_admin` replaces
    `team_manager` (R5).
 
+Release 1 deletes nothing it migrates, so rollback stays open; a cleanup change
+removes the legacy data once release 1 has run in production.
+
+In release 1 every new account joins the configured organization (MG5); the
+configuration states it as such.
+
 **Later releases, each with its UI:** projects; organization-level content,
-`org_editor` and organization agents; creating further organizations.
+`org_editor` and organization agents; creating further organizations, with an
+explicit way in for a new account (invitation by an `org_admin`, or a landing
+page outside any organization that routes to an external request, as team
+requests already do).
 
 ## 5. Impact on existing contracts
 
