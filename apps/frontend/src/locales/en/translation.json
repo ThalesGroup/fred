@@ -3005,23 +3005,12 @@
     "uiSettings": {
       "title": "User interface",
       "subtitle": "Default theme and themes available to users. Changes apply the next time each user loads the application.",
-      "default": {
-        "title": "Default theme",
-        "hint": "Theme for users who have not chosen one yet, or whose chosen theme is no longer offered.",
-        "none": "None (first offered theme)"
-      },
-      "offered": {
-        "title": "Themes offered to users",
-        "hint": "An unchecked theme disappears from users' profile. Their choice is kept and comes back if the theme is offered again."
-      },
-      "unknown": "Themes unknown to this version, kept on save: {{ids}}",
-      "errors": {
-        "noneOffered": "Offer at least one theme.",
-        "defaultHidden": "The default theme must be one of the offered themes."
-      },
-      "save": "Save",
-      "saving": "Saving…",
-      "saved": "Interface settings saved",
+      "hint": "A disabled theme disappears from users' profile; their choice is kept and comes back if the theme is offered again. The default theme applies to users who have not chosen one, and is always offered.",
+      "offeredLabel": "Offer the {{theme}} theme to users",
+      "offeredTooltip": "Offered to users",
+      "setDefault": "Set as default",
+      "isDefault": "Default",
+      "unknown": "Themes unknown to this version, kept as they are: {{ids}}",
       "saveFailed": "Interface settings were not saved",
       "lastUpdated": "Changed by {{who}} on {{when}}",
       "loadFailed": "Could not load the interface settings. Reload the page.",

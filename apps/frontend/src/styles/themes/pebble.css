@@ -17,7 +17,7 @@
 /* Pebble UI theme ("Galet", the default look): indigo accents on a slightly
    blue neutral, Geist, soft radii. Colors map onto the --core-* ramps of
    color-ramps.css. Every theme declares this same set of tokens. */
-:root[data-ui-theme="pebble"] {
+[data-ui-theme="pebble"] {
   --font-family-base: "Geist", sans-serif;
   --radius-2xl: 48px;
   --radius-xl: 32px;

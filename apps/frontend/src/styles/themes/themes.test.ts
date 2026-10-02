@@ -41,7 +41,7 @@ function customProperties(body: string): string[] {
 }
 
 function blockOf(selector: string, id: string): Block | undefined {
-  if (selector === `:root[data-ui-theme="${id}"]`) return "root";
+  if (selector === `[data-ui-theme="${id}"]`) return "root";
   if (selector === `[data-ui-theme="${id}"][data-theme="light"]`) return "light";
   if (selector === `[data-ui-theme="${id}"][data-theme="dark"]`) return "dark";
   return undefined;

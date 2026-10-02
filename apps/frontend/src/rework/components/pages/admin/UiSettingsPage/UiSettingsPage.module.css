@@ -24,58 +24,85 @@
   max-width: 960px;
 }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-l);
-  border-radius: var(--radius-ms);
-  background-color: var(--surface-container);
-  padding: var(--spacing-m);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  margin: 0;
-  border: none;
-  padding: 0;
-}
-
-.fieldTitle {
-  margin: 0;
-  padding: 0;
-  color: var(--on-surface);
-  font: var(--font-title-small);
-}
-
-.fieldHint {
+.hint {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-}
-
-.select {
-  margin-top: var(--spacing-xs);
-  width: 240px;
 }
 
 .themes {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  margin: var(--spacing-xs) 0 0;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.theme {
-  display: inline-flex;
+.tile {
+  display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  cursor: pointer;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  background-color: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+  min-width: 500px;
+}
+
+/* The switch: L after it, while the tile's gap keeps M between the other items. */
+/* Only the name gives way when the tile is narrow. */
+.tile > :not(.name) {
+  flex-shrink: 0;
+}
+
+.toggle {
+  display: inline-flex;
+}
+
+.tile > :first-child {
+  margin-inline-end: calc(var(--spacing-l) - var(--spacing-m));
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   color: var(--on-surface);
-  font: var(--font-body-medium);
+  font: var(--font-body-large);
+  /* After the shorthand: the theme's own family, set on this element. */
+  font-family: var(--font-family-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview {
+  display: flex;
+}
+
+.swatches {
+  display: flex;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline-muted);
+  background-color: var(--surface-container);
+  padding: var(--spacing-xs);
+}
+
+.swatches:first-child {
+  border-right: none;
+  border-radius: var(--radius-ms) 0 0 var(--radius-ms);
+}
+
+.swatches:last-child {
+  border-left: none;
+  border-radius: 0 var(--radius-ms) var(--radius-ms) 0;
+}
+
+.swatch {
+  border: 1px solid var(--outline-muted);
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
 }
 
 .error {
@@ -84,15 +111,8 @@
   font: var(--font-body-small);
 }
 
-.footer {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--spacing-m);
-}
-
 .meta {
-  margin: 0 auto 0 0;
+  margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }

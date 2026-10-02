@@ -176,8 +176,9 @@ Verify that a token exists before using it. The authoritative token files are:
 ### UI themes
 
 Every UI theme (`pebble`, `cobalt`, `cloud`) is a peer: one file in
-`src/styles/themes/` with a `:root[data-ui-theme="<id>"]` block (font family,
-radius scale, emphasized headline weights) and one block per mode
+`src/styles/themes/` with a `[data-ui-theme="<id>"]` block (font family,
+radius scale, emphasized headline weights; not bound to `:root`, so an element
+can preview another theme's shapes and font) and one block per mode
 (`[data-ui-theme="<id>"][data-theme="light|dark"]`, semantic colors and
 `color-scheme`). All themes declare the same tokens and the base stylesheets
 declare none of them; `src/styles/themes/themes.test.ts` enforces both. The

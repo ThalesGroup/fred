@@ -3005,23 +3005,12 @@
     "uiSettings": {
       "title": "Interface utilisateur",
       "subtitle": "Thème proposé par défaut et thèmes disponibles pour les utilisateurs. Les changements s'appliquent au prochain chargement de l'application par chaque utilisateur.",
-      "default": {
-        "title": "Thème par défaut",
-        "hint": "Thème des utilisateurs qui n'en ont pas encore choisi, ou dont le thème choisi n'est plus proposé.",
-        "none": "Aucun (premier thème proposé)"
-      },
-      "offered": {
-        "title": "Thèmes proposés aux utilisateurs",
-        "hint": "Un thème décoché disparaît du profil des utilisateurs. Leur choix est conservé et revient si le thème est de nouveau proposé."
-      },
-      "unknown": "Thèmes inconnus de cette version, conservés à l'enregistrement : {{ids}}",
-      "errors": {
-        "noneOffered": "Proposez au moins un thème.",
-        "defaultHidden": "Le thème par défaut doit faire partie des thèmes proposés."
-      },
-      "save": "Enregistrer",
-      "saving": "Enregistrement…",
-      "saved": "Paramètres d'interface enregistrés",
+      "hint": "Un thème désactivé disparaît du profil des utilisateurs ; leur choix est conservé et revient si le thème est de nouveau proposé. Le thème par défaut s'applique aux utilisateurs qui n'en ont pas choisi, et reste toujours proposé.",
+      "offeredLabel": "Proposer le thème {{theme}} aux utilisateurs",
+      "offeredTooltip": "Proposé aux utilisateurs",
+      "setDefault": "Définir par défaut",
+      "isDefault": "Par défaut",
+      "unknown": "Thèmes inconnus de cette version, conservés tels quels : {{ids}}",
       "saveFailed": "Les paramètres d'interface n'ont pas été enregistrés",
       "lastUpdated": "Modifié par {{who}} le {{when}}",
       "loadFailed": "Impossible de charger les paramètres d'interface. Rechargez la page.",

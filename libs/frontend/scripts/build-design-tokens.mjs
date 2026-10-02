@@ -81,7 +81,7 @@ function rewriteSingleUrl(value, packedName, sourceDescription) {
 }
 
 const packagedThemeSelectors = new Map([
-  [`:root[data-ui-theme="${PACKAGED_THEME}"]`, ":root"],
+  [`[data-ui-theme="${PACKAGED_THEME}"]`, ":root"],
   [
     `[data-ui-theme="${PACKAGED_THEME}"][data-theme="light"]`,
     '[data-theme="light"]',

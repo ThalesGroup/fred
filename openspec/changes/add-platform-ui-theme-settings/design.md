@@ -60,10 +60,16 @@ and before `createRoot().render()`. A cache miss or a stale cache can therefore 
 blank page background before the first render, never painted application content.
 
 **Admin page.** Route `/admin/interface`, nav entry "Interface utilisateur" / "User interface"
-(`requires: "admin"`). One card: a dropdown for the default theme ("None, use the catalog order"
-plus every shipped theme), and one checkbox per shipped theme labelled "Offered to users". Saving
-is disabled with an inline message when the default is unchecked or no theme is checked. Ids stored
-but not shipped are kept on save and listed as "Unknown to this version".
+(`requires: "admin"`). One wide tile per shipped theme: a switch "offered to users", its primary,
+secondary and tertiary colors in one preview split into a light half and a dark half (halves carrying the theme's `data-ui-theme`
+and a fixed `data-theme`, so the theme's own tokens resolve inside them), the theme name, and a "Set as default"
+button. The colors sit in a container in the theme's own `surface-container` and `--radius-ms`, and
+the name uses the theme's font (an element with `data-ui-theme` only, so colors stay the page's).
+The default's switch and a withdrawn theme's button are disabled, as is the switch of the
+last offered theme, so an invalid state cannot be built and no error message is needed. With
+nothing saved the page shows Pebble (the first offered theme) as default; the first change writes it
+explicitly. Each switch or default change is saved at once (no Save button); the tiles are locked
+during the request and return to the stored values if it fails. Ids stored but not shipped are kept on save and listed as "Unknown to this version".
 
 **Profile picker.** Lists offered themes; hidden when exactly one is offered.
 

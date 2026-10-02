@@ -17,7 +17,7 @@
 /* Cobalt UI theme: strict navy and cyan, Inter, near-square controls. Colors
    come from LCh seeds (neutral 265/2.5 in light, 226/2.5 in dark; primary
    298/90; tertiary 226/39) with the accent rules of the token rework. */
-:root[data-ui-theme="cobalt"] {
+[data-ui-theme="cobalt"] {
   --font-family-base: "Inter", sans-serif;
   /* Near-square controls (buttons, inputs), soft menus; cards keep --radius-l. */
   --radius-xs: 4px;

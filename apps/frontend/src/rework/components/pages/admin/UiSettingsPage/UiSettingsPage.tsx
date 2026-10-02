@@ -15,13 +15,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
-import Checkbox from "@shared/atoms/Checkbox/Checkbox.tsx";
+import Switch from "@shared/atoms/Switch/Switch.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import Select from "@shared/molecules/Select/Select.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
-import { UI_THEME_LABEL_KEYS, UI_THEMES, type UiTheme } from "../../../../../app/uiThemes.ts";
+import { offeredUiThemes, UI_THEME_LABEL_KEYS, UI_THEMES } from "../../../../../app/uiThemes.ts";
 import {
   usePlatformUiSettingsQuery,
   useSetPlatformUiSettingsMutation,
@@ -29,159 +29,164 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./UiSettingsPage.module.css";
 
-// Select value for "no platform default": the first offered theme then applies.
-const NO_DEFAULT = "";
+const SWATCHES = ["primary", "secondary", "tertiary"] as const;
+const MODES = ["light", "dark"] as const;
+
+type StoredSettings = { default_theme?: string | null; hidden_themes?: string[] };
+
+// Every shipped theme hidden (API or another version): users get them all, so show them offered.
+function storedHidden(stored: StoredSettings): string[] {
+  const hidden = stored.hidden_themes ?? [];
+  const offered = offeredUiThemes(stored);
+  return hidden.filter((id) => !(offered as string[]).includes(id));
+}
+
+// No default saved: shown as the first offered theme, which is what users get.
+function storedDefault(stored: StoredSettings): string {
+  return stored.default_theme ?? offeredUiThemes(stored)[0];
+}
 
 /**
- * Platform UI theme settings: the theme users get when they have not chosen
- * one, and the themes withdrawn from their choice. Applies at each user's next
+ * Platform UI theme settings: one tile per theme to offer it to users and pick
+ * the platform default. The default is always offered, and at least one theme
+ * stays offered. Each change is saved at once and applies at each user's next
  * load of the application.
  */
 export default function UiSettingsPage() {
   const { t } = useTranslation();
-  const { showSuccess, showError } = useToast();
-  const { data, isLoading, isError } = usePlatformUiSettingsQuery();
+  const { showError } = useToast();
+  const { data, isLoading, isFetching, isError } = usePlatformUiSettingsQuery();
   const [save, { isLoading: isSaving }] = useSetPlatformUiSettingsMutation();
 
   const auditUids = data?.updated_by ? [data.updated_by] : [];
   const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
 
-  const [defaultTheme, setDefaultTheme] = useState<string>(NO_DEFAULT);
+  const [defaultTheme, setDefaultTheme] = useState<string>(UI_THEMES[0]);
   const [hidden, setHidden] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | undefined>();
   useEffect(() => {
     if (!data) return;
-    setDefaultTheme(data.default_theme ?? NO_DEFAULT);
-    setHidden(data.hidden_themes ?? []);
+    setDefaultTheme(storedDefault(data));
+    setHidden(storedHidden(data));
   }, [data]);
 
   // Ids stored by another frontend version: kept as they are on save.
-  const unknownIds = [...new Set([...hidden, ...(defaultTheme ? [defaultTheme] : [])])].filter(
+  const unknownIds = [...new Set([...hidden, defaultTheme])].filter(
     (id) => !(UI_THEMES as readonly string[]).includes(id),
   );
-  const offeredCount = UI_THEMES.filter((theme) => !hidden.includes(theme)).length;
-  const blocking =
-    offeredCount === 0
-      ? t("rework.uiSettings.errors.noneOffered")
-      : defaultTheme && hidden.includes(defaultTheme)
-        ? t("rework.uiSettings.errors.defaultHidden")
-        : undefined;
-  const isDirty =
-    data !== undefined &&
-    (defaultTheme !== (data.default_theme ?? NO_DEFAULT) ||
-      [...hidden].sort().join() !== [...(data.hidden_themes ?? [])].sort().join());
+  const offered = UI_THEMES.filter((theme) => !hidden.includes(theme));
+  // Also while refetching after a save: a revert must never use settings older than the server's.
+  const locked = isLoading || isFetching || isSaving || isError;
 
-  const toggleOffered = (theme: UiTheme, offered: boolean) => {
+  // Saved at once; on failure the tiles go back to what the server holds.
+  const persist = async (nextDefault: string, nextHidden: string[]) => {
     setServerError(undefined);
-    setHidden((current) => (offered ? current.filter((id) => id !== theme) : [...current, theme]));
-  };
-
-  const onSave = async () => {
+    setDefaultTheme(nextDefault);
+    setHidden(nextHidden);
     try {
       await save({
-        setPlatformUiSettingsRequest: { default_theme: defaultTheme || null, hidden_themes: hidden },
+        setPlatformUiSettingsRequest: { default_theme: nextDefault, hidden_themes: nextHidden },
       }).unwrap();
-      setServerError(undefined);
-      showSuccess({ summary: t("rework.uiSettings.saved") });
     } catch (error: unknown) {
+      if (data) {
+        setDefaultTheme(storedDefault(data));
+        setHidden(storedHidden(data));
+      }
       setServerError(normalizeApiError(error).detail);
       showError({ summary: t("rework.uiSettings.saveFailed") });
     }
   };
 
-  const themeOptions = [
-    { key: NO_DEFAULT, value: NO_DEFAULT, label: t("rework.uiSettings.default.none") },
-    ...UI_THEMES.map((theme) => ({ key: theme, value: theme as string, label: t(UI_THEME_LABEL_KEYS[theme]) })),
-    // A default saved by another frontend version stays visible instead of a blank trigger.
-    ...(defaultTheme && !(UI_THEMES as readonly string[]).includes(defaultTheme)
-      ? [{ key: defaultTheme, value: defaultTheme, label: defaultTheme, disabled: true }]
-      : []),
-  ];
-
   return (
     <div className={styles.page}>
       <PageHeader title={t("rework.uiSettings.title")} subtitle={t("rework.uiSettings.subtitle")} />
 
-      {/* Without the stored settings the form would show defaults as if they were saved. */}
+      {/* Without the stored settings the tiles would show defaults as if they were saved. */}
       {isError && (
         <p className={styles.error} role="alert">
           {t("rework.uiSettings.loadFailed")}
         </p>
       )}
 
-      <section className={styles.card}>
-        <div className={styles.field}>
-          <h2 className={styles.fieldTitle}>{t("rework.uiSettings.default.title")}</h2>
-          <p className={styles.fieldHint}>{t("rework.uiSettings.default.hint")}</p>
-          <div className={styles.select}>
-            <Select<string>
-              size="xs"
-              compact
-              options={themeOptions}
-              value={defaultTheme}
-              onChange={(value) => {
-                setServerError(undefined);
-                setDefaultTheme(value);
-              }}
-              disabled={isLoading || isSaving || isError}
-              ariaLabel={t("rework.uiSettings.default.title")}
-            />
-          </div>
-        </div>
+      <p className={styles.hint}>{t("rework.uiSettings.hint")}</p>
 
-        <fieldset className={styles.field} disabled={isLoading || isSaving || isError}>
-          <legend className={styles.fieldTitle}>{t("rework.uiSettings.offered.title")}</legend>
-          <p className={styles.fieldHint}>{t("rework.uiSettings.offered.hint")}</p>
-          <ul className={styles.themes}>
-            {UI_THEMES.map((theme) => (
-              <li key={theme}>
-                <label className={styles.theme}>
-                  <Checkbox
-                    checked={!hidden.includes(theme)}
-                    onChange={(event) => toggleOffered(theme, event.target.checked)}
+      <ul className={styles.themes}>
+        {UI_THEMES.map((theme) => {
+          const label = t(UI_THEME_LABEL_KEYS[theme]);
+          const isOffered = !hidden.includes(theme);
+          const isDefault = theme === defaultTheme;
+          return (
+            <li key={theme} className={styles.tile}>
+              {/* A wrapper, so the hint also shows on a disabled switch. */}
+              <Tooltip text={t("rework.uiSettings.offeredTooltip")}>
+                <span className={styles.toggle}>
+                  <Switch
+                    size="small"
+                    checked={isOffered}
+                    // The default and the last offered theme cannot be withdrawn.
+                    disabled={locked || isDefault || (isOffered && offered.length === 1)}
+                    onChange={(event) =>
+                      persist(
+                        defaultTheme,
+                        event.target.checked ? hidden.filter((id) => id !== theme) : [...hidden, theme],
+                      )
+                    }
+                    aria-label={t("rework.uiSettings.offeredLabel", { theme: label })}
                   />
-                  {t(UI_THEME_LABEL_KEYS[theme])}
-                </label>
-              </li>
-            ))}
-          </ul>
-          {unknownIds.length > 0 && (
-            <p className={styles.fieldHint}>{t("rework.uiSettings.unknown", { ids: unknownIds.join(", ") })}</p>
-          )}
-        </fieldset>
+                </span>
+              </Tooltip>
+              {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
+              <span className={styles.preview}>
+                {MODES.map((mode) => (
+                  <span key={mode} className={styles.swatches} data-ui-theme={theme} data-theme={mode}>
+                    {SWATCHES.map((role) => (
+                      <span key={role} className={styles.swatch} style={{ backgroundColor: `var(--${role})` }} />
+                    ))}
+                  </span>
+                ))}
+              </span>
+              {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
+              <span className={styles.name} data-ui-theme={theme} title={label}>
+                {label}
+              </span>
+              <Button
+                color="primary"
+                variant={isDefault ? "text" : "outlined"}
+                size="small"
+                icon={isDefault ? { category: "outlined", type: "check", filled: false } : undefined}
+                disabled={locked || isDefault || !isOffered}
+                onClick={() => persist(theme, hidden)}
+              >
+                {isDefault ? t("rework.uiSettings.isDefault") : t("rework.uiSettings.setDefault")}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
 
-        {(blocking ?? serverError) && (
-          <p className={styles.error} role="alert">
-            {blocking ?? serverError}
-          </p>
-        )}
+      {unknownIds.length > 0 && (
+        <p className={styles.hint}>{t("rework.uiSettings.unknown", { ids: unknownIds.join(", ") })}</p>
+      )}
 
-        <div className={styles.footer}>
-          {data?.updated_at && (
-            <p className={styles.meta}>
-              {t("rework.uiSettings.lastUpdated", {
-                who: data.updated_by
-                  ? userDisplayName(
-                      data.updated_by,
-                      auditUsers.find((user) => user.id === data.updated_by),
-                    )
-                  : t("rework.uiSettings.unknownAuthor"),
-                when: new Date(data.updated_at).toLocaleString(),
-              })}
-            </p>
-          )}
-          <Button
-            color="primary"
-            variant="filled"
-            size="small"
-            icon={{ category: "outlined", type: "check", filled: false }}
-            onClick={onSave}
-            disabled={!isDirty || !!blocking || isSaving}
-          >
-            {isSaving ? t("rework.uiSettings.saving") : t("rework.uiSettings.save")}
-          </Button>
-        </div>
-      </section>
+      {serverError && (
+        <p className={styles.error} role="alert">
+          {serverError}
+        </p>
+      )}
+
+      {data?.updated_at && (
+        <p className={styles.meta}>
+          {t("rework.uiSettings.lastUpdated", {
+            who: data.updated_by
+              ? userDisplayName(
+                  data.updated_by,
+                  auditUsers.find((user) => user.id === data.updated_by),
+                )
+              : t("rework.uiSettings.unknownAuthor"),
+            when: new Date(data.updated_at).toLocaleString(),
+          })}
+        </p>
+      )}
     </div>
   );
 }

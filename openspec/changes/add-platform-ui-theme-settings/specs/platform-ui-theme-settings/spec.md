@@ -41,8 +41,8 @@ offered.
 
 #### Scenario: Hiding every theme
 
-- **WHEN** an administrator unchecks the last offered theme
-- **THEN** the page does not allow saving and says at least one theme must stay offered
+- **WHEN** an administrator tries to withdraw the default theme or the last offered theme
+- **THEN** the page does not allow it, so at least one theme always stays offered
 
 ### Requirement: Settings are known before the first paint
 

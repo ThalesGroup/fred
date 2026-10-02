@@ -34,7 +34,8 @@ See proposal.md for motivation. Current state:
 ## Decisions
 
 **Theme file shape.** Each `styles/themes/<id>.css` holds three blocks:
-`:root[data-ui-theme="<id>"]` (font family, radius scale), and
+`[data-ui-theme="<id>"]` (font family, radius scale; not bound to `:root`, so an element such as the
+admin theme tiles can preview another theme), and
 `[data-ui-theme="<id>"][data-theme="light|dark"]` (semantic colors). Pebble keeps referencing the
 `--core-*` ramps; `color-ramps.css` stays in the base as a raw palette any theme may use (Cobalt and
 Cloud keep literal values). Alternative considered: keep Pebble in the base and treat it as "the
@@ -67,7 +68,7 @@ resolves them with the same rules. `html` gets `background: var(--surface-main)`
 **Design tokens package.** `package-inputs.mjs` points at `themes/pebble.css` instead of the two
 semantic files, and the build rewrites Pebble's selectors to the package's permitted ones
 (`[data-ui-theme="pebble"][data-theme="light"]` → `[data-theme="light"]`,
-`:root[data-ui-theme="pebble"]` → `:root`). Other themes are not packaged. A test compares the
+`[data-ui-theme="pebble"]` → `:root`). Other themes are not packaged. A test compares the
 rebuilt token set (names and values) with the one produced before the change.
 
 ## Risks / Trade-offs

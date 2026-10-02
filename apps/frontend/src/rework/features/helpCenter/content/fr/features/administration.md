@@ -43,14 +43,18 @@ n'accèdent donc pas nécessairement à la même page.
 Chaque utilisateur choisit son thème (Galet, Cobalt, Nuage…) et son mode clair,
 sombre ou système dans **Profil** → **Interface : thème et mode**.
 
-Sur la page **Interface utilisateur**, un **Admin plateforme** décide :
+Sur la page **Interface utilisateur**, chaque thème a sa tuile, avec ses trois
+couleurs principales. Un **Admin plateforme** y décide :
 
-- du **thème par défaut**, celui des utilisateurs qui n'ont encore rien choisi ;
-- des **thèmes proposés** : un thème décoché disparaît du profil des
-  utilisateurs.
+- des **thèmes proposés** : un thème désactivé disparaît du profil des
+  utilisateurs ;
+- du **thème par défaut**, avec **Définir par défaut** : celui des
+  utilisateurs qui n'ont encore rien choisi. Galet l'est tant que rien n'a été
+  changé. Le thème par défaut reste toujours proposé.
 
-Un utilisateur dont le thème n'est plus proposé passe au thème par défaut, ou au
-premier thème proposé si aucun défaut n'est choisi. Son choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
+Chaque changement est enregistré aussitôt.
+
+Un utilisateur dont le thème n'est plus proposé passe au thème par défaut. Son choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
 un thème dans son profil, même celui déjà affiché, le garde ensuite si le thème
 par défaut change. Si un seul thème est proposé, le
 profil n'affiche plus que le mode. Les changements s'appliquent au prochain

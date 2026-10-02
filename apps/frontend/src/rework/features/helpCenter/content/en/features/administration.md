@@ -40,13 +40,17 @@ do not necessarily reach the same page.
 Each user picks their theme (Pebble, Cobalt, Cloud…) and their light, dark or
 system mode in **Profile** → **Interface: theme and mode**.
 
-On the **User interface** page, a **Platform admin** decides:
+On the **User interface** page, each theme has its tile, with its three main
+colors. A **Platform admin** decides there:
 
-- the **default theme**, the one users get until they choose one;
-- the **offered themes**: an unchecked theme disappears from users' profile.
+- the **offered themes**: a disabled theme disappears from users' profile;
+- the **default theme**, with **Set as default**: the one users get until they
+  choose one. Pebble is the default until someone changes it. The default theme
+  is always offered.
 
-A user whose theme is no longer offered moves to the default theme, or to the
-first offered theme when no default is set. Their choice is kept: it comes back if the theme is offered again. Picking a theme in
+Each change is saved at once.
+
+A user whose theme is no longer offered moves to the default theme. Their choice is kept: it comes back if the theme is offered again. Picking a theme in
 the profile, even the one already shown, keeps it afterwards if the default
 theme changes. When a single theme is offered, the profile only shows the mode. Changes apply
 the next time each user loads the application.

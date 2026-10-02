@@ -18,7 +18,7 @@
    shapes and Nunito. Colors come from LCh seeds (neutral 245/3 in light,
    270/4 in dark; primary 250/48; secondary 280/20; tertiary 190/30) with the
    accent rules of the token rework; info follows primary in this theme. */
-:root[data-ui-theme="cloud"] {
+[data-ui-theme="cloud"] {
   --font-family-base: "Nunito", sans-serif;
   --radius-xs: 6px;
   --radius-s: 12px;

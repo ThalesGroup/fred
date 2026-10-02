@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Saving must never leave users with no theme or with a hidden default: the
-// page blocks both before the round-trip, and keeps ids it does not ship.
+// tiles make both impossible, and the page keeps ids it does not ship.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({
       updated_at: null,
     },
     isLoading: false,
+    isFetching: false,
     isError: false,
   },
   save: vi.fn(),
@@ -48,27 +49,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useUsersByIdsQuery: () => ({ data: [] }),
 }));
 
-// A native select: what is under test is the page's logic, not the dropdown.
-vi.mock("@shared/molecules/Select/Select.tsx", () => ({
-  default: ({
-    options,
-    value,
-    onChange,
-  }: {
-    options: { value: string; label: string }[];
-    value: string;
-    onChange: (v: string) => void;
-  }) => (
-    <select data-testid="default-theme" value={value} onChange={(e) => onChange(e.target.value)}>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
-
 import UiSettingsPage from "./UiSettingsPage";
 
 declare global {
@@ -80,29 +60,21 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
 
-const checkbox = (label: string) =>
-  Array.from(container.querySelectorAll("label"))
-    .find((l) => l.textContent?.includes(label))!
-    .querySelector("input") as HTMLInputElement;
-const saveButton = () =>
-  Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("rework.uiSettings.save"))!;
+// Each tile is an <li> holding the theme label key.
+const tile = (label: string) =>
+  Array.from(container.querySelectorAll("li")).find((li) => li.textContent?.includes(label))!;
+const offeredSwitch = (label: string) => tile(label).querySelector('input[type="checkbox"]') as HTMLInputElement;
+const defaultButton = (label: string) => tile(label).querySelector("button") as HTMLButtonElement;
 const alertText = () => container.querySelector('[role="alert"]')?.textContent ?? null;
 
 function render() {
   act(() => root.render(<UiSettingsPage />));
 }
 
-function chooseDefault(value: string) {
-  const select = container.querySelector('[data-testid="default-theme"]') as HTMLSelectElement;
-  act(() => {
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-}
-
 beforeEach(() => {
   h.settings.data = { default_theme: "cobalt", hidden_themes: [], updated_by: null, updated_at: null };
   h.settings.isError = false;
+  h.settings.isFetching = false;
   h.save.mockReset();
   h.save.mockReturnValue({ unwrap: () => Promise.resolve({}) });
   container = document.createElement("div");
@@ -116,57 +88,97 @@ afterEach(() => {
 });
 
 describe("UiSettingsPage", () => {
-  it("shows the stored settings and keeps Save disabled until something changes", () => {
+  it("shows the stored settings without saving anything", () => {
     render();
-    expect((container.querySelector('[data-testid="default-theme"]') as HTMLSelectElement).value).toBe("cobalt");
-    expect(checkbox("themeCloud").checked).toBe(true);
-    expect(saveButton().disabled).toBe(true);
+    expect(defaultButton("themeCobalt").textContent).toContain("rework.uiSettings.isDefault");
+    expect(defaultButton("themePebble").textContent).toContain("rework.uiSettings.setDefault");
+    expect(offeredSwitch("themeCloud").checked).toBe(true);
+    const previews = Array.from(tile("themeCloud").querySelectorAll('[data-ui-theme="cloud"][data-theme]'));
+    expect(previews.map((el) => el.getAttribute("data-theme"))).toEqual(["light", "dark"]);
+    expect(h.save).not.toHaveBeenCalled();
   });
 
-  it("blocks saving when the default theme is hidden", () => {
+  it("shows Pebble as the default when nothing was saved", () => {
+    h.settings.data = { default_theme: null, hidden_themes: [], updated_by: null, updated_at: null };
     render();
-    act(() => checkbox("themeCobalt").click());
-    expect(alertText()).toBe("rework.uiSettings.errors.defaultHidden");
-    expect(saveButton().disabled).toBe(true);
+    expect(defaultButton("themePebble").disabled).toBe(true);
+    expect(defaultButton("themePebble").textContent).toContain("rework.uiSettings.isDefault");
   });
 
-  it("blocks saving when no theme is offered", () => {
+  it("saves as soon as a theme is withdrawn or set as default", async () => {
     render();
-    chooseDefault("");
-    act(() => {
-      checkbox("themePebble").click();
-      checkbox("themeCobalt").click();
-      checkbox("themeCloud").click();
+    await act(async () => offeredSwitch("themePebble").click());
+    expect(h.save).toHaveBeenLastCalledWith({
+      setPlatformUiSettingsRequest: { default_theme: "cobalt", hidden_themes: ["pebble"] },
     });
-    expect(alertText()).toBe("rework.uiSettings.errors.noneOffered");
-    expect(saveButton().disabled).toBe(true);
+    await act(async () => defaultButton("themeCloud").click());
+    expect(h.save).toHaveBeenLastCalledWith({
+      setPlatformUiSettingsRequest: { default_theme: "cloud", hidden_themes: ["pebble"] },
+    });
   });
 
-  it("saves the default and the hidden themes, null for no default", async () => {
+  it("goes back to the stored settings when a save fails", async () => {
+    h.save.mockReturnValue({ unwrap: () => Promise.reject({ status: 422, data: { detail: "nope" } }) });
     render();
-    chooseDefault("");
-    act(() => checkbox("themePebble").click());
-    await act(async () => saveButton().click());
-    expect(h.save).toHaveBeenCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: null, hidden_themes: ["pebble"] },
-    });
+    await act(async () => offeredSwitch("themeCloud").click());
+    expect(offeredSwitch("themeCloud").checked).toBe(true);
+    expect(alertText()).not.toBeNull();
+  });
+
+  it("never lets the default theme be withdrawn, nor a withdrawn theme become the default", async () => {
+    render();
+    expect(offeredSwitch("themeCobalt").disabled).toBe(true);
+    await act(async () => offeredSwitch("themeCloud").click());
+    expect(offeredSwitch("themeCloud").checked).toBe(false);
+    expect(defaultButton("themeCloud").disabled).toBe(true);
+  });
+
+  it("keeps the last offered theme offered", async () => {
+    h.settings.data = { default_theme: "aurora", hidden_themes: [], updated_by: null, updated_at: null };
+    render();
+    await act(async () => offeredSwitch("themePebble").click());
+    await act(async () => offeredSwitch("themeCobalt").click());
+    expect(offeredSwitch("themeCloud").disabled).toBe(true);
+  });
+
+  it("locks the tiles while the settings are refetched after a save", () => {
+    h.settings.isFetching = true;
+    render();
+    expect(offeredSwitch("themeCloud").disabled).toBe(true);
+    expect(defaultButton("themeCloud").disabled).toBe(true);
   });
 
   it("says when the settings could not be loaded instead of showing defaults as stored", () => {
     h.settings.isError = true;
     render();
     expect(alertText()).toBe("rework.uiSettings.loadFailed");
-    expect(checkbox("themeCloud").closest("fieldset")!.disabled).toBe(true);
+    expect(offeredSwitch("themeCloud").disabled).toBe(true);
+    expect(defaultButton("themeCloud").disabled).toBe(true);
+  });
+
+  it("shows every theme offered when all of them were stored as hidden, and saves a valid state", async () => {
+    h.settings.data = {
+      default_theme: null,
+      hidden_themes: ["pebble", "cobalt", "cloud", "aurora"],
+      updated_by: null,
+      updated_at: null,
+    };
+    render();
+    expect(offeredSwitch("themeCobalt").checked).toBe(true);
+    expect(defaultButton("themePebble").textContent).toContain("rework.uiSettings.isDefault");
+    await act(async () => offeredSwitch("themeCloud").click());
+    expect(h.save).toHaveBeenCalledWith({
+      setPlatformUiSettingsRequest: { default_theme: "pebble", hidden_themes: ["aurora", "cloud"] },
+    });
   });
 
   it("keeps ids this version does not ship", async () => {
     h.settings.data = { default_theme: null, hidden_themes: ["aurora"], updated_by: null, updated_at: null };
     render();
     expect(container.textContent).toContain("rework.uiSettings.unknown");
-    act(() => checkbox("themeCloud").click());
-    await act(async () => saveButton().click());
+    await act(async () => offeredSwitch("themeCloud").click());
     expect(h.save).toHaveBeenCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: null, hidden_themes: ["aurora", "cloud"] },
+      setPlatformUiSettingsRequest: { default_theme: "pebble", hidden_themes: ["aurora", "cloud"] },
     });
   });
 });
