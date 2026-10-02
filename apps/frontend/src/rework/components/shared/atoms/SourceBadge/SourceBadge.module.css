@@ -37,6 +37,6 @@
 
 .badge:hover {
   border-color: var(--outline-retreat);
-  background: var(--surface-container-low);
+  background: var(--surface-container-high);
   color: var(--on-surface);
 }

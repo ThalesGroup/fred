@@ -25,7 +25,7 @@
      panel, on the resources page), so the host decides how tight they are. */
   border-radius: var(--radius-m) var(--card-seam-radius, var(--radius-m)) var(--card-seam-radius, var(--radius-m))
     var(--radius-m);
-  background: var(--surface-container-high);
+  background: var(--surface-container);
   min-height: 0;
 }
 

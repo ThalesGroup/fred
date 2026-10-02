@@ -28,7 +28,7 @@ The surface tokens SHALL resolve to the following tones of the neutral ramp.
 | `surface-container` | 96 | 12 |
 | `surface-container-high` | 94.5 | 15 |
 | `surface-container-highest` | 93 | 18 |
-| `surface-floating` | 100 | 15 |
+| `surface-floating` | 100 | 20 |
 
 #### Scenario: Token values match the table
 - **WHEN** the computed value of each token is read in each theme
@@ -44,7 +44,7 @@ Elements that float above the page (menus, popovers, tooltips, modal dialogs, ed
 
 #### Scenario: Menu in dark theme
 - **WHEN** a menu opens over a page in the dark theme
-- **THEN** its background is lighter than `surface-container`, and it is separated from the page by its shadow
+- **THEN** its background is lighter than every `surface-container-*` level, and it is separated from the page by its shadow
 
 ### Requirement: Neutral ramp tint
 

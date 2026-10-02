@@ -53,7 +53,7 @@ lightness. Steps `--core-cold-grey-97-5` and `--core-cold-grey-94-5` were added.
 | `--surface-container`         | 94 → 96              | 10 → 12             |
 | `--surface-container-high`    | 96 → 94.5            | 12 → 15             |
 | `--surface-container-highest` | 100 → 93             | 14 → 18             |
-| `--surface-floating` (new)    | 100                  | 15                  |
+| `--surface-floating` (new)    | 100                  | 20                  |
 
 **How to migrate.** Find every `--surface-*` usage in your CSS and inline
 styles, identify what the element _is_, and apply this table. The left column
@@ -70,10 +70,8 @@ is the token FRED components typically used for that role before the change.
 | Bordered content sheet on the page, nav rail, faint decorative block | `--surface-container-lowest`                                                                  | unchanged                                  |
 | Card, sidebar, chip, list row, track, badge, hover, focus            | any `--surface-container-*`                                                                   | unchanged (tone shifts only)               |
 
-Inside a floating surface, do not use `--surface-container-high`: in dark it
-has the same tone as `--surface-floating` and disappears. Use
-`--surface-container` for inset content, `--surface-container-highest` for
-tracks and fields, and a `--state-*` layer for hover. Chart and canvas tooltips
+Every container level reads darker than `--surface-floating` in both themes,
+so any of them can be nested in a floating element. Chart and canvas tooltips
 that read a token from JavaScript count as floating too.
 
 A positioned element (`position: absolute` or `fixed`) with a shadow is almost

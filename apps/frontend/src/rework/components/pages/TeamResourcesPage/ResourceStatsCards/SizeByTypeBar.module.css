@@ -19,7 +19,7 @@
   flex-direction: column;
   gap: var(--spacing-2xs);
   border-radius: var(--radius-s);
-  background: var(--surface-container-high);
+  background: var(--surface-container);
   padding: var(--spacing-s);
   height: 120px;
   /* Not hidden: Recharts' hover Tooltip is a plain absolutely-positioned DOM

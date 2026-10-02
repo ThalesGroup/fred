@@ -53,7 +53,7 @@
 .bannerNotice {
   margin: 0 auto var(--spacing-l);
   border-radius: var(--radius-s);
-  background: var(--surface-container-low);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);

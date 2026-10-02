@@ -14,7 +14,7 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 
 **Scale "further from the background" (M3 semantics, softened light steps).** Chosen over "higher = lighter" with a lowered light background (keeps today's intuition but light steps 97–100 are too close to tell apart) and over a role-based 4-token scale (cleaner but a ~300-usage rename). Light steps are 1.5 tones apart instead of M3's 2 to avoid heavy greys.
 
-**A dedicated `--surface-floating` token.** Under this scale no container level is both near-white in light and clearly raised in dark. Using `surface-container` (strict M3) makes menus grey in light; using `surface-container-lowest` leaves dark menus at tone 8, distinguishable only by shadow. One named exception (light 100, dark 15) is clearer than bending a container level.
+**A dedicated `--surface-floating` token.** Under this scale no container level is both near-white in light and clearly raised in dark. Using `surface-container` (strict M3) makes menus grey in light; using `surface-container-lowest` leaves dark menus at tone 8, distinguishable only by shadow. One named exception (light 100, dark 20) is clearer than bending a container level. Dark sits above `surface-container-highest` (18) so that every container level nested in a floating element reads darker than it, in both themes; an earlier value of 15 equalled `surface-container-high` and made nested fills vanish.
 
 **Ramp generated once, committed as hex.** Each step is CIE LCh(L = tone, C = 1.5, H = 280°) converted to sRGB (D65), then nudged to the nearest 8-bit color so rounding does not swing the hue at such low chroma. Values are computed once and written to `color-ramps.css` with a 2-line comment giving the formula; no generator script is added. Tone 0 and 100 stay pure black and white. Half steps are named `--core-cold-grey-97-5` and `--core-cold-grey-94-5`. No existing step is removed, even unused ones.
 
@@ -35,9 +35,11 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 
 `ButtonGroup` overrides to `surface-container-lowest` in TeamSettingsParameters are removed: the component default (`surface-container`) keeps the track visible. Full-screen modals that already sit on `surface-main` (FullPageModal, SettingsModal, PromptsPage modal card) and inline panels (ImportPanel, InlineDrawer) are not floating and keep their token.
 
-Inside a floating surface, `surface-container-high` equals `surface-floating` in dark (both tone 15), so nested fills use `surface-container` for inset content (WikiRevisions entries), `surface-container-highest` for tracks (MenuPopover toggle) and state layers for hover (Toast action button).
+Inside a floating surface every container level reads darker than the surface in both themes. Hover on transparent elements uses state layers (Toast action button).
 
 Floating elements were found by scanning every rule with `position: absolute|fixed` plus a `--shadow`/`--elevation` box-shadow and a surface background, plus TSX inline styles that set a tooltip background.
+
+**Second pass, every remaining usage (tasks section 5).** Same role table, plus two rules: hover on a transparent element is a state layer (`--state-on-surface-hover`, focus `--state-on-surface-focused`), hover on a filled element steps one level further from the page. Side panels and drawers that float (InlineDrawer overlay, floating push panels) are `surface-floating`; a flush push panel is `surface-container-low`, like the sidebar.
 
 ## Risks / Trade-offs
 

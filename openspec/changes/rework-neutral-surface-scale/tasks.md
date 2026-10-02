@@ -26,3 +26,12 @@
 - [x] 4.4 Add a token migration section to `libs/frontend/design-tokens/README.md` (rule, value table, old → new token by role, steps an assistant can follow), built from the final diff; verify every remap in the diff appears in it
 - [x] 4.5 Run `/code-review` on the diff and record exact verification evidence in `verification.md`; verify every finding is fixed or answered
 - [ ] 4.6 After the developer's in-app check in both themes, archive the change with `openspec archive` and close #2915 once the PR is merged
+
+## 5. Surfaces by role everywhere
+
+- [x] 5.1 Hover/focus: transparent elements use `--state-on-surface-hover` / `-focused`; filled elements step one level further from the page; rules that already layer a state over their base are left alone; verify by listing every hover/focus rule with a surface background
+- [x] 5.2 Cards and chart sections on the page move to `surface-container` (KPI, leaderboard, marketplace, HITL, responsible AI, resource explorer, chart sections, chat attachment cards, migration cards, access-pack tree); the prompt view dialog card moves to `surface-floating`; verify no other surface usage inside those cards equals the card token
+- [x] 5.3 Badges, switch track and group counts move to `surface-container-highest`; code block and Mermaid headers to `surface-container-high` over a `surface-container` body; verify a code block and a Mermaid diagram show a distinct header
+- [x] 5.4 InlineDrawer defaults to `surface-floating` (overlay and floating push) and `surface-container-low` (flush push); caller overrides and pane backgrounds inside the capability side panel are removed; verify the chat side panel and a document preview drawer in both themes
+- [x] 5.5 Help Center page and header move to `surface-main`, its sidebar to `surface-container-low`; verify the Help Center in both themes
+- [x] 5.6 Raise dark `surface-floating` from 15 to 20 so every container level nested in a floating element reads darker than it; update spec, design and docs

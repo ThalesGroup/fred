@@ -214,7 +214,7 @@ of the neutral ramp:
 | `--surface-container`         | 96    | 12   |
 | `--surface-container-high`    | 94.5  | 15   |
 | `--surface-container-highest` | 93    | 18   |
-| `--surface-floating`          | 100   | 15   |
+| `--surface-floating`          | 100   | 20   |
 
 Pick the token by the element's role, not by how it looks in one theme:
 
@@ -228,10 +228,8 @@ Pick the token by the element's role, not by how it looks in one theme:
 | Filled fields, tracks, badges, focus                        | `--surface-container-highest`              |
 | Menus, popovers, tooltips, dialogs, toasts, floating panels | `--surface-floating` (with a `--shadow-*`) |
 
-Inside a floating surface, avoid `--surface-container-high`: it has the same
-dark tone as `--surface-floating`. Use `--surface-container` for inset content,
-`--surface-container-highest` for tracks and fields, and a `--state-*` layer for
-hover.
+Every container level reads darker than `--surface-floating` in both themes, so
+any of them can be nested in a floating element.
 
 Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
 in `libs/frontend/design-tokens/README.md` (Token migrations).

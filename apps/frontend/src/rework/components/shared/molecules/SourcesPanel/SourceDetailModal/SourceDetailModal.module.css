@@ -92,7 +92,7 @@
 }
 
 .closeBtn:hover {
-  background: var(--surface-container);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 

@@ -68,7 +68,7 @@
 .row:hover,
 .row:focus-visible {
   outline: none;
-  background: var(--surface-container);
+  background: var(--state-on-surface-focused);
 }
 
 /* Status dot + step number cluster — its own gap, wider than the gap before

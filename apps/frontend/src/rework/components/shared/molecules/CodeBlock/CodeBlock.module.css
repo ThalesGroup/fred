@@ -38,7 +38,7 @@
   justify-content: space-between;
   align-items: center;
   border-bottom: 0.5px solid var(--outline-muted);
-  background: var(--surface-container);
+  background: var(--surface-container-high);
   padding: var(--spacing-2xs) var(--spacing-s);
   min-height: 32px;
 }
@@ -67,7 +67,7 @@
 }
 
 .copy:hover {
-  background: var(--surface-container-low);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 

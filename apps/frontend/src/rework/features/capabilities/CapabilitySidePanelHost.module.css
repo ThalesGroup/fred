@@ -20,6 +20,5 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: var(--surface-container);
   height: 100%;
 }

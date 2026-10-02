@@ -38,7 +38,7 @@
   --surface-container: var(--core-cold-grey-12);
   --surface-container-low: var(--core-cold-grey-10);
   --surface-container-lowest: var(--core-cold-grey-08);
-  --surface-floating: var(--core-cold-grey-15);
+  --surface-floating: var(--core-cold-grey-20);
   --error: var(--core-red-75);
   --on-error: var(--core-red-10);
   --error-container: var(--core-red-20);

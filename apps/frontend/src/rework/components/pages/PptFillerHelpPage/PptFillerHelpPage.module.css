@@ -75,7 +75,7 @@
 
   code {
     border-radius: var(--radius-xs);
-    background-color: var(--surface-container-high);
+    background-color: var(--surface-container);
     padding: 0.1em 0.35em;
     font-size: 0.9em;
   }

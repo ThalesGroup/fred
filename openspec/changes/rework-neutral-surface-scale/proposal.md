@@ -16,7 +16,7 @@ The light theme reads heavy and greyish, and switching between light and dark lo
   | `surface-container-high` | 94.5 | 15 |
   | `surface-container-highest` | 93 | 18 |
 
-- Add `--surface-floating` (light 100, dark 15) for elements that float above the page: menus, popovers, tooltips, modals, editor popups. It is the one named exception to the scale.
+- Add `--surface-floating` (light 100, dark 20) for elements that float above the page: menus, popovers, tooltips, modals, editor popups. It is the one named exception to the scale.
 - Remap the usages of `surface-container-lowest` and `surface-container-highest` whose visual role flips under the new scale (filled fields, code wells, page backgrounds), and move every floating element to `surface-floating` whatever its current token. Usages of `surface-container-low`, `surface-container` and `surface-container-high` keep their token; only their tone changes.
 
 Non-goals (follow-up changes): secondary text tones, outline levels, `secondary-container` vs `primary-container`, dead and undefined tokens.
