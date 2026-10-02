@@ -205,3 +205,24 @@ it.each([-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])("rejects invalid 
     "totalItems must be a nonnegative safe integer",
   );
 });
+
+// Validate both incoming state and values the selector can send back to its owner.
+it.each([0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])("rejects invalid page sizes %s", (value) => {
+  render(<TablePagination {...baseProps} />);
+  for (const onRowsPerPageChange of [undefined, vi.fn()]) {
+    expect(() =>
+      renderToStaticMarkup(
+        <TablePagination {...baseProps} rowsPerPage={value} onRowsPerPageChange={onRowsPerPageChange} />,
+      ),
+    ).toThrow("rowsPerPage must be a positive safe integer");
+    expect(() =>
+      renderToStaticMarkup(
+        <TablePagination
+          {...baseProps}
+          rowsPerPageOptions={[...baseProps.rowsPerPageOptions, { key: "invalid", label: "Invalid", value }]}
+          onRowsPerPageChange={onRowsPerPageChange}
+        />,
+      ),
+    ).toThrow("rowsPerPageOptions values must be positive safe integers");
+  }
+});

@@ -44,6 +44,7 @@ export interface TablePaginationProps {
   currentPage: number;
   /** Nonnegative safe integer. Zero represents an empty result. */
   pageCount: number;
+  /** Positive safe integer, as must be every rowsPerPageOptions value. */
   rowsPerPage: number;
   rowsPerPageOptions: SelectOption<number>[];
   /** Omit to keep rowsPerPage fixed and hide the selector. */
@@ -85,6 +86,12 @@ export default function TablePagination({
     throw new Error(
       "TablePagination: currentPage must be within pageCount; update both together when the count shrinks (use page 0 for an empty result).",
     );
+  }
+  if (!Number.isSafeInteger(rowsPerPage) || rowsPerPage <= 0) {
+    throw new Error("TablePagination: rowsPerPage must be a positive safe integer.");
+  }
+  if (rowsPerPageOptions.some(({ value }) => !Number.isSafeInteger(value) || value <= 0)) {
+    throw new Error("TablePagination: rowsPerPageOptions values must be positive safe integers.");
   }
   const displayedPageCount = Math.max(1, pageCount);
   const displayedPage = pageCount === 0 ? 0 : currentPage;

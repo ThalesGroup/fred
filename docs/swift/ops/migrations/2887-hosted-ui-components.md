@@ -32,7 +32,7 @@ Selectable `DataTable` consumers must supply a stable `rowKey` function, control
 
 ProgressBar consumers must provide `aria-label` or `aria-labelledby`. DataTable consumers should supply stable column `key` values when labels change or duplicate-label column objects are recreated.
 
-Standalone `TablePagination` requires a nonnegative safe-integer page count and a current index inside that count (index zero for an empty result). When filtering reduces the count, update the controlled index together with the count; inconsistent props are rejected explicitly.
+Standalone `TablePagination` requires a nonnegative safe-integer page count and a current index inside that count (index zero for an empty result). When filtering reduces the count, update the controlled index together with the count; inconsistent props are rejected explicitly. Its `rowsPerPage` and every `rowsPerPageOptions` value must be positive safe integers, including when the selector is hidden; invalid sizes are rejected before rendering.
 
 Hosted consumers can opt into typed table-row activation, localized drawer action labels and semantic KPI tones after the UI package release. Server pagination counts and offsets must be nonnegative safe integers; page sizes must be positive safe integers.
 
