@@ -1,6 +1,6 @@
 # RFC: Organizations and projects
 
-**Status:** model agreed (2026-10-02); release 1 scoped in §4, its OpenSpec changes not yet written
+**Status:** model agreed (2026-10-02); release 1 specified as two OpenSpec changes (`platform-type-and-explicit-team-kind`, `explicit-organization-and-org-admin`), not implemented
 **Author:** Dimitri Tombroff
 **Date:** 2026-10-02
 **Related:** issue #2921; `docs/swift/platform/REBAC.md`
