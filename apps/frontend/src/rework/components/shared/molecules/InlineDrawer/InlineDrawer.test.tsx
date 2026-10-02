@@ -398,3 +398,12 @@ it("retains a pending Escape across a parent rerender and calls the latest handl
     host.remove();
   }
 });
+
+it.each(["{}", "[]", "null", '"500"', "true", "1e999"])("ignores malformed persisted width %s", (stored) => {
+  localStorage.setItem("localHook:inline-drawer:width-test:width", stored);
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(<InlineDrawer {...props} width="480px" />);
+  expect(host.querySelector("aside")?.getAttribute("style")).toContain("480px");
+  expect(host.querySelector('[role="separator"]')?.getAttribute("aria-valuenow")).toBe("480");
+  localStorage.removeItem("localHook:inline-drawer:width-test:width");
+});

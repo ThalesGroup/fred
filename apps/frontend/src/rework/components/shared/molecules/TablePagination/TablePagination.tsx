@@ -74,6 +74,8 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
+  const displayedPageCount = Math.max(1, pageCount);
+  const displayedPage = pageCount === 0 ? 0 : currentPage;
   let displayedOptions = rowsPerPageOptions;
   if (!rowsPerPageOptions.some((option) => option.value === rowsPerPage)) {
     let key = `active-page-size:${rowsPerPage}`;
@@ -118,7 +120,7 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "first_page" }}
             aria-label={text.first}
-            disabled={currentPage <= 0}
+            disabled={displayedPage <= 0}
             onClick={onFirst}
           />
           <IconButton
@@ -127,11 +129,11 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "chevron_left" }}
             aria-label={text.prev}
-            disabled={currentPage <= 0}
+            disabled={displayedPage <= 0}
             onClick={onPrev}
           />
           <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-            {text.pageNumber(currentPage + 1, pageCount)}
+            {text.pageNumber(displayedPage + 1, displayedPageCount)}
           </span>
           <IconButton
             type="button"
@@ -139,7 +141,7 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "chevron_right" }}
             aria-label={text.next}
-            disabled={currentPage >= pageCount - 1}
+            disabled={displayedPage >= displayedPageCount - 1}
             onClick={onNext}
           />
           <IconButton
@@ -148,7 +150,7 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "last_page" }}
             aria-label={text.last}
-            disabled={currentPage >= pageCount - 1}
+            disabled={displayedPage >= displayedPageCount - 1}
             onClick={onLast}
           />
         </div>

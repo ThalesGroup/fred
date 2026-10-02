@@ -177,3 +177,11 @@ it("preserves the caller label for an existing active option", () => {
   );
   expect(buttons()[0].textContent).toContain("Twenty-five");
 });
+
+it("normalizes zero pages for the formatter and disables navigation", () => {
+  const pageNumber = vi.fn((page: number, count: number) => `${page}/${count}`);
+  render(<TablePagination {...baseProps} totalItems={0} currentPage={0} pageCount={0} labels={{ pageNumber }} />);
+  expect(pageNumber).toHaveBeenCalledWith(1, 1);
+  expect(container.textContent).toContain("1/1");
+  expect(buttons().every((button) => button.disabled)).toBe(true);
+});

@@ -74,7 +74,8 @@ export function usePaneResize({
   dragging: boolean;
   handleProps: PaneResizeHandleProps;
 } {
-  const [width, setWidth] = useLocalStorageState(storageKey, initialWidth);
+  const [storedWidth, setWidth] = useLocalStorageState(storageKey, initialWidth);
+  const width = typeof storedWidth === "number" && Number.isFinite(storedWidth) ? storedWidth : initialWidth;
   const [dragging, setDragging] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : maxWidth,
@@ -131,10 +132,17 @@ export function usePaneResize({
       event.preventDefault();
       const direction = (event.key === "ArrowLeft" ? 1 : -1) * (anchor === "right" ? 1 : -1);
       setWidth((previous) =>
-        clamp(event.key === "Home" ? 0 : event.key === "End" ? Infinity : clamp(previous) + direction * 10),
+        clamp(
+          event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? Infinity
+              : clamp(typeof previous === "number" && Number.isFinite(previous) ? previous : initialWidth) +
+                direction * 10,
+        ),
       );
     },
-    [anchor, clamp, setWidth],
+    [anchor, clamp, setWidth, initialWidth],
   );
 
   const endDrag = useCallback(() => setDragging(false), []);
