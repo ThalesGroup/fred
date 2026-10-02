@@ -78,6 +78,6 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-xs);
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-s) var(--spacing-m);
 }

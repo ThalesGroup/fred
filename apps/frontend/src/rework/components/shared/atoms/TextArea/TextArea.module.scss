@@ -22,7 +22,7 @@
 
   textarea {
     --input-outline: transparent;
-    --input-border: var(--outline-retreat);
+    --input-border: var(--outline-variant);
     outline: 2px solid var(--input-outline);
     border: 1px solid var(--input-border);
     border-radius: var(--spacing-xs);

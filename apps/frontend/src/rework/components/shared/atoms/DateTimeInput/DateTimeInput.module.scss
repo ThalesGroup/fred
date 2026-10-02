@@ -33,7 +33,7 @@
 
 .input {
   --input-outline: transparent;
-  --input-border: var(--outline-retreat);
+  --input-border: var(--outline-variant);
   transition:
     border-color 0.15s,
     outline-color 0.15s;

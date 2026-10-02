@@ -61,7 +61,7 @@
  * DataTable.module.scss, keeping the border scoped to ResourceExplorer's own
  * table instead of leaking into every other DataTable consumer. */
 .tableFill [class*="datatable-header"] {
-  border-bottom: 1px solid var(--outline-retreat);
+  border-bottom: 1px solid var(--outline-muted);
 }
 
 /* Same border, same reasoning, on the pagination footer's top edge — it
@@ -73,7 +73,7 @@
  * (`_datatable-footer_<hash>_<line>`) mean the plain substring match would
  * otherwise also catch `_datatable-footer-left_..._...`. */
 .tableFill [class*="datatable-footer"]:not([class*="datatable-footer-"]) {
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
 }
 
 /* Same scoping reasoning as the header/footer borders above — breathing

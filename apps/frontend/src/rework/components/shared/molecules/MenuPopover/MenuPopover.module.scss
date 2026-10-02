@@ -59,7 +59,7 @@
    so the rule spans edge to edge. Neutral border → an `outline-*` token. */
 .separator {
   margin: var(--spacing-2xs) calc(-1 * var(--spacing-2xs));
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
 }
 
 /* ── Item row ───────────────────────────────────────────────────────────── */
@@ -152,7 +152,7 @@
   transition:
     background-color 120ms ease,
     border-color 120ms ease;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-variant);
   border-radius: var(--radius-2xl);
   background: var(--surface-container-highest);
   width: 2rem;

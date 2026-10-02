@@ -84,7 +84,7 @@
 /* Says which of the two panes you can act on, at a glance. */
 .badge {
   flex: none;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-full);
   padding: 0 var(--spacing-xs);
   color: var(--on-surface-retreat);
@@ -182,7 +182,7 @@
  * pushing the pane taller. Read-only — there is no editor here on purpose. */
 .instructionsBody {
   flex: 1;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container);
   padding: var(--spacing-s);

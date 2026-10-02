@@ -34,7 +34,7 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
   const { t } = useTranslation();
   const css = getCssVars(
     "--on-surface-retreat",
-    "--outline-retreat",
+    "--outline-muted",
     "--surface-floating",
     "--on-surface",
     "--primary",
@@ -69,7 +69,7 @@ export default function PieChart({ title, rows, emptyMessage, isLoading, isError
               <Tooltip
                 contentStyle={{
                   background: css["--surface-floating"],
-                  border: `1px solid ${css["--outline-retreat"]}`,
+                  border: `1px solid ${css["--outline-muted"]}`,
                   borderRadius: css["--radius-s"],
                   color: css["--on-surface"],
                   fontSize: 12,

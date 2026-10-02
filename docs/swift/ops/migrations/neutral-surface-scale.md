@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Rework the neutral palette and surface scale of the frontend themes"
+title: "Rework the neutral palette, surfaces, text and outlines of the frontend themes"
 impact: none
 configuration: none
 configuration_reason: "CSS token values and usages only; no configuration keys or defaults change."
@@ -23,13 +23,15 @@ No configuration changes are required.
 
 Deploy Fred normally; no additional operator or user action is required.
 
-Teams that build custom UI on `@fred-oss/design-tokens` should follow the
-"Token migrations" section of that package's README when they upgrade it.
+Teams that build custom UI on `@fred-oss/design-tokens` must follow the
+"Token migrations" section of that package's README when they upgrade it:
+some tokens were removed (for example `--outline-retreat`).
 
 ## Validation
 
 Open the application in the light theme: the page background is white, menus
-and dialogs are white with a shadow, and input fields are light grey.
+and dialogs are white with a shadow, input fields are light grey, and
+secondary text is a mid grey rather than near black.
 
 ## Rollback
 

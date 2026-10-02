@@ -117,7 +117,7 @@ button.entryMain {
 }
 
 button.entryMain:hover .what {
-  color: var(--core-primary);
+  color: var(--primary);
 }
 
 /* Says in words what this entry is — a manual edit, an agent's, a validation.

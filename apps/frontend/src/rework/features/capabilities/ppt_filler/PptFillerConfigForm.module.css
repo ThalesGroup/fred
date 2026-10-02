@@ -35,7 +35,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   font-size: var(--font-size-small, 0.8125rem);
   overflow-wrap: anywhere;
 }
@@ -47,7 +47,7 @@
   border: none;
   background: none;
   padding: 0;
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   font-size: inherit;
 }
 
@@ -65,7 +65,7 @@
 
 .hint {
   margin: 0;
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   font-size: var(--font-size-small, 0.8125rem);
 }
 
@@ -107,7 +107,7 @@
 
 .slideTitle {
   margin: 0;
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   font-weight: 600;
   font-size: var(--font-size-small, 0.8125rem);
 }
@@ -140,11 +140,11 @@
   border: 1px solid var(--outline-variant, #e0e0e0);
   border-radius: 999px;
   padding: 0 6px;
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   font-size: var(--font-size-x-small, 0.75rem);
 }
 
 .keyDescription {
-  color: var(--on-surface-variant, #666);
+  color: var(--on-surface-retreat);
   overflow-wrap: anywhere;
 }

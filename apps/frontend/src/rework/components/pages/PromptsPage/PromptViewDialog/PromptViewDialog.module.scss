@@ -121,7 +121,7 @@
    * — see .textSection's min-height: 0 for why that's possible. */
   flex: 1;
   cursor: default;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--spacing-xs);
   background-color: var(--surface-container-highest);
   padding: var(--spacing-s);

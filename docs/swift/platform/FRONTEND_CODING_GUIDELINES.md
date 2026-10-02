@@ -234,6 +234,19 @@ any of them can be nested in a floating element.
 Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
 in `libs/frontend/design-tokens/README.md` (Token migrations).
 
+### Text and outline tokens
+
+| Token                  | Role                                           | Light | Dark |
+| ---------------------- | ---------------------------------------------- | ----- | ---- |
+| `--on-surface`         | Primary text and icons                         | 10    | 95   |
+| `--on-surface-retreat` | Secondary text and icons (AA on every surface) | 40    | 75   |
+| `--on-surface-muted`   | Meta text, placeholders (AA on the page)       | 45    | 60   |
+| `--outline`            | Form control hover, focus outlines (3:1)       | 50    | 60   |
+| `--outline-variant`    | Form control borders, scrollbar thumb          | 80    | 40   |
+| `--outline-muted`      | Default borders and dividers                   | 88    | 30   |
+
+Borders and dividers use an `--outline-*` token, never a surface token.
+
 ### Disabled state tokens
 
 | Token                         | Use case                          |

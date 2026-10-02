@@ -55,7 +55,7 @@ export default function TimeSeriesLineChart({
   const css = useCssVars(
     sectionRef,
     "--on-surface-retreat",
-    "--outline-retreat",
+    "--outline-muted",
     "--surface-floating",
     "--on-surface",
     "--primary",
@@ -87,12 +87,12 @@ export default function TimeSeriesLineChart({
       {!!rows.length && (
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} />
+            <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} />
             <XAxis
               dataKey="date"
               tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
               tickLine={false}
-              axisLine={{ stroke: css["--outline-retreat"] }}
+              axisLine={{ stroke: css["--outline-muted"] }}
             />
             <YAxis
               allowDecimals={false}
@@ -102,10 +102,10 @@ export default function TimeSeriesLineChart({
               width={32}
             />
             <Tooltip
-              cursor={{ stroke: css["--outline-retreat"] }}
+              cursor={{ stroke: css["--outline-muted"] }}
               contentStyle={{
                 background: css["--surface-floating"],
-                border: `1px solid ${css["--outline-retreat"]}`,
+                border: `1px solid ${css["--outline-muted"]}`,
                 borderRadius: css["--radius-s"],
                 color: css["--on-surface"],
                 fontSize: 12,

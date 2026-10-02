@@ -28,12 +28,12 @@ The mockup uses short token names. The canonical codebase tokens are below.
 | Mockup token                   | Codebase token         | Value (light)       |
 | ------------------------------ | ---------------------- | ------------------- |
 | `--color-text-primary`         | `--on-surface`         | cold-grey-10        |
-| `--color-text-secondary`       | `--on-surface-retreat` | cold-grey-30        |
-| `--color-text-tertiary`        | `--on-surface-muted`   | cold-grey-40        |
+| `--color-text-secondary`       | `--on-surface-retreat` | cold-grey-40        |
+| `--color-text-tertiary`        | `--on-surface-muted`   | cold-grey-45        |
 | `--color-background-primary`   | `--surface-main`       | cold-grey-100       |
 | `--color-background-secondary` | `--surface-container`  | cold-grey-96        |
-| `--color-border-tertiary`      | `--outline-muted`      | cold-grey-80        |
-| `--color-border-secondary`     | `--outline-retreat`    | cold-grey-80        |
+| `--color-border-tertiary`      | `--outline-muted`      | cold-grey-88        |
+| `--color-border-secondary`     | `--outline-variant`    | cold-grey-80        |
 | `--font-sans`                  | `--font-family-base`   | "Geist", sans-serif |
 | `--border-radius-lg` (12 px)   | `--radius-m` (16 px)   | closest available   |
 | `--border-radius-md` (8 px)    | `--radius-s` (8 px)    | exact               |
@@ -1057,7 +1057,7 @@ closed by tap outside.
 }
 
 .optionCard:hover {
-  border-color: var(--outline-retreat);
+  border-color: var(--outline-muted);
 }
 
 .optionCardHeader {

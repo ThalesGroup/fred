@@ -30,8 +30,8 @@
   --tertiary-container: var(--core-light-blue-30);
   --on-tertiary-container: var(--core-light-blue-90);
   --on-surface: var(--core-cold-grey-95);
-  --on-surface-retreat: var(--core-cold-grey-70);
-  --on-surface-muted: var(--core-cold-grey-50);
+  --on-surface-retreat: var(--core-cold-grey-75);
+  --on-surface-muted: var(--core-cold-grey-60);
   --surface-main: var(--core-cold-grey-06);
   --surface-container-highest: var(--core-cold-grey-18);
   --surface-container-high: var(--core-cold-grey-15);
@@ -61,17 +61,7 @@
   --folder: var(--core-mustard-80);
   --outline: var(--core-cold-grey-60);
   --outline-variant: var(--core-cold-grey-40);
-  --outline-retreat: var(--core-cold-grey-30);
-  --outline-muted: var(--core-cold-grey-20);
-  --color-background-primary: var(--surface-main);
-  --color-background-secondary: var(--surface-container);
-  --color-background-info: var(--info-container);
-  --color-text-primary: var(--on-surface);
-  --color-text-secondary: var(--on-surface-retreat);
-  --color-text-tertiary: var(--on-surface-muted);
-  --color-text-info: var(--on-info-container);
-  --color-border-secondary: var(--outline-variant);
-  --color-border-tertiary: var(--outline-retreat);
+  --outline-muted: var(--core-cold-grey-30);
   --scrim: rgba(0, 0, 0, 0.64);
   --surface-picture: var(--core-cold-grey-100);
 }

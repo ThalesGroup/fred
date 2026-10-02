@@ -72,7 +72,7 @@ export interface InlineDrawerProps {
   flushBody?: boolean;
   /**
    * Render the panel as a detached floating card (push layout): inset from every
-   * edge, a single `outline-retreat` border, `--radius-l` corners and a subtle
+   * edge, a single `outline-muted` border, `--radius-l` corners and a subtle
    * shadow, dropping the drawer's flush edge border and the header divider.
    * Opt-in — default panels stay flush.
    */

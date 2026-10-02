@@ -27,6 +27,32 @@ still requires a complete maintainer-confirmed release contract; see [../RELEASE
 Written so a developer, or their coding assistant, can migrate custom UI built
 on these tokens. Newest change first.
 
+### Text, outlines and cleanup (after `0.1.0-alpha.1`)
+
+**Removed — action needed:**
+
+| Removed token                                                     | Use instead                                                                                                    |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `--outline-retreat`                                               | `--outline-variant` on form controls (inputs, selects, switches), `--outline-muted` on containers and dividers |
+| `--color-background-primary`                                      | `--surface-main`                                                                                               |
+| `--color-background-secondary`                                    | `--surface-container`                                                                                          |
+| `--color-background-info`                                         | `--info-container`                                                                                             |
+| `--color-text-primary`                                            | `--on-surface`                                                                                                 |
+| `--color-text-secondary`                                          | `--on-surface-retreat`                                                                                         |
+| `--color-text-tertiary`                                           | `--on-surface-muted`                                                                                           |
+| `--color-text-info`                                               | `--on-info-container`                                                                                          |
+| `--color-border-secondary`                                        | `--outline-variant`                                                                                            |
+| `--color-border-tertiary`                                         | `--outline-muted`                                                                                              |
+| `--state-surface-main-hover`, `-pressed`, `-focused`, `-selected` | `--state-on-surface-hover`, `-pressed`, `-focused`, `-selected`                                                |
+
+**Changed values, no action needed:** `--on-surface-retreat` light 30 → 40,
+dark 70 → 75; `--on-surface-muted` light 40 → 45, dark 50 → 60;
+`--outline-variant` light 70 → 80; `--outline-muted` light 80 → 88, dark 20 → 30.
+New ramp step `--core-cold-grey-45`.
+
+Also replace any surface token used as a border color (for example a table
+divider drawn with `--surface-container-highest`) with `--outline-muted`.
+
 ### Surface scale rework (after `0.1.0-alpha.1`)
 
 No token was renamed or removed, so existing CSS keeps resolving. What changed

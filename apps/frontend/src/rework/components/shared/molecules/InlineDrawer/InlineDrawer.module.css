@@ -48,7 +48,7 @@
   transition:
     transform 250ms ease-out,
     visibility 250ms;
-  border-left: 1px solid var(--outline-retreat);
+  border-left: 1px solid var(--outline-muted);
   width: var(--drawer-width);
   max-width: 100vw;
   /* No overflow:hidden here — keep main content interactive at all times */
@@ -229,7 +229,7 @@
   flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--outline-retreat);
+  border-bottom: 1px solid var(--outline-muted);
   padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
 }
 
