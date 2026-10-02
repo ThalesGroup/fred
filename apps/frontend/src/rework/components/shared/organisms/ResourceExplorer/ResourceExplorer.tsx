@@ -133,27 +133,27 @@ export default function ResourceExplorer<T>({
           <Breadcrumb segments={breadcrumb.segments} />
         </span>
         <span className={styles.toolbarEnd}>
-          {toolbarActions}
+          {toolbarActions && <span className={styles.toolbarActions}>{toolbarActions}</span>}
           {search && (
             <span className={styles.search}>
               <TextInput
                 ref={searchInputRef}
                 compact
-                size="small"
+                size="xs"
                 icon={{ category: "outlined", type: "search" }}
                 value={search.value}
                 onChange={(e) => search.onChange(e.target.value)}
                 placeholder={search.placeholder}
                 aria-label={search.ariaLabel}
                 style={
-                  search.value ? { paddingRight: "calc(var(--spacing-2xs) + 2rem + var(--spacing-xs))" } : undefined
+                  search.value ? { paddingRight: "calc(var(--spacing-2xs) + 1.5rem + var(--spacing-xs))" } : undefined
                 }
               />
               {search.value && (
                 <span className={styles.searchClear}>
                   <IconButton
                     type="button"
-                    size="small"
+                    size="2xs"
                     color="on-surface-retreat"
                     variant="icon"
                     icon={{ category: "outlined", type: "close" }}

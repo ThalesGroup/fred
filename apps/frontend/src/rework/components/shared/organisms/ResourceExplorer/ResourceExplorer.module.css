@@ -52,7 +52,7 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
-  padding: var(--spacing-xs) var(--spacing-xs) 0;
+  padding: var(--spacing-xs) var(--spacing-s) 0 var(--spacing-xs);
 }
 
 /* The pagination footer ships its own border-top (TablePagination.module.scss)
@@ -67,12 +67,6 @@
   border-top: 1px solid var(--outline-muted);
 }
 
-/* Same scoping reasoning as the footer border above — breathing
- * room under the row list, ResourceExplorer's table only. */
-.tableFill [class*="datatable-body"] {
-  padding-bottom: var(--spacing-xs);
-}
-
 .toolbarStart {
   display: flex;
   align-items: center;
@@ -84,6 +78,12 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
+}
+
+/* Icon buttons sit flush: their own state layer already spaces them. */
+.toolbarActions {
+  display: flex;
+  align-items: center;
 }
 
 .search {
