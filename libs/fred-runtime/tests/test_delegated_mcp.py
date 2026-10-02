@@ -37,6 +37,8 @@ from conftest import (
     StaticWorkloadTokens,
     admitted_provider,
 )
+from fred_core.logs.context import log_context
+from fred_core.logs.propagation import CONTEXT_HEADER, decode_log_context
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import (
     GRANT_PARAM_AGENT,
@@ -756,9 +758,16 @@ async def test_the_tool_gate_adds_no_header_and_stops_only_delegated_calls(
         for server_name in ("no-token-mcp", "delegated-mcp")
     )
 
-    await no_token_tool.ainvoke({})
-    await delegated_tool.ainvoke({})
-    assert opened_connections == [dict(connection), dict(connection)]
+    with log_context(correlation_id="mcp-journey", custom="retained"):
+        await no_token_tool.ainvoke({})
+        await delegated_tool.ainvoke({})
+    assert opened_connections[0] == dict(connection)
+    delegated_headers = opened_connections[1]["headers"]
+    assert "Authorization" not in delegated_headers
+    assert decode_log_context(delegated_headers[CONTEXT_HEADER]) == (
+        {"correlation_id": "mcp-journey", "custom": "retained"},
+        None,
+    )
 
     runtime.records.mark_terminal("run-7")
     await no_token_tool.ainvoke({})
@@ -981,6 +990,7 @@ def tool_server(monkeypatch) -> _ToolServer:
         )
 
     monkeypatch.setattr(mcp_sessions, "create_mcp_http_client", _client)
+    monkeypatch.setattr(mcp_utils, "create_mcp_http_client", _client)
     return served
 
 
@@ -1262,3 +1272,40 @@ async def test_with_the_flag_off_a_refused_listing_retries_connection(
         for instance in instances
         for interceptor in instance.tool_interceptors
     )
+
+
+@pytest.mark.asyncio
+async def test_mcp_transport_stamps_live_context_only_on_its_configured_origin(
+    monkeypatch,
+):
+    seen = []
+    transport = httpx.MockTransport(
+        lambda request: (
+            seen.append(request)
+            or httpx.Response(302, headers={"Location": "http://external.invalid/leak"})
+        )
+    )
+    monkeypatch.setattr(
+        mcp_utils,
+        "create_mcp_http_client",
+        lambda **kwargs: httpx.AsyncClient(
+            transport=transport, follow_redirects=True, **kwargs
+        ),
+    )
+    async with mcp_utils._delegated_mcp_http_client(
+        origin=("http", "tools.invalid", None)
+    ) as client:
+        with log_context(correlation_id="one", session_id="session-a"):
+            await client.get("http://tools.invalid/mcp")
+        with log_context(correlation_id="two"):
+            await client.get("http://tools.invalid/mcp")
+            await client.get("http://external.invalid/explicit")
+    assert len(seen) == 3
+    assert decode_log_context(seen[0].headers[CONTEXT_HEADER])[0] == {
+        "correlation_id": "one",
+        "session_id": "session-a",
+    }
+    assert decode_log_context(seen[1].headers[CONTEXT_HEADER])[0] == {
+        "correlation_id": "two"
+    }
+    assert CONTEXT_HEADER not in seen[2].headers

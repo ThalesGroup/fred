@@ -28,6 +28,7 @@ from jwt import PyJWKClient
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.logs.context import bind_operation_context
+from fred_core.logs.propagation import CONTEXT_HEADER, admit_delegated_log_context
 from fred_core.security.delegation import (
     AssertedUser,
     bears_service_account_markers,
@@ -659,6 +660,13 @@ async def resolve_request_principal(
         logger.warning("[AUTH] Request subject is not in the whitelist")
         raise HTTPException(status_code=403, detail="user_not_whitelisted")
     request.state.principal_context = PrincipalContext(caller=caller, subject=subject)
+    if isinstance(subject, AssertedUser):
+        admit_delegated_log_context(
+            request.headers.get(CONTEXT_HEADER),
+            user_id=subject.uid,
+            run_id=subject.run_id,
+            agent_id=subject.agent_id,
+        )
     return subject
 
 

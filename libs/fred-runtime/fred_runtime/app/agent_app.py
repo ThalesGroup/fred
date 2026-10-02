@@ -85,6 +85,7 @@ from fred_core.logs.context import (
 from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingMiddleware
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
+from fred_core.logs.propagation import outbound_context_headers
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_core.security.delegation import (
     AssertedUser,
@@ -1771,7 +1772,11 @@ async def _resolve_agent_instance(
         # (TURN-01 evidence gap: no way to join a turn to its binding call
         # besides timestamps).
         headers["X-Request-Id"] = request_id
+    if call_credentials.delegated:
+        headers.update(outbound_context_headers())
     request_kwargs: dict[str, Any] = {"headers": headers or None}
+    if call_credentials.delegated:
+        request_kwargs["follow_redirects"] = False
     if call_credentials.parameters:
         request_kwargs["params"] = dict(call_credentials.parameters)
     if isinstance(provider, DelegatedCredentialProvider):
