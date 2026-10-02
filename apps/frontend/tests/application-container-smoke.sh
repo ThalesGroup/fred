@@ -22,8 +22,9 @@ if [ -z "${image}" ]; then
 fi
 if ! command -v docker >/dev/null 2>&1 || \
     ! command -v curl >/dev/null 2>&1 || \
-    ! command -v openssl >/dev/null 2>&1; then
-    echo "The frontend container smoke test requires docker, curl, and openssl" >&2
+    ! command -v openssl >/dev/null 2>&1 || \
+    ! command -v jq >/dev/null 2>&1; then
+    echo "The frontend container smoke test requires docker, curl, openssl, and jq" >&2
     exit 2
 fi
 if ! docker image inspect "${image}" >/dev/null 2>&1; then
@@ -384,6 +385,33 @@ unknown_status=$(curl -sS -o /dev/null -w '%{http_code}' \
 optional_status=$(curl -sS -o /dev/null -w '%{http_code}' \
     "http://127.0.0.1:${frontend_port}/app-services/optional-app/teams/team-a")
 [ "${optional_status}" = "503" ]
+
+# Access output must remain one JSON event per completed request, including
+# adversarial paths and credentials; native diagnostics remain text.
+curl -sS -H 'Authorization: Bearer access-log-secret' \
+    -H 'Cookie: session=access-log-cookie' -H 'User-Agent: access-log-agent' \
+    -o /dev/null \
+    "http://127.0.0.1:${frontend_port}/apps/required-app/quote%22slash%5Cline%0A?secret=access-log-query"
+docker logs "${frontend}" > "${test_directory}/access.jsonl" 2> "${test_directory}/native-errors.log"
+jq -s -e '
+    length > 0 and
+    all(.[]; .service == "frontend" and .service_role == "proxy" and
+        .logger == "nginx.access" and (.timestamp | type == "string") and
+        (.request_id | test("^[0-9a-f]{32}$")) and
+        (.duration_s >= 0) and (.response_bytes >= 0) and
+        .severity == (if .http_status >= 500 then "ERROR"
+                     elif .http_status >= 400 then "WARNING" else "INFO" end)) and
+    any(.[]; .http_status == 204 and .http_route == "application-ui") and
+    any(.[]; .http_status == 404 and .severity == "WARNING") and
+    any(.[]; .http_status == 503 and .severity == "ERROR")
+' "${test_directory}/access.jsonl" >/dev/null
+if grep -E 'access-log-(secret|cookie|agent|query)|placeholder-token|request-body|quote|X-Injected' \
+    "${test_directory}/access.jsonl" >/dev/null; then
+    echo "Frontend access logs retained request content or sensitive headers" >&2
+    exit 1
+fi
+# The over-limit request still emits its native diagnostic on stderr.
+grep -F '[error]' "${test_directory}/native-errors.log" >/dev/null
 
 docker rm -f "${frontend}" >/dev/null
 start_frontend "${unhealthy_frontend}" \

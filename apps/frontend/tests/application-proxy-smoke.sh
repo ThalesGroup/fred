@@ -197,4 +197,15 @@ for unsafe in \
         "[{\"app_id\":\"app\",\"ui_upstream\":\"http://ui.invalid\",\"service_upstream\":\"${unsafe}\"}]"
 done
 
+
+for logging_config in "${config}" "${disabled_config}"; do
+    assert_contains "${logging_config}" 'log_format fred_json escape=json'
+    assert_contains "${logging_config}" 'access_log /dev/stdout fred_json;'
+    assert_contains "${logging_config}" 'error_log /dev/stderr warn;'
+    assert_not_contains "${logging_config}" '$http_authorization'
+    assert_not_contains "${logging_config}" '$http_cookie'
+    assert_not_contains "${logging_config}" '$http_user_agent'
+    assert_not_contains "${logging_config}" '$args'
+done
+
 echo "Application proxy smoke checks passed"
