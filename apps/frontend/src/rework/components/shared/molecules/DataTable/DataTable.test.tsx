@@ -970,3 +970,34 @@ it("keeps distinct symbol rows distinct when their descriptions match", () => {
   expect((container.querySelector("input") as HTMLInputElement).value).toBe("B");
   expect(container.querySelectorAll("input")[1]).toBe(first);
 });
+
+it.each([NaN, Infinity, -Infinity, -1, 0.5, Number.MAX_SAFE_INTEGER + 1])(
+  "rejects invalid server count/offset %s before navigation",
+  (value) => {
+    for (const field of ["totalCount", "offset"] as const) {
+      const pagination = { totalCount: 2, offset: 0, limit: 1, onOffsetChange: vi.fn(), [field]: value };
+      expect(() =>
+        renderToStaticMarkup(<DataTable columns={columns} data={makeRows(1)} serverPagination={pagination} />),
+      ).toThrow(`serverPagination.${field} must be a nonnegative safe integer`);
+      expect(pagination.onOffsetChange).not.toHaveBeenCalled();
+    }
+  },
+);
+it("accepts zero server count and offset as an empty first page", () => {
+  const onOffsetChange = vi.fn();
+  render(
+    <DataTable
+      columns={columns}
+      data={[]}
+      serverPagination={{ totalCount: 0, offset: 0, limit: 20, onOffsetChange }}
+    />,
+  );
+  expect(container.textContent).not.toContain("NaN");
+  expect((container.querySelector('[aria-label="dataTable.pagination.next"]') as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  expect((container.querySelector('[aria-label="dataTable.pagination.last"]') as HTMLButtonElement).disabled).toBe(
+    true,
+  );
+  expect(onOffsetChange).not.toHaveBeenCalled();
+});

@@ -248,6 +248,16 @@ export default function DataTable<T>({
       throw new Error(`DataTable: ${name} must be a positive safe integer.`);
     }
   }
+  if (serverPagination) {
+    for (const [name, value] of [
+      ["totalCount", serverPagination.totalCount],
+      ["offset", serverPagination.offset],
+    ] as const) {
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new Error(`DataTable: serverPagination.${name} must be a nonnegative safe integer.`);
+      }
+    }
+  }
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);

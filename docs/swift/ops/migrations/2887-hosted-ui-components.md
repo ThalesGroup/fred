@@ -7,7 +7,7 @@ configuration_reason: "No configuration keys or defaults change. Deployments usi
 ---
 ## Applicability
 
-Fred deployments upgrading with PR #2890, including the built-in evaluator removal tracked by #2904.
+Fred deployments upgrading with PR #2890, including the built-in evaluator removal tracked by #2904, and consumers of the unpublished UI alpha.3 candidate.
 
 ## Prerequisites
 
@@ -27,9 +27,13 @@ Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `l
 
 Selectable `DataTable` consumers must supply a stable `rowKey` function, controlled `selectedKeys` set and `onSelectionChange` handler (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected. Controlled sorting requires both `sortState` (including `null`) and `onSortChange`; omit both for internal sorting, with `sortValue` on every sortable column.
 
+Hosted consumers can opt into typed table-row activation, localized drawer action labels and semantic KPI tones after the UI package release. Server pagination counts and offsets must be nonnegative safe integers; page sizes must be positive safe integers.
+
 ## Validation
 
 Confirm Apps opens the evaluator for an authorized team, while unauthorized teams retain the existing admission restrictions. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.
+
+In the evaluation application, activate a run row with Enter, close the case drawer using its localized close action, and inspect outcome KPI values in both themes. Open the agent selector in a scrolled hosted form and navigate its options: only the options list should scroll, while the form and Fred host retain their position.
 
 ## Rollback
 
@@ -37,4 +41,4 @@ Restore the previous Fred frontend image to recover the built-in screens. Keep t
 
 ## Limitations
 
-Publishing the alpha.3 npm package is a separate operation. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.
+Publishing the alpha.3 npm package is a separate operation. Rebuild the candidate archive and regenerate release evidence before publication; evaluator registry pins remain pending that release. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.
