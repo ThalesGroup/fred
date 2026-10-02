@@ -47,6 +47,11 @@ its other uses in the bounded surface. Review every operand of an arithmetic
 contract, every participant sharing an event, or every consumer relying on the
 same identity; choose variants from that mechanism, not from the example's nouns.
 
+For each public component, inventory how each real consumer uses it, not only
+which props it passes: inside a form, in a localized UI, by keyboard, with which
+states displayed (errors, progress, empty), and which values it actually supplies.
+Reachability is judged against this context.
+
 Try to disprove each invariant with a valid-looking consumer outside the current
 happy path. Use stateful children for identity claims, a second participant for
 exclusive ownership, and changed inputs for lifecycle claims. Explain why the
@@ -64,6 +69,9 @@ Use the relevant questions below, not a mandatory matrix for unrelated work:
 | Dimensions | Are accepted units and boundary values interpreted correctly, including container-relative layouts? |
 | Interaction | Do nested native/ARIA controls, editable content, portals and keyboard events preserve their own actions? |
 | Presentation | Are foreground/background tokens paired, themes inherited, and long text/narrow layouts usable? |
+| Output consistency | When one input drives several outputs (visual, ARIA, text, counters), do they agree for every accepted value? |
+| Accessibility in context | Does every element a consumer reaches have an accessible name, a visible focus, an announced state or error, and no hard-coded string in a localized UI? |
+| Forms | Inside a consumer's form, do internal buttons avoid submitting, do file inputs accept a retry, and are errors tied to their control? |
 | Async work | Are delayed responses, errors, cancellation and terminal states consistent across consumers? |
 | Retirement/migration | Do routes, callers, generated clients, configuration, help/search links and both locales still lead to supported behavior? |
 
@@ -120,6 +128,12 @@ must assess each finding, fix or justify it, and verify affected behavior.
 If independent review cannot run, report that limitation rather than substituting
 self-review and calling it independent. Do not invent findings to fill a quota.
 
+## Replay earlier findings
+
+When the changed files received review comments before (earlier or closed PRs for
+the same issue), re-disposition each comment against the current HEAD before
+declaring readiness. Reverting a fix does not close its finding.
+
 ## Disposition of findings
 
 Detection without a disposition rule turns review into an endless patch loop:
@@ -128,9 +142,13 @@ ask whether a real consumer (an existing caller or the task's target consumer)
 reaches the triggering case. Then prefer, in order:
 
 1. Delete or narrow the surface so the case is no longer expressible.
-2. Reject it in the type contract.
-3. Document it as a constraint.
+2. Reject it in the type contract, or remove it with a static default (an
+   attribute or a CSS rule, no branching).
+3. Document it as a constraint, only when 1 and 2 cannot express it.
 4. Only for a case a real consumer reaches, add runtime logic.
+
+Take the highest level that can express the fix; documenting a case a type
+could reject is a wrong disposition.
 
 An unreachable case never justifies new runtime logic. Reply with the chosen
 disposition instead of patching. Fix one review round as a batch, verify it,
