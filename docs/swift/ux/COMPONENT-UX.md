@@ -5072,10 +5072,13 @@ The tool drawer lists the offered choices and highlights the selected one.
 While the person is answering, the `ask_user` tool line stays in progress.
 Simultaneous questions share one card with short subject tabs that scroll
 horizontally when needed. A choice or Skip records a local draft and advances
-to the next unanswered tab. The person can revisit any tab and revise the
-choice or text. Send all becomes available only when every tab has an answer
-or skip; it sends one request for the complete set. The card stays visible
-during submission and keeps the drafts if submission fails.
+to the next unanswered tab. Nonblank free text counts as an answer while typing,
+without requiring Next or switching tabs; clearing it removes that answer unless
+a choice remains selected. The person can revisit any tab and revise the choice
+or text. Send all becomes available only when every tab has an answer or skip;
+it sends one request for the complete set. Closing the grouped card skips all
+pending questions in one request, replacing any local drafts. The card stays
+visible during submission and keeps the drafts if submission fails.
 For free text, a compact filled Send button sits directly left of Skip in the
 card footer. Choice-only questions keep Skip at the bottom right.
 The chat composer blocks new messages and commands in that conversation while
@@ -5083,4 +5086,7 @@ the question or its resume is in progress, then becomes available again.
 Approval actions use the same neutral outline style and offer a conversation-scoped
 choice; the browser answers later matching approval pauses through the existing
 resume flow. Skip at the bottom right and close at the top right appear only
-for `stage="agent_question"`. Both resume the turn as skipped. A skipped answer is shown in the same card, including after history reload.
+for `stage="agent_question"`. For one question, both resume it as skipped. With
+grouped questions, Skip records a draft for the active tab, while close skips
+the entire group in one request. Skipped answers appear in the same cards,
+including after history reload.

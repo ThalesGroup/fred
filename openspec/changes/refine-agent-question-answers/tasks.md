@@ -19,6 +19,7 @@
 - [x] 2.3 Show simultaneous agent questions as selectable subject tabs in one HITL card; keep per-question drafts and first-pending default, reconstruct all unanswered tabs on reload, verify answer routing across resumes, and keep the card open on the next tab after Skip until no questions remain.
 - [x] 2.4 Record the observed one-versus-two-call latency trade-off and the batch resume result in the PR.
 - [x] 2.5 Stage every simultaneous question answer locally, allow edits and skips, then send one complete batch; verify no card flicker and failed-send recovery.
+- [x] 2.6 Count nonblank free text as a draft during typing without requiring Next, and make closing the grouped card skip every pending question in one batch; verify both behaviors in focused frontend tests.
 
 ## 3. Close-out
 

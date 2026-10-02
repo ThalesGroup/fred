@@ -287,6 +287,37 @@ describe("HitlPrompt answer actions", () => {
 });
 
 describe("HitlPrompt staged batch answers", () => {
+  it("closes a grouped card by skipping the whole group", () => {
+    const first = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", occurrence_id: "call-a" },
+    };
+    const second = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", occurrence_id: "call-b" },
+    };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onSkipAll = vi.fn();
+    const onStageAnswer = vi.fn();
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSkipAll={onSkipAll}
+          onAnswer={() => undefined}
+        />,
+      ),
+    );
+    const close = container.querySelector('button[aria-label="chatbot.skipAllHitlQuestionsAria"]');
+    act(() => (close as HTMLButtonElement | null)?.click());
+    expect(onSkipAll).toHaveBeenCalledOnce();
+    expect(onStageAnswer).not.toHaveBeenCalled();
+    act(() => root.unmount());
+  });
+
   it("advances through choices while keeping every tab editable until Send all", () => {
     const first = {
       ...event,

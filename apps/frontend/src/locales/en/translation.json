@@ -544,6 +544,7 @@
     "sendHitlAnswer": "Send",
     "skipHitlQuestion": "Skip",
     "skipHitlQuestionAria": "Skip this question",
+    "skipAllHitlQuestionsAria": "Skip all questions",
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {

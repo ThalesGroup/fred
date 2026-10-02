@@ -1425,7 +1425,13 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendHitlResumeMock).not.toHaveBeenCalled();
 
     act(() => latest.setHitlFreeText("No limit"));
-    act(() => latest.stageHitlAnswer(undefined, "No limit"));
+    expect(latest.pendingHitl).toEqual(second);
+    expect(latest.stagedHitlCount).toBe(2);
+    expect(latest.canSendAllHitl).toBe(true);
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    act(() => latest.setHitlFreeText("  "));
+    expect(latest.canSendAllHitl).toBe(false);
+    act(() => latest.setHitlFreeText("No limit"));
     expect(latest.canSendAllHitl).toBe(true);
     act(() => latest.selectHitlTab(first));
     act(() => latest.stageHitlAnswer("rome"));
@@ -1447,6 +1453,59 @@ describe("useManagedChat — session write reliability", () => {
       [
         { event: first, answer: "rome", freeText: undefined, skipped: false },
         { event: second, answer: undefined, freeText: "No limit", skipped: false },
+      ],
+    );
+    expect(latest.pendingHitl).toBeNull();
+  });
+
+  it("skips every simultaneous question when the card is closed", async () => {
+    const first = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        free_text: true,
+      },
+    };
+    const second = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => {
+      capturedOnAwaitingHuman?.(first);
+      capturedOnAwaitingHuman?.(second);
+    });
+    rerender();
+    act(() => latest.setHitlFreeText("Paris"));
+    act(() => latest.selectHitlTab(second));
+    expect(latest.canSendAllHitl).toBe(false);
+
+    await act(async () => {
+      latest.handleSkipAllHitl();
+      await Promise.resolve();
+    });
+    expect(sendHitlResumeMock).toHaveBeenCalledTimes(1);
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      first,
+      undefined,
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+      undefined,
+      [
+        { event: first, answer: undefined, freeText: undefined, skipped: true },
+        { event: second, answer: undefined, freeText: undefined, skipped: true },
       ],
     );
     expect(latest.pendingHitl).toBeNull();

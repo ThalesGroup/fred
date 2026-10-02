@@ -773,6 +773,7 @@ export default function ManagedChatPage() {
                         canSendAllHitl={chat.canSendAllHitl}
                         onStageHitlAnswer={chat.stageHitlAnswer}
                         onSendAllHitl={chat.handleSendAllHitl}
+                        onSkipAllHitl={chat.handleSkipAllHitl}
                         isLoading={conversationUnresolved}
                         isStreaming={chat.waitResponse}
                         scrollContainerRef={scrollContainerRef}

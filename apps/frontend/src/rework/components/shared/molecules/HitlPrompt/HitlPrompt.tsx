@@ -34,6 +34,7 @@ interface HitlPromptProps {
   canSendAll?: boolean;
   onStageAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
   onSendAll?: () => void;
+  onSkipAll?: () => void;
   onAnswer: (
     answer: string | boolean | undefined,
     freeText?: string,
@@ -61,6 +62,7 @@ export function HitlPrompt({
   canSendAll = false,
   onStageAnswer,
   onSendAll,
+  onSkipAll,
   onAnswer,
   readonly = false,
   maxChatInputChars,
@@ -123,9 +125,9 @@ export function HitlPrompt({
           variant="icon"
           size="small"
           icon={{ category: "outlined", type: "close" }}
-          aria-label={t("chatbot.skipHitlQuestionAria")}
-          title={t("chatbot.skipHitlQuestionAria")}
-          onClick={skipQuestion}
+          aria-label={t(hasQuestionTabs ? "chatbot.skipAllHitlQuestionsAria" : "chatbot.skipHitlQuestionAria")}
+          title={t(hasQuestionTabs ? "chatbot.skipAllHitlQuestionsAria" : "chatbot.skipHitlQuestionAria")}
+          onClick={hasQuestionTabs ? onSkipAll : skipQuestion}
           disabled={busy}
         />
       )}

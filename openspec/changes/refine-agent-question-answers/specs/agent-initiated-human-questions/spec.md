@@ -41,7 +41,9 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **THEN** it displays one HITL card with a tab for each unanswered question in call order, selecting the first by default
 - **AND** each tab displays a short subject title, or a localized numbered fallback when no title exists, with horizontal scrolling when needed
 - **AND** selecting a choice records a draft answer and advances to the next question without resuming the agent
+- **AND** nonblank free text counts as a draft answer while the person types, without requiring Next or changing the active tab; clearing it removes that draft unless a choice remains selected
 - **AND** the person can revisit a tab, change its choice or text answer, and skip an individual question
+- **AND** closing the grouped card submits a skip for every pending question, including tabs with drafted answers, in one batch
 - **AND** once every tab has a draft answer or skip, one Send action submits all answers together to their own calls
 - **AND** the card stays open until the batch is accepted, and failed submission preserves editable answers
 

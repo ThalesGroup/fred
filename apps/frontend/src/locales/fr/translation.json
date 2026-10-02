@@ -544,6 +544,7 @@
     "sendHitlAnswer": "Envoyer",
     "skipHitlQuestion": "Passer",
     "skipHitlQuestionAria": "Passer cette question",
+    "skipAllHitlQuestionsAria": "Passer toutes les questions",
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {

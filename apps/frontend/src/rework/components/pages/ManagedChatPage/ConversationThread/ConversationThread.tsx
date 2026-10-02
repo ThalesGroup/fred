@@ -38,6 +38,7 @@ interface ConversationThreadProps {
   canSendAllHitl?: boolean;
   onStageHitlAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
   onSendAllHitl?: () => void;
+  onSkipAllHitl?: () => void;
   isLoading: boolean;
   isStreaming: boolean;
   emptyState?: ReactNode;
@@ -70,6 +71,7 @@ export const ConversationThread = memo(function ConversationThread({
   canSendAllHitl,
   onStageHitlAnswer,
   onSendAllHitl,
+  onSkipAllHitl,
   isLoading,
   isStreaming,
   emptyState,
@@ -152,6 +154,7 @@ export const ConversationThread = memo(function ConversationThread({
           canSendAll={canSendAllHitl}
           onStageAnswer={onStageHitlAnswer}
           onSendAll={onSendAllHitl}
+          onSkipAll={onSkipAllHitl}
           onAnswer={onHitlAnswer}
           maxChatInputChars={maxChatInputChars}
           freeTextValue={hitlFreeText}

@@ -52,6 +52,18 @@ function hitlKey(event: RuntimeAwaitingHumanEvent): string {
   ].join(":");
 }
 
+function resolvedHitlAnswer(
+  event: RuntimeAwaitingHumanEvent,
+  stagedAnswers: ReadonlyMap<string, StagedHitlAnswer>,
+  drafts: ReadonlyMap<string, string>,
+): StagedHitlAnswer | undefined {
+  const key = hitlKey(event);
+  const staged = stagedAnswers.get(key);
+  if (staged) return staged;
+  const freeText = event.payload.free_text ? drafts.get(key) : undefined;
+  return freeText?.trim() ? { answer: undefined, freeText, skipped: false } : undefined;
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 interface UseManagedChatParams {
@@ -85,9 +97,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   }, []);
   const pendingHitl = pendingHitls.find((event) => hitlKey(event) === selectedHitlKey) ?? pendingHitls[0] ?? null;
   const pendingHitlTabs = pendingHitl?.payload.stage === "agent_question" ? pendingHitls : [];
-  const stagedHitlAnswer = pendingHitl ? stagedHitlAnswers.get(hitlKey(pendingHitl)) : undefined;
-  const stagedHitlCount = pendingHitlTabs.filter((event) => stagedHitlAnswers.has(hitlKey(event))).length;
-  const canSendAllHitl = pendingHitlTabs.length > 1 && stagedHitlCount === pendingHitlTabs.length;
+  const stagedHitlAnswer = pendingHitl
+    ? resolvedHitlAnswer(pendingHitl, stagedHitlAnswers, hitlDraftsRef.current)
+    : undefined;
+  const stagedHitlCount = pendingHitlTabs.filter((event) =>
+    resolvedHitlAnswer(event, stagedHitlAnswers, hitlDraftsRef.current),
+  ).length;
   const [resumingAgentQuestionSessionId, setResumingAgentQuestionSessionId] = useState<string | null>(null);
   const hitlResumeOwnerRef = useRef<RuntimeAwaitingHumanEvent | null>(null);
   const submittedBatchKeysRef = useRef<Set<string>>(new Set());
@@ -131,7 +146,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       replaceStagedHitlAnswers(nextAnswers);
       const index = current.findIndex((event) => hitlKey(event) === hitlKey(selected));
       const next = [...current.slice(index + 1), ...current.slice(0, index)].find(
-        (event) => !nextAnswers.has(hitlKey(event)),
+        (event) => !resolvedHitlAnswer(event, nextAnswers, hitlDraftsRef.current),
       );
       if (next) {
         setSelectedHitlKey(hitlKey(next));
@@ -386,6 +401,18 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     onTurnRejected: handleTurnRejected,
     isTurnCurrent,
   });
+  const canSendAllHitl =
+    pendingHitlTabs.length > 1 &&
+    pendingHitlTabs.every((event) => {
+      const answer = resolvedHitlAnswer(event, stagedHitlAnswers, hitlDraftsRef.current);
+      if (!answer) return false;
+      if (!answer.skipped && answer.answer === undefined && !answer.freeText?.trim()) return false;
+      return (
+        answer.freeText === undefined ||
+        maxChatInputChars === undefined ||
+        countUnicodeCodePoints(answer.freeText) <= maxChatInputChars
+      );
+    });
   latestMessagesRef.current = messages;
 
   // Chat controls are resolved per agent instance/config, not per session — a
@@ -902,52 +929,60 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [agentInstanceId, maxChatInputChars, pendingHitl, replacePendingHitls, sendHitlResume, showError, t],
   );
 
-  const handleSendAllHitl = useCallback(() => {
-    const prompts = pendingHitlsRef.current;
-    if (prompts.length < 2 || prompts.some((event) => event.payload.stage !== "agent_question")) return;
-    if (hitlResumeOwnerRef.current) return;
-    const answers: HitlBatchAnswer[] = [];
-    for (const event of prompts) {
-      const staged = stagedHitlAnswersRef.current.get(hitlKey(event));
-      if (!staged || !event.payload.interrupt_id || !event.payload.occurrence_id) return;
-      if (
-        staged.freeText &&
-        maxChatInputChars !== undefined &&
-        countUnicodeCodePoints(staged.freeText) > maxChatInputChars
-      )
-        return;
-      answers.push({ event, ...staged });
-    }
-    const owner = prompts[0];
-    hitlResumeOwnerRef.current = owner;
-    setResumingAgentQuestionSessionId(owner.session_id);
-    const submittedKeys = new Set(prompts.map(hitlKey));
-    submittedBatchKeysRef.current = submittedKeys;
-    const { runtimeContext, turnOptions } = buildTurnContextRef.current();
-    void sendHitlResume(owner, undefined, undefined, runtimeContext, turnOptions, false, undefined, answers)
-      .then((accepted) => {
-        if (!accepted) {
-          if (submittedBatchKeysRef.current === submittedKeys) submittedBatchKeysRef.current = new Set();
+  const submitHitlBatch = useCallback(
+    (skipAll: boolean) => {
+      const prompts = pendingHitlsRef.current;
+      if (prompts.length < 2 || prompts.some((event) => event.payload.stage !== "agent_question")) return;
+      if (hitlResumeOwnerRef.current) return;
+      const answers: HitlBatchAnswer[] = [];
+      for (const event of prompts) {
+        const staged = skipAll
+          ? { answer: undefined, freeText: undefined, skipped: true }
+          : resolvedHitlAnswer(event, stagedHitlAnswersRef.current, hitlDraftsRef.current);
+        if (!staged || !event.payload.interrupt_id || !event.payload.occurrence_id) return;
+        if (!staged.skipped && staged.answer === undefined && !staged.freeText?.trim()) return;
+        if (
+          staged.freeText &&
+          maxChatInputChars !== undefined &&
+          countUnicodeCodePoints(staged.freeText) > maxChatInputChars
+        )
           return;
-        }
-        if (activeSessionIdRef.current !== owner.session_id) return;
-        const remaining = pendingHitlsRef.current.filter((event) => !submittedKeys.has(hitlKey(event)));
-        replacePendingHitls(remaining);
-        replaceStagedHitlAnswers(new Map());
-        for (const key of submittedKeys) hitlDraftsRef.current.delete(key);
-        setSelectedHitlKey(remaining.length ? hitlKey(remaining[0]) : null);
-        setHitlFreeText(remaining.length ? (hitlDraftsRef.current.get(hitlKey(remaining[0])) ?? "") : "");
-      })
-      .catch((error) => {
-        console.error("[useManagedChat] HITL batch resume failed", error);
-        if (submittedBatchKeysRef.current === submittedKeys) submittedBatchKeysRef.current = new Set();
-      })
-      .finally(() => {
-        if (hitlResumeOwnerRef.current !== owner) return;
-        hitlResumeOwnerRef.current = null;
-        setResumingAgentQuestionSessionId(null);
-      });
-  }, [maxChatInputChars, replacePendingHitls, replaceStagedHitlAnswers, sendHitlResume]);
+        answers.push({ event, ...staged });
+      }
+      const owner = prompts[0];
+      hitlResumeOwnerRef.current = owner;
+      setResumingAgentQuestionSessionId(owner.session_id);
+      const submittedKeys = new Set(prompts.map(hitlKey));
+      submittedBatchKeysRef.current = submittedKeys;
+      const { runtimeContext, turnOptions } = buildTurnContextRef.current();
+      void sendHitlResume(owner, undefined, undefined, runtimeContext, turnOptions, false, undefined, answers)
+        .then((accepted) => {
+          if (!accepted) {
+            if (submittedBatchKeysRef.current === submittedKeys) submittedBatchKeysRef.current = new Set();
+            return;
+          }
+          if (activeSessionIdRef.current !== owner.session_id) return;
+          const remaining = pendingHitlsRef.current.filter((event) => !submittedKeys.has(hitlKey(event)));
+          replacePendingHitls(remaining);
+          replaceStagedHitlAnswers(new Map());
+          for (const key of submittedKeys) hitlDraftsRef.current.delete(key);
+          setSelectedHitlKey(remaining.length ? hitlKey(remaining[0]) : null);
+          setHitlFreeText(remaining.length ? (hitlDraftsRef.current.get(hitlKey(remaining[0])) ?? "") : "");
+        })
+        .catch((error) => {
+          console.error("[useManagedChat] HITL batch resume failed", error);
+          if (submittedBatchKeysRef.current === submittedKeys) submittedBatchKeysRef.current = new Set();
+        })
+        .finally(() => {
+          if (hitlResumeOwnerRef.current !== owner) return;
+          hitlResumeOwnerRef.current = null;
+          setResumingAgentQuestionSessionId(null);
+        });
+    },
+    [maxChatInputChars, replacePendingHitls, replaceStagedHitlAnswers, sendHitlResume],
+  );
+  const handleSendAllHitl = useCallback(() => submitHitlBatch(false), [submitHitlBatch]);
+  const handleSkipAllHitl = useCallback(() => submitHitlBatch(true), [submitHitlBatch]);
 
   useEffect(() => {
     if (!pendingHitl || waitResponse || pendingHitl.payload.stage !== "tool_approval") return;
@@ -1110,6 +1145,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     runCommand,
     handleHitlAnswer,
     handleSendAllHitl,
+    handleSkipAllHitl,
     handleAbort: abort,
     startNewConversation,
     commitTitle,
