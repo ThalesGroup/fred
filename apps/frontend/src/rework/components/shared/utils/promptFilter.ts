@@ -20,6 +20,7 @@ export interface FilterablePrompt {
   name: string;
   description?: string | null;
   category_id?: string | null;
+  is_favorite?: boolean;
 }
 
 /**
@@ -40,6 +41,8 @@ export interface PromptFilterCriteria {
    * it. Omit to trust `category_id` as-is.
    */
   knownCategoryIds?: ReadonlySet<string>;
+  /** Keep only the caller's favorites; combines with the other criteria. */
+  favoritesOnly?: boolean;
 }
 
 /** Case-insensitive substring match over name + description. */
@@ -66,6 +69,9 @@ function matchesCategory(
 export function filterPrompts<T extends FilterablePrompt>(prompts: T[], criteria: PromptFilterCriteria): T[] {
   const query = criteria.search.trim().toLowerCase();
   return prompts.filter(
-    (prompt) => matchesSearch(prompt, query) && matchesCategory(prompt, criteria.categoryId, criteria.knownCategoryIds),
+    (prompt) =>
+      (!criteria.favoritesOnly || prompt.is_favorite === true) &&
+      matchesSearch(prompt, query) &&
+      matchesCategory(prompt, criteria.categoryId, criteria.knownCategoryIds),
   );
 }

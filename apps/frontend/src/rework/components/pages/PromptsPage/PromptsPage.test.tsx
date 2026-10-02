@@ -49,6 +49,7 @@ vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({
 // `canManage` — force it on so the edit-form-reseed regression tests below
 // can still reach that pencil.
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({ useTeamCapabilities: () => ({ canUpdateResources: true }) }));
+vi.mock("@core/hooks/usePromptFavoriteToggle.ts", () => ({ usePromptFavoriteToggle: () => vi.fn() }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
   useConfirmationDialog: () => ({ showConfirmationDialog: () => {} }),
 }));
