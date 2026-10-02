@@ -46,6 +46,9 @@ export default function TextArea({
 }: TextAreaProps) {
   const generatedId = useId();
   const id = suppliedId ?? generatedId;
+  const hintId = `${generatedId}-hint`;
+  const describedBy =
+    [props["aria-describedby"], error || explanation ? hintId : undefined].filter(Boolean).join(" ") || undefined;
   const controlled = value !== undefined;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => inputRef.current!, []);
@@ -90,6 +93,8 @@ export default function TextArea({
 
       <textarea
         {...props}
+        aria-invalid={error ? true : props["aria-invalid"]}
+        aria-describedby={describedBy}
         ref={inputRef}
         id={id}
         value={value}
@@ -104,7 +109,9 @@ export default function TextArea({
 
       {hasInformation && (
         <span className={styles.information}>
-          <span className={styles.hint}>{error || explanation || null}</span>
+          <span id={hintId} className={styles.hint} aria-live="polite">
+            {error || explanation || null}
+          </span>
           <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
         </span>
       )}

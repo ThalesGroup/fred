@@ -135,3 +135,37 @@ it("preserves native uncontrolled editing, refs and form reset with an accurate 
 it("supports an initially empty uncontrolled field", () => {
   expect(renderToStaticMarkup(<TextArea label="Notes" maxLength={100} />)).toContain("0 / 100");
 });
+
+it("associates dynamic errors and hints without losing caller descriptions", () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    const render = (error?: string) =>
+      act(() =>
+        root.render(
+          <TextArea
+            label="Email"
+            defaultValue=""
+            explanation="Use your work email"
+            error={error}
+            aria-describedby="external-help"
+          />,
+        ),
+      );
+    render();
+    const field = host.querySelector("textarea")!;
+    const descriptions = () => field.getAttribute("aria-describedby")!.split(" ");
+    expect(descriptions()[0]).toBe("external-help");
+    const hint = host.querySelector('[aria-live="polite"]')!;
+    expect(descriptions()).toContain(hint.id);
+    expect(hint.textContent).toBe("Use your work email");
+    render("Invalid email");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(hint.textContent).toBe("Invalid email");
+    render();
+    expect(field.hasAttribute("aria-invalid")).toBe(false);
+    expect(hint.textContent).toBe("Use your work email");
+  } finally {
+    act(() => root.unmount());
+  }
+});

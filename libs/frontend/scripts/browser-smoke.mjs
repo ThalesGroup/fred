@@ -891,6 +891,19 @@ async function verifyHostedComponents(page) {
     await notes.evaluate((element) => element === document.activeElement),
     true,
   );
+  await hosted.getByRole("button", { name: "Toggle notes error" }).click();
+  assert.equal(await notes.getAttribute("aria-invalid"), "true");
+  const hintId = await notes.getAttribute("aria-describedby");
+  assert.equal(
+    await page.locator(`[id="${hintId}"]`).textContent(),
+    "Invalid evaluation notes",
+  );
+  await hosted.getByRole("button", { name: "Toggle notes error" }).click();
+  assert.equal(await notes.getAttribute("aria-invalid"), null);
+  assert.equal(
+    await page.locator(`[id="${hintId}"]`).textContent(),
+    "Describe the evaluation",
+  );
   await notes.fill("Package-only notes");
   assert.equal(await notes.inputValue(), "Package-only notes");
   const nativeNotes = hosted.getByRole("textbox", {
@@ -1054,6 +1067,57 @@ async function verifyHostedComponents(page) {
     () =>
       document.querySelector('[data-layout="push"]').getBoundingClientRect()
         .width >= 319,
+  );
+  for (let cycle = 0; cycle < 2; cycle++) {
+    const trigger = drawer.getByRole("button", { name: "Open nested dialog" });
+    await trigger.click();
+    const dialog = page.getByRole("dialog", { name: "Nested confirmation" });
+    await dialog.waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal(await drawer.getAttribute("data-open"), "true");
+    assert.equal(
+      await trigger.evaluate((el) => el === document.activeElement),
+      true,
+    );
+  }
+  await page.keyboard.press("Escape");
+  await drawer.waitFor({ state: "hidden" });
+  await hosted.getByRole("button", { name: "Open push drawer" }).click();
+  await drawer.waitFor({ state: "visible" });
+  const keyboardHandle = drawer.getByRole("separator", {
+    name: "Resize panel",
+  });
+  await keyboardHandle.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await keyboardHandle.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  assert.equal(
+    await keyboardHandle.evaluate((el) => getComputedStyle(el).outlineStyle),
+    "solid",
+  );
+  const initialKeyboardWidth = Number(
+    await keyboardHandle.getAttribute("aria-valuenow"),
+  );
+  await page.keyboard.press("ArrowLeft");
+  assert.equal(
+    Number(await keyboardHandle.getAttribute("aria-valuenow")),
+    initialKeyboardWidth + 10,
+  );
+  await page.keyboard.press("Home");
+  assert.equal(
+    await keyboardHandle.getAttribute("aria-valuenow"),
+    await keyboardHandle.getAttribute("aria-valuemin"),
+  );
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        document.querySelector('[data-layout="push"]').getBoundingClientRect()
+          .width - 320,
+      ) < 1,
   );
   const before = await drawer.boundingBox();
   const handle = drawer.getByRole("separator", { name: "Resize panel" });

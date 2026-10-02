@@ -33,6 +33,7 @@ interface InlineDrawerBaseProps {
   onClose: () => void;
   title: string;
   closeLabel?: string;
+  resizeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
@@ -99,6 +100,7 @@ export function InlineDrawer({
   onClose,
   title,
   closeLabel = "Close panel",
+  resizeLabel = "Resize panel",
   titleAccessory,
   headerActions,
   width = "480px",
@@ -162,11 +164,20 @@ export function InlineDrawer({
 
   useEffect(() => {
     if (!open) return;
+    let active = true;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key !== "Escape" || e.isComposing) return;
+      // Dialog and drawer listeners can register in either order on window.
+      // Wait until dispatch completes before deciding whether a child consumed Escape.
+      queueMicrotask(() => {
+        if (active && !e.defaultPrevented) handleClose();
+      });
     };
     window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    return () => {
+      active = false;
+      window.removeEventListener("keydown", handleKey);
+    };
   }, [open, handleClose]);
 
   return (
@@ -198,7 +209,7 @@ export function InlineDrawer({
             className={styles.resizeHandle}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize panel"
+            aria-label={resizeLabel}
             {...resize.handleProps}
           />
         )}

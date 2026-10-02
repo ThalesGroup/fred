@@ -5,6 +5,7 @@ import {
   Breadcrumb,
   DataTable,
   Disclosure,
+  Dialog,
   FileDropzone,
   IndicatorDot,
   InlineDrawer,
@@ -157,6 +158,8 @@ export function HostedComponents() {
   const [activations, setActivations] = useState(0);
   const [uploads, setUploads] = useState(0);
   const [file, setFile] = useState("");
+  const [nestedDialog, setNestedDialog] = useState(false);
+  const [notesError, setNotesError] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [drawerGeneration, setDrawerGeneration] = useState(0);
   const [overlay, setOverlay] = useState(false);
@@ -183,7 +186,12 @@ export function HostedComponents() {
         value={text}
         onChange={(event) => setText(event.currentTarget.value)}
         maxLength={50}
+        error={notesError ? "Invalid evaluation notes" : undefined}
+        explanation="Describe the evaluation"
       />
+      <button type="button" onClick={() => setNotesError((value) => !value)}>
+        Toggle notes error
+      </button>
       <form data-native-notes>
         <TextArea label="Native notes" defaultValue="Bonjour" maxLength={50} />
         <button type="reset">Reset native notes</button>
@@ -324,6 +332,18 @@ export function HostedComponents() {
           resizable={{ persistKey: "hosted-fixture", maxViewportFraction: 0.8 }}
         >
           <span>Drawer content</span>
+          <button type="button" onClick={() => setNestedDialog(true)}>
+            Open nested dialog
+          </button>
+          <Dialog
+            open={nestedDialog}
+            title="Nested confirmation"
+            confirmLabel="Confirm"
+            onConfirm={() => setNestedDialog(false)}
+            onCancel={() => setNestedDialog(false)}
+          >
+            <input aria-label="Nested value" />
+          </Dialog>
         </InlineDrawer>
       </div>
       <button

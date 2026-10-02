@@ -140,3 +140,10 @@ DataTable rejects pageSize and server limits
 that are not positive safe integers before pagination arithmetic.
 FileDropzone associates its error with the upload control and announces new
 errors through an alert; clearing the error also clears its invalid state.
+
+TextArea links its hint/error to the field, preserves caller `aria-describedby`
+references and marks supplied errors invalid. Dynamic messages use a polite live region.
+InlineDrawer leaves consumed Escape events to nested dialogs, so dismissing the
+dialog preserves the drawer. Its resize handle supports Left/Right (10px),
+Home/End, visible keyboard focus and accessible bounds; `resizeLabel` localizes
+its name. Keyboard widths persist with the same bounds as pointer resizing.

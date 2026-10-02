@@ -28,7 +28,7 @@
  * when it leaves the handle.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalStorageState } from "../../../hooks/useLocalStorageState.ts";
 
 interface UsePaneResizeOptions {
@@ -50,6 +50,11 @@ interface UsePaneResizeOptions {
 }
 
 export interface PaneResizeHandleProps {
+  tabIndex: number;
+  "aria-valuemin": number;
+  "aria-valuemax": number;
+  "aria-valuenow": number;
+  onKeyDown: (e: React.KeyboardEvent) => void;
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
   onPointerUp: (e: React.PointerEvent) => void;
@@ -71,6 +76,14 @@ export function usePaneResize({
 } {
   const [width, setWidth] = useLocalStorageState(storageKey, initialWidth);
   const [dragging, setDragging] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : maxWidth,
+  );
+  useEffect(() => {
+    const update = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
   // The anchored edge does not move while dragging; captured once per drag so
   // pointermove never forces a layout read.
   const dragAnchorRef = useRef(0);
@@ -82,11 +95,10 @@ export function usePaneResize({
       // `window` is absent outside a browser (SSR / non-jsdom test render) —
       // this hook runs unconditionally from every InlineDrawer, so it must not
       // assume one exists.
-      const viewportWidth = typeof window !== "undefined" ? window.innerWidth : maxWidth;
       const cap = Math.min(maxWidth, Math.floor(viewportWidth * maxViewportFraction));
       return Math.min(cap, Math.max(minWidth, value));
     },
-    [minWidth, maxWidth, maxViewportFraction],
+    [minWidth, maxWidth, maxViewportFraction, viewportWidth],
   );
 
   const onPointerDown = useCallback(
@@ -113,6 +125,18 @@ export function usePaneResize({
     [clamp, setWidth, anchor],
   );
 
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const direction = (event.key === "ArrowLeft" ? 1 : -1) * (anchor === "right" ? 1 : -1);
+      setWidth((previous) =>
+        clamp(event.key === "Home" ? 0 : event.key === "End" ? Infinity : clamp(previous) + direction * 10),
+      );
+    },
+    [anchor, clamp, setWidth],
+  );
+
   const endDrag = useCallback(() => setDragging(false), []);
 
   return {
@@ -120,6 +144,16 @@ export function usePaneResize({
     // narrower window) can never produce an out-of-range drawer.
     width: clamp(width),
     dragging,
-    handleProps: { onPointerDown, onPointerMove, onPointerUp: endDrag, onPointerCancel: endDrag },
+    handleProps: {
+      tabIndex: 0,
+      "aria-valuemin": clamp(0),
+      "aria-valuemax": clamp(Infinity),
+      "aria-valuenow": clamp(width),
+      onKeyDown,
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: endDrag,
+      onPointerCancel: endDrag,
+    },
   };
 }

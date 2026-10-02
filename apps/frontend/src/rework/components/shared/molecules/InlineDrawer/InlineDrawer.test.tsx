@@ -14,7 +14,10 @@
 // limitations under the License.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, expect, it } from "vitest";
+import { act, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { DialogPrimitive } from "../Dialog/DialogPrimitive";
+import { afterEach, expect, it, vi } from "vitest";
 import { InlineDrawer, type InlineDrawerProps } from "./InlineDrawer";
 
 const props: InlineDrawerProps = {
@@ -54,4 +57,95 @@ it("keeps CSS widths available without resizing", () => {
 it.each([undefined, "overlay"])("rejects resizing with layout %s", (layout) => {
   const invalid = { ...props, layout } as unknown as InlineDrawerProps;
   expect(() => renderToStaticMarkup(<InlineDrawer {...invalid} />)).toThrow('resizable requires layout="push"');
+});
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+it.each([false, true])("Escape closes only the dialog with initially open child=%s", async (initiallyOpen) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const parent = vi.fn();
+  const child = vi.fn();
+  function Harness() {
+    const [open, setOpen] = useState(initiallyOpen);
+    return (
+      <div className="fred-ui">
+        <InlineDrawer open title="Parent" onClose={parent}>
+          <button onClick={() => setOpen(true)}>Open child</button>
+          <DialogPrimitive
+            open={open}
+            title="Child"
+            confirmLabel="Save"
+            onConfirm={() => {}}
+            onCancel={() => {
+              child();
+              setOpen(false);
+            }}
+          >
+            <input />
+          </DialogPrimitive>
+        </InlineDrawer>
+      </div>
+    );
+  }
+  try {
+    act(() => root.render(<Harness />));
+    const trigger = Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Open child")!;
+    for (let cycle = 0; cycle < 2; cycle++) {
+      if (!initiallyOpen || cycle > 0)
+        act(() => {
+          trigger.focus();
+          trigger.click();
+        });
+      const field = document.querySelector("input")!;
+      await act(async () =>
+        field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })),
+      );
+      expect(child).toHaveBeenCalledTimes(cycle + 1);
+      expect(parent).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    }
+    await act(async () =>
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })),
+    );
+    expect(parent).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
+
+it("keyboard resizing shares pointer bounds and persists its width", () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    act(() =>
+      root.render(
+        <InlineDrawer
+          {...props}
+          width="400px"
+          resizable={{ persistKey: "keys", minWidth: 320, maxWidth: 500, maxViewportFraction: 1 }}
+          resizeLabel="Resize details"
+        />,
+      ),
+    );
+    const handle = host.querySelector('[role="separator"]') as HTMLElement;
+    const key = (key: string) =>
+      act(() => handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })));
+    expect(handle.tabIndex).toBe(0);
+    expect(handle.getAttribute("aria-label")).toBe("Resize details");
+    key("ArrowLeft");
+    expect(handle.getAttribute("aria-valuenow")).toBe("410");
+    key("ArrowRight");
+    expect(handle.getAttribute("aria-valuenow")).toBe("400");
+    key("End");
+    key("ArrowLeft");
+    expect(handle.getAttribute("aria-valuenow")).toBe("500");
+    key("Home");
+    key("ArrowRight");
+    expect(handle.getAttribute("aria-valuenow")).toBe("320");
+    expect(localStorage.getItem("localHook:inline-drawer:keys:width")).toBe("320");
+  } finally {
+    act(() => root.unmount());
+  }
 });
