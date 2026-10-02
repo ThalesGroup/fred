@@ -1347,7 +1347,7 @@ export function useChatSse(
           ac.signal,
           () => {
             acceptedByRuntime = true;
-            if (agentQuestion) {
+            if (agentQuestion || hitlPayload?.stage === "tool_approval") {
               // The SSE resume does not emit HITL history rows. Mirror the accepted
               // answer now; a later history load replaces these with persisted rows.
               let next = messagesRef.current;
@@ -1360,7 +1360,20 @@ export function useChatSse(
                   message.session_id === sessionId &&
                   message.exchange_id === exchangeId &&
                   (message.parts?.[0] as { occurrence_id?: string | null } | undefined)?.occurrence_id === occurrenceId;
-                if (!next.some((message) => message.channel === "hitl_request" && sameOccurrence(message))) {
+                const requestId = occurrenceId ?? itemPayload.interrupt_id;
+                const hasRequest = next.some(
+                  (message) =>
+                    message.session_id === sessionId &&
+                    message.exchange_id === exchangeId &&
+                    message.channel === "hitl_request" &&
+                    (requestId == null
+                      ? agentQuestion && sameOccurrence(message)
+                      : message.parts.some(
+                          (part) =>
+                            part.type === "hitl_request" && (part.occurrence_id ?? part.interrupt_id) === requestId,
+                        )),
+                );
+                if (!hasRequest) {
                   next = upsertOne(next, {
                     session_id: sessionId,
                     exchange_id: exchangeId,
@@ -1373,7 +1386,7 @@ export function useChatSse(
                         type: "hitl_request",
                         question: itemPayload.question ?? "",
                         title: itemPayload.title ?? null,
-                        stage: "agent_question",
+                        stage: itemPayload.stage ?? "tool_approval",
                         choices: (itemPayload.choices ?? []).map((choice) => ({ id: choice.id, label: choice.label })),
                         free_text: itemPayload.free_text ?? false,
                         occurrence_id: occurrenceId,
@@ -1383,7 +1396,10 @@ export function useChatSse(
                     ],
                   });
                 }
-                if (!next.some((message) => message.channel === "hitl_response" && sameOccurrence(message))) {
+                if (
+                  !agentQuestion ||
+                  !next.some((message) => message.channel === "hitl_response" && sameOccurrence(message))
+                ) {
                   next = upsertOne(next, {
                     session_id: sessionId,
                     exchange_id: exchangeId,

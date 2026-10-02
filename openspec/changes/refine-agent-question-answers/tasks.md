@@ -24,9 +24,10 @@
 - [x] 2.8 Scroll overflowing subject tabs with wheel or trackpad input without dragging the scrollbar, and release vertical page scrolling at the strip ends; verify the focused card interaction.
 - [x] 2.9 Reduce active agent-question card width, typography, padding, and choice spacing slightly while retaining readable descriptions and controls; verify focused component tests and frontend quality.
 - [x] 2.10 Render a free-text answer to a choice question as one highlighted localized Other row in the tool detail drawer, preserving offered choices and choice comments; verify the drawer regression.
+- [x] 2.11 Show accepted tool execution approval, refusal, and skip responses in the chat immediately and after reload; verify focused resume and thread conversion tests.
 
 ## 3. Close-out
 
-- [x] 3.1 Run targeted tests, full module suites, the root quality gate, and OpenSpec validation and sync; verify PR #2900 records the result and limitations. Evidence: runtime 1,745 passed, 11 skipped, 17 deselected; frontend 3,176 passed, 7 skipped; targeted batch tests 57 runtime and 109 frontend passed; root code-quality, migration check, and OpenSpec validation passed.
+- [x] 3.1 Run targeted tests, full module suites, the root quality gate, and OpenSpec validation and sync; verify PR #2900 records the result and limitations. Evidence: runtime 1,745 passed, 11 skipped, 17 deselected; frontend 3,176 passed, 7 skipped; targeted batch tests 57 runtime and 109 frontend passed; root code-quality, migration check, and OpenSpec validation passed. Follow-up tool approval and thread conversion suites passed 81 tests; the root code-quality and migration check passed again.
 - [x] 3.2 Obtain independent correctness review and resolve its actionable findings.
 - [ ] 3.3 Archive the change after merge.

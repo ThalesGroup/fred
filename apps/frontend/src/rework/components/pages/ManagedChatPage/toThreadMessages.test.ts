@@ -318,6 +318,16 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     expect(rows.filter((r) => r.role === "hitl_request")).toHaveLength(2);
   });
 
+  it("shows the tool approval choice as a user response below its confirmation card", () => {
+    const rows = toThreadMessages(
+      [hitlRequestMsg("e1", {}, 1), hitlResponseMsg("e1", { choice_id: "cancel" }, 2)],
+      false,
+    );
+
+    expect(rows.filter((row) => row.role === "hitl_request")).toHaveLength(1);
+    expect(rows.filter((row) => row.role === "hitl_response").map((row) => row.text)).toEqual(["cancel"]);
+  });
+
   it("omits the trailing UNANSWERED gate's readonly card (the live prompt renders it instead)", () => {
     const messages = [hitlRequestMsg("e1"), hitlResponseMsg("e1"), hitlRequestMsg("e2")];
     const rows = toThreadMessages(messages, false);
