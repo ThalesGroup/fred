@@ -107,6 +107,7 @@ export default function TablePagination({
         )}
         <div className={styles["footer-nav"]}>
           <IconButton
+            type="button"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "first_page" }}
@@ -115,6 +116,7 @@ export default function TablePagination({
             onClick={onFirst}
           />
           <IconButton
+            type="button"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "chevron_left" }}
@@ -126,6 +128,7 @@ export default function TablePagination({
             {text.pageNumber(currentPage + 1, pageCount)}
           </span>
           <IconButton
+            type="button"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "chevron_right" }}
@@ -134,6 +137,7 @@ export default function TablePagination({
             onClick={onNext}
           />
           <IconButton
+            type="button"
             variant="icon"
             size="small"
             icon={{ category: "outlined", type: "last_page" }}

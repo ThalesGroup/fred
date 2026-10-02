@@ -1110,6 +1110,14 @@ async function verifyHostedComponents(page) {
       .textContent(),
     "Row 25",
   );
+  assert.deepEqual(
+    await hosted
+      .locator('[class*="footer-nav"] button')
+      .evaluateAll((buttons) => [
+        ...new Set(buttons.map((button) => button.type)),
+      ]),
+    ["button"],
+  );
   await hosted.getByRole("button", { name: "Standalone next" }).click();
   await hosted
     .getByText("Standalone 2", { exact: true })
@@ -1118,6 +1126,12 @@ async function verifyHostedComponents(page) {
   await hosted.getByRole("button", { name: "Open push drawer" }).click();
   const drawer = hosted.getByRole("complementary", { name: "Hosted drawer" });
   await drawer.waitFor({ state: "visible" });
+  assert.equal(
+    await drawer
+      .getByRole("button", { name: "Close panel" })
+      .getAttribute("type"),
+    "button",
+  );
   await page.waitForFunction(
     () =>
       document.querySelector('[data-layout="push"]').getBoundingClientRect()
@@ -1138,6 +1152,14 @@ async function verifyHostedComponents(page) {
     await trigger.click();
     const dialog = page.getByRole("dialog", { name: "Nested confirmation" });
     await dialog.waitFor({ state: "visible" });
+    assert.deepEqual(
+      await dialog
+        .locator('[class*="actions"] button')
+        .evaluateAll((buttons) => [
+          ...new Set(buttons.map((button) => button.type)),
+        ]),
+      ["button"],
+    );
     await page.keyboard.press("Escape");
     await dialog.waitFor({ state: "hidden" });
     assert.equal(await drawer.getAttribute("data-open"), "true");

@@ -207,11 +207,12 @@ export function DialogPrimitive({
               </div>
               <div className={styles.actions}>
                 {!hideCancel && (
-                  <Button color="on-surface" variant="text" size="medium" onClick={onCancel}>
+                  <Button type="button" color="on-surface" variant="text" size="medium" onClick={onCancel}>
                     {cancelLabel}
                   </Button>
                 )}
                 <Button
+                  type="button"
                   color={confirmColor}
                   variant="filled"
                   size="medium"

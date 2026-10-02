@@ -297,3 +297,26 @@ it("keeps a lower drawer inert if it closes underneath an overlay", () => {
     host.remove();
   }
 });
+
+it("closes inside a form without submitting", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
+  const close = vi.fn();
+  try {
+    act(() =>
+      root.render(
+        <form onSubmit={submit}>
+          <InlineDrawer open title="Edit" onClose={close} />
+        </form>,
+      ),
+    );
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Close panel"]')!.click());
+    expect(close).toHaveBeenCalledOnce();
+    expect(submit).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

@@ -129,3 +129,22 @@ it("retains defaults for explicitly undefined partial labels", () => {
   expect(container.querySelector('[aria-label="Items per page"]')).not.toBeNull();
   expect(container.querySelector('[aria-label="First page"]')).not.toBeNull();
 });
+
+it("navigates from an enclosing form without submitting it", () => {
+  const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
+  const callbacks = [vi.fn(), vi.fn(), vi.fn(), vi.fn()];
+  render(
+    <form onSubmit={submit}>
+      <TablePagination
+        {...baseProps}
+        onFirst={callbacks[0]}
+        onPrev={callbacks[1]}
+        onNext={callbacks[2]}
+        onLast={callbacks[3]}
+      />
+    </form>,
+  );
+  for (const button of buttons()) act(() => button.click());
+  callbacks.forEach((callback) => expect(callback).toHaveBeenCalledOnce());
+  expect(submit).not.toHaveBeenCalled();
+});
