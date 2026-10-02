@@ -1,10 +1,9 @@
 ---
 schema: 1
-title: "Remove unused task tray code and frontend dependencies"
-impact: none
-configuration: none
-configuration_reason: "The change removes unmounted frontend components, an unused static flag helper, and unused npm dependencies; deployment configuration is unchanged."
-no_action_reason: "Active task pages, APIs, and stored data are unchanged; normal frontend deployment is sufficient."
+title: "Remove unused task tray and retired frontend flags"
+impact: minor
+configuration: production
+configuration_reason: "The control-plane and worker Helm configuration schemas now accept only supported frontend flags. Bundled values now list the supported default-off flags and meet the stricter generated schema."
 ---
 ## Applicability
 
@@ -12,24 +11,24 @@ Existing Fred deployments upgrading to this release.
 
 ## Prerequisites
 
-No additional prerequisites beyond the normal deployment procedure.
+Review private control-plane backend and worker values overlays for `platform.frontend.feature_flags` before installing the new chart.
 
 ## Configuration
 
-No configuration changes are required.
+Keep only `enableApplications`, `enableAllResourceSpaces`, and `enableInformationSystems` under `platform.frontend.feature_flags`. Remove any other keys from both application overlays. The bundled Helm values already contain the supported default-off flags.
 
 ## Upgrade
 
-Deploy Fred normally; no additional operator or user action is required.
+Apply the overlay cleanup, validate the values against the new chart schema, then deploy the paired Fred chart and code normally. There is no data migration or special restart order.
 
 ## Validation
 
-Open the admin Tasks page and a migration task page; confirm task rows, statuses, and acknowledgements remain available.
+Confirm chart values validation passes. Check that `/control-plane/v1/frontend/bootstrap` exposes the three supported flags and that the admin Tasks and migration task pages still show task rows, statuses, and acknowledgements.
 
 ## Rollback
 
-Use the normal rollback procedure; this change introduces no data migration.
+Restore the previous paired chart and code using the normal rollback procedure. Pruned overlay keys do not need to be restored.
 
 ## Limitations
 
-No additional migration limitations identified for this change.
+Any private overlay that still sets an unsupported frontend flag fails strict chart validation until the key is removed.
