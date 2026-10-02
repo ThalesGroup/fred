@@ -33,7 +33,7 @@ flowchart TD
 
 ## Runtime dependencies
 
-- `MCP_SERVER_KNOWLEDGE_FLOW_TEXT`
+- `document_access` (native capability)
 - the `document_markdown` runtime port (`context.services.document_markdown`)
 
 `knowledge.search` is kept only as an explicit fallback path and is disabled by

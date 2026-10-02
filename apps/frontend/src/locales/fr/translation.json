@@ -907,50 +907,6 @@
         "description": "Permet à votre agent d'interroger les métriques Prometheus et d'exécuter des requêtes PromQL",
         "name": "Accès à Prometheus"
       },
-      "search_documents": {
-        "description": "Recherche documentaire sémantique historique (chemin MCP pré-capability, sans scoping par agent). Remplacée par la capability Accès aux documents — ne pas activer les deux sur le même agent.",
-        "name": "Recherche documentaire (historique)",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Sélecteur de bibliothèque de documents",
-              "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
-            },
-            "libraries_binding": {
-              "title": "Lier à des bibliothèques spécifiques",
-              "description": "Restreindre cet agent à un ensemble fixe de bibliothèques de documents choisies lors de la configuration."
-            },
-            "bound_library_ids": {
-              "title": "Bibliothèques de documents liées",
-              "description": "Restreindre le sélecteur de bibliothèque du chat à cet ensemble présélectionné de bibliothèques de documents."
-            },
-            "documents_selection": {
-              "title": "Sélecteur de document",
-              "description": "Afficher un sélecteur de document dans l'interface de discussion."
-            },
-            "attach_files": {
-              "title": "Pièces jointes",
-              "description": "Permettre aux utilisateurs de joindre des fichiers (PDF, images, texte) à leurs messages dans l'interface de discussion."
-            },
-            "search_policy_enabled": {
-              "title": "Sélecteur de politique de recherche dans le chat",
-              "description": "Permettre aux utilisateurs de changer la politique de recherche depuis l'interface de discussion."
-            },
-            "search_policy": {
-              "title": "Politique de recherche par défaut",
-              "description": "Stratégie de recherche utilisée lorsque l'utilisateur ne l'a pas modifiée."
-            },
-            "search_rag_scope_enabled": {
-              "title": "Sélecteur de portée RAG dans le chat",
-              "description": "Permettre aux utilisateurs de changer la portée RAG depuis l'interface de discussion."
-            },
-            "search_rag_scope": {
-              "title": "Portée RAG par défaut",
-              "description": "Portée utilisée lorsque l'utilisateur ne l'a pas modifiée."
-            }
-          }
-        }
-      },
       "search_opensearch": {
         "description": "Permet à votre agent de rechercher dans les indices opensearch",
         "name": "Rechercher dans opensearch"
@@ -958,10 +914,6 @@
       "tabular": {
         "description": "Capacité d'exploiter les données issues des fichiers tabulaires présents dans les ressources (CSV, Excel...).",
         "name": "Exploiter les fichiers tabulaires"
-      },
-      "web_github_readonly": {
-        "description": "Capacité locale en processus pour consulter des pages web publiques et inspecter des dépôts GitHub (lecture seule)",
-        "name": "Web + GitHub (lecture seule)"
       }
     }
   },
@@ -992,7 +944,6 @@
       "env": "Variables d'environnement",
       "id": "Identifiant",
       "name": "Nom affiché (clé i18n)",
-      "provider": "Fournisseur local",
       "timeout": "Timeout SSE (s)",
       "transport": "Transport",
       "url": "URL du serveur"
@@ -1007,14 +958,13 @@
     },
     "helpers": {
       "args": "Arguments séparés par un espace ou une virgule",
-      "env": "Une ligne KEY=VALUE par variable",
-      "provider": "Exemple : web_github_readonly"
+      "env": "Une ligne KEY=VALUE par variable"
     },
     "noResultsHint": "Essayez de supprimer certains filtres ou d'élargir la recherche.",
     "noResultsTitle": "Aucun connecteur ne correspond à la recherche",
     "restoreButton": "Restaurer le catalogue depuis la configuration",
     "resultsLabel": "résultats",
-    "searchPlaceholder": "Rechercher par id, nom, description, URL, commande ou fournisseur",
+    "searchPlaceholder": "Rechercher par id, nom, description, URL, commande",
     "source": {
       "local": "Local",
       "mcp": "MCP"
@@ -1035,7 +985,6 @@
       "updated": "Serveur MCP mis à jour"
     },
     "transport": {
-      "inprocess": "inprocess",
       "sse": "Server-sent events",
       "stdio": "stdio",
       "streamable_http": "HTTP",

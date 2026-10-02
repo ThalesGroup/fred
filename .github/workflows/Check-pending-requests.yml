@@ -161,6 +161,7 @@ jobs:
               - 'libs/fred-runtime/**'
             fred-agents:
               - 'apps/fred-agents/**'
+              - 'libs/capabilities/fred-capability-mcp/**'
             platform-ops:
               - 'libs/capabilities/fred-capability-platform-ops/**'
             html-artifact:

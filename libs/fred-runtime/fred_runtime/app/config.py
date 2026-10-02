@@ -434,7 +434,7 @@ class AgentPodConfig(BaseModel):
 
     How to use it:
     - write a `config/configuration.yaml` alongside `config/models_catalog.yaml`
-      and `config/mcp_catalog.yaml`
+      and, optionally, `config/mcp_catalog_external.yaml`
     - call `load_agent_pod_config()` at startup
     - pass the result to `create_agent_app(config=...)`
 
@@ -538,8 +538,8 @@ class AgentPodConfig(BaseModel):
         Attach the resolved MCP catalog to this config as internal runtime data.
 
         Why this exists:
-        - pod startup should keep `mcp_catalog.yaml` as the single MCP source of
-          truth without exposing an `mcp` section in the public config schema
+        - pod startup should combine capability and external MCP catalogs in one
+          resolved source without exposing an `mcp` section in the public config schema
 
         How to use it:
         - call only from internal config bootstrap helpers after loading the

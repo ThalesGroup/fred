@@ -32,6 +32,7 @@ COPY libs/capabilities/fred-capability-html-artifact /workspace/libs/capabilitie
 COPY libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fred-capability-team-wiki
 COPY libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
+COPY libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 
 RUN make dev VENV=/app/venv TARGET=/app/target
 
@@ -77,6 +78,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-html-artif
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fred-capability-team-wiki
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
 
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy
@@ -87,11 +89,12 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-a
 # resolves to /workspace/libs/fred-runtime/fred_runtime/migrations.
 COPY --chown=${USER_ID}:${GROUP_ID} alembic.ini /workspace/libs/fred-runtime/alembic.ini
 
-# Runtime pods keep the startup contract externalized: .env + configuration
-# are mounted at /app/config, while the default catalogs can ship in-image.
+# Deployments provide .env and configuration under /app/config. The model catalog
+# ships as a default; the Fred chart mounts its override at the same path.
+# The platform prompt and empty external MCP catalog also ship in-image.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/models_catalog.yaml /app/config/models_catalog.yaml
-COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/mcp_catalog.yaml /app/config/mcp_catalog.yaml
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/platform_prompt.json /app/config/platform_prompt.json
+COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/config/mcp_catalog_external.yaml /app/config/mcp_catalog_external.yaml
 
 USER ${USER_NAME}
 
