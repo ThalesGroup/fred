@@ -5,16 +5,16 @@ The light theme reads heavy and greyish, and switching between light and dark lo
 ## What Changes
 
 - Regenerate the `--core-cold-grey-*` neutral ramp with a discreet blue tint (CIE LCh chroma 1.5, hue 280°) at the same tone steps, plus the two half steps the new scale needs (97.5, 94.5). Every token built on this ramp (surfaces, text, outlines) shifts hue, not lightness.
-- Apply one surface rule to both themes: **each `surface-container-*` level sits further from `surface-main` than the level below it** (lighter in dark, darker in light).
+- Apply one surface rule to both themes: **each `surface-container-*` level is lighter than the level below it**, from `-lowest` to `-highest`. `surface-main`, the surface for important content, is set apart: its tone is the designer's choice per theme, for text contrast.
 
   | Token | Light | Dark |
   |---|---|---|
-  | `surface-main` | 100 | 6 |
-  | `surface-container-lowest` | 99 | 8 |
-  | `surface-container-low` | 97.5 | 10 |
+  | `surface-main` | 99.5 | 6 |
+  | `surface-container-lowest` | 93 | 8 |
+  | `surface-container-low` | 94.5 | 10 |
   | `surface-container` | 96 | 12 |
-  | `surface-container-high` | 94.5 | 15 |
-  | `surface-container-highest` | 93 | 18 |
+  | `surface-container-high` | 97.5 | 15 |
+  | `surface-container-highest` | 100 | 18 |
 
 - Add `--surface-floating` (light 100, dark 20) for elements that float above the page: menus, popovers, tooltips, modals, editor popups. It is the one named exception to the scale.
 - Remap the usages of `surface-container-lowest` and `surface-container-highest` whose visual role flips under the new scale (filled fields, code wells, page backgrounds), and move every floating element to `surface-floating` whatever its current token. Usages of `surface-container-low`, `surface-container` and `surface-container-high` keep their token; only their tone changes.

@@ -12,7 +12,7 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 
 ## Decisions
 
-**Scale "further from the background" (M3 semantics, softened light steps).** Chosen over "higher = lighter" with a lowered light background (keeps today's intuition but light steps 97–100 are too close to tell apart) and over a role-based 4-token scale (cleaner but a ~300-usage rename). Light steps are 1.5 tones apart instead of M3's 2 to avoid heavy greys.
+**Scale "higher = lighter" in both themes, `surface-main` set apart.** Containers get lighter from `lowest` to `highest` in light (93 → 100, 1.5-tone steps to avoid heavy greys) and in dark (8 → 18). `surface-main` is the surface for important content: its tone is the designer's choice per theme, for text contrast, not a fixed rung (light 99.5, just under `highest`; dark 6, under `lowest`). A first version ordered containers "further from the background" (M3, light containers darker than the page); the visual review preferred the more natural "higher = lighter" in light, which also makes the rule the same in both themes. A role-based 4-token scale was rejected (a ~300-usage rename).
 
 **A dedicated `--surface-floating` token.** Under this scale no container level is both near-white in light and clearly raised in dark. Using `surface-container` (strict M3) makes menus grey in light; using `surface-container-lowest` leaves dark menus at tone 8, distinguishable only by shadow. One named exception (light 100, dark 20) is clearer than bending a container level. Dark sits above `surface-container-highest` (18) so that every container level nested in a floating element reads darker than it, in both themes; an earlier value of 15 equalled `surface-container-high` and made nested fills vanish.
 

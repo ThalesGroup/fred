@@ -58,10 +58,11 @@ divider drawn with `--surface-container-highest`) with `--outline-muted`.
 No token was renamed or removed, so existing CSS keeps resolving. What changed
 is what the surface tokens look like, and one token was added.
 
-**New rule, both themes:** each `surface-container-*` level sits further from
-`--surface-main` than the level below it (darker in light, lighter in dark).
-Before, light containers were mostly darker than the page and dark containers
-lighter, so a component could recede in one theme and float in the other.
+**New rule, both themes:** each `surface-container-*` level is lighter than the
+level below it, from `-lowest` to `-highest`. `--surface-main`, the surface for
+important content, is set apart for text contrast: just under `-highest` in
+light, darker than every container in dark. Before, a component could recede in
+one theme and float in the other.
 
 **New token:** `--surface-floating`, for anything that floats above the page
 (menus, popovers, tooltips, dialogs, toasts, floating panels). Pair it with a
@@ -73,12 +74,12 @@ lightness. Steps `--core-cold-grey-97-5` and `--core-cold-grey-94-5` were added.
 
 | Token                         | Light before → after | Dark before → after |
 | ----------------------------- | -------------------- | ------------------- |
-| `--surface-main`              | 98 → 100             | 6 → 6               |
-| `--surface-container-lowest`  | 90 → 99              | 4 → 8               |
-| `--surface-container-low`     | 92 → 97.5            | 8 → 10              |
+| `--surface-main`              | 98 → 99.5            | 6 → 6               |
+| `--surface-container-lowest`  | 90 → 93              | 4 → 8               |
+| `--surface-container-low`     | 92 → 94.5            | 8 → 10              |
 | `--surface-container`         | 94 → 96              | 10 → 12             |
-| `--surface-container-high`    | 96 → 94.5            | 12 → 15             |
-| `--surface-container-highest` | 100 → 93             | 14 → 18             |
+| `--surface-container-high`    | 96 → 97.5            | 12 → 15             |
+| `--surface-container-highest` | 100 → 100            | 14 → 18             |
 | `--surface-floating` (new)    | 100                  | 20                  |
 
 **How to migrate.** Find every `--surface-*` usage in your CSS and inline

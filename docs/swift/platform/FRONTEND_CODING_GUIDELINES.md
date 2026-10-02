@@ -201,11 +201,11 @@ Verify that a token exists before using it. The authoritative token files are:
 ### Surface tokens
 
 `--surface-main` is the background of a surface that shows main content (the
-page, a reading pane): it carries the strongest text contrast. In light it sits
-just under `surface-container-highest` and the lower container levels get
-darker; in dark each `surface-container-*` level sits further from
-`surface-main` (lighter). `surface-floating` is for everything that floats
-above the page. Tones (CIE L\*) of the neutral ramp:
+page, a reading pane): it carries the strongest text contrast, and its tone is
+the designer's choice per theme for that contrast (just under
+`surface-container-highest` in light, under every container in dark). In both
+themes the `surface-container-*` levels get lighter from `-lowest` to
+`-highest`. `surface-floating` is for everything that floats above the page. Tones (CIE L\*) of the neutral ramp:
 
 | Token                         | Light | Dark |
 | ----------------------------- | ----- | ---- |

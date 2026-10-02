@@ -2,15 +2,15 @@
 
 ### Requirement: One surface rule for both themes
 
-The frontend SHALL define the neutral surface tokens so that, in both the light and the dark theme, each `surface-container-*` level is further in lightness from `surface-main` than the level below it, in the order `surface-container-lowest`, `surface-container-low`, `surface-container`, `surface-container-high`, `surface-container-highest`. In the light theme the levels SHALL get darker than `surface-main`; in the dark theme they SHALL get lighter.
+The frontend SHALL define the neutral surface tokens so that, in both the light and the dark theme, each `surface-container-*` level is lighter than the level below it, in the order `surface-container-lowest`, `surface-container-low`, `surface-container`, `surface-container-high`, `surface-container-highest`. `surface-main`, the surface for important content, is a rung of the same scale but SHALL NOT be bound to this order: its tone is chosen per theme by the UX/UI designer for the contrast it gives text, and it SHALL differ from every `surface-container-*` level.
 
 #### Scenario: Light theme ordering
 - **WHEN** the light theme is active
-- **THEN** `surface-main` is the lightest neutral surface and each successive container level, from `surface-container-lowest` to `surface-container-highest`, has a strictly lower tone
+- **THEN** each successive container level, from `surface-container-lowest` to `surface-container-highest`, has a strictly higher tone, and `surface-main` sits just under `surface-container-highest`
 
 #### Scenario: Dark theme ordering
 - **WHEN** the dark theme is active
-- **THEN** `surface-main` is the darkest neutral surface and each successive container level, from `surface-container-lowest` to `surface-container-highest`, has a strictly higher tone
+- **THEN** each successive container level, from `surface-container-lowest` to `surface-container-highest`, has a strictly higher tone, and `surface-main` is darker than every container level
 
 #### Scenario: Same role after a theme switch
 - **WHEN** a component styled with a given `surface-container-*` level is shown in light and then in dark
@@ -22,12 +22,12 @@ The surface tokens SHALL resolve to the following tones of the neutral ramp.
 
 | Token | Light | Dark |
 |---|---|---|
-| `surface-main` | 100 | 6 |
-| `surface-container-lowest` | 99 | 8 |
-| `surface-container-low` | 97.5 | 10 |
+| `surface-main` | 99.5 | 6 |
+| `surface-container-lowest` | 93 | 8 |
+| `surface-container-low` | 94.5 | 10 |
 | `surface-container` | 96 | 12 |
-| `surface-container-high` | 94.5 | 15 |
-| `surface-container-highest` | 93 | 18 |
+| `surface-container-high` | 97.5 | 15 |
+| `surface-container-highest` | 100 | 18 |
 | `surface-floating` | 100 | 20 |
 
 #### Scenario: Token values match the table

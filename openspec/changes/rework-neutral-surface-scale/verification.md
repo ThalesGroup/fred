@@ -5,7 +5,7 @@ Evidence for `rework-neutral-surface-scale` on branch `ui-theme-polish` (2026-10
 ## Proven
 
 - **Ramp (spec: Neutral ramp tint).** Every `--core-cold-grey-*` step except 0 and 100 was converted back from hex to CIE LCh: 0 failures against chroma ≤ 2, hue 280° ± 10° (max deviation 8.4°), |L\* − tone| ≤ 0.6.
-- **Surface tones (spec: Surface tones).** Resolving each `--surface-*` token through `color-ramps.css` gives the spec table in both themes (light 100 / 99 / 97.5 / 96 / 94.5 / 93, floating 100; dark 6 / 8 / 10 / 12 / 15 / 18, floating 20 — raised from 15 during the second pass, see design.md). The ordering scenarios follow from these values.
+- **Surface tones (spec: Surface tones).** Resolving each `--surface-*` token through `color-ramps.css` gives the spec table in both themes (light, after the "higher = lighter" revision: main 99.5, lowest → highest 93 / 94.5 / 96 / 97.5 / 100, floating 100; first pass was 100 / 99 / 97.5 / 96 / 94.5 / 93; dark 6 / 8 / 10 / 12 / 15 / 18, floating 20 — raised from 15 during the second pass, see design.md). The ordering scenarios follow from these values.
 - **Floating surface.** Every CSS rule with `position: absolute|fixed`, a `--shadow`/`--elevation` box-shadow and a surface background uses `surface-floating`; chart and mind-map tooltips set from TSX do too.
 - **Remaining `surface-container-lowest` / `-highest` usages.** All 45 match a role of the design.md table.
 - **Package.** `npm run build:tokens` in `libs/frontend` succeeds; `dist/tokens.css` defines `--surface-floating`.
