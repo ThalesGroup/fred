@@ -466,3 +466,47 @@ it("keeps an overlay above a later responsive modal push drawer", async () => {
     vi.unstubAllGlobals();
   }
 });
+
+it("updates inert ownership after open keyed peers reorder without reopening", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const closeA = vi.fn();
+  const closeB = vi.fn();
+  const a = <InlineDrawer key="a" open title="A" onClose={closeA} />;
+  const b = <InlineDrawer key="b" open title="B" onClose={closeB} />;
+  try {
+    await act(async () =>
+      root.render(
+        <>
+          {a}
+          {b}
+        </>,
+      ),
+    );
+    const [first, second] = host.querySelectorAll("aside");
+    expect(first.inert).toBe(true);
+    expect(second.inert).toBe(false);
+    await act(async () =>
+      root.render(
+        <>
+          {b}
+          {a}
+        </>,
+      ),
+    );
+    expect(first.inert).toBe(false);
+    expect(second.inert).toBe(true);
+    act(() => first.querySelector<HTMLButtonElement>("button")!.focus());
+    expect(first.contains(document.activeElement)).toBe(true);
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(closeA).toHaveBeenCalledOnce();
+    expect(closeB).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

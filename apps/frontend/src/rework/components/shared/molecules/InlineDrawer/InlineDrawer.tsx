@@ -20,6 +20,7 @@ import styles from "./InlineDrawer.module.css";
 
 // Overlay drawers paint above push drawers; peers follow DOM paint order.
 const openDrawers = new Set<HTMLElement>();
+const orderObservers = new Map<Document, MutationObserver>();
 function topDrawer(document: Document): HTMLElement | undefined {
   return [...openDrawers]
     .filter((node) => node.ownerDocument === document && node.isConnected)
@@ -244,6 +245,11 @@ export function InlineDrawer({
     if (backdropRef.current) backdrops.set(drawer, backdropRef.current);
     else backdrops.delete(drawer);
     syncDrawerInteraction(drawer.ownerDocument);
+    if (!orderObservers.has(drawer.ownerDocument)) {
+      const observer = new MutationObserver(() => syncDrawerInteraction(drawer.ownerDocument));
+      observer.observe(drawer.ownerDocument.documentElement, { childList: true, subtree: true });
+      orderObservers.set(drawer.ownerDocument, observer);
+    }
     let pendingClose: ReturnType<typeof setTimeout> | undefined;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.isComposing || topDrawer(drawer.ownerDocument) !== drawer) return;
@@ -259,6 +265,10 @@ export function InlineDrawer({
     return () => {
       clearTimeout(pendingClose);
       openDrawers.delete(drawer);
+      if (![...openDrawers].some((node) => node.ownerDocument === drawer.ownerDocument)) {
+        orderObservers.get(drawer.ownerDocument)?.disconnect();
+        orderObservers.delete(drawer.ownerDocument);
+      }
       syncDrawerInteraction(drawer.ownerDocument);
       window.removeEventListener("keydown", handleKey);
     };
