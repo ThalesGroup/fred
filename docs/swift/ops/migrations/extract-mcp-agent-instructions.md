@@ -27,10 +27,11 @@ servers unchanged. Move third-party entries from the old
 `applications.fred-agents.mcp_catalog` value to
 `applications.fred-agents.mcp_catalog_external`. The old Helm key is no longer
 accepted. Duplicate IDs across installed and external servers fail startup.
-The production image no longer copies `models_catalog.yaml`; the Fred chart
-mounts it from `applications.fred-agents.models_catalog`. Deployments using the
-image without this chart must provide the model catalog at
-`/app/config/models_catalog.yaml` or set `FRED_MODELS_CATALOG_FILE` to its path.
+The production image includes a default `models_catalog.yaml`; the Fred chart
+mounts its configured catalog from `applications.fred-agents.models_catalog` at
+the same path. Deployments without this chart can use the image default, mount
+another file at `/app/config/models_catalog.yaml`, or set
+`FRED_MODELS_CATALOG_FILE` to its path.
 `FRED_MCP_CATALOG_FILE` still overrides an existing `./config/mcp_catalog.yaml`,
 and either replaces the entire packaged list. `servers: []` disables all MCPs;
 an explicitly selected missing file retains the previous no-MCP behavior.

@@ -59,9 +59,10 @@ Runtime contract:
 - `.env` + `configuration.yaml` stay externalized under `/app/config`
 - `models_catalog.yaml` and `mcp_catalog_external.yaml` are mounted by the Fred chart
 
-The production image does not include `models_catalog.yaml`. Deployments outside
-the Fred chart must mount it at `/app/config/models_catalog.yaml` or set
-`FRED_MODELS_CATALOG_FILE` to their catalog path.
+The production image includes the default `models_catalog.yaml`. Deployments
+outside the Fred chart can use that default, mount another file at
+`/app/config/models_catalog.yaml`, or set `FRED_MODELS_CATALOG_FILE` to their
+catalog path.
 
 Fred's internal MCP catalog and its instructions are loaded from the installed package
 [`fred-capability-mcp`](../../libs/capabilities/fred-capability-mcp/README.md).
