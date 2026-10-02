@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The "team resources" pack options (Simple capabilities view): a leaner take on
-// the Advanced document_access folder-scoping. It reuses the same two config
-// keys — `bind_libraries` (the "restrict to specific folders" switch) and
-// `library_tag_ids` (the picked folders) — and the SAME labels as the Advanced
-// card, but strips the field label and hint around the tree and drops the folder
-// picker onto its own tinted card, for a simpler look suited to Simple mode.
+// The Simple resource pack reuses Advanced document-access settings for library
+// scoping and attachments-only search.
 
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
 import { useTranslation } from "react-i18next";
@@ -25,14 +21,20 @@ import { SwitchRow } from "../../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
 import styles from "./DocumentAccessPackOptions.module.css";
 
 interface DocumentAccessPackOptionsProps {
-  /** document_access's current config values (`bind_libraries`, `library_tag_ids`). */
+  /** Current document_access config values. */
   configValues: Record<string, unknown>;
   /** Patch one document_access config value (writes back into the pack selection). */
   onConfigChange: (key: string, value: unknown) => void;
   teamId?: string;
+  disabled?: boolean;
 }
 
-export function DocumentAccessPackOptions({ configValues, onConfigChange, teamId }: DocumentAccessPackOptionsProps) {
+export function DocumentAccessPackOptions({
+  configValues,
+  onConfigChange,
+  teamId,
+  disabled = false,
+}: DocumentAccessPackOptionsProps) {
   const { t } = useTranslation();
   const bindLibraries = Boolean(configValues.bind_libraries);
   const selectedTagIds = Array.isArray(configValues.library_tag_ids) ? (configValues.library_tag_ids as string[]) : [];
@@ -44,6 +46,7 @@ export function DocumentAccessPackOptions({ configValues, onConfigChange, teamId
         label={t("capability.document_access.fields.bind_libraries.title")}
         description={t("capability.document_access.fields.bind_libraries.description")}
         checked={bindLibraries}
+        disabled={disabled}
         onChange={(checked) => onConfigChange("bind_libraries", checked)}
       />
       {bindLibraries && (
@@ -53,9 +56,18 @@ export function DocumentAccessPackOptions({ configValues, onConfigChange, teamId
             selectedTagIds={selectedTagIds}
             onChange={(tagIds) => onConfigChange("library_tag_ids", tagIds)}
             foldersOnly
+            disableLibrarySelection={disabled}
           />
         </div>
       )}
+      <SwitchRow
+        size="small"
+        label={t("capability.document_access.fields.search_attachments_only.title")}
+        description={t("capability.document_access.fields.search_attachments_only.description")}
+        checked={configValues.search_attachments_only === true}
+        disabled={disabled}
+        onChange={(checked) => onConfigChange("search_attachments_only", checked)}
+      />
     </div>
   );
 }

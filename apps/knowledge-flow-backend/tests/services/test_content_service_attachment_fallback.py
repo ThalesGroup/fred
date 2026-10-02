@@ -153,6 +153,25 @@ def test_attachment_uid_falls_back_to_the_reconstructed_session_text(app_context
     assert vector_store.calls == [("att-1", "u-1")]
 
 
+def test_tabular_attachment_reader_refuses_a_partial_preview(app_context, monkeypatch):
+    metadata = _metadata("att-table", preview_status=ProcessingStatus.DONE)
+    metadata.source.source_tag = "fast_ingest"
+    metadata.identity.uploaded_by = "u-1"
+    metadata.tags.tag_ids = []
+    service, vector_store, _ = _service(app_context, corpus={"att-table": metadata}, readable=set(), attachments={})
+    monkeypatch.setattr(
+        "knowledge_flow_backend.features.content.content_service.read_tabular_multi_artifact",
+        lambda document: object(),
+    )
+
+    with pytest.raises(FileNotFoundError, match="Use the tabular schema and query tools"):
+        asyncio.run(service.get_markdown_preview(_user(), "att-table"))
+    assert vector_store.calls == []
+
+    with pytest.raises(AuthorizationError):
+        asyncio.run(service.get_markdown_preview(_user("other-user"), "att-table"))
+
+
 def test_denial_surfaces_when_nothing_is_reconstructable(app_context):
     """Someone else's attachment, an unknown uid, or a denied corpus document:
     the original 403 must reach the caller, never an empty document."""

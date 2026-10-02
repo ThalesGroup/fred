@@ -52,7 +52,7 @@ from knowledge_flow_backend.features.tabular.artifacts import (
 )
 from knowledge_flow_backend.features.tabular.execution import open_duckdb_connection
 from knowledge_flow_backend.features.tabular.service import TabularDatasetAccessUnsupportedError, TabularDatasetReadError, TabularService
-from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest
+from knowledge_flow_backend.features.tabular.structures import TabularQueryRequest, TabularSearchRequest
 from knowledge_flow_backend.features.tag.structure import MissingTeamIdError
 
 
@@ -933,6 +933,69 @@ async def test_resolve_owned_attachment_dataset_authorizes_the_uploader_without_
     dataset = await service._resolve_owned_attachment_dataset(_user(), "doc-attachment")
     assert dataset is not None
     assert dataset.metadata.document_uid == "doc-attachment"
+
+
+@pytest.mark.asyncio
+async def test_excel_attachment_uses_corpus_tables_and_roadmap(tmp_path, metadata_store, monkeypatch):
+    from openpyxl import Workbook
+
+    from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
+    from knowledge_flow_backend.features.ingestion.ingestion_controller import IngestionController
+    from knowledge_flow_backend.features.tabular.artifacts import read_tabular_multi_artifact
+
+    content_store = ApplicationContext.get_instance().get_content_store()
+    content_store.clear()
+    monkeypatch.setattr(ExcelProcessor, "recalc", False)
+
+    workbook = Workbook()
+    first = workbook.active
+    assert first is not None
+    first.title = "Ventes"
+    first.append(["city", "amount"])
+    for index in range(30):
+        first.append([f"city-{index}", index])
+    second = workbook.create_sheet("Cibles")
+    second.append(["city", "target"])
+    second.append(["Paris", 42])
+    path = tmp_path / "attachment.xlsx"
+    workbook.save(path)
+
+    controller = IngestionController.__new__(IngestionController)
+    controller.service = SimpleNamespace(metadata_service=MetadataService())
+    roadmap = await controller._build_attachment_excel_dataset(user=_user(), document_uid="excel-attachment", filename=path.name, raw_path=path)
+    metadata = await metadata_store.get_metadata_by_uid("excel-attachment")
+    assert metadata is not None
+    multi = read_tabular_multi_artifact(metadata)
+    assert multi is not None and len(multi.tables) == 2
+    assert "Ventes" in roadmap and "Cibles" in roadmap
+    assert content_store.get_output_artifact("excel-attachment/output/output.md").decode() == roadmap
+
+    service = TabularService()
+    service.rebac = _FakeRebac(set())
+    schemas = await service.describe_documents(_user(), ["excel-attachment"])
+    assert len(schemas[0].tables) == 2
+    assert schemas[0].markdown == roadmap
+    response = await service.query_read(
+        _user(),
+        request=TabularQueryRequest(
+            sql=f"SELECT COUNT(*) AS n FROM {multi.tables[0].query_alias}",
+            dataset_uids=["excel-attachment"],
+        ),
+    )
+    assert response.rows == [{"n": 30}]
+    search = await service.search_values(_user(), request=TabularSearchRequest(keyword="city-29", dataset_uids=["excel-attachment"]))
+    assert len(search.matches) == 1
+    assert search.matches[0].document_uid == "excel-attachment"
+    with pytest.raises(PermissionError):
+        await service.describe_documents(_user("different-user"), ["excel-attachment"])
+
+    service.rebac = _FakeRebacDisabled()
+    assert "excel-attachment" not in {item.document_uid for item in await service.list_datasets(_user("different-user"))}
+    with pytest.raises(FileNotFoundError):
+        await service.query_read(
+            _user("different-user"),
+            request=TabularQueryRequest(sql=f"SELECT * FROM {multi.tables[0].query_alias}", dataset_uids=["excel-attachment"]),
+        )
 
 
 @pytest.mark.asyncio

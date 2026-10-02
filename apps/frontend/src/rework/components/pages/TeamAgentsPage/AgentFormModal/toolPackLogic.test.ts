@@ -15,8 +15,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPackToggle,
+  applyResourceSearchScope,
   derivePackChecked,
   includedCapabilityStatus,
+  isPackSelectable,
   type CapabilitySelectionState,
 } from "./toolPackLogic";
 import {
@@ -35,44 +37,25 @@ import {
   type ToolPack,
 } from "./toolPacks";
 
-// --- helpers ---------------------------------------------------------------
-
 function packById(id: string): ToolPack {
-  const pack = TOOL_PACK_SECTIONS.flatMap((s) => s.packs).find((p) => p.id === id);
+  const pack = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).find((item) => item.id === id);
   if (!pack) throw new Error(`unknown pack ${id}`);
   return pack;
 }
 
-const TEAM_RESOURCES = packById("team_resources");
-const ATTACHMENTS = packById("conversation_attachments");
+const RESOURCES = packById("team_resources");
 const WORD = packById("word_document");
 const PPT = packById("powerpoint_document");
 const REASONING = packById("reasoning");
-
-// Every shipped plain pack now holds a single capability, so the multi-member
-// branch of `derivePackChecked` has no real pack left to exercise it. This
-// fixture keeps that branch covered — see the partial-availability suite.
-const MULTI_MEMBER_PACK: ToolPack = {
-  id: "test_multi_member",
-  kind: "capabilities",
-  icon: "science",
-  titleKey: "test.multiMember.title",
-  descriptionKey: "test.multiMember.description",
-  includes: [],
-  enablesCapabilityIds: [CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER],
-};
-
-const ALL_IDS: ReadonlySet<string> = new Set([
+const RESOURCE_IDS = [
   CAP_DOCUMENT_ACCESS,
+  CAP_TABULAR,
   CAP_DOCUMENT_SUMMARIZE,
   CAP_DOCUMENT_SIMILARITY,
   CAP_DOCUMENT_VERBATIM,
   CAP_DOCUMENT_EXTRACT,
-  CAP_TABULAR,
-  CAP_TEAM_WIKI,
-  CAP_WRITABLE_DOCUMENT,
-  CAP_PPT_FILLER,
-]);
+];
+const ALL_IDS: ReadonlySet<string> = new Set([...RESOURCE_IDS, CAP_TEAM_WIKI, CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER]);
 
 function empty(): CapabilitySelectionState {
   return { selectedCapabilityIds: [], capabilityConfigValues: {}, reasoningEnabled: false };
@@ -82,264 +65,225 @@ function docConfig(state: CapabilitySelectionState) {
   return state.capabilityConfigValues[CAP_DOCUMENT_ACCESS];
 }
 
-// --- document_access truth table ------------------------------------------
-
-describe("resource packs — document_access truth table", () => {
-  it("team resources only → corpus, no attach, corpus scope", () => {
-    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining([CAP_TABULAR, CAP_DOCUMENT_SUMMARIZE]));
-    expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
-    expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(false);
-    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(true);
-    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(false);
+describe("combined resource pack", () => {
+  it("replaces the attachments card while keeping the full resource capability list", () => {
+    const ids = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).map((pack) => pack.id);
+    expect(ids).toContain("team_resources");
+    expect(ids).not.toContain("conversation_attachments");
+    expect(RESOURCES.enablesCapabilityIds).toEqual(RESOURCE_IDS);
+    expect(RESOURCES.includes.map((entry) => entry.capabilityId)).toEqual(RESOURCE_IDS);
   });
 
-  it("attachments only → no corpus, attach on, attachments-only scope", () => {
-    const s = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
-    expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
-    expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
-    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(false);
-    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(true);
+  it("enables corpus and attachments together with every available member", () => {
+    const seeded: CapabilitySelectionState = {
+      ...empty(),
+      selectedCapabilityIds: [CAP_TEAM_WIKI],
+      capabilityConfigValues: { [CAP_DOCUMENT_ACCESS]: { restrict_to_folders: true } },
+    };
+    const on = applyPackToggle(RESOURCES, true, seeded, ALL_IDS);
+
+    expect(on.selectedCapabilityIds).toEqual(expect.arrayContaining([...RESOURCE_IDS, CAP_TEAM_WIKI]));
+    expect(docConfig(on)).toEqual({
+      restrict_to_folders: true,
+      [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: false,
+      [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+    });
+    expect(derivePackChecked(RESOURCES, on, ALL_IDS)).toBe(true);
   });
 
-  it("both on → corpus + attach, corpus scope wins over attachments-only", () => {
-    let s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-    s = applyPackToggle(ATTACHMENTS, true, s, ALL_IDS);
-    expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
-    expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
-    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(true);
-    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(true);
+  it("skips unavailable members without leaving the switch off", () => {
+    const available = new Set([...ALL_IDS].filter((id) => id !== CAP_TABULAR));
+    const on = applyPackToggle(RESOURCES, true, empty(), available);
+
+    expect(on.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+    expect(on.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
+    expect(derivePackChecked(RESOURCES, on, available)).toBe(true);
+    expect(includedCapabilityStatus(CAP_TABULAR, available, new Set(on.selectedCapabilityIds))).toBe("unavailable");
   });
 
-  it("both off → document_access removed entirely", () => {
-    const s = applyPackToggle(TEAM_RESOURCES, false, applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS), ALL_IDS);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SUMMARIZE);
-    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(false);
-    expect(derivePackChecked(ATTACHMENTS, s, ALL_IDS)).toBe(false);
-  });
-});
-
-describe("resource packs — shared summarize + mode transitions", () => {
-  it("turning team resources OFF while attachments ON keeps summarize and flips to attachments-only", () => {
-    let s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-    s = applyPackToggle(ATTACHMENTS, true, s, ALL_IDS); // both on
-    s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS); // team off, attachments still on
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE); // shared, must stay
-    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR); // team-only, removed
-    expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
-    expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(true);
+  it("cannot be selected without document access", () => {
+    const available = new Set([...ALL_IDS].filter((id) => id !== CAP_DOCUMENT_ACCESS));
+    expect(isPackSelectable(RESOURCES, available)).toBe(false);
+    expect(applyPackToggle(RESOURCES, true, empty(), available)).toEqual(empty());
+    expect(derivePackChecked(RESOURCES, empty(), available)).toBe(false);
   });
 
-  it("turning attachments OFF while team resources ON keeps corpus and drops the attach control", () => {
-    let s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-    s = applyPackToggle(ATTACHMENTS, true, s, ALL_IDS); // both on
-    s = applyPackToggle(ATTACHMENTS, false, s, ALL_IDS); // attachments off, team still on
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE);
-    expect(docConfig(s)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
-    expect(docConfig(s)?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]).toBe(false);
-  });
-});
+  it("turning off removes only bundle members and preserves unrelated state", () => {
+    const on = applyPackToggle(
+      RESOURCES,
+      true,
+      {
+        ...empty(),
+        selectedCapabilityIds: [CAP_TEAM_WIKI, CAP_WRITABLE_DOCUMENT],
+        capabilityConfigValues: { [CAP_TEAM_WIKI]: { mode: "read" } },
+        reasoningEnabled: true,
+      },
+      ALL_IDS,
+    );
+    const off = applyPackToggle(RESOURCES, false, on, ALL_IDS);
 
-describe("document reading pair — shared by both resource packs", () => {
-  const READING = [CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT];
-
-  it("comes with the team-resources pack", () => {
-    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-
-    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
-  });
-
-  it("comes with the attachments pack, on its own", () => {
-    const s = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
-
-    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
+    expect(off.selectedCapabilityIds).toEqual([CAP_TEAM_WIKI, CAP_WRITABLE_DOCUMENT]);
+    expect(off.capabilityConfigValues[CAP_TEAM_WIKI]).toEqual({ mode: "read" });
+    expect(off.reasoningEnabled).toBe(true);
+    expect(derivePackChecked(RESOURCES, off, ALL_IDS)).toBe(false);
   });
 
-  it("stays while either pack remains on", () => {
-    let s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-    s = applyPackToggle(ATTACHMENTS, true, s, ALL_IDS);
-
-    s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
-
-    s = applyPackToggle(ATTACHMENTS, true, applyPackToggle(TEAM_RESOURCES, true, s, ALL_IDS), ALL_IDS);
-    s = applyPackToggle(ATTACHMENTS, false, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining(READING));
-  });
-
-  it("clearing one of them in Advanced does not turn the pack off", () => {
-    // The pack's state comes from document_access alone: clearing a shared
-    // member leaves the switch on, and the member reads inactive, not missing.
-    const on = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-
-    const cleared = {
-      ...on,
-      selectedCapabilityIds: on.selectedCapabilityIds.filter((id) => id !== CAP_DOCUMENT_VERBATIM),
+  it("shows a complete legacy attachments-only selection as an active pack", () => {
+    const legacy: CapabilitySelectionState = {
+      ...empty(),
+      selectedCapabilityIds: [CAP_DOCUMENT_ACCESS, CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
+      capabilityConfigValues: {
+        [CAP_DOCUMENT_ACCESS]: {
+          [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: true,
+          [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+        },
+      },
     };
 
-    expect(derivePackChecked(TEAM_RESOURCES, cleared, ALL_IDS)).toBe(true);
-    expect(includedCapabilityStatus(CAP_DOCUMENT_VERBATIM, ALL_IDS, new Set(cleared.selectedCapabilityIds))).toBe(
+    expect(derivePackChecked(RESOURCES, legacy, ALL_IDS)).toBe(true);
+    expect(includedCapabilityStatus(CAP_DOCUMENT_VERBATIM, ALL_IDS, new Set(legacy.selectedCapabilityIds))).toBe(
+      "active",
+    );
+    expect(includedCapabilityStatus(CAP_DOCUMENT_SIMILARITY, ALL_IDS, new Set(legacy.selectedCapabilityIds))).toBe(
       "inactive",
     );
+    expect(legacy.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+
+    const combined = applyPackToggle(RESOURCES, true, legacy, ALL_IDS);
+    expect(combined.selectedCapabilityIds).toEqual(expect.arrayContaining(RESOURCE_IDS));
+    expect(docConfig(combined)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
+    expect(derivePackChecked(RESOURCES, combined, ALL_IDS)).toBe(true);
+
+    const attachmentsOnly = applyResourceSearchScope(true, legacy, ALL_IDS);
+    expect(attachmentsOnly.selectedCapabilityIds).toContain(CAP_TABULAR);
+    expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
   });
 
-  it("is withdrawn when the last pack goes off", () => {
-    const on = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
+  it("shows legacy corpus-only and Advanced attachment overrides as partial", () => {
+    const combined = applyPackToggle(RESOURCES, true, empty(), ALL_IDS);
+    const corpusOnly: CapabilitySelectionState = {
+      ...combined,
+      capabilityConfigValues: {
+        [CAP_DOCUMENT_ACCESS]: {
+          ...docConfig(combined),
+          [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: false,
+        },
+      },
+    };
+    expect(derivePackChecked(RESOURCES, corpusOnly, ALL_IDS)).toBe(false);
+    expect(docConfig(corpusOnly)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
 
-    const off = applyPackToggle(ATTACHMENTS, false, on, ALL_IDS);
-
-    expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_VERBATIM);
-    expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_EXTRACT);
+    const missingReader = {
+      ...combined,
+      selectedCapabilityIds: combined.selectedCapabilityIds.filter((id) => id !== CAP_DOCUMENT_VERBATIM),
+    };
+    expect(derivePackChecked(RESOURCES, missingReader, ALL_IDS)).toBe(false);
   });
 
-  it("is skipped when the admin has not enabled it, without blocking the pack", () => {
-    const noExtract: ReadonlySet<string> = new Set([...ALL_IDS].filter((id) => id !== CAP_DOCUMENT_EXTRACT));
+  it("keeps tabular available when switching to attachments-only search", () => {
+    const full = applyPackToggle(
+      RESOURCES,
+      true,
+      {
+        ...empty(),
+        selectedCapabilityIds: [CAP_TEAM_WIKI],
+        capabilityConfigValues: {
+          [CAP_DOCUMENT_ACCESS]: { bind_libraries: true, library_tag_ids: ["folder-1"] },
+          [CAP_TEAM_WIKI]: { mode: "read" },
+        },
+      },
+      ALL_IDS,
+    );
+    const attachmentsOnly = applyResourceSearchScope(true, full, ALL_IDS);
 
-    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), noExtract);
+    expect(derivePackChecked(RESOURCES, attachmentsOnly, ALL_IDS)).toBe(true);
+    expect(attachmentsOnly.selectedCapabilityIds).toEqual(
+      expect.arrayContaining([
+        CAP_DOCUMENT_ACCESS,
+        CAP_TABULAR,
+        CAP_DOCUMENT_SUMMARIZE,
+        CAP_DOCUMENT_VERBATIM,
+        CAP_DOCUMENT_EXTRACT,
+        CAP_TEAM_WIKI,
+      ]),
+    );
+    expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
+    expect(attachmentsOnly.capabilityConfigValues[CAP_TEAM_WIKI]).toEqual({ mode: "read" });
+    expect(docConfig(attachmentsOnly)).toEqual({
+      bind_libraries: true,
+      library_tag_ids: ["folder-1"],
+      [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: true,
+      [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+    });
 
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_VERBATIM);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_EXTRACT);
-    // A document-access pack reads its state from document_access alone, never
-    // from its members' availability — so this asserts the intent, not a guard.
-    expect(derivePackChecked(TEAM_RESOURCES, s, noExtract)).toBe(true);
-  });
-});
-
-describe("admin availability — activate available, ignore the rest", () => {
-  const NO_TABULAR: ReadonlySet<string> = new Set([...ALL_IDS].filter((id) => id !== CAP_TABULAR));
-
-  it("skips an unavailable included capability but still activates the pack", () => {
-    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), NO_TABULAR);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SUMMARIZE);
-    expect(s.selectedCapabilityIds).not.toContain(CAP_TABULAR); // admin-disabled, skipped
-    expect(derivePackChecked(TEAM_RESOURCES, s, ALL_IDS)).toBe(true);
-  });
-});
-
-describe("includedCapabilityStatus — badge tri-state reflects live selection", () => {
-  it("unavailable when the admin has not enabled it, regardless of selection", () => {
-    expect(includedCapabilityStatus(CAP_TABULAR, new Set(), new Set([CAP_TABULAR]))).toBe("unavailable");
-  });
-
-  it("active when admin-enabled AND selected", () => {
-    expect(includedCapabilityStatus(CAP_DOCUMENT_SUMMARIZE, ALL_IDS, new Set([CAP_DOCUMENT_SUMMARIZE]))).toBe("active");
-  });
-
-  it("inactive when admin-enabled but NOT selected (e.g. turned off in Advanced)", () => {
-    // The reported case: summarize is admin-enabled but the user deselected it,
-    // so it must read inactive (grey), never active (green).
-    expect(includedCapabilityStatus(CAP_DOCUMENT_SUMMARIZE, ALL_IDS, new Set([CAP_DOCUMENT_ACCESS]))).toBe("inactive");
-  });
-});
-
-describe("plain packs (word / ppt) and reasoning", () => {
-  it("word/ppt toggle just add/remove their capability id", () => {
-    let s = applyPackToggle(WORD, true, empty(), ALL_IDS);
-    expect(s.selectedCapabilityIds).toEqual([CAP_WRITABLE_DOCUMENT]);
-    expect(derivePackChecked(WORD, s, ALL_IDS)).toBe(true);
-    s = applyPackToggle(PPT, true, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toEqual(expect.arrayContaining([CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER]));
-    s = applyPackToggle(WORD, false, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toEqual([CAP_PPT_FILLER]);
+    const restored = applyResourceSearchScope(false, attachmentsOnly, ALL_IDS);
+    expect(restored.selectedCapabilityIds).toEqual(expect.arrayContaining(RESOURCE_IDS));
+    expect(restored.selectedCapabilityIds).toContain(CAP_TEAM_WIKI);
+    expect(docConfig(restored)).toEqual({
+      bind_libraries: true,
+      library_tag_ids: ["folder-1"],
+      [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: false,
+      [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+    });
+    expect(derivePackChecked(RESOURCES, restored, ALL_IDS)).toBe(true);
   });
 
-  it("reasoning pack toggles the reasoningEnabled field", () => {
-    const on = applyPackToggle(REASONING, true, empty(), ALL_IDS);
-    expect(on.reasoningEnabled).toBe(true);
-    expect(derivePackChecked(REASONING, on, ALL_IDS)).toBe(true);
-    const off = applyPackToggle(REASONING, false, on, ALL_IDS);
-    expect(off.reasoningEnabled).toBe(false);
+  it("does not select tabular when unavailable to the team", () => {
+    const available = new Set([...ALL_IDS].filter((id) => id !== CAP_TABULAR));
+    const full = applyPackToggle(RESOURCES, true, empty(), available);
+    const restored = applyResourceSearchScope(false, applyResourceSearchScope(true, full, available), available);
+
+    expect(restored.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+    expect(restored.selectedCapabilityIds).toContain(CAP_DOCUMENT_SIMILARITY);
+    expect(derivePackChecked(RESOURCES, restored, available)).toBe(true);
   });
 
-  it("toggling a resource pack preserves a capability enabled outside it", () => {
-    // Stands in for the Advanced view: an id no resource pack owns must survive
-    // the resource-state recomputation.
-    const seeded: CapabilitySelectionState = { ...empty(), selectedCapabilityIds: [CAP_TEAM_WIKI] };
+  it("keeps an incomplete Advanced attachments-only selection separate", () => {
+    const attachmentsOnly: CapabilitySelectionState = {
+      ...empty(),
+      selectedCapabilityIds: [CAP_DOCUMENT_ACCESS],
+      capabilityConfigValues: {
+        [CAP_DOCUMENT_ACCESS]: {
+          [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: true,
+          [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+        },
+      },
+    };
+    const afterUnrelatedToggle = applyPackToggle(WORD, true, attachmentsOnly, ALL_IDS);
 
-    let s = applyPackToggle(TEAM_RESOURCES, true, seeded, ALL_IDS);
-    expect(s.selectedCapabilityIds).toContain(CAP_TEAM_WIKI);
+    expect(afterUnrelatedToggle.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
+    expect(afterUnrelatedToggle.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
+    expect(afterUnrelatedToggle.selectedCapabilityIds).not.toContain(CAP_TABULAR);
+    expect(docConfig(afterUnrelatedToggle)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(true);
+    expect(derivePackChecked(RESOURCES, afterUnrelatedToggle, ALL_IDS)).toBe(false);
 
-    s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toContain(CAP_TEAM_WIKI);
-  });
-
-  it("toggling a resource pack preserves unrelated selections (word/ppt/reasoning)", () => {
-    let s = applyPackToggle(WORD, true, empty(), ALL_IDS);
-    s = applyPackToggle(REASONING, true, s, ALL_IDS);
-    s = applyPackToggle(TEAM_RESOURCES, true, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toContain(CAP_WRITABLE_DOCUMENT);
-    expect(s.reasoningEnabled).toBe(true);
-    s = applyPackToggle(TEAM_RESOURCES, false, s, ALL_IDS);
-    expect(s.selectedCapabilityIds).toContain(CAP_WRITABLE_DOCUMENT); // untouched
-    expect(s.reasoningEnabled).toBe(true);
-  });
-});
-
-// --- partial admin availability -------------------------------------------
-
-describe("plain packs — partial admin availability", () => {
-  it("stays on when only the admin-enabled members are selectable", () => {
-    // The upgrade case: a new capability joins an existing pack and no team has
-    // it enabled yet. Before availability was part of the derivation, the switch
-    // flipped on, failed to add the unavailable member, and read back as off.
-    const partial: ReadonlySet<string> = new Set(MULTI_MEMBER_PACK.enablesCapabilityIds.slice(0, -1));
-
-    const s = applyPackToggle(MULTI_MEMBER_PACK, true, empty(), partial);
-
-    expect(derivePackChecked(MULTI_MEMBER_PACK, s, partial)).toBe(true);
-    expect(s.selectedCapabilityIds).toEqual([...partial]);
-  });
-
-  it("is off when nothing in the pack is admin-enabled", () => {
-    const none: ReadonlySet<string> = new Set<string>();
-
-    const s = applyPackToggle(MULTI_MEMBER_PACK, true, empty(), none);
-
-    expect(derivePackChecked(MULTI_MEMBER_PACK, s, none)).toBe(false);
-  });
-
-  it("turning it off still clears every member, available or not", () => {
-    const on = applyPackToggle(MULTI_MEMBER_PACK, true, empty(), ALL_IDS);
-
-    const off = applyPackToggle(MULTI_MEMBER_PACK, false, on, ALL_IDS);
-
-    expect(off.selectedCapabilityIds).toEqual([]);
+    const incompleteWithCorpusTool = {
+      ...attachmentsOnly,
+      selectedCapabilityIds: [CAP_DOCUMENT_ACCESS, CAP_TABULAR],
+    };
+    expect(derivePackChecked(RESOURCES, incompleteWithCorpusTool, ALL_IDS)).toBe(false);
   });
 });
 
-// --- similarity search rides the corpus pack ------------------------------
+describe("plain packs and included capability status", () => {
+  it("keeps word, PowerPoint, and reasoning independent", () => {
+    let state = applyPackToggle(WORD, true, empty(), ALL_IDS);
+    state = applyPackToggle(PPT, true, state, ALL_IDS);
+    state = applyPackToggle(REASONING, true, state, ALL_IDS);
+    expect(state.selectedCapabilityIds).toEqual([CAP_WRITABLE_DOCUMENT, CAP_PPT_FILLER]);
+    expect(state.reasoningEnabled).toBe(true);
 
-describe("document_similarity — corpus-scoped resource capability", () => {
-  it("comes with the team-resources pack, alongside its uid source", () => {
-    const s = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_SIMILARITY);
-    // document_access is what gives the model a document uid to aim at.
-    expect(s.selectedCapabilityIds).toContain(CAP_DOCUMENT_ACCESS);
+    state = applyPackToggle(WORD, false, state, ALL_IDS);
+    expect(state.selectedCapabilityIds).toEqual([CAP_PPT_FILLER]);
+    expect(derivePackChecked(PPT, state, ALL_IDS)).toBe(true);
+    expect(derivePackChecked(REASONING, state, ALL_IDS)).toBe(true);
   });
 
-  it("stays off for an attachments-only agent", () => {
-    // Knowledge Flow never searches session attachments in this mode, so the
-    // tool could only ever return nothing.
-    const s = applyPackToggle(ATTACHMENTS, true, empty(), ALL_IDS);
-
-    expect(s.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
-  });
-
-  it("is dropped when the team-resources pack is turned off", () => {
-    const on = applyPackToggle(TEAM_RESOURCES, true, empty(), ALL_IDS);
-
-    const off = applyPackToggle(TEAM_RESOURCES, false, on, ALL_IDS);
-
-    expect(off.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
+  it("reads active, inactive, and unavailable from live selection and availability", () => {
+    expect(includedCapabilityStatus(CAP_DOCUMENT_ACCESS, ALL_IDS, new Set([CAP_DOCUMENT_ACCESS]))).toBe("active");
+    expect(includedCapabilityStatus(CAP_DOCUMENT_ACCESS, ALL_IDS, new Set())).toBe("inactive");
+    expect(includedCapabilityStatus(CAP_DOCUMENT_ACCESS, new Set(), new Set([CAP_DOCUMENT_ACCESS]))).toBe(
+      "unavailable",
+    );
   });
 });
