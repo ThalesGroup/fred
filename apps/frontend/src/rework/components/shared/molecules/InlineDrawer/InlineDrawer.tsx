@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, ReactNode, useCallback, useLayoutEffect, useId, useRef } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useLayoutEffect, useId, useRef, useState } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import { FOCUSABLE, isVisibleFocusable } from "../../utils/focus";
@@ -24,7 +24,7 @@ function topDrawer(document: Document): HTMLElement | undefined {
   return [...openDrawers]
     .filter((node) => node.ownerDocument === document && node.isConnected)
     .sort((a, b) => {
-      const layer = (node: HTMLElement) => (node.dataset.layout === "overlay" ? 1 : 0);
+      const layer = (node: HTMLElement) => (node.dataset.modal === "true" ? 1 : 0);
       return layer(a) - layer(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     })
     .pop();
@@ -43,7 +43,7 @@ function syncDrawerInteraction(document: Document) {
     blockedBranches.delete(node);
   }
   const top = topDrawer(document);
-  if (!top || top.dataset.layout !== "overlay") return;
+  if (!top || top.dataset.modal !== "true") return;
   const backdrop = backdrops.get(top);
   const block = (node: HTMLElement) => {
     if (node === top || node === backdrop) return;
@@ -162,6 +162,18 @@ export function InlineDrawer({
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
+  const [mobile, setMobile] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 720px)").matches,
+  );
+  useLayoutEffect(() => {
+    const query = window.matchMedia?.("(max-width: 720px)");
+    if (!query) return;
+    const update = () => setMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const modal = layout === "overlay" || mobile;
   const drawerRef = useRef<HTMLElement | null>(null);
   const ownedFocusEvents = useRef(new WeakSet<Event>());
   const lastOwnedFocus = useRef<HTMLElement | null>(null);
@@ -244,10 +256,10 @@ export function InlineDrawer({
       syncDrawerInteraction(drawer.ownerDocument);
       window.removeEventListener("keydown", handleKey);
     };
-  }, [open, layout]);
+  }, [open, modal]);
 
   useLayoutEffect(() => {
-    if (!open || layout !== "overlay") return;
+    if (!open || !modal) return;
     const drawer = drawerRef.current!;
     const doc = drawer.ownerDocument;
     const origin = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
@@ -309,11 +321,11 @@ export function InlineDrawer({
         if (origin?.isConnected && !origin.closest("[inert]")) origin.focus();
       });
     };
-  }, [open, layout]);
+  }, [open, modal]);
 
   return (
     <>
-      {layout === "overlay" && (
+      {modal && (
         <div
           ref={backdropRef}
           className={styles.backdrop}
@@ -333,12 +345,13 @@ export function InlineDrawer({
         className={styles.drawer}
         data-open={open}
         data-layout={layout}
+        data-modal={modal}
         data-floating={floating ? "true" : undefined}
         data-compact-header={compactHeader ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         inert={!open}
-        role={layout === "overlay" ? "dialog" : undefined}
-        aria-modal={layout === "overlay" && open ? true : undefined}
+        role={modal ? "dialog" : undefined}
+        aria-modal={modal && open ? true : undefined}
         aria-hidden={!open}
         aria-labelledby={hideHeader ? undefined : titleId}
         aria-label={hideHeader ? title : undefined}

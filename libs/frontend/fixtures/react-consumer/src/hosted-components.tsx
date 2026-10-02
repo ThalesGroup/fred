@@ -413,9 +413,21 @@ export function HostedComponents() {
         onClose={() => setOverlay(false)}
       >
         <span>Overlay content</span>
+        <details>
+          <summary>Editor details</summary>
+          <span>Details</span>
+        </details>
         <button type="button" onClick={() => setOverlayDialog(true)}>
           Open overlay dialog
         </button>
+        <div
+          contentEditable
+          suppressContentEditableWarning
+          role="textbox"
+          aria-label="Overlay editor"
+        >
+          Editable
+        </div>
         <Dialog
           open={overlayDialog}
           title="Overlay confirmation"

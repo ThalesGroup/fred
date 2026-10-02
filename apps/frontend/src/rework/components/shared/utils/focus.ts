@@ -13,10 +13,16 @@
 // limitations under the License.
 
 export const FOCUSABLE =
-  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], area[href], summary, iframe, object, embed, audio[controls], video[controls], [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])';
 
 export function isVisibleFocusable(node: HTMLElement, dialog: HTMLElement): boolean {
-  if (node.tabIndex < 0 || node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  const editable = node.matches('[contenteditable]:not([contenteditable="false"])') && !node.hasAttribute("tabindex");
+  if (
+    (node.tabIndex < 0 && !editable) ||
+    node.matches(":disabled") ||
+    node.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
+    return false;
   for (let ancestor: HTMLElement | null = node; ancestor; ancestor = ancestor.parentElement) {
     const style = getComputedStyle(ancestor);
     if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;

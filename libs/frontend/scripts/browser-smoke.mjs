@@ -1228,6 +1228,18 @@ async function verifyHostedComponents(page) {
       ) < 2,
     resized.width,
   );
+  const desktopViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const mobileDrawer = hosted.getByRole("dialog", { name: "Hosted drawer" });
+  await mobileDrawer.waitFor({ state: "visible" });
+  assert.equal(await mobileDrawer.getAttribute("aria-modal"), "true");
+  await page.keyboard.press("Escape");
+  await mobileDrawer.waitFor({ state: "hidden" });
+  await page.setViewportSize(desktopViewport);
+  await hosted
+    .getByRole("button", { name: "Open push drawer", exact: true })
+    .click();
+  await drawer.waitFor({ state: "visible" });
   const persisted = await drawer.boundingBox();
   await drawer.getByRole("button", { name: "Close panel" }).click();
   await hosted.getByRole("button", { name: "Open overlay drawer" }).click();
@@ -1248,12 +1260,21 @@ async function verifyHostedComponents(page) {
   );
   await page.keyboard.press("Shift+Tab");
   assert.equal(
-    await overlayDialogTrigger.evaluate((el) => el === document.activeElement),
+    await overlay
+      .getByRole("textbox", { name: "Overlay editor" })
+      .evaluate((el) => el === document.activeElement),
     true,
   );
   await page.keyboard.press("Tab");
   assert.equal(
     await overlayClose.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await overlay
+      .locator("summary")
+      .evaluate((el) => el === document.activeElement),
     true,
   );
   await overlayDialogTrigger.click();
