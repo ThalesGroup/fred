@@ -88,7 +88,8 @@ export interface DataTableLabels {
   /** String prefixes include the stable key; callbacks can resolve a human-readable identity. */
   selectRow: string | ((key: string | number) => string);
   sortColumn: (label: string, direction: SortDirection | null) => string;
-  activateRow: string;
+  /** String prefixes include row identity; callbacks can provide a localized row name. */
+  activateRow: string | ((key: string | number) => string);
   pagination?: Partial<TablePaginationLabels>;
 }
 
@@ -119,7 +120,7 @@ interface DataTableBaseProps<T> {
   serverPagination?: ServerPagination;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
-  /** Activates the row background; embedded controls keep their own actions. */
+  /** Activates the row background; requires at least one column. Embedded controls keep their own actions. */
   onRowClick?: (row: T) => void;
   /** Whether a third press on the sorted column clears the sort (default) or
    *  simply flips it back to ascending.
@@ -216,6 +217,9 @@ export default function DataTable<T>({
   const primitiveKeys = useRef(new Map<unknown, number>());
   const nextObjectKey = useRef(0);
   const fallbackKey = (row: T): string => {
+    if (onRowClick && columns.length === 0) {
+      throw new Error("DataTable: row activation requires at least one column.");
+    }
     if ((typeof row === "object" && row !== null) || typeof row === "function") {
       const object = row as object;
       let key = objectKeys.current.get(object);
@@ -532,7 +536,11 @@ export default function DataTable<T>({
                           type="button"
                           data-row-action
                           className={styles["row-action"]}
-                          aria-label={labels?.activateRow ?? "Activate row"}
+                          aria-label={
+                            typeof labels?.activateRow === "function"
+                              ? labels.activateRow(key)
+                              : `${labels?.activateRow ?? "Activate row"} ${key}`
+                          }
                           aria-describedby={`${tableId}-${lineIndex}-content`}
                           onClick={() => onRowClick(line)}
                         >

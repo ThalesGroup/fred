@@ -1049,7 +1049,7 @@ async function verifyHostedComponents(page) {
   );
   const table = hosted.locator(".hosted-table");
   const rowAction = table
-    .getByRole("button", { name: "Open record", exact: true })
+    .getByRole("button", { name: /^Open record \d+$/ })
     .first();
   await rowAction.focus();
   await rowAction.press("Shift+Tab");

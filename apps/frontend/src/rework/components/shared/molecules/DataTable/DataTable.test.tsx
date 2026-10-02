@@ -637,7 +637,7 @@ describe("row activation", () => {
     const action = row.querySelector<HTMLButtonElement>("[data-row-action]")!;
     expect(action.type).toBe("button");
     expect(row.hasAttribute("tabindex")).toBe(false);
-    expect(action.getAttribute("aria-label")).toBe("dataTable.selection.activateRow");
+    expect(action.getAttribute("aria-label")).toBe("dataTable.selection.activateRow 1");
     click(action);
     click(action);
     expect(activate).toHaveBeenCalledTimes(3);
@@ -1114,4 +1114,27 @@ it.each(["explicit", "label", "duplicate"])("preserves cell state with %s column
   expect(container.querySelector("input")).toBe(inputs[1]);
   act(() => root.render(<DataTable data={data} columns={[b]} rowKey={(row) => row.id} />));
   expect(container.querySelector("input")!.value).toBe("Edited B");
+});
+
+it.each([undefined, () => null])("names row actions independently of empty cell content", (cellRenderer) => {
+  const activate = vi.fn();
+  render(
+    <DataTable
+      data={[{ id: 1 }, { id: 2 }]}
+      columns={[{ label: "Empty", cellRenderer }]}
+      rowKey={(row) => row.id}
+      onRowClick={activate}
+      labels={{ activateRow: (key) => `Open record ${key}` }}
+    />,
+  );
+  const actions = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-row-action]"));
+  expect(actions.map((button) => button.getAttribute("aria-label"))).toEqual(["Open record 1", "Open record 2"]);
+  act(() => actions[1].click());
+  expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 2 });
+});
+it("rejects row activation without a column for its keyboard action", () => {
+  render(<DataTable data={[]} columns={[]} />);
+  expect(() => renderToStaticMarkup(<DataTable data={[{ id: 1 }]} columns={[]} onRowClick={() => {}} />)).toThrow(
+    "row activation requires at least one column",
+  );
 });

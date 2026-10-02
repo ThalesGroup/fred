@@ -2315,7 +2315,7 @@ The alpha.3 archive SHALL retain all existing archive, runtime/declaration closu
 
 ### Requirement: Consumers control row activation and outcome presentation
 
-The shared UI SHALL let consumers activate a typed table row by pointer or keyboard without also activating its embedded controls. Activatable rows SHALL expose a native button with a caller-localized name, row context, and a visible focus indicator on real boxes while retaining embedded controls. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
+The shared UI SHALL let consumers activate a typed table row by pointer or keyboard without also activating its embedded controls. Activatable rows SHALL expose a native button with a caller-localized name, row context, and a visible focus indicator on real boxes while retaining embedded controls. Row action names SHALL include row identity independently of first-cell content, with a caller-owned key-to-label formatter available. Row activation without columns MUST be rejected explicitly. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
 
 #### Scenario: Row activation is isolated
 - **WHEN** a consumer activates a row cell or focuses its named native action button and presses Enter or Space
