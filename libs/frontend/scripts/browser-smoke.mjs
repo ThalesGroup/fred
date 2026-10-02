@@ -1290,11 +1290,39 @@ async function verifyHostedComponents(page) {
     await overlayClose.evaluate((el) => el === document.activeElement),
     true,
   );
+  const portalFirst = page.getByRole("button", {
+    name: "Portal first",
+    exact: true,
+  });
+  const portalLast = page.getByRole("button", {
+    name: "Portal last",
+    exact: true,
+  });
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(
+    await portalLast.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(
+    await portalFirst.evaluate((el) => el === document.activeElement),
+    true,
+  );
   await page.keyboard.press("Shift+Tab");
   assert.equal(
     await overlay
       .getByRole("textbox", { name: "Overlay editor" })
       .evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await portalFirst.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await portalLast.evaluate((el) => el === document.activeElement),
     true,
   );
   await page.keyboard.press("Tab");
@@ -1315,29 +1343,17 @@ async function verifyHostedComponents(page) {
   });
   await overlayDialog.waitFor({ state: "visible" });
   await overlayDialog.getByRole("textbox").fill("Nested portal remains usable");
+  for (const key of ["Tab", "Shift+Tab"]) {
+    await page.keyboard.press(key);
+    assert.equal(
+      await overlayDialog.evaluate((el) => el.contains(document.activeElement)),
+      true,
+    );
+  }
   await page.keyboard.press("Escape");
   await overlayDialog.waitFor({ state: "hidden" });
   assert.equal(
     await overlayDialogTrigger.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  const portalFirst = page.getByRole("button", {
-    name: "Portal first",
-    exact: true,
-  });
-  const portalLast = page.getByRole("button", {
-    name: "Portal last",
-    exact: true,
-  });
-  await portalFirst.focus();
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await portalLast.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await overlayClose.evaluate((el) => el === document.activeElement),
     true,
   );
   const previousViewport = page.viewportSize();

@@ -53,3 +53,5 @@ Publishing the alpha.3 npm package is a separate operation. Rebuild the candidat
 `InlineDrawer floating` requires explicit `layout="push"`; the unsupported overlay combination now throws instead of rendering a transparent modal panel.
 
 Activatable `DataTable` rows require at least one column. Their action labels include row identity independently of cell content; use `labels.activateRow(key)` for localized human-readable names.
+
+Raw React portals with drawer controls must use dedicated containers supplied through `InlineDrawer portalRoots`. Pass container elements (or null while mounting), not `document.body` or a shared application root. This lets Tab and Shift+Tab include those controls without discovering React internals. Nested Dialogs retain their own focus trap. Switch excludes `children` and `dangerouslySetInnerHTML`, which are invalid on its native input.

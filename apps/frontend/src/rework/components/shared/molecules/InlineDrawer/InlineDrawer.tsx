@@ -81,6 +81,9 @@ interface InlineDrawerBaseProps {
   onClose: () => void;
   title: string;
   closeLabel?: string;
+  /** Dedicated raw-portal containers to include in modal keyboard navigation.
+   * Never pass body or a shared application root. Null mounting refs are ignored. */
+  portalRoots?: readonly (HTMLElement | null)[];
   resizeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
@@ -149,6 +152,7 @@ export function InlineDrawer({
   onClose,
   title,
   closeLabel = "Close panel",
+  portalRoots,
   resizeLabel = "Resize panel",
   titleAccessory,
   headerActions,
@@ -177,7 +181,10 @@ export function InlineDrawer({
   }, []);
   const modal = layout === "overlay" || mobile;
   const drawerRef = useRef<HTMLElement | null>(null);
-  const ownedKeyEvents = useRef(new WeakSet<Event>());
+  const portalRootsRef = useRef(portalRoots);
+  useLayoutEffect(() => {
+    portalRootsRef.current = portalRoots;
+  });
   const hadModal = useRef(false);
   const ownedFocusEvents = useRef(new WeakSet<Event>());
   const lastOwnedFocus = useRef<HTMLElement | null>(null);
@@ -291,62 +298,52 @@ export function InlineDrawer({
     hadModal.current = true;
     const drawer = drawerRef.current!;
     const doc = drawer.ownerDocument;
-    let tabDirection: "forward" | "backward" | undefined;
+    const roots = () => [
+      drawer,
+      ...(portalRootsRef.current ?? []).filter(
+        (root): root is HTMLElement => !!root && root.isConnected && root.ownerDocument === doc,
+      ),
+    ];
+    const inScope = (node: Node) => roots().some((root) => root.contains(node));
     const focusable = () =>
-      [...drawer.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => isVisibleFocusable(node, drawer));
-    const focusInside = () => (focusable()[0] ?? drawer).focus();
+      [
+        ...new Set(
+          roots().flatMap((root) => [
+            ...(root !== drawer && root.matches(FOCUSABLE) ? [root] : []),
+            ...root.querySelectorAll<HTMLElement>(FOCUSABLE),
+          ]),
+        ),
+      ]
+        .filter((node) => isVisibleFocusable(node, doc.documentElement))
+        .sort((a, b) => {
+          const tabOrder = (node: HTMLElement) => (node.tabIndex > 0 ? node.tabIndex : Infinity);
+          return (
+            tabOrder(a) - tabOrder(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+          );
+        });
+    const focusInside = () => (focusable().find((node) => drawer.contains(node)) ?? drawer).focus();
     const onFocus = (event: FocusEvent) => {
-      if (topDrawer(doc) !== drawer || ownedFocusEvents.current.has(event) || drawer.contains(event.target as Node))
-        return;
-      if (tabDirection) {
-        const nodes = focusable();
-        (tabDirection === "backward" ? (nodes[nodes.length - 1] ?? drawer) : (nodes[0] ?? drawer)).focus();
-        tabDirection = undefined;
-        return;
-      }
+      if (topDrawer(doc) !== drawer || ownedFocusEvents.current.has(event) || inScope(event.target as Node)) return;
       const last = lastOwnedFocus.current;
       if (last?.isConnected && isVisibleFocusable(last, drawer)) last.focus();
       else focusInside();
     };
     const onTab = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Tab" ||
-        event.defaultPrevented ||
-        topDrawer(doc) !== drawer ||
-        (!drawer.contains(event.target as Node) && !ownedKeyEvents.current.has(event))
-      )
+      if (event.key !== "Tab" || event.defaultPrevented || topDrawer(doc) !== drawer || !inScope(event.target as Node))
         return;
-      tabDirection = event.shiftKey ? "backward" : "forward";
-      if (!drawer.contains(event.target as Node)) {
-        const documentNodes = [...doc.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) =>
-          isVisibleFocusable(node, doc.documentElement),
-        );
-        const index = documentNodes.indexOf(event.target as HTMLElement);
-        if (index < 0 || (event.shiftKey ? index === 0 : index === documentNodes.length - 1)) {
-          event.preventDefault();
-          const inside = focusable();
-          (event.shiftKey ? (inside[inside.length - 1] ?? drawer) : (inside[0] ?? drawer)).focus();
-          tabDirection = undefined;
-        }
-        return;
-      }
+      const nestedModal = (event.target as Element).closest('[aria-modal="true"]');
+      if (nestedModal && nestedModal !== drawer) return;
       const nodes = focusable();
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (
-        !first ||
-        (event.shiftKey && (doc.activeElement === first || doc.activeElement === drawer)) ||
-        (!event.shiftKey && doc.activeElement === last)
-      ) {
-        event.preventDefault();
-        (event.shiftKey ? (last ?? drawer) : (first ?? drawer)).focus();
-      }
+      const index = nodes.indexOf(doc.activeElement as HTMLElement);
+      const next =
+        index < 0
+          ? event.shiftKey
+            ? nodes.length - 1
+            : 0
+          : (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
+      event.preventDefault();
+      (nodes[next] ?? drawer).focus();
     };
-    const clearTab = () => {
-      tabDirection = undefined;
-    };
-    doc.defaultView!.addEventListener("keyup", clearTab);
-    doc.defaultView!.addEventListener("pointerdown", clearTab);
     doc.defaultView!.addEventListener("focusin", onFocus);
     doc.defaultView!.addEventListener("keydown", onTab);
     const focusOnOpen = () => {
@@ -367,8 +364,6 @@ export function InlineDrawer({
     return () => {
       drawer.removeEventListener("transitionend", onTransitionEnd);
       doc.defaultView!.cancelAnimationFrame(focusFrame);
-      doc.defaultView!.removeEventListener("keyup", clearTab);
-      doc.defaultView!.removeEventListener("pointerdown", clearTab);
       doc.defaultView!.removeEventListener("focusin", onFocus);
       doc.defaultView!.removeEventListener("keydown", onTab);
       lastOwnedFocus.current = null;
@@ -391,7 +386,6 @@ export function InlineDrawer({
       <aside
         ref={drawerRef}
         tabIndex={-1}
-        onKeyDownCapture={(event) => ownedKeyEvents.current.add(event.nativeEvent)}
         onFocusCapture={(event) => {
           ownedFocusEvents.current.add(event.nativeEvent);
           lastOwnedFocus.current = event.target as HTMLElement;

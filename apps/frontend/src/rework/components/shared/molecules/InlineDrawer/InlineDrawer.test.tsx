@@ -510,3 +510,57 @@ it("updates inert ownership after open keyed peers reorder without reopening", a
     host.remove();
   }
 });
+
+it("cycles through declared portal roots and reflects root changes without resetting focus", () => {
+  const host = document.createElement("div");
+  const portal = document.createElement("div");
+  const other = document.createElement("div");
+  document.body.append(host, portal, other);
+  portal.innerHTML =
+    "<button>First</button><button disabled>Disabled</button><button hidden>Hidden</button><button>Last</button>";
+  other.innerHTML = "<button>Outside</button>";
+  const root = createRoot(host);
+  const render = (roots: (HTMLElement | null)[]) =>
+    root.render(
+      <InlineDrawer open title="Modal" onClose={() => {}} portalRoots={roots}>
+        <input />
+      </InlineDrawer>,
+    );
+  const tab = (shiftKey = false) =>
+    act(() =>
+      document.activeElement!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", shiftKey, bubbles: true, cancelable: true }),
+      ),
+    );
+  try {
+    act(() => render([null, portal, portal]));
+    const close = host.querySelector<HTMLButtonElement>('button[aria-label="Close panel"]')!;
+    const input = host.querySelector("input")!;
+    const first = portal.querySelector("button")!;
+    const last = portal.lastElementChild as HTMLButtonElement;
+    expect(document.activeElement).toBe(close);
+    tab(true);
+    expect(document.activeElement).toBe(last);
+    tab(true);
+    expect(document.activeElement).toBe(first);
+    tab(true);
+    expect(document.activeElement).toBe(input);
+    tab();
+    expect(document.activeElement).toBe(first);
+    tab();
+    expect(document.activeElement).toBe(last);
+    tab();
+    expect(document.activeElement).toBe(close);
+    tab();
+    expect(document.activeElement).toBe(input);
+    act(() => render([]));
+    expect(document.activeElement).toBe(input);
+    tab();
+    expect(document.activeElement).toBe(close);
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+    portal.remove();
+    other.remove();
+  }
+});

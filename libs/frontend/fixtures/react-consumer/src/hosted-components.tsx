@@ -152,6 +152,7 @@ function ToastTriggers() {
 }
 const identityRows = [{ id: 2 }, { id: 1 }, { id: 3 }];
 export function HostedComponents() {
+  const [portalRoot, setPortalRoot] = useState<HTMLDivElement | null>(null);
   const [text, setText] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState(false);
@@ -408,6 +409,7 @@ export function HostedComponents() {
         </button>
       </InlineDrawer>
       <InlineDrawer
+        portalRoots={[portalRoot]}
         width="480px"
         title="Hosted overlay"
         open={overlay}
@@ -415,12 +417,13 @@ export function HostedComponents() {
       >
         <span>Overlay content</span>
         {overlay &&
+          portalRoot &&
           createPortal(
             <div>
               <button type="button">Portal first</button>
               <button type="button">Portal last</button>
             </div>,
-            document.querySelector(".fred-ui")!,
+            portalRoot,
           )}
         <details>
           <summary>Editor details</summary>
@@ -447,6 +450,7 @@ export function HostedComponents() {
           <input aria-label="Overlay dialog field" />
         </Dialog>
       </InlineDrawer>
+      <div ref={setPortalRoot} data-drawer-portal />
       <ToastProvider
         onCopy={setCopied}
         copyLabel="Copy notification"
