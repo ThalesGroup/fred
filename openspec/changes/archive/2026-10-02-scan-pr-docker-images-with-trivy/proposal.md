@@ -4,9 +4,9 @@ Pull requests build the production Docker images but do not check those built im
 
 ## What Changes
 
-- Scan the four publishable images after every pull request build, plus the frontend builder stage; keep building `ws-bench` with an explicit scan exception in the image manifest.
+- Scan the four publishable final images after every pull request build; keep building `ws-bench` with an explicit scan exception in the image manifest.
+- Scan the frontend npm lockfile separately because the final nginx image lacks npm package metadata.
 - Report every vulnerability severity and the package inventory, with full finding rows in dedicated job logs, JSON artifacts, and advisory warnings for critical findings.
-- Scan every tracked Python and npm lockfile, including development dependencies, to cover components absent from final images.
 - Preserve hard failures for image build and scanner execution errors, and leave release publishing unchanged.
 
 ## Capabilities
