@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { IconType } from "@shared/utils/Type.ts";
+import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
+import type { MaterialIconType } from "../../utils/Type.ts";
 import styles from "./ServiceNotice.module.scss";
 
-interface ServiceNoticeProps {
-  icon?: IconType;
+export interface ServiceNoticeProps {
+  icon?: MaterialIconType;
   title: string;
   description?: string;
   /** Wraps the notice in a flex-1 centred container — use when the notice is
@@ -47,7 +47,7 @@ export default function ServiceNotice({ icon = "info", title, description, cente
   const notice = (
     <div className={styles.serviceNotice}>
       <span className={styles.icon}>
-        <Icon category="outlined" type={icon} />
+        <Icon type={icon} />
       </span>
       <div className={styles.text}>
         <span className={styles.title}>{title}</span>

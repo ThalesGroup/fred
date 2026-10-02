@@ -46,3 +46,12 @@ body {
 .consumer-icon-button {
   justify-self: start;
 }
+
+.hosted-table {
+  height: 22rem;
+}
+.hosted-drawer {
+  display: flex;
+  height: 16rem;
+  justify-content: flex-end;
+}

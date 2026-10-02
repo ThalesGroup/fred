@@ -21,12 +21,11 @@
 // exact same view.
 //
 // Data comes from the standard task surface (`GET /tasks`, already scoped
-// platform vs team server-side) — but that surface is per-backend: each of
-// control-plane, knowledge-flow, and the evaluation backend runs its own task
+// platform vs team server-side) — both control-plane and knowledge-flow run
+// their own task
 // store behind an identical `GET /tasks`/`TaskSummary` contract (fred-core's
-// shared `tasks` module), none of them proxying the others. No `kind` filter
-// means "every kind" (this component's whole point), so this queries all
-// three and merges; a `kind` filter narrows both the query args AND which
+// shared `tasks` module), neither proxying the other. No `kind` filter
+// means "every kind", so this queries both and merges; a `kind` filter narrows both the query args AND which
 // single backend gets queried (`taskBackendFor` — the same map
 // `useTaskSseManager`/`useTaskAcknowledgement` route SSE/ack by), since
 // asking the wrong backend for a kind it doesn't own just returns nothing
@@ -57,7 +56,6 @@ import {
   type IngestionDetail,
   type RepairVectorMetadataResult,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import { useListTasksEvaluationV1TasksGetQuery } from "../../../../../slices/evaluation/evaluationOpenApi";
 import styles from "./TaskActivity.module.css";
 
 // Principal counters shown in the migration result disclosure, in display
@@ -223,7 +221,7 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
 
   // No kind filter → query every backend (see module docstring). A kind
-  // filter narrows to the single backend that owns it — the other two are
+  // filter narrows to the single backend that owns it — the other backend is
   // `skip`ped, never fired.
   const wantsBackend = (backend: TaskBackend) => !kind || taskBackendFor(kind) === backend;
   const queryArgs = { scope, teamId: teamId ?? undefined, kind };
@@ -237,25 +235,12 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
     ...pollOpts,
     skip: !wantsBackend("knowledge-flow"),
   });
-  // The evaluation backend's GET /tasks has no "platform" scope (evaluation
-  // campaigns are inherently team/user work, never platform-wide) and no
-  // `kind` param (every task it owns is already kind="evaluation" — nothing
-  // to filter). "team" is a safe placeholder when skipped; it's never sent.
-  const evaluation = useListTasksEvaluationV1TasksGetQuery(
-    { scope: "team", teamId: teamId ?? undefined },
-    { ...pollOpts, skip: !wantsBackend("evaluation") || scope !== "team" },
-  );
-
-  const isLoading = controlPlane.isLoading || knowledgeFlow.isLoading || evaluation.isLoading;
-  const isError = controlPlane.isError || knowledgeFlow.isError || evaluation.isError;
-  // The three backends' TaskSummary are independently generated from the
-  // same shared fred-core Pydantic model — structurally identical except
-  // evaluation's lacks acknowledged_at/acknowledged_by (that backend has no
-  // ack endpoint yet, see useTaskAcknowledgement); safe to merge as one list.
+  const isLoading = controlPlane.isLoading || knowledgeFlow.isLoading;
+  const isError = controlPlane.isError || knowledgeFlow.isError;
+  // Both backends generate TaskSummary from the shared fred-core model.
   const tasks: TaskSummary[] = [
     ...(controlPlane.data?.tasks ?? []),
     ...((knowledgeFlow.data?.tasks ?? []) as TaskSummary[]),
-    ...((evaluation.data?.tasks ?? []) as TaskSummary[]),
   ];
   const scheduled = tasks.filter((task) => task.state === "pending").sort(byDueAsc);
   const running = tasks.filter((task) => task.state === "running" || task.state === "cancelling");

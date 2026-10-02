@@ -16,7 +16,7 @@ import styles from "./IndicatorDot.module.css";
 
 export type IndicatorStatus = "idle" | "active" | "streaming" | "error";
 
-interface IndicatorDotProps {
+export interface IndicatorDotProps {
   status: IndicatorStatus;
   /** Accessible label — screen readers announce this instead of the visual dot. */
   label?: string;

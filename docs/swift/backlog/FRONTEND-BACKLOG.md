@@ -90,8 +90,9 @@ backend endpoints — `POST /tags/rebac/backfill` and
 `GET /documents/processing/graph`, both dead once the page was gone, no
 other caller — followed on 2026-08-08, the latter with its `ProcessingGraph*`
 types removed from `fred-core` too.) Full tree still not reachable regardless:
-also blocked on the missing evaluation UI (#1892) and the disabled PDF
-viewer (FRONT-13).
+the disabled PDF viewer (FRONT-13) remains. Evaluation is now provided by the
+registered standalone evaluator under Apps; PR #2890 removes the built-in
+team-settings screens (see `openspec/specs/frontend-application-hosting/spec.md`).
 
 ## 3 Explicit Non-Goals
 

@@ -15,12 +15,7 @@
 import type { TFunction } from "i18next";
 import type { TaskState, TaskViewModel } from "./taskTypes";
 
-/**
- * Single source of truth for the task feature's presentation strings.
- * Every label goes through i18n — nothing here is hardcoded in a human
- * language. Shared by TaskStateBadge, TaskIndicator, TaskCard, the popover
- * and the tray so the same task never renders two different wordings.
- */
+/** Shared task labels keep badges, indicators, cards, and popovers consistent. */
 
 /** task-state → CSS color token. */
 export const STATE_COLOR: Record<TaskState, string> = {
@@ -66,7 +61,7 @@ export function taskSupportDetails(task: TaskViewModel, t: TFunction): string {
     .join("\n");
 }
 
-/** Localized "time ago" string shared by the card, popover and tray. */
+/** Localized "time ago" string shared by the card and popover. */
 export function relativeTime(ms: number, t: TFunction, now = Date.now()): string {
   const diffS = Math.floor((now - ms) / 1000);
   if (diffS < 60) return t("rework.tasks.time.justNow");

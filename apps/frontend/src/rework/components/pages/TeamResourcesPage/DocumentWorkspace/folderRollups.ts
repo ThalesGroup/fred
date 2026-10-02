@@ -40,11 +40,9 @@ export interface FolderRollup {
  *
  * `failed` carries the documents to flag; `resolved` carries those whose last
  * word was `succeeded` or `cancelled`. Both matter: a document can accumulate
- * several terminal tasks — a failed run then a successful re-upload of the same
- * file, since uids are content-derived — and nothing ever removes the old one
- * from the Redux store (`taskEvicted` is only dispatched by `TaskTray`, which is
- * currently unmounted). Ranking them is what stops a folder being flagged with a
- * failure the user has already repaired.
+ * several terminal tasks: a failed run then a successful re-upload of the same
+ * file, since uids are content-derived. Old entries can remain in the
+ * Redux store. Ranking them prevents a repaired failure from staying flagged.
  *
  * `resolved` is not the complement of `failed`: it is only ever consulted to
  * clear a failure another source still believes in.

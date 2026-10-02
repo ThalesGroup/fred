@@ -13,11 +13,11 @@
 // limitations under the License.
 
 import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
-import IconButton from "@shared/atoms/IconButton/IconButton";
-import { usePaneResize } from "@rework/core/hooks/usePaneResize";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
+import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 
-interface InlineDrawerResizeSpec {
+export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
   persistKey: string;
   /** Drag bounds (px). Default 320–900, the legacy chat pane's bounds. */
@@ -28,10 +28,11 @@ interface InlineDrawerResizeSpec {
   maxViewportFraction?: number;
 }
 
-interface InlineDrawerProps {
+export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
+  closeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
@@ -90,6 +91,7 @@ export function InlineDrawer({
   open,
   onClose,
   title,
+  closeLabel = "Close panel",
   titleAccessory,
   headerActions,
   width = "480px",
@@ -199,10 +201,11 @@ export function InlineDrawer({
               <div className={styles.headerActions}>
                 {headerActions}
                 <IconButton
+                  type="button"
                   variant="icon"
                   size="small"
                   icon={{ category: "outlined", type: "close" }}
-                  aria-label="Close panel"
+                  aria-label={closeLabel}
                   onClick={handleClose}
                 />
               </div>

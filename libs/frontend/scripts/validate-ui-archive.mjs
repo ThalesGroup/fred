@@ -20,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import postcss from "postcss";
+import ts from "typescript";
 import selectorParser from "postcss-selector-parser";
 import valueParser from "postcss-value-parser";
 import * as fontkit from "fontkit";
@@ -42,6 +43,27 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
 
 export const expectedUiArchiveFiles = [
+  "dist/types/.generated/src/rework/components/shared/atoms/TextArea/TextArea.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Switch/Switch.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/ProgressBar/ProgressBar.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/IndicatorDot/IndicatorDot.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/Disclosure/Disclosure.d.ts",
+  "dist/types/.generated/src/rework/components/shared/atoms/StatusBadge/StatusBadge.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Breadcrumb/Breadcrumb.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/PageHeader/PageHeader.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/SelectableCard/SelectableCard.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/FileDropzone/FileDropzone.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/ServiceNotice/ServiceNotice.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/KpiStatCard/KpiStatCard.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/DataTable/DataTable.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/TablePagination/TablePagination.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Toast/Toast.d.ts",
+  "dist/types/.generated/src/rework/components/shared/molecules/Toast/ToastProvider.d.ts",
+  "dist/types/.generated/src/rework/core/hooks/usePaneResize.d.ts",
+  "dist/types/.generated/src/hooks/useLocalStorageState.d.ts",
+
   "LICENSE",
   "README.md",
   "THIRD_PARTY_NOTICES.md",
@@ -67,7 +89,7 @@ export const expectedUiArchiveFiles = [
   "dist/types/src/index.d.ts",
   "licenses/Material-Symbols-Apache-2.0.txt",
   "package.json",
-];
+].sort();
 
 const expectedExports = {
   ".": { types: "./dist/types/src/index.d.ts", import: "./dist/index.js" },
@@ -153,7 +175,7 @@ async function assertRelativeReferences(
   }
   for (const forbidden of [
     /@(?:shared|rework|models)\b/,
-    /(?:workspace|file|link):/,
+    /["'](?:workspace|file|link):/,
     /\/Users\//,
     /apps\/frontend/,
   ]) {
@@ -270,6 +292,23 @@ async function validateCss(packageRoot) {
     }),
   );
   const definitions = new Set();
+  const runtime = ts.createSourceFile(
+    "index.js",
+    await readFile(path.join(packageRoot, "dist/index.js"), "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  function collectInlineProperties(node) {
+    if (
+      ts.isPropertyAssignment(node) &&
+      ts.isStringLiteral(node.name) &&
+      node.name.text.startsWith("--")
+    )
+      definitions.add(node.name.text);
+    ts.forEachChild(node, collectInlineProperties);
+  }
+  collectInlineProperties(runtime);
   const references = new Set();
   for (const stylesheet of [...tokenRoots, root]) {
     stylesheet.walkDecls((declaration) => {
@@ -380,6 +419,96 @@ export async function validateUiArchive(
         !js.includes(forbidden),
         `UI JavaScript contains application-only icon behavior ${forbidden}`,
       );
+    const module = ts.createSourceFile(
+      "index.js",
+      js,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.JS,
+    );
+    const exported = module.statements
+      .filter(ts.isExportDeclaration)
+      .flatMap((statement) =>
+        statement.exportClause && ts.isNamedExports(statement.exportClause)
+          ? statement.exportClause.elements.map((element) => element.name.text)
+          : [],
+      );
+    assert.deepEqual(
+      exported.sort(),
+      [
+        "Breadcrumb",
+        "Button",
+        "Checkbox",
+        "Chip",
+        "DataTable",
+        "Dialog",
+        "Disclosure",
+        "FileDropzone",
+        "Icon",
+        "IconButton",
+        "IndicatorDot",
+        "InlineDrawer",
+        "KpiStatCard",
+        "PageEmptyState",
+        "PageHeader",
+        "ProgressBar",
+        "Select",
+        "SelectableCard",
+        "ServiceNotice",
+        "Spinner",
+        "StatusBadge",
+        "Switch",
+        "TextArea",
+        "TextInput",
+        "ToastProvider",
+        "Tooltip",
+        "useToast",
+      ],
+      "UI runtime exports differ from the reviewed contract",
+    );
+    const publicDeclarations = await readFile(
+      path.join(packageRoot, "dist/types/src/index.d.ts"),
+      "utf8",
+    );
+    for (const publicType of [
+      "TextAreaProps",
+      "SwitchProps",
+      "SwitchSize",
+      "ProgressBarProps",
+      "IndicatorDotProps",
+      "IndicatorStatus",
+      "DisclosureProps",
+      "StatusBadgeProps",
+      "StatusBadgeTone",
+      "BreadcrumbProps",
+      "BreadcrumbSegment",
+      "PageHeaderProps",
+      "SelectableCardProps",
+      "FileDropzoneProps",
+      "ServiceNoticeProps",
+      "PageEmptyStateProps",
+      "PageEmptyStateAction",
+      "KpiStatCardProps",
+      "DataTableProps",
+      "DataTableLabels",
+      "DataTableColumn",
+      "DataTableRowSize",
+      "ServerPagination",
+      "SortState",
+      "SortDirection",
+      "TablePaginationLabels",
+      "InlineDrawerProps",
+      "ToastSeverity",
+      "ToastProviderProps",
+      "ToastInput",
+      "ToastContextValue",
+    ]) {
+      assert.match(
+        publicDeclarations,
+        new RegExp(`\\b${publicType}\\b`),
+        `missing UI public type ${publicType}`,
+      );
+    }
     const declarations = files.filter((file) => file.endsWith(".d.ts"));
     for (const file of declarations) {
       const declaration = await assertRelativeReferences(

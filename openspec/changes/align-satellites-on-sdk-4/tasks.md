@@ -70,11 +70,8 @@ This file is the state of the work. Nothing else tracks it.
 
 - `agent_id` naming — open question, `docs/swift/rfc/AGENT-ID-NAMING-RFC.md`.
 - Agent versioning — decided in that RFC, not yet implemented.
-- **Extracting the evaluation UI.** `fred-agent-evaluator` predates the
-  application concept, so its UI was hardcoded into Fred's frontend — it lives in
-  `TeamSettingsPanel/TeamSettingsEvaluations/` (8 views) plus its own
-  `slices/evaluation/` RTK slice, as a tab in team settings rather than a surface
-  of its own. Turning it into a proper application was blocked on having an npm
-  package model; that is now nearly in place (`@fred-oss` publishes,
-  `@fred-oss/ui` ships 10 primitives). Its own change, once
-  `add-frontend-independent-releases` lands.
+- **Evaluation UI extraction is implemented in PR #2890** (issues #2887 and #2904).
+  Fred now hosts the standalone evaluator under Apps; its built-in team-settings
+  screens and dedicated frontend plumbing have been removed. The reconciled contract
+  is in `openspec/specs/frontend-application-hosting/spec.md`. Publishing the UI
+  alpha.3 package remains separate from this removal.

@@ -14,11 +14,11 @@
 
 import styles from "./DataTable.module.scss";
 import React, { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import Checkbox from "@shared/atoms/Checkbox/Checkbox.tsx";
-import TablePagination from "@shared/molecules/TablePagination/TablePagination.tsx";
-import { OptionModel } from "@models/Option.model.ts";
+import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
+import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
+import TablePagination from "../TablePagination/TablePagination.tsx";
+import type { SelectOption } from "../Select/Select.tsx";
+import type { TablePaginationLabels } from "../TablePagination/TablePagination.tsx";
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
 
@@ -51,7 +51,14 @@ export interface ServerPagination {
   onLimitChange?: (limit: number) => void;
 }
 
-interface DataTableProps<T> {
+export interface DataTableLabels {
+  selectAllOnPage: string;
+  selectRow: string;
+  pagination?: Partial<TablePaginationLabels>;
+}
+
+export interface DataTableProps<T> {
+  labels?: Partial<DataTableLabels>;
   columns: DataTableColumn<T>[];
   data: T[];
   backgroundColor?: string;
@@ -89,6 +96,9 @@ interface DataTableProps<T> {
   selectable?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
+  /** Pointer activation of the row background; embedded controls keep their own
+   *  actions. Keyboard users need an equivalent control inside the row. */
+  onRowClick?: (row: T) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
    *  for DataTable to sort `data` internally using each column's
@@ -140,13 +150,14 @@ function compareSortValues(
   return String(a).localeCompare(String(b));
 }
 
-const rowsPerPageOptions: OptionModel<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
+const rowsPerPageOptions: SelectOption<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
   value: n,
   label: String(n),
   key: String(n),
 }));
 
 export default function DataTable<T>({
+  labels,
   columns,
   data,
   backgroundColor = "var(--surface-container)",
@@ -159,11 +170,11 @@ export default function DataTable<T>({
   selectable = false,
   selectedKeys,
   onSelectionChange,
+  onRowClick,
   sortState: controlledSortState,
   onSortChange,
   sortClearable = true,
 }: DataTableProps<T>) {
-  const { t } = useTranslation();
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
@@ -291,7 +302,7 @@ export default function DataTable<T>({
               checked={allOnPageSelected}
               indeterminate={someOnPageSelected}
               onChange={toggleAllOnPage}
-              aria-label={t("dataTable.selection.selectAllOnPage")}
+              aria-label={labels?.selectAllOnPage ?? "Select all on page"}
             />
           </div>
         )}
@@ -311,10 +322,7 @@ export default function DataTable<T>({
                     {/* The arrow points the way the list runs, as a file
                         explorer does: down for ascending (A at the top, Z at
                         the bottom), up for descending. */}
-                    <Icon
-                      category="outlined"
-                      type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"}
-                    />
+                    <Icon type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"} />
                   </span>
                 </button>
               ) : (
@@ -333,26 +341,14 @@ export default function DataTable<T>({
               className={styles["datatable-row"]}
               key={key}
               data-selected={isSelected || undefined}
+              data-activatable={!!onRowClick || undefined}
               onClick={
-                selectable
+                onRowClick || selectable
                   ? (event) => {
-                      // Clicking an interactive control inside the row (a
-                      // preview button, a folder-name link, the checkbox
-                      // itself) must do its own thing, not also toggle
-                      // selection — only the row's otherwise-inert
-                      // background counts as "select this row". `label`
-                      // matters here specifically for the Checkbox atom: its
-                      // native input is visually hidden and wrapped in a
-                      // <label>, so a real click lands on the label/box, not
-                      // the input directly — the browser then separately
-                      // forwards a synthetic click to the input itself. Not
-                      // excluding `label` here meant this handler fired on
-                      // the first (visible) click AND the checkbox's own
-                      // onChange fired on the forwarded one: two toggles
-                      // that cancel out, looking like the click did nothing.
                       const target = event.target as HTMLElement;
-                      if (target.closest('button, a, input, label, [role="menuitem"]')) return;
-                      toggleRow(key);
+                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      if (onRowClick) onRowClick(line);
+                      else toggleRow(key);
                     }
                   : undefined
               }
@@ -362,7 +358,7 @@ export default function DataTable<T>({
                   <Checkbox
                     checked={selectedKeys?.has(key) ?? false}
                     onChange={() => toggleRow(key)}
-                    aria-label={t("dataTable.selection.selectRow")}
+                    aria-label={labels?.selectRow ?? "Select row"}
                   />
                 </div>
               )}
@@ -393,6 +389,7 @@ export default function DataTable<T>({
       </div>
       {paginationEnabled && (
         <TablePagination
+          labels={labels?.pagination}
           totalItems={serverPagination ? serverPagination.totalCount : data.length}
           currentPage={currentPage}
           pageCount={pageCount}

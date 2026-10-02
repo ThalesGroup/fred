@@ -21,13 +21,12 @@ import { TERMINAL_STATES, type AnyTaskEvent } from "./taskTypes";
 
 // Task events are served by the backend that runs the task: ingestion/reindex
 // tasks live in knowledge-flow, migration and conversation erasure in the
-// control-plane, evaluation campaigns in the evaluation backend. Backend
+// control-plane. Backend
 // selection itself lives in taskKinds.taskBackendFor, shared with
 // useTaskAcknowledgement.
 const BASE_PATH_BY_BACKEND: Record<TaskBackend, string> = {
   "knowledge-flow": "/knowledge-flow/v1",
   "control-plane": "/control-plane/v1",
-  evaluation: "/evaluation/v1",
 };
 
 export function taskEventsBasePath(kind: string | null): string {
@@ -165,9 +164,9 @@ async function openStream(
               backoffMs = BASE_BACKOFF_MS; // successful event — reset backoff
 
               if (TERMINAL_STATES.has(event.state)) {
-                // Terminal: stop streaming. Succeeded tasks are kept in the store
-                // for the session (admin history); the floating tray hides old ones
-                // via `selectVisibleTasks`, and the user clears them explicitly.
+                // Terminal: stop streaming. Succeeded tasks remain in the
+                // store for session history; `selectVisibleTasks` applies the
+                // age cutoff where that selector is used.
                 return; // clean terminal close — do not reconnect
               }
             }

@@ -935,8 +935,11 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["team_admin_charter_enabled"] is False
-    assert payload["feature_flags"]["enableK8Features"] is False
-    assert payload["feature_flags"]["enableApplications"] is False
+    assert payload["feature_flags"] == {
+        "enableApplications": False,
+        "enableAllResourceSpaces": False,
+        "enableInformationSystems": False,
+    }
     assert "ui_settings" not in payload
     # AUTHZ-05 review item 11: `permissions` only ever carries the
     # OpenFGA-derived role list now — the Keycloak-role-derived `items` list

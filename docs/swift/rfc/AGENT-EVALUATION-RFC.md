@@ -1,6 +1,6 @@
 # RFC EVAL-01 — Fred Agent Evaluation Platform
 
-**Status:** confirmed
+**Status:** confirmed; built-in frontend integration superseded by the hosted application (#2904)
 **Version:** v2 proposal; supersedes the architecture and implementation sequence in v1  
 **Date:** 2026-06-09  
 **Authors:** Dimitri Tombroff (v1); Marc (v2 amendment proposal)  
@@ -769,19 +769,19 @@ All request and response types come from Control Plane OpenAPI generation. Hand-
 
 > **Correction (2026-07-16, EVAL-04):** the evaluator ships as its own standalone
 > `/evaluation/v1` service (per `EVAL-02`'s fold into `OPS-04`), not inside Control Plane.
-> Types are generated from the evaluator's own OpenAPI spec, vendored into
-> `apps/frontend/src/slices/evaluation/` per that directory's `README.md`. The
-> "no hand-written duplicates" rule itself is unchanged.
+> Types are generated from the evaluator's own OpenAPI spec. Since #2904, the
+> external evaluator application owns that generated client; Fred no longer
+> vendors an evaluator slice. The "no hand-written duplicates" rule is unchanged.
 
 ### Amendment 2026-07-16 (EVAL-04 — first-release scope reduction)
 
 The sections above (§12.1-§12.4) describe the full target UX. The first shipped release
 (`EVAL-04`) is deliberately smaller and breaking, not incremental:
 
-- **No new routes.** The creation/list/detail views are hosted inside the Team Settings
-  panel's modal (`TeamSettingsEvaluations`), not at `/monitoring/evaluations/*` — this was
-  already true before `EVAL-04` and remains unaddressed; tracked as a known gap, not solved
-  here.
+- **Frontend ownership superseded (#2904).** Creation/list/detail now live in the
+  external evaluator application, admitted through Fred's generic Apps host.
+  The former team-settings evaluator views have been removed. See the
+  [hosting specification](../../../openspec/specs/frontend-application-hosting/spec.md).
 - **§12.2 Campaign creation** is reduced to one journey, no steps: pick a managed agent
   (no target-kind choice, no runtime-agent option, no execution-option controls) → pick an
   existing saved dataset **or** create one (JSON import or manual rows only — **no CSV**) →

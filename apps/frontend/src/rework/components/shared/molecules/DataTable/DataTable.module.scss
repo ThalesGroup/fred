@@ -221,3 +221,7 @@
 .header-sort-button:hover .sort-icon[data-visible] {
   opacity: 1;
 }
+
+.datatable-row[data-activatable="true"] {
+  cursor: pointer;
+}

@@ -88,6 +88,8 @@ Portaled listbox with virtual focus (DOM focus stays on the trigger,
 value type and unique key; `emptyMessage` overrides the default empty wording.
 The menu portals into the nearest consumer-owned `.fred-ui` root when present,
 or retains the legacy FRED body portal.
+Opening the menu and moving its active option scroll only the listbox, preserving
+the surrounding form and iframe host page's scroll position.
 
 **Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
 the same token `TextInput` uses, so a `Select` and a text field placed in one
@@ -2257,7 +2259,7 @@ sees inside scales with their role:
   view, just non-interactive, so a plain member can still see who holds
   elevated roles) and nothing else in the sidebar;
 - editors/analysts/admins: the same sections as before (Members with edit
-  controls, Parameters gated on `can_update_info`, Activity/Evaluations per
+  controls, Parameters gated on `can_update_info`, Activity per
   their existing gates) — Activity's gate moved from `canReadMembers` (now
   true for everyone) to a new `hasElevatedTeamRole` helper
   (`teamCapabilities.ts`), since it isn't part of the plain-member baseline.
@@ -2267,7 +2269,7 @@ settings sidebar — now a `filled` / `error` `Button` (`LeaveTeamButton.tsx`)
 rendered inline in the Members section header, `24px` to the right of the
 "Membres" page title (`.team-settings-members-header-left`, `gap:
 var(--spacing-l)`), so it only appears on the Members section, not on
-Parameters/Activity/Evaluations. Disabled with an explanatory `title`
+Parameters/Activity. Disabled with an explanatory `title`
 tooltip only for a team's sole remaining `team_admin` (computed client-side
 from the members list; the backend's last-admin invariant is the actual
 source of truth and still applies server-side regardless). Confirms via
@@ -2893,7 +2895,7 @@ and the `TaskActivity` entry below.
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
 you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
-Activity/Evaluations/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
+Activity/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
 match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
 (no sibling tabs to switch to) keeps the bare Back.
 
@@ -2926,7 +2928,6 @@ now share one consistent header pattern instead of diverging per page:
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
-| `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
 | `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
@@ -3527,8 +3528,8 @@ Two call sites remain, both dedicated Activity surfaces rather than embeds insid
 dashboard: `TasksPage` (`/admin/tasks`, `scope="platform"`) and `TeamSettingsPage`'s Activity tab
 (`/team/:teamId/settings/activity`, `scope="team"`). This organism's own rows have no ack/dismiss
 affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives in
-`TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a different,
-non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
+`TaskCard`/`TaskDetailPopover` in `MigrationPage`, a different consumer of the
+same `acknowledged_at`/`acknowledged_by` fields.
 
 **Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
 `AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
@@ -3547,7 +3548,7 @@ organism's missing ack affordance ever getting fixed for the duplicate. See
   populated at once.
 - **No ack affordance in this organism's own rows** — a platform/team admin reading
   Activités here has no one-click way to mark a failed/cancelled row seen; only the
-  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Lower urgency now
+  migration task cards (`TaskCard`/`TaskDetailPopover`) offer that today. Lower urgency now
   that the only two call sites are the dedicated Activity tabs, not a dashboard embed
   seen incidentally.
 
@@ -3563,7 +3564,7 @@ _(none yet)_
 `src/rework/components/shared/molecules/TaskDetailPopover/TaskDetailPopover.tsx`
 **Status:** `Functional`
 
-The personal-tray task surface (`TaskTray`, `MigrationPage`'s active/terminal grids) —
+The migration task surface (`MigrationPage`'s active/terminal grids):
 `TaskCard` renders one row per task with the ack/dismiss affordance referenced above; clicking
 its status indicator opens `TaskDetailPopover`, a floating detail panel showing state,
 progress %, step, elapsed time, and the raw `task.error` on failure.
@@ -4097,11 +4098,9 @@ is absent. Their stage names are translated (for example, `preview` becomes
 "Content extraction"); copied fallback details retain the technical stage keys
 for support. The document reference remains available.
 
-One coupling worth knowing: terminal tasks are never evicted today because
-`taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
-from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts
-applying and both the session "done" mark and any task-sourced failure would
-begin disappearing on that timer. The snapshot-sourced half is unaffected.
+One coupling worth knowing: task-sourced status can remain in Redux for the
+session. A new task for the same document supersedes an earlier outcome; the
+snapshot-sourced half of the rollup remains independent.
 
 `countUniqueDocs` was deleted in the same change: it had lost its last caller in
 #2173 and its DFS is now `collectDescendantDocUids`.
@@ -4918,14 +4917,12 @@ Three additions, all made for the rail and all useful beyond it:
   having been lost for good — stayed open alongside the next one hovered. On a
   rail of many triggers that meant two panels on screen at once.
 
-
 ### Ingestion actions — 2026-09-23
 
 `DocumentWorkspace` offers no user cancellation while ingestion is pending or
 running. Delete remains disabled until the task settles; its tooltip explains
 that ingestion is active. A durable terminal event refreshes document state and
 quota. Cancellation scope and cleanup are deferred to a separate design.
-
 
 ### Ingestion failure explanations — 2026-09-23
 
@@ -4937,7 +4934,6 @@ an explicit fallback when no reason was recorded and a copyable document ID.
 Personal Resources loads both failures and successes so an old failure does not
 return after a successful retry. Existing tooltip, copy and task components are
 reused. These changes have static review only; runtime/visual checks are pending.
-
 
 ### Ingestion relaunch — 2026-09-26
 
@@ -4952,7 +4948,6 @@ only for documents whose original profile is unknown; in a mixed selection this
 choice applies only to those documents. Cancel submits nothing. Pending requests
 suppress repeated clicks. Completed relaunches supply a new terminal task outcome
 so an earlier failure does not outlive a successful retry.
-
 
 ## Prompt commands in the composer — 2026-09-28
 
@@ -5101,3 +5096,29 @@ for `stage="agent_question"`. For one question, both resume it as skipped. With
 grouped questions, Skip records a draft for the active tab, while close skips
 the entire group in one request. Skipped answers appear in the same cards,
 including after history reload.
+
+## Shared hosted-application UI components
+
+The alpha.3 package surface reuses canonical atoms and molecules in place;
+see [the package README](../../../libs/frontend/ui/README.md) for exports and
+neutral contracts. KPI/table primitives take caller labels, while FRED's thin
+application adapters supply translations. Toast copying is application-owned.
+The generic StatusBadge is available to hosted applications, which own their
+domain-specific labels and tone mappings. Task/ingestion
+badges and charts remain separate domain components.
+
+### Hosted UI consumer interaction contracts
+
+`DataTable.onRowClick`, `InlineDrawer.closeLabel` and `KpiStatCard.tone` complete
+the evaluator's SDK integration. Defaults preserve current Fred consumers.
+Behavior and acceptance scenarios: [frontend package specs](../../../openspec/specs/frontend-package-archives/spec.md).
+
+### Evaluation application — built-in UI retired (#2904)
+
+Evaluation campaigns are accessed through the registered application under Apps.
+Team settings no longer contain an Evaluations section; old
+`/team/:teamId/settings/evaluations` URLs follow the existing Members fallback.
+Fred's Activity page, task rehydration and task event subscriptions query only
+Fred's control-plane and knowledge-flow services. Evaluation progress belongs
+to the external application's UI. Shared SDK components and backend evaluation
+permissions remain available; no evaluation data is removed.

@@ -43,7 +43,7 @@ import type { TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.ty
 import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
-import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
+import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import PieChart from "@shared/molecules/PieChart/PieChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
 import HistogramChart from "@shared/molecules/HistogramChart/HistogramChart";

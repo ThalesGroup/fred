@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-On a pull request changing a production Dockerfile, an image dependency manifest or lockfile, or an image build recipe, confirm each publishable Docker image job publishes a Trivy summary and attaches its JSON report. On other pull requests, confirm all five image builds still run while Trivy steps are skipped. `ws-bench` remains build-only. A critical finding produces a warning annotation without failing that job.
+On any pull request, confirm all five Docker images build and the four publishable final images receive separate Trivy checks and JSON reports. The frontend builder stage and all tracked Python and npm lockfiles also receive checks. Job logs list findings across all severities, and the JSON reports include package inventories; critical findings produce warning annotations without failing the checks. `ws-bench` remains build-only.
 
 ## Rollback
 
@@ -32,4 +32,4 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-This is an advisory pull request scan. Release publication does not run Trivy and critical findings do not block a merge. The frontend's final image contains built static assets, so scanning that image does not inventory npm packages used only in the builder stage.
+This is an advisory pull request scan. Release publication does not run Trivy and critical findings do not block a merge. Lockfile findings include development and fixture dependencies that may not appear in production images. Newly disclosed CVEs appear only when another pull request runs; there is no scheduled scan.

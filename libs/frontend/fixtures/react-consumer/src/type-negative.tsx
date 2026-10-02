@@ -71,3 +71,97 @@ export {
   badDialog,
   badCheckbox,
 };
+
+import {
+  StatusBadge,
+  ServiceNotice,
+  PageEmptyState,
+  Switch,
+  DataTable,
+  KpiStatCard,
+  InlineDrawer,
+  TextArea,
+  ToastProvider,
+  type DataTableColumn,
+  type SortState,
+} from "@fred-oss/ui";
+
+// @ts-expect-error Tones are a closed domain-neutral union.
+const badBadge = <StatusBadge label="Bad" tone="completed" />;
+// @ts-expect-error Custom application icons are outside the package.
+const badNotice = <ServiceNotice icon="customAgent" title="Bad" />;
+// @ts-expect-error Unsupported material glyphs are rejected.
+const badEmpty = <PageEmptyState icon="imaginary_icon" message="Bad" />;
+// @ts-expect-error Only implemented switch sizes are supported.
+const badSwitch = <Switch size="large" />;
+const badColumn: DataTableColumn<{ id: number }> = {
+  label: "Bad",
+  // @ts-expect-error Row renderers retain their generic row type.
+  cellRenderer: (row: string) => row,
+};
+const badTable = (
+  // @ts-expect-error Table row keys are string or number, never an arbitrary object.
+  <DataTable data={[{ id: 1 }]} columns={[]} rowKey={(row) => row} />
+);
+const badSelection = (
+  <DataTable
+    data={[{ id: 1 }]}
+    columns={[]}
+    rowKey={(row) => row.id}
+    // @ts-expect-error Row selection is not part of the hosted table contract.
+    selectable
+  />
+);
+const badDrawerLayout = (
+  // @ts-expect-error Push, resize and floating layouts stay FRED-internal.
+  <InlineDrawer open title="Bad" onClose={() => {}} layout="push" />
+);
+export {
+  badBadge,
+  badNotice,
+  badEmpty,
+  badSwitch,
+  badColumn,
+  badTable,
+  badSelection,
+  badDrawerLayout,
+};
+
+const badRowActivation = (
+  <DataTable<{ id: string }>
+    data={[]}
+    columns={[]}
+    rowKey={(row) => row.id}
+    // @ts-expect-error The row callback retains the table row type.
+    onRowClick={(row: number) => void row}
+  />
+);
+const badKpiTone = (
+  <KpiStatCard
+    label="Bad"
+    // @ts-expect-error KPI tones share the supported status vocabulary.
+    tone="purple"
+    isLoading={false}
+    isError={false}
+  />
+);
+const uncontrolledTextArea = (
+  // @ts-expect-error Hosted TextArea is controlled: value and onChange are required.
+  <TextArea label="Notes" maxLength={50} />
+);
+const badToastCopy = (
+  // @ts-expect-error The copy action is not part of the hosted toast contract.
+  <ToastProvider copyLabel="Copy">Bad</ToastProvider>
+);
+const ascending: SortState = { columnLabel: "Id", direction: "asc" };
+const loneSortState = (
+  // @ts-expect-error Controlled sorting requires sortState and onSortChange together.
+  <DataTable data={[{ id: 1 }]} columns={[]} sortState={ascending} />
+);
+export {
+  badRowActivation,
+  badKpiTone,
+  uncontrolledTextArea,
+  badToastCopy,
+  loneSortState,
+};
