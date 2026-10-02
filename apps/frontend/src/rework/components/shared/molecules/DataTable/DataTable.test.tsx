@@ -1143,3 +1143,26 @@ it.each([
     renderToStaticMarkup(<DataTable data={data} rowKey={rowKey} columns={[]} onRowClick={() => {}} />),
   ).toThrow("row activation requires at least one column");
 });
+
+it.each(["primitive", "object"])("separates repeated %s occurrences across client pages", (kind) => {
+  const value = kind === "primitive" ? "duplicate" : { id: 1 };
+  render(
+    <DataTable
+      data={[value, value]}
+      pageSize={1}
+      columns={[{ label: "Value", cellRenderer: () => <input defaultValue="original" /> }]}
+    />,
+  );
+  const first = container.querySelector("input") as HTMLInputElement;
+  first.value = "edited first occurrence";
+  first.focus();
+  click(container.querySelector('[aria-label="dataTable.pagination.next"]'));
+  const second = container.querySelector("input") as HTMLInputElement;
+  expect(second).not.toBe(first);
+  expect(second.value).toBe("original");
+  expect(document.activeElement).not.toBe(second);
+  second.value = "edited second occurrence";
+  click(container.querySelector('[aria-label="dataTable.pagination.prev"]'));
+  expect(container.querySelector("input")).not.toBe(second);
+  expect((container.querySelector("input") as HTMLInputElement).value).toBe("original");
+});

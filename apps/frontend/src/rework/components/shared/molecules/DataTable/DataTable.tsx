@@ -361,6 +361,18 @@ export default function DataTable<T>({
   }, [serverPagination]);
   // Server-paginated `data` already IS the current page's rows (the caller
   // fetched exactly that window) — slicing it again here would drop rows.
+  const keyOccurrences = new Map<string, number>();
+  const sortedKeys = sortedData.map((row) => {
+    if (rowKey) return rowKey(row);
+    const identity = fallbackKey(row);
+    const occurrence = keyOccurrences.get(identity) ?? 0;
+    keyOccurrences.set(identity, occurrence + 1);
+    return `${identity}:${occurrence}`;
+  });
+  const visibleKeys =
+    paginationEnabled && !serverPagination
+      ? sortedKeys.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
+      : sortedKeys;
   const pageData =
     paginationEnabled && !serverPagination
       ? sortedData.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
@@ -374,8 +386,7 @@ export default function DataTable<T>({
     }
   };
 
-  const keyOccurrences = new Map<string, number>();
-  const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
+  const pageKeys = selectable && rowKey ? visibleKeys : [];
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
   const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
   const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
@@ -478,10 +489,7 @@ export default function DataTable<T>({
         </div>
         <div role="rowgroup" className={styles["datatable-body"]}>
           {pageData.map((line, lineIndex) => {
-            const identity = rowKey ? undefined : fallbackKey(line);
-            const occurrence = identity === undefined ? 0 : (keyOccurrences.get(identity) ?? 0);
-            if (identity !== undefined) keyOccurrences.set(identity, occurrence + 1);
-            const key = rowKey ? rowKey(line) : `${identity}:${occurrence}`;
+            const key = visibleKeys[lineIndex];
             const isSelected = selectable && (selectedKeys?.has(key) ?? false);
             return (
               <div
