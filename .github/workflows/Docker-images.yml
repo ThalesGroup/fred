@@ -127,7 +127,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_args }}
           push: ${{ inputs.publish }}
-          tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
+          load: ${{ !inputs.publish }}
+          tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
           # The empty string is falsy in expressions, so it has to sit on the
           # falsy side: `publish && '' || format(...)` returns the format branch
@@ -137,3 +138,39 @@ jobs:
           # timeout must cost a slower build next time, not a red check on an
           # image that already compiled.
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
+
+      - name: Scan built image for critical CVEs
+        if: ${{ !inputs.publish }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ format('fred-pr/{0}:scan', matrix.name) }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+
+      - name: Summarize critical CVEs
+        if: ${{ !inputs.publish }}
+        env:
+          IMAGE_NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results.json)
+          echo "### Trivy: ${IMAGE_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          if (( count > 0 )); then
+            ids=$(jq -r '[.Results[]?.Vulnerabilities[]? | .VulnerabilityID // "unknown"] | unique | .[:20] | join(", ")' trivy-results.json)
+            echo "::warning title=Critical CVEs in ${IMAGE_NAME}::Trivy found ${count} critical vulnerability findings. See the job summary and report artifact."
+            echo "${count} critical OS/library vulnerability findings. CVE IDs (first 20): ${ids}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No critical OS/library vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Trivy report
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+          path: trivy-results.json
+          retention-days: 14
