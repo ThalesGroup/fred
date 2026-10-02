@@ -1066,12 +1066,47 @@ async function verifyHostedComponents(page) {
   const badges = await hosted
     .locator("[data-badge] span")
     .evaluateAll((elements) =>
-      elements.map((element) => ({
-        label: element.textContent,
-        color: getComputedStyle(element).color,
-      })),
+      elements.map((element) => {
+        const tone = element.parentElement.dataset.badge;
+        const container =
+          tone === "neutral" ? "surface-container" : `${tone}-container`;
+        const foreground =
+          tone === "neutral" ? "on-surface" : `on-${tone}-container`;
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = `var(--${container})`;
+        probe.style.color = `var(--${foreground})`;
+        element.parentElement.append(probe);
+        const expected = getComputedStyle(probe);
+        const actual = getComputedStyle(element);
+        const result = {
+          label: element.textContent,
+          color: actual.color,
+          background: actual.backgroundColor,
+          expectedColor: expected.color,
+          expectedBackground: expected.backgroundColor,
+        };
+        probe.remove();
+        return result;
+      }),
     );
   assert.equal(badges.length, 5);
+  for (const badge of badges) {
+    assert.equal(
+      badge.color,
+      badge.expectedColor,
+      `${badge.label}: foreground token`,
+    );
+    assert.equal(
+      badge.background,
+      badge.expectedBackground,
+      `${badge.label}: container token`,
+    );
+    assert.notEqual(
+      badge.background,
+      "rgba(0, 0, 0, 0)",
+      `${badge.label}: transparent container`,
+    );
+  }
   return {
     colors,
     badges,

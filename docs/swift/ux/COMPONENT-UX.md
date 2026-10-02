@@ -5080,7 +5080,9 @@ see [the package README](../../../libs/frontend/ui/README.md) for exports and
 neutral contracts. KPI/table primitives take caller labels, while FRED's thin
 application adapters supply translations. Toast copying is application-owned.
 The generic StatusBadge is available to hosted applications, which own their
-domain-specific labels and tone mappings. Task/ingestion
+domain-specific labels and tone mappings. Each tone pairs its container background
+with the corresponding on-container foreground; neutral uses surface-container
+and on-surface. Task/ingestion
 badges and charts remain separate domain components.
 
 ### Hosted UI consumer interaction contracts
