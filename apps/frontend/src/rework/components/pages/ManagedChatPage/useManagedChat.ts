@@ -546,7 +546,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // through the composer. `turnCommand` only adds the descriptor to the
   // context; every guard, session write and restore below is shared.
   const sendTurn = useCallback(
-    async (text: string, turnCommand?: TurnCommand, interrupted?: InterruptedRunChoice) => {
+    async (text: string, turnCommand?: TurnCommand, interrupted?: InterruptedRunChoice): Promise<boolean> => {
       const attachmentContext = attachments.attachmentsMarkdown;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
@@ -566,11 +566,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         console.debug(
           `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
-        return;
+        return false;
       }
       if (handleSendOwnerRef.current) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
-        return;
+        return false;
       }
       // `inputTooLong` above measures the composer draft, which on a command
       // is the short command line — not what goes on the wire. The runtime
@@ -585,7 +585,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           summary: t("chatbot.commandMenu.runErrorSummary"),
           detail: t("chatbot.errors.chatInputTooLong", { limit: maxChatInputChars }),
         });
-        return;
+        return false;
       }
       handleSendOwnerRef.current = true;
       try {
@@ -631,7 +631,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         const writesOk = await flushSessionWrites(sid);
         if (!writesOk) {
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
-          return;
+          return false;
         }
 
         // Input/attachments stay untouched here too — cleared only from
@@ -646,7 +646,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // restore the complete editable draft, including surrounding whitespace —
         // for a command, the command line the user actually typed.
         submittedDraftRef.current = { sessionId: sid, draft: input, text, command: turnCommand };
-        send(
+        return send(
           text,
           sid,
           turnCommand ? { ...runtimeContext, command: turnCommand } : runtimeContext,
@@ -706,13 +706,22 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       if (!pendingHitl || hitlResumeOwnerRef.current === pendingHitl) return;
       if (pendingHitl.payload.stage === "execution_interrupted") {
         // Not a HITL resume: the answer is a new turn that continues or restarts.
-        const interruptionId = pendingHitl.payload.metadata?.interruption_id;
+        const prompt = pendingHitl;
+        const interruptionId = prompt.payload.metadata?.interruption_id;
         setPendingHitl(null);
+        // A request that never started leaves the run interrupted: offer the choice again.
+        const restoreIfNotSent = (started: boolean) => {
+          if (!started && activeSessionIdRef.current === prompt.session_id) {
+            setPendingHitl((current) => current ?? prompt);
+          }
+        };
         if (answer === "continue" && typeof interruptionId === "string" && interruptionId) {
           const { runtimeContext, turnOptions } = buildTurnContextRef.current();
-          send("", pendingHitl.session_id, runtimeContext, turnOptions, { action: "continue", interruptionId });
+          void send("", prompt.session_id, runtimeContext, turnOptions, { action: "continue", interruptionId }).then(
+            restoreIfNotSent,
+          );
         } else {
-          void restartLastTurnRef.current();
+          void restartLastTurnRef.current().then(restoreIfNotSent);
         }
         return;
       }

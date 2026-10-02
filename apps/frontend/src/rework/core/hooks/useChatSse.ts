@@ -338,8 +338,9 @@ export function useChatSse(
   // `preflightTurnToken`), so two mounted chats do not silence each other.
   const degradedTokenWarnedRef = useRef(false);
   // A deliberate Stop is never offered back as an interrupted run: the next
-  // send restarts instead.
-  const stoppedRef = useRef(false);
+  // send in that session restarts instead. Survives session switches.
+  const stoppedSessionsRef = useRef(new Set<string>());
+  const turnSessionRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -402,7 +403,6 @@ export function useChatSse(
     // unconditional, unlike releasePreflightLock's ownership-checked release,
     // because this IS the current owner's cancellation, issued from outside.
     preflightOwnerRef.current = null;
-    stoppedRef.current = false;
     setWaitResponse(false);
     thoughtBufsRef.current.clear();
     setAll([]);
@@ -426,7 +426,7 @@ export function useChatSse(
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
-    stoppedRef.current = true;
+    if (turnSessionRef.current) stoppedSessionsRef.current.add(turnSessionRef.current);
     setWaitResponse(false);
   }, []);
 
@@ -796,9 +796,10 @@ export function useChatSse(
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       interrupted?: InterruptedRunChoice,
-    ) => {
+    ): Promise<boolean> => {
       const sendId = Math.random().toString(36).slice(2, 8);
-      const choice = interrupted ?? (stoppedRef.current ? { action: "restart" as const } : undefined);
+      const stopped = stoppedSessionsRef.current.has(sessionId ?? "draft");
+      const choice = interrupted ?? (stopped ? { action: "restart" as const } : undefined);
       const continuing = choice?.action === "continue";
       console.debug(
         `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} inputChars=${countUnicodeCodePoints(input)}`,
@@ -809,7 +810,7 @@ export function useChatSse(
       // is dropped here, outright: not cancelled, not merged, not queued.
       if (preflightOwnerRef.current) {
         console.debug(`[useChatSse][${sendId}] IGNORED — a send() is already preflighting`);
-        return;
+        return false;
       }
 
       if (abortRef.current) {
@@ -877,11 +878,11 @@ export function useChatSse(
       if (ac.signal.aborted) {
         console.debug(`[useChatSse][${sendId}] aborted during token refresh — never reaching onTurnStarted`);
         releasePreflightLock();
-        return;
+        return false;
       }
       if (tokenProblem) {
         failPreflight("token refresh", new Error(tokenProblem));
-        return;
+        return false;
       }
       // Ordering barrier: any in-flight session row creation and context-prompt
       // PATCH must commit before prepare-execution reads them, otherwise the
@@ -896,17 +897,17 @@ export function useChatSse(
         writesCommitted = await flushPendingWrites?.(sessionId ?? "");
       } catch (err) {
         failPreflight("session write flush", err);
-        return;
+        return false;
       }
       if (ac.signal.aborted) {
         console.debug(`[useChatSse][${sendId}] aborted during flush — never reaching onTurnStarted`);
         releasePreflightLock();
-        return;
+        return false;
       }
       if (writesCommitted === false) {
         console.debug(`[useChatSse][${sendId}] aborting — a pending session write failed`);
         releasePreflightLock();
-        return;
+        return false;
       }
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
@@ -925,7 +926,7 @@ export function useChatSse(
         if (ac.signal.aborted) {
           console.debug(`[useChatSse][${sendId}] aborted right after prepare-execution — never reaching onTurnStarted`);
           releasePreflightLock();
-          return;
+          return false;
         }
         console.debug(
           `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
@@ -965,7 +966,7 @@ export function useChatSse(
         // toast and `waitResponse` never set, so the composer looked idle
         // with no sign the message never sent.
         failPreflight("prepare-execution", err);
-        return;
+        return false;
       }
 
       // Last gate BEFORE the turn commits. Deliberately above `onTurnStarted`
@@ -983,11 +984,11 @@ export function useChatSse(
           `[useChatSse][${sendId}] aborted during the wire-time token check — never reaching onTurnStarted`,
         );
         releasePreflightLock();
-        return;
+        return false;
       }
       if (staleToken) {
         failPreflight("token refresh", new Error(staleToken));
-        return;
+        return false;
       }
 
       // The turn is now genuinely starting. Preflight is over — release the
@@ -999,7 +1000,8 @@ export function useChatSse(
       if (preflightOwnerRef.current === ac) {
         preflightOwnerRef.current = null;
       }
-      stoppedRef.current = false;
+      stoppedSessionsRef.current.delete(effectiveSessionId);
+      turnSessionRef.current = effectiveSessionId;
       // A continue sends no message: the composer keeps the user's draft.
       if (!continuing) onTurnStarted?.();
 
@@ -1080,6 +1082,7 @@ export function useChatSse(
           setWaitResponse(false);
         }
       }
+      return true;
     },
     [
       agentInstanceId,
@@ -1124,6 +1127,7 @@ export function useChatSse(
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
+      turnSessionRef.current = pending.session_id;
       // Takes over `abortRef` from outside, exactly like abort()/reset() do —
       // so it must also unconditionally free preflightOwnerRef the same way
       // they do. Without this, a send() still preflighting when this fires

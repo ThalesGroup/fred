@@ -91,7 +91,7 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // a fresh `vi.fn()` per render would make those deps look "changed" every
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
-const sendMock = vi.fn(async (..._args: unknown[]) => {});
+const sendMock = vi.fn(async (..._args: unknown[]) => true);
 const prepareChatControlsMock = vi.fn(async () => ({}));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
@@ -1419,6 +1419,22 @@ describe("useManagedChat — session write reliability", () => {
     });
     expect(latest.pendingHitl).toBeNull();
     expect(latest.input).toBe("again");
+  });
+
+  it("keeps offering the choice when the continue request never started", async () => {
+    sendMock.mockResolvedValueOnce(false);
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("continue");
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(interruptedEvent);
   });
 
   it("restart on an interrupted run re-sends the same turn, command included, with restart", async () => {

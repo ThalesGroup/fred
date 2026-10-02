@@ -4343,8 +4343,15 @@ async def _iterate_runtime_event_payloads_inner(
                     occurrence_id=request.occurrence_id,
                 )
             elif isinstance(executor, GraphExecutor) and continuing:
-                # The HITL single-use claim, keyed by the interruption, admits
-                # one continue across replicas.
+                # Read-only check first, so a stale id or a failed read leaves no
+                # claim. The HITL single-use claim then admits one continue
+                # across replicas; the executor re-checks after it.
+                if await executor.interruption_id(execution_config) != (
+                    request.interruption_id
+                ):
+                    raise RuntimeError(
+                        "Graph execution has no interrupted step matching this interruption_id."
+                    )
                 graph_claim = await _claim_hitl_resume_before_invocation(
                     session_id=executor.thread_id(execution_config),
                     checkpoint_ns="",

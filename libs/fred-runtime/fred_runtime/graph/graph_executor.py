@@ -32,6 +32,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, cast
+from uuid import uuid4
 
 from fred_core.history.history_schema import coerce_finish_reason
 from fred_sdk.contracts.context import (
@@ -210,6 +211,8 @@ def _final_event_from_output(
 # so the next turn reads the completed state from the thread's last checkpoint.
 _COMPLETE_NODE = "__fred_complete__"
 _TURN_KEY = "fred_graph_turn"
+# Not `__`-prefixed: LangGraph copies it into each checkpoint's metadata.
+_RUN_KEY = "fred_graph_run"
 
 
 @dataclass(slots=True)
@@ -451,10 +454,13 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         outcome: _RunOutcome,
     ) -> AsyncIterator[RuntimeEvent]:
         thread = self._thread_config(config)
-        graph_input = await self._graph_input(input_model, config, thread)
+        snapshot = await self._compiled.aget_state(thread)
+        graph_input = self._graph_input(input_model, config, snapshot)
         if isinstance(graph_input, ExecutionInterruptedRuntimeEvent):
             yield graph_input
             return
+        # Stamped on every checkpoint this run writes; failure cleanup is fenced on it.
+        run_mark = {"start": _checkpoint_id(snapshot.config), "run": uuid4().hex}
         recorder = _TurnRecorder()
         completed: BaseModel | None = None
         run_config = cast(
@@ -464,6 +470,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                     **thread.get("configurable", {}),
                     **self._owner_keys(),
                     _TURN_KEY: recorder,
+                    _RUN_KEY: run_mark["run"],
                 },
                 # +1: the technical completion node is one more superstep.
                 "recursion_limit": config.max_steps + 1,
@@ -492,7 +499,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             outcome.error = RuntimeError(
                 f"Graph execution exceeded max_steps={config.max_steps}."
             )
-            await self._end_unfinished_run(thread)
+            await self._end_unfinished_run(thread, run_mark)
             return
         except Exception as exc:
             logger.exception(
@@ -500,7 +507,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 self._definition.agent_id,
             )
             outcome.error = exc
-            await self._end_unfinished_run(thread)
+            await self._end_unfinished_run(thread, run_mark)
             return
 
         if outcome.awaiting is not None:
@@ -510,7 +517,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
         if completed is None:
             outcome.error = RuntimeError("Graph execution produced no completed state.")
-            await self._end_unfinished_run(thread)
+            await self._end_unfinished_run(thread, run_mark)
             return
         output = self._definition.output_model().model_validate(
             self._definition.build_output(completed)
@@ -523,12 +530,21 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             finish_reason=recorder.finish_reason,
         )
 
-    async def _end_unfinished_run(self, thread: RunnableConfig) -> None:
+    async def _end_unfinished_run(
+        self, thread: RunnableConfig, run_mark: dict[str, str | None]
+    ) -> None:
         """
         Clear the pending steps of a run ending in this live process, so that
-        only a lost process leaves an execution the user can continue.
+        only a lost process leaves an execution the user can continue. Skipped
+        when another run has since moved the head: its pending steps are its own.
         """
         try:
+            snapshot = await self._compiled.aget_state(thread)
+            head_is_ours = _checkpoint_id(snapshot.config) == run_mark["start"] or (
+                (snapshot.metadata or {}).get(_RUN_KEY) == run_mark["run"]
+            )
+            if not head_is_ours:
+                return
             await self._compiled.aupdate_state(thread, None, as_node=END)
         except Exception:
             logger.warning(
@@ -555,13 +571,17 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             interruption_id=_interruption_id(snapshot),
         )
 
-    async def _graph_input(
+    async def interruption_id(self, config: ExecutionConfig) -> str | None:
+        """The id a continue must echo, or None when nothing is interrupted."""
+        snapshot = await self._compiled.aget_state(self._thread_config(config))
+        return _interruption_id(snapshot) if _is_interrupted(snapshot) else None
+
+    def _graph_input(
         self,
         input_model: BaseModel,
         config: ExecutionConfig,
-        thread: RunnableConfig,
+        snapshot: Any,
     ) -> Command | dict[str, object] | ExecutionInterruptedRuntimeEvent | None:
-        snapshot = await self._compiled.aget_state(thread)
         if config.resume_payload is not None:
             pending_ids = {pending.id for pending in snapshot.interrupts}
             if not pending_ids:
@@ -576,9 +596,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 return Command(resume={config.interrupt_id: config.resume_payload})
             return Command(resume=config.resume_payload)
 
-        # Pending steps without a pause: a lost process left them. A run still
-        # live on another replica looks the same; nothing here tells them apart.
-        interrupted = bool(snapshot.next) and not snapshot.interrupts
+        interrupted = _is_interrupted(snapshot)
         if config.interrupted_action == "continue":
             if not interrupted or config.interruption_id != _interruption_id(snapshot):
                 raise RuntimeError(
@@ -666,10 +684,21 @@ def _recorder(config: RunnableConfig) -> _TurnRecorder:
     return recorder if isinstance(recorder, _TurnRecorder) else _TurnRecorder()
 
 
+def _is_interrupted(snapshot: Any) -> bool:
+    # Pending steps without a pause: a lost process left them. A run still
+    # live on another replica looks the same; nothing here tells them apart.
+    return bool(snapshot.next) and not snapshot.interrupts
+
+
+def _checkpoint_id(config: Any) -> str | None:
+    configurable = (config or {}).get("configurable", {})
+    return configurable.get("checkpoint_id")
+
+
 def _interruption_id(snapshot: Any) -> str:
     """Opaque id of the thread head; any later checkpoint makes it stale."""
-    configurable = snapshot.config.get("configurable", {})
-    head = f"{configurable.get('thread_id')}\0{configurable.get('checkpoint_id')}"
+    thread_id = snapshot.config.get("configurable", {}).get("thread_id")
+    head = f"{thread_id}\0{_checkpoint_id(snapshot.config)}"
     return hashlib.sha256(head.encode()).hexdigest()[:32]
 
 

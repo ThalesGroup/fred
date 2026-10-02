@@ -543,3 +543,38 @@ def test_openai_compat_cannot_answer_the_card_so_a_lost_run_restarts(
     assert response.status_code == 200, response.text
     assert '"finish_reason":"stop"' in response.text
     assert RUNS["prepare"] == 2  # restarted from the entry step
+
+
+@pytest.mark.asyncio
+async def test_a_failing_run_never_clears_a_head_another_run_wrote(
+    checkpointer: FredSqlCheckpointer,
+) -> None:
+    await _lose_run_while_publishing(checkpointer)
+    executor = await _executor(checkpointer)
+    thread = executor._thread_config(ExecutionConfig(session_id="s1"))
+
+    # A run that started elsewhere and wrote nothing here must not clear it.
+    await executor._end_unfinished_run(thread, {"start": "older-head", "run": "other"})
+    await _interruption(checkpointer)
+
+    snapshot = await executor._compiled.aget_state(thread)
+    head = snapshot.config.get("configurable", {}).get("checkpoint_id")
+    await executor._end_unfinished_run(thread, {"start": head, "run": "other"})
+    assert (await executor._compiled.aget_state(thread)).next == ()
+
+
+def test_pod_rejects_a_stale_continue_without_leaving_a_claim(
+    tmp_path, _offline_model
+) -> None:
+    from fastapi.testclient import TestClient
+    from test_agent_app import _hitl_claim_rows
+
+    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+        checkpointer = _lose_run_in_pod()
+        refused = _post(
+            client, interrupted_action="continue", interruption_id="stale-or-made-up"
+        )
+        rows = asyncio.run(_hitl_claim_rows(checkpointer))
+
+    assert refused["kind"] == "execution_error"
+    assert rows == []

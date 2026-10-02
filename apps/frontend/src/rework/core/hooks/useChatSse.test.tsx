@@ -368,7 +368,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
     mount();
 
-    let sendPromise!: Promise<void>;
+    let sendPromise!: Promise<boolean>;
     await act(async () => {
       sendPromise = latest.send("old session draft", "session-a");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
@@ -410,7 +410,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(response.promise);
     mount();
 
-    let sendPromise!: Promise<void>;
+    let sendPromise!: Promise<boolean>;
     await act(async () => {
       sendPromise = latest.send("old session draft", "session-a");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
@@ -876,12 +876,19 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("after Stop, only the next message restarts", async () => {
+  it("after Stop, the next message of that session restarts, even after visiting another session", async () => {
     flushPendingWrites = async () => true;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
     mount();
 
+    await act(async () => {
+      await latest.send("running", "session-1");
+    });
     act(() => latest.abort());
+    act(() => latest.reset()); // navigating to another session
+    await act(async () => {
+      await latest.send("elsewhere", "session-2");
+    });
     await act(async () => {
       await latest.send("after stop", "session-1");
     });
@@ -890,9 +897,18 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     });
 
     const bodies = fetchSpy.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
-    expect(bodies[0].interrupted_action).toBe("restart");
-    expect(bodies[1].interrupted_action).toBeUndefined();
+    expect(bodies.map((body) => body.interrupted_action)).toEqual([undefined, undefined, "restart", undefined]);
     fetchSpy.mockRestore();
+  });
+
+  it("send() reports whether the turn started", async () => {
+    flushPendingWrites = async () => false;
+    mount();
+    let started: boolean | undefined;
+    await act(async () => {
+      started = await latest.send("hello", "session-1");
+    });
+    expect(started).toBe(false);
   });
 
   it("send() forwards the UI language into runtime_context", async () => {
@@ -1416,7 +1432,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     } as Response);
     mount();
 
-    let sendPromise!: Promise<void>;
+    let sendPromise!: Promise<boolean>;
     await act(async () => {
       sendPromise = latest.send("hello", "session-1");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
