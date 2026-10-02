@@ -15,7 +15,9 @@
 
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+import LocalizedKpiStatCard from "./LocalizedKpiStatCard";
 import KpiStatCard from "./KpiStatCard";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -58,4 +60,15 @@ it("retains neutral styling by default and accepts outcome tones", () => {
   } finally {
     act(() => root.unmount());
   }
+});
+
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => `translated:${key}` }) }));
+it.each([
+  ["isLoading", "loadingLabel", "common.loading"],
+  ["isError", "errorLabel", "common.loadingError"],
+  ["unavailable", "noDataLabel", "common.noData"],
+])("preserves localized %s defaults under undefined overrides", (state, label, key) => {
+  const props = { label: "Runs", isLoading: false, isError: false, [state]: true, [label]: undefined };
+  expect(renderToStaticMarkup(<LocalizedKpiStatCard {...props} />)).toContain(`translated:${key}`);
+  expect(renderToStaticMarkup(<LocalizedKpiStatCard {...props} {...{ [label]: "Custom" }} />)).toContain("Custom");
 });

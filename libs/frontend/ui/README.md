@@ -103,10 +103,11 @@ and pagination.
 `KpiStatCard.tone` accepts the shared `StatusBadgeTone` vocabulary and defaults to
 neutral. These additive alpha.3 props preserve existing consumer defaults.
 
-`TextArea` is controlled: pass `value` (use `""` for an empty field) and
-`onChange`, or `readOnly` for display. `defaultValue` is unsupported and rejected
-by the public types and at runtime, keeping the character counter tied to the
-value supplied by the consumer. A supplied native `id` is shared with its label;
+`TextArea` preserves native controlled and uncontrolled modes. With `value`,
+supply `onChange`, `readOnly={true}` or `disabled={true}`; this is enforced in
+types and at runtime. Without `value`, optionally provide `defaultValue`.
+Do not mix the two. The character counter follows edits and native form resets,
+including canceled resets. A supplied native `id` is shared with its label;
 otherwise the component generates one.
 
 `Switch` always renders a native checkbox. Its `type` is fixed and cannot be
@@ -134,3 +135,8 @@ Visual and accessible progress use the same clamped value in [0, max]. Invalid
 (non-finite or non-positive) maxima produce an empty [0, 0] range; NaN current
 becomes zero and infinite current clamps to the corresponding bound.
 PageEmptyState actions are click-only buttons and do not submit enclosing forms.
+
+DataTable rejects pageSize and server limits
+that are not positive safe integers before pagination arithmetic.
+FileDropzone associates its error with the upload control and announces new
+errors through an alert; clearing the error also clears its invalid state.

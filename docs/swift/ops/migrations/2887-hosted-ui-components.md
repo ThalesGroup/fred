@@ -23,7 +23,7 @@ Validate that an authorized team can open the evaluator through Apps, then deplo
 
 Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `layout="push"` and provide `width` as a pixel string (for example, `"480px"`, also the default). Relative CSS units remain supported without `resizable`; invalid resize widths are rejected by TypeScript and at runtime.
 
-`TextArea` consumers must supply a controlled `value` (`""` for empty content), with `onChange` or `readOnly`; `defaultValue` is rejected.
+`TextArea` retains native uncontrolled usage, including `defaultValue`. Controlled `value` requires `onChange`, `readOnly={true}` or `disabled={true}`; do not combine `value` and `defaultValue`. Its counter follows edits and native form reset.
 
 Selectable `DataTable` consumers must supply a stable `rowKey` function, controlled `selectedKeys` set and `onSelectionChange` handler (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected. Controlled sorting requires both `sortState` (including `null`) and `onSortChange`; omit both for internal sorting, with `sortValue` on every sortable column.
 

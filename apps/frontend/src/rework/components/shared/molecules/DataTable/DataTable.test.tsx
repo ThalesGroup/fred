@@ -15,6 +15,7 @@
 
 import { act } from "react";
 import type { DataTableProps } from "./DataTable.tsx";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -887,3 +888,21 @@ it("announces unsorted, ascending, descending and cleared states using localized
   click(button);
   expect(button.getAttribute("aria-label")).toBe(label("none"));
 });
+
+it.each([0, -1, NaN, Infinity, -Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1])(
+  "rejects invalid pagination size %s",
+  (value) => {
+    expect(() => renderToStaticMarkup(<DataTable columns={columns} data={makeRows(2)} pageSize={value} />)).toThrow(
+      "pageSize must be a positive safe integer",
+    );
+    expect(() =>
+      renderToStaticMarkup(
+        <DataTable
+          columns={columns}
+          data={makeRows(2)}
+          serverPagination={{ totalCount: 2, offset: 0, limit: value, onOffsetChange: vi.fn() }}
+        />,
+      ),
+    ).toThrow("serverPagination.limit must be a positive safe integer");
+  },
+);

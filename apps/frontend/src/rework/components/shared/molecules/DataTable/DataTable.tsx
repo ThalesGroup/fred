@@ -220,6 +220,14 @@ export default function DataTable<T>({
   if (!onSortChange && columns.some((column) => column.sortable && !column.sortValue)) {
     throw new Error("DataTable: uncontrolled sortable columns require sortValue.");
   }
+  for (const [name, value] of [
+    ["pageSize", pageSize],
+    ["serverPagination.limit", serverPagination?.limit],
+  ] as const) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
+      throw new Error(`DataTable: ${name} must be a positive safe integer.`);
+    }
+  }
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);

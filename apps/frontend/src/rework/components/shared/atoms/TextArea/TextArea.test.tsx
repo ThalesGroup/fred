@@ -26,11 +26,13 @@ it("counts controlled text and empty values", () => {
   expect(renderToStaticMarkup(<TextArea label="Notes" value="" readOnly maxLength={100} />)).toContain("0 / 100");
 });
 
-it.each([{ defaultValue: "abc" }, {}, { value: "abc", defaultValue: "abc" }])(
-  "rejects uncontrolled or mixed props from untyped consumers: %j",
+it.each([{ value: null }, { value: "abc", defaultValue: "abc" }])(
+  "rejects null controlled or mixed props from untyped consumers: %j",
   (values) => {
     const props = { label: "Notes", maxLength: 100, ...values } as TextAreaProps;
-    expect(() => renderToStaticMarkup(<TextArea {...props} />)).toThrow("TextArea requires a controlled value");
+    expect(() => renderToStaticMarkup(<TextArea {...props} />)).toThrow(
+      "TextArea: use either a non-null controlled value or defaultValue, not both.",
+    );
   },
 );
 
@@ -81,4 +83,55 @@ it.each([undefined, "notes"])("associates the label with its textarea for id %s"
   expect(textarea.id).not.toBe("");
   if (id) expect(textarea.id).toBe(id);
   expect(container.querySelector("label")!.htmlFor).toBe(textarea.id);
+});
+
+it("rejects an implicitly frozen controlled field", () => {
+  const props = { label: "Notes", value: "abc" } as TextAreaProps;
+  expect(() => renderToStaticMarkup(<TextArea {...props} />)).toThrow(
+    "TextArea requires onChange, readOnly or disabled",
+  );
+});
+it("accepts explicit disabled mode without a change handler", () => {
+  expect(renderToStaticMarkup(<TextArea label="Notes" value="abc" disabled />)).toContain("disabled");
+});
+
+it("preserves native uncontrolled editing, refs and form reset with an accurate counter", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const ref = { current: null as HTMLTextAreaElement | null };
+  const changed = vi.fn();
+  try {
+    act(() =>
+      root.render(
+        <form>
+          <TextArea label="Notes" defaultValue="Bonjour" maxLength={100} ref={ref} onChange={changed} />
+        </form>,
+      ),
+    );
+    const textarea = container.querySelector("textarea")!;
+    expect(ref.current).toBe(textarea);
+    expect(textarea.value).toBe("Bonjour");
+    expect(container.textContent).toContain("7 / 100");
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(textarea, "Bonsoir!");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(changed).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain("8 / 100");
+    const form = container.querySelector("form")!;
+    await act(async () => {
+      form.reset();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(textarea.value).toBe("Bonjour");
+    expect(container.textContent).toContain("7 / 100");
+  } finally {
+    act(() => root.unmount());
+    expect(ref.current).toBeNull();
+    container.remove();
+  }
+});
+it("supports an initially empty uncontrolled field", () => {
+  expect(renderToStaticMarkup(<TextArea label="Notes" maxLength={100} />)).toContain("0 / 100");
 });

@@ -893,6 +893,30 @@ async function verifyHostedComponents(page) {
   );
   await notes.fill("Package-only notes");
   assert.equal(await notes.inputValue(), "Package-only notes");
+  const nativeNotes = hosted.getByRole("textbox", {
+    name: "Native notes",
+    exact: true,
+  });
+  const nativeForm = hosted.locator("[data-native-notes]");
+  assert.equal(await nativeNotes.inputValue(), "Bonjour");
+  await nativeNotes.fill("Bonsoir!");
+  assert.ok((await nativeForm.textContent()).includes("8 / 50"));
+  await nativeForm.evaluate((form) =>
+    form.addEventListener("reset", (event) => event.preventDefault(), {
+      once: true,
+    }),
+  );
+  await hosted
+    .getByRole("button", { name: "Reset native notes", exact: true })
+    .click();
+  assert.equal(await nativeNotes.inputValue(), "Bonsoir!");
+  assert.ok((await nativeForm.textContent()).includes("8 / 50"));
+  await hosted
+    .getByRole("button", { name: "Reset native notes", exact: true })
+    .click();
+  assert.equal(await nativeNotes.inputValue(), "Bonjour");
+  await nativeForm.getByText("7 / 50", { exact: true }).waitFor();
+
   const toggle = hosted.getByRole("checkbox", { name: "Enable evaluation" });
   await toggle.focus();
   await page.keyboard.press("Space");

@@ -193,13 +193,9 @@ const badViewportDrawer = (
 export { badRemDrawer, badPercentDrawer, badViewportDrawer };
 
 const uncontrolledTextArea = (
-  // @ts-expect-error TextArea requires a controlled value for its character counter.
   <TextArea label="Notes" defaultValue="abc" maxLength={100} />
 );
-const missingTextAreaValue = (
-  // @ts-expect-error Empty controlled TextAreas must use value="".
-  <TextArea label="Notes" maxLength={100} />
-);
+const missingTextAreaValue = <TextArea label="Notes" maxLength={100} />;
 export { uncontrolledTextArea, missingTextAreaValue };
 
 const selectableTableWithoutKeys = (
@@ -293,3 +289,15 @@ export const missingSelectedKeys = (
     onSelectionChange={() => {}}
   />
 );
+
+const frozenTextArea = (
+  // @ts-expect-error A controlled TextArea needs an explicit editable, read-only or disabled mode.
+  <TextArea label="Notes" value="abc" />
+);
+export { frozenTextArea };
+
+const mixedTextArea = (
+  // @ts-expect-error Controlled and uncontrolled initial values cannot be mixed.
+  <TextArea label="Notes" value="abc" defaultValue="abc" readOnly />
+);
+export { mixedTextArea };

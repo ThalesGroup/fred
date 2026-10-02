@@ -184,6 +184,10 @@ export function HostedComponents() {
         onChange={(event) => setText(event.currentTarget.value)}
         maxLength={50}
       />
+      <form data-native-notes>
+        <TextArea label="Native notes" defaultValue="Bonjour" maxLength={50} />
+        <button type="reset">Reset native notes</button>
+      </form>
       <Switch
         aria-label="Enable evaluation"
         checked={enabled}

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./FileDropzone.module.css";
 
@@ -30,6 +30,7 @@ export interface FileDropzoneProps {
 
 /** Drag-and-drop (or click-to-browse) file selector. Design-tokens only. */
 export default function FileDropzone({ accept, hint, subHint, onFile, error }: FileDropzoneProps) {
+  const errorId = useId();
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -37,6 +38,8 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
     <div className={styles.wrapper}>
       <button
         type="button"
+        aria-describedby={error ? errorId : undefined}
+        aria-invalid={error ? true : undefined}
         className={styles.zone}
         data-dragging={dragging}
         onClick={() => inputRef.current?.click()}
@@ -58,6 +61,8 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
         <input
           ref={inputRef}
           type="file"
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? true : undefined}
           accept={accept}
           className={styles.input}
           onChange={(e) => {
@@ -67,7 +72,11 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
           }}
         />
       </button>
-      {error && <span className={styles.error}>{error}</span>}
+      {error && (
+        <span id={errorId} role="alert" className={styles.error}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

@@ -12,17 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ComponentPropsWithRef, useId } from "react";
+import { ComponentPropsWithRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import styles from "./TextArea.module.scss";
 
-export interface TextAreaProps extends Omit<ComponentPropsWithRef<"textarea">, "value" | "defaultValue"> {
+interface TextAreaBaseProps extends Omit<ComponentPropsWithRef<"textarea">, "value" | "defaultValue"> {
   label: string;
-  /** Controlled value; use an empty string for an empty field. */
-  value: NonNullable<ComponentPropsWithRef<"textarea">["value"]>;
-  defaultValue?: never;
   explanation?: string;
   error?: string;
 }
+
+export type TextAreaProps = TextAreaBaseProps &
+  (
+    | ({ value: NonNullable<ComponentPropsWithRef<"textarea">["value"]>; defaultValue?: never } & (
+        | { onChange: NonNullable<ComponentPropsWithRef<"textarea">["onChange"]> }
+        | { readOnly: true }
+        | { disabled: true }
+      ))
+    | { value?: undefined; defaultValue?: ComponentPropsWithRef<"textarea">["defaultValue"] }
+  );
 
 export default function TextArea({
   label,
@@ -30,16 +37,45 @@ export default function TextArea({
   error,
   maxLength,
   value,
+  defaultValue,
+  ref,
+  onChange,
   required,
   id: suppliedId,
   ...props
 }: TextAreaProps) {
   const generatedId = useId();
   const id = suppliedId ?? generatedId;
-  if (value === undefined || value === null || props.defaultValue !== undefined) {
-    throw new Error("TextArea requires a controlled value; defaultValue is not supported.");
+  const controlled = value !== undefined;
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(ref, () => inputRef.current!, []);
+  const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
+  useEffect(() => {
+    if (controlled) return;
+    const input = inputRef.current;
+    const form = input?.form;
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    if (input) setUncontrolledValue(input.value);
+    const onReset = (event: Event) => {
+      // The browser restores defaultValue after dispatching the cancelable reset event.
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        if (!event.defaultPrevented && inputRef.current === input && input) setUncontrolledValue(input.value);
+      });
+    };
+    form?.addEventListener("reset", onReset);
+    return () => {
+      clearTimeout(resetTimer);
+      form?.removeEventListener("reset", onReset);
+    };
+  });
+  if (value === null || (controlled && defaultValue !== undefined)) {
+    throw new Error("TextArea: use either a non-null controlled value or defaultValue, not both.");
   }
-  const characterCounter = String(value).length;
+  if (controlled && !onChange && !props.readOnly && !props.disabled) {
+    throw new Error("TextArea requires onChange, readOnly or disabled for a controlled value.");
+  }
+  const characterCounter = String(controlled ? value : uncontrolledValue).length;
   // No hint/error/counter to show — drop the container entirely rather than
   // leaving an empty row under the field.
   const hasInformation = !!error || !!explanation || !!maxLength;
@@ -52,7 +88,19 @@ export default function TextArea({
         {required ? `${label} *` : label}
       </label>
 
-      <textarea id={id} value={value} maxLength={maxLength} required={required} {...props} />
+      <textarea
+        {...props}
+        ref={inputRef}
+        id={id}
+        value={value}
+        defaultValue={defaultValue}
+        maxLength={maxLength}
+        required={required}
+        onChange={(event) => {
+          if (!controlled) setUncontrolledValue(event.currentTarget.value);
+          onChange?.(event);
+        }}
+      />
 
       {hasInformation && (
         <span className={styles.information}>
