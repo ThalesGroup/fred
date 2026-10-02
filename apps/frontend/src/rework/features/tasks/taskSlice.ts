@@ -329,7 +329,7 @@ export const makeSelectImportTasks = (teamId: string | null) =>
       .filter(
         (vm) => vm.kind === "ingestion" && vm.stage !== null && vm.target?.type === "document" && vm.teamId === teamId,
       )
-      // Oldest first, unlike the tray: these are the files of one import, and
+      // Oldest first: these are the files of one import, and
       // reading them in the order they were sent beats having the list reshuffle
       // under the eye as each new one registers.
       .sort((a, b) => a.registeredAt - b.registeredAt),

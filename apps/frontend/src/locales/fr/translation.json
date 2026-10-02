@@ -2440,14 +2440,6 @@
         "justNow": "à l'instant",
         "minAgo": "il y a {{count}} min"
       },
-      "tray": {
-        "empty": "Aucune tâche récente",
-        "failed": "{{count}} en échec",
-        "progress": "Progression des tâches",
-        "running": "{{count}} en cours",
-        "title": "Tâches récentes",
-        "trigger": "Tâches"
-      },
       "due": {
         "imminent": "imminent",
         "inMinutes": "dans {{count}} min",

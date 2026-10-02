@@ -312,7 +312,8 @@ cutover to canonical task events.
 - [ ] Frontend: make `useTaskRehydration` + `useTaskSseManager` **multi-source** (knowledge-flow +
       control-plane + evaluation); add `evaluation` to `taskKinds`/labels
 - [ ] Frontend: cut over the `EvaluationCampaignDetail` **SEAM** (bespoke SSE → `useTaskStream` →
-      `TaskStateBadge`/`TaskProgressBar`); surface campaigns in `TaskTray` + inline `TaskIndicator`
+      `TaskStateBadge`/`TaskProgressBar`); decide where campaigns appear outside the detail view
+      and add an inline `TaskIndicator`
 - [ ] **Cross-repo codegen guard**: CI check asserting the frontend's vendored
       `src/slices/evaluation/openapi.json` matches the `fred-agent-evaluator` published OpenAPI for
       the pinned evaluator/fred-core version (turns silent client drift into a failing build).
@@ -357,5 +358,5 @@ All previously open questions are resolved by RFC v2. See `docs/swift/rfc/AGENT-
 | Phase 3 — Evaluation worker | Not started | Depends on Phase 1 + 2 |
 | Phase 4 — Frontend | Not started | Depends on Phase 2 + 3 |
 | Phase 5 — OTel export | Not started | Depends on Phase 3 |
-| EVAL-02 — Task-event adoption | Proposed | RFC EVAL-02; standalone evaluator + multi-source tray |
+| EVAL-02 — Task-event adoption | Proposed | RFC EVAL-02; standalone evaluator + multi-source task events; campaign UI placement to decide |
 | Phase 6 — Live validation | Not started | Depends on Phase 3 + 4 |

@@ -2440,14 +2440,6 @@
         "justNow": "just now",
         "minAgo": "{{count}} min ago"
       },
-      "tray": {
-        "empty": "No recent tasks",
-        "failed": "{{count}} failed",
-        "progress": "Task progress",
-        "running": "{{count}} running",
-        "title": "Recent tasks",
-        "trigger": "Tasks"
-      },
       "due": {
         "imminent": "imminent",
         "inMinutes": "in {{count}} min",

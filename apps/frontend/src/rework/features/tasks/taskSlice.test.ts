@@ -585,7 +585,7 @@ describe("selectAllTasks", () => {
     vi.useFakeTimers();
     const now = 1_000_000;
     vi.setSystemTime(now);
-    // Older than the tray eviction window — selectVisibleTasks would drop this,
+    // Older than the visible-task window: selectVisibleTasks drops this,
     // but the admin history must retain it.
     const s = { byId: { old: vm({ taskId: "old", state: "succeeded", terminalAt: now - EVICTION_DELAY_MS - 1 }) } };
     expect(selectVisibleTasks(root(s))).toHaveLength(0);
