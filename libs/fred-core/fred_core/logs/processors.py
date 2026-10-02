@@ -142,7 +142,7 @@ class EventProcessor:
                 "seconds": seconds,
                 "nanos": int((record.created - seconds) * 1_000_000_000),
             },
-            "message": record.getMessage(),
+            "message": event["event"],
             "logger": record.name,
             "service": self.service,
             "category": "kpi" if record.name == KPI_LOGGER_NAME else "application",
