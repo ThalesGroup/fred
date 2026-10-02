@@ -52,3 +52,50 @@ Frontend:
 | P2: Stop memory was hook-wide | Fixed. It is now a per-session set that survives `reset()`. | `useChatSse.test.tsx` › "after Stop, the next message of that session restarts, even after visiting another session" |
 | P2: the card was lost when the request never started | Fixed. `send()` returns whether the turn started, and the card is restored otherwise. | `useManagedChat.test.tsx` › "keeps offering the choice when the continue request never started"; `useChatSse.test.tsx` › "send() reports whether the turn started" |
 | Code-quality bot: "statement has no effect" (`await run` in the test helper) | No change. It awaits the cancelled task's teardown. | — |
+
+## Scoped owner-loss correction (2026-10-02)
+
+The developer confirmed PostgreSQL and SQLite owner-lifetime admission for technical
+continuations. External-effect idempotency/reconciliation belongs to the agent author;
+there is no atomic transaction or exactly-once promise for external effects.
+
+`GraphExecutor` now holds admission around a continuation and retains LangGraph's
+checkpoint and pending task results. The permanent technical HITL claim and its
+duplicate checkpoint-validation method are removed; ordinary HITL claims are unchanged.
+
+Verification:
+
+- Root `make code-quality`: exit 0. Raw basedpyright on the three affected executor/store
+  modules and both affected test files: 0 errors, 0 warnings, without baseline masking.
+- Final runtime offline suite: 1,746 passed, 11 skipped (missing optional `fastapi_mcp`),
+  21 integration cases deselected.
+- Targeted runtime suites including unchanged storage and HITL suites: 82 passed before
+  the final legacy-claim regression. The final two changed suites pass 30 cases with
+  PostgreSQL 16, including that regression.
+- The four PostgreSQL integration cases also pass on PostgreSQL 17. They cover mutual
+  exclusion, real process death, configured server timers, and reserved checkpoint
+  connection capacity. Both databases were isolated temporary Docker containers.
+- `make migration-check`: valid. `openspec validate resume-interrupted-graph-execution
+  --strict`: valid. `git diff --check`: clean.
+
+New behaviour-locking evidence includes:
+
+- A process dies inside a continuation through the public pod endpoint; a new process
+  finishes from the same step without repeating preparation or deleting a claim.
+- A live owner rejects a competitor. Killing the owner releases admission on both
+  SQLite and PostgreSQL; different Graph threads are independently locked.
+- Multiple continuations retain a completed tool-task result, with one external tool
+  invocation. Closing the SDK stream releases admission immediately; cancellation
+  during SQLite worker acquisition does not leak a late-acquired file lock.
+- Previously burned `continue:` HITL claims are ignored without modifying their rows.
+- PostgreSQL timers configured to 100 ms do not steal a 300 ms owner. `SET LOCAL`
+  settings restore after exit, including PostgreSQL 17's `transaction_timeout`.
+
+Independent correctness/performance review found one server-timer defect; it was fixed
+and re-reviewed with no remaining blocker in this slice. Admission holds one PostgreSQL
+connection per continuation, with a pool-shared local capacity guard leaving checkpoint
+headroom. SQLite filesystem acquisition runs in a worker thread. No load campaign was
+run, and no new KPI dimensions, public models, migrations, leases or heartbeats were added.
+
+Review point 3 (concurrent failure cleanup), new-turn/Restart coordination and late-writer
+fencing remain deferred. The change stays active; it is not archived by this commit.

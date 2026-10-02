@@ -30,8 +30,10 @@ lets the user choose, explicitly, whether to continue or restart.
 - `RuntimeExecuteRequest` gains `interrupted_action` (`"continue"` or `"restart"`) and
   `interruption_id`:
   - `continue` resumes the interrupted step with `astream(None)`. It takes the existing
-    durable single-use HITL claim, keyed by the interruption. A stale or unknown
-    `interruption_id` is rejected.
+    owner-lifetime admission on the Graph thread to reject concurrent continuations.
+    Admission is released when its owner dies, including during the same step;
+    permanent HITL claims are used only for ordinary HITL. A stale or unknown
+    `interruption_id` is rejected. Ordinary HITL admission is unchanged.
   - `restart` runs the new turn exactly as today.
 - Frontend: the chat renders `execution_interrupted` with the existing `HitlPrompt`
   component and restores the user's draft in the composer. A choice sends
@@ -63,8 +65,9 @@ None.
 - Runtime (`fred-runtime`): `graph/graph_executor.py` (durability, detection, continue,
   clearing tasks when a live run ends) and `app/agent_app.py` (request plumbing, claim,
   skipping history and KPIs for the interrupted outcome).
-- No new table, no Alembic migration. The claim reuses `checkpoint_hitl_claim` with a
-  dedicated key prefix.
+- No new table or Alembic migration. Technical continuation uses a PostgreSQL
+  transaction-scoped advisory lock or a local SQLite POSIX file lock. It does not
+  reuse permanent `checkpoint_hitl_claim` rows. Unsupported providers fail explicitly.
 - Frontend: regenerated runtime client, `useChatSse.ts` and `useManagedChat.ts`
   (event handling, draft restore, Stop memory), and `ConversationThread.tsx` to render
   the `HitlPrompt`.
@@ -72,6 +75,10 @@ None.
   It is reviewed with `fred-performance-reviewer`.
 - Docs: a dated entry in `RUNTIME-EXECUTION-CONTRACT.md` §8, `COMPONENT-UX.md`, and a
   migration note.
-- Out of scope, possible follow-ups of #2892: lease-based owner recovery, an
-  external-effect outcome journal, ReAct/Deep, showing the prompt when a conversation
-  loads, and recovery of the crashed turn's own user message.
+- External-effect idempotency or reconciliation belongs to the agent author. This
+  change does not add an external-effect journal or an atomic transaction with the
+  destination. An interrupted step may repeat a committed external operation; its
+  identity and content must come from earlier persisted preparation.
+- Out of scope: coordination of ordinary new turns/Restart with a live run, fencing
+  late checkpoint writers, ReAct/Deep, showing the prompt when a conversation loads,
+  and recovery of the crashed turn's own user message.

@@ -261,6 +261,104 @@ async def test_continue_runs_only_the_interrupted_step(
 
 
 @pytest.mark.asyncio
+async def test_repeated_continuations_preserve_a_completed_tool_task(
+    checkpointer: FredSqlCheckpointer,
+) -> None:
+    from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+    from langchain_core.tools import tool
+
+    calls: list[str] = []
+    entered = asyncio.Event()
+    hanging = True
+
+    @tool("save")
+    async def save(plan: str) -> str:
+        """Record the external effect once; LangGraph caches its result."""
+        calls.append(plan)
+        return plan
+
+    @typed_node(_State)
+    async def publish(state: _State, context: GraphNodeContext) -> StepResult:
+        assert state.plan is not None
+        result = await context.invoke_runtime_tool("save", {"plan": state.plan})
+        assert result == state.plan
+        entered.set()
+        if hanging:
+            await asyncio.Event().wait()
+        return StepResult(state_update={})
+
+    class Agent(_Agent):
+        workflow = GraphWorkflow(
+            entry="prepare",
+            nodes={"prepare": _prepare, "publish": publish, "finalize": _finalize},
+            edges={"prepare": "publish", "publish": "finalize"},
+        )
+
+    async def executor() -> GraphExecutor:
+        runtime = GraphRuntime(
+            definition=Agent(),
+            services=RuntimeServices(checkpointer=checkpointer),
+            capability_block=CapabilityAgentBlock(
+                middleware=(), tools=(save,), hitl={}
+            ),
+        )
+        runtime.bind(_binding())
+        result = await runtime.get_executor()
+        assert isinstance(result, GraphExecutor)
+        return result
+
+    config = {}
+    for _ in range(2):
+        entered.clear()
+        run = asyncio.create_task(_turn(await executor(), **config))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        run.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await run
+        event = await _interruption(checkpointer)
+        config = {
+            "interrupted_action": "continue",
+            "interruption_id": event.interruption_id,
+        }
+
+    hanging = False
+    events = await _turn(await executor(), **config)
+    assert isinstance(events[-1], FinalRuntimeEvent)
+    assert calls == ["plan for migrate"]
+    assert RUNS["prepare"] == 1
+
+
+@pytest.mark.asyncio
+async def test_closing_a_continuation_stream_releases_admission_immediately(
+    checkpointer: FredSqlCheckpointer,
+) -> None:
+    from fred_runtime.runtime_support.graph_resume_lock import (
+        GraphResumeAlreadyRunningError,
+    )
+
+    await _lose_run_while_publishing(checkpointer)
+    event = await _interruption(checkpointer)
+    executor = await _executor(checkpointer)
+    config = ExecutionConfig(
+        session_id="s1",
+        interrupted_action="continue",
+        interruption_id=event.interruption_id,
+    )
+    stream = executor.stream(_Input(message="ignored"), config)
+    try:
+        assert isinstance(await anext(stream), FinalRuntimeEvent)
+        with pytest.raises(GraphResumeAlreadyRunningError):
+            async with checkpointer.graph_resume_lock.acquire(
+                executor.thread_id(config)
+            ):
+                pytest.fail("The continuation released ownership before stream exit")
+    finally:
+        await stream.aclose()
+    async with checkpointer.graph_resume_lock.acquire(executor.thread_id(config)):
+        pass
+
+
+@pytest.mark.asyncio
 async def test_a_stale_or_unknown_interruption_is_rejected(
     checkpointer: FredSqlCheckpointer,
 ) -> None:
@@ -456,9 +554,90 @@ def test_pod_continue_finishes_without_a_user_row(tmp_path, _offline_model) -> N
 
 
 def test_pod_refuses_a_continue_another_replica_already_holds(
-    tmp_path, _offline_model
+    tmp_path: Path, _offline_model: None
 ) -> None:
     from fastapi.testclient import TestClient
+
+    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+        checkpointer = _lose_run_in_pod()
+        reported = _post(client, input="again")
+        publishes = RUNS["publish"]
+        admission = checkpointer.graph_resume_lock.acquire(
+            f"sess-1:{_Agent().agent_id}"
+        )
+        with asyncio.Runner() as runner:
+            runner.run(admission.__aenter__())
+            try:
+                refused = _post(
+                    client,
+                    interrupted_action="continue",
+                    interruption_id=reported["interruption_id"],
+                )
+            finally:
+                runner.run(admission.__aexit__(None, None, None))
+
+    assert refused["kind"] == "execution_error"
+    assert RUNS["publish"] == publishes
+
+
+_CRASHING_CONTINUATION = """
+import sys
+from pathlib import Path
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from conftest import StaticChatModelFactory, ToolFriendlyFakeChatModel
+from langchain_core.messages import AIMessage
+import test_graph_interrupted_execution as t
+
+model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="unused")])
+with patch("fred_runtime.app.agent_app._build_chat_model_factory",
+           lambda config: StaticChatModelFactory(model)):
+    with TestClient(t._app_with(t._Agent(), Path(sys.argv[1]))) as client:
+        t._lose_run_in_pod()
+        reported = t._post(client, input="again")
+        t.BEHAVIOUR["publish"] = "exit"
+        t._post(client, interrupted_action="continue",
+                interruption_id=reported["interruption_id"])
+"""
+
+
+def test_pod_continues_again_after_its_continuing_process_dies(
+    tmp_path: Path, _offline_model: None
+) -> None:
+    from fastapi.testclient import TestClient
+    from test_agent_app import _hitl_claim_rows
+
+    child = subprocess.run(
+        [sys.executable, "-c", _CRASHING_CONTINUATION, str(tmp_path)],
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parent)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert child.returncode == 9, child.stderr
+
+    with TestClient(_app_with(_Agent(), tmp_path)) as client:
+        reported = _post(client, input="again")
+        final = _post(
+            client,
+            interrupted_action="continue",
+            interruption_id=reported["interruption_id"],
+        )
+        from fred_runtime.runtime_context import get_runtime_context
+
+        checkpointer = get_runtime_context().config.checkpointer
+        assert asyncio.run(_hitl_claim_rows(checkpointer)) == []
+
+    assert final["kind"] == "final"
+    assert final["content"] == "published plan for migrate"
+    assert RUNS == Counter(publish=1, finalize=1)
+
+
+def test_pod_continuation_ignores_an_old_permanent_technical_claim(
+    tmp_path: Path, _offline_model: None
+) -> None:
+    from fastapi.testclient import TestClient
+    from test_agent_app import _hitl_claim_rows
 
     with TestClient(_app_with(_Agent(), tmp_path)) as client:
         checkpointer = _lose_run_in_pod()
@@ -467,18 +646,22 @@ def test_pod_refuses_a_continue_another_replica_already_holds(
             "thread_id": f"sess-1:{_Agent().agent_id}",
             "checkpoint_ns": "",
             "interrupt_id": f"continue:{reported['interruption_id']}",
-            "occurrence_id": None,
         }
-        assert asyncio.run(checkpointer.aclaim_hitl_resume(**identity)) is not None
-        publishes = RUNS["publish"]
-        refused = _post(
+        token = asyncio.run(checkpointer.aclaim_hitl_resume(**identity))
+        assert token is not None
+        assert asyncio.run(
+            checkpointer.astart_hitl_resume(**identity, claim_token=token)
+        )
+        rows_before = asyncio.run(_hitl_claim_rows(checkpointer))
+        final = _post(
             client,
             interrupted_action="continue",
             interruption_id=reported["interruption_id"],
         )
+        assert asyncio.run(_hitl_claim_rows(checkpointer)) == rows_before
 
-    assert refused["kind"] == "execution_error"
-    assert RUNS["publish"] == publishes
+    assert final["kind"] == "final"
+    assert RUNS["prepare"] == 1
 
 
 def test_pod_refuses_continue_for_a_non_graph_agent(tmp_path, _offline_model) -> None:

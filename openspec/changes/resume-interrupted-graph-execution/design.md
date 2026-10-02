@@ -38,8 +38,8 @@ using `Command(goto=...)` nodes `a → b → c` and `durability="sync"`. It was 
 - Use only public LangGraph APIs: `durability`, `aget_state`, `astream(None, ...)` and
   `aupdate_state(..., as_node=END)`.
 - Add no new persistent state and no migration.
-- Reuse the HITL request model, the HITL card and the HITL claim. The HITL protocol and
-  its history semantics stay untouched.
+- Reuse the HITL request model and card. Keep ordinary HITL single-use admission and
+  history semantics untouched; technical continuation must survive its owner's loss.
 
 **Non-Goals:**
 
@@ -48,6 +48,11 @@ using `Command(goto=...)` nodes `a → b → c` and `durability="sync"`. It was 
 - Owner leases, fencing a late writer, or an external-effect journal. Business
   idempotency of external commits remains the agent author's responsibility: fix the key
   in an earlier step and publish idempotently.
+- Atomicity between checkpoint storage and an external destination, or exactly-once
+  external effects. An interrupted step may restart even after its external operation
+  committed. The author must safely replay or reconcile the same prepared operation;
+  an unsafe destination must not be blindly retried. Native LangGraph task caching is
+  retained, but does not remove the commit-before-result-persistence window.
 - ReAct and Deep agents.
 - Showing the card when a conversation loads, and recovering the crashed turn's user
   message.
@@ -147,14 +152,44 @@ Alternative considered: emitting a real `awaiting_human` event and answering it 
   `ExecutionConfig` carries both fields to the executor.
 - **Graph branch of `agent_app`.**
   - For `continue`, `GraphExecutor.interruption_id()` first validates the id read-only,
-    so a stale id or a failed read leaves no claim. The existing claim helper is then
-    called with `interrupt_id=f"continue:{interruption_id}"` on the agent's thread, and
-    the claim is consumed after the stream. The executor re-checks the id after the
-    claim, to cover races.
+    so a stale id or a failed read leaves no admission behind. Admission must reject a
+    concurrent continuation and become recoverable if its owner process dies before
+    the pending step completes. The executor re-checks the id after admission.
   - For a non-Graph executor, `continue` raises an execution error and `restart` is
     ignored.
   - Authorization runs before any of this, unchanged. The event is only produced inside
     the executor stream, which runs after `_authorize_and_resolve`.
+
+**Owner-lifetime admission (confirmed 2026-10-02).** `GraphExecutor` holds a lock
+around a technical continuation, before reading and validating the checkpoint. It
+uses the checkpointer's table namespace and Graph thread identity, so direct SDK calls
+and pod execution share admission. The lock neither advances the checkpoint nor clears
+pending writes; completed LangGraph tool-task results remain reusable. Technical
+continuations no longer consult or write permanent HITL claims. Existing technical
+claim rows are inert; ordinary HITL claims are unchanged.
+
+- PostgreSQL uses `pg_try_advisory_xact_lock`, with Fred's `advisory_lock_key`, on a
+  transaction held for the continuation. Normal exit rolls back/commits the transaction;
+  process loss closes its connection and PostgreSQL releases ownership. The admission
+  transaction locally disables idle-in-transaction and transaction timeouts,
+  so a server timer cannot steal a long-running step; pooled settings are restored
+  afterward. Each live continuation holds one connection in addition to checkpoint I/O. A pod-local capacity
+  guard shared by checkpointers on the same pool reserves at most half the pool's base
+  size for owners, leaving checkpoint capacity. Exhaustion is explicitly rejected.
+  A pooled engine needs at least two base connections; `NullPool` is also supported.
+- File-backed SQLite on a local POSIX filesystem uses non-blocking `flock` on one empty
+  sidecar file per table namespace and Graph thread, under `<database>.graph-locks/`.
+  File acquisition is offloaded; cancellation closes even a late worker's handle.
+  Closing the handle or losing the process releases ownership. Files are never unlinked
+  while the runtime is running, since replacing a locked inode breaks exclusion.
+- Unsupported providers, SQLite memory/URI databases, and insufficient PostgreSQL pools
+  explicitly reject technical continuation; there is no unguarded fallback.
+
+No TTL, lease, heartbeat, new schema or external-effect journal is added. PostgreSQL
+ownership lasts until the database observes transaction/connection termination; network
+partitions or server-side connection termination are not evidence that an old worker's
+external request has stopped. New-turn/Restart races, late-writer fencing and failure
+cleanup remain outside this corrective slice.
 - **`GraphExecutor._graph_input`** decides which mode applies:
 
   | Request | Thread interrupted? | Mode |
@@ -204,18 +239,17 @@ Alternative considered: emitting a real `awaiting_human` event and answering it 
 - **[Restart re-sends the same wire text and command, but not attachments.]**
   Attachments were cleared when the turn started.
 
-- **[A continue that crashes again inside the same step leaves its claim `started` for
-  that interruption, so a further `continue` is refused.]** A stale id or a failed
-  pre-claim read no longer leaves a claim, but the claim stays single-use by design. The head checkpoint, and therefore `interruption_id`, only changes once a
-  step completes. Mitigation: the refusal names the cause, and `restart` remains
-  available. A lease-based claim is a possible follow-up.
+- **[Owner-lifetime locks hold resources for the duration of a continuation.]**
+  PostgreSQL reserves connection capacity; SQLite retains empty sidecar files. There is
+  no timer-based stealing of a live owner. Sidecar cleanup is only safe with all runtime
+  processes stopped.
 - **[Threads left with pending tasks before deployment are offered `continue` after
   deployment]**, including threads that ended in a node failure. Mitigation: a continue
   re-runs the failed step. If it fails again, the thread is cleared and the next message
   behaves as before. This is documented in the migration note.
-- **[The step re-run on `continue` repeats any side effect inside it.]** This is the same
-  replay that today's restart already performs, and more. The authoring guidance is
-  explicit: fix the key in an earlier step and commit idempotently.
+- **[The step re-run on `continue` may repeat an already committed external effect.]**
+  This is the accepted contract: the agent author fixes identity and content in an
+  earlier persisted step, and owns idempotent replay or outcome reconciliation.
 - **[After a reload, the crashed turn's user message is missing from history]** (§8.89).
   Mitigation: the card names the interrupted step. Recovery of that message is a
   non-goal.

@@ -22,6 +22,23 @@ is not yet persisted.
 - **THEN** the next step does not run
 - **AND** the run ends with an execution error
 
+### Requirement: External effects remain the agent author's responsibility
+
+Checkpoint persistence and an external operation are not one atomic transaction. The
+runtime SHALL NOT promise exactly-once external effects. A continued step may execute
+again from its beginning even if an external operation already committed. The agent
+author MUST make replayable external operations idempotent or reconcile their outcome,
+using the same operation identity and content prepared in an earlier persisted step.
+An operation that cannot safely be repeated or reconciled MUST NOT be blindly retried.
+Completed LangGraph task results SHALL remain available on continuation; recovery SHALL
+NOT discard them merely to obtain a new admission identity.
+
+#### Scenario: External commit succeeds before the process is lost
+- **WHEN** an external operation commits and the process dies before its result is persisted
+- **THEN** continuation may execute the interrupted step again
+- **AND** the agent's adapter is responsible for safely replaying or reconciling the same operation
+- **AND** the runtime does not infer that the external operation failed
+
 ### Requirement: Only a lost process leaves an interrupted execution
 
 A Graph execution SHALL be interrupted when its persisted state still has steps to run,
@@ -87,10 +104,15 @@ SHALL persist its assistant output as a new exchange without a fabricated user r
 - **WHEN** the process died while running step N+1, and the user chooses `continue`
 - **THEN** step N+1 runs again from its beginning with the same persisted input state
 
-### Requirement: Continue is single-use and rejects stale or unknown interruptions
+### Requirement: Continue excludes concurrent attempts and survives owner loss
 
-The runtime SHALL admit at most one `continue` per interruption, across processes and
-replicas. A concurrent `continue` for the same interruption SHALL be refused. A
+The runtime SHALL admit at most one live `continue` per interruption, across processes
+and replicas. A concurrent `continue` for the same interruption SHALL be refused. Loss
+of the admitted process before the interrupted step completes SHALL NOT permanently
+consume the right to continue from that checkpoint. Another authorized process SHALL
+be able to continue the same persisted step without restarting completed preparation
+or requiring direct database intervention. Elapsed time alone SHALL NOT establish that
+a live owner has stopped. Ordinary HITL single-use admission SHALL remain unchanged. A
 `continue` whose `interruption_id` does not identify the conversation's current
 interruption SHALL be rejected with an execution error, and no step SHALL run. This
 covers an execution that already advanced, completed, was restarted, or was never
@@ -100,6 +122,15 @@ interrupted.
 - **WHEN** two `continue` requests for the same interruption arrive concurrently
 - **THEN** exactly one runs the interrupted step
 - **AND** the other is refused as already being resumed
+
+#### Scenario: The continuing process dies in the same step
+- **WHEN** a continuation is admitted and its process dies before the interrupted step completes
+- **THEN** another authorized process can continue that step from the same persisted state
+- **AND** completed preparation is not repeated and no claim needs manual deletion
+
+#### Scenario: A long-running continuation still owns admission
+- **WHEN** an admitted continuation remains live in a step longer than an admission timeout
+- **THEN** elapsed time does not authorize another continuation of that interruption
 
 #### Scenario: Stale interruption
 - **WHEN** a `continue` carries an `interruption_id` from an interruption that has since been continued past or restarted

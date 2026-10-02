@@ -29,7 +29,8 @@ import hashlib
 import inspect
 import json
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, aclosing, nullcontext
 from dataclasses import dataclass, replace
 from typing import Any, cast
 from uuid import uuid4
@@ -88,6 +89,7 @@ from fred_runtime.react.react_stream_adapter import (
 )
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
+from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.tool_approval import ToolApproval
 
 logger = logging.getLogger(__name__)
@@ -301,6 +303,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         self._state_model = definition.state_model()
         self._adapters: dict[str, TypeAdapter[Any]] = {}
         self._checkpoint_ns = checkpoint_ns
+        self._checkpointer = checkpointer
         self._compiled = self._compile(checkpointer)
 
     # ── compilation ──────────────────────────────────────────────────────────
@@ -436,12 +439,13 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
     async def stream(
         self, input_model: BaseModel, config: ExecutionConfig
-    ) -> AsyncIterator[RuntimeEvent]:
+    ) -> AsyncGenerator[RuntimeEvent, None]:
         outcome = _RunOutcome()
         sequence = 0
-        async for event in self._run(input_model, config, outcome):
-            yield _resequence_event(event, sequence)
-            sequence += 1
+        async with aclosing(self._run(input_model, config, outcome)) as events:
+            async for event in events:
+                yield _resequence_event(event, sequence)
+                sequence += 1
         if outcome.error is not None:
             yield FinalRuntimeEvent(
                 sequence=sequence, content=f"An error occurred: {outcome.error}"
@@ -452,7 +456,30 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         input_model: BaseModel,
         config: ExecutionConfig,
         outcome: _RunOutcome,
-    ) -> AsyncIterator[RuntimeEvent]:
+    ) -> AsyncGenerator[RuntimeEvent, None]:
+        admission: AbstractAsyncContextManager[None] = nullcontext()
+        if config.interrupted_action == "continue":
+            if not isinstance(self._checkpointer, FredSqlCheckpointer):
+                raise RuntimeError(
+                    "Graph continuation requires a persistent SQL checkpointer "
+                    "with owner-lifetime admission."
+                )
+            admission = self._checkpointer.graph_resume_lock.acquire(
+                self.thread_id(config)
+            )
+        async with (
+            admission,
+            aclosing(self._run_admitted(input_model, config, outcome)) as events,
+        ):
+            async for event in events:
+                yield event
+
+    async def _run_admitted(
+        self,
+        input_model: BaseModel,
+        config: ExecutionConfig,
+        outcome: _RunOutcome,
+    ) -> AsyncGenerator[RuntimeEvent, None]:
         thread = self._thread_config(config)
         snapshot = await self._compiled.aget_state(thread)
         graph_input = self._graph_input(input_model, config, snapshot)
@@ -570,11 +597,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             ),
             interruption_id=_interruption_id(snapshot),
         )
-
-    async def interruption_id(self, config: ExecutionConfig) -> str | None:
-        """The id a continue must echo, or None when nothing is interrupted."""
-        snapshot = await self._compiled.aget_state(self._thread_config(config))
-        return _interruption_id(snapshot) if _is_interrupted(snapshot) else None
 
     def _graph_input(
         self,

@@ -4,7 +4,7 @@ title: "Offer to continue a Graph run interrupted by a lost process"
 impact: none
 configuration: none
 configuration_reason: "Runtime and frontend behaviour only; no configuration key, default or chart value changes."
-no_action_reason: "No schema or data migration: detection reads existing checkpoints and the single-use claim reuses the existing HITL claim table."
+no_action_reason: "No schema or data migration: detection reads existing checkpoints and continuation admission uses owner-lifetime PostgreSQL or local SQLite locks."
 ---
 ## Applicability
 
@@ -12,8 +12,10 @@ Existing Fred deployments upgrading to this release, for Graph agents only.
 
 ## Prerequisites
 
-No additional prerequisites beyond the normal deployment procedure. Deploy the
-runtime and the frontend of the same release.
+Deploy the runtime and the frontend of the same release. Technical continuation
+requires PostgreSQL (a pool with at least two base connections, or NullPool), or
+file-backed SQLite on a local POSIX filesystem with permission to create
+`<database>.graph-locks/`. Other providers explicitly refuse continuation.
 
 ## Configuration
 
@@ -32,6 +34,8 @@ message behaves as before.
 Stop the runtime pod while a Graph agent is between two steps, restart it, and
 send a message in that conversation: the chat shows the interruption card, and
 **Continue** finishes the run without repeating completed steps.
+Kill the pod again during that continuation, before the step completes: a new
+pod can continue the same checkpoint without deleting any claim.
 
 ## Rollback
 
@@ -46,3 +50,15 @@ the runtime shows no answer for a turn on an interrupted Graph thread. Direct
 `execution_interrupted` event and must answer it with `interrupted_action`; the
 OpenAI-compatible route restarts automatically. A run still executing on another
 replica or tab cannot be told apart from a lost one.
+
+Concurrent technical continuations use owner-lifetime locks. PostgreSQL reserves
+at most half the pool's base connections for continuations so checkpoint writes
+can progress; capacity exhaustion is rejected with a retryable user message.
+Old `continue:` HITL claim rows no longer affect continuation and require no
+manual purge. Ordinary HITL single-use claims remain unchanged.
+
+SQLite keeps empty lock files; do not delete or replace them while any runtime
+process is running. They may be removed with all runtime processes stopped.
+An interrupted step may repeat an already committed external effect. The agent
+author owns idempotent replay or reconciliation of the same prepared operation;
+checkpoint storage is not atomic with an external destination.

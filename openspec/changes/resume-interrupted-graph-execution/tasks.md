@@ -14,7 +14,7 @@
 ## 3. Runtime admission and persistence
 
 - [x] 3.1 Mirror the new request fields in `_AgentExecuteRequest` and `_to_internal_request`, and pass them into `ExecutionConfig`. Verify that the fields reach the executor with an `agent_app` test.
-- [x] 3.2 In the Graph branch, take the existing single-use claim for `continue` (key `continue:{interruption_id}` on the agent thread) before invoking, and consume it after the stream. Refuse `continue` for non-Graph agents and ignore `restart` there. Verify with a test that two concurrent continues for one interruption run the interrupted node exactly once and the loser gets the "already being resumed" error.
+- [x] 3.2 Replace permanent HITL admission for technical `continue` with the PostgreSQL/SQLite owner-lifetime locks confirmed in D5. Reject concurrent continuations across processes, allow continuation after owner loss in the same step, and leave ordinary HITL admission unchanged. Refuse `continue` for non-Graph agents and ignore `restart` there. Do not discard LangGraph pending task results or infer owner death from elapsed time alone.
 - [x] 3.3 Skip `_emit_turn_completed` and `_write_turn_history` when a payload of kind `execution_interrupted` is present, in both the streaming and non-streaming endpoints. Verify that a continued turn writes its assistant rows and no user row. Verify with history-store tests.
 - [x] 3.4 Verify that an unauthorized caller to an interrupted conversation is rejected by the existing checks before any event is emitted, with an `agent_app` authorization test.
 
@@ -22,6 +22,7 @@
 
 - [x] 4.1 Add a test that runs a Graph agent in a subprocess on a file-backed SQLite `FredSqlCheckpointer` and kills the process (`os._exit`) inside step N+1 after step N was persisted. Then, in the test process, reopen the same database, send a new turn (assert the event), send `continue` (assert that steps 1..N do not re-run, that step N+1 and the remaining steps complete, and that the final output is produced).
 - [x] 4.2 Verify that existing HITL behaviour is unchanged by running the current HITL suites unmodified (`test_graph_capability_hitl.py`, `test_hitl_resume_langgraph_integration.py`, `test_sql_checkpointer_hitl_claim.py`).
+- [x] 4.3 Through public pod execution, lose a process during a continuation in the same step, reopen persistent storage and continue successfully without repeating preparation or manually deleting a claim. Verify that a competing continuation is rejected while its owner remains live, and that persisted tool-task results are retained.
 
 ## 5. Frontend
 
@@ -38,3 +39,4 @@
 - [x] 6.4 Add a dated entry in `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8 (sync durability, interrupted execution, event, request fields, claim reuse) and update `docs/swift/ux/COMPONENT-UX.md` for the interruption card. Verify that both files are in the diff.
 - [x] 6.5 Add the English migration note under `docs/swift/ops/migrations/` following `MIGRATION-GUIDES.md`. It covers no operator action, the frontend and runtime shipping together, and pre-existing threads with pending tasks. Verify that the release-policy check accepts it.
 - [ ] 6.6 Record the verification evidence, comment on GitHub #2892 with the delivered slice and the remaining follow-ups, then archive the change.
+- [ ] 6.7 Resolve the separately deferred failure-cleanup race (review point 3) before PR close-out. The owner-lifetime continuation fix does not claim to protect new turns/Restart or late checkpoint writers.

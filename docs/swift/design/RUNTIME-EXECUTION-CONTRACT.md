@@ -6436,3 +6436,29 @@ user stopped. A step re-run by `continue`
 repeats any side effect inside it: commit externally with a key fixed in an
 earlier step. Full rationale:
 `openspec/changes/resume-interrupted-graph-execution/design.md`.
+
+### 8.101 Technical Graph continuation survives the continuing process's loss (2026-10-02)
+
+Supersedes the technical-continuation HITL claim reuse in §8.100. Ordinary HITL
+claims remain single-use and unchanged. `GraphExecutor` holds owner-lifetime
+admission on the Graph thread around a `continue`, including direct SDK calls.
+It validates the current interruption inside admission and resumes with
+`astream(None)`, preserving checkpoint identity and persisted tool-task results.
+
+PostgreSQL uses a non-blocking transaction-scoped advisory lock; ownership ends
+when the transaction exits or the database observes connection loss. Pooled
+engines require at least two base connections; a pod-local capacity guard leaves
+checkpoint connections available and rejects excess continuation admission.
+File-backed SQLite on a local POSIX filesystem uses non-blocking file locks in
+`<database>.graph-locks/`; closing the handle or process loss releases ownership.
+Other providers fail explicitly. SQLite sidecars must not be removed while any
+runtime process is running. No schema migration or claim purge is required.
+
+A continuation lost in the same step is continuable again without restarting
+completed preparation. Concurrent continuations are refused while an owner is
+live. This does not coordinate new turns/Restart or fence late checkpoint writers.
+
+Checkpoint persistence is not atomic with an external operation. An interrupted
+step may execute again even if its external effect committed. Agent authors own
+idempotent replay or reconciliation using identity/content prepared in an earlier
+persisted step. The runtime does not promise exactly-once external effects.
