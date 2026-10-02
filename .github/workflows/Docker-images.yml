@@ -35,16 +35,8 @@ jobs:
         with:
           filters: |
             trivy:
-              - 'apps/fred-agents/pyproject.toml'
-              - 'apps/fred-agents/uv.lock'
-              - 'apps/knowledge-flow-backend/pyproject.toml'
-              - 'apps/knowledge-flow-backend/uv.lock'
-              - 'apps/control-plane-backend/pyproject.toml'
-              - 'apps/control-plane-backend/uv.lock'
-              - 'libs/*/pyproject.toml'
-              - 'libs/*/uv.lock'
-              - 'libs/capabilities/*/pyproject.toml'
-              - 'libs/capabilities/*/uv.lock'
+              - '**/pyproject.toml'
+              - '**/uv.lock'
               - 'apps/frontend/package.json'
               - 'apps/frontend/package-lock.json'
               - 'apps/frontend/npm-shrinkwrap.json'
