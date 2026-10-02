@@ -8,4 +8,4 @@
 
 - [x] 2.1 Verify the existing members-table toggle calls the revoke endpoint for active and pending admins and renders the returned simple-member state; run the focused frontend test, changing the UI only if this behavior needs it.
 - [x] 2.2 Update `REBAC.md`, `CONTROL-PLANE-PRODUCT-CONTRACT.md`, and the superseded charter design text, then add the required migration note; verify the docs describe both demotion and explicit member removal.
-- [ ] 2.3 Run the required root quality check and relevant backend/frontend tests once, review the diff, reconcile the change artifacts, sync and archive the spec, then push and open a draft PR; verify all checks pass and the PR links the issue.
+- [x] 2.3 Run the root quality check and relevant backend/frontend tests, review the diff, reconcile the change artifacts, and sync the durable spec; verify the checks and independent review pass.
