@@ -117,7 +117,6 @@ jobs:
               - 'apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css'
               - 'apps/frontend/src/rework/components/shared/utils/Portal.tsx'
               - 'apps/frontend/src/rework/components/shared/utils/viewport.ts'
-              - 'apps/frontend/src/rework/components/shared/utils/focus.ts'
               - 'apps/frontend/src/index.scss'
               - 'apps/frontend/src/styles/index.css'
               - 'apps/frontend/src/assets/fonts/Geist.woff2'
@@ -270,8 +269,7 @@ jobs:
   code-quality:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    # Temporary frontend stabilization: restore backend checks before final validation.
-    if: github.head_ref != '2887-package-the-components-hosted-applications-need-in-fred-ossui-ui-extension-2-alpha3' && (needs.detect-changes.outputs.python-modules != '[]')
+    if: needs.detect-changes.outputs.python-modules != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -305,8 +303,7 @@ jobs:
   backend-tests:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    # Temporary frontend stabilization: restore backend checks before final validation.
-    if: github.head_ref != '2887-package-the-components-hosted-applications-need-in-fred-ossui-ui-extension-2-alpha3' && (needs.detect-changes.outputs.python-modules != '[]')
+    if: needs.detect-changes.outputs.python-modules != '[]'
     strategy:
       fail-fast: false
       matrix:
@@ -611,8 +608,7 @@ jobs:
   fred-agents-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    # Temporary frontend stabilization: restore backend checks before final validation.
-    if: github.head_ref != '2887-package-the-components-hosted-applications-need-in-fred-ossui-ui-extension-2-alpha3' && (contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'fred-agents'))
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'fred-agents')
 
     steps:
       - name: Checkout code
@@ -634,8 +630,7 @@ jobs:
   knowledge-flow-backend-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    # Temporary frontend stabilization: restore backend checks before final validation.
-    if: github.head_ref != '2887-package-the-components-hosted-applications-need-in-fred-ossui-ui-extension-2-alpha3' && (contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'knowledge-flow-backend'))
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'knowledge-flow-backend')
 
     steps:
       - name: Checkout code
@@ -662,8 +657,7 @@ jobs:
   control-plane-backend-checks:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    # Temporary frontend stabilization: restore backend checks before final validation.
-    if: github.head_ref != '2887-package-the-components-hosted-applications-need-in-fred-ossui-ui-extension-2-alpha3' && (contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'control-plane-backend'))
+    if: contains(fromJSON(needs.detect-changes.outputs.python-modules).*.name, 'control-plane-backend')
 
     steps:
       - name: Checkout code
@@ -690,8 +684,7 @@ jobs:
   openapi-drift-check:
     runs-on: ubuntu-24.04
     needs: detect-changes
-    # Temporary frontend stabilization: restore backend checks before final validation.
-    if: github.head_ref != '2887-package-the-components-hosted-applications-need-in-fred-ossui-ui-extension-2-alpha3' && (needs.detect-changes.outputs.openapi-drift != '[]')
+    if: needs.detect-changes.outputs.openapi-drift != '[]'
     strategy:
       fail-fast: false
       matrix:
