@@ -566,7 +566,14 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
             relations = await deps.rebac.list_direct_relations(
                 RebacReference(Resource.TEAM, metadata.id)
             )
-            for user_id in _fold_team_role_relations(relations):
+            for user_id, snapshot_roles in _fold_team_role_relations(relations).items():
+                if snapshot_roles.isdisjoint(
+                    {
+                        UserTeamRelation.TEAM_ADMIN,
+                        UserTeamRelation.PENDING_TEAM_ADMIN,
+                    }
+                ):
+                    continue
                 async with metadata_store.advisory_lock(
                     _team_member_role_lock_key(metadata.id, user_id)
                 ):

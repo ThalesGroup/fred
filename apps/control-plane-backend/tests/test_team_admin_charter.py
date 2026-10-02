@@ -543,6 +543,39 @@ async def test_reconciliation_does_not_promote_cancelled_nomination() -> None:
 
 
 @pytest.mark.asyncio
+async def test_reconciliation_skips_plain_members_for_fresh_role_reads() -> None:
+    class CountingRebac(_FakeRebac):
+        def __init__(self, tuples: set[tuple[str, str, str]]) -> None:
+            super().__init__(tuples)
+            self.read_subjects: list[str | None] = []
+
+        async def list_direct_relations(self, resource, **kwargs):
+            subject = kwargs.get("subject")
+            self.read_subjects.append(subject.id if subject else None)
+            return await super().list_direct_relations(resource, **kwargs)
+
+    rebac = CountingRebac(
+        {
+            ("owner", _ADMIN, "team-a"),
+            ("nominee", _PENDING, "team-a"),
+            ("plain", RelationType.TEAM_MEMBER.value, "team-a"),
+        }
+    )
+    store = _FakeCharterStore(
+        {("owner", _VERSION), ("nominee", _VERSION)}, applied="2025-01"
+    )
+
+    moved = await reconcile_team_admin_charter_roles(
+        _deps(rebac, store, teams=["team-a"])
+    )
+
+    assert moved == 1
+    assert rebac.read_subjects.count(None) == 1
+    assert set(rebac.read_subjects[1:]) == {"nominee", "owner"}
+    assert ("plain", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
+
+
+@pytest.mark.asyncio
 async def test_turning_the_charter_off_promotes_every_pending_admin() -> None:
     rebac = _FakeRebac({("nominee", _PENDING, "team-a")})
     store = _FakeCharterStore(applied=_VERSION)
