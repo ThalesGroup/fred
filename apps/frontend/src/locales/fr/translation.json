@@ -528,7 +528,11 @@
       "toolApprovalSaveFailedSummary": "Approbation non enregistrée",
       "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
+    "hitlOtherAnswerPlaceholder": "Autre",
+    "hitlOtherAnswerWithText": "Autre : {{answer}}",
     "hitlFreeTextLabel": "Votre réponse",
+    "hitlQuestionTabsAria": "Questions",
+    "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "L'agent attend votre réponse",
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
@@ -536,9 +540,12 @@
       "empty": "Aucun aperçu markdown disponible."
     },
     "recordAudio": "Enregistrer de l'audio",
+    "nextHitlQuestion": "Suivant",
+    "sendAllHitlAnswers": "Tout envoyer",
     "sendHitlAnswer": "Envoyer",
     "skipHitlQuestion": "Passer",
     "skipHitlQuestionAria": "Passer cette question",
+    "skipAllHitlQuestionsAria": "Passer toutes les questions",
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {

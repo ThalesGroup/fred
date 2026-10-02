@@ -25,6 +25,7 @@ from fred_runtime.react.middleware.hitl import FredHitlMiddleware
 from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
 )
+from fred_runtime.runtime_support.ask_user import AskUserArgs
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -36,7 +37,7 @@ from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import BaseTool, StructuredTool, tool
 
 
 @tool
@@ -180,6 +181,86 @@ async def test_completed_mistral_tool_call_text_becomes_a_native_call() -> None:
             {"sql": "SELECT 1", "dataset_uids": ["fake-dataset"]},
         )
     ]
+
+
+def _question_tool() -> BaseTool:
+    async def invoke(**payload: Any) -> str:
+        return ""
+
+    return StructuredTool.from_function(
+        coroutine=invoke,
+        name="ask_user",
+        description="Ask the user a question.",
+        args_schema=AskUserArgs,
+    )
+
+
+@pytest.mark.asyncio
+async def test_marked_questions_with_literal_line_breaks_recover_all_calls() -> None:
+    content: list[str | dict[str, object]] = [
+        {"type": "text", "text": "ask_user"},
+        {"type": "reference", "reference_ids": []},
+        {
+            "type": "text",
+            "text": (
+                '{"question":"\nWhich island?","choices":[{"id":"one","label":"One"}],'
+                '"allow_free_text":true} ask_user'
+                '{"question":"Which hotel?","allow_free_text":true} ask_user'
+            ),
+        },
+        {"type": "reference", "reference_ids": []},
+        {
+            "type": "text",
+            "text": (
+                '{"question":"\r\nHow long?","allow_free_text":true} ask_user'
+                '{"question":"What budget?","allow_free_text":true}'
+            ),
+        },
+    ]
+    original = AIMessage(
+        content=content,
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[_question_tool()])
+
+    recovered = response.result[0]
+    assert isinstance(recovered, AIMessage)
+    assert recovered.content == ""
+    assert [call["args"]["question"] for call in recovered.tool_calls] == [
+        "\nWhich island?",
+        "Which hotel?",
+        "\r\nHow long?",
+        "What budget?",
+    ]
+    assert len({call["id"] for call in recovered.tool_calls}) == 4
+    assert all("tool_call_id" not in call["args"] for call in recovered.tool_calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        '{"question":"Which\t island?","allow_free_text":true}',
+        '{"question":"Which island?","allow_free_text":true,"unexpected":1}',
+        '{"question":"Which island?","allow_free_text":true,"tool_call_id":"spoof"}',
+        '{"question":"Which island?"}',
+        (
+            '{"question":"Which island?","choices":['
+            '{"id":"same","label":"First"},{"id":"same","label":"Second"}]}'
+        ),
+    ],
+)
+async def test_marked_question_rejects_other_invalid_arguments(arguments: str) -> None:
+    original = AIMessage(
+        content=_structured_call_content("ask_user", arguments),
+        response_metadata={"model_name": "mistral-medium-latest"},
+    )
+
+    response, _ = await _recover_message(original, tools=[_question_tool()])
+
+    assert response.result[0] is original
+    assert original.tool_calls == []
 
 
 @pytest.mark.asyncio

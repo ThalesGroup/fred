@@ -395,6 +395,11 @@ def parse_human_input_answer(
 class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.AWAITING_HUMAN] = RuntimeEventKind.AWAITING_HUMAN
     request: HumanInputRequest
+    sources: tuple[VectorSearchHit, ...] = ()
+    ui_parts: tuple[UiPart, ...] = ()
+    model_name: str | None = None
+    token_usage: dict[str, int] | None = None
+    context_tokens: int | None = None
 
 
 class AssistantDeltaRuntimeEvent(RuntimeEventBase):
