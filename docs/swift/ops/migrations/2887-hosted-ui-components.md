@@ -21,11 +21,11 @@ No new configuration fields are introduced. Existing application registration an
 
 Validate that an authorized team can open the evaluator through Apps, then deploy Fred. The built-in Evaluations settings entry, screens and direct evaluator task polling are removed. Use Apps to inspect evaluation runs and progress; the old settings URL falls back to Members.
 
-Hosted UI consumers using `InlineDrawer` with `resizable` must provide `width` as a pixel string (for example, `"480px"`, also the default). Relative CSS units remain supported without `resizable`; invalid resize widths are rejected by TypeScript and at runtime.
+Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `layout="push"` and provide `width` as a pixel string (for example, `"480px"`, also the default). Relative CSS units remain supported without `resizable`; invalid resize widths are rejected by TypeScript and at runtime.
 
 `TextArea` consumers must supply a controlled `value` (`""` for empty content), with `onChange` or `readOnly`; `defaultValue` is rejected.
 
-Selectable `DataTable` consumers must supply a stable `rowKey` function (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript.
+Selectable `DataTable` consumers must supply a stable `rowKey` function (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected.
 
 ## Validation
 

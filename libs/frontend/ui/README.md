@@ -53,7 +53,7 @@ application adapters supply its existing translations. Pagination options use
 
 `StatusBadge` renders a label with `success`, `error`, `warning`, `info`, or
 `neutral` tone; use `Chip` for removable input tokens. `InlineDrawer` supports
-both overlay and push layouts. With `resizable`, `width` must be a pixel string
+both overlay and push layouts. With `resizable`, `layout="push"` is required and `width` must be a pixel string
 (e.g. `"480px"`); other CSS units are rejected. Without resizing, CSS units remain
 unrestricted. Push drawers accept `resizable` bounds and a
 `persistKey`. Resize/storage hooks are private implementation dependencies.
@@ -109,3 +109,6 @@ otherwise the component generates one.
 
 `Switch` always renders a native checkbox. Its `type` is fixed and cannot be
 overridden; pass `checked`/`onChange` or `defaultChecked` for native state handling.
+
+Sortable column labels identify sort state and must be unique across all columns.
+DataTable rejects ambiguous labels instead of choosing another column’s comparator.

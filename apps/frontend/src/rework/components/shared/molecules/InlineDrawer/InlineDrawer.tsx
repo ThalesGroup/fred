@@ -88,6 +88,7 @@ export type InlineDrawerProps = InlineDrawerBaseProps &
     | {
         /** Push-layout drag resize; persists the chosen pixel width under persistKey. */
         resizable: InlineDrawerResizeSpec;
+        layout: "push";
         /** Initial width in pixels only. Defaults to "480px"; persisted widths take precedence. */
         width?: `${number}px`;
       }
@@ -115,6 +116,9 @@ export function InlineDrawer({
   const drawerRef = useRef<HTMLElement | null>(null);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
+  if (resizable && layout !== "push") {
+    throw new Error('InlineDrawer: resizable requires layout="push".');
+  }
   const seedWidthPx = Number(width.slice(0, -2));
   if (resizable && (!width.endsWith("px") || !Number.isFinite(seedWidthPx))) {
     throw new Error('InlineDrawer: resizable width must use pixels (for example, "480px").');

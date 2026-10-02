@@ -163,6 +163,7 @@ const badRemDrawer = (
     open
     onClose={() => {}}
     title="Bad"
+    layout="push"
     width="30rem"
     resizable={{ persistKey: "bad" }}
   />
@@ -173,6 +174,7 @@ const badPercentDrawer = (
     open
     onClose={() => {}}
     title="Bad"
+    layout="push"
     width="50%"
     resizable={{ persistKey: "bad" }}
   />
@@ -183,6 +185,7 @@ const badViewportDrawer = (
     open
     onClose={() => {}}
     title="Bad"
+    layout="push"
     width="30vw"
     resizable={{ persistKey: "bad" }}
   />
@@ -226,3 +229,23 @@ export function dynamicSelectionContract(selectable: boolean) {
 
 // @ts-expect-error Switch always renders a checkbox; callers cannot override its type.
 export const badSwitchType = <Switch type="text" />;
+
+export const missingResizeLayout = (
+  // @ts-expect-error Resizing requires an explicit push layout.
+  <InlineDrawer
+    open
+    onClose={() => {}}
+    title="Bad"
+    resizable={{ persistKey: "bad" }}
+  />
+);
+export const overlayResizeLayout = (
+  // @ts-expect-error Overlay drawers cannot resize.
+  <InlineDrawer
+    open
+    onClose={() => {}}
+    title="Bad"
+    layout="overlay"
+    resizable={{ persistKey: "bad" }}
+  />
+);

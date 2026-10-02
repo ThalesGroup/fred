@@ -217,6 +217,16 @@ export default function DataTable<T>({
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
 
+  const columnLabels = new Set<string>();
+  const duplicateLabels = new Set<string>();
+  for (const column of columns) {
+    if (columnLabels.has(column.label)) duplicateLabels.add(column.label);
+    columnLabels.add(column.label);
+  }
+  if (columns.some((column) => column.sortable && duplicateLabels.has(column.label))) {
+    throw new Error("DataTable: sortable column labels must be unique across all columns.");
+  }
+
   const sortedData = useMemo(() => {
     // Controlled sort: the caller already ordered `data` (e.g. a sorted
     // server response) — sorting it again here would fight that order.

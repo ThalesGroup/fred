@@ -749,3 +749,17 @@ it("keeps background selection inside an external ARIA container", () => {
   click(container.querySelector('[class*="datatable-row"] span'));
   expect(select).toHaveBeenCalledExactlyOnceWith(new Set([1]));
 });
+
+it.each([true, false])("rejects ambiguous sortable labels when the other column is sortable=%s", (sortable) => {
+  expect(() =>
+    render(
+      <DataTable
+        data={makeRows(2)}
+        columns={[
+          { label: "Value", sortable, cellRenderer: (row) => row.id, sortValue: (row) => row.id },
+          { label: "Value", sortable: true, cellRenderer: (row) => -row.id, sortValue: (row) => -row.id },
+        ]}
+      />,
+    ),
+  ).toThrow("sortable column labels must be unique");
+});

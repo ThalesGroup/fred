@@ -50,3 +50,8 @@ it("keeps CSS widths available without resizing", () => {
     "--drawer-width:30rem",
   );
 });
+
+it.each([undefined, "overlay"])("rejects resizing with layout %s", (layout) => {
+  const invalid = { ...props, layout } as unknown as InlineDrawerProps;
+  expect(() => renderToStaticMarkup(<InlineDrawer {...invalid} />)).toThrow('resizable requires layout="push"');
+});
