@@ -502,7 +502,8 @@ def test_attachment_context_suffix_routes_csv_through_tabular_tools() -> None:
     )
 
     assert "New CSV and Excel attachments are tabular datasets" in suffix
-    assert "first call the tabular schema tool" in suffix
+    assert "call describe_tabular_documents directly with its uid" in suffix
+    assert "Do not call list_tabular_documents" in suffix
     assert "partial searchable text preview" in suffix
     assert (
         "- sales.csv [2b6a1cfdbffe4847a4d2f087741f2835]: conversation document (use tabular/SQL tools first"
@@ -522,7 +523,7 @@ def test_attachment_context_suffix_warns_when_no_tabular_tool_is_bound() -> None
     assert "No tabular/SQL tool is enabled" in suffix
     assert "newly uploaded CSV and Excel attachments cannot be queried" in suffix
     assert "Older attachments may have a partial text preview" in suffix
-    assert "first call the tabular schema tool" not in suffix
+    assert "call describe_tabular_documents directly with its uid" not in suffix
 
 
 def test_attachment_context_suffix_routes_excel_to_its_table_roadmap() -> None:
