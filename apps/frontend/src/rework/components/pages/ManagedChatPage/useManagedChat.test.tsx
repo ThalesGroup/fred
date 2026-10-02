@@ -1386,6 +1386,115 @@ describe("useManagedChat — session write reliability", () => {
   };
   const grantScope = { userId: "alice", agentInstanceId: "agent-1", sessionId: "session-1" };
 
+  it("submits Other text alone after a single question choice", async () => {
+    const question = {
+      ...awaitingHumanEvent,
+      payload: {
+        ...awaitingHumanEvent.payload,
+        stage: "agent_question",
+        choices: [{ id: "paris", label: "Paris" }],
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(question));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("paris", "Lyon");
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(question, undefined, "Lyon", expect.any(Object), undefined, false);
+  });
+
+  it("replaces a staged choice with Other text in a grouped answer", async () => {
+    const first = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "paris", label: "Paris" }],
+        free_text: true,
+      },
+    };
+    const second = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        choices: [{ id: "low", label: "Low" }],
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => {
+      capturedOnAwaitingHuman?.(first);
+      capturedOnAwaitingHuman?.(second);
+    });
+    rerender();
+    act(() => latest.stageHitlAnswer("paris"));
+    act(() => latest.selectHitlTab(first));
+    act(() => latest.setHitlFreeText("Lyon"));
+    expect(latest.stagedHitlAnswer).toEqual({ answer: undefined, freeText: "Lyon", skipped: false });
+    act(() => latest.stageHitlAnswer(undefined, "Lyon"));
+    act(() => latest.stageHitlAnswer("low"));
+
+    await act(async () => {
+      latest.handleSendAllHitl();
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      first,
+      undefined,
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+      expect.any(Function),
+      [
+        { event: first, answer: undefined, freeText: "Lyon", skipped: false },
+        { event: second, answer: "low", freeText: undefined, skipped: false },
+      ],
+    );
+  });
+
+  it("wraps Next to the first unanswered question tab", () => {
+    const questions = ["first", "second", "third", "fourth"].map((id) => ({
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: `${id}?`,
+        interrupt_id: `interrupt-${id}`,
+        occurrence_id: `call-${id}`,
+        choices: [{ id, label: id }],
+        free_text: true,
+      },
+    }));
+    mount();
+    bindSession("session-1");
+    act(() => questions.forEach((question) => capturedOnAwaitingHuman?.(question)));
+    rerender();
+
+    act(() => latest.selectHitlTab(questions[3]));
+    act(() => latest.stageHitlAnswer("fourth"));
+    expect(latest.pendingHitl).toEqual(questions[0]);
+    act(() => latest.stageHitlAnswer("first"));
+    expect(latest.pendingHitl).toEqual(questions[1]);
+    act(() => latest.selectHitlTab(questions[3]));
+    act(() => latest.stageHitlAnswer("fourth"));
+    expect(latest.pendingHitl).toEqual(questions[1]);
+    act(() => latest.stageHitlAnswer("second"));
+    expect(latest.pendingHitl).toEqual(questions[2]);
+  });
+
   it("stages simultaneous answers, permits revision, then resumes once", async () => {
     const first = {
       ...awaitingHumanEvent,

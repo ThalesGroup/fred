@@ -52,6 +52,19 @@ function hitlKey(event: RuntimeAwaitingHumanEvent): string {
   ].join(":");
 }
 
+function answerWithOtherPriority(
+  event: RuntimeAwaitingHumanEvent,
+  answer: string | boolean | undefined,
+  freeText?: string,
+): string | boolean | undefined {
+  return event.payload.stage === "agent_question" &&
+    event.payload.free_text &&
+    event.payload.choices?.length &&
+    freeText?.trim()
+    ? undefined
+    : answer;
+}
+
 function resolvedHitlAnswer(
   event: RuntimeAwaitingHumanEvent,
   stagedAnswers: ReadonlyMap<string, StagedHitlAnswer>,
@@ -122,7 +135,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         if (staged && (!staged.skipped || value.trim())) {
           const next = new Map(stagedHitlAnswersRef.current);
           if (staged.answer === undefined && !value.trim()) next.delete(key);
-          else next.set(key, { ...staged, freeText: value.trim() ? value : undefined, skipped: false });
+          else
+            next.set(key, {
+              ...staged,
+              answer: answerWithOtherPriority(selected, staged.answer, value),
+              freeText: value.trim() ? value : undefined,
+              skipped: false,
+            });
           replaceStagedHitlAnswers(next);
         }
       }
@@ -142,7 +161,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       const selected = current.find((event) => hitlKey(event) === selectedHitlKey) ?? current[0];
       if (!selected || current.length < 2) return;
       const nextAnswers = new Map(stagedHitlAnswersRef.current);
-      nextAnswers.set(hitlKey(selected), { answer, freeText, skipped });
+      nextAnswers.set(hitlKey(selected), {
+        answer: answerWithOtherPriority(selected, answer, freeText),
+        freeText,
+        skipped,
+      });
       replaceStagedHitlAnswers(nextAnswers);
       const index = current.findIndex((event) => hitlKey(event) === hitlKey(selected));
       const next = [...current.slice(index + 1), ...current.slice(0, index)].find(
@@ -900,9 +923,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             }
           }
         : undefined;
+      const selectedAnswer = answerWithOtherPriority(prompt, answer, freeText);
       const resume = onAccepted
-        ? sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped, onAccepted)
-        : sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped);
+        ? sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped, onAccepted)
+        : sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped);
       void resume
         .then((reached) => {
           if (reached) {
@@ -947,7 +971,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           countUnicodeCodePoints(staged.freeText) > maxChatInputChars
         )
           return;
-        answers.push({ event, ...staged });
+        answers.push({
+          event,
+          ...staged,
+          answer: answerWithOtherPriority(event, staged.answer, staged.freeText),
+        });
       }
       const owner = prompts[0];
       hitlResumeOwnerRef.current = owner;

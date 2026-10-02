@@ -392,6 +392,21 @@ describe("HitlPrompt staged batch answers", () => {
       ),
     );
     expect(choice?.getAttribute("aria-pressed")).toBe("true");
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSendAll={onSendAll}
+          onAnswer={onAnswer}
+          canSendAll
+          stagedAnswer={{ answer: "proceed", skipped: false }}
+          freeTextValue="Other answer"
+        />,
+      ),
+    );
+    expect(choice?.getAttribute("aria-pressed")).toBe("false");
     act(() => sendAll?.click());
     expect(onSendAll).toHaveBeenCalledOnce();
     act(() => root.unmount());
