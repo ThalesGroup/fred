@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
 import TablePagination from "../TablePagination/TablePagination.tsx";
@@ -86,6 +86,7 @@ export interface ServerPagination {
 export interface DataTableLabels {
   selectAllOnPage: string;
   selectRow: string;
+  activateRow: string;
   pagination?: Partial<TablePaginationLabels>;
 }
 
@@ -143,6 +144,7 @@ export type DataTableProps<T> = DataTableBaseProps<T> &
       }
     | {
         selectable: boolean;
+        selectedKeys: ReadonlySet<string | number>;
         onSelectionChange: (keys: ReadonlySet<string | number>) => void;
         /** Required when selection can be enabled, including a dynamic boolean. */
         rowKey: (element: T) => string | number;
@@ -202,8 +204,12 @@ export default function DataTable<T>({
   onSortChange,
   sortClearable = true,
 }: DataTableProps<T>) {
+  const tableId = useId();
   if ((controlledSortState !== undefined) !== (onSortChange !== undefined)) {
     throw new Error("DataTable: sortState and onSortChange must be supplied together.");
+  }
+  if (selectable && selectedKeys === undefined) {
+    throw new Error("DataTable: selectable requires selectedKeys.");
   }
   if (selectable && !onSelectionChange) {
     throw new Error("DataTable: selectable requires onSelectionChange.");
@@ -391,16 +397,6 @@ export default function DataTable<T>({
               key={key}
               data-selected={isSelected || undefined}
               data-activatable={!!onRowClick || undefined}
-              tabIndex={onRowClick ? 0 : undefined}
-              onKeyDown={
-                onRowClick
-                  ? (event) => {
-                      if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
-                      event.preventDefault();
-                      onRowClick(line);
-                    }
-                  : undefined
-              }
               onClick={
                 onRowClick || selectable
                   ? (event) => {
@@ -435,13 +431,30 @@ export default function DataTable<T>({
                      * team names) must never spill under the neighbouring
                      * column. Element values are the caller's own layout
                      * and pass through untouched. */}
-                    {isPrimitive ? (
-                      <span className={styles["cell-text"]} title={String(cellContent)}>
-                        {cellContent}
-                      </span>
-                    ) : (
-                      cellContent
+                    {onRowClick && columnIndex === 0 && (
+                      <button
+                        type="button"
+                        data-row-action
+                        className={styles["row-action"]}
+                        aria-label={labels?.activateRow ?? "Activate row"}
+                        aria-describedby={`${tableId}-${lineIndex}-content`}
+                        onClick={() => onRowClick(line)}
+                      >
+                        <Icon type="chevron_right" />
+                      </button>
                     )}
+                    <div
+                      id={columnIndex === 0 ? `${tableId}-${lineIndex}-content` : undefined}
+                      className={styles["cell-content"]}
+                    >
+                      {isPrimitive ? (
+                        <span className={styles["cell-text"]} title={String(cellContent)}>
+                          {cellContent}
+                        </span>
+                      ) : (
+                        cellContent
+                      )}
+                    </div>
                   </div>
                 );
               })}

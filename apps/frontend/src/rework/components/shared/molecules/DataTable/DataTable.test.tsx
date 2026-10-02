@@ -627,17 +627,23 @@ describe("row activation", () => {
       />,
     );
     const row = container.querySelector('[data-activatable="true"]')!;
-    click(row.querySelector("span"));
+    click(row.querySelector('[class*="cell-content"] span'));
     expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
     expect(select).not.toHaveBeenCalled();
-    click(row.querySelector("button"));
+    click(row.querySelector("button:not([data-row-action])"));
     expect(embedded).toHaveBeenCalledOnce();
     expect(activate).toHaveBeenCalledOnce();
-    act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
-    act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+    const action = row.querySelector<HTMLButtonElement>("[data-row-action]")!;
+    expect(action.type).toBe("button");
+    expect(row.hasAttribute("tabindex")).toBe(false);
+    expect(action.getAttribute("aria-label")).toBe("dataTable.selection.activateRow");
+    click(action);
+    click(action);
     expect(activate).toHaveBeenCalledTimes(3);
     act(() =>
-      row.querySelector("button")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
+      row
+        .querySelector("button:not([data-row-action])")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
     );
     click(row.querySelector('input[aria-label="Input"]'));
     expect(activate).toHaveBeenCalledTimes(3);
@@ -711,7 +717,7 @@ describe("embedded custom controls", () => {
         />
       </div>,
     );
-    click(container.querySelector("[data-activatable] span"));
+    click(container.querySelector('[data-activatable] [class*="cell-content"] span'));
     expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
   });
 });
@@ -789,13 +795,19 @@ it.each([10, 25])("shows the active server page size %s and updates when it chan
 it.each([{ sortState: null }, { onSortChange: () => {} }])(
   "rejects incomplete controlled sort props from untyped callers",
   (sortProps) => {
-    const invalid = { data: makeRows(2), columns, ...sortProps } as DataTableProps<Row>;
+    const invalid = { data: makeRows(2), columns, ...sortProps } as unknown as DataTableProps<Row>;
     expect(() => render(<DataTable {...invalid} />)).toThrow("sortState and onSortChange must be supplied together");
   },
 );
 
 it("rejects untyped selectable tables without a selection handler", () => {
-  const invalid = { data: makeRows(2), columns, selectable: true, rowKey: (row: Row) => row.id } as DataTableProps<Row>;
+  const invalid = {
+    data: makeRows(2),
+    columns,
+    selectable: true,
+    selectedKeys: new Set(),
+    rowKey: (row: Row) => row.id,
+  } as unknown as DataTableProps<Row>;
   expect(() => render(<DataTable {...invalid} />)).toThrow("selectable requires onSelectionChange");
 });
 
@@ -804,4 +816,15 @@ it("rejects local sortable columns without comparators but permits controlled so
   expect(() => render(<DataTable data={makeRows(2)} columns={cols} />)).toThrow("require sortValue");
   act(() => root.render(<DataTable data={makeRows(2)} columns={cols} sortState={null} onSortChange={vi.fn()} />));
   expect(container.textContent).toContain("Id");
+});
+
+it("rejects untyped selectable tables without their controlled selection state", () => {
+  const invalid = {
+    data: makeRows(2),
+    columns,
+    selectable: true,
+    rowKey: (row: Row) => row.id,
+    onSelectionChange: vi.fn(),
+  } as unknown as DataTableProps<Row>;
+  expect(() => render(<DataTable {...invalid} />)).toThrow("selectable requires selectedKeys");
 });

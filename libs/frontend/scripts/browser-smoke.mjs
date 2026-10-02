@@ -949,6 +949,38 @@ async function verifyHostedComponents(page) {
     await hosted.getByText(text, { exact: true }).waitFor({ state: "visible" });
   }
   const table = hosted.locator(".hosted-table");
+  const rowAction = table
+    .getByRole("button", { name: "Open record", exact: true })
+    .first();
+  await rowAction.focus();
+  await rowAction.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await rowAction.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  assert.equal(
+    await rowAction.evaluate(
+      (el) =>
+        document.getElementById(el.getAttribute("aria-describedby"))
+          ?.textContent,
+    ),
+    "Row 1",
+  );
+  await rowAction.press("Enter");
+  await rowAction.press("Space");
+  assert.equal(await hosted.locator("[data-activations]").textContent(), "2");
+  assert.equal(
+    await rowAction.evaluate((el) => getComputedStyle(el).outlineStyle),
+    "solid",
+  );
+  assert.equal(
+    await rowAction.evaluate(
+      (el) => getComputedStyle(el.parentElement).outlineStyle,
+    ),
+    "solid",
+  );
+
   await table
     .getByRole("checkbox", { name: "Select visible records" })
     .locator("..")

@@ -153,6 +153,7 @@ export function HostedComponents() {
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState(false);
   const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+  const [activations, setActivations] = useState(0);
   const [uploads, setUploads] = useState(0);
   const [file, setFile] = useState("");
   const [drawer, setDrawer] = useState(false);
@@ -264,14 +265,17 @@ export function HostedComponents() {
           rowKey={(row) => row.id}
           selectedKeys={keys}
           onSelectionChange={setKeys}
+          onRowClick={() => setActivations((count) => count + 1)}
           pageSize={20}
           labels={{
             selectAllOnPage: "Select visible records",
             selectRow: "Select record",
+            activateRow: "Open record",
             pagination: labels,
           }}
         />
       </div>
+      <output data-activations>{activations}</output>
       <output data-selection>{keys.size}</output>
       <TablePagination
         totalItems={3}

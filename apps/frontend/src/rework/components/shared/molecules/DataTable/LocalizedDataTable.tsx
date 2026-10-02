@@ -23,6 +23,7 @@ export default function LocalizedDataTable<T>(props: DataTableProps<T>) {
       {...props}
       labels={{
         selectAllOnPage: t("dataTable.selection.selectAllOnPage"),
+        activateRow: t("dataTable.selection.activateRow"),
         selectRow: t("dataTable.selection.selectRow"),
         pagination: {
           totalItems: (count) => t("dataTable.pagination.totalItems", { count }),

@@ -225,7 +225,28 @@
 .datatable-row[data-activatable="true"] {
   cursor: pointer;
 }
-.datatable-row[data-activatable="true"]:focus-visible {
+.datatable-row:has(.row-action:focus-visible) > .datatable-cell {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.cell-content {
+  display: contents;
+}
+.row-action {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  margin-right: var(--spacing-xs);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-xs);
+  color: var(--on-surface);
+}
+.row-action:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
 }

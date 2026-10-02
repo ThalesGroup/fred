@@ -652,6 +652,7 @@
     },
     "selection": {
       "selectAllOnPage": "Select all rows on this page",
+      "activateRow": "Open row",
       "selectRow": "Select row"
     }
   },

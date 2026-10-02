@@ -208,6 +208,7 @@ const selectableTableWithoutKeys = (
     data={[{ id: 1 }]}
     columns={[]}
     selectable
+    selectedKeys={new Set()}
     onSelectionChange={() => {}}
   />
 );
@@ -220,6 +221,7 @@ export function dynamicSelectionContract(selectable: boolean) {
       data={[{ id: 1 }]}
       columns={[]}
       selectable={selectable}
+      selectedKeys={new Set()}
       onSelectionChange={() => {}}
     />
   );
@@ -228,6 +230,7 @@ export function dynamicSelectionContract(selectable: boolean) {
       data={[{ id: 1 }]}
       columns={[]}
       selectable={selectable}
+      selectedKeys={new Set()}
       rowKey={(row) => row.id}
       onSelectionChange={() => {}}
     />
@@ -277,5 +280,16 @@ export const missingSelectionHandler = (
     columns={[]}
     selectable
     rowKey={(row) => row.id}
+  />
+);
+
+export const missingSelectedKeys = (
+  // @ts-expect-error Selection is controlled and requires its current set.
+  <DataTable
+    data={[{ id: 1 }]}
+    columns={[]}
+    selectable
+    rowKey={(row) => row.id}
+    onSelectionChange={() => {}}
   />
 );

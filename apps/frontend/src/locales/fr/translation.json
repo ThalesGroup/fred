@@ -652,6 +652,7 @@
     },
     "selection": {
       "selectAllOnPage": "Sélectionner toutes les lignes de cette page",
+      "activateRow": "Ouvrir la ligne",
       "selectRow": "Sélectionner la ligne"
     }
   },

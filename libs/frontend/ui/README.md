@@ -92,9 +92,11 @@ candidates must still be compared with a complete, maintainer-confirmed contract
 [../RELEASE.md](../RELEASE.md).
 
 Real-consumer interaction props: `DataTable<T>.onRowClick(row)` activates row
-background/cells by pointer or Enter/Space while leaving embedded controls alone.
+background/cells by pointer while leaving embedded controls alone. A native
+first-cell action button supports Enter/Space with visible button and row focus;
+`labels.activateRow` supplies its localized name, with first-cell content as context.
 When combined with selection, background activates and checkboxes select.
-Selectable tables require `rowKey` and `onSelectionChange`, including when `selectable` is a dynamic
+Selectable tables require `rowKey`, `selectedKeys` and `onSelectionChange`, including when `selectable` is a dynamic
 boolean, so row and page-wide selection use stable identities across sorting
 and pagination.
 `InlineDrawer.closeLabel` supplies the accessible close action name.
