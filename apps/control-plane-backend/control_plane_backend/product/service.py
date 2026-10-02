@@ -98,6 +98,7 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
+    FrontendUiThemes,
     FrontendUserAuthConfig,
     InactiveSessionItem,
     InactiveSessionsResponse,
@@ -453,11 +454,21 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         if user_security.enabled
         else FrontendUserAuthConfig(enabled=False)
     )
+    ui_settings = await deps.get_platform_ui_settings_store().get()
+    ui_themes = (
+        FrontendUiThemes(
+            default_theme=ui_settings.default_theme,
+            hidden_themes=ui_settings.hidden_themes,
+        )
+        if ui_settings is not None
+        else None
+    )
     return FrontendConfig(
         user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        ui_themes=ui_themes,
     )
 
 
