@@ -11,6 +11,7 @@ Tracked by [#2899](https://github.com/ThalesGroup/fred/issues/2899).
 - Agent questions with two or more choices always accept a text answer, regardless of the model's `allow_free_text` argument. The four-choice limit remains.
 - Managed chat places a localized gray "Other" / "Autre" label beside the editable last row of the choice list and renders question Markdown. Text-only questions and tool approvals retain their existing forms.
 - When multiple `ask_user` calls wait together, managed chat groups their pending questions in one card with subject tabs. The first question is selected initially; answers stay editable until every tab is answered or skipped, then one request resumes the complete set. Completed questions stay in the trace.
+- Once the runtime accepts a tool execution approval or refusal, managed chat shows the person's response below the confirmation card without waiting for history reload.
 
 ## Capabilities
 

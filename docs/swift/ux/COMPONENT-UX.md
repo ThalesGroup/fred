@@ -5093,7 +5093,10 @@ The chat composer blocks new messages and commands in that conversation while
 the question or its resume is in progress, then becomes available again.
 Approval actions use the same neutral outline style and offer a conversation-scoped
 choice; the browser answers later matching approval pauses through the existing
-resume flow. Skip at the bottom right and close at the top right appear only
+resume flow. After the runtime accepts an approval, refusal, or skip, the chat
+shows that localized user response below the confirmation card immediately and
+after history reload. A rejected resume does not show a response. Skip at the
+bottom right and close at the top right appear only
 for `stage="agent_question"`. For one question, both resume it as skipped. With
 grouped questions, Skip records a draft for the active tab, while close skips
 the entire group in one request. Skipped answers appear in the same cards,

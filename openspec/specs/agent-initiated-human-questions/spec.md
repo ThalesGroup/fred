@@ -80,6 +80,14 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **AND** the `ask_user` tool detail drawer lists the offered choices and highlights the selected one when the response is available
 - **AND** a free-text answer to a question with choices appears once as a highlighted localized "Other: <answer>" row in that drawer, even when the agent offered an option named Other
 
+#### Scenario: Tool execution approval response in managed chat
+
+- **GIVEN** a tool execution confirmation is awaiting a person's choice
+- **WHEN** the runtime accepts approval, refusal, or skip
+- **THEN** managed chat shows the localized user response below the confirmation card without waiting for history reload
+- **AND** the same response remains visible after history reload
+- **AND** a resume rejected before acceptance leaves no response in the chat
+
 #### Scenario: No-LLM Graph test assistant uses the question tool
 
 - **GIVEN** an interactive Graph test assistant with agent questions enabled

@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Ask an interactive agent a question with multiple choices. Confirm that an Other text field appears below the choices and accepts an answer. For simultaneous questions, edit answers across tabs, submit once, and confirm each call receives its own answer. A question following an invalid tool call must not show the previous failure as a final response.
+Ask an interactive agent a question with multiple choices. Confirm that an Other text field appears below the choices and accepts an answer. For simultaneous questions, edit answers across tabs, submit once, and confirm each call receives its own answer. Approve or refuse a tool execution and confirm that the response appears below its confirmation card immediately and after reload. A question following an invalid tool call must not show the previous failure as a final response.
 
 ## Rollback
 
