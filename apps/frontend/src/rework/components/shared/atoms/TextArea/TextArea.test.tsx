@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { act, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
@@ -188,5 +189,48 @@ it("keeps an initially empty live region mounted across error updates", () => {
     }
   } finally {
     act(() => root.unmount());
+  }
+});
+
+it("renders a zero-character limit", () => {
+  expect(renderToStaticMarkup(<TextArea label="Notes" maxLength={0} />)).toContain("0 / 0");
+});
+it.each([false, true])("synchronizes a reset with synchronous parent updates, canceled=%s", async (cancel) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  function Form() {
+    const [version, setVersion] = useState(0);
+    return (
+      <form
+        onReset={(event) => {
+          if (cancel) event.preventDefault();
+          flushSync(() => setVersion((value) => value + 1));
+        }}
+      >
+        <TextArea label={`Notes ${version}`} defaultValue="abc" maxLength={100} />
+      </form>
+    );
+  }
+  try {
+    act(() => root.render(<Form />));
+    const field = host.querySelector("textarea")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "abcdef");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(host.textContent).toContain("6 / 100");
+    await act(async () => {
+      // happy-dom reset() ignores preventDefault; dispatch the canceled path explicitly.
+      const form = host.querySelector("form")!;
+      if (cancel) expect(form.dispatchEvent(new Event("reset", { bubbles: true, cancelable: true }))).toBe(false);
+      else form.reset();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(field.value).toBe(cancel ? "abcdef" : "abc");
+    expect(host.textContent).toContain(cancel ? "6 / 100" : "3 / 100");
+  } finally {
+    act(() => root.unmount());
+    host.remove();
   }
 });

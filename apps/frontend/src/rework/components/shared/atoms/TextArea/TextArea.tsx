@@ -54,6 +54,9 @@ export default function TextArea({
   useImperativeHandle(ref, () => inputRef.current!, []);
   const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
   useEffect(() => {
+    if (!controlled && inputRef.current) setUncontrolledValue(inputRef.current.value);
+  });
+  useEffect(() => {
     if (controlled) return;
     const input = inputRef.current;
     const form = input?.form;
@@ -71,7 +74,7 @@ export default function TextArea({
       clearTimeout(resetTimer);
       form?.removeEventListener("reset", onReset);
     };
-  });
+  }, [controlled, props.form]);
   if (value === null || (controlled && defaultValue !== undefined)) {
     throw new Error("TextArea: use either a non-null controlled value or defaultValue, not both.");
   }
@@ -80,7 +83,7 @@ export default function TextArea({
   }
   const characterCounter = String(controlled ? value : uncontrolledValue).length;
   // Keep the live region mounted before content arrives, without reserving an empty row.
-  const hasInformation = !!error || !!explanation || !!maxLength;
+  const hasInformation = !!error || !!explanation || maxLength !== undefined;
 
   return (
     <div
@@ -110,7 +113,7 @@ export default function TextArea({
         <span id={hintId} className={styles.hint} aria-live="polite">
           {error || explanation || null}
         </span>
-        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+        <span className={styles.maxLength}>{maxLength !== undefined && `${characterCounter} / ${maxLength}`}</span>
       </span>
     </div>
   );
