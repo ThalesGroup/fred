@@ -1612,10 +1612,9 @@ async def revoke_team_member_role(
     hold untouched (AUTHZ-06, RFC Part 7 §34-35).
 
     Why this function exists:
-    - the inverse of `grant_team_member_role`; revoking a member's only
-      remaining role is refused (`TeamMemberLastRoleError`) — that is a
-      removal, not a role change, and must go through `remove_team_member` so
-      the two stay distinct, explicit, auditable actions
+    - revoking a sole elevated role retains membership through a direct
+      `team_member` relation; revoking a sole `team_member` is refused so
+      full removal still goes through `remove_team_member`
 
     How to use it:
     - call from the team-membership role-revoke route
@@ -1629,7 +1628,10 @@ async def revoke_team_member_role(
     current_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
     if relation not in current_roles:
         raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
-    if current_roles == {relation}:
+    sole_elevated_role = (
+        current_roles == {relation} and relation != UserTeamRelation.TEAM_MEMBER
+    )
+    if current_roles == {UserTeamRelation.TEAM_MEMBER}:
         raise TeamMemberLastRoleError(team_id, user_id, relation)
 
     if relation == UserTeamRelation.TEAM_ADMIN:
@@ -1640,13 +1642,23 @@ async def revoke_team_member_role(
             revoked_role=relation,
         )
     permission_to_check = _get_administer_permission_for_team_role_relation(relation)
+    permissions_to_check = [permission_to_check]
+    if (
+        sole_elevated_role
+        and permission_to_check != TeamPermission.CAN_ADMINISTER_MEMBERS
+    ):
+        permissions_to_check.append(TeamPermission.CAN_ADMINISTER_MEMBERS)
     await _validate_team_and_check_permission(
         user,
         team_id,
         rebac,
-        [permission_to_check],
+        permissions_to_check,
         deps,
     )
+    if sole_elevated_role:
+        await _add_team_member_relation(
+            rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+        )
     await _remove_team_member_relation(rebac, team_id, user_id, relation)
 
     logger.info(

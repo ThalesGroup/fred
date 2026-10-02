@@ -21,7 +21,8 @@ single-role model it replaces. These tests lock in the grant/revoke
 primitives directly (no HTTP layer) so the invariants are unambiguous:
 - granting adds without disturbing any role already held;
 - revoking removes only the named role;
-- revoking a role not held, or a member's only remaining role, is refused;
+- revoking a sole elevated role retains a direct member relation;
+- revoking a role not held or a sole direct member role is refused;
 - the "team must keep at least one team_admin" guard fires exactly when
   `team_admin` is the role being taken away, whether by a single-role revoke
   or a full member removal.
@@ -361,27 +362,55 @@ async def test_revoke_team_member_role_raises_when_not_held() -> None:
 
 
 @pytest.mark.asyncio
-async def test_revoke_team_member_role_raises_when_it_is_the_last_role() -> None:
-    """AUTHZ-06 (RFC Part 7 §35): revoking a member's only role would silently
-    remove them — that must go through `remove_team_member` instead."""
-    rebac = _FakeRebac(
-        roles={
-            "bob": {UserTeamRelation.TEAM_EDITOR},
-            "alice": {UserTeamRelation.TEAM_ADMIN},
-        }
-    )
+async def test_revoke_team_member_role_refuses_sole_direct_member_role() -> None:
+    rebac = _FakeRebac(roles={"bob": {UserTeamRelation.TEAM_MEMBER}})
 
     with pytest.raises(TeamMemberLastRoleError):
         await revoke_team_member_role(
             _user(),
             TeamId("fredlab"),
             "bob",
-            UserTeamRelation.TEAM_EDITOR,
+            UserTeamRelation.TEAM_MEMBER,
             _deps(rebac, "fredlab"),
         )
 
-    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_EDITOR}
+    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_MEMBER}
+    assert rebac.added_relations == []
     assert rebac.deleted_relations == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("role", "permission"),
+    [
+        (UserTeamRelation.TEAM_ADMIN, TeamPermission.CAN_ADMINISTER_ADMINS),
+        (UserTeamRelation.PENDING_TEAM_ADMIN, TeamPermission.CAN_ADMINISTER_ADMINS),
+        (UserTeamRelation.TEAM_EDITOR, TeamPermission.CAN_ADMINISTER_EDITORS),
+        (UserTeamRelation.TEAM_ANALYST, TeamPermission.CAN_ADMINISTER_ANALYSTS),
+    ],
+)
+async def test_revoke_sole_elevated_role_retains_simple_member(
+    role: UserTeamRelation, permission: TeamPermission
+) -> None:
+    rebac = _FakeRebac(roles={"bob": {role}, "alice": {UserTeamRelation.TEAM_ADMIN}})
+    deps = _deps(rebac, "fredlab")
+
+    await revoke_team_member_role(_user(), TeamId("fredlab"), "bob", role, deps)
+
+    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_MEMBER}
+    assert [relation.relation for relation in rebac.added_relations] == [
+        RelationType.TEAM_MEMBER
+    ]
+    assert [relation.relation for relation in rebac.deleted_relations] == [
+        RelationType(role.value)
+    ]
+    assert rebac.team_permission_checks == [
+        ("fredlab", (permission, TeamPermission.CAN_ADMINISTER_MEMBERS))
+    ]
+    members = await list_team_members_unfiltered(_user(), TeamId("fredlab"), deps)
+    assert next(member.relations for member in members if member.user.id == "bob") == [
+        UserTeamRelation.TEAM_MEMBER
+    ]
 
 
 @pytest.mark.asyncio
@@ -428,22 +457,110 @@ async def test_revoke_team_member_role_allows_admin_revoke_when_another_admin_ex
     assert rebac.roles["bob"] == {UserTeamRelation.TEAM_EDITOR}
 
 
-# --------------------------- base-role preservation (PR #1957 review) -----
-#
-# `_FakeRebac.lookup_subjects` mirrors OpenFGA's computed `team_member`
-# relation (schema.fga: `[user] or team_admin or team_editor or
-# team_analyst`) exactly — a TEAM_MEMBER lookup also returns elevated-role
-# holders, whether or not they hold a direct `team_member` tuple. This lets
-# these tests reproduce the bug (and pin the fix) without a live OpenFGA
-# server: `_get_user_roles_in_team` must recover the base role from
-# `has_direct_relation` (a literal-tuple read), never from that computed set.
+@pytest.mark.asyncio
+async def test_revoke_sole_admin_still_blocks_last_active_admin_without_writes() -> (
+    None
+):
+    rebac = _FakeRebac(roles={"bob": {UserTeamRelation.TEAM_ADMIN}})
+
+    with pytest.raises(TeamAdminConstraintError):
+        await revoke_team_member_role(
+            _user(),
+            TeamId("fredlab"),
+            "bob",
+            UserTeamRelation.TEAM_ADMIN,
+            _deps(rebac, "fredlab"),
+        )
+
+    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_ADMIN}
+    assert rebac.added_relations == []
+    assert rebac.deleted_relations == []
+
+
+@pytest.mark.asyncio
+async def test_revoke_sole_elevated_role_checks_member_grant_permission_before_writing() -> (
+    None
+):
+    class DenyMemberGrantRebac(_FakeRebac):
+        async def check_user_team_permissions_or_raise(
+            self, *, user, team_id, permissions
+        ) -> str | None:
+            if TeamPermission.CAN_ADMINISTER_MEMBERS in permissions:
+                raise PermissionError("member grant denied")
+            return await super().check_user_team_permissions_or_raise(
+                user=user, team_id=team_id, permissions=permissions
+            )
+
+    rebac = DenyMemberGrantRebac(roles={"bob": {UserTeamRelation.TEAM_EDITOR}})
+
+    with pytest.raises(PermissionError, match="member grant denied"):
+        await revoke_team_member_role(
+            _user(),
+            TeamId("fredlab"),
+            "bob",
+            UserTeamRelation.TEAM_EDITOR,
+            _deps(rebac, "fredlab"),
+        )
+
+    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_EDITOR}
+    assert rebac.added_relations == []
+    assert rebac.deleted_relations == []
+
+
+@pytest.mark.asyncio
+async def test_revoke_sole_elevated_role_can_retry_after_delete_failure() -> None:
+    class FailOnceOnDeleteRebac(_FakeRebac):
+        fail_next_delete = True
+
+        async def delete_relations(self, relations: list[Relation]) -> None:
+            if self.fail_next_delete:
+                self.fail_next_delete = False
+                raise RuntimeError("delete failed")
+            await super().delete_relations(relations)
+
+    rebac = FailOnceOnDeleteRebac(
+        roles={
+            "bob": {UserTeamRelation.TEAM_ADMIN},
+            "alice": {UserTeamRelation.TEAM_ADMIN},
+        }
+    )
+    deps = _deps(rebac, "fredlab")
+
+    with pytest.raises(RuntimeError, match="delete failed"):
+        await revoke_team_member_role(
+            _user(),
+            TeamId("fredlab"),
+            "bob",
+            UserTeamRelation.TEAM_ADMIN,
+            deps,
+        )
+
+    assert rebac.roles["bob"] == {
+        UserTeamRelation.TEAM_ADMIN,
+        UserTeamRelation.TEAM_MEMBER,
+    }
+    assert len(rebac.added_relations) == 1
+
+    await revoke_team_member_role(
+        _user(),
+        TeamId("fredlab"),
+        "bob",
+        UserTeamRelation.TEAM_ADMIN,
+        deps,
+    )
+
+    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_MEMBER}
+    assert len(rebac.added_relations) == 1
+
+
+# --------------------------- base-role preservation -----------------------
+# The role read must distinguish a direct member tuple from membership
+# computed through an elevated role.
 
 
 @pytest.mark.asyncio
 async def test_member_promoted_to_editor_can_be_demoted_back_to_member() -> None:
-    """Regression for PR #1957 discussion_r3568344074: a base member granted
-    an elevated role must be demotable back to base member — revoking the
-    elevated role must not be mistaken for revoking their only role."""
+    """A direct member tuple survives granting and revoking an elevated role."""
     rebac = _FakeRebac(roles={"bob": {UserTeamRelation.TEAM_MEMBER}})
 
     await grant_team_member_role(
@@ -467,6 +584,7 @@ async def test_member_promoted_to_editor_can_be_demoted_back_to_member() -> None
     )
 
     assert rebac.roles["bob"] == {UserTeamRelation.TEAM_MEMBER}
+    assert rebac.added_relations[-1].relation == RelationType.TEAM_EDITOR
 
 
 @pytest.mark.asyncio
@@ -515,33 +633,6 @@ async def test_editor_and_analyst_without_direct_member_tuple_revoke_editor_leav
     )
 
     assert rebac.roles["bob"] == {UserTeamRelation.TEAM_ANALYST}
-
-
-@pytest.mark.asyncio
-async def test_editor_alone_without_direct_member_tuple_revoke_editor_stays_refused() -> (
-    None
-):
-    """bob holds team_editor only, with no direct team_member tuple (and no
-    other elevated role) — revoking editor is still refused as a last-role
-    revoke; the fix must not incorrectly grant a fabricated base role that
-    would let this succeed."""
-    rebac = _FakeRebac(
-        roles={
-            "bob": {UserTeamRelation.TEAM_EDITOR},
-            "alice": {UserTeamRelation.TEAM_ADMIN},
-        }
-    )
-
-    with pytest.raises(TeamMemberLastRoleError):
-        await revoke_team_member_role(
-            _user(),
-            TeamId("fredlab"),
-            "bob",
-            UserTeamRelation.TEAM_EDITOR,
-            _deps(rebac, "fredlab"),
-        )
-
-    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_EDITOR}
 
 
 # --------------------------- roster / removal -----------------------------

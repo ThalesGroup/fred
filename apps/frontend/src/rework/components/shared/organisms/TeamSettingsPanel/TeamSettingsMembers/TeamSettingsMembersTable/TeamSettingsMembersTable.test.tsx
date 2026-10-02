@@ -114,6 +114,33 @@ describe("TeamSettingsMembersTable — role chip toggling", () => {
     });
   });
 
+  it.each(["team_admin", "pending_team_admin"] as const)(
+    "turning off %s keeps the row visible as a simple member after refresh",
+    (role) => {
+      h.revokeTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+      const user = { id: "u1", first_name: "Alice", last_name: "Doe", username: "alice" };
+      h.teamMembers = [{ user, relations: [role] } as TeamMember];
+      render(<TeamSettingsMembersTable team={team} search="" />);
+
+      const chip =
+        role === "pending_team_admin" ? container.querySelector('button[data-pending="true"]') : roleChip("team_admin");
+      expect(chip?.getAttribute("aria-pressed")).toBe("true");
+      click(chip);
+
+      expect(h.revokeTeamMemberRole).toHaveBeenCalledWith({
+        teamId: "team-1",
+        userId: "u1",
+        relation: role,
+      });
+      h.teamMembers = [{ user, relations: ["team_member"] } as TeamMember];
+      act(() => root.render(<TeamSettingsMembersTable team={team} search="" />));
+
+      expect(container.textContent).toContain("alice");
+      expect(roleChip("team_admin").getAttribute("aria-pressed")).toBe("false");
+      expect(container.textContent).toContain("rework.teamRoles.team_member");
+    },
+  );
+
   it("clicking an inactive role chip grants it immediately, with no confirmation", () => {
     h.grantTeamMemberRole.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     h.teamMembers = [

@@ -81,12 +81,14 @@ team's own `team_admin`(s), never on `platform_admin`.
 A person may hold `team_admin`, `team_editor`, and `team_analyst` on the same
 team at the same time — common on small teams where one person governs, edits
 content, and evaluates. Nothing in the OpenFGA schema enforces exclusivity;
-each role is an independent stored relation. Each grant and each revoke is its
-own explicit, individually permission-checked action (`POST
+each role is an independent stored relation. Grants and revocations use
+individually permission-checked actions (`POST
 /teams/{team_id}/members/{user_id}/roles`, `DELETE
-/teams/{team_id}/members/{user_id}/roles/{relation}`) — never a bulk "replace
-the role set" call. Revoking a member's only remaining role is refused (use
-`DELETE /teams/{team_id}/members/{user_id}` to remove them entirely instead).
+/teams/{team_id}/members/{user_id}/roles/{relation}`), with no bulk role-set
+replacement. Revoking the only stored elevated role grants a direct
+`team_member` relation before removing that role, so the person remains a simple
+member. Revoking a sole direct `team_member` is refused; use
+`DELETE /teams/{team_id}/members/{user_id}` to remove the person entirely.
 
 ### Team admin — team `team_admin`
 
