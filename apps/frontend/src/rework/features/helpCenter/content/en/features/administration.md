@@ -45,10 +45,11 @@ On the **User interface** page, a **Platform admin** decides:
 - the **default theme**, the one users get until they choose one;
 - the **offered themes**: an unchecked theme disappears from users' profile.
 
-A user whose theme is no longer offered moves to the default theme. Their
-choice is kept: it comes back if the theme is offered again. Picking a theme in
+A user whose theme is no longer offered moves to the default theme, or to the
+first offered theme when no default is set. Their choice is kept: it comes back if the theme is offered again. Picking a theme in
 the profile, even the one already shown, keeps it afterwards if the default
-theme changes. Changes apply the next time each user loads the application.
+theme changes. When a single theme is offered, the profile only shows the mode. Changes apply
+the next time each user loads the application.
 
 ## Who opens functions to your team
 

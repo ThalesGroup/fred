@@ -166,7 +166,7 @@ class FrontendConfig(BaseModel):
     ui_themes: FrontendUiThemes | None = Field(
         default=None,
         description=(
-            "Platform UI theme settings, or null when never saved. Public on "
+            "Platform UI theme settings, omitted when never saved. Public on "
             "purpose: the frontend resolves the theme before its first paint, "
             "before authentication. Theme ids only, no admin-authored content."
         ),

@@ -92,6 +92,10 @@ export default function UiSettingsPage() {
   const themeOptions = [
     { key: NO_DEFAULT, value: NO_DEFAULT, label: t("rework.uiSettings.default.none") },
     ...UI_THEMES.map((theme) => ({ key: theme, value: theme as string, label: t(UI_THEME_LABEL_KEYS[theme]) })),
+    // A default saved by another frontend version stays visible instead of a blank trigger.
+    ...(defaultTheme && !(UI_THEMES as readonly string[]).includes(defaultTheme)
+      ? [{ key: defaultTheme, value: defaultTheme, label: defaultTheme, disabled: true }]
+      : []),
   ];
 
   return (

@@ -49,11 +49,12 @@ Sur la page **Interface utilisateur**, un **Admin plateforme** décide :
 - des **thèmes proposés** : un thème décoché disparaît du profil des
   utilisateurs.
 
-Un utilisateur dont le thème n'est plus proposé passe au thème par défaut. Son
-choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
+Un utilisateur dont le thème n'est plus proposé passe au thème par défaut, ou au
+premier thème proposé si aucun défaut n'est choisi. Son choix est conservé : il le retrouve si le thème est de nouveau proposé. Choisir
 un thème dans son profil, même celui déjà affiché, le garde ensuite si le thème
-par défaut change. Les changements s'appliquent au prochain chargement de
-l'application par chaque utilisateur.
+par défaut change. Si un seul thème est proposé, le
+profil n'affiche plus que le mode. Les changements s'appliquent au prochain
+chargement de l'application par chaque utilisateur.
 
 ## Qui ouvre les fonctions à votre équipe
 

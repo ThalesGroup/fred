@@ -158,6 +158,9 @@ from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummar
 
 logger = logging.getLogger(__name__)
 
+# Non-empty while the platform UI settings store is failing (see build_frontend_config).
+_ui_settings_failure_logged: set[bool] = set()
+
 # Chat-controls cache (#1976, RFC §3.7): computed chat controls are NEVER
 # persisted. Control-plane may cache the pod's per-capability evaluation
 # cache-aside only, keyed `(capability_id, manifest.version, config_hash)`. A
@@ -454,7 +457,21 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         if user_security.enabled
         else FrontendUserAuthConfig(enabled=False)
     )
-    ui_settings = await deps.get_platform_ui_settings_store().get()
+    try:
+        ui_settings = await deps.get_platform_ui_settings_store().get()
+        _ui_settings_failure_logged.clear()
+    except Exception as exc:
+        # A cosmetic setting must never block login: an unmigrated database
+        # degrades to "no platform theme settings" instead of a failing config.
+        # Logged once per outage: this public endpoint runs on every page load.
+        if not _ui_settings_failure_logged:
+            _ui_settings_failure_logged.add(True)
+            logger.warning(
+                "[frontend-config] platform UI settings unavailable: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+        ui_settings = None
     ui_themes = (
         FrontendUiThemes(
             default_theme=ui_settings.default_theme,

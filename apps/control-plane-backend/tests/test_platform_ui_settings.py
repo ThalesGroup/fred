@@ -33,6 +33,7 @@ from control_plane_backend.platform_ui_settings.service import (
     set_platform_ui_settings,
 )
 from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
+from control_plane_backend.product import service as product_service
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from fred_core import AuthorizationError, KeycloakUser, OrganizationPermission
 from fred_core.security.models import Resource
@@ -235,3 +236,38 @@ async def test_public_config_exposes_saved_ui_themes_without_auth(
         "default_theme": "cobalt",
         "hidden_themes": ["pebble"],
     }
+
+
+@pytest.mark.asyncio
+async def test_public_config_survives_an_unavailable_settings_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing table (migration not run) must not take the login page down."""
+
+    class _BrokenStore:
+        async def get(self):
+            raise RuntimeError("no such table: platform_ui_settings")
+
+    # The app's logging setup does not propagate to caplog; watch the logger itself.
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        product_service.logger,
+        "warning",
+        lambda msg, *args, **kwargs: warnings.append(msg % args),
+    )
+    monkeypatch.setattr(product_service, "_ui_settings_failure_logged", set())
+    app = create_app()
+    container = get_application_container_from_app(app)
+    container.get_platform_ui_settings_store = lambda: _BrokenStore()  # type: ignore[method-assign]
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/control-plane/v1/frontend/config")
+        again = await client.get("/control-plane/v1/frontend/config")
+    assert resp.status_code == 200 and again.status_code == 200
+    assert "ui_themes" not in resp.json()
+    # Public endpoint, hit on every page load: one warning per outage.
+    assert [w for w in warnings if "UI settings unavailable" in w] == [
+        "[frontend-config] platform UI settings unavailable: "
+        "RuntimeError: no such table: platform_ui_settings"
+    ]
