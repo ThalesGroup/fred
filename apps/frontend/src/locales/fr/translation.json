@@ -641,6 +641,12 @@
     "vectorsColumn": "Vecteurs"
   },
   "dataTable": {
+    "sort": {
+      "label": "{{label}}, {{direction}}",
+      "asc": "croissant",
+      "desc": "décroissant",
+      "none": "non trié"
+    },
     "pagination": {
       "first": "Première page",
       "itemsPerPage": "Éléments par page",

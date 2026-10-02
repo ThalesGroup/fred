@@ -23,16 +23,18 @@ export interface ProgressBarProps extends Pick<AriaAttributes, "aria-label" | "a
 }
 
 export default function ProgressBar({ theme, current, max, ...accessibleName }: ProgressBarProps) {
-  const percentage = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
+  const boundedMax = Number.isFinite(max) && max > 0 ? max : 0;
+  const boundedCurrent = Number.isNaN(current) ? 0 : Math.min(boundedMax, Math.max(0, current));
+  const percentage = boundedMax > 0 ? (boundedCurrent / boundedMax) * 100 : 0;
 
   return (
     <div
       {...accessibleName}
       className={styles.track}
       role="progressbar"
-      aria-valuenow={current}
+      aria-valuenow={boundedCurrent}
       aria-valuemin={0}
-      aria-valuemax={max}
+      aria-valuemax={boundedMax}
     >
       <div data-color={theme} className={styles.fill} style={{ width: `${percentage}%` }} />
     </div>

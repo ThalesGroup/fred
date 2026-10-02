@@ -995,13 +995,21 @@ async function verifyHostedComponents(page) {
   assert.equal(await hosted.locator("[data-selection]").textContent(), "20");
   await table.getByRole("button", { name: "Next records" }).click();
   assert.equal(
-    await table
-      .getByRole("checkbox", { name: "Select record", exact: true })
-      .count(),
+    await table.getByRole("checkbox", { name: /^Select record \d+$/ }).count(),
     5,
   );
-  await table.getByRole("button", { name: "Record", exact: true }).click();
-  await table.getByRole("button", { name: "Record", exact: true }).click();
+  await table
+    .getByRole("button", { name: "Record, not sorted", exact: true })
+    .click();
+  await table
+    .getByRole("button", { name: "Record, ascending", exact: true })
+    .click();
+  assert.equal(
+    await table
+      .getByRole("button", { name: "Record, descending", exact: true })
+      .count(),
+    1,
+  );
   await table.getByRole("button", { name: "Start records" }).click();
   assert.equal(
     await table

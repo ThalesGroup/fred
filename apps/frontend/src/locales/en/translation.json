@@ -641,6 +641,12 @@
     "vectorsColumn": "Vectors"
   },
   "dataTable": {
+    "sort": {
+      "label": "{{label}}, {{direction}}",
+      "asc": "ascending",
+      "desc": "descending",
+      "none": "not sorted"
+    },
     "pagination": {
       "first": "First page",
       "itemsPerPage": "Items per page",

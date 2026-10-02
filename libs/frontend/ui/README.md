@@ -124,5 +124,13 @@ ordering to the caller and may omit it. Undefined partial pagination labels reta
 their defaults. FileDropzone clears its input after capture so the same file can
 be selected again.
 
+DataTable `labels.selectRow` accepts a prefix (the stable row key is appended)
+or a `(key) => string` callback to look up a meaningful record name.
+`labels.sortColumn(label, direction)` names the current sort state, with `null`
+for unsorted; the English default and FRED translations include that state.
+
 Name progress indicators with `aria-label` or `aria-labelledby` on ProgressBar.
+Visual and accessible progress use the same clamped value in [0, max]. Invalid
+(non-finite or non-positive) maxima produce an empty [0, 0] range; NaN current
+becomes zero and infinite current clamps to the corresponding bound.
 PageEmptyState actions are click-only buttons and do not submit enclosing forms.

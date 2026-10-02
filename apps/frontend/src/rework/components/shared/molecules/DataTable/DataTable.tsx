@@ -85,7 +85,9 @@ export interface ServerPagination {
 
 export interface DataTableLabels {
   selectAllOnPage: string;
-  selectRow: string;
+  /** String prefixes include the stable key; callbacks can resolve a human-readable identity. */
+  selectRow: string | ((key: string | number) => string);
+  sortColumn: (label: string, direction: SortDirection | null) => string;
   activateRow: string;
   pagination?: Partial<TablePaginationLabels>;
 }
@@ -370,6 +372,10 @@ export default function DataTable<T>({
                 <button
                   type="button"
                   className={styles["header-sort-button"]}
+                  aria-label={
+                    labels?.sortColumn?.(column.label, isSorted ? sortState.direction : null) ??
+                    `${column.label}, ${isSorted ? (sortState.direction === "asc" ? "ascending" : "descending") : "not sorted"}`
+                  }
                   data-active={isSorted || undefined}
                   onClick={() => handleHeaderSortClick(column)}
                 >
@@ -417,7 +423,11 @@ export default function DataTable<T>({
                   <Checkbox
                     checked={selectedKeys?.has(key) ?? false}
                     onChange={() => toggleRow(key)}
-                    aria-label={labels?.selectRow ?? "Select row"}
+                    aria-label={
+                      typeof labels?.selectRow === "function"
+                        ? labels.selectRow(key)
+                        : `${labels?.selectRow ?? "Select row"} ${key}`
+                    }
                   />
                 </div>
               )}

@@ -842,3 +842,48 @@ it("preserves translated pagination defaults under partial and undefined overrid
   expect(container.querySelector('[aria-label="dataTable.pagination.next"]')).not.toBeNull();
   expect(container.textContent).toContain("dataTable.pagination.totalItems");
 });
+
+it("identifies selection controls by stable key and supports translated identity callbacks", () => {
+  const props = {
+    columns,
+    data: [{ id: 42 }, { id: 7 }],
+    selectable: true as const,
+    rowKey: (row: Row) => row.id,
+    selectedKeys: new Set<number>(),
+    onSelectionChange: vi.fn(),
+  };
+  render(<DataTable {...props} labels={{ selectRow: "Choisir" }} />);
+  expect(
+    Array.from(container.querySelectorAll('input[type="checkbox"]'))
+      .slice(1)
+      .map((el) => el.getAttribute("aria-label")),
+  ).toEqual(["Choisir 42", "Choisir 7"]);
+  act(() =>
+    root.render(
+      <DataTable
+        {...props}
+        data={[{ id: 7 }, { id: 42 }]}
+        labels={{ selectRow: (key) => `Choisir document ${key}` }}
+      />,
+    ),
+  );
+  expect(
+    Array.from(container.querySelectorAll('input[type="checkbox"]'))
+      .slice(1)
+      .map((el) => el.getAttribute("aria-label")),
+  ).toEqual(["Choisir document 7", "Choisir document 42"]);
+});
+
+it("announces unsorted, ascending, descending and cleared states using localized labels", () => {
+  render(<DataTable data={makeRows(2)} columns={[{ label: "Id", sortable: true, sortValue: (row) => row.id }]} />);
+  const button = container.querySelector('[class*="header-sort-button"]')!;
+  const label = (direction: string) =>
+    `dataTable.sort.label ${JSON.stringify({ label: "Id", direction: `dataTable.sort.${direction}` })}`;
+  expect(button.getAttribute("aria-label")).toBe(label("none"));
+  click(button);
+  expect(button.getAttribute("aria-label")).toBe(label("asc"));
+  click(button);
+  expect(button.getAttribute("aria-label")).toBe(label("desc"));
+  click(button);
+  expect(button.getAttribute("aria-label")).toBe(label("none"));
+});

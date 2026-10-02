@@ -29,6 +29,8 @@ export default function LocalizedDataTable<T>(props: DataTableProps<T>) {
         selectAllOnPage: t("dataTable.selection.selectAllOnPage"),
         activateRow: t("dataTable.selection.activateRow"),
         selectRow: t("dataTable.selection.selectRow"),
+        sortColumn: (label, direction) =>
+          t("dataTable.sort.label", { label, direction: t(`dataTable.sort.${direction ?? "none"}`) }),
         ...overrides,
         pagination: {
           totalItems: (count) => t("dataTable.pagination.totalItems", { count }),
