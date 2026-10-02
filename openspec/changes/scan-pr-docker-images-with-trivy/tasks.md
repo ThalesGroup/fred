@@ -7,3 +7,8 @@
 
 - [x] 2.1 Add the required no-impact migration note and run the targeted migration and workflow validation checks.
 - [x] 2.2 Push a dedicated branch, open a draft PR linked to the issue, and inspect the PR Docker matrix and migration checks on GitHub.
+
+## 3. Selective pull request scanning
+
+- [x] 3.1 Detect dependency, production Dockerfile, build recipe, and image CI changes in the reusable workflow; keep the image build matrix active for every pull request and skip Trivy for unrelated changes.
+- [ ] 3.2 Verify the path filter locally for representative positive and negative paths, then inspect the draft PR's GitHub jobs and scan reports after pushing.

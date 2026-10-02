@@ -22,10 +22,45 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.include }}
+      scan: ${{ steps.changes.outputs.trivy }}
 
     steps:
       - name: Check out the repo
         uses: actions/checkout@v5
+
+      - name: Detect changes requiring a vulnerability scan
+        id: changes
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish }}
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            trivy:
+              - 'apps/fred-agents/pyproject.toml'
+              - 'apps/fred-agents/uv.lock'
+              - 'apps/knowledge-flow-backend/pyproject.toml'
+              - 'apps/knowledge-flow-backend/uv.lock'
+              - 'apps/control-plane-backend/pyproject.toml'
+              - 'apps/control-plane-backend/uv.lock'
+              - 'libs/*/pyproject.toml'
+              - 'libs/*/uv.lock'
+              - 'libs/capabilities/*/pyproject.toml'
+              - 'libs/capabilities/*/uv.lock'
+              - 'apps/frontend/package.json'
+              - 'apps/frontend/package-lock.json'
+              - 'apps/frontend/npm-shrinkwrap.json'
+              - 'apps/frontend/.npmrc'
+              - 'apps/*/dockerfiles/Dockerfile-prod'
+              - 'apps/fred-agents/Makefile'
+              - 'apps/knowledge-flow-backend/Makefile'
+              - 'apps/control-plane-backend/Makefile'
+              - 'apps/frontend/Makefile'
+              - 'scripts/makefiles/python-deps.mk'
+              - 'scripts/makefiles/python-venv-bootstrap.mk'
+              - 'scripts/makefiles/python-vars.mk'
+              - '.dockerignore'
+              - '.github/docker-images.json'
+              - '.github/workflows/Check-docker-images.yml'
+              - '.github/workflows/Docker-images.yml'
 
       # A Dockerfile nobody listed is a Dockerfile nobody builds — that is how a
       # missing COPY line reached a release tag. Adding one must be a conscious
@@ -127,7 +162,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_args }}
           push: ${{ inputs.publish }}
-          load: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+          load: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' && matrix.scan }}
           tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
           # The empty string is falsy in expressions, so it has to sit on the
@@ -140,7 +175,7 @@ jobs:
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
 
       - name: Scan built image for critical CVEs
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' && matrix.scan }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ format('fred-pr/{0}:scan', matrix.name) }}
@@ -152,7 +187,7 @@ jobs:
           exit-code: '0'
 
       - name: Summarize critical CVEs
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' && matrix.scan }}
         env:
           IMAGE_NAME: ${{ matrix.name }}
         run: |
@@ -168,7 +203,7 @@ jobs:
           fi
 
       - name: Upload Trivy report
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' && matrix.scan }}
         uses: actions/upload-artifact@v4
         with:
           name: trivy-${{ matrix.name }}

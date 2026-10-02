@@ -1,8 +1,7 @@
 name: Check docker images
 
-# No paths filter on purpose: an image breaks from far outside its own directory
-# — a libs/ package added as a path dependency but never COPYed is exactly the
-# release-blocking bug this gate exists to catch.
+# Keep the build check on every PR: a change outside these dependency paths can
+# still break a Docker COPY. The reusable workflow filters only its Trivy steps.
 
 on:
   pull_request:
@@ -17,6 +16,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   docker-images:
