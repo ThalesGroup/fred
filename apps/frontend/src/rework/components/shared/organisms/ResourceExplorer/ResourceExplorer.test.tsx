@@ -200,3 +200,32 @@ describe("ResourceExplorer", () => {
     expect(onSelectedKeysChange).toHaveBeenCalledWith(new Set([1]));
   });
 });
+
+it.each([{ sortState: null }, { onSortChange: () => {} }])(
+  "rejects incomplete sort pairs at the wrapper boundary",
+  (sortProps) => {
+    const props = {
+      breadcrumb: baseBreadcrumb,
+      columns,
+      rows: makeRows(2),
+      rowKey: (row: Row) => row.id,
+      ...sortProps,
+    } as unknown as import("./ResourceExplorer").ResourceExplorerProps<Row>;
+    expect(() => render(<ResourceExplorer {...props} />)).toThrow(
+      "sortState and onSortChange must be supplied together",
+    );
+  },
+);
+
+function verifySortContract() {
+  const base = { breadcrumb: baseBreadcrumb, columns, rows: makeRows(2), rowKey: (row: Row) => row.id };
+  // @ts-expect-error Controlled sort requires a callback.
+  const stateOnly: import("./ResourceExplorer").ResourceExplorerProps<Row> = {
+    ...base,
+    sortState: { columnLabel: "Id", direction: "asc" },
+  };
+  // @ts-expect-error Controlled sort requires explicit state.
+  const callbackOnly: import("./ResourceExplorer").ResourceExplorerProps<Row> = { ...base, onSortChange: () => {} };
+  return [stateOnly, callbackOnly];
+}
+void verifySortContract;

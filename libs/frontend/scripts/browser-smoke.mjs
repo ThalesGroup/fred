@@ -878,6 +878,12 @@ async function verifyFonts(browser, origin) {
 
 async function verifyHostedComponents(page) {
   const hosted = page.locator("[data-hosted]");
+  assert.equal(
+    await hosted
+      .getByRole("progressbar", { name: "Evaluation progress" })
+      .count(),
+    1,
+  );
   const notes = hosted.getByRole("textbox", { name: "Evaluation notes" });
   assert.equal(await notes.getAttribute("id"), "evaluation-notes");
   await hosted.locator('label[for="evaluation-notes"]').click();
@@ -938,6 +944,7 @@ async function verifyHostedComponents(page) {
     "2",
   );
   await hosted.getByRole("button", { name: "Create evaluation" }).click();
+  assert.equal(await hosted.locator("[data-submissions]").textContent(), "0");
   assert.equal(await card.getAttribute("aria-pressed"), "true");
   for (const text of [
     "Service unavailable",

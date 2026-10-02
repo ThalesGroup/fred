@@ -123,3 +123,6 @@ Uncontrolled sortable columns require `sortValue`; controlled sorting delegates
 ordering to the caller and may omit it. Undefined partial pagination labels retain
 their defaults. FileDropzone clears its input after capture so the same file can
 be selected again.
+
+Name progress indicators with `aria-label` or `aria-labelledby` on ProgressBar.
+PageEmptyState actions are click-only buttons and do not submit enclosing forms.

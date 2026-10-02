@@ -130,12 +130,13 @@ interface DataTableBaseProps<T> {
   sortClearable?: boolean;
 }
 
+export type DataTableSortProps =
+  | { sortState?: undefined; onSortChange?: undefined }
+  | { sortState: SortState | null; onSortChange: (next: SortState | null) => void };
+
 /** Selection requires stable keys so individual and page-wide actions share identity. */
 export type DataTableProps<T> = DataTableBaseProps<T> &
-  (
-    | { sortState?: undefined; onSortChange?: undefined }
-    | { sortState: SortState | null; onSortChange: (next: SortState | null) => void }
-  ) &
+  DataTableSortProps &
   (
     | {
         selectable?: false;

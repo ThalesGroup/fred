@@ -12,20 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { AriaAttributes } from "react";
 import { ColorTheme } from "../../utils/Type.ts";
 import styles from "./ProgressBar.module.css";
 
-export interface ProgressBarProps {
+export interface ProgressBarProps extends Pick<AriaAttributes, "aria-label" | "aria-labelledby"> {
   theme: ColorTheme;
   current: number;
   max: number;
 }
 
-export default function ProgressBar({ theme, current, max }: ProgressBarProps) {
+export default function ProgressBar({ theme, current, max, ...accessibleName }: ProgressBarProps) {
   const percentage = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
 
   return (
-    <div className={styles.track} role="progressbar" aria-valuenow={current} aria-valuemin={0} aria-valuemax={max}>
+    <div
+      {...accessibleName}
+      className={styles.track}
+      role="progressbar"
+      aria-valuenow={current}
+      aria-valuemin={0}
+      aria-valuemax={max}
+    >
       <div data-color={theme} className={styles.fill} style={{ width: `${percentage}%` }} />
     </div>
   );

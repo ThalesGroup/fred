@@ -828,3 +828,17 @@ it("rejects untyped selectable tables without their controlled selection state",
   } as unknown as DataTableProps<Row>;
   expect(() => render(<DataTable {...invalid} />)).toThrow("selectable requires selectedKeys");
 });
+
+it("preserves translated pagination defaults under partial and undefined overrides", () => {
+  render(
+    <DataTable
+      data={makeRows(2)}
+      columns={columns}
+      pageSize={1}
+      labels={{ pagination: { first: "Début", totalItems: undefined } }}
+    />,
+  );
+  expect(container.querySelector('[aria-label="Début"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="dataTable.pagination.next"]')).not.toBeNull();
+  expect(container.textContent).toContain("dataTable.pagination.totalItems");
+});

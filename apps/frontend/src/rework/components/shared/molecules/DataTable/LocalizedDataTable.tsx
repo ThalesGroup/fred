@@ -18,6 +18,10 @@ export type { DataTableColumn, ServerPagination, SortState, SortDirection, DataT
 
 export default function LocalizedDataTable<T>(props: DataTableProps<T>) {
   const { t } = useTranslation();
+  const overrides = Object.fromEntries(Object.entries(props.labels ?? {}).filter(([, value]) => value !== undefined));
+  const paginationOverrides = Object.fromEntries(
+    Object.entries(props.labels?.pagination ?? {}).filter(([, value]) => value !== undefined),
+  );
   return (
     <DataTable
       {...props}
@@ -25,6 +29,7 @@ export default function LocalizedDataTable<T>(props: DataTableProps<T>) {
         selectAllOnPage: t("dataTable.selection.selectAllOnPage"),
         activateRow: t("dataTable.selection.activateRow"),
         selectRow: t("dataTable.selection.selectRow"),
+        ...overrides,
         pagination: {
           totalItems: (count) => t("dataTable.pagination.totalItems", { count }),
           itemsPerPage: t("dataTable.pagination.itemsPerPage"),
@@ -33,8 +38,8 @@ export default function LocalizedDataTable<T>(props: DataTableProps<T>) {
           prev: t("dataTable.pagination.prev"),
           next: t("dataTable.pagination.next"),
           last: t("dataTable.pagination.last"),
+          ...paginationOverrides,
         },
-        ...props.labels,
       }}
     />
   );

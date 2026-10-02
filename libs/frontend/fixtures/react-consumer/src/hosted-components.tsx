@@ -153,6 +153,7 @@ export function HostedComponents() {
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState(false);
   const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+  const [submissions, setSubmissions] = useState(0);
   const [activations, setActivations] = useState(0);
   const [uploads, setUploads] = useState(0);
   const [file, setFile] = useState("");
@@ -189,7 +190,12 @@ export function HostedComponents() {
         onChange={(event) => setEnabled(event.currentTarget.checked)}
       />
       <Switch aria-label="Disabled switch" disabled />
-      <ProgressBar theme="primary" current={3} max={10} />
+      <ProgressBar
+        theme="primary"
+        current={3}
+        max={10}
+        aria-label="Evaluation progress"
+      />
       <IndicatorDot status="active" label="Evaluation active" />
       <Disclosure title="Case details">
         <span>Expanded case content</span>
@@ -216,14 +222,22 @@ export function HostedComponents() {
         title="Service unavailable"
         description="Caller-owned explanation"
       />
-      <PageEmptyState
-        icon="description"
-        message="No evaluations"
-        action={{
-          label: "Create evaluation",
-          onClick: () => setSelected(true),
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          setSubmissions((count) => count + 1);
         }}
-      />
+      >
+        <PageEmptyState
+          icon="description"
+          message="No evaluations"
+          action={{
+            label: "Create evaluation",
+            onClick: () => setSelected(true),
+          }}
+        />
+      </form>
+      <output data-submissions>{submissions}</output>
       {(["success", "error", "warning", "info", "neutral"] as const).map(
         (tone) => (
           <div key={tone} data-badge={tone}>
