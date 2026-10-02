@@ -67,6 +67,7 @@ from control_plane_backend.capabilities.enablement import (
     revive_dependent_instances,
     set_capability_default_on,
     set_capability_personal_scope,
+    validate_team_settings,
 )
 from control_plane_backend.capabilities.impact import (
     CapabilityImpact,
@@ -80,11 +81,14 @@ from control_plane_backend.capabilities.schemas import (
     CapabilityEnablementList,
     CapabilityImpactPreview,
     CapabilityPersonalScopeResult,
+    CapabilityTeamSettingsMap,
     ImpactedInstanceSummary,
     ModelReasoningResult,
     PersonalScope,
     TeamCapabilityEnablementResult,
+    TeamCapabilitySettingsView,
 )
+from control_plane_backend.capabilities.settings_store import settings_scope_id
 from control_plane_backend.organization_authz import require_manage_capabilities
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.teams.service import (
@@ -504,6 +508,141 @@ async def _revive_after_grant(
         available_by_source=available_by_source,
         team_id=team_id,
         kpi_writer=deps.get_kpi_writer(),
+    )
+
+
+async def require_can_manage_capability(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    deps: ProductServiceDependencies,
+) -> None:
+    """The feature-governance gate, for a READ that is admin-only.
+
+    The mutations below fold this into their own flow; an admin-only read has
+    nothing else to fold it into, so it is exposed here rather than reaching
+    into the private helper from the route.
+    """
+
+    await _require_can_manage(_rebac(deps), user, capability_id, deps=deps)
+
+
+def _effective_team_settings(
+    entry: CapabilityCatalogEntry, stored: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """Declared defaults overlaid with what the team actually stored.
+
+    Restricted to the keys the manifest declares: a stale row left by an older
+    manifest version cannot leak a field the capability no longer has.
+    """
+
+    values: dict[str, Any] = {}
+    for field in entry.team_settings_fields:
+        if stored is not None and field.key in stored:
+            values[field.key] = stored[field.key]
+        elif field.default is not None:
+            values[field.key] = field.default
+    return values
+
+
+async def read_team_capability_settings(
+    *,
+    capability_id: str,
+    team_id: TeamId,
+    deps: ProductServiceDependencies,
+) -> TeamCapabilitySettingsView:
+    """One team's effective settings for one capability.
+
+    Authorization is the CALLER'S concern: this is reached both from the admin
+    surface (`can_manage`) and from an ordinary team member's session, which
+    needs to know the posture its own team was given. Every returned key is one
+    the manifest declares, so nothing undeclared can escape through here.
+    """
+
+    catalog = await aggregate_capability_catalog(deps)
+    entry = _catalog_entry(catalog, capability_id)
+    scope_id = settings_scope_id(team_id)
+    stored = None
+    if not is_projected_product_object(entry):
+        record = await deps.get_team_capability_settings_store().get(
+            team_id=scope_id, capability_id=capability_id
+        )
+        stored = record.settings if record is not None else None
+    return TeamCapabilitySettingsView(
+        capability_id=capability_id,
+        team_id=str(scope_id),
+        settings=_effective_team_settings(entry, stored),
+    )
+
+
+async def read_capability_team_settings_map(
+    *,
+    capability_id: str,
+    deps: ProductServiceDependencies,
+) -> CapabilityTeamSettingsMap:
+    """Every team's effective settings for one capability, in one round trip.
+
+    Authorization is the caller's concern; the admin route gates this on
+    `can_manage`. Teams without a stored row are omitted rather than filled with
+    defaults — the caller already has `team_settings_fields` and would otherwise
+    receive a row per team in the organization.
+    """
+
+    catalog = await aggregate_capability_catalog(deps)
+    entry = _catalog_entry(catalog, capability_id)
+    if is_projected_product_object(entry):
+        return CapabilityTeamSettingsMap(capability_id=capability_id)
+    stored = await deps.get_team_capability_settings_store().list_for_capability(
+        capability_id
+    )
+    return CapabilityTeamSettingsMap(
+        capability_id=capability_id,
+        by_team={
+            team_id: _effective_team_settings(entry, values)
+            for team_id, values in stored.items()
+        },
+    )
+
+
+async def write_team_capability_settings(
+    *,
+    user: KeycloakUser,
+    capability_id: str,
+    team_id: TeamId,
+    settings: Mapping[str, Any],
+    deps: ProductServiceDependencies,
+) -> TeamCapabilitySettingsView:
+    """Change one team's settings WITHOUT touching its enablement.
+
+    Deliberately not `enable_team_capability` with the same payload: that writes
+    the `enabled` tuple, so editing an option on a team that merely INHERITS a
+    default-on capability would silently promote it to an explicit grant — the
+    admin would change a checkbox and find the team moved from "Default" to
+    "Enabled". Settings and authorization are separate axes (the settings row
+    "never carries an authorization signal"), and this is the settings one.
+    """
+
+    await require_can_manage_capability(
+        user=user, capability_id=capability_id, deps=deps
+    )
+    catalog = await aggregate_capability_catalog(deps)
+    entry = _catalog_entry(catalog, capability_id)
+    if is_projected_product_object(entry):
+        raise CapabilityNotFound(
+            f"Capability {capability_id!r} has no per-team settings."
+        )
+    team_id = settings_scope_id(_canonical_team_id_for_entry(user, entry, team_id))
+    validated = validate_team_settings(entry.team_settings_fields, settings)
+    await deps.get_team_capability_settings_store().upsert(
+        team_id=team_id,
+        capability_id=capability_id,
+        settings=validated,
+        updated_by=user.uid,
+    )
+    return TeamCapabilitySettingsView(
+        capability_id=capability_id,
+        team_id=str(team_id),
+        settings=_effective_team_settings(entry, validated),
     )
 
 

@@ -90,6 +90,10 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
     { isLoading: false },
   ],
   useDisableTeamCapabilityMutation: () => [vi.fn(), { isLoading: false }],
+  // Only reached by the per-team options affordance, which these tests never open.
+  useLazyAdminTeamCapabilitySettingsQuery: () => [vi.fn(), { isLoading: false }],
+  useSetTeamCapabilitySettingsMutation: () => [vi.fn(), { isLoading: false }],
+  useCapabilityTeamSettingsMapQuery: () => ({ data: undefined, refetch: vi.fn() }),
   useSetCapabilityPersonalScopeMutation: () => [
     (args: { capabilityId: string }) => ({
       unwrap: async () => {

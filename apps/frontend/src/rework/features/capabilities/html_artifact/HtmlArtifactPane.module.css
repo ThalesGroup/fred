@@ -80,9 +80,10 @@
   appearance: none;
   cursor: pointer;
   border: none;
-  border-bottom: 2px solid transparent;
   background: transparent;
-  padding: var(--spacing-xs) var(--spacing-s);
+  /* Horizontal padding moved to .tabWrap so the underline spans the label AND the
+     close button; only the vertical padding belongs to the label itself. */
+  padding: var(--spacing-xs) 0;
   max-width: 6rem;
   overflow: hidden;
   color: var(--on-surface-retreat);
@@ -96,7 +97,6 @@
 }
 
 .tabActive {
-  border-bottom-color: var(--primary);
   color: var(--primary);
 }
 
@@ -169,4 +169,47 @@
   opacity: 0;
   z-index: 0;
   pointer-events: none;
+}
+
+/* Shown in place of the preview frames once the reader stops the page. Deliberately
+   plain: stopping is a normal control, not an incident. */
+/* Shown above a page whose script the team may not run: the page still renders,
+   it simply does not react, and without this it just looks broken. */
+.suppressedNotice {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  border-bottom: 1px solid var(--outline-muted);
+  background-color: var(--surface-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.stoppedNotice {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  text-align: center;
+}
+
+/* Tab and its close control sit side by side — a button cannot nest in a button —
+   but they read as ONE tab: the wrapper carries the padding and the active
+   underline, so the primary rule runs under the close button too. */
+.tabWrap {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  border-bottom: 2px solid transparent;
+  /* No right padding: the close button's own 24px footprint already provides the
+     breathing room on that side. */
+  padding-left: var(--spacing-s);
+}
+
+.tabWrapActive {
+  border-bottom-color: var(--primary);
 }

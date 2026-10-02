@@ -20,12 +20,12 @@
 // one (source is reachable via Download / open-in-new-tab). The markup rides
 // inline on the chat part (no fetch); the slice is the source.
 //
-// SECURITY (RFC §4.7): the Preview iframe is `sandbox=""` — the empty attribute
-// enables ALL sandbox restrictions, so NO script runs (no `allow-scripts`) and the
-// frame is an opaque origin with no access to the app (`no allow-same-origin`). The
-// composed document also carries a restrictive CSP meta (composeHtmlDocument), so
-// no external resource can load even if a sandbox flag ever regressed. `srcDoc`
-// (never `src`) keeps the content inert same-document text.
+// SECURITY (RFC §4.7): the preview renders the SANDBOXED SHELL, not the artifact
+// itself — the shell's `frame-src blob:` is what stops the artifact navigating
+// itself to an attacker URL, which nothing in the artifact's own CSP can do. The
+// frame is `sandbox={SHELL_SANDBOX}` — `allow-scripts` so the shell boots, and
+// NEVER `allow-same-origin`, so it stays an opaque origin with no access to the
+// app's DOM, cookies or storage. `srcDoc` (never `src`) keeps it out of any app URL.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -36,16 +36,28 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { CapabilitySidePanelProps } from "../types";
 import { useOpenSessionId } from "../useOpenSessionId";
 import {
+  closeHtmlArtifact,
   selectHtmlArtifact,
+  selectHtmlArtifactClosedIds,
   selectHtmlArtifactSelectedId,
   selectHtmlArtifactSessionId,
   selectHtmlArtifactsById,
 } from "./htmlArtifactSlice";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { composeHtmlDocument, openHtmlArtifactInNewTab, zoomIn, zoomOut, ZOOM_LEVELS } from "./htmlArtifactDocument";
+import {
+  SHELL_SANDBOX,
+  ZOOM_LEVELS,
+  artifactHasScript,
+  composeHtmlDocument,
+  openHtmlArtifactInNewTab,
+  sandboxedShellDocument,
+  zoomIn,
+  zoomOut,
+} from "./htmlArtifactDocument";
 import { nextBufferAction } from "./previewBuffers";
 import { measureArtifactWidth } from "./htmlArtifactExport";
 import HtmlArtifactDownloadButton from "./HtmlArtifactDownloadButton";
+import { useHtmlArtifactJavaScriptAllowed } from "./useHtmlArtifactJavaScript";
 import styles from "./HtmlArtifactPane.module.css";
 
 export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
@@ -56,15 +68,27 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const sliceSessionId = useSelector(selectHtmlArtifactSessionId);
   const byId = useSelector(selectHtmlArtifactsById);
   const selectedId = useSelector(selectHtmlArtifactSelectedId);
+  const closedIds = useSelector(selectHtmlArtifactClosedIds);
   // Browser-like zoom for the Preview (reflows content via CSS `zoom`), so a wide
   // page can be shrunk to fit. Download / open-in-new-tab stay at 100%.
   const [zoom, setZoom] = useState(1);
+  // A stop switch, not a gate: an artifact runs on arrival (RFC §4.7), and this is
+  // how a reader ends a page that hangs the tab or shows something it should not.
+  // Unmounting the frames is the kill — it destroys the browsing contexts, so
+  // scripts, timers and workers all stop; there is nothing left to keep running.
+  const [stopped, setStopped] = useState(false);
   const previewWrapRef = useRef<HTMLDivElement>(null);
 
   // Only surface artifacts belonging to the conversation currently open.
+  // Closed artifacts stay in the slice so their chat card can reopen them; the
+  // pane simply does not list them.
   const artifacts = useMemo(
-    () => (sliceSessionId === openSessionId ? Object.values(byId) : []),
-    [byId, sliceSessionId, openSessionId],
+    () => (sliceSessionId === openSessionId ? Object.values(byId).filter((a) => !closedIds[a.artifact_id]) : []),
+    [byId, sliceSessionId, openSessionId, closedIds],
+  );
+  const hasClosedOnly = useMemo(
+    () => artifacts.length === 0 && Object.keys(byId).length > 0 && sliceSessionId === openSessionId,
+    [artifacts, byId, sliceSessionId, openSessionId],
   );
 
   // Selection is the slice's single source of truth: both a card's Open button and
@@ -74,12 +98,33 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
     [artifacts, selectedId],
   );
 
+  // Whether THIS team may run script, resolved now rather than when the artifact
+  // was produced — withdrawing the right has to reach pages that already exist.
+  const allowJavaScript = useHtmlArtifactJavaScriptAllowed();
+
   // The composed, CSP-carrying document for the Preview iframe (recomputed when the
-  // selected artifact's markup OR the zoom changes).
+  // selected artifact's markup, the zoom, OR the team's posture changes).
   const composed = useMemo(
-    () => (selected ? composeHtmlDocument(selected.html, selected.css, zoom) : ""),
-    [selected, zoom],
+    () => (selected ? sandboxedShellDocument(selected.html, selected.css, zoom, allowJavaScript) : ""),
+    [selected, zoom, allowJavaScript],
   );
+
+  // Stopping is about the page in front of you, so switching artifact starts the
+  // new one running rather than inheriting the previous one's stopped state.
+  const selectedKey = selected?.artifact_id;
+  useEffect(() => setStopped(false), [selectedKey]);
+
+  // Whether the markup carries anything the browser WOULD execute. Parsed, so a
+  // page merely displaying `onclick="…"` in a <pre> does not count.
+  const carriesScript = useMemo(() => (selected ? artifactHasScript(selected.html) : false), [selected]);
+
+  // Only a page that can execute has anything to stop.
+  const canStop = carriesScript && allowJavaScript;
+
+  // Script that exists but will not run. This is the visible half of the posture:
+  // the page was produced while the team could run script and the right has since
+  // been withdrawn, so it would otherwise just look broken.
+  const scriptSuppressed = carriesScript && !allowJavaScript;
 
   // Double-buffer the Preview so a zoom / markup change never flashes the iframe's
   // blank white background: the newly composed document loads into the HIDDEN back
@@ -131,6 +176,10 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const copyMarkup = async () => {
     if (!selected) return;
     try {
+      // Deliberately the readable composed page, not the shell: Copy exists to hand
+      // over source the user can edit, and it is the source already shown in the
+      // HTML/CSS tabs. It carries author script — an output path whose safety is the
+      // user's own judgement, enumerated as such in RFC §4.7.
       await navigator.clipboard.writeText(composeHtmlDocument(selected.html, selected.css));
       showSuccess({ summary: t("capability.html_artifact.copied", { defaultValue: "Copied to clipboard" }) });
     } catch {
@@ -178,12 +227,19 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
               variant="icon"
               size="small"
               icon={{ category: "outlined", type: "open_in_new" }}
-              onClick={() => openHtmlArtifactInNewTab(selected.html, selected.css)}
+              onClick={() => openHtmlArtifactInNewTab(selected.html, selected.css, allowJavaScript)}
               aria-label={t("capability.html_artifact.openInNewTab", { defaultValue: "Open in a new tab" })}
             />
           </Tooltip>
         )}
-        {selected && <HtmlArtifactDownloadButton html={selected.html} css={selected.css} title={selected.title} />}
+        {selected && (
+          <HtmlArtifactDownloadButton
+            html={selected.html}
+            css={selected.css}
+            title={selected.title}
+            allowJavaScript={allowJavaScript}
+          />
+        )}
         <IconButton
           variant="icon"
           size="small"
@@ -200,19 +256,26 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
 
       {!selected && (
         <div className={styles.empty}>
-          {t("capability.html_artifact.empty", {
-            defaultValue: "No artifact yet. Ask the assistant to build a page or component.",
-          })}
+          {hasClosedOnly
+            ? t("capability.html_artifact.allClosed", {
+                defaultValue: "No preview open. Reopen one from its card in the conversation.",
+              })
+            : t("capability.html_artifact.empty", {
+                defaultValue: "No artifact yet. Ask the assistant to build a page or component.",
+              })}
         </div>
       )}
 
       {selected && (
         <>
           <div className={styles.controlsBar}>
-            {artifacts.length > 1 && (
-              <div className={styles.artifactTabs} role="tablist" aria-label="Artifacts">
-                {artifacts.map((a) => (
-                  <Tooltip key={a.artifact_id} text={a.title || untitled} placement="top">
+            <div className={styles.artifactTabs} role="tablist" aria-label="Artifacts">
+              {artifacts.map((a) => (
+                <div
+                  key={a.artifact_id}
+                  className={`${styles.tabWrap} ${a.artifact_id === selected.artifact_id ? styles.tabWrapActive : ""}`}
+                >
+                  <Tooltip text={a.title || untitled} placement="top">
                     <button
                       role="tab"
                       aria-selected={a.artifact_id === selected.artifact_id}
@@ -222,10 +285,43 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
                       {a.title || untitled}
                     </button>
                   </Tooltip>
-                ))}
-              </div>
-            )}
+                  {/* Sibling, not nested: a button inside a button is invalid markup
+                      and the inner click would not reliably reach its own handler. */}
+                  <IconButton
+                    variant="icon"
+                    size="2xs"
+                    color={a.artifact_id === selected.artifact_id ? "primary" : "on-surface-retreat"}
+                    icon={{ category: "outlined", type: "close" }}
+                    onClick={() => dispatch(closeHtmlArtifact(a.artifact_id))}
+                    aria-label={t("capability.html_artifact.closeArtifact", {
+                      defaultValue: "Close this artifact",
+                    })}
+                  />
+                </div>
+              ))}
+            </div>
             <div className={styles.zoomCluster}>
+              {canStop && (
+                <Tooltip
+                  text={
+                    stopped
+                      ? t("capability.html_artifact.restart", { defaultValue: "Run the page again" })
+                      : t("capability.html_artifact.stop", { defaultValue: "Stop the page" })
+                  }
+                >
+                  <IconButton
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: stopped ? "refresh" : "stop" }}
+                    onClick={() => setStopped((value) => !value)}
+                    aria-label={
+                      stopped
+                        ? t("capability.html_artifact.restart", { defaultValue: "Run the page again" })
+                        : t("capability.html_artifact.stop", { defaultValue: "Stop the page" })
+                    }
+                  />
+                </Tooltip>
+              )}
               <Tooltip text={t("capability.html_artifact.fitWidth", { defaultValue: "Fit width" })}>
                 <IconButton
                   variant="icon"
@@ -264,20 +360,40 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
           </div>
 
           <div className={styles.body}>
+            {scriptSuppressed && (
+              <div className={styles.suppressedNotice} role="status">
+                <Icon category="outlined" type="info" />
+                <span>
+                  {t("capability.html_artifact.scriptSuppressedNotice", {
+                    defaultValue:
+                      "This page contains JavaScript, which your team is not allowed to run. It is shown without interaction.",
+                  })}
+                </span>
+              </div>
+            )}
             <div ref={previewWrapRef} className={styles.previewFrameWrap}>
-              {([0, 1] as const).map((i) => (
-                <iframe
-                  key={i}
-                  // No attribute while empty: in Chromium, a doc set while the empty srcdoc is
-                  // still loading paints blank.
-                  srcDoc={buffers[i] || undefined}
-                  className={`${styles.previewFrame} ${revealed && front === i ? styles.frameFront : styles.frameBack}`}
-                  title={selected.title || untitled}
-                  sandbox=""
-                  referrerPolicy="no-referrer"
-                  onLoad={() => handleFrameLoad(i)}
-                />
-              ))}
+              {stopped ? (
+                <div className={styles.stoppedNotice}>
+                  {t("capability.html_artifact.stoppedNotice", { defaultValue: "The page has been stopped." })}
+                </div>
+              ) : (
+                ([0, 1] as const).map((i) => (
+                  <iframe
+                    key={i}
+                    // No attribute while empty: in Chromium, a doc set while the empty srcdoc is
+                    // still loading paints blank.
+                    srcDoc={buffers[i] || undefined}
+                    className={`${styles.previewFrame} ${revealed && front === i ? styles.frameFront : styles.frameBack}`}
+                    title={selected.title || untitled}
+                    // The frame hosts our TRUSTED shell, whose bootstrap is a
+                    // script. The ARTIFACT's own permission is one level down,
+                    // on the inner frame the shell writes.
+                    sandbox={SHELL_SANDBOX}
+                    referrerPolicy="no-referrer"
+                    onLoad={() => handleFrameLoad(i)}
+                  />
+                ))
+              )}
             </div>
           </div>
         </>

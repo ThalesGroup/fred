@@ -241,7 +241,9 @@
       },
       "untitled": "Document",
       "saving": "Saving…",
+      "allClosed": "No preview open. Reopen one from its card in the conversation.",
       "close": "Close panel",
+      "closeArtifact": "Close this artifact",
       "download": "Download",
       "downloadError": "Download failed",
       "noSession": "No session — open a chat to see its documents.",
@@ -262,7 +264,7 @@
     },
     "html_artifact": {
       "name": "Generate a web page (HTML/CSS)",
-      "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
+      "description": "Ability to produce a self-contained web page, rendered in a preview beside the chat.",
       "panel": {
         "html_artifact_pane": {
           "title": "HTML artifact",
@@ -280,10 +282,21 @@
       "copied": "Copied to clipboard",
       "copyFailed": "Could not copy.",
       "exportFailed": "Could not export the {{format}}.",
+      "exportStaticCapture": "The {{format}} captures the page before its JavaScript runs, so interactive parts appear in their initial state.",
       "fitWidth": "Fit width",
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "resetZoom": "Reset zoom",
+      "restart": "Run the page again",
+      "stop": "Stop the page",
+      "stoppedNotice": "The page has been stopped.",
+      "scriptSuppressedNotice": "This page contains JavaScript, which your team is not allowed to run. It is shown without interaction.",
+      "teamSettings": {
+        "allow_javascript": {
+          "title": "Allow JavaScript",
+          "description": "Let this team's agents produce pages that run JavaScript — tabs, animations, charts. Left off, pages are generated and shown static. Turning it off also stops pages this team produced earlier from running."
+        }
+      },
       "empty": "No artifact yet. Ask the assistant to build a page or component.",
       "card": {
         "aria": "HTML artifact",
@@ -1227,6 +1240,12 @@
           "disable": "Disable",
           "cancel": "Cancel",
           "saveEnable": "Save & enable",
+          "editSettings": "Options",
+          "editSettingsActiveAria": "Options for {{team}} (an option is on)",
+          "settingsSavedToast": "Options saved for {{team}}.",
+          "settingsSaveError": "Could not save the options.",
+          "editSettingsAria": "Options for {{team}}",
+          "settingsLoadError": "Could not load the current options; showing the defaults.",
           "enabledToast": "Feature enabled for {{team}}.",
           "enableError": "Could not enable the feature.",
           "disabledToast": "Feature disabled for {{team}}.",
@@ -2784,7 +2803,7 @@
             },
             "webPage": {
               "title": "Generate a web page (HTML/CSS)",
-              "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat."
+              "description": "Ability to produce a self-contained web page, rendered in a preview beside the chat."
             },
             "reasoning": {
               "title": "Reasoning",
