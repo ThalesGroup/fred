@@ -598,8 +598,8 @@ def test_startup_diagnostics_wait_for_selected_output(
     monkeypatch.setattr(config_files, "_startup_events", deque(maxlen=32))
     files = ConfigFiles(logger=logging.getLogger("config-test"))
     env_file = tmp_path / ".env"
-    env_file.write_text("FRED_STARTUP_LOG_TEST=private-value\n", encoding="utf-8")
-    monkeypatch.delenv("FRED_STARTUP_LOG_TEST", raising=False)
+    env_file.write_text("FRED_TEST=private-value\n", encoding="utf-8")
+    monkeypatch.delenv("FRED_TEST", raising=False)
     files.load_environment(str(env_file))
     config_file = str(tmp_path / "configuration.yaml")
     files.mark_config_loaded(config_file)
