@@ -18,6 +18,8 @@ import styles from "./HitlChoiceRecap.module.css";
 
 export function HitlChoiceRecap({ summary }: { summary: HitlAnswerSummary }) {
   const { t } = useTranslation();
+  const freeTextChoice =
+    !summary.skipped && summary.choiceId === null && summary.choices.length > 0 && !!summary.answer;
   return (
     <div className={styles.recap}>
       <p className={styles.question}>{summary.question}</p>
@@ -33,12 +35,18 @@ export function HitlChoiceRecap({ summary }: { summary: HitlAnswerSummary }) {
               </div>
             );
           })}
+          {freeTextChoice && (
+            <div className={styles.choice} data-selected="true" role="listitem">
+              <span className={styles.label}>{t("chatbot.hitlOtherAnswerWithText", { answer: summary.answer })}</span>
+              <span className={styles.selected}>{t("rework.hitlPrompt.selected")}</span>
+            </div>
+          )}
         </div>
       )}
       {summary.skipped ? (
         <p className={styles.response}>{t("rework.hitlPrompt.skipped")}</p>
       ) : !summary.choiceId || !summary.choices.some((choice) => choice.id === summary.choiceId) ? (
-        summary.answer && <p className={styles.response}>{summary.answer}</p>
+        summary.answer && !freeTextChoice && <p className={styles.response}>{summary.answer}</p>
       ) : null}
       {summary.comment && !summary.skipped && <p className={styles.comment}>{summary.comment}</p>}
     </div>

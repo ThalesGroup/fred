@@ -221,6 +221,118 @@ async def test_question_resumes_its_tool_call(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["react", "deep"])
+async def test_multiple_choices_allow_text_even_when_agent_disables_it(
+    kind: str,
+) -> None:
+    model = _Model(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ask_user",
+                        "args": {
+                            "question": "Which destination?",
+                            "choices": [
+                                {"id": "city", "label": "City"},
+                                {"id": "beach", "label": "Beach"},
+                            ],
+                            "allow_free_text": False,
+                        },
+                        "id": "call-other",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="continued"),
+        ]
+    )
+    agent = _compile(kind, model)
+    thread = f"other-answer-{kind}"
+    pending = await _drive(agent, {"messages": [HumanMessage("Ask me")]}, thread)
+
+    assert len(pending) == 1
+    assert pending[0].value["free_text"] is True
+    assert (
+        await _drive(
+            agent, Command(resume={pending[0].id: {"text": "Mountains"}}), thread
+        )
+        == []
+    )
+    assert any(
+        message.tool_call_id == "call-other"
+        and json.loads(str(message.content))
+        == {"status": "answered", "text": "Mountains"}
+        for call in model.calls
+        for message in call
+        if isinstance(message, ToolMessage)
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["react", "deep"])
+async def test_marked_mistral_question_pauses_after_an_answer(kind: str) -> None:
+    model = _Model(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ask_user",
+                        "args": {"question": "Destination?", "allow_free_text": True},
+                        "id": "first-question",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(
+                content=[
+                    {"type": "text", "text": "ask_user"},
+                    {"type": "reference", "reference_ids": []},
+                    {
+                        "type": "text",
+                        "text": '{"question":"\nWhich island?","allow_free_text":true}',
+                    },
+                ],
+                response_metadata={"model_name": "mistral-medium-latest"},
+            ),
+            AIMessage(content="continued"),
+        ]
+    )
+    agent = _compile(kind, model)
+    thread = f"marked-followup-{kind}"
+
+    first = await _drive(agent, {"messages": [HumanMessage("Plan a trip")]}, thread)
+    assert len(first) == 1
+    second = await _drive(
+        agent,
+        Command(resume={first[0].id: {"text": "Canaries"}}),
+        thread,
+    )
+
+    assert len(second) == 1
+    assert second[0].value["question"] == "\nWhich island?"
+    assert second[0].value["occurrence_id"].startswith("recovered-")
+    assert (
+        await _drive(
+            agent,
+            Command(resume={second[0].id: {"text": "Tenerife"}}),
+            thread,
+        )
+        == []
+    )
+    assert any(
+        message.tool_call_id == second[0].value["occurrence_id"]
+        and json.loads(str(message.content))
+        == {"status": "answered", "text": "Tenerife"}
+        for call in model.calls
+        for message in call
+        if isinstance(message, ToolMessage)
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["react", "deep"])
 async def test_sibling_questions_keep_distinct_tool_call_ids(kind: str) -> None:
     model = _Model(
         script=[
@@ -256,6 +368,63 @@ async def test_sibling_questions_keep_distinct_tool_call_ids(kind: str) -> None:
     assert (
         await _drive(
             agent, Command(resume={by_call["call-2"].id: {"text": "two"}}), thread
+        )
+        == []
+    )
+    results = {
+        message.tool_call_id: json.loads(str(message.content))
+        for call in model.calls
+        for message in call
+        if isinstance(message, ToolMessage)
+        and message.tool_call_id in {"call-1", "call-2"}
+    }
+    assert results == {
+        "call-1": {"status": "answered", "text": "one"},
+        "call-2": {"status": "answered", "text": "two"},
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["react", "deep"])
+async def test_sibling_questions_resume_together_in_one_graph_invocation(
+    kind: str,
+) -> None:
+    model = _Model(
+        script=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "ask_user",
+                        "args": {"question": "First?", "allow_free_text": True},
+                        "id": "call-1",
+                        "type": "tool_call",
+                    },
+                    {
+                        "name": "ask_user",
+                        "args": {"question": "Second?", "allow_free_text": True},
+                        "id": "call-2",
+                        "type": "tool_call",
+                    },
+                ],
+            ),
+            AIMessage(content="continued"),
+        ]
+    )
+    agent = _compile(kind, model)
+    thread = f"batch-siblings-{kind}"
+    pending = await _drive(agent, {"messages": [HumanMessage("Ask twice")]}, thread)
+    by_call = {item.value["occurrence_id"]: item for item in pending}
+    assert (
+        await _drive(
+            agent,
+            Command(
+                resume={
+                    by_call["call-1"].id: {"text": "one"},
+                    by_call["call-2"].id: {"text": "two"},
+                }
+            ),
+            thread,
         )
         == []
     )

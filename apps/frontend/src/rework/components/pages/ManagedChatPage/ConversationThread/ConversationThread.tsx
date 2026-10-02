@@ -31,6 +31,14 @@ import { hitlResponseKey } from "../toThreadMessages";
 interface ConversationThreadProps {
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
+  pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
+  onSelectHitlTab?: (event: RuntimeAwaitingHumanEvent) => void;
+  hitlBusy?: boolean;
+  stagedHitlAnswer?: { answer: string | boolean | undefined; freeText?: string; skipped: boolean };
+  canSendAllHitl?: boolean;
+  onStageHitlAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
+  onSendAllHitl?: () => void;
+  onSkipAllHitl?: () => void;
   isLoading: boolean;
   isStreaming: boolean;
   emptyState?: ReactNode;
@@ -56,6 +64,14 @@ interface ConversationThreadProps {
 export const ConversationThread = memo(function ConversationThread({
   messages,
   pendingHitl,
+  pendingHitlTabs = [],
+  onSelectHitlTab,
+  hitlBusy = false,
+  stagedHitlAnswer,
+  canSendAllHitl,
+  onStageHitlAnswer,
+  onSendAllHitl,
+  onSkipAllHitl,
   isLoading,
   isStreaming,
   emptyState,
@@ -131,6 +147,14 @@ export const ConversationThread = memo(function ConversationThread({
       {pendingHitl && (
         <HitlPrompt
           event={pendingHitl}
+          siblingQuestions={pendingHitlTabs}
+          onSelectQuestion={onSelectHitlTab}
+          busy={hitlBusy}
+          stagedAnswer={stagedHitlAnswer}
+          canSendAll={canSendAllHitl}
+          onStageAnswer={onStageHitlAnswer}
+          onSendAll={onSendAllHitl}
+          onSkipAll={onSkipAllHitl}
           onAnswer={onHitlAnswer}
           maxChatInputChars={maxChatInputChars}
           freeTextValue={hitlFreeText}

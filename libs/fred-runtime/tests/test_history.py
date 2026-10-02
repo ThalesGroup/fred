@@ -367,6 +367,63 @@ def test_write_turn_history_skips_save_when_no_content() -> None:
     store.save.assert_not_awaited()
 
 
+def test_write_turn_history_preserves_pause_metadata_without_final() -> None:
+    from fred_core.history.history_schema import Channel
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="find a guide",
+            payloads=[
+                {
+                    "kind": "awaiting_human",
+                    "request": {
+                        "question": "Continue?",
+                        "stage": "agent_question",
+                        "occurrence_id": "question-1",
+                    },
+                    "sources": [
+                        {
+                            "uid": "source-1",
+                            "title": "Guide",
+                            "content": "Evidence",
+                            "score": 1.0,
+                        }
+                    ],
+                    "ui_parts": [
+                        {"type": "link", "href": "https://example.test/guide"}
+                    ],
+                    "model_name": "test-model",
+                    "token_usage": {
+                        "input_tokens": 230,
+                        "output_tokens": 30,
+                        "total_tokens": 260,
+                    },
+                    "context_tokens": 130,
+                }
+            ],
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    assert len(messages) == 3
+    metadata = messages[1]
+    assert metadata.channel == Channel.system_note
+    assert metadata.parts == []
+    assert metadata.metadata.extras == {"pause_metadata": True}
+    assert metadata.metadata.sources[0].uid == "source-1"
+    assert metadata.metadata.ui_parts[0]["type"] == "link"
+    assert metadata.metadata.model == "test-model"
+    assert metadata.metadata.token_usage.total_tokens == 260
+    assert metadata.metadata.context_tokens == 130
+    assert messages[2].channel == Channel.hitl_request
+
+
 def test_write_turn_history_handles_awaiting_human_and_node_error() -> None:
     """
     _write_turn_history must map awaiting_human and node_error payloads to
@@ -541,6 +598,11 @@ def test_write_turn_history_skips_a_pause_the_previous_run_already_surfaced() ->
         {
             "kind": "awaiting_human",
             "request": {"question": "Second?", "occurrence_id": "ask-2"},
+            "token_usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+            },
         },
         {
             "kind": "awaiting_human",
@@ -562,14 +624,16 @@ def test_write_turn_history_skips_a_pause_the_previous_run_already_surfaced() ->
     )
 
     messages = store.save.call_args.kwargs["messages"]
-    # The answer to ask-1, then only the pause this run raised for the first
-    # time — and no rank burned by the skipped one.
+    # Re-emitted ask-2 keeps this stream's usage without duplicating its
+    # question; only ask-3 gets a new request row.
     assert [m.channel for m in messages] == [
         Channel.hitl_response,
+        Channel.system_note,
         Channel.hitl_request,
     ]
-    assert messages[1].parts[0].occurrence_id == "ask-3"
-    assert [m.rank for m in messages] == [0, 1]
+    assert messages[1].metadata.token_usage.total_tokens == 120
+    assert messages[2].parts[0].occurrence_id == "ask-3"
+    assert [m.rank for m in messages] == [0, 1, 2]
 
 
 def test_legacy_hitl_response_choice_id_remains_readable() -> None:

@@ -22,15 +22,15 @@
     "allowSyntheticDefaultImports": true,
     "typeRoots": ["./node_modules/@types"],
 
-    "baseUrl": ".",
     "paths": {
-      "@core/*": ["src/rework/core/*"],
-      "@components/*": ["src/rework/components/*"],
-      "@shared/*": ["src/rework/components/shared/*"],
-      "@hooks/*": ["src/rework/core/hooks/*"],
-      "@models/*": ["src/rework/core/models/*"],
-      "@assets/*": ["src/assets/*"],
-      "@rework/*": ["src/rework/*"]
+      "src/*": ["./src/*"],
+      "@core/*": ["./src/rework/core/*"],
+      "@components/*": ["./src/rework/components/*"],
+      "@shared/*": ["./src/rework/components/shared/*"],
+      "@hooks/*": ["./src/rework/core/hooks/*"],
+      "@models/*": ["./src/rework/core/models/*"],
+      "@assets/*": ["./src/assets/*"],
+      "@rework/*": ["./src/rework/*"]
     }
   },
   "include": ["src"],
