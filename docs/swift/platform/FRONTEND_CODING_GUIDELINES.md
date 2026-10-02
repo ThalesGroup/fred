@@ -221,11 +221,11 @@ Pick the token by the element's role, not by how it looks in one theme:
 | Role                                                        | Token                                      |
 | ----------------------------------------------------------- | ------------------------------------------ |
 | Page background                                             | `--surface-main`                           |
-| Bordered content sheet, nav rail, faint decorative block    | `--surface-container-lowest`               |
+| Form fields (bordered), bordered content sheet, nav rail    | `--surface-container-lowest`               |
 | Sidebar, chips, zebra rows                                  | `--surface-container-low`                  |
 | Cards, inset wells (code, raw output, tables)               | `--surface-container`                      |
 | List rows, hover                                            | `--surface-container-high`                 |
-| Filled fields, tracks, badges, focus                        | `--surface-container-highest`              |
+| Tracks, badges, focus of raised search bars                 | `--surface-container-highest`              |
 | Menus, popovers, tooltips, dialogs, toasts, floating panels | `--surface-floating` (with a `--shadow-*`) |
 
 Every container level reads darker than `--surface-floating` in both themes, so

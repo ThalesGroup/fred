@@ -85,16 +85,16 @@ lightness. Steps `--core-cold-grey-97-5` and `--core-cold-grey-94-5` were added.
 styles, identify what the element _is_, and apply this table. The left column
 is the token FRED components typically used for that role before the change.
 
-| Element role                                                         | Typical token before                                                                          | Token now                                  |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Page background                                                      | `--surface-container-lowest`                                                                  | `--surface-main`                           |
-| Element that must blend with the page (fade masks, rings, cut-outs)  | `--surface-container-lowest`                                                                  | the page's token, usually `--surface-main` |
-| Filled input, textarea, select, search field, tag input              | `--surface-container-lowest`                                                                  | `--surface-container-highest`              |
-| Inset well: code block, raw output, embedded table                   | `--surface-container-lowest`                                                                  | `--surface-container`                      |
-| Zebra row                                                            | `--surface-container-lowest`                                                                  | `--surface-container-low`                  |
-| Menu, popover, tooltip, dropdown, dialog, toast, floating panel      | `--surface-container-high` or `-highest` (sometimes `--surface-container`, `-low`, `-lowest`) | `--surface-floating`                       |
-| Bordered content sheet on the page, nav rail, faint decorative block | `--surface-container-lowest`                                                                  | unchanged                                  |
-| Card, sidebar, chip, list row, track, badge, hover, focus            | any `--surface-container-*`                                                                   | unchanged (tone shifts only)               |
+| Element role                                                         | Typical token before                                                                          | Token now                                     |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Page background                                                      | `--surface-container-lowest`                                                                  | `--surface-main`                              |
+| Element that must blend with the page (fade masks, rings, cut-outs)  | `--surface-container-lowest`                                                                  | the page's token, usually `--surface-main`    |
+| Input, textarea, select, search field, tag input (bordered)          | `--surface-container-lowest`                                                                  | unchanged — keep a `--outline-variant` border |
+| Inset well: code block, raw output, embedded table                   | `--surface-container-lowest`                                                                  | `--surface-container`                         |
+| Zebra row                                                            | `--surface-container-lowest`                                                                  | `--surface-container-low`                     |
+| Menu, popover, tooltip, dropdown, dialog, toast, floating panel      | `--surface-container-high` or `-highest` (sometimes `--surface-container`, `-low`, `-lowest`) | `--surface-floating`                          |
+| Bordered content sheet on the page, nav rail, faint decorative block | `--surface-container-lowest`                                                                  | unchanged                                     |
+| Card, sidebar, chip, list row, track, badge, hover, focus            | any `--surface-container-*`                                                                   | unchanged (tone shifts only)                  |
 
 Every container level reads darker than `--surface-floating` in both themes,
 so any of them can be nested in a floating element. Chart and canvas tooltips

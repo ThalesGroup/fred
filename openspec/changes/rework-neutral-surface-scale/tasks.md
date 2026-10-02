@@ -11,7 +11,7 @@
 
 - [x] 3.1 Move page backgrounds from `surface-container-lowest` to `surface-main` (`styles.css` body, DocumentViewerPage); bordered content sheets keep `surface-container-lowest` (design.md); verify each page in both themes
 - [x] 3.2 Repoint blend-with-background usages (HorizontalScrollRow fade, TraceEntryRow dot ring; ChatList group header kept, see design.md) to the token of the surface they sit on; verify no visible seam in both themes
-- [x] 3.3 Move filled fields from `surface-container-lowest` to `surface-container-highest` (TextInput incl. autofill shadow, TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea); verify on a form page in both themes
+- [x] 3.3 Keep bordered fields on `surface-container-lowest` (moved to `surface-container-highest`, then reverted: too light in dark) (TextInput incl. autofill shadow, TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea); verify on a form page in both themes
 - [x] 3.4 Move inset wells from `surface-container-lowest` to `surface-container` (CodeBlock CSS and `customStyle`, TabularToolDetail, PlatformPromptPage instructions, LibraryTreePlayground card; MindMapBlock kept, see design.md); verify a code block in chat in both themes
 - [x] 3.5 Move MarkdownRenderer zebra rows to `surface-container-low` (MainNavBar rail kept on `surface-container-lowest`, developer decision); verify a markdown table and the nav in both themes
 - [x] 3.6 Move every floating element to `surface-floating` (full list in design.md, found by scanning positioned + shadowed rules); verify a menu, a tooltip, a dialog and a toast in both themes

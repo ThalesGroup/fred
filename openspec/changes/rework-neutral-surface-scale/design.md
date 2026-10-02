@@ -25,7 +25,7 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 | Page background | `surface-container-lowest` | `surface-main` | `styles.css` body, DocumentViewerPage |
 | Element that must blend with the page behind it | `surface-container-lowest` | `surface-main` (the chat page) | HorizontalScrollRow fade, TraceEntryRow dot ring |
 | Bordered content sheet on the page | `surface-container-lowest` | unchanged | Gdpr/Gcu/ReleaseNotes/Bootstrap/TeamAdminCharter contents, TeamSettingsResponsibilities |
-| Filled field | `surface-container-lowest` | `surface-container-highest` | TextInput (incl. autofill), TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea |
+| Field (bordered) | `surface-container-lowest` | unchanged (first moved to `surface-container-highest`, reverted after review in dark: a field lighter than its card read as raised; fields are outlined, M3 outlined text field style) | TextInput (incl. autofill), TextArea, DateTimeInput, Select, SearchField, TagInput, PromptEditor, PromptViewDialog textarea |
 | Inset well (code, raw output, tables) | `surface-container-lowest` | `surface-container` | CodeBlock (CSS and `customStyle`), TabularToolDetail, PlatformPromptPage instructions, LibraryTreePlayground card |
 | Zebra row | `surface-container-lowest` | `surface-container-low` | MarkdownRenderer even rows |
 | Main nav rail | `surface-container-lowest` | unchanged (sits closer to the page than the `surface-container-low` sidebar) | MainNavBar |
@@ -43,7 +43,6 @@ Floating elements were found by scanning every rule with `position: absolute|fix
 
 ## Risks / Trade-offs
 
-- [Filled fields get lighter in dark (4 → 18)] → matches M3 filled fields; checked visually on a form page in both themes.
 - [Borders drawn with `surface-container-highest` become visible lines in light (DataTable, TablePagination)] → accepted; revisited by the outline follow-up.
 - [Hue shift reaches text and outlines too] → same tones, so contrast ratios are unchanged within rounding; spot-checked with a contrast tool.
 - [Usages read only in light during review] → every remapped component is checked in both themes before close-out.
