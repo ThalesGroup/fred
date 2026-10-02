@@ -12,17 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { AriaAttributes } from "react";
 import { ColorTheme } from "../../utils/Type.ts";
 import styles from "./ProgressBar.module.css";
 
-export interface ProgressBarProps extends Pick<AriaAttributes, "aria-label" | "aria-labelledby"> {
+export type ProgressBarProps = {
   theme: ColorTheme;
   current: number;
   max: number;
-}
+} & ({ "aria-label": string; "aria-labelledby"?: string } | { "aria-label"?: string; "aria-labelledby": string });
 
 export default function ProgressBar({ theme, current, max, ...accessibleName }: ProgressBarProps) {
+  if (!accessibleName["aria-label"]?.trim() && !accessibleName["aria-labelledby"]?.trim()) {
+    throw new Error("ProgressBar requires an accessible name.");
+  }
   const boundedMax = Number.isFinite(max) && max > 0 ? max : 0;
   const boundedCurrent = Number.isNaN(current) ? 0 : Math.min(boundedMax, Math.max(0, current));
   const percentage = boundedMax > 0 ? (boundedCurrent / boundedMax) * 100 : 0;

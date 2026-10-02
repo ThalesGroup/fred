@@ -155,6 +155,8 @@ export type DataTableProps<T> = DataTableBaseProps<T> &
   );
 
 export interface DataTableColumn<T> {
+  /** Stable column identity. Unique labels are the default; duplicate labels use object identity. Supply for duplicate or changing labels across recreated column objects. */
+  key?: string;
   label: string;
   /** A `grid-template-columns` track (e.g. "2fr", "6.5rem"). Avoid `"auto"`
    *  for a column whose header label and cell content differ meaningfully in
@@ -208,6 +210,8 @@ export default function DataTable<T>({
   sortClearable = true,
 }: DataTableProps<T>) {
   const tableId = useId();
+  const columnKeys = useRef(new WeakMap<object, number>());
+  const nextColumnKey = useRef(0);
   const objectKeys = useRef(new WeakMap<object, number>());
   const primitiveKeys = useRef(new Map<unknown, number>());
   const nextObjectKey = useRef(0);
@@ -282,6 +286,17 @@ export default function DataTable<T>({
   }
   if (columns.some((column) => column.sortable && duplicateLabels.has(column.label))) {
     throw new Error("DataTable: sortable column labels must be unique across all columns.");
+  }
+  const columnKey = (column: DataTableColumn<T>) => {
+    if (column.key !== undefined) return `key:${column.key}`;
+    if (duplicateLabels.has(column.label) || columnKeys.current.has(column)) {
+      if (!columnKeys.current.has(column)) columnKeys.current.set(column, nextColumnKey.current++);
+      return `object:${columnKeys.current.get(column)}`;
+    }
+    return `label:${column.label}`;
+  };
+  if (new Set(columns.map(columnKey)).size !== columns.length) {
+    throw new Error("DataTable: column keys must be unique.");
   }
 
   const sortedData = useMemo(() => {
@@ -414,7 +429,7 @@ export default function DataTable<T>({
               />
             </div>
           )}
-          {columns.map((column, columnIndex) => {
+          {columns.map((column) => {
             const isSorted = sortState?.columnLabel === column.label;
             return (
               <div
@@ -429,7 +444,7 @@ export default function DataTable<T>({
                     : undefined
                 }
                 className={styles["datatable-cell"]}
-                key={columnIndex}
+                key={columnKey(column)}
               >
                 {column.sortable ? (
                   <button
@@ -505,7 +520,7 @@ export default function DataTable<T>({
                   const cellContent = column.cellRenderer?.(line);
                   const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
                   return (
-                    <div role="cell" className={styles["datatable-cell"]} key={columnIndex}>
+                    <div role="cell" className={styles["datatable-cell"]} key={columnKey(column)}>
                       {/* Primitive cell values get single-line ellipsis
                        * truncation, with the full value readable via the
                        * native title tooltip — free-length text (usernames,

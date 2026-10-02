@@ -248,7 +248,9 @@ it.each([false, true])("blocks lower drawer controls and restores them on close,
     return (
       <>
         <InlineDrawer title="Lower" open onClose={() => {}} width="600px">
-          <button data-lower>Lower action</button>
+          <button data-lower data-open="false">
+            Lower action
+          </button>
           {nested && upper}
         </InlineDrawer>
         {!nested && upper}

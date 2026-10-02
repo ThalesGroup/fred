@@ -1094,3 +1094,24 @@ it("resets server offset when changing size through the rendered selector", () =
   expect(container.querySelector("output")!.textContent).toBe("0:50");
   expect(container.querySelector('[aria-haspopup="listbox"]')!.textContent).toContain("50");
 });
+
+it.each(["explicit", "label", "duplicate"])("preserves cell state with %s column identity", (identity) => {
+  const a = {
+    key: identity === "explicit" ? "a" : undefined,
+    label: identity === "duplicate" ? "" : "A",
+    cellRenderer: () => <input defaultValue="A" />,
+  };
+  const b = {
+    key: identity === "explicit" ? "b" : undefined,
+    label: identity === "duplicate" ? "" : "B",
+    cellRenderer: () => <input defaultValue="B" />,
+  };
+  const data = [{ id: 1 }];
+  render(<DataTable data={data} columns={[a, b]} rowKey={(row) => row.id} />);
+  const inputs = container.querySelectorAll("input");
+  inputs[1].value = "Edited B";
+  act(() => root.render(<DataTable data={data} columns={[b, a]} rowKey={(row) => row.id} />));
+  expect(container.querySelector("input")).toBe(inputs[1]);
+  act(() => root.render(<DataTable data={data} columns={[b]} rowKey={(row) => row.id} />));
+  expect(container.querySelector("input")!.value).toBe("Edited B");
+});

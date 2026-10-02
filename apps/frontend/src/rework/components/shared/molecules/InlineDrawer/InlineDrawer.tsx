@@ -34,11 +34,12 @@ function topDrawer(document: Document): HTMLElement | undefined {
 // Ancestors of a nested overlay cannot themselves be inert: block their other
 // branches, leaving the path to the active drawer and its backdrop available.
 const backdrops = new WeakMap<HTMLElement, HTMLElement>();
+const drawerElements = new WeakSet<HTMLElement>();
 const blockedBranches = new Map<HTMLElement, boolean>();
 function syncDrawerInteraction(document: Document) {
   for (const [node, wasInert] of blockedBranches) {
     if (node.ownerDocument !== document) continue;
-    node.inert = wasInert || node.dataset.open === "false";
+    node.inert = wasInert || (drawerElements.has(node) && node.dataset.open === "false");
     blockedBranches.delete(node);
   }
   const top = topDrawer(document);
@@ -219,6 +220,8 @@ export function InlineDrawer({
   useLayoutEffect(() => {
     if (!open) return;
     const drawer = drawerRef.current!;
+    drawerElements.add(drawer);
+    if (backdropRef.current) drawerElements.add(backdropRef.current);
     openDrawers.add(drawer);
     if (backdropRef.current) backdrops.set(drawer, backdropRef.current);
     else backdrops.delete(drawer);

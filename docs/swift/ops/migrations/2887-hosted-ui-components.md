@@ -30,6 +30,8 @@ Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `l
 
 Selectable `DataTable` consumers must supply a stable `rowKey` function, controlled `selectedKeys` set and `onSelectionChange` handler (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected. Controlled sorting requires both `sortState` (including `null`) and `onSortChange`; omit both for internal sorting, with `sortValue` on every sortable column.
 
+ProgressBar consumers must provide `aria-label` or `aria-labelledby`. DataTable consumers should supply stable column `key` values when labels change or duplicate-label column objects are recreated.
+
 Hosted consumers can opt into typed table-row activation, localized drawer action labels and semantic KPI tones after the UI package release. Server pagination counts and offsets must be nonnegative safe integers; page sizes must be positive safe integers.
 
 ## Validation

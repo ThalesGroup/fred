@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useTranslation } from "react-i18next";
 import ProgressBar from "../ProgressBar/ProgressBar";
 import type { TaskState } from "../../../../features/tasks/taskTypes";
 import type { ColorTheme } from "../../utils/Type";
@@ -33,6 +34,8 @@ const STATE_THEME: Record<TaskState, ColorTheme> = {
 };
 
 export function TaskProgressBar({ state, progress }: TaskProgressBarProps) {
+  const { t } = useTranslation();
+  const label = t("rework.tasks.tray.progress");
   const theme = STATE_THEME[state];
 
   // While running, the backend emits only coarse progress (a single ~0.3 step
@@ -41,7 +44,7 @@ export function TaskProgressBar({ state, progress }: TaskProgressBarProps) {
   // snaps it to 100%. Movement without per-subprocess granularity.
   if (state === "running" && (progress === null || progress < 0.9)) {
     return (
-      <div className={styles.creepTrack} role="progressbar" aria-label="processing" data-color={theme}>
+      <div className={styles.creepTrack} role="progressbar" aria-label={label} data-color={theme}>
         <div className={styles.creepFill} />
       </div>
     );
@@ -49,11 +52,11 @@ export function TaskProgressBar({ state, progress }: TaskProgressBarProps) {
 
   if (progress === null) {
     return (
-      <div className={styles.shimmerTrack} role="progressbar" aria-label="loading" data-color={theme}>
+      <div className={styles.shimmerTrack} role="progressbar" aria-label={label} data-color={theme}>
         <div className={styles.shimmerFill} />
       </div>
     );
   }
 
-  return <ProgressBar theme={theme} current={Math.round(progress * 100)} max={100} />;
+  return <ProgressBar aria-label={label} theme={theme} current={Math.round(progress * 100)} max={100} />;
 }

@@ -41,3 +41,14 @@ describe("ProgressBar bounds", () => {
     expect((bar.firstElementChild as HTMLElement).style.width).toBe(`${percent}%`);
   });
 });
+
+it("rejects missing names from untyped callers", () => {
+  // @ts-expect-error public props require a name
+  const unnamed = <ProgressBar theme="primary" current={3} max={10} />;
+  expect(() => renderToStaticMarkup(unnamed)).toThrow("accessible name");
+});
+it("accepts a visible label reference", () => {
+  expect(
+    renderToStaticMarkup(<ProgressBar theme="primary" current={3} max={10} aria-labelledby="task-label" />),
+  ).toContain('aria-labelledby="task-label"');
+});
