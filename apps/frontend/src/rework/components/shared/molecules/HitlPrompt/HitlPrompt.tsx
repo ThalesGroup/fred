@@ -179,7 +179,11 @@ export function HitlPrompt({
                 key={c.id}
                 className={[
                   c.description && styles.choiceWithDescription,
-                  collectingAnswers && stagedAnswer?.answer === c.id && !stagedAnswer.skipped && styles.selectedChoice,
+                  collectingAnswers &&
+                    stagedAnswer?.answer === c.id &&
+                    !stagedAnswer.skipped &&
+                    !freeText.trim() &&
+                    styles.selectedChoice,
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -187,7 +191,11 @@ export function HitlPrompt({
                 variant="outlined"
                 size={isAgentQuestion ? "small" : "medium"}
                 disabled={isOverLimit || busy}
-                aria-pressed={collectingAnswers ? stagedAnswer?.answer === c.id && !stagedAnswer.skipped : undefined}
+                aria-pressed={
+                  collectingAnswers
+                    ? stagedAnswer?.answer === c.id && !stagedAnswer.skipped && !freeText.trim()
+                    : undefined
+                }
                 onClick={() => answerQuestion(c.id, freeText.trim() ? freeText : undefined)}
               >
                 {c.description ? (
