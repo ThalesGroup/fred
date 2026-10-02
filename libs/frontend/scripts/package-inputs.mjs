@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The package exposes one theme, the default, under the plain [data-theme]
+// selectors its token contract allows; the app scopes it by data-ui-theme.
+export const PACKAGED_THEME = "pebble";
+
 export const TOKEN_SOURCE_PATHS = [
   "apps/frontend/src/styles/color-ramps.css",
-  "apps/frontend/src/styles/colors-semantic-light.css",
-  "apps/frontend/src/styles/colors-semantic-dark.css",
+  "apps/frontend/src/styles/themes/pebble.css",
   "apps/frontend/src/styles/colors-state-semantic.css",
   "apps/frontend/src/styles/shadow-light.css",
   "apps/frontend/src/styles/shadow-dark.css",

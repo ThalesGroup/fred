@@ -43,8 +43,7 @@ jobs:
             frontend-packages:
               - 'libs/frontend/**'
               - 'apps/frontend/src/styles/color-ramps.css'
-              - 'apps/frontend/src/styles/colors-semantic-light.css'
-              - 'apps/frontend/src/styles/colors-semantic-dark.css'
+              - 'apps/frontend/src/styles/themes/pebble.css'
               - 'apps/frontend/src/styles/colors-state-semantic.css'
               - 'apps/frontend/src/styles/shadow-light.css'
               - 'apps/frontend/src/styles/shadow-dark.css'

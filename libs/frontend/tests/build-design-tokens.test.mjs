@@ -26,10 +26,12 @@ import {
   buildDesignTokens,
   defaultPackageRoot,
   defaultRepositoryRoot,
+  rewritePackagedThemeSelectors,
 } from "../scripts/build-design-tokens.mjs";
 import {
   FONT_SOURCES,
   FONT_STYLESHEET_PATH,
+  PACKAGED_THEME,
   ROOT_LICENSE_PATH,
   TOKEN_SOURCE_PATHS,
 } from "../scripts/package-inputs.mjs";
@@ -70,8 +72,10 @@ test("generates the token AST in canonical source order", async () => {
   );
   const expectedNodes = [];
   for (const sourcePath of TOKEN_SOURCE_PATHS) {
-    const source = postcss.parse(
-      await readFile(path.join(defaultRepositoryRoot, sourcePath), "utf8"),
+    const source = rewritePackagedThemeSelectors(
+      postcss.parse(
+        await readFile(path.join(defaultRepositoryRoot, sourcePath), "utf8"),
+      ),
     );
     expectedNodes.push(...source.nodes.map((node) => node.toString()));
   }
@@ -79,6 +83,51 @@ test("generates the token AST in canonical source order", async () => {
     generated.nodes.map((node) => node.toString()),
     expectedNodes,
   );
+});
+
+test("packages every token of the default theme under plain selectors", async () => {
+  await buildDesignTokens();
+  const declared = (root) => {
+    const bySelector = new Map();
+    root.walkDecls((declaration) => {
+      const selector = declaration.parent.selector;
+      if (!bySelector.has(selector)) bySelector.set(selector, new Map());
+      bySelector.get(selector).set(declaration.prop, declaration.value);
+    });
+    return bySelector;
+  };
+  const theme = declared(
+    rewritePackagedThemeSelectors(
+      postcss.parse(
+        await readFile(
+          path.join(
+            defaultRepositoryRoot,
+            `apps/frontend/src/styles/themes/${PACKAGED_THEME}.css`,
+          ),
+          "utf8",
+        ),
+      ),
+    ),
+  );
+  const packaged = declared(
+    postcss.parse(
+      await readFile(path.join(defaultPackageRoot, "dist/tokens.css"), "utf8"),
+    ),
+  );
+  assert.deepEqual([...theme.keys()].sort(), [
+    ":root",
+    '[data-theme="dark"]',
+    '[data-theme="light"]',
+  ]);
+  for (const [selector, properties] of theme) {
+    for (const [property, value] of properties) {
+      assert.equal(
+        packaged.get(selector)?.get(property),
+        value,
+        `${selector} ${property}`,
+      );
+    }
+  }
 });
 
 test("keeps themes neutral and fonts explicitly separate", async () => {

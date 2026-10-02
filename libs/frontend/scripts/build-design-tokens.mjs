@@ -23,6 +23,7 @@ import valueParser from "postcss-value-parser";
 import {
   FONT_SOURCES,
   FONT_STYLESHEET_PATH,
+  PACKAGED_THEME,
   ROOT_LICENSE_PATH,
   TOKEN_SOURCE_PATHS,
 } from "./package-inputs.mjs";
@@ -79,6 +80,27 @@ function rewriteSingleUrl(value, packedName, sourceDescription) {
   return parsed.toString();
 }
 
+const packagedThemeSelectors = new Map([
+  [`:root[data-ui-theme="${PACKAGED_THEME}"]`, ":root"],
+  [
+    `[data-ui-theme="${PACKAGED_THEME}"][data-theme="light"]`,
+    '[data-theme="light"]',
+  ],
+  [
+    `[data-ui-theme="${PACKAGED_THEME}"][data-theme="dark"]`,
+    '[data-theme="dark"]',
+  ],
+]);
+
+/** Maps the packaged theme's app selectors onto the package's plain ones. */
+export function rewritePackagedThemeSelectors(root) {
+  root.walkRules((rule) => {
+    const packaged = packagedThemeSelectors.get(rule.selector.trim());
+    if (packaged) rule.selector = packaged;
+  });
+  return root;
+}
+
 async function buildTokens(repositoryRoot) {
   const output = postcss.root();
   for (const sourcePath of TOKEN_SOURCE_PATHS) {
@@ -86,6 +108,7 @@ async function buildTokens(repositoryRoot) {
     const css = await readFile(absolutePath, "utf8");
     const parsed = postcss.parse(css, { from: absolutePath });
     assertNoCssImports(parsed, sourcePath);
+    rewritePackagedThemeSelectors(parsed);
     output.append(parsed.nodes.map((node) => node.clone()));
   }
   assertTokenCssContract(output, "generated tokens.css");

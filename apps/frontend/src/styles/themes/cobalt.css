@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-/* Cobalt UI theme: overrides the default (Pebble) semantic tokens when <html> carries
-   data-ui-theme="cobalt". Colors come from LCh seeds (neutral 265/2.5 in
-   light, 226/2.5 in dark; primary 298/90; tertiary 226/39) with the accent
-   rules of the token rework. */
-/* :root raises specificity above the :root blocks of radius.css and typography.css. */
+/* Cobalt UI theme: strict navy and cyan, Inter, near-square controls. Colors
+   come from LCh seeds (neutral 265/2.5 in light, 226/2.5 in dark; primary
+   298/90; tertiary 226/39) with the accent rules of the token rework. */
 :root[data-ui-theme="cobalt"] {
   --font-family-base: "Inter", sans-serif;
   /* Near-square controls (buttons, inputs), soft menus; cards keep --radius-l. */
@@ -31,11 +29,15 @@
   --font-headline-medium-emphasized: 300 1.75rem / 1.28 var(--font-family-base);
   --font-headline-small-emphasized: 400 1.5rem / 1.33 var(--font-family-base);
   --font-title-large-emphasized: 400 1.375rem / 1.27 var(--font-family-base);
+  --radius-2xl: 48px;
+  --radius-xl: 32px;
+  --radius-l: 24px;
 }
 
 /* Light ladder rises toward white; surface-main sits just under the highest
    container so the main content keeps the strongest text contrast. */
 [data-ui-theme="cobalt"][data-theme="light"] {
+  color-scheme: light;
   --primary: #002789;
   --on-primary: #fcfcff;
   --primary-container: #e4dfff;
@@ -79,9 +81,12 @@
   --outline: #74777b;
   --outline-variant: #c4c7cb;
   --outline-muted: #dadde1;
+  --scrim: rgba(0, 0, 0, 0.44);
+  --surface-picture: #ffffff;
 }
 
 [data-ui-theme="cobalt"][data-theme="dark"] {
+  color-scheme: dark;
   --primary: #c8bfff;
   --on-primary: #001454;
   --primary-container: #3d3e8b;
@@ -124,4 +129,6 @@
   --outline: #8c9294;
   --outline-variant: #5a5f61;
   --outline-muted: #373c3e;
+  --scrim: rgba(0, 0, 0, 0.64);
+  --surface-picture: #ffffff;
 }
