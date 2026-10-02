@@ -58,6 +58,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_core import (
     KeycloakUser,
+    RebacEngine,
     RebacReference,
     Relation,
     RelationType,
@@ -572,6 +573,40 @@ async def test_reconciliation_skips_plain_members_for_fresh_role_reads() -> None
     assert moved == 1
     assert rebac.read_subjects.count(None) == 1
     assert set(rebac.read_subjects[1:]) == {"nominee", "owner"}
+    assert ("plain", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_uses_fresh_snapshot_before_filtering_members() -> None:
+    class StaleSnapshotRebac(_FakeRebac):
+        async def list_direct_relations(self, resource, **kwargs):
+            relations = await super().list_direct_relations(resource, **kwargs)
+            if (
+                kwargs.get("subject") is None
+                and kwargs.get("consistency_token") != RebacEngine.HIGHER_CONSISTENCY
+            ):
+                return [
+                    relation
+                    for relation in relations
+                    if relation.relation != RelationType.TEAM_ADMIN
+                ]
+            return relations
+
+    rebac = StaleSnapshotRebac(
+        {
+            ("unaware", _ADMIN, "team-a"),
+            ("plain", RelationType.TEAM_MEMBER.value, "team-a"),
+        }
+    )
+    store = _FakeCharterStore(applied="2025-01")
+
+    moved = await reconcile_team_admin_charter_roles(
+        _deps(rebac, store, teams=["team-a"])
+    )
+
+    assert moved == 1
+    assert ("unaware", _PENDING, "team-a") in rebac.tuples
+    assert ("unaware", _ADMIN, "team-a") not in rebac.tuples
     assert ("plain", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
 
 

@@ -564,7 +564,8 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
         moved = 0
         for metadata in await metadata_store.list_all():
             relations = await deps.rebac.list_direct_relations(
-                RebacReference(Resource.TEAM, metadata.id)
+                RebacReference(Resource.TEAM, metadata.id),
+                consistency_token=RebacEngine.HIGHER_CONSISTENCY,
             )
             for user_id, snapshot_roles in _fold_team_role_relations(relations).items():
                 if snapshot_roles.isdisjoint(
