@@ -594,16 +594,22 @@ def test_startup_diagnostics_wait_for_selected_output(
     from fred_pod.common import config_files
     from fred_pod.common.config_files import ConfigFiles
 
+    # Simulate fresh startup, independent of logging initialized by other tests.
     monkeypatch.setattr(config_files, "_logging_ready", False)
     monkeypatch.setattr(config_files, "_startup_events", deque(maxlen=32))
     files = ConfigFiles(logger=logging.getLogger("config-test"))
+    # Use a real dotenv file to distinguish its diagnostic path from its contents.
     env_file = tmp_path / ".env"
     env_file.write_text("FRED_TEST=private-value\n", encoding="utf-8")
     monkeypatch.delenv("FRED_TEST", raising=False)
     files.load_environment(str(env_file))
+    # Simulate successful YAML loading; this test exercises logging, not parsing.
     config_file = str(tmp_path / "configuration.yaml")
     files.mark_config_loaded(config_file)
+    # Both startup events must remain buffered until the output format is known.
     assert not capsys.readouterr().out
+
+    # Real setup flushes the buffer through the selected formatter and fake store.
     store = _StubLogStore()
     log_setup(
         service_name="bootstrap-test",
@@ -612,12 +618,14 @@ def test_startup_diagnostics_wait_for_selected_output(
         include_uvicorn=False,
     )
     output = capsys.readouterr().out
+    # Paths survive as structured metadata, while file contents stay out of output.
     assert "private-value" not in output
     assert store.indexed[-1].extra == {
         "env_file": str(env_file),
         "config_file": config_file,
     }
     if log_format == "json":
+        # The last line is the configuration event, queued after the environment event.
         event = json.loads(output.splitlines()[-1])
         assert event["service"] == "bootstrap-test"
         assert event["severity"] == "INFO"
@@ -628,6 +636,7 @@ def test_startup_diagnostics_wait_for_selected_output(
         assert f"env_file={env_file}" in output
         assert f"config_file={config_file}" in output
 
+    # After setup, new events must emit immediately without another buffer flush.
     lazy_config_file = str(tmp_path / "lazy-configuration.yaml")
     files.mark_config_loaded(lazy_config_file)
     output = capsys.readouterr().out
