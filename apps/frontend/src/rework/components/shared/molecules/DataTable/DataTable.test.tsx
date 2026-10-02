@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { act } from "react";
+import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DataTable, { DataTableColumn, SortState } from "./LocalizedDataTable.tsx";
@@ -634,4 +635,117 @@ describe("row activation", () => {
     expect(select).toHaveBeenCalledOnce();
     expect(activate).toHaveBeenCalledTimes(3);
   });
+});
+
+describe("embedded custom controls", () => {
+  it.each([
+    { role: "button" },
+    { role: "switch" },
+    { role: "combobox" },
+    { role: "textbox" },
+    { role: "menuitemcheckbox" },
+    { role: "unknown button" },
+    { contentEditable: true },
+    { contentEditable: "plaintext-only" as const },
+    { tabIndex: 0 },
+  ])("isolates nested clicks and keyboard events for %j", (attributes) => {
+    const activate = vi.fn();
+    const select = vi.fn();
+    const embedded = vi.fn();
+    render(
+      <DataTable
+        data={[{ id: 1 }]}
+        columns={[
+          {
+            label: "Control",
+            cellRenderer: () => (
+              <div {...attributes} suppressContentEditableWarning onClick={embedded} onKeyDown={embedded}>
+                <span data-control-content>Control</span>
+              </div>
+            ),
+          },
+        ]}
+        rowKey={(row) => row.id}
+        selectable
+        selectedKeys={new Set()}
+        onSelectionChange={select}
+        onRowClick={activate}
+      />,
+    );
+    const content = container.querySelector("[data-control-content]")!;
+    click(content);
+    act(() => content.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    act(() => content.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })));
+    expect(embedded).toHaveBeenCalledTimes(3);
+    expect(activate).not.toHaveBeenCalled();
+    expect(select).not.toHaveBeenCalled();
+  });
+
+  it("still activates ordinary content inside an external ARIA container", () => {
+    const activate = vi.fn();
+    render(
+      <div role="grid">
+        <DataTable
+          data={[{ id: 1 }]}
+          columns={[
+            {
+              label: "Id",
+              cellRenderer: () => (
+                <div contentEditable={false}>
+                  <span>Ordinary content</span>
+                </div>
+              ),
+            },
+          ]}
+          onRowClick={activate}
+        />
+      </div>,
+    );
+    click(container.querySelector("[data-activatable] span"));
+    expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
+  });
+});
+
+it("does not activate a row when a portaled cell action bubbles through React", () => {
+  const activate = vi.fn();
+  const embedded = vi.fn();
+  render(
+    <DataTable
+      data={[{ id: 1 }]}
+      onRowClick={activate}
+      columns={[
+        {
+          label: "Action",
+          cellRenderer: () =>
+            createPortal(
+              <button data-portal-action onClick={embedded}>
+                <span>Portal action</span>
+              </button>,
+              document.body,
+            ),
+        },
+      ]}
+    />,
+  );
+  click(document.querySelector("[data-portal-action] span"));
+  expect(embedded).toHaveBeenCalledOnce();
+  expect(activate).not.toHaveBeenCalled();
+});
+
+it("keeps background selection inside an external ARIA container", () => {
+  const select = vi.fn();
+  render(
+    <div role="grid">
+      <DataTable
+        data={[{ id: 1 }]}
+        columns={columns}
+        selectable
+        rowKey={(row) => row.id}
+        selectedKeys={new Set()}
+        onSelectionChange={select}
+      />
+    </div>,
+  );
+  click(container.querySelector('[class*="datatable-row"] span'));
+  expect(select).toHaveBeenCalledExactlyOnceWith(new Set([1]));
 });

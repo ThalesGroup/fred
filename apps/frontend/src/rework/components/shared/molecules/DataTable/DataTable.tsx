@@ -22,6 +22,38 @@ import type { TablePaginationLabels } from "../TablePagination/TablePagination.t
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
 
+const EMBEDDED_CONTROL_SELECTOR = [
+  "button, a, input, label, select, textarea, summary, audio[controls], video[controls], [tabindex]",
+  '[contenteditable]:not([contenteditable="false" i])',
+  ...[
+    "button",
+    "checkbox",
+    "combobox",
+    "grid",
+    "link",
+    "listbox",
+    "menu",
+    "menubar",
+    "menuitem",
+    "menuitemcheckbox",
+    "menuitemradio",
+    "option",
+    "radio",
+    "radiogroup",
+    "scrollbar",
+    "searchbox",
+    "slider",
+    "spinbutton",
+    "switch",
+    "tab",
+    "tablist",
+    "textbox",
+    "tree",
+    "treegrid",
+    "treeitem",
+  ].map((role) => `[role~="${role}"]`),
+].join(", ");
+
 export type DataTableRowSize = "medium" | "small";
 
 const ROW_HEIGHT_BY_SIZE: Record<DataTableRowSize, string> = {
@@ -355,7 +387,10 @@ export default function DataTable<T>({
                 onRowClick || selectable
                   ? (event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      // Portaled cell controls bubble through React, outside the row's DOM.
+                      if (!event.currentTarget.contains(target)) return;
+                      const control = target.closest(EMBEDDED_CONTROL_SELECTOR);
+                      if (control && control !== event.currentTarget && event.currentTarget.contains(control)) return;
                       if (onRowClick) onRowClick(line);
                       else toggleRow(key);
                     }
