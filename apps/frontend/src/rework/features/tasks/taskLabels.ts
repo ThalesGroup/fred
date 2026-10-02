@@ -35,12 +35,22 @@ export const STATE_COLOR: Record<TaskState, string> = {
 /** Localized task-state label (e.g. "Pending" / "En attente"). */
 export const stateLabel = (state: TaskState, t: TFunction): string => t(`rework.tasks.state.${state}`);
 
+/** Every ingestion step the backend actually emits on the task feed. Anything
+ *  outside this set is a pipeline internal we have no wording for — naming the
+ *  stage beats printing an English identifier into a French page. */
+/** Every step the ingestion workflow emits. Exported because the import
+ *  stepper has to place each one on a phase — a step named here and unplaced
+ *  there falls back to the first phase, walking the stepper backwards. */
+export const INGESTION_STEPS = new Set(["uploading", "processing", "indexing", "listed", "vectorized", "skip", "done"]);
+
 /** Keep backend stage keys in the payload, translate only their presentation. */
-export function stepLabel(task: Pick<TaskViewModel, "kind" | "step">, t: TFunction): string {
+export function stepLabel(task: Pick<TaskViewModel, "kind" | "step" | "stage">, t: TFunction): string {
+  // The transfer is the browser's own half of the work: no backend step
+  // describes it, and none will arrive until it is over.
+  if (task.stage === "upload") return t("rework.tasks.importStage.upload");
   const step = task.step ?? "";
-  if (task.kind === "ingestion" && ["uploading", "processing", "indexing", "done"].includes(step)) {
-    return t(`rework.tasks.ingestionStep.${step}`);
-  }
+  if (task.kind === "ingestion" && INGESTION_STEPS.has(step)) return t(`rework.tasks.ingestionStep.${step}`);
+  if (task.stage === "analysis") return t("rework.tasks.importStage.analysis");
   return step;
 }
 
@@ -63,7 +73,9 @@ export function relativeTime(ms: number, t: TFunction, now = Date.now()): string
   const diffM = Math.floor(diffS / 60);
   if (diffM < 60) return t("rework.tasks.time.minAgo", { count: diffM });
   const diffH = Math.floor(diffM / 60);
-  return t("rework.tasks.time.hoursAgo", { count: diffH });
+  if (diffH < 24) return t("rework.tasks.time.hoursAgo", { count: diffH });
+  // Days past that: a record kept for a week would otherwise read "168 h".
+  return t("rework.tasks.time.daysAgo", { count: Math.floor(diffH / 24) });
 }
 
 /** Localized "due in …" hint for a future timestamp (erasure schedule view).

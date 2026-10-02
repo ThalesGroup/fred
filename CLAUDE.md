@@ -392,9 +392,10 @@ The mandatory read order below applies to **development tasks only**. Skip for s
 Python tooling uses uv with an existing pyproject.toml and committed uv.lock
 where practical. Do not add a parallel requirements.txt/pip installation path.
 
-Every PR must add an English migration note, even when no operator action is
-needed. Follow `docs/swift/ops/MIGRATION-GUIDES.md` and its template. The maximum
-operational impact determines the minimum paired code/chart version increment:
+Every PR except those opened by `dependabot[bot]` must add an English
+migration note, even when no operator action is needed. Follow
+`docs/swift/ops/MIGRATION-GUIDES.md` and its template. The maximum operational
+impact determines the minimum paired code/chart version increment:
 none -> patch, operations (including optional activation) -> minor, substantial
 incompatibility -> major. The release skill must generate and present the operator
 guide alongside UI notes before asking for tag approval.

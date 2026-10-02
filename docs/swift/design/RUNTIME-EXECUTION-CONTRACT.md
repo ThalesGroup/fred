@@ -2611,9 +2611,9 @@ the `folder:` form. Regression tests:
 > delayed-Keycloak, two-SSE-stream pod test. That one is not merely unrun — it
 > is currently *unrunnable*, because `_authorize_and_resolve` nulls
 > body-supplied refresh tokens and no producer supplies one, so nothing can
-> drive a real refresh end to end. It stays owed until
-> `DELEGATED-DOWNSTREAM-AUTH-RFC.md` lands or the criterion is formally
-> revised. See the TURN-07 dossier for the full accounting.
+> drive a real refresh end to end. Delegated execution
+> ([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md)) removes the
+> need for it when `act_for_people` is on. See the TURN-07 dossier for the full accounting.
 
 **Enforces §0.2 invariant #2 on the last path that violated it.**
 `refresh_user_access_token_from_keycloak` was a synchronous `httpx.post(...,
@@ -2690,9 +2690,10 @@ Two consequences, and the second is the one that matters:
 Restoring delegated refresh is **not** simply re-adding the producer: F-B
 neutralizes body-supplied refresh tokens deliberately, and giving a pod a user's
 long-lived refresh token is a security decision, not a bug fix. The design for
-closing the root cause is `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`
-(token exchange at admission) — written, not implemented, awaiting its own
-issue. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
+The root cause was closed differently: with `act_for_people` on, downstream
+calls present a renewable workload token plus a person grant instead of the
+person's bearer ([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md));
+with it off, the person's bearer is still forwarded. §8.49 and §8.50 record the two no-RFC mitigations landed alongside this
 change.
 
 **Contract-visible signature changes** (all internal to `fred-runtime`; the
@@ -2769,8 +2770,8 @@ bookkeeping. Any last-waiter-cancels scheme races the waiters' own resumption
 401-recovery handler misses — killing turns instead of degrading them. The
 accepted cost is a rotation nobody consumes (the exchange completes, Keycloak
 invalidates the presented token, the replacement is dropped): the
-protocol-inherent lost-rotation race already recorded as
-`DELEGATED-DOWNSTREAM-AUTH-RFC.md` open question 8, which degrades to one
+protocol-inherent lost-rotation race (Keycloak invalidates the presented
+refresh token before the response arrives), which degrades to one
 `invalid_grant` retry. Each waiter also receives its **own** copy of the
 payload, since one task resolves to one object and a shared mutable dict would
 let the first mutator corrupt what its peers already read.
@@ -2779,7 +2780,7 @@ let the first mutator corrupt what its peers already read.
 earlier refresh completed finds no in-flight entry and presents a token Keycloak
 has already consumed, so it still gets `invalid_grant`. Closing that needs a
 cached result keyed on the pre-rotation token — live credentials held in pod
-memory, an AUTH-TX decision rather than a refresher one.
+memory, which delegated execution avoids by holding no refresh token.
 
 **A 2xx is not a promise of a token.** The success path validates the response
 shape — JSON object, non-empty string `access_token`, and an `expires_in` that
@@ -2979,12 +2980,11 @@ server still accepts. And
 `createKeycloakInstance` registers `onAuthLogout` to drop the persisted copy
 the moment Keycloak ends the session. The removal is hygiene against the app's
 own fallback, not a boundary — anything running in the page could keep a copy
-of the token regardless; only the 300 s TTL (and, eventually, the RFC's
-server-side exchange) actually bounds a leaked bearer.
+of the token regardless; only the 300 s TTL actually bounds a leaked bearer.
 
 This narrows the window; it does not close it (a turn can still outlive a
-120–300 s token). The close is `DELEGATED-DOWNSTREAM-AUTH-RFC.md` (token
-exchange at admission), deliberately not implemented here.
+120–300 s token). The close is delegated execution with `act_for_people` on
+([`DELEGATED-EXECUTION.md`](../platform/DELEGATED-EXECUTION.md)).
 
 Regression tests: `useChatSse.test.tsx` (refusal below the hard floor, degraded
 proceed above it, HITL refusal reporting not-reached with no optimistic
@@ -6245,19 +6245,31 @@ ReAct and Deep parent/child frames may recover a tool call only at the completed
 assistant-message boundary, only for a Mistral-qualified response, and only when
 the reconstructed provider content contains the exact empty typed sentinel
 `{"type":"reference","reference_ids":[]}` between a registered tool name
-and strict JSON arguments. Prose before, between, or after valid calls remains
-assistant content; the calls execute. Non-empty citation references, extra
-reference fields, literal exporter placeholders, duplicate JSON keys, unknown
-tools, schema-invalid arguments and over-cap representations remain assistant
-text. The exact empty sentinel is distinct from ordinary cited-answer blocks,
-which carry reference IDs.
-Native tool calls, including duplicates, are preserved unchanged.
+and JSON arguments. Literal CR/LF inside a quoted JSON string are accepted;
+other raw control characters remain invalid. Arguments are checked against the
+model-visible tool schema and the full input schema, using a temporary call ID
+only for an injected `tool_call_id` so cross-field validators still run. The bounded content list may mix typed text blocks
+and plain string fragments; their original order and bytes are retained even
+when they split a tool name or JSON argument. A response may contain several
+exact sentinels when each follows a registered tool name and every resulting
+call validates. The whole candidate is rejected if a later marker or call is
+invalid. Prose before, between, or after valid calls remains assistant content;
+the calls execute. Non-empty citation references, extra reference fields,
+literal exporter placeholders, duplicate JSON keys, unknown tools,
+schema-invalid arguments and over-cap representations remain assistant text.
+The exact empty sentinel is distinct from ordinary cited-answer blocks, which
+carry reference IDs. Native tool calls, including duplicates and their IDs, are
+preserved unchanged.
 
 Recovery is bounded, validates every call before allocating call IDs, and marks
 the normalized message so the Mistral-gated streaming bridge withholds the typed
-marker and call syntax from assistant/reasoning SSE. Only the longest suffix
-that remains a prefix of a registered tool name is held while the marker is
-unresolved; ordinary and non-Mistral text is released unchanged. Each completed
+marker and call syntax from assistant/reasoning SSE for the same mixed content
+shape. If a completed message already carries native calls and marked content,
+the bridge discards pending encoded syntax instead of publishing it as a Planning
+preamble; safe prose emitted before the tool-name probe is retained. Only
+the longest suffix that remains a prefix of a registered tool name is held
+while the marker is unresolved; ordinary, unrecognized-block,
+and non-Mistral text is released unchanged. Each completed
 representation is normalized at most once and then follows the normal tool
 route: existing limits run before HITL proposals, approved calls execute through
 tool observability, and every call keeps normal `ToolMessage` pairing. Recovery
@@ -6360,3 +6372,64 @@ selects a renderer and nothing more, and a malformed value is dropped rather
 than failing the turn. `prompt_id` is attribution, never resolved at display
 time — a prompt is overwritten on edit and can be deleted, so the turn's own
 text is the record of what was sent.
+
+### 8.99 Agent-initiated human questions
+
+An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
+`RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
+platform tool explicitly under that control. An absent value or `false` leaves
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional short subject title, up to
+four distinct single-choice options, and/or free text. Two or more choices
+automatically allow a text answer even when the agent sets `allow_free_text=false`;
+zero- and one-choice questions follow that flag. The agent selects the most
+relevant options before calling; a longer list is rejected, never trimmed.
+Its injected tool call ID is hidden from
+the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
+`stage="agent_question"`. A collision with a declared, provider or capability
+tool named `ask_user` rejects executor construction.
+
+A pending human interrupt is the turn's result until the person responds. If an
+earlier tool call failed and the agent recovered by asking a valid question, the
+stream retains the failed tool trace but emits no stale failure as a final answer.
+The pause event carries sources, UI parts, model usage and context size accumulated
+before the interrupt. History stores them in a metadata-only system note
+before deduplicating the HITL request row; managed chat combines each pause
+segment with the resumed answer in the same exchange. For parallel pending
+questions, the stream attaches shared metadata only to the first pause event
+so usage is counted once, even when that request was previously surfaced.
+Managed chat also reads metadata stored on older HITL request rows.
+
+The tool pauses through LangGraph before any external effect. A resume must carry
+the pending interrupt and occurrence IDs. After authorization and before the
+single-use claim, the runtime validates a selected option against the pending
+question. `resume_payload` may be `{"choice_id":"id"}`, `{"text":"..."}`,
+both fields, or `{"skipped":true}`. Skip cannot carry an answer. The tool result
+is compact JSON with `status="answered"` and the supplied fields, or
+`status="skipped"` and a French or English `instruction` that tells the agent to continue with stated assumptions. The turn language chooses French when it starts with `fr`; English is the fallback. Each sibling question keeps its own tool call identity.
+Approval gates retain their existing resume behavior and do not accept skip.
+A Graph question pause leaves its tool call in progress; only the resumed call
+emits a tool result. The no-LLM Graph test assistant exercises confirmation,
+choice, free text, and choice with comment through this platform tool.
+
+Managed chat groups simultaneous agent questions in one HITL card with short
+subject tabs in call order. Tabs scroll horizontally when needed, and older
+questions without titles use localized numbered labels. The first unanswered
+question is selected initially. Selecting a choice or skipping stages that
+answer and advances to the next unanswered tab. The person can revisit any
+tab and change its answer. Once every tab has an answer or skip, one Send
+resumes all pending calls in a single backend request. The card remains visible
+until that request succeeds and retains every draft if it fails. Reload
+reconstructs unanswered siblings from history by occurrence ID.
+
+A batch resume uses `resume_payload={"answers":[{"interrupt_id":"...",
+"occurrence_id":"...","answer":{...}},...]}` without top-level interrupt or
+occurrence IDs. The request must cover the exact pending set of agent questions.
+The runtime validates each answer, claims the occurrences in one database
+transaction, and resumes LangGraph once with an interrupt-ID-to-answer map.
+It persists one response row per occurrence. Existing single-answer resumes
+remain valid.
+
+`HitlResponsePart.skipped` is optional and defaults to false for old history.
+A skipped question writes a response row even without choice or text. Graph
+choice helpers expose the same typed answer through `choice_step_response`;
+`choice_step` keeps its string return contract for existing authors.

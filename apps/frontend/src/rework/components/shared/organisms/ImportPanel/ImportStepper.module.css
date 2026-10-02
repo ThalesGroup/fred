@@ -1,0 +1,111 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Sits where the card's timestamp does, so it must never push the step name
+   into an ellipsis: fixed width, no shrinking, no growing. */
+.stepper {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phase {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  width: 12px;
+  height: 12px;
+}
+
+.phase [class*="material-symbols"] {
+  font-size: 12px;
+}
+
+/* One colour per state, shared by the markers and the runs between them. */
+.phase[data-state="pending"],
+.link[data-state="pending"] {
+  color: var(--on-surface-muted);
+}
+
+/* Queued for a worker: where the file is, with nothing running yet. Same grey
+   as the card's status line in that state. */
+.phase[data-state="waiting"],
+.link[data-state="waiting"] {
+  color: var(--on-surface-retreat);
+}
+
+.phase[data-state="current"],
+.link[data-state="current"] {
+  color: var(--info);
+}
+
+.phase[data-state="done"],
+.link[data-state="done"] {
+  color: var(--success);
+}
+
+.phase[data-state="failed"],
+.link[data-state="failed"] {
+  color: var(--error);
+}
+
+.link {
+  flex-shrink: 0;
+  border-radius: 1px;
+  background: currentcolor;
+  width: 10px;
+  height: 2px;
+}
+
+/* A run nothing has reached yet is a track, not a line that has been drawn. */
+.link[data-state="pending"] {
+  background: var(--outline-variant);
+}
+
+/* The tooltip's trigger. The marker is 12px, so the hit area is the icon
+   itself — it fills the phase rather than shrink-wrapping the glyph. */
+.marker {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* Name, then what the phase is for. Kept narrow so the hint wraps to two or
+   three lines instead of stretching into one long run. */
+/* A rich panel owns its own padding — the shared tooltip drops its text-hint
+   padding for these. Same inset and width as the plain prose variant, so the
+   two read as the same tooltip with a name on top. */
+.tip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  max-width: 250px;
+}
+
+.tipName {
+  font: var(--font-label-medium);
+}
+
+.tipHint {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

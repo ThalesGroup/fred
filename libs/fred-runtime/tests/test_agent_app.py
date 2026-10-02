@@ -1251,6 +1251,61 @@ def test_execute_forwards_context_prompt_text_to_agent_binding(
     assert any("CTXMARKER-9f3a" in p.get("content", "") for p in tool_results)
 
 
+def test_execute_forwards_ask_user_to_agent_tool_catalog(monkeypatch, tmp_path) -> None:
+    model = ToolFriendlyFakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "call-question-1",
+                        "name": "ask_user",
+                        "args": {
+                            "question": "Choose one",
+                            "choices": [
+                                {"id": "a", "label": "A"},
+                                {"id": "b", "label": "B"},
+                            ],
+                        },
+                    }
+                ],
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    app = create_agent_app(
+        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute/stream",
+            json={
+                "agent_id": definition.agent_id,
+                "input": "Ask me",
+                "session_id": "session-question",
+                "runtime_context": {"user_id": "alice", "ask_user": True},
+            },
+        )
+        assert response.status_code == 200
+
+    payloads = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert any(
+        event.get("kind") == "awaiting_human"
+        and event.get("request", {}).get("stage") == "agent_question"
+        for event in payloads
+    )
+
+
 def test_execute_forwards_team_routing_policy_to_agent_binding(
     monkeypatch, tmp_path
 ) -> None:
@@ -5351,8 +5406,7 @@ def test_capability_block_skips_mcp_agent_instructions_for_inactive_server() -> 
 
 def test_build_capability_block_for_graph_agent_returns_tools() -> None:
     """
-    Ensure `_build_capability_block` builds a non-empty block for a Graph agent
-    (Phase 3, NOTES-GRAPH-CAPABILITY-BRIDGE.md).
+    Ensure `_build_capability_block` builds a non-empty block for a Graph agent.
 
     Why this exists:
     - `_build_capability_block` and `_effective_capability_ids` used to gate

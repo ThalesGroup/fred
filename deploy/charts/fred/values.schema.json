@@ -141,6 +141,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -2031,6 +2051,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -2817,6 +2857,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -7527,6 +7587,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -12237,6 +12317,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -16737,6 +16837,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -21237,6 +21357,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -25737,6 +25877,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -26672,6 +26832,7 @@
                           "ingress_prefix": {
                             "anyOf": [
                               {
+                                "pattern": "^/[A-Za-z0-9._~/-]+$",
                                 "type": "string"
                               },
                               {
@@ -26679,7 +26840,7 @@
                               }
                             ],
                             "default": null,
-                            "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+                            "description": "Canonical root-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. Absolute URLs, encoded characters, and path traversal are rejected.",
                             "title": "Ingress Prefix"
                           }
                         },
@@ -27866,6 +28027,26 @@
                 },
                 "podAnnotations": {
                   "type": "object"
+                },
+                "extraEnvVars": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "valueFrom": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": true
+                      }
+                    },
+                    "additionalProperties": true
+                  }
                 }
               },
               "additionalProperties": false
@@ -28801,6 +28982,7 @@
                           "ingress_prefix": {
                             "anyOf": [
                               {
+                                "pattern": "^/[A-Za-z0-9._~/-]+$",
                                 "type": "string"
                               },
                               {
@@ -28808,7 +28990,7 @@
                               }
                             ],
                             "default": null,
-                            "description": "Ingress-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. MUST NOT be a cluster-internal hostname or pod IP.",
+                            "description": "Canonical root-relative URL prefix for browser-facing runtime access, e.g. /runtime/agents-v2. Required for execution preparation. Absolute URLs, encoded characters, and path traversal are rejected.",
                             "title": "Ingress Prefix"
                           }
                         },

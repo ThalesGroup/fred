@@ -80,7 +80,7 @@ export default function TeamSelectionListItem({
       {personal ? (
         <UserAvatar name={avatarName} size="small" />
       ) : imgUrl ? (
-        <img className={styles.avatar} src={imgUrl} alt="" />
+        <img className={styles.avatar} src={imgUrl} alt="" width={32} height={32} decoding="async" />
       ) : (
         <TeamInitials className={styles.avatar} name={avatarName} size="small" color={avatarColor} />
       )}

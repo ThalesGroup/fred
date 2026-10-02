@@ -517,7 +517,8 @@ jobs:
           # fail-closed (optional: false), never a literal value, never bootstrap_token_file.
           # Migration Job is enabled here too, so this one render also proves
           # extraEnvVars stays a Deployment-only extension point (never copied
-          # into the Alembic migration Job, which only needs .app.env).
+          # into the Alembic migration Job, which only gets DATABASE_URL and
+          # migration.extraEnvVars).
           helm template fred deploy/charts/fred \
             --set-string applications.control-plane-backend.image.tag=swift-dev \
             --set applications.control-plane-backend.migration.enabled=true \

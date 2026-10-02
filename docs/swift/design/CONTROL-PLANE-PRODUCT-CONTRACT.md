@@ -673,6 +673,18 @@ snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
   only), `POST /marketplace/prompts/{id}/import` (per-target
   `can_update_resources`, `_imported-N` naming)
 
+Per-user favorites (2026-10-01, OpenSpec `add-prompt-favorites`):
+
+- table `prompt_favorite (user_id, prompt_id → prompt ON DELETE CASCADE)`;
+  personal data, never read on behalf of another user
+- `PUT` / `DELETE /teams/{team_id}/prompts/{prompt_id}/favorite`: idempotent,
+  `204`, `can_use_team_agents` (reading the prompt is enough), `404` for a
+  prompt outside the team
+- `PromptSummary.is_favorite` (team listing) and `ContextPromptSummary.is_favorite`
+  (chat picker) are computed for the caller; other payloads carry `false`
+- removed with the prompt, when the user leaves or is removed from the
+  prompt's team (`remove_team_member`), and on account deletion (`DELETE /users/{id}`)
+
 ### 3.7 Feedback
 
 Feedback must align with managed execution semantics:
@@ -4245,3 +4257,16 @@ remain active; absence from a browser's task cache never proves abandonment.
 Raw-file preparation is outside the admission transaction: this does not make
 external content writes atomic with SQL, or recover historical unbound tasks.
 The source synchronization preparation contract is unchanged.
+
+## Agent-question composer control
+
+Managed execution preparation appends a platform-owned `ask_user_toggle`
+`ChatControlDescriptor` with `params.default=true` for a person with an own
+credential. It is independent of capability chat controls and model reasoning.
+The frontend stores the choice per conversation and sends `RuntimeContext.ask_user`
+only when the turn's preparation offers the descriptor. It retains the choice
+before eager controls load, so the first turn uses the fresh preparation and the
+enabled default. `false` disables questions on new turns; an absent descriptor
+sends no field. A question already pending remains
+answerable when the control is switched off during its pause. Asserted-person
+preparation does not offer the control.

@@ -44,6 +44,13 @@
   padding: 0 var(--spacing-l) var(--spacing-m);
 }
 
+/* The favorites toggle leads; the category chips wrap beside it. */
+.filterRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
 .searchBar {
   width: 100%;
   max-width: 320px;

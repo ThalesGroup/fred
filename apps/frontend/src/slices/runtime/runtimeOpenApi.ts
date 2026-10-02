@@ -435,6 +435,8 @@ export type RuntimeContext = {
   agent_profile_overrides?: {
     [key: string]: string;
   } | null;
+  /** Whether this interactive conversation offers the agent's ask_user tool. True mounts it, False disables it for new turns, and None means no interactive control was offered. */
+  ask_user?: boolean | null;
   attachments_markdown?: string | null;
   /** Team-chosen default chat model profile id, resolved by control-plane from the team's TeamRoutingPolicy at prepare-execution and forwarded unchanged for the rest of the session — same channel as context_prompt_text, not re-fetched per turn. Applied by RoutedChatModelFactory only when no static models_catalog.yaml agent_profile_overrides entry matches — the static YAML override remains an ops-level override this can never beat. */
   chat_default_profile_id?: string | null;
@@ -578,19 +580,6 @@ export type HumanInputRequest = {
   stage?: string | null;
   title?: string | null;
 };
-export type AwaitingHumanRuntimeEvent = {
-  kind?: "awaiting_human";
-  request: HumanInputRequest;
-  sequence?: number;
-};
-export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
-export type RuntimeErrorEvent = {
-  kind?: "execution_error";
-  message: string;
-  reason?: RuntimeStopReason | null;
-  sequence?: number;
-};
-export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
   /** Position of the chunk inside its source document, used to restore document order */
@@ -658,6 +647,33 @@ export type LinkPart = {
   title?: string | null;
   type?: "link";
 };
+export type AwaitingHumanRuntimeEvent = {
+  context_tokens?: number | null;
+  kind?: "awaiting_human";
+  model_name?: string | null;
+  request: HumanInputRequest;
+  sequence?: number;
+  sources?: VectorSearchHit[];
+  token_usage?: {
+    [key: string]: number;
+  } | null;
+  ui_parts?: (
+    | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
+        type: "link";
+      } & LinkPart)
+  )[];
+};
+export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
+export type RuntimeErrorEvent = {
+  kind?: "execution_error";
+  message: string;
+  reason?: RuntimeStopReason | null;
+  sequence?: number;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type FinalRuntimeEvent = {
   content?: string;
   context_tokens?: number | null;
@@ -866,6 +882,7 @@ export type HitlResponsePart = {
   choice_id?: string | null;
   label?: string | null;
   occurrence_id?: string | null;
+  skipped?: boolean;
   text?: string | null;
   type?: "hitl_response";
 };

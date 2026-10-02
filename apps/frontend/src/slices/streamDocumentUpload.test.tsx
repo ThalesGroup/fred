@@ -341,3 +341,22 @@ describe("multipart filename pinning", () => {
     expect(part.name).toBe("a.csv");
   });
 });
+
+describe("the server's own explanation", () => {
+  it("keeps the reason a refused upload came with", async () => {
+    // Quota and permission checks run before the stream opens and answer with
+    // an ordinary error. Throwing away the body left the user reading a status
+    // code for the most common reason an import is refused.
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ detail: "Storage quota exceeded for team fredlab: limit is 10 GB." }), {
+          status: 400,
+          statusText: "Bad Request",
+        }),
+    ) as unknown as typeof fetch;
+
+    await expect(streamUploadOrProcessDocument([new File(["x"], "a.pdf")], "process")).rejects.toThrow(
+      /Storage quota exceeded/,
+    );
+  });
+});

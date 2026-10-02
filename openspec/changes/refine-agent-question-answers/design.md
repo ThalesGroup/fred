@@ -1,0 +1,31 @@
+## Context
+
+See proposal.md. `AskUserArgs` already rejects more than four choices. `ask_user` creates the `HumanInputRequest`, whose `free_text` value controls both resume validation and the rendered card. The ReAct event bridge retains a failed tool result for final-answer safety, but currently also emits that result after a later HITL interrupt. Managed chat renders choices and a separate `TextArea` from the request fields.
+
+## Goals / Non-Goals
+
+**Goals:** Keep the request and UI aligned, preserve choice-plus-comment answers, and ensure a paused turn has no stale final answer.
+
+**Non-Goals:** Raise the four-choice limit, change tool approval cards, or change the HITL answer payload schema.
+
+## Decisions
+
+1. In `ask_user`, make `HumanInputRequest.free_text` true whenever there are at least two choices. Keep the model argument for zero- and one-choice questions. This also makes stored pause state and server-side answer validation agree. Merely showing an input in the frontend would create a text answer that the backend rejects.
+2. For agent questions with choices and free text, render a labeled text input as the last row inside the choice column, with a fixed gray "Other" / "Autre" label beside the editable area. Match the choice outline, width and height with scoped CSS, and render the question through the shared sanitized `MarkdownRenderer`. Keep the Send action and existing optional comment behavior when an option is selected. Text-only questions retain the multiline `TextArea`; approval cards are unchanged. In the read-only tool drawer, display a free-text response to a choice question once as a highlighted localized Other row, preserving offered options and the existing choice-with-comment display.
+3. Track whether a valid human interrupt was emitted during a ReAct stream. Omit `FinalRuntimeEvent` for the paused turn so a prior failed tool cannot become its answer. After collecting sibling updates, attach accumulated sources, UI parts, model usage, and context size once to `AwaitingHumanRuntimeEvent`; persist them on a metadata-only row before request deduplication and combine them with the resumed final in managed chat. Continue reading older request rows that already carry metadata. The pause keeps no answer content. Ordinary all-failed tool rounds retain their safe-error path.
+
+4. Mistral completed-message recovery still requires the exact typed reference marker, a registered tool name, bounded content, and validation of every call. Validate the public `tool_call_schema` first, rejecting model-supplied injected fields, then the full input schema with a temporary `tool_call_id` so question-level validators still run. Reject recovery for other hidden fields. Permit literal CR/LF inside quoted JSON strings while rejecting other raw control characters. Keep unmarked text and other malformed JSON ineligible for recovery.
+
+5. Group sibling agent questions from the same exchange into one card. Keep the first pending call selected initially, allow selecting another pending tab, and retain a separate draft for each occurrence. Selecting a choice or Skip stages the answer locally and advances to the next tab. Nonblank free text counts as a draft during typing without moving tabs; clearing it removes the draft unless a choice remains selected. Every tab remains editable until all questions have an answer and the person presses Send once. Closing the grouped card sends skips for every pending question in one batch, overriding local drafts. A refused batch resume preserves all drafts. Once the runtime accepts a batch, managed chat removes only its submitted occurrences before the resumed SSE stream finishes, so later questions in the same exchange never inherit answered tabs. History reload reconstructs unanswered siblings by occurrence ID. Leave chronological tool trace rows in their original order. `ask_user` accepts a short subject title of a few words. The active agent-question card uses a 38rem maximum width, 12px padding, tighter choice spacing, 13px question/tab/choice text, and 32px choice rows without descriptions. Described choices retain enough height for both lines. Tabs use a localized numbered fallback when no title exists and scroll horizontally only when necessary. Vertical wheel input over an overflowing title strip moves it horizontally; native horizontal trackpad input remains available, and wheel input reaches the page at either end.
+6. Keep one `ask_user` call per question. Parallel calls in one model response already share one LLM invocation, as local history confirms. Send their answers in one targeted resume map, saving intermediate HTTP, authorization, checkpoint and UI waits without changing how the model asks questions. Validate the complete set against one checkpoint before execution and claim every occurrence atomically to prevent concurrent single or batch replays. Persist one response row per occurrence; retain the existing single-answer form for older clients and standalone questions.
+7. Mirror accepted tool approvals, refusals, and skips into the same HITL response history shape already used by reload. Match the pause by its interrupt ID before synthesizing a missing request, and add the response only after the runtime accepts the resume. Keep the approval card and answer payload unchanged.
+
+## Risks / Trade-offs
+
+- A single-line field is less spacious for long answers. Keep its full value and input length check; the text-only form remains multiline.
+- Pauses persisted before the change may have `free_text=false`. Render from the persisted request so their UI only offers answer forms the checkpoint accepts. New multiple-choice pauses always carry `free_text=true`.
+- The saved history flattens provider content, and no local trace store is available for the reported exchange. Tests reconstruct the typed-marker content shape and verify both ReAct and Deep routing after a prior answer.
+
+## Migration Plan
+
+Normal runtime and frontend deployment is sufficient. Existing checkpoints keep their stored answer form. Rollback restores the previous question presentation and choice policy; no data migration is required.

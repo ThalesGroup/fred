@@ -1,3 +1,53 @@
+**v3.1.1** - 2026-10-02
+
+- **Summary**
+
+  You can answer several agent questions together and see your tool approval decisions in the conversation. Paused exchanges resume more reliably.
+
+- **Bug Fixes**
+
+  - Answer several agent questions together, including a custom answer, without losing progress (#2899)
+  - Tool approval decisions appear immediately in chat and remain visible after reload (#2916)
+
+**v3.1.0** - 2026-10-01
+
+- **Summary**
+
+  Imports now ask before replacing documents and stay visible until each file is ready. Agents can ask questions in chat, and former hidden document versions appear under distinct names.
+
+- **Features**
+
+  - Choose whether to replace a same-named document during import (#2876)
+  - Track each import through completion in a side panel, including failures and interruptions (#2876)
+  - Answer questions an agent asks during a conversation (#2840)
+  - Approve a tool for the rest of a conversation (#2840)
+  - Start a new chat with the same agent from the current conversation (#2875)
+
+- **Improvements**
+
+  - Former hidden document versions appear as individually named files (#2881)
+  - Team avatars load faster and reuse the browser cache (#2842)
+  - Other requests stay responsive while large uploads are stored (#2846)
+  - Pagination takes less space in tables (#2898)
+
+- **Security**
+
+  - Tabular queries can no longer read external files or runtime settings (#2872)
+  - Agent conversations reject unsafe runtime addresses (#2872)
+  - Updated dependencies resolve reported security alerts (#2856)
+
+- **Bug Fixes**
+
+  - Empty or unreadable uploads explain what went wrong (#2841)
+  - Marketplace prompt imports list only teams where you can add them (#2827)
+  - Mistral agents run tool calls returned alongside text instead of exposing their syntax (#2848)
+  - Deep agents show their task lists again (#2864)
+  - Dropping a file on a folder no longer leaves the page overlay visible (#2888)
+
+- **Deployment note**
+
+  Check custom migration Job inputs and runtime paths before upgrading. The database upgrade gives former hidden document versions distinct names; this rename cannot be undone. No document re-ingestion is required.
+
 **v3.0.1** — 2026-09-29
 
 - **Summary**

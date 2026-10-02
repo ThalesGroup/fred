@@ -1,6 +1,49 @@
 {{- define "common-library.hook-migration" -}}
 
 {{- if and .app.migration .app.migration.enabled }}
+{{- /*
+  The migration Job is self-sufficient (#2440 follow-up): it mounts none of the
+  application's own ConfigMaps/Secret, which are regular release resources that
+  Helm applies only AFTER pre-install hooks, so a fresh install used to block on
+  missing mounts. Every Alembic env honours DATABASE_URL before it ever loads the
+  configuration (fred_core.sql.alembic_env._build_url), so the Job only needs the
+  database coordinates from `configuration.storage.postgres` plus the password.
+  It deliberately inherits nothing else from the app (env, envFrom,
+  extraEnvVars): any of those may point at a resource the release creates.
+
+  The password is FRED_POSTGRES_PASSWORD, from one of:
+  - `dotenv.FRED_POSTGRES_PASSWORD`, copied into the `<app>-migration-db` hook
+    Secret below (weight -1, so it exists before the Job at weight 0);
+  - otherwise `migration.extraEnvVars`, e.g. a secretKeyRef to a Secret that
+    exists before the release (vault/CI-injected secrets).
+*/}}
+{{- $pg := required (printf "applications.%s.configuration.storage.postgres is required when migration.enabled is true" .app.applicationName) (and .app.configuration .app.configuration.storage .app.configuration.storage.postgres) }}
+{{- $dbPassword := "" }}
+{{- if .app.dotenv }}
+{{- $dbPassword = default "" .app.dotenv.FRED_POSTGRES_PASSWORD }}
+{{- end }}
+
+{{- if $dbPassword }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .app.applicationName }}-migration-db
+  namespace: {{ .root.Release.Namespace }}
+  labels:
+    app: {{ .app.applicationName }}
+    type: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    # Helm never manages hook resources with the release: without the last two
+    # policies the password would outlive the migration, and even an uninstall.
+    # Helm deletes succeeded hooks once the whole phase is done, so the Job
+    # (weight 0) still reads this Secret while it runs.
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded,hook-failed
+stringData:
+  FRED_POSTGRES_PASSWORD: {{ $dbPassword | quote }}
+{{- end }}
 
 ---
 apiVersion: batch/v1
@@ -19,6 +62,7 @@ spec:
   backoffLimit: {{ default 3 .app.migration.backoffLimit }}
   template:
     metadata:
+      {{- if or .app.podAnnotations .app.migration.podAnnotations }}
       annotations:
         {{- if .app.podAnnotations }}
 {{ toYaml .app.podAnnotations | nindent 8 }}
@@ -26,9 +70,7 @@ spec:
         {{- if .app.migration.podAnnotations }}
 {{ toYaml .app.migration.podAnnotations | nindent 8 }}
         {{- end }}
-        {{- if .app.configuration }}
-        configmap.configurations.checksum: "{{ .app.configuration | join "," | sha256sum }}"
-        {{- end }}
+      {{- end }}
       labels:
         app: {{ .app.applicationName }}
         type: migration
@@ -61,19 +103,22 @@ spec:
           args:
 {{ toYaml (default (list "upgrade" "head") .app.migration.args) | nindent 12 }}
 
-          {{- if .app.env }}
-          env:
-{{ toYaml .app.env | nindent 12 }}
-          {{- end }}
-
-          {{- if .app.envFrom }}
+          {{- if $dbPassword }}
           envFrom:
-{{ toYaml .app.envFrom | nindent 12 }}
+            - secretRef:
+                name: {{ .app.applicationName }}-migration-db
           {{- end }}
 
-          volumeMounts:
-{{ toYaml .app.volumeMounts | nindent 12 }}
+          env:
+            {{- with .app.migration.extraEnvVars }}
+{{ toYaml . | nindent 12 }}
+            {{- end }}
+            # Last, so $(FRED_POSTGRES_PASSWORD) resolves from any source above.
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://{{ $pg.username }}:$(FRED_POSTGRES_PASSWORD)@{{ $pg.host }}:{{ default 5432 $pg.port }}/{{ $pg.database }}"
+
           {{- if and .app.extraVolumeMounts (gt (len .app.extraVolumeMounts) 0) }}
+          volumeMounts:
 {{ toYaml .app.extraVolumeMounts | nindent 12 }}
           {{- end }}
 
@@ -82,9 +127,8 @@ spec:
 {{ toYaml . | nindent 12 }}
           {{- end }}
 
-      volumes:
-{{ toYaml .app.volumes | nindent 8 }}
       {{- if and .app.extraVolumes (gt (len .app.extraVolumes) 0) }}
+      volumes:
 {{ toYaml .app.extraVolumes | nindent 8 }}
       {{- end }}
 

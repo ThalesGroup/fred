@@ -25,6 +25,7 @@ import {
   parseSseFrames,
 } from "../../core/utils/runtimeStream";
 import { buildComposerRuntimeContext } from "../../components/pages/ManagedChatPage/runtimeContextBuilder";
+import { runtimeExecuteStreamPath } from "../../core/utils/runtimeExecutionUrl";
 import type { ExecutionPreparation } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { RuntimeExecuteRequest } from "../../../slices/runtime/runtimeOpenApi";
 import { MAX_HOLD_SECONDS, type AgentTurnResult } from "./types";
@@ -145,8 +146,9 @@ export async function streamAgentTurn(
     ),
   };
 
-  const response = await fetch(prep.execute_stream_url, {
+  const response = await fetch(runtimeExecuteStreamPath(prep.execute_stream_url), {
     method: "POST",
+    redirect: "error",
     headers: {
       Authorization: `Bearer ${args.bearer ?? (await bearer())}`,
       "Content-Type": "application/json",

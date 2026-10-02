@@ -15,7 +15,7 @@
 import asyncio
 from abc import abstractmethod
 from datetime import datetime
-from typing import List, Literal
+from typing import List, Literal, Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -143,6 +143,29 @@ class BaseDocumentMetadataStore:
         self, tag_id: str, session: AsyncSession | None = None
     ) -> List[DocumentMetadata]:
         """Return all metadata entries that are tagged with a specific tag ID."""
+
+    async def document_uids_by_name_in_tag(
+        self,
+        tag_id: str,
+        names: Sequence[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, list[str]]:
+        """Which of ``names`` a tag already holds, and under which document uids.
+
+        A name can map to more than one document: adding a document to a folder
+        that already holds its name is not guarded, so two can share a display
+        name. Callers must not assume a single uid.
+
+        Portable default, overridden where the store can answer by index.
+        """
+
+        wanted = set(names)
+        found: dict[str, list[str]] = {}
+        for doc in await self.get_metadata_in_tag(tag_id, session=session):
+            name = doc.identity.document_name
+            if name in wanted:
+                found.setdefault(name, []).append(doc.identity.document_uid)
+        return found
 
     async def browse_metadata_in_tag(
         self,

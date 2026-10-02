@@ -1,0 +1,70 @@
+/* Read-only choice state in the existing tool drawer. */
+.recap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  user-select: text;
+}
+
+.question,
+.response,
+.comment {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.question {
+  color: var(--on-surface);
+  font: var(--font-body-medium-emphasized);
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-2xs);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-xs) var(--spacing-s);
+  color: var(--on-surface);
+  overflow-wrap: anywhere;
+}
+
+.choice[data-selected] {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-container-high));
+}
+
+.label {
+  font: var(--font-body-medium);
+  white-space: pre-wrap;
+}
+
+.selected {
+  margin-left: auto;
+  color: var(--primary);
+  font: var(--font-label-small);
+}
+
+.description {
+  flex-basis: 100%;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.response {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.comment {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}

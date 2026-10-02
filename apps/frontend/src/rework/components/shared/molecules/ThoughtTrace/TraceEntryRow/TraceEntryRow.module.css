@@ -32,6 +32,21 @@
   user-select: none;
 }
 
+/* An answered question stays attached to the tool step that raised it. */
+.hasAnswer {
+  --trace-marker-y: 16px;
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 32px;
+}
+
+.answerWrap {
+  flex-basis: calc(100% - var(--trace-rail-x, 16.5px) - 1.5rem);
+  margin-left: calc(var(--trace-rail-x, 16.5px) + 1.5rem);
+  padding-block: var(--spacing-2xs);
+  min-width: 0;
+}
+
 /* Timeline rail — drawn per row rather than as one absolute line, so each
    segment is exactly as tall as its own row. Static regardless of step status
    — "tool in progress" is signalled by the dot alone, never by the rail

@@ -12,49 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 import { CharacterLimitNotice } from "@shared/atoms/CharacterLimitNotice/CharacterLimitNotice";
+import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
-import type { ButtonVariant, ColorTheme } from "@shared/utils/Type.ts";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { hitlRendererForTool } from "@rework/features/capabilities/hitlRendererRegistry";
 import styles from "./HitlPrompt.module.css";
 
 interface HitlPromptProps {
   event: RuntimeAwaitingHumanEvent;
-  onAnswer: (answer: string | boolean | undefined, freeText?: string) => void;
+  siblingQuestions?: RuntimeAwaitingHumanEvent[];
+  onSelectQuestion?: (event: RuntimeAwaitingHumanEvent) => void;
+  busy?: boolean;
+  stagedAnswer?: { answer: string | boolean | undefined; freeText?: string; skipped: boolean };
+  canSendAll?: boolean;
+  onStageAnswer?: (answer: string | boolean | undefined, freeText?: string, skipped?: boolean) => void;
+  onSendAll?: () => void;
+  onSkipAll?: () => void;
+  onAnswer: (
+    answer: string | boolean | undefined,
+    freeText?: string,
+    skipped?: boolean,
+    rememberApproval?: boolean,
+  ) => void;
   readonly?: boolean;
   maxChatInputChars?: number;
   freeTextValue?: string;
   onFreeTextChange?: (value: string) => void;
 }
 
-/**
- * Visual treatment for one HITL choice button. The tool-approval gate
- * (`build_tool_approval_request`, the only HITL prompt in the system today)
- * always uses the stable ids "proceed"/"cancel" — never localized, unlike
- * `label` — so a semantic success/error pairing keys off them directly:
- * Accept reads as a positive (success) action, Reject as a destructive
- * (error) one. A future bespoke Graph-authored question with different
- * choice ids falls back to the previous default/non-default styling.
- */
-function choiceButtonStyle(choice: { id: string; default?: boolean }): {
-  color: ColorTheme;
-  variant: ButtonVariant;
-} {
-  if (choice.id === "proceed") return { color: "success", variant: "filled" };
-  if (choice.id === "cancel") return { color: "error", variant: "filled" };
-  return {
-    color: choice.default ? "primary" : "on-surface-retreat",
-    variant: choice.default ? "filled" : "text",
-  };
+function questionTabLabel(event: RuntimeAwaitingHumanEvent, index: number, fallback: string): string {
+  const title = event.payload.title?.trim();
+  if (!title) return `${fallback} ${index + 1}`;
+  return title;
 }
 
 export function HitlPrompt({
   event,
+  siblingQuestions = [],
+  onSelectQuestion,
+  busy = false,
+  stagedAnswer,
+  canSendAll = false,
+  onStageAnswer,
+  onSendAll,
+  onSkipAll,
   onAnswer,
   readonly = false,
   maxChatInputChars,
@@ -63,11 +71,49 @@ export function HitlPrompt({
 }: HitlPromptProps) {
   const { t } = useTranslation();
   const payload = event.payload;
+  const isAgentQuestion = payload.stage === "agent_question";
+  const hasQuestionTabs = !readonly && isAgentQuestion && siblingQuestions.length > 1;
+  const collectingAnswers = hasQuestionTabs && onStageAnswer !== undefined;
+  const selectedQuestionIndex = siblingQuestions.findIndex((question) =>
+    question.payload.occurrence_id
+      ? question.payload.occurrence_id === event.payload.occurrence_id
+      : question.payload.interrupt_id === event.payload.interrupt_id,
+  );
+  const hasChoiceTextRow = isAgentQuestion && payload.free_text && (payload.choices?.length ?? 0) > 0;
   const [localFreeText, setLocalFreeText] = useState("");
+  const questionTabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tabs = questionTabsRef.current;
+    if (!tabs) return;
+    const scrollWithWheel = (wheel: WheelEvent) => {
+      if (wheel.ctrlKey || wheel.shiftKey || Math.abs(wheel.deltaX) >= Math.abs(wheel.deltaY)) return;
+      const maxScroll = tabs.scrollWidth - tabs.clientWidth;
+      if (maxScroll <= 0) return;
+      const unit =
+        wheel.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : wheel.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? tabs.clientWidth
+            : 1;
+      const next = Math.max(0, Math.min(maxScroll, tabs.scrollLeft + wheel.deltaY * unit));
+      if (next === tabs.scrollLeft) return;
+      tabs.scrollLeft = next;
+      wheel.preventDefault();
+    };
+    tabs.addEventListener("wheel", scrollWithWheel, { passive: false });
+    return () => tabs.removeEventListener("wheel", scrollWithWheel);
+  }, [hasQuestionTabs]);
   const freeText = freeTextValue ?? localFreeText;
   const characterInfoId = useId();
   const characterCount = countUnicodeCodePoints(freeText);
   const isOverLimit = maxChatInputChars !== undefined && characterCount > maxChatInputChars;
+  const answerQuestion = (answer: string | boolean | undefined, text?: string, skipped = false) => {
+    if (busy) return;
+    if (collectingAnswers) onStageAnswer(answer, text, skipped);
+    else if (skipped) onAnswer(answer, text, true);
+    else onAnswer(answer, text);
+  };
+  const skipQuestion = () => answerQuestion(undefined, undefined, true);
   const setFreeText = (value: string) => {
     if (onFreeTextChange) onFreeTextChange(value);
     else setLocalFreeText(value);
@@ -75,12 +121,44 @@ export function HitlPrompt({
 
   return (
     <div
-      className={`${styles.card} ${!readonly ? styles.active : ""}`}
+      className={`${styles.card} ${!readonly ? styles.active : ""} ${isAgentQuestion && !readonly ? styles.skippable : ""}`}
       role="group"
       aria-label={t("chatbot.hitlWaitingAria")}
     >
-      {payload.title && <p className={styles.title}>{payload.title}</p>}
-      {payload.question && <p className={styles.question}>{payload.question}</p>}
+      {hasQuestionTabs && (
+        <div ref={questionTabsRef} className={styles.questionTabs}>
+          <ButtonGroup
+            variant="tabs"
+            size="small"
+            color="primary"
+            aria-label={t("chatbot.hitlQuestionTabsAria")}
+            selectedIndex={Math.max(0, selectedQuestionIndex)}
+            onSelectedIndexChange={(index) => onSelectQuestion?.(siblingQuestions[index])}
+            items={siblingQuestions.map((question, index) => ({
+              label: questionTabLabel(question, index, t("chatbot.hitlQuestionTabFallback")),
+              title: question.payload.title || question.payload.question,
+            }))}
+          />
+        </div>
+      )}
+      {isAgentQuestion && !readonly && (
+        <IconButton
+          className={styles.skipClose}
+          variant="icon"
+          size="small"
+          icon={{ category: "outlined", type: "close" }}
+          aria-label={t(hasQuestionTabs ? "chatbot.skipAllHitlQuestionsAria" : "chatbot.skipHitlQuestionAria")}
+          title={t(hasQuestionTabs ? "chatbot.skipAllHitlQuestionsAria" : "chatbot.skipHitlQuestionAria")}
+          onClick={hasQuestionTabs ? onSkipAll : skipQuestion}
+          disabled={busy}
+        />
+      )}
+      {payload.title && !hasQuestionTabs && <p className={styles.title}>{payload.title}</p>}
+      {payload.question && (
+        <div className={styles.question}>
+          <MarkdownRenderer text={payload.question} />
+        </div>
+      )}
 
       {/* What the gate carries is a tool name and 1 200 characters of argument
           preview — enough to say WHICH call, never enough to judge it. A
@@ -91,48 +169,130 @@ export function HitlPrompt({
         return Renderer ? <Renderer key={call.tool_call_id || call.tool_name} call={call} /> : null;
       })}
 
-      {/* Answered questions hide their choices — the answer is already written into the
-          chat as the turn right after this card, so a disabled button row would be redundant. */}
+      {/* Read-only prompts hide choices; answered agent questions show their
+          result under the matching tool line instead. */}
       {!readonly && payload.choices && payload.choices.length > 0 && (
         <div className={styles.choices}>
           {payload.choices.map((c) => {
-            const { color, variant } = choiceButtonStyle(c);
             return (
               <Button
                 key={c.id}
-                color={color}
-                variant={variant}
-                size="small"
-                style={{ order: c.default ? 2 : 1 }}
-                onClick={() => onAnswer(c.id)}
+                className={[
+                  c.description && styles.choiceWithDescription,
+                  collectingAnswers &&
+                    stagedAnswer?.answer === c.id &&
+                    !stagedAnswer.skipped &&
+                    !freeText.trim() &&
+                    styles.selectedChoice,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                color="primary"
+                variant="outlined"
+                size={isAgentQuestion ? "small" : "medium"}
+                disabled={isOverLimit || busy}
+                aria-pressed={
+                  collectingAnswers
+                    ? stagedAnswer?.answer === c.id && !stagedAnswer.skipped && !freeText.trim()
+                    : undefined
+                }
+                onClick={() => answerQuestion(c.id, freeText.trim() ? freeText : undefined)}
               >
-                {c.label}
+                {c.description ? (
+                  <span className={styles.choiceContent}>
+                    <span>{c.label}</span>
+                    <span className={styles.choiceDescription}>{c.description}</span>
+                  </span>
+                ) : (
+                  c.label
+                )}
               </Button>
             );
           })}
+          {hasChoiceTextRow && (
+            <label className={styles.otherChoice}>
+              <span className={styles.otherChoiceLabel}>{t("chatbot.hitlOtherAnswerPlaceholder")}</span>
+              <input
+                type="text"
+                value={freeText}
+                disabled={busy}
+                onChange={(e) => setFreeText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing && freeText.trim() && !isOverLimit && !busy) {
+                    e.preventDefault();
+                    answerQuestion(undefined, freeText);
+                  }
+                }}
+                aria-invalid={isOverLimit || undefined}
+                aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
+              />
+            </label>
+          )}
+          {payload.stage === "tool_approval" &&
+            (payload.pending_calls?.length ?? 0) > 0 &&
+            payload.pending_calls?.every((call) => call.tool_name) &&
+            payload.choices.some((choice) => choice.id === "proceed") && (
+              <Button
+                color="primary"
+                variant="outlined"
+                size="medium"
+                disabled={busy}
+                onClick={() => onAnswer("proceed", undefined, false, true)}
+              >
+                {t("chatbot.approveForConversation")}
+              </Button>
+            )}
         </div>
       )}
 
-      {payload.free_text && !readonly && (
+      {hasChoiceTextRow && !readonly && (
+        <CharacterLimitNotice id={characterInfoId} count={characterCount} limit={maxChatInputChars} />
+      )}
+
+      {payload.free_text && !readonly && !hasChoiceTextRow && (
         <div className={styles.freeText}>
           <TextArea
             label={t("chatbot.hitlFreeTextLabel")}
             value={freeText}
+            disabled={busy}
             onChange={(e) => setFreeText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && freeText.trim() && !isOverLimit && !busy) {
+                e.preventDefault();
+                answerQuestion(undefined, freeText);
+              }
+            }}
             rows={2}
             aria-invalid={isOverLimit || undefined}
             aria-describedby={maxChatInputChars !== undefined ? characterInfoId : undefined}
           />
           <CharacterLimitNotice id={characterInfoId} count={characterCount} limit={maxChatInputChars} />
-          <Button
-            color="primary"
-            variant="filled"
-            size="small"
-            disabled={!freeText.trim() || isOverLimit}
-            onClick={() => onAnswer(undefined, freeText)}
-          >
-            {t("chatbot.sendHitlAnswer")}
-          </Button>
+        </div>
+      )}
+
+      {!readonly && (payload.free_text || isAgentQuestion) && (
+        <div className={styles.actions}>
+          {payload.free_text && (
+            <Button
+              color="primary"
+              variant="filled"
+              size="small"
+              disabled={!freeText.trim() || isOverLimit || busy}
+              onClick={() => answerQuestion(undefined, freeText)}
+            >
+              {t(collectingAnswers ? "chatbot.nextHitlQuestion" : "chatbot.sendHitlAnswer")}
+            </Button>
+          )}
+          {collectingAnswers && (
+            <Button color="primary" variant="filled" size="small" disabled={!canSendAll || busy} onClick={onSendAll}>
+              {t("chatbot.sendAllHitlAnswers")}
+            </Button>
+          )}
+          {isAgentQuestion && (
+            <Button color="on-surface-retreat" variant="text" size="small" disabled={busy} onClick={skipQuestion}>
+              {t("chatbot.skipHitlQuestion")}
+            </Button>
+          )}
         </div>
       )}
     </div>

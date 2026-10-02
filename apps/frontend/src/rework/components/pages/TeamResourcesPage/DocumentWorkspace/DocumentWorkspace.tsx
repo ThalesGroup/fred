@@ -59,7 +59,12 @@ import {
   withoutMachineWritten,
   type TagNode,
 } from "../../../../../shared/utils/tagTree.ts";
-import { taskRegistered, selectAllTasks, selectActiveTasks } from "../../../../features/tasks/taskSlice";
+import {
+  importPanelOpenRequested,
+  selectActiveTasks,
+  selectAllTasks,
+  taskRegistered,
+} from "../../../../features/tasks/taskSlice";
 import { TERMINAL_STATES, type TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { useRefetchOnTaskSettled } from "../../../../features/tasks/useRefetchOnTaskSettled";
 import { useNotifyOnNewTaskTarget } from "../../../../features/tasks/useNotifyOnNewTaskTarget";
@@ -115,6 +120,10 @@ interface PageState {
 
 interface DocumentWorkspaceProps {
   teamId: string;
+  /** The owning team's real id, when `teamId` is the "personal" URL alias.
+   *  Only the import panel's scoping uses it; everywhere else `teamId` is
+   *  already the real one. */
+  importScopeId?: string;
   isPersonalTeam: boolean;
   /** Notified after any action that adds or removes a document (upload,
    * single/bulk removal, folder deletion) — lets the parent page's storage
@@ -191,6 +200,7 @@ function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: st
  */
 function DocumentWorkspace({
   teamId,
+  importScopeId,
   isPersonalTeam,
   onDocumentsChanged,
   rootTagId,
@@ -232,6 +242,16 @@ function DocumentWorkspace({
   // folder deletion, a newly-registered ingestion task) already calls
   // refetchTags() to refresh the folder tree — piggyback the stats refresh
   // on that same signal instead of threading it through each call site.
+  // Whether this workspace is still on screen. Read by the import drawer's
+  // completion callback, which outlives it.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const refetchTags = useCallback(() => {
     onDocumentsChanged?.();
     return refetchTagsQuery();
@@ -629,6 +649,10 @@ function DocumentWorkspace({
                   taskId,
                   kind: "ingestion",
                   target: { type: "document", id: doc.identity.document_uid, label: doc.identity.document_name },
+                  // Re-processing a document already in the corpus: the row and
+                  // the task tray follow it, the import panel has nothing to
+                  // say about a file nobody imported.
+                  stage: null,
                 }),
               );
           }
@@ -818,6 +842,7 @@ function DocumentWorkspace({
         // landed on this row must not bubble up and hit that target too.
         event.stopPropagation();
         setDragOverFolder(null);
+        setPageDragOver(false);
         openDrawerWithDroppedFiles(event, node);
       },
     };
@@ -1376,11 +1401,78 @@ function DocumentWorkspace({
     return options;
   };
 
+  // Two of the tracks after "Auteur" hold nothing most of the time: a settled
+  // document shows no chip at all, and the search-exclusion icon is rare. They
+  // still reserved their full width on every row, which is what made the table
+  // refuse to narrow. Both grids read the same track list, so deciding this
+  // once here keeps the header and the rows in step.
+  const showsStatus = filteredRows.some((row) => {
+    if (row.kind === "folder") {
+      const rollup = folderRollups.get(row.node.full);
+      return Boolean(rollup?.processing || rollup?.failed.length || rollup?.justDone);
+    }
+    return getDocStatus(row.doc) !== "ready" || justCompletedDocUids.has(row.doc.identity.document_uid);
+  });
+  // Names in this folder that a file still on the user's hands is waiting to be
+  // told what to do about. The row only points at the panel: a table is no
+  // place to be answering a question (see the panel's own decision buttons).
+  const contestedNames = new Set(
+    allTasks
+      .filter((vm) => vm.stage === "decision" && vm.conflict?.tagId && vm.conflict.tagId === currentTag?.id)
+      .map((vm) => vm.conflict!.filename),
+  );
+
+  const showsExclusion = filteredRows.some(
+    (row) =>
+      row.kind === "document" &&
+      getDocStatus(row.doc) === "ready" &&
+      row.doc.source.retrievable === false &&
+      !isTabularOnlyDoc(row.doc),
+  );
+
+  // Only present when some row actually has a state to report — a folder of
+  // settled documents shows nothing here, and an always-there track would just
+  // be 8rem of blank on every row. Fixed rather than "auto" for the same
+  // dual-grid reason as the actions column below. Its usual width fits the
+  // widest chip (FR "Traitement..."); it shrinks beside a wide import panel.
+  const statusColumn: DataTableColumn<Row> = {
+    label: "",
+    size: "minmax(0, 8rem)",
+    cellRenderer: (row) => {
+      // Folder rollup (#2384). Precedence is processing > failures > done:
+      // while anything is still running the folder is not settled yet, and
+      // once it is, an unresolved failure is more actionable than a "your
+      // upload landed" marker. `raw` is never rolled up — a folder holding
+      // never-processed documents is a normal steady state, not news.
+      if (row.kind === "folder") {
+        const rollup = folderRollups.get(row.node.full);
+        if (rollup?.processing) return <StatusChip status="processing" />;
+        if (rollup?.failed.length) return <StatusChip status="warning" failedDocuments={rollup.failed} />;
+        return rollup?.justDone ? <StatusChip status="ready" justCompleted /> : null;
+      }
+      return (
+        <StatusChip
+          status={getDocStatus(row.doc)}
+          errors={row.doc.processing?.errors}
+          documentUid={row.doc.identity.document_uid}
+          // The failure a Temporal child job reported: for a run that died
+          // before any stage started, this is the ONLY account of it —
+          // `processing.errors` is keyed by stage and stays empty. Already in
+          // hand from the task feed, so the Resources tab stops being the one
+          // surface that shows "Erreur" with nothing behind it (#2315 put the
+          // message on the task; it only ever reached the task popover).
+          taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
+          justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
+        />
+      );
+    },
+  };
+
   const columns: DataTableColumn<Row>[] = [
     {
       label: columnLabel("name"),
       sortable: true,
-      size: "2fr",
+      size: "minmax(8rem, 2fr)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
           return (
@@ -1397,13 +1489,28 @@ function DocumentWorkspace({
             </button>
           );
         }
-        return <DocumentNameCell doc={row.doc} />;
+        if (!contestedNames.has(row.doc.identity.document_name)) return <DocumentNameCell doc={row.doc} />;
+        return (
+          <span className={styles.contestedName}>
+            <DocumentNameCell doc={row.doc} />
+            <Tooltip text={t("rework.imports.conflict.rowHint")}>
+              <IconButton
+                variant="icon"
+                size="small"
+                color="warning"
+                icon={{ category: "outlined", type: "warning" }}
+                aria-label={t("rework.imports.conflict.rowHint")}
+                onClick={() => dispatch(importPanelOpenRequested())}
+              />
+            </Tooltip>
+          </span>
+        );
       },
     },
     {
       label: columnLabel("size"),
       sortable: true,
-      size: "6.5rem",
+      size: "minmax(0, 6.5rem)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
           const ids = folderDescendantTagIds.get(row.node.full) ?? [];
@@ -1423,7 +1530,7 @@ function DocumentWorkspace({
       // Pydantic default_factory, base_input_processor.py) and always set.
       label: columnLabel("created"),
       sortable: true,
-      size: "9rem",
+      size: "minmax(0, 9rem)",
       cellRenderer: (row) => (
         <span className={styles.nowrapCell}>
           {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.source.date_added_to_kb)}
@@ -1438,7 +1545,7 @@ function DocumentWorkspace({
       // ingested before this field existed has no uploaded_by and renders
       // "—", same as a folder (folders have no uploader concept at all).
       label: t("rework.resources.columns.author"),
-      size: "9rem",
+      size: "minmax(0, 9rem)",
       cellRenderer: (row) => {
         const uid = row.kind === "document" ? row.doc.identity.uploaded_by : null;
         if (!uid) return <span className={styles.nowrapCell}>—</span>;
@@ -1454,43 +1561,7 @@ function DocumentWorkspace({
         return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
       },
     },
-    {
-      // Fixed for the same header/body dual-grid reason as the actions column
-      // below. Sized for the widest chip — FR "Traitement..." with its spinner
-      // (~100px) — which 6rem clipped; the shorter Erreur/En attente chips
-      // masked that until the live-task wiring (#2315) made "processing"
-      // actually render here.
-      label: "",
-      size: "8rem",
-      cellRenderer: (row) => {
-        // Folder rollup (#2384). Precedence is processing > failures > done:
-        // while anything is still running the folder is not settled yet, and
-        // once it is, an unresolved failure is more actionable than a "your
-        // upload landed" marker. `raw` is never rolled up — a folder holding
-        // never-processed documents is a normal steady state, not news.
-        if (row.kind === "folder") {
-          const rollup = folderRollups.get(row.node.full);
-          if (rollup?.processing) return <StatusChip status="processing" />;
-          if (rollup?.failed.length) return <StatusChip status="warning" failedDocuments={rollup.failed} />;
-          return rollup?.justDone ? <StatusChip status="ready" justCompleted /> : null;
-        }
-        return (
-          <StatusChip
-            status={getDocStatus(row.doc)}
-            errors={row.doc.processing?.errors}
-            documentUid={row.doc.identity.document_uid}
-            // The failure a Temporal child job reported: for a run that died
-            // before any stage started, this is the ONLY account of it —
-            // `processing.errors` is keyed by stage and stays empty. Already in
-            // hand from the task feed, so the Resources tab stops being the one
-            // surface that shows "Erreur" with nothing behind it (#2315 put the
-            // message on the task; it only ever reached the task popover).
-            taskError={docOutcomes.failed.get(row.doc.identity.document_uid)?.error}
-            justCompleted={justCompletedDocUids.has(row.doc.identity.document_uid)}
-          />
-        );
-      },
-    },
+    ...(showsStatus ? [statusColumn] : []),
     {
       // Fixed, not "auto": DataTable renders the header and body as two
       // independent grids (RFC-tracked, for the scroll-starts-below-header
@@ -1499,13 +1570,12 @@ function DocumentWorkspace({
       // the two grids disagree on this column's width. That leftover space
       // then gets absorbed differently by the flexible Name (2fr) column in
       // each grid, shifting every column after it out of alignment. A fixed
-      // width both grids agree on avoids the whole class of drift. Sized for
-      // up to three 2rem elements (the excluded-from-search indicator +
-      // preview + the "more" trigger, the indicator only present on an
-      // excluded document) + their gaps + the cell's own horizontal padding,
-      // plus headroom.
+      // width both grids agree on avoids the whole class of drift. Two 2rem
+      // buttons plus their gap and the cell's padding is the normal case; the
+      // third slot is only reserved when a document on the page is actually
+      // excluded from search.
       label: "",
-      size: "8rem",
+      size: showsExclusion ? "8rem" : "5.75rem",
       cellRenderer: (row) => {
         // retrievable stays false for the entire ingestion window (it only
         // flips true once vectorization completes), not just for a deliberate
@@ -1857,11 +1927,17 @@ function DocumentWorkspace({
         }}
         initialFiles={droppedFiles}
         teamId={teamId}
+        importScopeId={importScopeId}
         destinationPath={uploadTargetNode.full || undefined}
         metadata={{ tags: uploadTargetTag ? [uploadTargetTag.id] : [] }}
         ensureFolderPath={canCreateFolder ? ensureFolderPath : undefined}
         requireFolderPerFile={!uploadTargetTag}
+        // Reached long after the drawer closed — the transfer is detached, and
+        // by then this workspace may be gone. Refetching a query whose
+        // subscription has ended throws, so nothing is refreshed once it is:
+        // the next mount fetches anyway.
         onUploadComplete={() => {
+          if (!mounted.current) return;
           if (uploadTargetTag) void loadTagPage(uploadTargetTag.id, perTag[uploadTargetTag.id]?.offset ?? 0);
           void refetchTags();
         }}

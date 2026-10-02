@@ -28,7 +28,7 @@ implementations execute it.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
@@ -328,9 +328,78 @@ class HumanInputRequest(FrozenModel):
     pending_calls: tuple[PendingToolCall, ...] = ()
 
 
+class HumanInputAnswer(FrozenModel):
+    """The selected option, human text, or explicit skip of one human prompt."""
+
+    choice_id: str | None = None
+    text: str | None = None
+    skipped: bool = False
+
+
+def parse_human_input_answer(
+    value: object,
+    request: HumanInputRequest,
+    *,
+    allow_legacy_string: bool = False,
+) -> HumanInputAnswer:
+    """Validate a resume against the question it answers."""
+
+    choice_id: object = None
+    text: object = None
+    skipped = False
+    if isinstance(value, str) and allow_legacy_string:
+        if request.choices:
+            choice_id = value
+        elif request.free_text:
+            text = value
+    elif isinstance(value, Mapping):
+        raw_skipped = value.get("skipped", False)
+        if not isinstance(raw_skipped, bool):
+            raise ValueError("skipped must be a boolean")
+        skipped = raw_skipped
+        choice_id = value.get("choice_id")
+        text = value.get("text")
+        answer = value.get("answer")
+        if choice_id is None and request.choices and isinstance(answer, str):
+            choice_id = answer
+        if text is None and request.free_text and not request.choices:
+            text = answer
+    else:
+        raise ValueError("human answer must be an object")
+
+    if skipped:
+        if choice_id is not None or text is not None:
+            raise ValueError("a skipped question cannot carry an answer")
+        return HumanInputAnswer(skipped=True)
+
+    if choice_id is not None:
+        if not isinstance(choice_id, str) or not choice_id.strip():
+            raise ValueError("choice_id must be a nonempty string")
+        choice_id = choice_id.strip()
+        if choice_id not in {option.id for option in request.choices}:
+            raise ValueError("choice_id is not offered by the pending question")
+    if text is not None:
+        if not isinstance(text, str) or not text.strip():
+            raise ValueError("text must be a nonempty string")
+        if not request.free_text:
+            raise ValueError("the pending question does not allow text")
+    if request.choices and choice_id is None and text is None:
+        raise ValueError("the pending question requires a choice or text")
+    if not request.choices and request.free_text and text is None:
+        raise ValueError("the pending question requires text")
+    if not request.choices and not request.free_text:
+        raise ValueError("the pending question has no answer form")
+    return HumanInputAnswer(choice_id=choice_id, text=text)
+
+
 class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.AWAITING_HUMAN] = RuntimeEventKind.AWAITING_HUMAN
     request: HumanInputRequest
+    sources: tuple[VectorSearchHit, ...] = ()
+    ui_parts: tuple[UiPart, ...] = ()
+    model_name: str | None = None
+    token_usage: dict[str, int] | None = None
+    context_tokens: int | None = None
 
 
 class AssistantDeltaRuntimeEvent(RuntimeEventBase):

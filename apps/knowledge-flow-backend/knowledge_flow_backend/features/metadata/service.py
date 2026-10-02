@@ -15,7 +15,6 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 from fred_core import (
@@ -511,24 +510,6 @@ class MetadataService:
                 if ProcessingStage.SQL_INDEXED in metadata.processing.stages:
                     await self._delete_tabular_artifacts(metadata.document_uid, metadata=metadata)
 
-                # Promote an alternate version (version=1) to base if present
-                if getattr(metadata.identity, "version", 0) == 0:
-                    try:
-                        promoted = await self._promote_alternate_version(
-                            canonical_name=metadata.identity.canonical_name or metadata.document_name,
-                            source_tag=metadata.source.source_tag,
-                            removed_tag_id=tag_id_to_remove,
-                            actor=user.uid,
-                        )
-                        if promoted:
-                            logger.info(
-                                "[METADATA] Promoted draft version '%s' to base for canonical '%s' after removing '%s'.",
-                                promoted.identity.document_uid,
-                                promoted.identity.canonical_name,
-                                tag_id_to_remove,
-                            )
-                    except Exception as e:
-                        logger.warning("Failed to promote alternate version for '%s': %s", metadata.document_name, e)
                 if self.content_store is not None:
                     try:
                         self.content_store.delete_content(metadata.document_uid)
@@ -663,7 +644,7 @@ class MetadataService:
             raise InvalidMetadataRequest("Document UID cannot be empty")
         await self._delete_document_and_artifacts(actor_uid=actor_uid, document_uid=document_uid)
 
-    async def purge_document_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None) -> None:
+    async def purge_document_artifacts(self, document_uid: str, *, metadata: DocumentMetadata | None = None, include_content: bool = True) -> None:
         """Delete everything a document produced outside its metadata row.
 
         Vectors, tabular Parquet revisions and stored content — the one
@@ -680,6 +661,10 @@ class MetadataService:
         Best-effort per store and never raises: a document whose row is already
         gone must not be blocked from having its bytes reclaimed because one
         store is briefly unavailable.
+
+        `include_content=False` drops only what indexes the document, leaving
+        its bytes in place — an overwrite replaces those in the same step, and
+        the document must never be without content in between.
         """
         stages = metadata.processing.stages if metadata else {}
         label = metadata.document_name if metadata else document_uid
@@ -694,11 +679,12 @@ class MetadataService:
         if not metadata or ProcessingStage.SQL_INDEXED in stages:
             await self._delete_tabular_artifacts(document_uid, metadata=metadata)
 
-        try:
-            await asyncio.to_thread(self.content_store.delete_content, document_uid)
-            logger.info("[CONTENT] Deleted content for document '%s'", label)
-        except Exception as exc:
-            logger.warning("[CONTENT] Could not delete content for '%s': %s", label, exc)
+        if include_content:
+            try:
+                await asyncio.to_thread(self.content_store.delete_content, document_uid)
+                logger.info("[CONTENT] Deleted content for document '%s'", label)
+            except Exception as exc:
+                logger.warning("[CONTENT] Could not delete content for '%s': %s", label, exc)
 
     def _vector_store(self) -> BaseVectorStore:
         """Resolve the vector store in whichever process is running.
@@ -1590,28 +1576,6 @@ class MetadataService:
         Remove a relation in the ReBAC engine between a tag and a document.
         """
         await self.rebac.delete_relation(self._get_tag_as_parent_relation(tag_id, document_uid))
-
-    async def _promote_alternate_version(self, canonical_name: str, source_tag: str | None, removed_tag_id: str, actor: str) -> DocumentMetadata | None:
-        """
-        Find a version=1 sibling with the same canonical_name and tag, promote it to version=0, and save.
-        """
-        filters: dict[str, Any] = {"canonical_name": canonical_name}
-        if removed_tag_id:
-            filters.setdefault("tags", {})["tag_ids"] = [removed_tag_id]
-        if source_tag:
-            filters.setdefault("source", {})["source_tag"] = source_tag
-
-        siblings = await self.metadata_store.get_all_metadata(filters)
-        candidate = next((d for d in siblings if getattr(d.identity, "version", 0) == 1), None)
-        if not candidate:
-            return None
-
-        candidate.identity.version = 0
-        candidate.identity.document_name = candidate.identity.canonical_name or candidate.identity.document_name
-        candidate.identity.modified = datetime.now(timezone.utc)
-        candidate.identity.last_modified_by = actor
-        await self.metadata_store.save_metadata(candidate)
-        return candidate
 
     def _get_tag_as_parent_relation(self, tag_id: str, document_uid: str) -> Relation:
         return Relation(subject=RebacReference(Resource.TAGS, tag_id), relation=RelationType.PARENT, resource=RebacReference(Resource.DOCUMENTS, document_uid))

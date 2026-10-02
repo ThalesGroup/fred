@@ -60,6 +60,7 @@ from pydantic import BaseModel, Field
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
+from fred_runtime.runtime_support.ask_user import AskUserArgs, ask_user
 
 from .react_tool_rendering import (
     normalize_runtime_provider_artifact,
@@ -156,6 +157,7 @@ class ReActRuntimeToolResolver:
         toolset_key: str | None,
         services: RuntimeServices,
         binding: BoundRuntimeContext,
+        capability_tool_names: tuple[str, ...] = (),
     ) -> None:
         """
         Store the collaborators needed to resolve one runtime tool surface.
@@ -176,6 +178,7 @@ class ReActRuntimeToolResolver:
         self._toolset_key = toolset_key
         self._services = services
         self._binding = binding
+        self._capability_tool_names = capability_tool_names
 
     def resolve_tools(self) -> list[FredRuntimeToolSpec]:
         """
@@ -201,6 +204,37 @@ class ReActRuntimeToolResolver:
         used_names: set[str] = set()
         specs.extend(self._resolve_declared_tools(used_names=used_names))
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
+        if self._binding.runtime_context.ask_user is True:
+            if "ask_user" in used_names or "ask_user" in self._capability_tool_names:
+                raise RuntimeError(
+                    "Platform ask_user tool collides with another runtime tool"
+                )
+            used_names.add("ask_user")
+
+            async def invoke_ask_user(payload: dict[str, object]) -> tuple[str, None]:
+                return (
+                    await ask_user(
+                        payload, language=self._binding.runtime_context.language
+                    ),
+                    None,
+                )
+
+            specs.append(
+                FredRuntimeToolSpec(
+                    runtime_name="ask_user",
+                    description=(
+                        "Ask the user one question and continue after their answer. "
+                        "When possible, give the question a short subject title of a few words. "
+                        "Hard limit: choices must contain no more than four items. "
+                        "If you have five or more candidates, first select the four that best satisfy the user's constraints; "
+                        "the interface always offers an Other free-text answer alongside multiple choices. "
+                        "Use allow_free_text for questions without choices."
+                    ),
+                    args_schema=AskUserArgs,
+                    tool_ref="platform.ask_user",
+                    invoke=invoke_ask_user,
+                )
+            )
         logger.debug(
             "[V2][TOOL_RESOLVER] resolved %d tool(s): %r",
             len(specs),

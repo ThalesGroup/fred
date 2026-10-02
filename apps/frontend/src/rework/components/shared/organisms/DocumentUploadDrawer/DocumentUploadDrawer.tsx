@@ -18,6 +18,7 @@ import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { Portal } from "@shared/utils/Portal";
 import Button from "@shared/atoms/Button/Button";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Select from "@shared/molecules/Select/Select";
@@ -25,19 +26,23 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import UploadWarningBanner from "@shared/molecules/UploadWarningBanner/UploadWarningBanner";
 import { formatBytes } from "@shared/utils/formatBytes";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import {
-  leafFileName,
-  streamUploadOrProcessDocument,
-  type ScheduledTask,
-} from "../../../../../slices/streamDocumentUpload";
+import { leafFileName } from "../../../../../slices/streamDocumentUpload";
 import {
   IngestionProcessingProfile,
+  useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation,
   useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation,
+  type ImportNameConflicts,
   type QuotaPrecheckResponse,
 } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { OptionModel } from "@models/Option.model";
-import { taskRegistered } from "../../../../features/tasks/taskSlice";
+import { importPanelOpenRequested } from "../../../../features/tasks/taskSlice";
+import {
+  UPLOAD_BATCH_SIZE,
+  chunkFilesByLeafName,
+  runImport,
+  type ImportBatch,
+} from "../../../../features/imports/importRun";
 import {
   MAX_FOLDER_DEPTH,
   displayPath,
@@ -45,6 +50,17 @@ import {
   folderPathDepth,
   relativeDirSegments,
 } from "./droppedPaths";
+import {
+  conflictKey,
+  conflictsToAsk,
+  decisionsForGroup,
+  destinationsToCheck,
+  namesArrivingTwice,
+  splitByDecision,
+  type ConflictDecision,
+  type ImportConflict,
+  type UploadGroup,
+} from "./importConflicts";
 import styles from "./DocumentUploadDrawer.module.css";
 
 interface DocumentUploadDrawerProps {
@@ -53,6 +69,10 @@ interface DocumentUploadDrawerProps {
   onUploadComplete?: () => void;
   metadata?: Record<string, unknown>;
   teamId?: string;
+  /** The team an import is filed under, for the panel that follows it. Distinct
+   *  from `teamId`, which may be the "personal" URL alias: the server reports
+   *  the owning team's real id, and the two have to agree after a reload. */
+  importScopeId?: string | null;
   /** Destination folder path shown prominently in the header, e.g. "CIR" or "CIR/Sub". */
   destinationPath?: string;
   /** Files picked before the drawer opened (dropped on a folder row) — seeded into the
@@ -71,132 +91,20 @@ interface DocumentUploadDrawerProps {
   requireFolderPerFile?: boolean;
 }
 
-/**
- * Resolves once every file in `files` has an outcome (task_id, reported
- * failure, or plain success) — resolving on just the first would let the
- * drawer close/refresh while the rest of the batch is still unaccounted for.
- * Each outcome still fires its callback as its own line streams in, so the
- * tray/toast never waits on the slowest file. A mid-stream transport failure
- * reports whatever's still pending too, so it isn't silently dropped. Pass
- * files sharing `requestMetadata` (see streamUploadOrProcessDocument).
- */
-export function scheduleFiles(
-  files: File[],
-  uploadMode: "upload" | "process",
-  requestMetadata: Record<string, unknown>,
-  onDiscovered: (task: ScheduledTask) => void,
-  onBackgroundError: (message: string) => void,
-): Promise<void> {
-  return new Promise<void>((resolve) => {
-    let settled = false;
-    const pendingLeafNames = new Set(files.map(leafFileName));
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      resolve();
-    };
-    const markDone = (filename: string) => {
-      pendingLeafNames.delete(filename);
-      if (pendingLeafNames.size === 0) settle();
-    };
-
-    streamUploadOrProcessDocument(
-      files,
-      uploadMode,
-      requestMetadata,
-      (task) => {
-        onDiscovered(task);
-        markDone(task.filename);
-      },
-      (filename, message) => {
-        onBackgroundError(`${filename}: ${message}`);
-        markDone(filename);
-      },
-      markDone,
-    )
-      .then(() => settle())
-      .catch((err) => {
-        // Some files may already have an outcome (reported above, as their
-        // lines streamed in) even though the request as a whole then failed
-        // — only the ones still pending were never accounted for.
-        if (pendingLeafNames.size > 0) {
-          onBackgroundError(err instanceof Error ? err.message : String(err));
-        }
-        settle();
-      });
-  });
-}
-
-// Bounds how many batched upload requests (and their ReBAC/quota checks) run
-// at once, and how many files each request carries.
-const UPLOAD_BATCH_SIZE = 8;
-const UPLOAD_CONCURRENCY = 4;
-
-/** Runs `worker` over `items` with at most `limit` calls in flight at once. */
-export async function runWithConcurrencyLimit<T>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  let next = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const item = items[next++];
-      await worker(item);
-    }
-  });
-  await Promise.all(runners);
-}
-
-/** Splits `files` into batches of at most `maxSize`, never putting two files
- * with the same leaf name in the same batch — the backend correlates a
- * batch's progress lines by that leaf name, so a collision would make two
- * files' outcomes indistinguishable within one request. */
-export function chunkFilesByLeafName(files: File[], maxSize: number): File[][] {
-  const leafNames = files.map(leafFileName);
-  const hasCollision = new Set(leafNames).size !== leafNames.length;
-  if (!hasCollision) {
-    // The common case — a drop rarely repeats a filename — is a plain O(n)
-    // slice; the collision-safe grouping below is only needed when it does.
-    const batches: File[][] = [];
-    for (let i = 0; i < files.length; i += maxSize) batches.push(files.slice(i, i + maxSize));
-    return batches;
-  }
-
-  const batches: File[][] = [];
-  let remaining = files;
-  while (remaining.length) {
-    const batch: File[] = [];
-    const leftover: File[] = [];
-    const namesInBatch = new Set<string>();
-    for (const file of remaining) {
-      const leafName = leafFileName(file);
-      if (batch.length < maxSize && !namesInBatch.has(leafName)) {
-        batch.push(file);
-        namesInBatch.add(leafName);
-      } else {
-        leftover.push(file);
-      }
-    }
-    batches.push(batch);
-    remaining = leftover;
-  }
-  return batches;
-}
-
 export function DocumentUploadDrawer({
   isOpen,
   onClose,
   onUploadComplete,
   metadata,
   teamId,
+  importScopeId,
   destinationPath,
   initialFiles,
   ensureFolderPath,
   requireFolderPerFile,
 }: DocumentUploadDrawerProps) {
   const { t } = useTranslation();
-  const { showError } = useToast();
+  const { showError, showInfo } = useToast();
 
   const dispatch = useDispatch();
   const [uploadMode, setUploadMode] = useState<"upload" | "process">("process");
@@ -279,6 +187,66 @@ export function DocumentUploadDrawer({
   const [quotaPrecheck] = useQuotaPrecheckKnowledgeFlowV1QuotaPrecheckPostMutation();
   useEffect(() => setQuotaDenial(null), [files]);
 
+  // Names the destination folder already holds. Asked once, on Save, before
+  // any byte leaves: until every one has an answer, nothing is sent. Editing
+  // the list drops the answers with it — they were about that selection.
+  const [conflicts, setConflicts] = useState<ImportConflict[]>([]);
+  const [decisions, setDecisions] = useState<Map<string, ConflictDecision>>(new Map());
+  const [checkNames] = useImportNameCheckKnowledgeFlowV1DocumentsNameCheckPostMutation();
+  useEffect(() => {
+    setConflicts([]);
+    setDecisions(new Map());
+  }, [files]);
+
+  const unansweredCount = conflicts.filter(
+    (conflict) => !decisions.has(conflictKey(conflict.tagId, conflict.name)),
+  ).length;
+
+  const decideOne = (conflict: ImportConflict, decision: ConflictDecision) =>
+    setDecisions((prev) => new Map(prev).set(conflictKey(conflict.tagId, conflict.name), decision));
+
+  const decideAll = (decision: ConflictDecision) =>
+    setDecisions((prev) => {
+      const next = new Map(prev);
+      for (const conflict of conflicts) next.set(conflictKey(conflict.tagId, conflict.name), decision);
+      return next;
+    });
+
+  /** Whether the destination folder already holds any of the selected names,
+   * so an import into it may be replacing rather than adding. Scoped to that
+   * one folder: a dropped subdirectory's folder may not exist yet, and finding
+   * out would mean creating it before the quota question is settled. */
+  const destinationMayHoldTheseNames = async (): Promise<boolean> => {
+    const destination = ((metadata?.tags as string[] | undefined) ?? [])[0];
+    if (!destination) return false;
+    try {
+      const answer = await checkNames({
+        importNameCheckRequest: { destinations: [{ tag_id: destination, names: files.map(leafFileName) }] },
+      }).unwrap();
+      return (answer.conflicts ?? []).some((entry) => entry.names.length > 0);
+    } catch {
+      return false;
+    }
+  };
+
+  /** Which of these files the destination folders already hold and the user
+   * has not answered about yet. Advisory: a transport failure returns nothing
+   * to ask, because the upload re-checks and reports what it finds — the
+   * import must not be blocked by a check that only exists to save a transfer. */
+  const askAboutConflicts = async (groups: UploadGroup[]): Promise<ImportConflict[]> => {
+    const destinations = destinationsToCheck(groups);
+    if (!destinations.length) return [];
+    let answer: ImportNameConflicts[] = [];
+    try {
+      answer = (await checkNames({ importNameCheckRequest: { destinations } }).unwrap()).conflicts ?? [];
+    } catch {
+      return [];
+    }
+    return conflictsToAsk(groups, answer, displayPath).filter(
+      (conflict) => !decisions.has(conflictKey(conflict.tagId, conflict.name)),
+    );
+  };
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     // Keyboard-accessible: the dropzone root becomes focusable (tabIndex) and
     // Enter/Space opens the file dialog (react-dropzone), so adding files no
@@ -333,7 +301,13 @@ export function DocumentUploadDrawer({
           total_size: newFilesSize,
         },
       }).unwrap();
-      if (!verdict.allowed) {
+      // A denial counts every file at full size, but a file replacing an
+      // existing document only costs the difference — which only the server
+      // can work out. So a denial is not final while the destination may
+      // already hold one of these names: the upload endpoint nets it out and
+      // answers for real. Asked against the destination folder alone, which
+      // needs no folder created to answer.
+      if (!verdict.allowed && !(await destinationMayHoldTheseNames())) {
         setQuotaDenial(verdict);
         setIsLoading(false);
         return;
@@ -374,56 +348,91 @@ export function DocumentUploadDrawer({
         return;
       }
     }
-    try {
-      // Group files that share the same destination tags into batches (same
-      // request metadata => one request can carry several files, see
-      // scheduleFiles' doc comment), then run those batches through a bounded
-      // pool rather than firing one request per file unbounded.
-      const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
-      const groups = new Map<string, { requestMetadata: Record<string, unknown>; files: File[] }>();
-      for (const file of files) {
-        // A file inside a dropped subdirectory attaches to that subdirectory's
-        // tag instead of the destination folder's (`base` keeps the latter).
-        const dirTagId = tagIdByDir.get(dirKeyByFile.get(file)!);
-        const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
-        const groupKey = dirTagId ?? "";
-        const group = groups.get(groupKey);
-        if (group) group.files.push(file);
-        else groups.set(groupKey, { requestMetadata, files: [file] });
-      }
-
-      const batches: { requestMetadata: Record<string, unknown>; files: File[] }[] = [];
-      for (const group of groups.values()) {
-        for (const batchFiles of chunkFilesByLeafName(group.files, UPLOAD_BATCH_SIZE)) {
-          batches.push({ requestMetadata: group.requestMetadata, files: batchFiles });
-        }
-      }
-
-      // Register each task the instant the server first reports its id (its own
-      // line in the stream), not after the whole batch finishes — so the tray
-      // lights up and starts its SSE subscription while the upload streams.
-      await runWithConcurrencyLimit(batches, UPLOAD_CONCURRENCY, (batch) =>
-        scheduleFiles(
-          batch.files,
-          uploadMode,
-          batch.requestMetadata,
-          ({ taskId, documentUid, filename }) => {
-            dispatch(
-              taskRegistered({
-                taskId,
-                kind: "ingestion",
-                target: documentUid ? { type: "document", id: documentUid, label: filename } : null,
-              }),
-            );
-          },
-          (message) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail: message }),
-        ),
-      );
-      onUploadComplete?.();
-    } finally {
-      setIsLoading(false);
-      handleClose();
+    // Group files that share the same destination tags into batches (same
+    // request metadata => one request can carry several files, see
+    // scheduleFiles' doc comment), then run those batches through a bounded
+    // pool rather than firing one request per file unbounded.
+    const base = canSelectProfile ? { ...(metadata ?? {}), profile } : { ...(metadata ?? {}) };
+    const destinationTag = ((metadata?.tags as string[] | undefined) ?? [])[0] ?? null;
+    const groups = new Map<string, { requestMetadata: Record<string, unknown>; group: UploadGroup }>();
+    for (const file of files) {
+      // A file inside a dropped subdirectory attaches to that subdirectory's
+      // tag instead of the destination folder's (`base` keeps the latter).
+      const dirTagId = tagIdByDir.get(dirKeyByFile.get(file)!);
+      const requestMetadata = dirTagId ? { ...base, tags: [dirTagId] } : base;
+      const groupKey = dirTagId ?? "";
+      const existing = groups.get(groupKey);
+      if (existing) existing.group.files.push(file);
+      else groups.set(groupKey, { requestMetadata, group: { tagId: dirTagId ?? destinationTag, files: [file] } });
     }
+
+    const uploadGroups = Array.from(groups.values(), (entry) => entry.group);
+
+    // Two files of the same name into the same folder have no answer: one
+    // decision cannot mean two things, and replacing would let one take the
+    // other's place unnoticed. Refuse before anything is sent or created.
+    const arrivingTwice = namesArrivingTwice(uploadGroups);
+    if (arrivingTwice.length) {
+      showError?.({
+        summary: t("documentLibrary.uploadDrawerTitle"),
+        detail: t("documentLibrary.sameNameTwice", { count: arrivingTwice.length, names: arrivingTwice.join(", ") }),
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Ask about the names before sending any byte, and outside the block below
+    // whose `finally` closes the drawer: an unanswered conflict must leave it
+    // open on the question, since resolving it either way would be resolving
+    // it for the user.
+    const unanswered = await askAboutConflicts(uploadGroups);
+    if (unanswered.length) {
+      setConflicts(unanswered);
+      setIsLoading(false);
+      return;
+    }
+
+    const batches: ImportBatch[] = [];
+    let skippedCount = 0;
+    for (const { requestMetadata, group } of groups.values()) {
+      const { toUpload, skipped } = splitByDecision(group, decisions);
+      skippedCount += skipped.length;
+      if (!toUpload.length) continue;
+      const decided = decisionsForGroup({ ...group, files: toUpload }, decisions);
+      const metadataWithDecisions = Object.keys(decided).length
+        ? { ...requestMetadata, conflict_decisions: decided }
+        : requestMetadata;
+      for (const batchFiles of chunkFilesByLeafName(toUpload, UPLOAD_BATCH_SIZE)) {
+        batches.push({ requestMetadata: metadataWithDecisions, files: batchFiles });
+      }
+    }
+
+    if (skippedCount) {
+      // A skipped file is never sent: the whole point of asking first is not
+      // to transfer bytes the answer makes useless.
+      showInfo?.({
+        summary: t("documentLibrary.uploadDrawerTitle"),
+        detail: t("documentLibrary.conflictSkippedSummary", { count: skippedCount }),
+      });
+    }
+
+    // Everything that had to be settled before sending is settled. Give the
+    // application back now: the transfer is the long part, and the panel is
+    // where it is followed from here. `runImport` deliberately runs detached —
+    // it holds no reference to this component, only to the store and the toast
+    // provider, both of which outlive the dialog.
+    setIsLoading(false);
+    handleClose();
+    dispatch(importPanelOpenRequested());
+    // Detached on purpose: every outcome reaches the panel through the store,
+    // so nothing about the transfer depends on this dialog still being mounted.
+    void runImport(batches, {
+      dispatch,
+      uploadMode,
+      teamId: importScopeId ?? teamId ?? null,
+      onError: (detail) => showError?.({ summary: t("documentLibrary.uploadDrawerTitle"), detail }),
+      onComplete: onUploadComplete,
+    });
   };
 
   useEffect(() => {
@@ -474,27 +483,33 @@ export function DocumentUploadDrawer({
           </div>
           <div className={styles.body}>
             <UploadWarningBanner />
-            <div className={styles.field}>
-              <label className={styles.label}>{t("documentLibrary.ingestionMode")}</label>
-              <Select<"upload" | "process">
-                options={uploadModeOptions}
-                value={uploadMode}
-                onChange={setUploadMode}
-                size="small"
-              />
-            </div>
-
-            {canSelectProfile && (
+            <div className={styles.fieldRow}>
               <div className={styles.field}>
-                <label className={styles.label}>{t("documentLibrary.processingProfile")}</label>
-                <Select<IngestionProcessingProfile>
-                  options={profileOptions}
-                  value={profile}
-                  onChange={setProfile}
+                <label className={styles.label}>{t("documentLibrary.ingestionMode")}</label>
+                {/* No error slot held open under a field that has no error
+                    to report: neither of these can fail. */}
+                <Select<"upload" | "process">
+                  options={uploadModeOptions}
+                  value={uploadMode}
+                  onChange={setUploadMode}
                   size="small"
+                  compact
                 />
               </div>
-            )}
+
+              {canSelectProfile && (
+                <div className={styles.field}>
+                  <label className={styles.label}>{t("documentLibrary.processingProfile")}</label>
+                  <Select<IngestionProcessingProfile>
+                    options={profileOptions}
+                    value={profile}
+                    onChange={setProfile}
+                    size="small"
+                    compact
+                  />
+                </div>
+              )}
+            </div>
 
             <div
               {...getRootProps()}
@@ -543,6 +558,53 @@ export function DocumentUploadDrawer({
 
             <p className={styles.formatsCaption}>{t("documentLibrary.supportedFormats")}</p>
 
+            {conflicts.length > 0 && (
+              <div className={styles.conflicts} role="group" aria-labelledby="upload-conflicts-title">
+                <strong id="upload-conflicts-title" className={styles.conflictsTitle}>
+                  {t("documentLibrary.conflictsTitle", { count: conflicts.length })}
+                </strong>
+                <p className={styles.conflictsMessage}>{t("documentLibrary.conflictsMessage")}</p>
+                <div className={styles.conflictsBulk}>
+                  <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("overwrite")}>
+                    {t("documentLibrary.conflictReplaceAll")}
+                  </Button>
+                  <Button color="on-surface" variant="outlined" size="small" onClick={() => decideAll("skip")}>
+                    {t("documentLibrary.conflictSkipAll")}
+                  </Button>
+                </div>
+                <ul className={styles.conflictList}>
+                  {conflicts.map((conflict) => {
+                    const decision = decisions.get(conflictKey(conflict.tagId, conflict.name));
+                    return (
+                      <li key={conflictKey(conflict.tagId, conflict.name)} className={styles.conflictRow}>
+                        <span className={styles.fileName} title={conflict.label}>
+                          {conflict.label}
+                        </span>
+                        {/* One pick per file, so the two options are one
+                            control rather than two buttons that happen to be
+                            mutually exclusive. Nothing is selected until the
+                            user answers — the import waits on that. */}
+                        <ButtonGroup
+                          size="2xs"
+                          color="on-surface"
+                          variant="radio"
+                          aria-label={t("documentLibrary.conflictDecisionFor", { name: conflict.label })}
+                          // The block behind it is already surface-container.
+                          backgroundColor="var(--surface-container-high)"
+                          selectedIndex={decision === "overwrite" ? 0 : decision === "skip" ? 1 : -1}
+                          onSelectedIndexChange={(index) => decideOne(conflict, index === 0 ? "overwrite" : "skip")}
+                          items={[
+                            { label: t("documentLibrary.conflictReplace") },
+                            { label: t("documentLibrary.conflictSkip") },
+                          ]}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
             {quotaDenial && (
               <div className={styles.quotaWarning} role="alert">
                 <strong className={styles.quotaTitle}>{t("documentLibrary.storageQuotaExceededTitle")}</strong>
@@ -576,9 +638,11 @@ export function DocumentUploadDrawer({
               variant="filled"
               size="small"
               onClick={handleSave}
-              disabled={!files.length || isLoading || !!quotaDenial}
+              disabled={!files.length || isLoading || !!quotaDenial || unansweredCount > 0}
             >
-              {isLoading ? t("documentLibrary.saving") : t("documentLibrary.save")}
+              {/* What the button does, and to how many files — "Save" said
+                  neither, and nothing is being saved here. */}
+              {files.length ? t("documentLibrary.importCount", { count: files.length }) : t("documentLibrary.import")}
             </Button>
           </div>
         </div>

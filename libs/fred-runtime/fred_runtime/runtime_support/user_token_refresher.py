@@ -69,8 +69,8 @@ _DEFAULT_EXPIRES_IN_SECONDS = 300
 # on the value. `adapters.py` writes `runtime_context.access_token_expires_at`
 # and no reader exists — `_workspace_access_token` returns any non-empty token
 # string without consulting expiry at all. The clamp bounds the field for the
-# first consumer that does read it (the AUTH-TX exchange cache is the expected
-# one) rather than leaving a value that would be nonsense on arrival.
+# first consumer that does read it rather than leaving a value that would be
+# nonsense on arrival.
 #
 # Clamped, not rejected: a realm legitimately configured with a multi-day token
 # keeps working, it is merely re-checked after a day.
@@ -514,8 +514,8 @@ async def refresh_user_access_token_from_keycloak(
       refresh already completed presents a token Keycloak has consumed and
       still gets `invalid_grant`. Closing that needs a cached result keyed on
       the pre-rotation token, which means holding live credentials in pod
-      memory — an AUTH-TX decision (`DELEGATED-DOWNSTREAM-AUTH-RFC.md` Q8), not
-      one to make here. It degrades to one failed tool call, not a dead turn.
+      memory, which delegated execution avoids by holding no refresh token.
+      It degrades to one failed tool call, not a dead turn.
 
     How to use it:
     - `payload = await refresh_user_access_token_from_keycloak(url, cid, token)`
@@ -574,10 +574,9 @@ async def refresh_user_access_token_from_keycloak(
     #
     # The cost of NOT cancelling is a rotation nobody consumes: the exchange
     # completes, Keycloak invalidates the presented refresh token, and the
-    # replacement is dropped. That is the protocol-inherent lost-rotation race
-    # already recorded as open question 8 in
-    # `docs/swift/rfc/DELEGATED-DOWNSTREAM-AUTH-RFC.md`, and it degrades to one
-    # `invalid_grant` retry — strictly better than cancelling a live turn.
+    # replacement is dropped. That lost-rotation race is inherent to the
+    # protocol, and it degrades to one `invalid_grant` retry — strictly better
+    # than cancelling a live turn.
     #
     # Each waiter gets its OWN dict: the task resolves to a single object, and
     # handing the same mutable payload to every coalesced caller would let the

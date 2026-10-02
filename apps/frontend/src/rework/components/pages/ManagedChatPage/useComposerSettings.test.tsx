@@ -162,6 +162,21 @@ describe("useComposerSettings — defaults never clobber an explicit pick", () =
     expect(latest.reasoning).toBe(true);
   });
 
+  it("stores the agent-question toggle separately for each conversation", () => {
+    const questionControls: ChatControlDescriptor[] = [
+      { capability_id: "platform", widget: "ask_user_toggle", params: { default: true } },
+    ];
+    render("sid-a", questionControls);
+    expect(latest.askUser).toBe(true);
+    act(() => latest.setAskUser(false));
+    expect(latest.askUser).toBe(false);
+    act(() => latest.reset("sid-b", questionControls));
+    render("sid-b", questionControls);
+    expect(latest.askUser).toBe(true);
+    remount("sid-a", questionControls);
+    expect(latest.askUser).toBe(false);
+  });
+
   it("lets a stored session pick outrank the author's default", () => {
     sessionStorage.setItem("chat.composer.sid-3", JSON.stringify({ reasoning: false }));
 

@@ -30,7 +30,7 @@ from fred_core.common import (
 )
 from fred_core.scheduler import SchedulerBackend
 from fred_sdk.contracts.models import TuningValue
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from control_plane_backend.applications.catalog import ApplicationSourceConfig
 
@@ -150,12 +150,26 @@ class RuntimeCatalogSourceConfig(BaseModel):
     enabled: bool = True
     ingress_prefix: str | None = Field(
         default=None,
+        pattern=r"^/[A-Za-z0-9._~/-]+$",
         description=(
-            "Ingress-relative URL prefix for browser-facing runtime access, "
+            "Canonical root-relative URL prefix for browser-facing runtime access, "
             "e.g. /runtime/agents-v2. Required for execution preparation. "
-            "MUST NOT be a cluster-internal hostname or pod IP."
+            "Absolute URLs, encoded characters, and path traversal are rejected."
         ),
     )
+
+    @field_validator("ingress_prefix")
+    @classmethod
+    def _validate_ingress_prefix(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if (
+            "//" in value
+            or value.endswith("/")
+            or any(segment in {".", ".."} for segment in value.split("/"))
+        ):
+            raise ValueError("ingress_prefix must be a canonical root-relative path")
+        return value
 
 
 class ManagedAgentUiHints(BaseModel):

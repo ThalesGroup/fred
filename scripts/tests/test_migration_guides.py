@@ -196,6 +196,25 @@ class GitTests(unittest.TestCase):
         )
         self.repo(worktree=True).check_pr(self.installed)
 
+    def test_schema_only_validation_change_supports_production_note(self):
+        schema_path = "deploy/charts/fred/values.schema.json"
+        original = {"properties": {"ingress_prefix": {"type": "string"}}}
+        self.write(schema_path, json.dumps(original))
+        self.commit("add chart schema")
+        base = self.git("rev-parse", "HEAD")
+        self.add_note("prefix", "minor", configuration="production")
+
+        cosmetic = copy.deepcopy(original)
+        cosmetic["properties"]["ingress_prefix"]["description"] = "Browser path"
+        self.write(schema_path, json.dumps(cosmetic))
+        with self.assertRaisesRegex(m.Invalid, "values.yaml or"):
+            self.repo(worktree=True).check_pr(base)
+
+        constrained = copy.deepcopy(cosmetic)
+        constrained["properties"]["ingress_prefix"]["pattern"] = "^/[a-z/]+$"
+        self.write(schema_path, json.dumps(constrained))
+        self.repo(worktree=True).check_pr(base)
+
     def test_commented_option_removal_requires_chart_schema_evidence(self):
         chart = "deploy/charts/fred/values.yaml"
         schema_path = "deploy/charts/fred/values.schema.json"

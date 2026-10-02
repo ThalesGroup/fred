@@ -255,7 +255,14 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
             </div>
             <div className={styles["team-avatar-preview"]}>
               {avatarImageUrl ? (
-                <img className={styles["team-avatar-preview-image"]} src={avatarImageUrl} alt="" />
+                <img
+                  className={styles["team-avatar-preview-image"]}
+                  src={avatarImageUrl}
+                  alt=""
+                  width={96}
+                  height={96}
+                  decoding="async"
+                />
               ) : (
                 <span className={styles["team-avatar-preview-empty"]}>
                   {t("rework.teamSettings.parameters.teamAvatar.noAvatar")}

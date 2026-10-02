@@ -21,7 +21,10 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  border-radius: var(--radius-m);
+  /* Right corners face whatever the host puts beside this card (the import
+     panel, on the resources page), so the host decides how tight they are. */
+  border-radius: var(--radius-m) var(--card-seam-radius, var(--radius-m)) var(--card-seam-radius, var(--radius-m))
+    var(--radius-m);
   background: var(--surface-container-high);
   min-height: 0;
 }
@@ -38,7 +41,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  border-radius: 0 0 var(--radius-m) var(--radius-m);
+  border-radius: 0 0 var(--card-seam-radius, var(--radius-m)) var(--radius-m);
   min-height: 0;
   overflow: hidden;
 }
@@ -115,7 +118,7 @@
   flex: 1;
   justify-content: center;
   align-items: center;
-  border-radius: 0 0 var(--radius-m) var(--radius-m);
+  border-radius: 0 0 var(--card-seam-radius, var(--radius-m)) var(--radius-m);
   padding: var(--spacing-l) var(--spacing-m);
   min-height: 0;
   color: var(--on-surface-muted);

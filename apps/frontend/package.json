@@ -7,7 +7,8 @@
     "pdfjs-dist": "4.3.136",
     "canvas": "npm:@napi-rs/canvas@^0.1.59",
     "@mapbox/node-pre-gyp": "^2",
-    "dompurify": "^3.4.13"
+    "dompurify": "^3.4.13",
+    "js-yaml": "^4.3.2"
   },
   "scripts": {
     "dev": "vite",
@@ -29,7 +30,7 @@
     "@fontsource/inter": "^5.2.6",
     "@fontsource/roboto": "^5.1.0",
     "@lezer/highlight": "^1.2.3",
-    "@mdxeditor/editor": "^4.2.3",
+    "@mdxeditor/editor": "^4.3.1",
     "@reduxjs/toolkit": "^2.1.0",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.2",

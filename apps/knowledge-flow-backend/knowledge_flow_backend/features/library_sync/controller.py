@@ -31,6 +31,7 @@ from fred_core.security.structure import is_service_agent
 
 from knowledge_flow_backend.common.source_utils import UnknownSourceTagError
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
+from knowledge_flow_backend.core.processors.input.common.base_input_processor import InputValidationError
 from knowledge_flow_backend.core.stores.tags.base_tag_store import TagAlreadyExistsError, TagNotFoundError
 from knowledge_flow_backend.features.library_sync.service import LibrarySyncService
 from knowledge_flow_backend.features.library_sync.structures import (
@@ -71,7 +72,8 @@ def _bounded_failure(exc: Exception, *, code: str = "document_write_failed") -> 
     """
     return HTTPException(
         status_code=500,
-        detail={"code": code, "failure": type(exc).__name__},
+        # Keep the established sync classification when upload validation adds a user-facing message.
+        detail={"code": code, "failure": "ValueError" if isinstance(exc, InputValidationError) else type(exc).__name__},
     )
 
 

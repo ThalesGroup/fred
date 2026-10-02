@@ -145,9 +145,6 @@ class LibrarySyncService:
                 tags=[folder_id],
                 source_tag=source_tag,
                 profile=profile,
-                # The suffix-based draft version is what makes two uploads two
-                # documents. Here the key already says they are one.
-                apply_versioning=False,
             )
             if existing is not None:
                 # The identifier is reused, never recomputed from the key: this

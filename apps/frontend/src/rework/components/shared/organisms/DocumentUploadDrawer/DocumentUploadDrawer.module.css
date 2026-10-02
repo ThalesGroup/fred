@@ -32,7 +32,7 @@
   box-shadow: var(--shadow-l);
   border-radius: var(--radius-m);
   background-color: var(--surface-container-high);
-  width: min(480px, 92vw);
+  width: min(560px, 92vw);
   max-height: 85vh;
   color: var(--on-surface);
 }
@@ -83,10 +83,19 @@
   overflow-y: auto;
 }
 
+/* Mode and profile side by side: two short choices that belong together, and
+   the room they leave is room the file list gets. */
+.fieldRow {
+  display: flex;
+  gap: var(--spacing-m);
+}
+
 .field {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .label {
@@ -103,7 +112,7 @@
     background 150ms;
   cursor: pointer;
   border: 1.5px dashed var(--outline-retreat);
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-s);
   min-height: 180px;
   overflow-y: auto;
 }
@@ -227,6 +236,49 @@
 .quotaExcess {
   color: var(--error);
   font-weight: 600;
+}
+
+/* ── Name conflicts ────────────────────────────────────────────────────────── */
+
+.conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-retreat);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.conflictsTitle {
+  color: var(--on-surface);
+  font: var(--font-label-medium);
+}
+
+.conflictsMessage {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.conflictsBulk {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.conflictList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conflictRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 /* ── Actions ───────────────────────────────────────────────────────────────── */

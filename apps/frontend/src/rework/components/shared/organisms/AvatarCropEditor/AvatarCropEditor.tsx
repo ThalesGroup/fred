@@ -19,10 +19,11 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./AvatarCropEditor.module.scss";
 
 // Display size of the square crop viewport, and the exported avatar size. The
-// export is bounded (512×512 WebP) so a huge source image never reaches the
-// avatar surfaces at full resolution (#2300).
+// export is bounded so a huge source image never reaches the avatar surfaces at
+// full resolution. 320 covers the largest consumer (the 96px settings preview)
+// at 3x DPR; every other surface renders it at 28-48px.
 const VIEWPORT = 288;
-const OUTPUT = 512;
+const OUTPUT = 320;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 

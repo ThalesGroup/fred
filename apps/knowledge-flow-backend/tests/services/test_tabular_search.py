@@ -110,6 +110,24 @@ async def test_search_locates_value_case_accent_and_space_insensitive(tmp_path, 
 
 
 @pytest.mark.asyncio
+async def test_search_quotes_filename_column_and_keyword(tmp_path, metadata_store):
+    ApplicationContext.get_instance().get_content_store().clear()
+    keyword = "O'Malley'); DROP TABLE source_csv; --"
+    await _ingest_csv(
+        tmp_path=tmp_path,
+        document_uid="doc-quoted",
+        file_name="sales'); DROP TABLE source_csv; --.csv",
+        content=f'"quo""te",amount\n"{keyword}",10\n',
+    )
+
+    service = TabularService()
+    response = await service.search_values(_user(), request=TabularSearchRequest(keyword=keyword))
+    assert len(response.matches) == 1
+    assert response.matches[0].matched_columns == ['quo"te']
+    assert response.matches[0].rows == [{'quo"te': keyword, "amount": 10}]
+
+
+@pytest.mark.asyncio
 async def test_search_matches_numeric_format_with_thousands_space_and_decimal_comma(tmp_path, metadata_store):
     """A French-formatted amount stored as text ("1 234,56") is found by "1234.56":
     whitespace is removed and the decimal comma is normalized to a point."""

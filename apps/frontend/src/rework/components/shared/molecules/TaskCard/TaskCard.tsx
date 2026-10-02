@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
-import { relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
+import { STATE_COLOR, relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -26,6 +26,23 @@ import styles from "./TaskCard.module.css";
 
 interface TaskCardProps {
   task: TaskViewModel;
+  /** Replaces the footer's own error/step line. For a caller that knows the
+   *  task's domain and can say more about it than a generic card can — the
+   *  import panel naming a failure's cause, rather than showing the sentence
+   *  the backend wrote for a log. */
+  statusText?: string;
+  /** The detail behind `statusText`, on hover. */
+  statusDetail?: string | null;
+  /** Controls next to the dismiss button — a retry, a decision to make. */
+  actions?: ReactNode;
+  /** Replaces the progress bar at the foot of the card. For a caller whose
+   *  task has no measurable progress to show — an import, where the server
+   *  reports named phases rather than a fraction. */
+  progressSlot?: ReactNode;
+  /** Replaces the footer's timestamp. For a caller with something live to put
+   *  there while the task runs — an import's phase markers, facing the name of
+   *  the phase they are on. Omit it and the timestamp comes back. */
+  trailingSlot?: ReactNode;
   /** Present only when this task can be acknowledged (failed/cancelled, not
    *  yet acknowledged) — the caller owns the `POST /tasks/{id}/ack` call and
    *  the resulting store update (TASK-EVENT-STREAM-RFC.md §2.10). */
@@ -33,11 +50,16 @@ interface TaskCardProps {
   acknowledging?: boolean;
 }
 
-export function truncate(name: string, max = 32): string {
-  return name.length > max ? `${name.slice(0, max - 1)}…` : name;
-}
-
-export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) {
+export function TaskCard({
+  task,
+  statusText,
+  statusDetail,
+  actions,
+  progressSlot,
+  trailingSlot,
+  onAcknowledge,
+  acknowledging,
+}: TaskCardProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const isTerminal = TERMINAL_STATES.has(task.state);
@@ -58,41 +80,57 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
   return (
     <div className={styles.card} data-state={task.state}>
       <div className={styles.header}>
-        <span className={styles.filename} title={displayName}>
-          {truncate(displayName)}
-        </span>
+        {/* The state reads as a colour before it reads as anything else, so it
+            leads the line the name is on. */}
         <TaskStateBadge state={task.state} showLabel={false} size="sm" />
-        {needsAttention && (
-          <IconButton
-            variant="icon"
-            size="small"
-            icon={{ category: "outlined", type: "close" }}
-            onClick={onAcknowledge}
-            disabled={acknowledging}
-            title={t("rework.tasks.card.acknowledge")}
-          />
-        )}
+        {/* Cut by the CSS ellipsis, which cuts at the width actually left —
+            a character count cut short names in a wide card. */}
+        <span className={styles.filename} title={displayName}>
+          {displayName}
+        </span>
+        {/* Always present, even empty: the buttons are twice the line's height,
+            so letting the row size itself would jolt the card every time one
+            appeared. */}
+        <div className={styles.toolbar}>
+          {actions}
+          {needsAttention && (
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "close" }}
+              onClick={onAcknowledge}
+              disabled={acknowledging}
+              title={t("rework.tasks.card.acknowledge")}
+            />
+          )}
+        </div>
       </div>
 
-      {!isTerminal && (
-        <div className={styles.progressRow}>
-          <TaskProgressBar state={task.state} progress={task.progress} />
-        </div>
-      )}
-
       <div className={styles.footer}>
-        {task.state === "failed" && task.error ? (
+        {statusText ? (
+          <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
+            {statusDetail ? (
+              <Tooltip content={statusDetail}>
+                <span className={styles.truncate}>{statusText}</span>
+              </Tooltip>
+            ) : (
+              statusText
+            )}
+          </span>
+        ) : task.state === "failed" && task.error ? (
           // Tooltip's own wrapper is inline-flex with no flex-grow of its own — nesting it
           // *inside* .errorText (rather than putting .errorText on the wrapper itself) keeps
           // the existing flex:1/min-width:0/ellipsis truncation on the real flex item, so the
           // Tooltip's internal markup never has to know about TaskCard's row layout.
           <span className={styles.errorText}>
-            <Tooltip content={<span className={styles.errorTooltip}>{task.error}</span>}>
-              <span>{task.error}</span>
+            <Tooltip content={task.error}>
+              <span className={styles.truncate}>{task.error}</span>
             </Tooltip>
           </span>
         ) : task.step ? (
-          <span className={styles.stepText}>{stepLabel(task, t)}</span>
+          <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
+            {stepLabel(task, t)}
+          </span>
         ) : null}
         {task.warnings && task.warnings.length > 0 && (
           <div className={styles.warningGroup}>
@@ -120,8 +158,18 @@ export function TaskCard({ task, onAcknowledge, acknowledging }: TaskCardProps) 
             />
           </div>
         )}
-        <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>
+        {trailingSlot ?? <span className={styles.timestamp}>{relativeTime(timeMs, t)}</span>}
       </div>
+
+      {progressSlot !== undefined ? (
+        <div className={styles.progressRow}>{progressSlot}</div>
+      ) : (
+        !isTerminal && (
+          <div className={styles.progressRow}>
+            <TaskProgressBar state={task.state} progress={task.progress} />
+          </div>
+        )
+      )}
     </div>
   );
 }
