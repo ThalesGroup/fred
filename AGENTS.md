@@ -106,6 +106,22 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
+## Critical CVE checks for pull requests
+
+When a PR changes dependencies, base images, Dockerfiles, build/install recipes,
+or code that can change the packages or binaries in a production image, ensure
+Trivy scans the affected images before close-out. Use the PR image-scan jobs when
+they ran; otherwise run the scans explicitly. Keep the documented `ws-bench`
+exception. For frontend dependency changes, also scan the npm lockfile: the
+final nginx image does not contain the Node dependencies.
+
+Compare the PR images with images built from the PR base commit using the same
+Trivy version, vulnerability database snapshot, and OS/library `CRITICAL` scan
+options. Present critical finding counts before and after, and their difference,
+for each image and in total to the user and in the PR. List introduced and
+resolved CVE IDs, link the scan jobs or reports, and state any coverage or
+comparison that could not be verified. A scanner error is not a clean result.
+
 ## Branch and draft PR workflow
 
 For implementation work, identify or create the tracking GitHub issue and use
