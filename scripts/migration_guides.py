@@ -213,6 +213,7 @@ def parse_note(path, text):
         "impact",
         "configuration",
         "configuration_reason",
+        "configuration_scope",
         "no_action_reason",
         "after",
         "covers",
@@ -244,6 +245,12 @@ def parse_note(path, text):
         substantive(meta.get("configuration_reason")),
         f"{path}: explain configuration ownership/compatibility",
     )
+    if "configuration_scope" in meta:
+        require(
+            meta["configuration"] == "production"
+            and meta["configuration_scope"] == "deployment-values",
+            f"{path}: configuration_scope is only deployment-values for production",
+        )
     if meta["impact"] == "none":
         require(
             substantive(meta.get("no_action_reason")),
@@ -494,7 +501,15 @@ class Repo:
                         old_schema
                     ) != schema_validation_shape(new_schema)
                 require(
-                    chart in changed or (validation_changed and not removed_options),
+                    chart in changed
+                    or (validation_changed and not removed_options)
+                    or (
+                        not config_paths
+                        and all(
+                            n.meta.get("configuration_scope") == "deployment-values"
+                            for n in production
+                        )
+                    ),
                     "Production configuration changes require Fred chart values.yaml or a chart schema validation change in the same PR",
                 )
                 if chart in changed:

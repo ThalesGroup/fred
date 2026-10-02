@@ -2,8 +2,9 @@
 schema: 1
 title: "Shared UI components and retirement of the built-in evaluator"
 impact: minor
-configuration: none
-configuration_reason: "No configuration keys or defaults change. Deployments using built-in evaluations must register the external evaluator using the existing application configuration."
+configuration: production
+configuration_scope: deployment-values
+configuration_reason: "Affected deployments must update existing production Helm application catalog, FRONTEND_APPLICATIONS_JSON and ingress/proxy values to register and expose the external evaluator."
 ---
 ## Applicability
 
@@ -11,7 +12,9 @@ Fred deployments upgrading with PR #2890, including the built-in evaluator remov
 
 ## Prerequisites
 
-For deployments using evaluations, deploy and register the standalone fred-agent-evaluator application before upgrading Fred. Follow the existing [application deployment contract](../../platform/FORKING_GUIDE.md); grant the intended teams access through the existing application permissions. Preserve the evaluator service and its database.
+For deployments using evaluations, this migration is blocked until the standalone evaluator enforces team membership and application grants on every API operation, including direct access through the legacy `/evaluation/` proxy. Apps admission and the application gateway do not provide this API authorization. Do not treat the currently documented authentication-only evaluator as meeting this prerequisite. Verify the deployed evaluator implementation before rollout.
+
+After that prerequisite is met, deploy and register the standalone fred-agent-evaluator application before upgrading Fred. Follow the existing [application deployment contract](../../platform/FORKING_GUIDE.md); grant the intended teams access through the existing application permissions. Preserve the evaluator service and its database.
 
 ## Configuration
 
@@ -19,7 +22,7 @@ No new configuration fields are introduced. Existing application registration an
 
 ## Upgrade
 
-Validate that an authorized team can open the evaluator through Apps, then deploy Fred. The built-in Evaluations settings entry, screens and direct evaluator task polling are removed. Use Apps to inspect evaluation runs and progress; the old settings URL falls back to Members.
+Only after the authorization prerequisite is verified, validate that an authorized team can open the evaluator through Apps, then deploy Fred. The built-in Evaluations settings entry, screens and direct evaluator task polling are removed. Use Apps to inspect evaluation runs and progress; the old settings URL falls back to Members.
 
 Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `layout="push"` and provide `width` as a pixel string (for example, `"480px"`, also the default). Relative CSS units remain supported without `resizable`; invalid resize widths are rejected by TypeScript and at runtime.
 
@@ -31,7 +34,7 @@ Hosted consumers can opt into typed table-row activation, localized drawer actio
 
 ## Validation
 
-Confirm Apps opens the evaluator for an authorized team, while unauthorized teams retain the existing admission restrictions. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.
+Confirm Apps opens the evaluator for an authorized team. Independently verify that direct API requests from authenticated users without the target team membership or application grant are denied, through both the application gateway and legacy `/evaluation/` path. An Apps admission check alone is insufficient; failed or missing API authorization blocks rollout. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.
 
 In the evaluation application, activate a run row with Enter, close the case drawer using its localized close action, and inspect outcome KPI values in both themes. Open the agent selector in a scrolled hosted form and navigate its options: only the options list should scroll, while the form and Fred host retain their position.
 
