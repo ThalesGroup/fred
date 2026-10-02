@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-On any pull request, confirm all five Docker images build and the four publishable final images receive separate Trivy checks and JSON reports. A fifth check scans the frontend npm lockfile, including development dependencies. Job logs list findings across all severities, and the JSON reports include package inventories; critical findings produce warning annotations without failing the checks. `ws-bench` remains build-only.
+On any pull request, confirm all five Docker images build and the four publishable final images receive separate Trivy checks and JSON reports. A fifth check scans the frontend npm lockfile, including development dependencies. Job logs list findings from CRITICAL through UNKNOWN, and the JSON reports include package inventories; critical findings produce warning annotations without failing the checks. `ws-bench` remains build-only.
 
 ## Rollback
 

@@ -20,7 +20,7 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 - Run the versioned Trivy action against final images with all severities and all package entries in JSON. Summaries count critical findings separately. `exit-code: 0` keeps findings advisory; an action failure still fails the job.
 - Count findings from Trivy JSON and emit one GitHub warning annotation per affected image. Add a short job summary and upload the full JSON report for review. A warning annotation is visible without adding PR write permissions or a comment bot.
 - Show dedicated `Scan Trivy / <image>` checks for the four final images. Build jobs scan and upload JSON artifacts; result jobs print every finding in their logs and emit warnings and concise summaries. This makes the result visible in GitHub's top-level job list without transferring large Docker images. GitHub Actions has no warning job conclusion, so findings leave checks successful with warning annotations; scanner or report failures fail the workflow.
-- Add a `Scan Trivy / frontend dependencies` job for the npm lockfile with development dependencies included. It publishes the same all-severity log and JSON inventory, and verifies the lockfile was actually inventoried.
+- Add a `Scan Trivy / frontend dependencies` job for the npm lockfile with development dependencies included. It publishes the same all-severity log and JSON inventory, and verifies the lockfile was actually inventoried. Print findings from CRITICAL through UNKNOWN in every Trivy job log and summary.
 - Remove the changed-file filter. Every pull request builds all five images and scans the four scan-enabled final images after the Docker builds. Release publication remains build/push only.
 
 ## Risks / Trade-offs
