@@ -1,7 +1,7 @@
 name: Check docker images
 
-# Keep the build check on every PR: a change outside these dependency paths can
-# still break a Docker COPY. The reusable workflow filters only its Trivy steps.
+# Build and scan on every PR: changes outside dependency files can still alter
+# an image or break a Docker COPY.
 
 on:
   pull_request:
@@ -16,7 +16,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
   docker-images:
