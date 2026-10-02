@@ -25,9 +25,17 @@ _startup_events: deque[tuple[logging.Logger, logging.LogRecord]] = deque(maxlen=
 _logging_ready = False
 
 
-def defer_startup_log(logger: logging.Logger, level: int, message: str) -> None:
+def defer_startup_log(
+    logger: logging.Logger,
+    level: int,
+    message: str,
+    *,
+    extra: dict[str, object] | None = None,
+) -> None:
     """Preserve event time while deferring config diagnostics until logging setup."""
-    record = logger.makeRecord(logger.name, level, __file__, 0, message, (), None)
+    record = logger.makeRecord(
+        logger.name, level, __file__, 0, message, (), None, extra=extra
+    )
     if _logging_ready:
         if logger.isEnabledFor(level):
             logger.handle(record)
@@ -54,7 +62,7 @@ class ConfigFiles:
     Why this exists:
     - Every backend starts the same way: load environment variables, then load a
       YAML configuration file.
-    - Exact selected paths stay available to operational inspection, outside logs.
+    - Startup logs and operational inspection expose the exact selected paths.
 
     Example:
     - `ENV_FILE=./config/.env.prod`
@@ -123,6 +131,7 @@ class ConfigFiles:
             "Environment configuration loaded"
             if loaded
             else "Environment file unavailable; using process environment",
+            extra={"env_file": env_path},
         )
         self._loaded_env_file_path = env_path
         return env_path
@@ -146,13 +155,19 @@ class ConfigFiles:
         return resolved
 
     def mark_config_loaded(self, config_file: str) -> None:
-        """Record the selected file and defer its identifier-free load status.
+        """Record the selected file and defer structured startup diagnostics.
 
         Example:
         - After parsing `configuration_prod.yaml`, call this method so startup
-          inspection exposes the profile while logs contain only load status.
+          logs and inspection expose the selected environment and configuration.
         """
         self._loaded_config_file_path = config_file
         defer_startup_log(
-            self._logger, logging.INFO, "Application configuration loaded"
+            self._logger,
+            logging.INFO,
+            "Application configuration loaded",
+            extra={
+                "env_file": self._loaded_env_file_path,
+                "config_file": config_file,
+            },
         )

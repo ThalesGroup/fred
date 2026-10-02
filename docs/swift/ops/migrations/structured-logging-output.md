@@ -21,6 +21,8 @@ Set `app.log_format: json` in API configuration to emit one JSON object per stdo
 
 Reconcile production overlays with the chart values and restart the APIs. Adapt stdout queries to `severity`, `message`, `timestamp`, `logger`, `service` and `service_role`. The timestamp contains event-creation epoch seconds and nanoseconds. The audit stream retains its existing isolated JSON representation.
 
+Shared configuration startup events retain the selected file paths as structured `env_file` and `config_file` fields, rather than embedding them in the message. Environment-file contents are not logged.
+
 ## Validation
 
 Emit an ordinary event and confirm that stdout has a complete single-line JSON object with normalized severity, event time, source and structured properties. Verify severity/timestamp promotion and field filtering in a GKE canary before declaring collector compatibility. Check readable local output without width-dependent wrapping.

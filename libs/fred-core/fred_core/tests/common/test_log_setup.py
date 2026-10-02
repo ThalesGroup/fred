@@ -18,8 +18,11 @@ import io
 import json
 import logging
 import uuid
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Literal
 
 import pytest
 from fred_core.logs.base_log_store import LogEventDTO
@@ -581,27 +584,58 @@ def test_context_rejects_aggregate_metadata_without_stringifying_objects() -> No
             pass
 
 
+@pytest.mark.parametrize("log_format", ["json", "text"])
 def test_startup_diagnostics_wait_for_selected_output(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    log_format: Literal["json", "text"],
 ) -> None:
     from fred_pod.common import config_files
     from fred_pod.common.config_files import ConfigFiles
 
     monkeypatch.setattr(config_files, "_logging_ready", False)
+    monkeypatch.setattr(config_files, "_startup_events", deque(maxlen=32))
     files = ConfigFiles(logger=logging.getLogger("config-test"))
-    files.mark_config_loaded("/sensitive/customer/configuration.yaml")
+    env_file = tmp_path / ".env"
+    env_file.write_text("FRED_STARTUP_LOG_TEST=private-value\n", encoding="utf-8")
+    monkeypatch.delenv("FRED_STARTUP_LOG_TEST", raising=False)
+    files.load_environment(str(env_file))
+    config_file = str(tmp_path / "configuration.yaml")
+    files.mark_config_loaded(config_file)
     assert not capsys.readouterr().out
+    store = _StubLogStore()
     log_setup(
         service_name="bootstrap-test",
-        store=_StubLogStore(),
-        log_format="json",
+        store=store,
+        log_format=log_format,
         include_uvicorn=False,
     )
     output = capsys.readouterr().out
-    event = json.loads(output)
-    assert event["service"] == "bootstrap-test"
-    assert event["severity"] == "INFO"
-    assert "sensitive" not in output
-    files.mark_config_loaded("/sensitive/lazy/configuration.yaml")
-    assert json.loads(capsys.readouterr().out)["service"] == "bootstrap-test"
+    assert "private-value" not in output
+    assert store.indexed[-1].extra == {
+        "env_file": str(env_file),
+        "config_file": config_file,
+    }
+    if log_format == "json":
+        event = json.loads(output.splitlines()[-1])
+        assert event["service"] == "bootstrap-test"
+        assert event["severity"] == "INFO"
+        assert event["env_file"] == str(env_file)
+        assert event["config_file"] == config_file
+        assert config_file not in event["message"]
+    else:
+        assert f"env_file={env_file}" in output
+        assert f"config_file={config_file}" in output
+
+    lazy_config_file = str(tmp_path / "lazy-configuration.yaml")
+    files.mark_config_loaded(lazy_config_file)
+    output = capsys.readouterr().out
+    assert store.indexed[-1].extra == {
+        "env_file": str(env_file),
+        "config_file": lazy_config_file,
+    }
+    if log_format == "json":
+        assert json.loads(output)["config_file"] == lazy_config_file
+    else:
+        assert f"config_file={lazy_config_file}" in output
