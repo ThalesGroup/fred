@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.include }}
+      scan_matrix: ${{ steps.matrix.outputs.scan_include }}
       scan: ${{ steps.changes.outputs.trivy }}
 
     steps:
@@ -95,7 +96,9 @@ jobs:
           include=$(jq -c --argjson publish ${{ inputs.publish }} \
             '[.images[] | select(($publish | not) or .publish) | . + {scan: (.scan != false)}]' \
             .github/docker-images.json)
+          scan_include=$(echo "$include" | jq -c '[.[] | select(.scan)]')
           echo "include=$include" >> "$GITHUB_OUTPUT"
+          echo "scan_include=$scan_include" >> "$GITHUB_OUTPUT"
           echo "$include" | jq -r '.[] | "\(.name)\t\(.dockerfile)"'
 
   build:
@@ -174,8 +177,32 @@ jobs:
           output: trivy-results.json
           exit-code: '0'
 
-      - name: Summarize critical CVEs
+      - name: Upload Trivy report
         if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' && matrix.scan }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+          path: trivy-results.json
+          retention-days: 14
+
+  trivy:
+    name: Trivy critical CVEs / ${{ matrix.name }}
+    if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' }}
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.scan_matrix) }}
+
+    steps:
+      - name: Download Trivy report
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+
+      - name: Report critical CVEs
         env:
           IMAGE_NAME: ${{ matrix.name }}
         run: |
@@ -189,11 +216,3 @@ jobs:
           else
             echo "No critical OS/library vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      - name: Upload Trivy report
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan == 'true' && matrix.scan }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-${{ matrix.name }}
-          path: trivy-results.json
-          retention-days: 14

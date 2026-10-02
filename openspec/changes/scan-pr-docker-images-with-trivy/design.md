@@ -17,6 +17,7 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 - The image manifest marks `ws-bench` with `scan: false`; matrix resolution defaults all other images to scanning. Load only scan-enabled Buildx output from `pull_request` runs into the runner Docker store under a local tag; release pushes never load or scan images. This preserves the existing build recipe and release push path. A separate rebuild would waste time and could scan a different artifact.
 - Run the versioned Trivy action against the scan-enabled local tags, limited to critical OS and library vulnerabilities. Produce JSON so a following step can distinguish an empty result from a failed scan. `exit-code: 0` keeps findings advisory; an action failure still fails the job.
 - Count findings from Trivy JSON and emit one GitHub warning annotation per affected image. Add a short job summary and upload the full JSON report for review. A warning annotation is visible without adding PR write permissions or a comment bot.
+- Show one dedicated `Trivy critical CVEs / <image>` check per scanned image. Build jobs keep scanning and upload their JSON artifacts; the dedicated jobs download those reports and emit the warnings and summaries. This makes the result visible in GitHub's top-level job list without rebuilding or transferring large Docker images. GitHub Actions has no warning job conclusion, so vulnerability findings leave the check successful with a warning annotation; scanner or report failures still fail the workflow.
 - Resolve a single pull request change filter before the image matrix. Any Python `pyproject.toml` or `uv.lock`, frontend npm manifests and lockfiles, production Dockerfiles, dependency installation Makefiles, the root `.dockerignore`, image manifest, and image CI workflows trigger all four scans. The broad Python globs also cover newly added libraries without changing this workflow. The pull request caller grants read access for the changed-files API. All five image builds still run for every pull request, including unrelated changes, so build breakage remains visible and required checks do not disappear. `ws-bench` never scans.
 
 ## Risks / Trade-offs
@@ -25,6 +26,7 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 - Vulnerability database changes can change findings without code changes. The JSON report records what each run found.
 - A new database finding will not be reported on an unchanged pull request until a selected file changes or a later scan is added. The final frontend image contains static assets, so its image scan does not inventory npm packages left in the builder stage.
 - Docker's local image exporter supports the current single-platform build; a future multi-platform build would need a different export strategy.
+- Dedicated result jobs wait for the whole build matrix before starting. This adds short artifact-download jobs to scan-triggering PRs but avoids a second image build.
 
 ## Migration Plan
 

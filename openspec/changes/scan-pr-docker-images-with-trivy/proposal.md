@@ -5,7 +5,7 @@ Pull requests build the production Docker images but do not check those built im
 ## What Changes
 
 - Scan the four publishable images in the existing pull request Docker matrix with Trivy after the build; keep building `ws-bench` with an explicit scan exception in the image manifest.
-- Emit a GitHub Actions warning and job summary for critical OS or library vulnerabilities while allowing the job to succeed.
+- Show one dedicated Trivy result job per scanned image, with a GitHub Actions warning and job summary for critical OS or library vulnerabilities while allowing the job to succeed.
 - Run Trivy only when a pull request changes production image dependencies, Dockerfiles, installation recipes, or the image CI definition; keep all five Docker builds on every pull request.
 - Preserve hard failures for image build and scanner execution errors, and leave release publishing unchanged.
 

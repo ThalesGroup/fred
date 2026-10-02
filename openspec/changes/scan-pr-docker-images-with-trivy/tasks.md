@@ -11,4 +11,9 @@
 ## 3. Selective pull request scanning
 
 - [x] 3.1 Detect dependency, production Dockerfile, build recipe, and image CI changes in the reusable workflow; keep the image build matrix active for every pull request and skip Trivy for unrelated changes.
-- [ ] 3.2 Verify the path filter locally for representative positive and negative paths, then inspect the draft PR's GitHub jobs and scan reports after pushing.
+- [x] 3.2 Verify the path filter locally for representative positive and negative paths, then inspect the draft PR's GitHub jobs and scan reports after pushing.
+
+## 4. Visible Trivy checks
+
+- [x] 4.1 Add one report job per scanned image and verify the resolved matrix excludes `ws-bench` and release runs.
+- [ ] 4.2 Verify on the draft PR that the four Trivy jobs appear separately, annotate findings as warnings, and stay successful when CVEs are present.
