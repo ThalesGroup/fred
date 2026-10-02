@@ -173,6 +173,10 @@ Audit output remains independently formatted and excluded from generic context/s
 processing. Dependency warnings/errors are console-only to avoid sink recursion.
 Collector timestamp/severity recognition requires a rollout canary.
 
+Existing standard-library `%s`, `%d` and named-placeholder log calls remain supported
+in both output formats. They can also supply `extra={...}` structured properties,
+allowing gradual migration without rewriting every message or switching to f-strings.
+
 
 Ordinary application logs (startup messages, warnings, day-to-day diagnostics) are the lowest-
 sensitivity, highest-volume stream. They are stored in OpenSearch alongside — but in a separate
