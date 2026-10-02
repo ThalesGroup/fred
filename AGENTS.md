@@ -115,12 +115,10 @@ they ran; otherwise run the scans explicitly. Keep the documented `ws-bench`
 exception. For frontend dependency changes, also scan the npm lockfile: the
 final nginx image does not contain the Node dependencies.
 
-Compare the PR images with images built from the PR base commit using the same
-Trivy version, vulnerability database snapshot, and OS/library `CRITICAL` scan
-options. Present critical finding counts before and after, and their difference,
-for each image and in total to the user and in the PR. List introduced and
-resolved CVE IDs, link the scan jobs or reports, and state any coverage or
-comparison that could not be verified. A scanner error is not a clean result.
+Present a clear result for each scanned image to the user and in the PR:
+whether critical findings were detected, their current count, and a link to
+the scan job or report. State any image that could not be checked. A scanner
+error is not a clean result.
 
 ## Author review before readiness
 
