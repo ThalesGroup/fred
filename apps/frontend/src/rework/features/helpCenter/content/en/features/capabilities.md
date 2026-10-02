@@ -37,20 +37,20 @@ attach a contract and ask the agent to list its deadlines.
 
 This capability groups several functions, which the **Advanced** view separates:
 
-| Function                  | What it does                                         | Worth knowing                                                          |
-| ------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| Search team resources     | Finds the relevant passages and cites them           | May show a library or document selector in the conversation            |
-| Attach conversation files | Adds files to the conversation for the agent to read | Files stay in that conversation, outside the team corpus               |
-| Use tabular files         | Uses the data of a CSV or Excel file from the corpus | The file must be uploaded into a library; this is not a reporting tool |
-| Summarize a document      | Produces a document's summary                        | Asks for your confirmation before each summary; adjustable length      |
-| Compare documents         | Finds the passages closest to a given passage        | Works on the corpus, never on an attachment                            |
-| Read a document verbatim  | Returns the exact text, page by page                 | The pages returned have a limited length                               |
-| Extract information       | Goes through the whole document, omitting nothing    | The slowest and most expensive; confirmation asked by default          |
+| Function                  | What it does                                                         | Worth knowing                                                                                         |
+| ------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Search team resources     | Finds the relevant passages and cites them                           | May show a library or document selector in the conversation                                           |
+| Attach conversation files | Adds files to the conversation for the agent to read                 | Files stay in that conversation, outside the team corpus                                              |
+| Use tabular files         | Queries tabular files from libraries and attached CSV or Excel files | New CSV and Excel attachments are SQL-queryable; older Excel attachments may have only a text preview |
+| Summarize a document      | Produces a document's summary                                        | Asks for your confirmation before each summary; adjustable length                                     |
+| Compare documents         | Finds the passages closest to a given passage                        | Works on the corpus, never on an attachment                                                           |
+| Read a document verbatim  | Returns the exact text, page by page                                 | The pages returned have a limited length                                                              |
+| Extract information       | Goes through the whole document, omitting nothing                    | The slowest and most expensive; confirmation asked by default                                         |
 
 In **Simple**, this one pack initially enables team resources and conversation
 attachments together. Below the library scope, switch on **Search in attachments
-only** to stop corpus search and turn off the tabular and comparison tools.
-Switch it off to restore both sources. In **Advanced**, you can select attachments
+only** to stop corpus document search and turn off the comparison tool. Tabular
+analysis remains available for attached CSV and Excel files. Use tabular analysis to read their complete tables; document reading tools are for text attachments. Switch the scope off to restore both sources. In **Advanced**, you can select attachments
 without enabling the other resource tools. Existing agents keep their selected
 capabilities until you change them.
 

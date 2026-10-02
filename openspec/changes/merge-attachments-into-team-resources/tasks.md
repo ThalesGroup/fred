@@ -10,7 +10,7 @@
 - [x] 2.3 Derive the pack's checked state from the full corpus plus attachments profile; verify tests show it on for the full bundle and off for corpus-only or otherwise partial selections.
 
 - [x] 2.4 Add an attachments-only switch below library scoping in the Simple resource card, wired to the existing document-access setting; verify its visibility and checked state in focused component tests.
-- [x] 2.5 Make Simple scope changes update document access and corpus-only member selection atomically while preserving shared readers, unrelated selections, and stored library scoping; verify both directions with focused tests.
+- [x] 2.5 Make Simple scope changes update document access and similarity and tabular selection atomically while preserving shared readers, unrelated selections, and stored library scoping; verify both directions with focused tests.
 - [x] 2.6 Derive the main pack switch from either complete Simple profile so it remains on while the scope switch is active; verify a complete former attachments-pack selection reads on and an incomplete Advanced selection remains off.
 
 ## 3. Advanced and legacy behavior
@@ -32,6 +32,8 @@
 
 - [x] 4.7 Update English and French Help Center, UX, migration guidance, and this change's artifacts for the new scope switch; validate the OpenSpec change and migration declaration.
 - [x] 4.8 Run focused and full frontend tests plus root code-quality for this follow-up, review the diff, and record results in the draft PR.
+
+- [x] 4.9 Keep tabular selected when Simple switches to attachments-only while similarity remains off; verify focused selection tests, English and French help, and the migration note against the delivered behavior.
 
 ## Verification evidence
 

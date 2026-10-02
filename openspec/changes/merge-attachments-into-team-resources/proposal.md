@@ -8,7 +8,7 @@ The Simple capabilities view presents team resources and conversation attachment
 
 - Remove the standalone "Conversation attachments" card from Simple. Keep the existing "Team resources" members and add the attachment abilities to that pack.
 - Enabling the combined pack in Simple selects every available capability in the union and configures document access for corpus plus attachments (`search_attachments_only=false`, `show_attach_files_control=true`).
-- A switch below library scoping in the Simple pack selects attachments-only search. It keeps the shared reading capabilities but withdraws tabular and similarity access; clearing it restores the available corpus members. The main pack switch stays on for either complete profile.
+- A switch below library scoping in the Simple pack selects attachments-only search. It keeps the shared reading capabilities but keeps available tabular access for conversation spreadsheets and withdraws similarity access; clearing it restores the available corpus members. The main pack switch stays on for either complete profile.
 - Advanced remains granular. Selecting attachments there does not automatically add corpus search, tabular access, similarity search, or the shared reading capabilities. Incomplete Advanced selections leave the Simple pack off.
 - **BREAKING (Simple view):** existing agents are not migrated. An agent that used only the former attachments pack keeps those selected capabilities and its attachments-only mode; a complete former attachments-pack selection reads on with the new attachments-only switch selected, while an incomplete selection reads off. Update focused tests, French and English copy, and Help Center guidance.
 

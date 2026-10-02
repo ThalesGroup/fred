@@ -35,12 +35,12 @@ The Simple capabilities view SHALL offer one "Team resources" pack that retains 
 
 ### Requirement: Simple pack can restrict search to attachments
 
-The active Team resources pack SHALL offer an attachments-only switch below library scoping. Selecting it SHALL keep attachment upload and admin-available shared reading capabilities active, disable corpus search in document access, and withdraw tabular and similarity capabilities. Clearing it SHALL restore corpus search and reselect those capabilities when admin-available. Library scoping values SHALL remain stored across this switch.
+The active Team resources pack SHALL offer an attachments-only switch below library scoping. Selecting it SHALL keep attachment upload and admin-available shared reading capabilities active, disable corpus search in document access, and retain an admin-available tabular capability and withdraw similarity. Clearing it SHALL restore corpus search and reselect similarity when admin-available. Library scoping values SHALL remain stored across this switch.
 
 #### Scenario: Restrict an active pack to attachments
 
 - **WHEN** a member selects attachments-only search in the Simple Team resources pack
-- **THEN** the pack remains on, document access searches only conversation attachments, tabular and similarity capabilities are withdrawn, and admin-available shared reading capabilities remain selected
+- **THEN** the pack remains on, document access searches only conversation attachments, tabular remains selected when available and similarity is withdrawn, and admin-available shared reading capabilities remain selected
 
 #### Scenario: Restore corpus search
 
@@ -49,7 +49,7 @@ The active Team resources pack SHALL offer an attachments-only switch below libr
 
 ### Requirement: Advanced document choices stay independent
 
-Advanced SHALL allow a member to select document access and its attachment and corpus options without implicitly enabling the full Simple resource bundle. The combined pack SHALL read on only when attachment upload and document access are selected and all admin-available members for the selected Simple profile are selected. In attachments-only mode, corpus-only members SHALL be absent. Its included-capability statuses SHALL reflect the actual stored selection.
+Advanced SHALL allow a member to select document access and its attachment and corpus options without implicitly enabling the full Simple resource bundle. The combined pack SHALL read on only when attachment upload and document access are selected and all admin-available members for the selected Simple profile are selected. In attachments-only mode, similarity SHALL be absent. Existing attachment-only selections without tabular SHALL remain unchanged until the member uses a Simple switch. Its included-capability statuses SHALL reflect the actual stored selection.
 
 #### Scenario: Select attachments only in Advanced
 

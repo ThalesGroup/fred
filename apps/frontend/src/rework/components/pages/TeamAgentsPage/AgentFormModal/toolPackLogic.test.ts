@@ -153,6 +153,10 @@ describe("combined resource pack", () => {
     expect(combined.selectedCapabilityIds).toEqual(expect.arrayContaining(RESOURCE_IDS));
     expect(docConfig(combined)?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]).toBe(false);
     expect(derivePackChecked(RESOURCES, combined, ALL_IDS)).toBe(true);
+
+    const attachmentsOnly = applyResourceSearchScope(true, legacy, ALL_IDS);
+    expect(attachmentsOnly.selectedCapabilityIds).toContain(CAP_TABULAR);
+    expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
   });
 
   it("shows legacy corpus-only and Advanced attachment overrides as partial", () => {
@@ -176,7 +180,7 @@ describe("combined resource pack", () => {
     expect(derivePackChecked(RESOURCES, missingReader, ALL_IDS)).toBe(false);
   });
 
-  it("switches an active pack to attachments only without corpus-only tools", () => {
+  it("keeps tabular available when switching to attachments-only search", () => {
     const full = applyPackToggle(
       RESOURCES,
       true,
@@ -196,13 +200,13 @@ describe("combined resource pack", () => {
     expect(attachmentsOnly.selectedCapabilityIds).toEqual(
       expect.arrayContaining([
         CAP_DOCUMENT_ACCESS,
+        CAP_TABULAR,
         CAP_DOCUMENT_SUMMARIZE,
         CAP_DOCUMENT_VERBATIM,
         CAP_DOCUMENT_EXTRACT,
         CAP_TEAM_WIKI,
       ]),
     );
-    expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_TABULAR);
     expect(attachmentsOnly.selectedCapabilityIds).not.toContain(CAP_DOCUMENT_SIMILARITY);
     expect(attachmentsOnly.capabilityConfigValues[CAP_TEAM_WIKI]).toEqual({ mode: "read" });
     expect(docConfig(attachmentsOnly)).toEqual({
@@ -224,7 +228,7 @@ describe("combined resource pack", () => {
     expect(derivePackChecked(RESOURCES, restored, ALL_IDS)).toBe(true);
   });
 
-  it("does not reselect corpus-only capabilities unavailable to the team", () => {
+  it("does not select tabular when unavailable to the team", () => {
     const available = new Set([...ALL_IDS].filter((id) => id !== CAP_TABULAR));
     const full = applyPackToggle(RESOURCES, true, empty(), available);
     const restored = applyResourceSearchScope(false, applyResourceSearchScope(true, full, available), available);

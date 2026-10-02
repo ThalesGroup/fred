@@ -66,6 +66,7 @@ export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 // corpus targets and never the conversation's attachments. It also needs a uid
 // source, which this pack's document_access provides.
 export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
+// CSV and Excel attachments expose SQL datasets through tabular tools.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";

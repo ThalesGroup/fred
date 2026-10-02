@@ -30,7 +30,7 @@ export interface CapabilitySelectionState {
   reasoningEnabled: boolean;
 }
 
-const CORPUS_ONLY_IDS = [CAP_TABULAR, CAP_DOCUMENT_SIMILARITY];
+const CORPUS_ONLY_IDS = [CAP_DOCUMENT_SIMILARITY];
 
 /** Hide a pack if its switch cannot enable anything for this team. */
 export function isPackSelectable(pack: ToolPack, availableIds: ReadonlySet<string>): boolean {
@@ -58,7 +58,9 @@ export function derivePackChecked(
   if (!searchAttachmentsOnly) return membersSelected;
 
   return (
-    selectable.filter((id) => !CORPUS_ONLY_IDS.includes(id)).every((id) => state.selectedCapabilityIds.includes(id)) &&
+    selectable
+      .filter((id) => !CORPUS_ONLY_IDS.includes(id) && id !== CAP_TABULAR)
+      .every((id) => state.selectedCapabilityIds.includes(id)) &&
     CORPUS_ONLY_IDS.every((id) => !state.selectedCapabilityIds.includes(id))
   );
 }
@@ -108,6 +110,7 @@ export function applyResourceSearchScope(
   availableIds: ReadonlySet<string>,
 ): CapabilitySelectionState {
   const ids = new Set(state.selectedCapabilityIds);
+  if (availableIds.has(CAP_TABULAR)) ids.add(CAP_TABULAR);
   for (const id of CORPUS_ONLY_IDS) {
     if (searchAttachmentsOnly) ids.delete(id);
     else if (availableIds.has(id)) ids.add(id);
