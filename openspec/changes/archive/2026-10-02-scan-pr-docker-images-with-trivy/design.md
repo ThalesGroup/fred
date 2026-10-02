@@ -16,11 +16,11 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 ## Decisions
 
 - The image manifest marks `ws-bench` with `scan: false`; matrix resolution defaults all other images to scanning. Load scan-enabled Buildx output from every pull request build into the runner Docker store under a local tag; release pushes never load or scan images. This preserves the existing build recipe and release push path.
-- Export the frontend `builder` stage through the same Buildx cache and scan it separately. Its Node/npm dependencies are absent from the final nginx image. Scan all tracked `uv.lock` and `package-lock.json` files in the checked-out repository, including development dependencies, to cover dependencies before packaging.
+- Scan all tracked `uv.lock` and `package-lock.json` files in the checked-out repository, including development dependencies. This covers frontend JavaScript dependencies that may be bundled into static assets but are absent as package metadata from the final nginx image. The intermediate builder image is not deployed, so its OS-package findings are excluded from the image results.
 - Run the versioned Trivy action against images and lockfiles with all severities and all package entries in JSON. Summaries count critical findings separately. `exit-code: 0` keeps findings advisory; an action failure still fails the job.
 - Count findings from Trivy JSON and emit one GitHub warning annotation per affected image. Add a short job summary and upload the full JSON report for review. A warning annotation is visible without adding PR write permissions or a comment bot.
-- Show dedicated `Scan Trivy / <image>` checks for the final images and frontend builder, plus one lockfile result check. Build jobs scan and upload JSON artifacts; result jobs print every finding in their logs and emit warnings and concise summaries. This makes the result visible in GitHub's top-level job list without transferring large Docker images. GitHub Actions has no warning job conclusion, so findings leave checks successful with warning annotations; scanner or report failures fail the workflow.
-- Remove the changed-file filter. Every pull request builds all five images and scans the four scan-enabled final images, the frontend builder, and lockfiles after the Docker builds. Release publication remains build/push only.
+- Show dedicated `Scan Trivy / <image>` checks for the four final images, plus one lockfile result check. Build jobs scan and upload JSON artifacts; result jobs print every finding in their logs and emit warnings and concise summaries. This makes the result visible in GitHub's top-level job list without transferring large Docker images. GitHub Actions has no warning job conclusion, so findings leave checks successful with warning annotations; scanner or report failures fail the workflow.
+- Remove the changed-file filter. Every pull request builds all five images and scans the four scan-enabled final images and lockfiles after the Docker builds. Release publication remains build/push only.
 
 ## Risks / Trade-offs
 
@@ -28,6 +28,7 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 - Vulnerability database changes can change findings without code changes. The JSON report records what each run found.
 - Pull request scans cannot report newly disclosed CVEs until a pull request runs; this workflow does not run on a schedule.
 - Lockfile findings may concern development-only or unused packages; summaries identify this scope rather than presenting them as production image findings.
+- The intermediate builder image is not scanned for its own OS packages. A compromised build environment is a separate supply-chain risk outside this runtime CVE check.
 - Docker's local image exporter supports the current single-platform build; a future multi-platform build would need a different export strategy.
 - Dedicated result jobs wait for the whole build matrix before starting. This adds short artifact-download jobs to scan-triggering PRs but avoids a second image build.
 

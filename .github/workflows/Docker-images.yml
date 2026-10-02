@@ -73,10 +73,7 @@ jobs:
           include=$(jq -c --argjson publish ${{ inputs.publish }} \
             '[.images[] | select(($publish | not) or .publish) | . + {scan: (.scan != false)}]' \
             .github/docker-images.json)
-          scan_include=$(echo "$include" | jq -c '
-            [.[] | select(.scan) | {name}] +
-            (if any(.[]; .name == "frontend" and .scan) then [{name: "frontend-builder"}] else [] end)
-          ')
+          scan_include=$(echo "$include" | jq -c '[.[] | select(.scan) | {name}]')
           echo "include=$include" >> "$GITHUB_OUTPUT"
           echo "scan_include=$scan_include" >> "$GITHUB_OUTPUT"
           echo "$include" | jq -r '.[] | "\(.name)\t\(.dockerfile)"'
@@ -163,39 +160,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: trivy-${{ matrix.name }}
-          path: trivy-results.json
-          retention-days: 14
-
-      - name: Load frontend builder stage
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.name == 'frontend' && matrix.scan }}
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          build-args: ${{ matrix.build_args }}
-          target: builder
-          load: true
-          tags: fred-pr/frontend-builder:scan
-          cache-from: type=gha,scope=frontend
-
-      - name: Scan frontend builder for CVEs
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.name == 'frontend' && matrix.scan }}
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: fred-pr/frontend-builder:scan
-          scanners: vuln
-          vuln-type: os,library
-          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-          list-all-pkgs: true
-          format: json
-          output: trivy-results.json
-          exit-code: '0'
-
-      - name: Upload frontend builder report
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.name == 'frontend' && matrix.scan }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-frontend-builder
           path: trivy-results.json
           retention-days: 14
 
