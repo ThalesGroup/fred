@@ -30,7 +30,7 @@
 ## 5. Surfaces by role everywhere
 
 - [x] 5.1 Hover/focus: transparent elements use `--state-on-surface-hover` / `-focused`; filled elements step one level further from the page; rules that already layer a state over their base are left alone; verify by listing every hover/focus rule with a surface background
-- [x] 5.2 Cards and chart sections on the page move to `surface-container` (KPI, leaderboard, marketplace, HITL, responsible AI, resource explorer, chart sections, chat attachment cards, migration cards, access-pack tree); the prompt view dialog card moves to `surface-floating`; verify no other surface usage inside those cards equals the card token
+- [x] 5.2 Cards and chart sections on the page move to `surface-container` (KPI, leaderboard, marketplace, HITL, responsible AI, resource explorer — its table now inherits the DataTable default so it matches the card —, chart sections, chat attachment cards, migration cards, access-pack tree); the prompt view dialog card moves to `surface-floating`; verify no other surface usage inside those cards equals the card token
 - [x] 5.3 Badges, switch track and group counts move to `surface-container-highest`; code block and Mermaid headers to `surface-container-high` over a `surface-container` body; verify a code block and a Mermaid diagram show a distinct header
 - [x] 5.4 InlineDrawer defaults to `surface-floating` (overlay and floating push) and `surface-container-low` (flush push); caller overrides and pane backgrounds inside the capability side panel are removed; verify the chat side panel and a document preview drawer in both themes
 - [x] 5.5 Help Center page and header move to `surface-main`, its sidebar to `surface-container-low`; verify the Help Center in both themes
