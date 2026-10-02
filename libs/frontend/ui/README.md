@@ -97,3 +97,8 @@ When combined with selection, background activates and checkboxes select.
 `InlineDrawer.closeLabel` supplies the accessible close action name.
 `KpiStatCard.tone` accepts the shared `StatusBadgeTone` vocabulary and defaults to
 neutral. These additive alpha.3 props preserve existing consumer defaults.
+
+`TextArea` is controlled: pass `value` (use `""` for an empty field) and
+`onChange`, or `readOnly` for display. `defaultValue` is unsupported and rejected
+by the public types and at runtime, keeping the character counter tied to the
+value supplied by the consumer.

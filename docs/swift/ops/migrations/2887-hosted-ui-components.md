@@ -23,6 +23,8 @@ Validate that an authorized team can open the evaluator through Apps, then deplo
 
 Hosted UI consumers using `InlineDrawer` with `resizable` must provide `width` as a pixel string (for example, `"480px"`, also the default). Relative CSS units remain supported without `resizable`; invalid resize widths are rejected by TypeScript and at runtime.
 
+`TextArea` consumers must supply a controlled `value` (`""` for empty content), with `onChange` or `readOnly`; `defaultValue` is rejected.
+
 ## Validation
 
 Confirm Apps opens the evaluator for an authorized team, while unauthorized teams retain the existing admission restrictions. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.

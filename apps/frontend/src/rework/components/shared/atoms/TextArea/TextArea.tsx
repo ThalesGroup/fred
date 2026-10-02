@@ -15,14 +15,20 @@
 import { ComponentPropsWithRef, useId } from "react";
 import styles from "./TextArea.module.scss";
 
-export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
+export interface TextAreaProps extends Omit<ComponentPropsWithRef<"textarea">, "value" | "defaultValue"> {
   label: string;
+  /** Controlled value; use an empty string for an empty field. */
+  value: NonNullable<ComponentPropsWithRef<"textarea">["value"]>;
+  defaultValue?: never;
   explanation?: string;
   error?: string;
 }
 
 export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
   const id = useId();
+  if (value === undefined || value === null || props.defaultValue !== undefined) {
+    throw new Error("TextArea requires a controlled value; defaultValue is not supported.");
+  }
   const characterCounter = String(value).length;
   // No hint/error/counter to show — drop the container entirely rather than
   // leaving an empty row under the field.

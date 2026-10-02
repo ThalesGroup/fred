@@ -16,6 +16,7 @@ import {
   Button,
   Checkbox,
   Dialog,
+  TextArea,
   InlineDrawer,
   IconButton,
   Select,
@@ -187,3 +188,13 @@ const badViewportDrawer = (
   />
 );
 export { badRemDrawer, badPercentDrawer, badViewportDrawer };
+
+const uncontrolledTextArea = (
+  // @ts-expect-error TextArea requires a controlled value for its character counter.
+  <TextArea label="Notes" defaultValue="abc" maxLength={100} />
+);
+const missingTextAreaValue = (
+  // @ts-expect-error Empty controlled TextAreas must use value="".
+  <TextArea label="Notes" maxLength={100} />
+);
+export { uncontrolledTextArea, missingTextAreaValue };
