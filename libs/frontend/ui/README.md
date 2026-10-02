@@ -112,3 +112,7 @@ overridden; pass `checked`/`onChange` or `defaultChecked` for native state handl
 
 Sortable column labels identify sort state and must be unique across all columns.
 DataTable rejects ambiguous labels instead of choosing another column’s comparator.
+
+Controlled DataTable sorting requires both `sortState` (use `null` for no sort)
+and `onSortChange`; omit both for internal sorting. The page-size selector includes
+the active limit even when it is outside the default choices.

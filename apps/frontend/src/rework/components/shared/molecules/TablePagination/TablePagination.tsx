@@ -87,6 +87,7 @@ export default function TablePagination({
             <span className={styles["footer-label"]}>{text.itemsPerPage}</span>
             <div className={styles["footer-rows-per-page-select"]}>
               <Select<number>
+                ariaLabel={text.itemsPerPage}
                 size="xs"
                 compact
                 value={rowsPerPage}

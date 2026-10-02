@@ -91,3 +91,23 @@ it("expires timed toasts and independently removes toasts created in the same tu
   expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
   expect(container.textContent).toContain("Second");
 });
+
+it.each([0, null, undefined])("handles duration %s without confusing zero with manual dismissal", (duration) => {
+  vi.useFakeTimers();
+  const onClose = vi.fn();
+  render(
+    <Toast
+      id={7}
+      severity="info"
+      summary="Notice"
+      duration={duration}
+      exiting={false}
+      onClose={onClose}
+      onExited={() => {}}
+    />,
+  );
+  expect(onClose).not.toHaveBeenCalled();
+  act(() => vi.runAllTimers());
+  if (duration === 0) expect(onClose).toHaveBeenCalledWith(7);
+  else expect(onClose).not.toHaveBeenCalled();
+});

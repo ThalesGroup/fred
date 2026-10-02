@@ -249,3 +249,12 @@ export const overlayResizeLayout = (
     resizable={{ persistKey: "bad" }}
   />
 );
+
+export const missingSortCallback = (
+  // @ts-expect-error Controlled sort requires both state and callback.
+  <DataTable data={[]} columns={[]} sortState={null} />
+);
+export const missingSortState = (
+  // @ts-expect-error Controlled sort requires an explicit state, including null.
+  <DataTable data={[]} columns={[]} onSortChange={() => {}} />
+);

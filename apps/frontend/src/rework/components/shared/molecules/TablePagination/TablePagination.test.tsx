@@ -108,3 +108,10 @@ describe("TablePagination", () => {
     expect(last.hasAttribute("disabled")).toBe(true);
   });
 });
+
+it("names the size selector using caller-owned localized text", () => {
+  render(
+    <TablePagination {...baseProps} labels={{ itemsPerPage: "Éléments par page" }} onRowsPerPageChange={vi.fn()} />,
+  );
+  expect(container.querySelector('button[aria-label="Éléments par page"]')).not.toBeNull();
+});

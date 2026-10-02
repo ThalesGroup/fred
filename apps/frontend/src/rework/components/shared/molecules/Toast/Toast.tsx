@@ -75,7 +75,7 @@ export function Toast({
   dismissLabel = "Dismiss",
 }: ToastProps) {
   useEffect(() => {
-    if (!duration || exiting) return;
+    if (duration == null || exiting) return;
     const timer = setTimeout(() => onClose(id), duration);
     return () => clearTimeout(timer);
   }, [id, duration, exiting, onClose]);

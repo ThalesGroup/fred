@@ -118,12 +118,6 @@ interface DataTableBaseProps<T> {
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Activates the row background; embedded controls keep their own actions. */
   onRowClick?: (row: T) => void;
-  /** Controlled sort — pass together with `onSortChange` when the caller
-   *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
-   *  for DataTable to sort `data` internally using each column's
-   *  `sortValue`. */
-  sortState?: SortState | null;
-  onSortChange?: (next: SortState | null) => void;
   /** Whether a third press on the sorted column clears the sort (default) or
    *  simply flips it back to ascending.
    *
@@ -137,6 +131,10 @@ interface DataTableBaseProps<T> {
 
 /** Selection requires stable keys so individual and page-wide actions share identity. */
 export type DataTableProps<T> = DataTableBaseProps<T> &
+  (
+    | { sortState?: undefined; onSortChange?: undefined }
+    | { sortState: SortState | null; onSortChange: (next: SortState | null) => void }
+  ) &
   (
     | {
         selectable?: false;
@@ -184,12 +182,6 @@ function compareSortValues(
   return String(a).localeCompare(String(b));
 }
 
-const rowsPerPageOptions: SelectOption<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
-  value: n,
-  label: String(n),
-  key: String(n),
-}));
-
 export default function DataTable<T>({
   labels,
   columns,
@@ -209,10 +201,16 @@ export default function DataTable<T>({
   onSortChange,
   sortClearable = true,
 }: DataTableProps<T>) {
+  if ((controlledSortState !== undefined) !== (onSortChange !== undefined)) {
+    throw new Error("DataTable: sortState and onSortChange must be supplied together.");
+  }
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
+  const rowsPerPageOptions: SelectOption<number>[] = [...new Set([...ROWS_PER_PAGE_OPTIONS, effectiveRowsPerPage])]
+    .sort((a, b) => a - b)
+    .map((value) => ({ value, label: String(value), key: String(value) }));
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;

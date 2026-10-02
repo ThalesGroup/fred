@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { act } from "react";
+import type { DataTableProps } from "./DataTable.tsx";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -763,3 +764,23 @@ it.each([true, false])("rejects ambiguous sortable labels when the other column 
     ),
   ).toThrow("sortable column labels must be unique");
 });
+
+it.each([10, 25])("shows the active server page size %s and updates when it changes", (limit) => {
+  const serverPagination = { totalCount: 100, offset: 0, limit, onOffsetChange: vi.fn(), onLimitChange: vi.fn() };
+  render(<DataTable data={makeRows(2)} columns={columns} serverPagination={serverPagination} />);
+  expect(container.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain(String(limit));
+  act(() =>
+    root.render(
+      <DataTable data={makeRows(2)} columns={columns} serverPagination={{ ...serverPagination, limit: 37 }} />,
+    ),
+  );
+  expect(container.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain("37");
+});
+
+it.each([{ sortState: null }, { onSortChange: () => {} }])(
+  "rejects incomplete controlled sort props from untyped callers",
+  (sortProps) => {
+    const invalid = { data: makeRows(2), columns, ...sortProps } as DataTableProps<Row>;
+    expect(() => render(<DataTable {...invalid} />)).toThrow("sortState and onSortChange must be supplied together");
+  },
+);
