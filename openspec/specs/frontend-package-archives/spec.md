@@ -338,7 +338,7 @@ authority, or authenticated application requests into a package.
 
 ### Requirement: The UI archive exposes a reviewed initial component contract
 
-The `@fred-oss/ui` archive SHALL expose named JavaScript and TypeScript declarations for `Button`, `IconButton`, `Icon`, `TextInput`, `Spinner`, `Dialog`, `Select`, `Chip`, `Tooltip`, and `Checkbox`, together with only the prop, option, and visual types required to use them. `Menu`, `MenuItem`, `Portal`, and viewport helpers SHALL remain internal. The archive SHALL additionally expose `TextArea`, `Switch`, `ProgressBar`, `IndicatorDot`, `Disclosure`, `Breadcrumb`, `PageHeader`, `SelectableCard`, `FileDropzone`, `ServiceNotice`, `PageEmptyState`, `KpiStatCard`, `DataTable`, `TablePagination`, `InlineDrawer`, `Toast`, `ToastProvider`, `useToast`, and `StatusBadge`, together with the neutral types needed to consume them. Internal resize/storage helpers SHALL remain unexported. Task-specific badges/progress, ingestion StatusChip, ConfirmationDialog, chart molecules, application components, and internal source paths MUST remain outside the public surface.
+The `@fred-oss/ui` archive SHALL expose named JavaScript and TypeScript declarations for `Button`, `IconButton`, `Icon`, `TextInput`, `Spinner`, `Dialog`, `Select`, `Chip`, `Tooltip`, and `Checkbox`, together with only the prop, option, and visual types required to use them. `Menu`, `MenuItem`, `Portal`, and viewport helpers SHALL remain internal. The archive SHALL additionally expose `TextArea`, `Switch`, `ProgressBar`, `IndicatorDot`, `Disclosure`, `Breadcrumb`, `PageHeader`, `SelectableCard`, `FileDropzone`, `ServiceNotice`, `PageEmptyState`, `KpiStatCard`, `DataTable`, `InlineDrawer`, `ToastProvider`, `useToast`, and `StatusBadge`, together with the neutral types needed to consume them. Internal resize/storage helpers SHALL remain unexported. Task-specific badges/progress, ingestion StatusChip, ConfirmationDialog, chart molecules, application components, and internal source paths MUST remain outside the public surface.
 
 `Button` and `IconButton` SHALL accept only their implemented `2xs`, `small`, and
 `medium` sizes without removing `xs` or any other value from the application-wide
@@ -2282,11 +2282,11 @@ The extended UI surface MUST work without FRED aliases, application models, tran
 
 ### Requirement: A generic status badge preserves evaluation status display
 
-StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning`, `info`, or `neutral` using paired design-system color tokens. It MUST NOT depend on domain states or act as a removable input chip. Hosted applications SHALL own their domain-specific labels and tone mappings; the shared atom MUST remain available after retiring the built-in evaluation views.
+StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning`, `info`, or `neutral` as an outlined badge whose text and border use that tone's semantic design-system color. It MUST NOT depend on domain states or act as a removable input chip. Hosted applications SHALL own their domain-specific labels and tone mappings; the shared atom MUST remain available after retiring the built-in evaluation views.
 
 #### Scenario: All badge tones render in both themes
 - **WHEN** a consumer renders each supported tone in light and dark themed roots
-- **THEN** each label remains readable with token-based foreground/background pairing and no remove action
+- **THEN** each label remains readable with its tone's semantic color token and no remove action
 
 ### Requirement: Hosted application UI extension has packed-consumer evidence
 
@@ -2302,7 +2302,7 @@ The alpha.3 archive SHALL retain all existing archive, runtime/declaration closu
 
 ### Requirement: Consumers control row activation and outcome presentation
 
-The shared UI SHALL let consumers activate a typed table row by pointer or keyboard without also activating its embedded controls. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
+The shared UI SHALL let consumers activate a typed table row by pointer or keyboard without also activating its embedded controls; an auto-repeated activation key SHALL NOT activate the row again. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
 
 #### Scenario: Row activation is isolated
 - **WHEN** a consumer activates a row cell or focuses the row and presses Enter or Space
@@ -2322,7 +2322,7 @@ The shared UI SHALL let consumers activate a typed table row by pointer or keybo
 
 ### Requirement: The hosted UI surface follows its consumers
 
-The `@fred-oss/ui` hosted surface SHALL expose only the components and props a hosted application uses. A new export or prop SHALL be added with the consuming use case. FRED-internal variants of a canonical component MAY remain outside the public types.
+The `@fred-oss/ui` hosted surface SHALL expose only the components and behavioral variants a hosted application uses. A new export or behavioral variant SHALL be added with the consuming use case. Optional presentational props of a public component remain public. FRED-internal variants of a canonical component MAY remain outside the public types.
 
 #### Scenario: An internal variant is requested by a hosted consumer
 - **WHEN** a hosted application needs a prop that is not public
@@ -2334,7 +2334,7 @@ The `@fred-oss/ui` hosted surface SHALL expose only the components and props a h
 
 ### Requirement: Hosted overlay drawer and toasts remain independently usable
 
-The public InlineDrawer SHALL be a single overlay drawer accepting `open`, `onClose`, `title`, `closeLabel`, `width`, `headerActions` and children, closing on its close action, backdrop or Escape, without application state dependencies. Nested hosted drawers are not supported. ToastProvider and `useToast` SHALL retain severity, dismissal, expiry, and error-copy behavior through a caller-supplied copy action. Toast action names SHALL be caller-configurable. FRED SHALL supply its existing clipboard action. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
+The public InlineDrawer SHALL be a single overlay drawer accepting `open`, `onClose`, `title`, `closeLabel`, `width`, `headerActions` and children, closing on its close action, backdrop or Escape, without application state dependencies. Nested hosted drawers are not supported. Like FRED's in-app overlay, opening it does not move keyboard focus and the page behind the backdrop remains focusable. ToastProvider and `useToast` SHALL retain severity, dismissal, expiry, and error-copy behavior through a caller-supplied copy action. Toast action names SHALL be caller-configurable. FRED SHALL supply its existing clipboard action. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
 
 #### Scenario: Overlay drawer is dismissed
 - **WHEN** a consumer opens the overlay drawer and presses Escape or activates its labelled close action

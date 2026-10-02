@@ -347,6 +347,8 @@ export default function DataTable<T>({
                   ? (event) => {
                       if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
                       event.preventDefault();
+                      // A held key would otherwise navigate once per auto-repeat.
+                      if (event.repeat) return;
                       onRowClick(line);
                     }
                   : undefined

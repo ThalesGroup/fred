@@ -58,7 +58,11 @@ application adapters supply its existing translations. Pagination options use
 `StatusBadge` renders a label with `success`, `error`, `warning`, `info`, or
 `neutral` tone; use `Chip` for removable input tokens. `InlineDrawer` is a single
 overlay drawer with `open`, `onClose`, `title`, `closeLabel`, `width` and
-`headerActions`; nested drawers are not supported. `ToastProvider` accepts `onCopy(text)`, `copyLabel`, and
+`headerActions`; nested drawers are not supported. It behaves like FRED's in-app
+overlay: opening it does not move keyboard focus and the page behind the backdrop
+stays focusable, so Escape also reaches a Dialog opened from that page.
+`TextArea` is controlled: pass `value` and `onChange`, which its `maxLength`
+counter reads. `ToastProvider` accepts `onCopy(text)`, `copyLabel`, and
 `dismissLabel`. Supply your application's clipboard action to enable error
 copying; without it, the copy control is omitted. `useToast` exposes success,
 error, info, and warning notifications with caller-controlled expiry.
@@ -88,13 +92,12 @@ Canonical ownership, package boundaries, and future work are described by the ex
 Sharp, custom SVG icons, domain-specific components, iframe SDK work, and
 adopter migrations are outside this extension milestone.
 
-The checked-in manifest uses the published UI prerelease coordinate. Future release
-candidates must still be compared with a complete, maintainer-confirmed contract as described in
+The checked-in manifest names the `0.1.0-alpha.3` candidate, which is not yet
+published. Release candidates must still be compared with a complete, maintainer-confirmed contract as described in
 [../RELEASE.md](../RELEASE.md).
 
 Real-consumer interaction props: `DataTable<T>.onRowClick(row)` activates row
 background/cells by pointer or Enter/Space while leaving embedded controls alone.
-When combined with selection, background activates and checkboxes select.
 `InlineDrawer.closeLabel` supplies the accessible close action name.
 `KpiStatCard.tone` accepts the shared `StatusBadgeTone` vocabulary and defaults to
 neutral. These additive alpha.3 props preserve existing consumer defaults.

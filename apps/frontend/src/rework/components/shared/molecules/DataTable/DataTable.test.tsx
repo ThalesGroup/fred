@@ -626,6 +626,10 @@ describe("row activation", () => {
     act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
     expect(activate).toHaveBeenCalledTimes(3);
     act(() =>
+      row.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true })),
+    );
+    expect(activate).toHaveBeenCalledTimes(3);
+    act(() =>
       row.querySelector("button")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
     );
     click(row.querySelector('input[aria-label="Input"]'));
