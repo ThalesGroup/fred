@@ -2931,6 +2931,8 @@
         "light": "Light",
         "system": "System",
         "themeAria": "Theme",
+        "defaultTheme": "Default",
+        "uiThemeAria": "UI theme",
         "languageAria": "Language"
       },
       "conversationProfile": {

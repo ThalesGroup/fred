@@ -24,6 +24,8 @@
 @import "./shadow-light.css";
 @import "./shadow-dark.css";
 
+@import "./themes/corporate.css";
+
 @import "spacings.css";
 @import "radius.css";
 @import "motion.css";

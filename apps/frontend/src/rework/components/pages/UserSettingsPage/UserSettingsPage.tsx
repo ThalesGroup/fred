@@ -27,7 +27,7 @@ export default function UserSettingsPage() {
   const navigate = useNavigate();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { t } = useTranslation();
-  const { themeMode, setThemeMode } = useContext(ApplicationContext);
+  const { themeMode, setThemeMode, uiTheme, setUiTheme } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
 
   const userFullName = KeyCloakService.GetUserFullName();
@@ -42,7 +42,7 @@ export default function UserSettingsPage() {
           <Button
             color={"primary"}
             variant={"text"}
-            size={"medium"}
+            size={"small"}
             icon={{ category: "outlined", type: "arrow_back", filled: true }}
             onClick={() => navigate(-1)}
           >
@@ -52,7 +52,7 @@ export default function UserSettingsPage() {
           <Button
             color={"error"}
             variant={"filled"}
-            size={"medium"}
+            size={"small"}
             icon={{ category: "outlined", type: "logout", filled: true }}
             onClick={KeyCloakService.CallLogout}
           >
@@ -71,30 +71,43 @@ export default function UserSettingsPage() {
           </div>
         </div>
         <div className={styles.userSettingsApplication}>
-          <ButtonGroup
-            variant="radio"
-            aria-label={t("rework.userSettings.app.themeAria")}
-            defaultSelectedIndex={themeMode === "dark" ? 0 : themeMode === "system" ? 1 : 2}
-            items={[
-              {
-                label: t("rework.userSettings.app.dark"),
-                icon: { category: "outlined", type: "dark_mode" },
-                onClick: () => setThemeMode("dark"),
-              },
-              {
-                label: t("rework.userSettings.app.system"),
-                icon: { category: "outlined", type: "desktop_windows" },
-                onClick: () => setThemeMode("system"),
-              },
-              {
-                label: t("rework.userSettings.app.light"),
-                icon: { category: "outlined", type: "light_mode" },
-                onClick: () => setThemeMode("light"),
-              },
-            ]}
-            size={"medium"}
-            color={"secondary"}
-          ></ButtonGroup>
+          <div className={styles.userSettingsApplicationRow}>
+            <ButtonGroup
+              variant="radio"
+              aria-label={t("rework.userSettings.app.uiThemeAria")}
+              defaultSelectedIndex={uiTheme === "corporate" ? 1 : 0}
+              items={[
+                { label: t("rework.userSettings.app.defaultTheme"), onClick: () => setUiTheme("fred") },
+                { label: "Corporate", onClick: () => setUiTheme("corporate") },
+              ]}
+              size={"small"}
+              color={"secondary"}
+            ></ButtonGroup>
+            <ButtonGroup
+              variant="radio"
+              aria-label={t("rework.userSettings.app.themeAria")}
+              defaultSelectedIndex={themeMode === "light" ? 0 : themeMode === "dark" ? 1 : 2}
+              items={[
+                {
+                  label: t("rework.userSettings.app.light"),
+                  icon: { category: "outlined", type: "light_mode" },
+                  onClick: () => setThemeMode("light"),
+                },
+                {
+                  label: t("rework.userSettings.app.dark"),
+                  icon: { category: "outlined", type: "dark_mode" },
+                  onClick: () => setThemeMode("dark"),
+                },
+                {
+                  label: t("rework.userSettings.app.system"),
+                  icon: { category: "outlined", type: "desktop_windows" },
+                  onClick: () => setThemeMode("system"),
+                },
+              ]}
+              size={"small"}
+              color={"secondary"}
+            ></ButtonGroup>
+          </div>
           <ButtonGroup
             variant="radio"
             aria-label={t("rework.userSettings.app.languageAria")}
@@ -109,7 +122,7 @@ export default function UserSettingsPage() {
                 onClick: () => i18n.changeLanguage("en"),
               },
             ]}
-            size={"medium"}
+            size={"small"}
             color={"secondary"}
           ></ButtonGroup>
         </div>

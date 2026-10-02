@@ -14,7 +14,7 @@
 
 import { createContext, PropsWithChildren, useEffect, useState } from "react";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
-import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
+import { ApplicationContextStruct, ThemeMode, UiTheme } from "./ApplicationContextStruct.tsx";
 
 /**
  * Our application context.
@@ -46,6 +46,7 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
   // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
   const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
+  const [uiTheme, setUiTheme] = useLocalStorageState<UiTheme>("ApplicationContextProvider.uiTheme", "fred");
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
   const darkMode = computeDarkMode(themeMode, systemDarkMode);
 
@@ -68,8 +69,10 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
     isSidebarCollapsed,
     darkMode,
     themeMode,
+    uiTheme,
     toggleSidebar,
     setThemeMode,
+    setUiTheme,
   };
 
   return <ApplicationContext.Provider value={contextValue}>{props.children}</ApplicationContext.Provider>;
