@@ -5,6 +5,7 @@ app:
   address: 127.0.0.1
   port: 8222
   log_level: info
+  log_format: text
 
 scheduler:
   enabled: true

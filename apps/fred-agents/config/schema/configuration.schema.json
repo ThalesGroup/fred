@@ -564,6 +564,15 @@
           "title": "Log Level",
           "type": "string"
         },
+        "log_format": {
+          "default": "text",
+          "enum": [
+            "json",
+            "text"
+          ],
+          "title": "Log Format",
+          "type": "string"
+        },
         "limit_concurrency": {
           "anyOf": [
             {

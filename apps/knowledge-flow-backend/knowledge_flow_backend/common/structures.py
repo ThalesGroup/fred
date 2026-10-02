@@ -33,6 +33,7 @@ from fred_core.common import (
 )
 from fred_core.scheduler import SchedulerBackend
 from fred_core.tasks.models import IngestionProcessingProfile as IngestionProcessingProfile
+from fred_pod.common.structures import LogOutputFormat
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import WithJsonSchema
 
@@ -697,6 +698,7 @@ class AppConfig(BaseModel):
     address: str = "127.0.0.1"
     port: int = 8000
     log_level: str = "info"
+    log_format: LogOutputFormat = "text"
     reload: bool = False
     reload_dir: str = "."
     gcu_version: str | None = None

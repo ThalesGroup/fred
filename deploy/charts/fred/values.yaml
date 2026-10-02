@@ -692,6 +692,7 @@ applications:
         host: "0.0.0.0"
         port: 8000
         log_level: "info"
+        log_format: "json"
         # Optional hard ceiling on concurrent HTTP/WebSocket connections
         # accepted by Uvicorn. Set to null to disable the limit.
         limit_concurrency: null
@@ -1457,6 +1458,7 @@ applications:
         address: "127.0.0.1"
         port: 8111
         log_level: "info"
+        log_format: "json"
         reload: false
         reload_dir: "."
         pdf_render_ttl_days: 30
@@ -1677,6 +1679,7 @@ applications:
         address: "127.0.0.1"
         port: 8112
         log_level: "info"
+        log_format: "json"
         reload: false
         reload_dir: "."
         # Same key as the API pod: the worker is what runs the nightly sweep.
@@ -2030,6 +2033,7 @@ applications:
         address: "127.0.0.1"
         port: 8222
         log_level: "info"
+        log_format: "json"
         # Env var Control Plane reads the one-time root bootstrap secret from
         # (AUTHZ-07 Part 8 §40-42). Just a variable name, never a secret value
         # — see `extraEnvVars` above for how the instance overlay supplies the
@@ -2269,6 +2273,7 @@ applications:
         address: "127.0.0.1"
         port: 8223
         log_level: "info"
+        log_format: "json"
 
       observability:
         kpi:
