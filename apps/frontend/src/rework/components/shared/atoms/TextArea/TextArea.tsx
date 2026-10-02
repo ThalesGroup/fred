@@ -24,8 +24,18 @@ export interface TextAreaProps extends Omit<ComponentPropsWithRef<"textarea">, "
   error?: string;
 }
 
-export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
-  const id = useId();
+export default function TextArea({
+  label,
+  explanation,
+  error,
+  maxLength,
+  value,
+  required,
+  id: suppliedId,
+  ...props
+}: TextAreaProps) {
+  const generatedId = useId();
+  const id = suppliedId ?? generatedId;
   if (value === undefined || value === null || props.defaultValue !== undefined) {
     throw new Error("TextArea requires a controlled value; defaultValue is not supported.");
   }

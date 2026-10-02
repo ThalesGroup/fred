@@ -175,6 +175,7 @@ export function HostedComponents() {
         }
       />
       <TextArea
+        id="evaluation-notes"
         label="Evaluation notes"
         value={text}
         onChange={(event) => setText(event.currentTarget.value)}

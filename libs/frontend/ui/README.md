@@ -104,4 +104,8 @@ neutral. These additive alpha.3 props preserve existing consumer defaults.
 `TextArea` is controlled: pass `value` (use `""` for an empty field) and
 `onChange`, or `readOnly` for display. `defaultValue` is unsupported and rejected
 by the public types and at runtime, keeping the character counter tied to the
-value supplied by the consumer.
+value supplied by the consumer. A supplied native `id` is shared with its label;
+otherwise the component generates one.
+
+`Switch` always renders a native checkbox. Its `type` is fixed and cannot be
+overridden; pass `checked`/`onChange` or `defaultChecked` for native state handling.

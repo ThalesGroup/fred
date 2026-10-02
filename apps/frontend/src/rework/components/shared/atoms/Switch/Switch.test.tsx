@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
-import Switch from "./Switch.tsx";
+import Switch, { type SwitchProps } from "./Switch.tsx";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -52,4 +52,14 @@ describe("Switch", () => {
     expect(container.querySelector("label")?.dataset.size).toBe("small");
     expect(container.querySelector("input")?.hasAttribute("size")).toBe(false);
   });
+});
+
+it("keeps checkbox behavior for an untyped consumer passing another input type", () => {
+  const props = { type: "text", "aria-label": "toggle" } as unknown as SwitchProps;
+  render(<Switch {...props} />);
+  const input = container.querySelector("input")!;
+  expect(input.type).toBe("checkbox");
+  expect(input.checked).toBe(false);
+  act(() => input.click());
+  expect(input.checked).toBe(true);
 });

@@ -223,3 +223,6 @@ export function dynamicSelectionContract(selectable: boolean) {
   );
   return { missingKeys, keyed, nonSelectable };
 }
+
+// @ts-expect-error Switch always renders a checkbox; callers cannot override its type.
+export const badSwitchType = <Switch type="text" />;

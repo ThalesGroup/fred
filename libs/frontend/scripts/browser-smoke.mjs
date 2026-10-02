@@ -879,6 +879,12 @@ async function verifyFonts(browser, origin) {
 async function verifyHostedComponents(page) {
   const hosted = page.locator("[data-hosted]");
   const notes = hosted.getByRole("textbox", { name: "Evaluation notes" });
+  assert.equal(await notes.getAttribute("id"), "evaluation-notes");
+  await hosted.locator('label[for="evaluation-notes"]').click();
+  assert.equal(
+    await notes.evaluate((element) => element === document.activeElement),
+    true,
+  );
   await notes.fill("Package-only notes");
   assert.equal(await notes.inputValue(), "Package-only notes");
   const toggle = hosted.getByRole("checkbox", { name: "Enable evaluation" });

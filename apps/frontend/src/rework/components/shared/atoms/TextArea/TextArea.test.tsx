@@ -73,3 +73,12 @@ it("updates the counter through the caller's change handler and external reset",
     container.remove();
   }
 });
+
+it.each([undefined, "notes"])("associates the label with its textarea for id %s", (id) => {
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(<TextArea id={id} label="Notes" value="" readOnly />);
+  const textarea = container.querySelector("textarea")!;
+  expect(textarea.id).not.toBe("");
+  if (id) expect(textarea.id).toBe(id);
+  expect(container.querySelector("label")!.htmlFor).toBe(textarea.id);
+});
