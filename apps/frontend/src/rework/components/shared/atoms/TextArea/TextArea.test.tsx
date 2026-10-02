@@ -169,3 +169,24 @@ it("associates dynamic errors and hints without losing caller descriptions", () 
     act(() => root.unmount());
   }
 });
+
+it("keeps an initially empty live region mounted across error updates", () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    const render = (error?: string) => act(() => root.render(<TextArea label="Notes" error={error} />));
+    render();
+    const live = host.querySelector('[aria-live="polite"]')!;
+    expect(live).not.toBeNull();
+    expect(live.textContent).toBe("");
+    for (const error of ["Required", undefined, "Too short"]) {
+      render(error);
+      expect(host.querySelector('[aria-live="polite"]')).toBe(live);
+      expect(live.textContent).toBe(error ?? "");
+      expect(live.closest('[hidden], [aria-hidden="true"]')).toBeNull();
+      expect(host.querySelector("textarea")!.getAttribute("aria-describedby")).toBe(error ? live.id : null);
+    }
+  } finally {
+    act(() => root.unmount());
+  }
+});

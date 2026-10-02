@@ -79,8 +79,7 @@ export default function TextArea({
     throw new Error("TextArea requires onChange, readOnly or disabled for a controlled value.");
   }
   const characterCounter = String(controlled ? value : uncontrolledValue).length;
-  // No hint/error/counter to show — drop the container entirely rather than
-  // leaving an empty row under the field.
+  // Keep the live region mounted before content arrives, without reserving an empty row.
   const hasInformation = !!error || !!explanation || !!maxLength;
 
   return (
@@ -107,14 +106,12 @@ export default function TextArea({
         }}
       />
 
-      {hasInformation && (
-        <span className={styles.information}>
-          <span id={hintId} className={styles.hint} aria-live="polite">
-            {error || explanation || null}
-          </span>
-          <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+      <span className={`${styles.information} ${hasInformation ? "" : styles.informationEmpty}`}>
+        <span id={hintId} className={styles.hint} aria-live="polite">
+          {error || explanation || null}
         </span>
-      )}
+        <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
+      </span>
     </div>
   );
 }
