@@ -16,7 +16,7 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 
 **A dedicated `--surface-floating` token.** Under this scale no container level is both near-white in light and clearly raised in dark. Using `surface-container` (strict M3) makes menus grey in light; using `surface-container-lowest` leaves dark menus at tone 8, distinguishable only by shadow. One named exception (light 100, dark 15) is clearer than bending a container level.
 
-**Ramp generated once, committed as hex.** Each step is CIE LCh(L = tone, C = 1.5, H = 280°) converted to sRGB (D65). Values are computed once and written to `color-ramps.css` with a 2-line comment giving the formula; no generator script is added. Tone 0 and 100 stay pure black and white. Half steps are named `--core-cold-grey-97-5` and `--core-cold-grey-94-5`. No existing step is removed, even unused ones.
+**Ramp generated once, committed as hex.** Each step is CIE LCh(L = tone, C = 1.5, H = 280°) converted to sRGB (D65), then nudged to the nearest 8-bit color so rounding does not swing the hue at such low chroma. Values are computed once and written to `color-ramps.css` with a 2-line comment giving the formula; no generator script is added. Tone 0 and 100 stay pure black and white. Half steps are named `--core-cold-grey-97-5` and `--core-cold-grey-94-5`. No existing step is removed, even unused ones.
 
 **Remap by role, not by token name.** Each `surface-container-lowest` and `surface-container-highest` usage is reassigned by what the element is:
 

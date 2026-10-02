@@ -1,6 +1,6 @@
 ## 1. Neutral ramp
 
-- [ ] 1.1 Regenerate every `--core-cold-grey-*` step in `apps/frontend/src/styles/color-ramps.css` as LCh(tone, 1.5, 280°) → sRGB (tones 0 and 100 stay black/white), add `-97-5` and `-94-5`, add a 2-line formula comment; verify each value by recomputing it with a one-off script and checking chroma ≤ 2 and hue within 10° of 280°
+- [x] 1.1 Regenerate every `--core-cold-grey-*` step in `apps/frontend/src/styles/color-ramps.css` as LCh(tone, 1.5, 280°) → sRGB (tones 0 and 100 stay black/white), add `-97-5` and `-94-5`, add a 2-line formula comment; verify each value by recomputing it with a one-off script and checking chroma ≤ 2 and hue within 10° of 280°
 
 ## 2. Semantic tokens
 
