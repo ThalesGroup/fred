@@ -344,7 +344,7 @@ export default function DataTable<T>({
   // row on a later page must not leave the caller re-fetching a stale,
   // now-out-of-range offset forever).
   const currentPage = serverPagination
-    ? Math.floor(serverPagination.offset / serverPagination.limit)
+    ? Math.min(Math.floor(serverPagination.offset / serverPagination.limit), pageCount - 1)
     : Math.min(page, pageCount - 1);
 
   useEffect(() => {

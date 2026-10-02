@@ -14,6 +14,7 @@
 // limitations under the License.
 
 import { act } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import TablePagination from "./TablePagination.tsx";
@@ -184,4 +185,16 @@ it("normalizes zero pages for the formatter and disables navigation", () => {
   expect(pageNumber).toHaveBeenCalledWith(1, 1);
   expect(container.textContent).toContain("1/1");
   expect(buttons().every((button) => button.disabled)).toBe(true);
+});
+
+it.each([-1, 2, 4, NaN, Infinity, 0.5])("rejects an invalid controlled current page %s", (currentPage) => {
+  render(<TablePagination {...baseProps} />);
+  expect(() =>
+    renderToStaticMarkup(<TablePagination {...baseProps} pageCount={2} currentPage={currentPage} />),
+  ).toThrow("currentPage must be within pageCount");
+});
+it("accepts an atomic page-count shrink with a corrected index", () => {
+  render(<TablePagination {...baseProps} pageCount={5} currentPage={4} />);
+  act(() => root.render(<TablePagination {...baseProps} pageCount={2} currentPage={1} />));
+  expect(container.textContent).toContain("Page 2 of 2");
 });

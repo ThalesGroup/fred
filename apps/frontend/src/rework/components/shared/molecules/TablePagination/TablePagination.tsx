@@ -40,8 +40,9 @@ const defaultLabels: TablePaginationLabels = {
 export interface TablePaginationProps {
   labels?: Partial<TablePaginationLabels>;
   totalItems: number;
-  /** 0-based. */
+  /** 0-based, within pageCount (0 for empty results). Update with count changes. */
   currentPage: number;
+  /** Nonnegative safe integer. Zero represents an empty result. */
   pageCount: number;
   rowsPerPage: number;
   rowsPerPageOptions: SelectOption<number>[];
@@ -74,6 +75,14 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
+  if (!Number.isSafeInteger(pageCount) || pageCount < 0) {
+    throw new Error("TablePagination: pageCount must be a nonnegative safe integer.");
+  }
+  if (!Number.isSafeInteger(currentPage) || currentPage < 0 || currentPage >= Math.max(1, pageCount)) {
+    throw new Error(
+      "TablePagination: currentPage must be within pageCount; update both together when the count shrinks (use page 0 for an empty result).",
+    );
+  }
   const displayedPageCount = Math.max(1, pageCount);
   const displayedPage = pageCount === 0 ? 0 : currentPage;
   let displayedOptions = rowsPerPageOptions;
