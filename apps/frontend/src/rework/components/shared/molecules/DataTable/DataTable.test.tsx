@@ -622,20 +622,11 @@ describe("row activation", () => {
     click(row.querySelector("button"));
     expect(embedded).toHaveBeenCalledOnce();
     expect(activate).toHaveBeenCalledOnce();
-    act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
-    act(() => row.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
-    expect(activate).toHaveBeenCalledTimes(3);
-    act(() =>
-      row.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true, cancelable: true })),
-    );
-    expect(activate).toHaveBeenCalledTimes(3);
-    act(() =>
-      row.querySelector("button")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
-    );
+    expect(row.getAttribute("tabindex")).toBeNull();
     click(row.querySelector('input[aria-label="Input"]'));
-    expect(activate).toHaveBeenCalledTimes(3);
+    expect(activate).toHaveBeenCalledOnce();
     click(row.querySelector('input[type="checkbox"]'));
     expect(select).toHaveBeenCalledOnce();
-    expect(activate).toHaveBeenCalledTimes(3);
+    expect(activate).toHaveBeenCalledOnce();
   });
 });

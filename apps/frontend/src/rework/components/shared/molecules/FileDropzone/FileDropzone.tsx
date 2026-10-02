@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./FileDropzone.module.css";
 
@@ -32,6 +32,7 @@ export interface FileDropzoneProps {
 export default function FileDropzone({ accept, hint, subHint, onFile, error }: FileDropzoneProps) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const errorId = useId();
 
   return (
     <div className={styles.wrapper}>
@@ -39,6 +40,8 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
         type="button"
         className={styles.zone}
         data-dragging={dragging}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => {
           e.preventDefault();
@@ -62,11 +65,17 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
           className={styles.input}
           onChange={(e) => {
             const file = e.target.files?.[0];
+            // Cleared so picking the same file again (after fixing it) fires change.
+            e.target.value = "";
             if (file) onFile(file);
           }}
         />
       </button>
-      {error && <span className={styles.error}>{error}</span>}
+      {error && (
+        <span id={errorId} role="alert" className={styles.error}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

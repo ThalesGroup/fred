@@ -55,8 +55,17 @@ import type {
   MaterialIconType,
 } from "../.generated/src/rework/components/shared/utils/Type.ts";
 import CanonicalDataTable, {
+  type DataTableLabels as CanonicalDataTableLabels,
   type DataTableProps as CanonicalDataTableProps,
+  type SortState,
 } from "../.generated/src/rework/components/shared/molecules/DataTable/DataTable.tsx";
+import CanonicalTextArea, {
+  type TextAreaProps as CanonicalTextAreaProps,
+} from "../.generated/src/rework/components/shared/atoms/TextArea/TextArea.tsx";
+import {
+  ToastProvider as CanonicalToastProvider,
+  type ToastProviderProps as CanonicalToastProviderProps,
+} from "../.generated/src/rework/components/shared/molecules/Toast/ToastProvider.tsx";
 import {
   InlineDrawer as CanonicalInlineDrawer,
   type InlineDrawerProps as CanonicalInlineDrawerProps,
@@ -120,8 +129,16 @@ export type {
   TooltipProps,
 };
 
-export { default as TextArea } from "../.generated/src/rework/components/shared/atoms/TextArea/TextArea.tsx";
-export type { TextAreaProps } from "../.generated/src/rework/components/shared/atoms/TextArea/TextArea.tsx";
+// Controlled only: the character counter reads `value`, and the label owns the id.
+export type TextAreaProps = Omit<
+  CanonicalTextAreaProps,
+  "value" | "defaultValue" | "onChange" | "id"
+> & {
+  value: string;
+  onChange: NonNullable<CanonicalTextAreaProps["onChange"]>;
+};
+export const TextArea: (props: TextAreaProps) => ReactElement =
+  CanonicalTextArea;
 
 export { default as Switch } from "../.generated/src/rework/components/shared/atoms/Switch/Switch.tsx";
 export type {
@@ -175,14 +192,26 @@ export { default as KpiStatCard } from "../.generated/src/rework/components/shar
 export type { KpiStatCardProps } from "../.generated/src/rework/components/shared/molecules/KpiStatCard/KpiStatCard.tsx";
 
 // Hosted consumers need display, sorting, pagination and row activation, not selection.
+export type DataTableLabels = Pick<CanonicalDataTableLabels, "pagination">;
+// Controlled sorting needs both props; omitting both keeps internal sorting.
+type DataTableSortProps =
+  | { sortState?: undefined; onSortChange?: undefined }
+  | {
+      sortState: SortState | null;
+      onSortChange: (next: SortState | null) => void;
+    };
 export type DataTableProps<T> = Omit<
   CanonicalDataTableProps<T>,
-  "selectable" | "selectedKeys" | "onSelectionChange"
->;
+  | "selectable"
+  | "selectedKeys"
+  | "onSelectionChange"
+  | "labels"
+  | "sortState"
+  | "onSortChange"
+> & { labels?: Partial<DataTableLabels> } & DataTableSortProps;
 export const DataTable: <T>(props: DataTableProps<T>) => ReactElement =
   CanonicalDataTable;
 export type {
-  DataTableLabels,
   DataTableColumn,
   DataTableRowSize,
   ServerPagination,
@@ -204,12 +233,15 @@ export const InlineDrawer: (props: InlineDrawerProps) => ReactElement =
 
 export type { ToastSeverity } from "../.generated/src/rework/components/shared/molecules/Toast/Toast.tsx";
 
-export {
-  ToastProvider,
-  useToast,
-} from "../.generated/src/rework/components/shared/molecules/Toast/ToastProvider.tsx";
+// Hosted toasts are dismissed, not copied; the copy action stays FRED-internal.
+export type ToastProviderProps = Omit<
+  CanonicalToastProviderProps,
+  "onCopy" | "copyLabel"
+>;
+export const ToastProvider: (props: ToastProviderProps) => ReactElement =
+  CanonicalToastProvider;
+export { useToast } from "../.generated/src/rework/components/shared/molecules/Toast/ToastProvider.tsx";
 export type {
-  ToastProviderProps,
   ToastInput,
   ToastContextValue,
 } from "../.generated/src/rework/components/shared/molecules/Toast/ToastProvider.tsx";

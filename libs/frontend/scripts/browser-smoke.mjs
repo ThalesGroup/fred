@@ -956,17 +956,11 @@ async function verifyHostedComponents(page) {
 
   await hosted.getByRole("button", { name: "Show hosted errors" }).click();
   assert.equal(
-    await hosted.getByRole("button", { name: "Copy notification" }).count(),
-    2,
+    await hosted.getByRole("navigation", { name: "Fil d'Ariane" }).count(),
+    1,
   );
-  await hosted
-    .getByRole("button", { name: "Copy notification" })
-    .first()
-    .click();
-  assert.equal(
-    await hosted.locator("[data-copied]").textContent(),
-    "Hosted error\nCopy this detail",
-  );
+  const progress = hosted.getByRole("progressbar", { name: "Run progress" });
+  assert.equal(await progress.getAttribute("aria-valuenow"), "100");
   await hosted
     .getByRole("button", { name: "Dismiss notification" })
     .first()

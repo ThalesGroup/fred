@@ -96,7 +96,8 @@ export interface DataTableProps<T> {
   selectable?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
-  /** Activates the row background; embedded controls keep their own actions. */
+  /** Pointer activation of the row background; embedded controls keep their own
+   *  actions. Keyboard users need an equivalent control inside the row. */
   onRowClick?: (row: T) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
@@ -341,18 +342,6 @@ export default function DataTable<T>({
               key={key}
               data-selected={isSelected || undefined}
               data-activatable={!!onRowClick || undefined}
-              tabIndex={onRowClick ? 0 : undefined}
-              onKeyDown={
-                onRowClick
-                  ? (event) => {
-                      if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
-                      event.preventDefault();
-                      // A held key would otherwise navigate once per auto-repeat.
-                      if (event.repeat) return;
-                      onRowClick(line);
-                    }
-                  : undefined
-              }
               onClick={
                 onRowClick || selectable
                   ? (event) => {

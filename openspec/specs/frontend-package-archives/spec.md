@@ -2270,7 +2270,7 @@ Acceptance of the context extension SHALL exercise the actual packed SDK archive
 
 ### Requirement: Extended UI components have neutral localized contracts
 
-The extended UI surface MUST work without FRED aliases, application models, translation providers, routing, or task stores. Exported declarations MUST NOT reference `IconType`, `OptionModel`, or `react-i18next`. Icon-bearing props SHALL accept only the supported Material Symbols contract. KpiStatCard and DataTable SHALL accept caller-owned state and pagination labels, including count-dependent text. Table options SHALL preserve their numeric value typing. Internal Dialog, drawer and pagination buttons SHALL NOT submit an enclosing form. Switch SHALL NOT accept `type`, `children` or `dangerouslySetInnerHTML`. Existing FRED consumers SHALL retain their translated labels and current interactions.
+The extended UI surface MUST work without FRED aliases, application models, translation providers, routing, or task stores. Exported declarations MUST NOT reference `IconType`, `OptionModel`, or `react-i18next`. Icon-bearing props SHALL accept only the supported Material Symbols contract. KpiStatCard and DataTable SHALL accept caller-owned state and pagination labels, including count-dependent text. Table options SHALL preserve their numeric value typing. Internal Dialog, drawer, pagination and empty-state buttons SHALL NOT submit an enclosing form. The public TextArea SHALL be controlled (`value` and `onChange` required) and own its id. Controlled sorting SHALL require `sortState` and `onSortChange` together. Public DataTable labels SHALL be limited to pagination. ProgressBar SHALL accept a caller accessible name and announce the same bounded percentage it displays. The rows-per-page selector SHALL be named by its visible label. Breadcrumb SHALL accept a localized landmark label. FileDropzone SHALL associate and announce its error and accept the same file again after a pick. Switch SHALL NOT accept `type`, `children` or `dangerouslySetInnerHTML`. Existing FRED consumers SHALL retain their translated labels and current interactions.
 
 #### Scenario: Independent consumer supplies localized labels
 - **WHEN** a consumer renders loading/error/no-data KPI states and paginated tables with its own labels
@@ -2290,7 +2290,7 @@ StatusBadge SHALL render a label and exactly one of `success`, `error`, `warning
 
 ### Requirement: Hosted application UI extension has packed-consumer evidence
 
-The alpha.3 archive SHALL retain all existing archive, runtime/declaration closure, source-isolation, React peer, asset/license, and scoped-style guarantees. Validators and the installed isolated React consumer SHALL cover every newly public component and relevant public type with positive and type-negative cases. Browser smoke SHALL render every added component in both themes and exercise forms, disclosure, row activation/sorting/pagination, file selection, overlay drawer dismissal, and toast copy/dismissal/expiry. Canonical-source changes MUST select package validation in CI. UI release metadata SHALL identify `0.1.0-alpha.3` without changing unrelated package coordinates or bypassing protected publication.
+The alpha.3 archive SHALL retain all existing archive, runtime/declaration closure, source-isolation, React peer, asset/license, and scoped-style guarantees. Validators and the installed isolated React consumer SHALL cover every newly public component and relevant public type with positive and type-negative cases. Browser smoke SHALL render every added component in both themes and exercise forms, disclosure, row activation/sorting/pagination, file selection, overlay drawer dismissal, and toast dismissal/expiry. Canonical-source changes MUST select package validation in CI. UI release metadata SHALL identify `0.1.0-alpha.3` without changing unrelated package coordinates or bypassing protected publication.
 
 #### Scenario: The expanded packed surface works outside the checkout
 - **WHEN** the generated alpha.3 tarball is installed in the separately provisioned isolated consumer
@@ -2302,10 +2302,10 @@ The alpha.3 archive SHALL retain all existing archive, runtime/declaration closu
 
 ### Requirement: Consumers control row activation and outcome presentation
 
-The shared UI SHALL let consumers activate a typed table row by pointer or keyboard without also activating its embedded controls; an auto-repeated activation key SHALL NOT activate the row again. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
+The shared UI SHALL let consumers activate a typed table row by pointer without also activating its embedded controls. Activatable rows SHALL NOT be keyboard focus targets; consumers provide an equivalent control inside the row. Consumer-owned drawer close labels SHALL determine the accessible close action name. KPI values SHALL support the shared semantic outcome tones, preserving neutral defaults and visible labels/counts.
 
 #### Scenario: Row activation is isolated
-- **WHEN** a consumer activates a row cell or focuses the row and presses Enter or Space
+- **WHEN** a consumer clicks a row cell
 - **THEN** the row callback receives that row, while button/link/input/label/select/textarea actions do not additionally activate the row
 
 #### Scenario: Existing selection stays usable
@@ -2332,14 +2332,14 @@ The `@fred-oss/ui` hosted surface SHALL expose only the components and behaviora
 - **WHEN** a consumer passes row selection to `DataTable` or a push, resizable or floating layout to `InlineDrawer`
 - **THEN** TypeScript rejects the assignment
 
-### Requirement: Hosted overlay drawer and toasts remain independently usable
+### Requirement: Hosted overlay drawer and dismissible toasts remain independently usable
 
-The public InlineDrawer SHALL be a single overlay drawer accepting `open`, `onClose`, `title`, `closeLabel`, `width`, `headerActions` and children, closing on its close action, backdrop or Escape, without application state dependencies. Nested hosted drawers are not supported. Like FRED's in-app overlay, opening it does not move keyboard focus and the page behind the backdrop remains focusable. ToastProvider and `useToast` SHALL retain severity, dismissal, expiry, and error-copy behavior through a caller-supplied copy action. Toast action names SHALL be caller-configurable. FRED SHALL supply its existing clipboard action. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
+The public InlineDrawer SHALL be a single overlay drawer accepting `open`, `onClose`, `title`, `closeLabel`, `width`, `headerActions` and children, closing on its close action, backdrop or Escape, without application state dependencies. Nested hosted drawers are not supported. Like FRED's in-app overlay, opening it does not move keyboard focus and the page behind the backdrop remains focusable. The overlay never exceeds the viewport width. ToastProvider and `useToast` SHALL retain severity, dismissal and expiry. The dismiss action name SHALL be caller-configurable. The error-copy action stays FRED-internal. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
 
 #### Scenario: Overlay drawer is dismissed
 - **WHEN** a consumer opens the overlay drawer and presses Escape or activates its labelled close action
 - **THEN** the drawer closes through the consumer's `onClose`
 
-#### Scenario: Toast copy and lifecycle are driven by the consumer
-- **WHEN** a consumer displays an error toast and activates its labelled copy or dismiss action, or a timed toast expires
-- **THEN** copy invokes the supplied action with the error text and dismissal/expiry removes the correct toast
+#### Scenario: Toast lifecycle is driven by the consumer
+- **WHEN** a consumer displays toasts and activates a labelled dismiss action, or a timed toast expires
+- **THEN** dismissal/expiry removes the correct toast

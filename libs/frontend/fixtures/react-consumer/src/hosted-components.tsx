@@ -143,7 +143,6 @@ export function HostedComponents() {
   const [activated, setActivated] = useState("");
   const [file, setFile] = useState("");
   const [overlay, setOverlay] = useState(false);
-  const [copied, setCopied] = useState("");
   return (
     <section aria-label="Hosted application components" data-hosted>
       <PageHeader
@@ -151,6 +150,7 @@ export function HostedComponents() {
         subtitle="Neutral components"
         breadcrumb={
           <Breadcrumb
+            label="Fil d'Ariane"
             segments={[
               { label: "Home", onClick: () => setSelected(false) },
               { label: "Evaluations" },
@@ -170,7 +170,12 @@ export function HostedComponents() {
         onChange={(event) => setEnabled(event.currentTarget.checked)}
       />
       <Switch aria-label="Disabled switch" disabled />
-      <ProgressBar theme="primary" current={3} max={10} />
+      <ProgressBar
+        theme="primary"
+        current={12}
+        max={10}
+        aria-label="Run progress"
+      />
       <IndicatorDot status="active" label="Evaluation active" />
       <Disclosure title="Case details">
         <span>Expanded case content</span>
@@ -254,14 +259,9 @@ export function HostedComponents() {
       >
         <span>Overlay content</span>
       </InlineDrawer>
-      <ToastProvider
-        onCopy={setCopied}
-        copyLabel="Copy notification"
-        dismissLabel="Dismiss notification"
-      >
+      <ToastProvider dismissLabel="Dismiss notification">
         <ToastTriggers />
       </ToastProvider>
-      <output data-copied>{copied}</output>
     </section>
   );
 }

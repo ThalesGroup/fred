@@ -89,6 +89,7 @@ export default function TablePagination({
               <Select<number>
                 size="xs"
                 compact
+                ariaLabel={text.itemsPerPage}
                 value={rowsPerPage}
                 options={rowsPerPageOptions}
                 onChange={onRowsPerPageChange}

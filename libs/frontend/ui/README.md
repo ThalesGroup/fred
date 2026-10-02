@@ -13,8 +13,9 @@ The public root exports `Button`, `Icon`, `IconButton`, `Spinner`, `TextInput`,
 Generic `DataTableProps<T>` and `DataTableColumn<T>` retain the consumer's row type.
 No component subpath is public.
 
-The surface follows its hosted consumers: a prop is public only when an application
-uses it. Ask for a prop with its use case rather than relying on internal behavior.
+The surface follows its hosted consumers: a component or behavioral variant is
+public only when an application uses it. Ask for one with its use case rather than
+relying on internal behavior.
 
 Install this archive together with the matching `@fred-oss/design-tokens` archive and
 consumer-owned React 19.2.4 / React DOM 19.2.4. Import the contracts explicitly:
@@ -62,9 +63,8 @@ overlay drawer with `open`, `onClose`, `title`, `closeLabel`, `width` and
 overlay: opening it does not move keyboard focus and the page behind the backdrop
 stays focusable, so Escape also reaches a Dialog opened from that page.
 `TextArea` is controlled: pass `value` and `onChange`, which its `maxLength`
-counter reads. `ToastProvider` accepts `onCopy(text)`, `copyLabel`, and
-`dismissLabel`. Supply your application's clipboard action to enable error
-copying; without it, the copy control is omitted. `useToast` exposes success,
+counter reads; it does not accept `id`. `ToastProvider` accepts `dismissLabel`.
+`useToast` exposes success,
 error, info, and warning notifications with caller-controlled expiry.
 
 Wrap reusable UI in a consumer-owned `.fred-ui` root and set `data-theme="light"` or
@@ -97,7 +97,12 @@ published. Release candidates must still be compared with a complete, maintainer
 [../RELEASE.md](../RELEASE.md).
 
 Real-consumer interaction props: `DataTable<T>.onRowClick(row)` activates row
-background/cells by pointer or Enter/Space while leaving embedded controls alone.
+background/cells by pointer while leaving embedded controls alone; give keyboard
+users an equivalent control inside the row, such as a button in the first cell.
+`sortState` and `onSortChange` go together. Page sizes are positive integers and
+server offsets are multiples of the limit. Pass `rowKey` and stable columns when
+rows or columns change. `ProgressBar` accepts `aria-label`/`aria-labelledby` and
+announces its bounded percentage. `Breadcrumb.label` names the navigation landmark.
 `InlineDrawer.closeLabel` supplies the accessible close action name.
 `KpiStatCard.tone` accepts the shared `StatusBadgeTone` vocabulary and defaults to
 neutral. These additive alpha.3 props preserve existing consumer defaults.

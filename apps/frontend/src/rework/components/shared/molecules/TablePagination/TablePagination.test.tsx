@@ -75,6 +75,11 @@ describe("TablePagination", () => {
     expect(buttons()).toHaveLength(4);
   });
 
+  it("names the rows-per-page selector with its visible label", () => {
+    render(<TablePagination {...baseProps} onRowsPerPageChange={vi.fn()} labels={{ itemsPerPage: "Per page" }} />);
+    expect(container.querySelector('[aria-label="Per page"]')).not.toBeNull();
+  });
+
   it("shows the rows-per-page selector when onRowsPerPageChange is provided", () => {
     render(<TablePagination {...baseProps} onRowsPerPageChange={vi.fn()} />);
     expect(buttons()).toHaveLength(5);

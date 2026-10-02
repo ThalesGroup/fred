@@ -80,8 +80,10 @@ import {
   DataTable,
   KpiStatCard,
   InlineDrawer,
+  TextArea,
   ToastProvider,
   type DataTableColumn,
+  type SortState,
 } from "@fred-oss/ui";
 
 // @ts-expect-error Tones are a closed domain-neutral union.
@@ -114,16 +116,6 @@ const badDrawerLayout = (
   // @ts-expect-error Push, resize and floating layouts stay FRED-internal.
   <InlineDrawer open title="Bad" onClose={() => {}} layout="push" />
 );
-const badToast = (
-  <ToastProvider
-    // @ts-expect-error Copy receives text, not an event or numeric value.
-    onCopy={(value: number) => {
-      void value;
-    }}
-  >
-    Bad
-  </ToastProvider>
-);
 export {
   badBadge,
   badNotice,
@@ -133,7 +125,6 @@ export {
   badTable,
   badSelection,
   badDrawerLayout,
-  badToast,
 };
 
 const badRowActivation = (
@@ -154,4 +145,23 @@ const badKpiTone = (
     isError={false}
   />
 );
-export { badRowActivation, badKpiTone };
+const uncontrolledTextArea = (
+  // @ts-expect-error Hosted TextArea is controlled: value and onChange are required.
+  <TextArea label="Notes" maxLength={50} />
+);
+const badToastCopy = (
+  // @ts-expect-error The copy action is not part of the hosted toast contract.
+  <ToastProvider copyLabel="Copy">Bad</ToastProvider>
+);
+const ascending: SortState = { columnLabel: "Id", direction: "asc" };
+const loneSortState = (
+  // @ts-expect-error Controlled sorting requires sortState and onSortChange together.
+  <DataTable data={[{ id: 1 }]} columns={[]} sortState={ascending} />
+);
+export {
+  badRowActivation,
+  badKpiTone,
+  uncontrolledTextArea,
+  badToastCopy,
+  loneSortState,
+};
