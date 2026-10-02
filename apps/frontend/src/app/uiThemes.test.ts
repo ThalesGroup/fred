@@ -16,9 +16,17 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
-import { computeDarkMode } from "./ApplicationContextProvider";
 import { localStorageKey } from "../hooks/useLocalStorageState";
-import { resolveUiTheme, THEME_MODE_STORAGE_KEY, UI_THEME_STORAGE_KEY, UI_THEMES } from "./uiThemes";
+import {
+  computeDarkMode,
+  offeredUiThemes,
+  PLATFORM_UI_THEMES_CACHE_KEY,
+  type PlatformUiThemes,
+  resolveUiTheme,
+  THEME_MODE_STORAGE_KEY,
+  UI_THEME_STORAGE_KEY,
+  UI_THEMES,
+} from "./uiThemes";
 import type { ThemeMode } from "./ApplicationContextStruct";
 
 const BOOT_SCRIPT = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");
@@ -51,9 +59,10 @@ describe("UI theme catalog", () => {
     expect(JSON.parse(match![1])).toEqual([...UI_THEMES]);
   });
 
-  it("reads the keys the storage hook writes", () => {
+  it("reads the keys the app writes", () => {
     expect(BOOT_SCRIPT).toContain(`"${localStorageKey(UI_THEME_STORAGE_KEY)}"`);
     expect(BOOT_SCRIPT).toContain(`"${localStorageKey(THEME_MODE_STORAGE_KEY)}"`);
+    expect(BOOT_SCRIPT).toContain(`"${PLATFORM_UI_THEMES_CACHE_KEY}"`);
   });
 
   it("matches the theme files", () => {
@@ -65,7 +74,7 @@ describe("UI theme catalog", () => {
 });
 
 describe("theme resolution before the first paint", () => {
-  const cases: { name: string; theme?: unknown; mode?: unknown; prefersDark: boolean }[] = [
+  const cases: { name: string; theme?: unknown; mode?: unknown; platform?: unknown; prefersDark: boolean }[] = [
     { name: "stored cloud, dark", theme: "cloud", mode: "dark", prefersDark: false },
     { name: "stored cobalt, light", theme: "cobalt", mode: "light", prefersDark: true },
     { name: "unknown theme", theme: "corporate", mode: "light", prefersDark: false },
@@ -73,14 +82,34 @@ describe("theme resolution before the first paint", () => {
     { name: "nothing stored, OS light", prefersDark: false },
     { name: "system mode, OS dark", theme: "pebble", mode: "system", prefersDark: true },
     { name: "garbage values", theme: 42, mode: "blue", prefersDark: true },
+    { name: "platform default, no choice", platform: { default_theme: "cobalt" }, prefersDark: false },
+    { name: "choice wins over default", theme: "cloud", platform: { default_theme: "cobalt" }, prefersDark: false },
+    {
+      name: "hidden choice",
+      theme: "cloud",
+      platform: { default_theme: "cobalt", hidden_themes: ["cloud"] },
+      prefersDark: false,
+    },
+    { name: "hidden default", platform: { default_theme: "pebble", hidden_themes: ["pebble"] }, prefersDark: true },
+    { name: "unknown default", platform: { default_theme: "aurora" }, prefersDark: true },
+    {
+      name: "everything hidden",
+      theme: "cloud",
+      platform: { hidden_themes: ["pebble", "cobalt", "cloud"] },
+      prefersDark: false,
+    },
+    { name: "malformed platform cache", theme: "cobalt", platform: { hidden_themes: "pebble" }, prefersDark: false },
+    { name: "non-object platform cache", platform: "cobalt", prefersDark: false },
   ];
 
-  it.each(cases)("boot script and React agree: $name", ({ theme, mode, prefersDark }) => {
+  it.each(cases)("boot script and React agree: $name", ({ theme, mode, platform, prefersDark }) => {
     const storage: Record<string, string> = {};
+    if (platform !== undefined) storage[PLATFORM_UI_THEMES_CACHE_KEY] = JSON.stringify(platform);
     if (theme !== undefined) storage[localStorageKey(UI_THEME_STORAGE_KEY)] = JSON.stringify(theme);
     if (mode !== undefined) storage[localStorageKey(THEME_MODE_STORAGE_KEY)] = JSON.stringify(mode);
     const attributes = boot(storage, prefersDark);
-    expect(attributes["data-ui-theme"]).toBe(resolveUiTheme(theme));
+    const parsed = typeof platform === "object" && platform !== null ? (platform as PlatformUiThemes) : null;
+    expect(attributes["data-ui-theme"]).toBe(resolveUiTheme(theme, parsed));
     const dark = computeDarkMode((mode ?? "system") as ThemeMode, prefersDark);
     expect(attributes["data-theme"]).toBe(dark ? "dark" : "light");
   });
@@ -98,5 +127,31 @@ describe("theme resolution before the first paint", () => {
     expect(boot({ [localStorageKey(UI_THEME_STORAGE_KEY)]: JSON.stringify("corporate") }, false)["data-ui-theme"]).toBe(
       "pebble",
     );
+  });
+});
+
+describe("resolveUiTheme with platform settings", () => {
+  it("offers every shipped theme when nothing is hidden", () => {
+    expect(offeredUiThemes(null)).toEqual([...UI_THEMES]);
+  });
+
+  it("drops hidden themes, unless that would leave none", () => {
+    expect(offeredUiThemes({ hidden_themes: ["pebble"] })).toEqual(["cobalt", "cloud"]);
+    expect(offeredUiThemes({ hidden_themes: [...UI_THEMES] })).toEqual([...UI_THEMES]);
+  });
+
+  it("keeps the user's offered choice", () => {
+    expect(resolveUiTheme("cloud", { default_theme: "cobalt" })).toBe("cloud");
+  });
+
+  it("falls back to the platform default when the choice is hidden or absent", () => {
+    expect(resolveUiTheme("cloud", { default_theme: "cobalt", hidden_themes: ["cloud"] })).toBe("cobalt");
+    expect(resolveUiTheme(null, { default_theme: "cobalt" })).toBe("cobalt");
+  });
+
+  it("falls back to the first offered theme when the default is unset, hidden or unknown", () => {
+    expect(resolveUiTheme(null, { hidden_themes: ["pebble"] })).toBe("cobalt");
+    expect(resolveUiTheme(null, { default_theme: "aurora" })).toBe("pebble");
+    expect(resolveUiTheme(null, null)).toBe("pebble");
   });
 });

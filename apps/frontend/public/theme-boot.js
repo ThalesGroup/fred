@@ -17,7 +17,6 @@
 // `script-src 'self'` CSP allows it; never transpiled, so ES5 syntax and APIs only.
 (function () {
   var THEMES = ["pebble", "cobalt", "cloud"];
-  var DEFAULT_THEME = "pebble";
 
   function read(key) {
     try {
@@ -28,8 +27,21 @@
     }
   }
 
+  // Same rules as resolveUiTheme: user's choice if offered, else the platform
+  // default if offered, else the first offered theme (platform settings cached
+  // from the last /frontend/config; index.tsx re-applies the fresh ones).
+  var platform = read("localHook:ApplicationContextProvider.platformUiThemes") || {};
+  var hidden = platform.hidden_themes instanceof Array ? platform.hidden_themes : [];
+  var offered = [];
+  for (var i = 0; i < THEMES.length; i++) {
+    if (hidden.indexOf(THEMES[i]) < 0) offered.push(THEMES[i]);
+  }
+  if (offered.length === 0) offered = THEMES;
+
   var theme = read("localHook:ApplicationContextProvider.uiTheme");
-  if (THEMES.indexOf(theme) < 0) theme = DEFAULT_THEME;
+  if (offered.indexOf(theme) < 0) {
+    theme = offered.indexOf(platform.default_theme) >= 0 ? platform.default_theme : offered[0];
+  }
 
   var mode = read("localHook:ApplicationContextProvider.themeMode");
   if (mode !== "light" && mode !== "dark") {

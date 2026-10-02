@@ -19,7 +19,7 @@
 // paints before anyone can toggle anything.
 
 import { describe, expect, it } from "vitest";
-import { computeDarkMode } from "./ApplicationContextProvider";
+import { computeDarkMode } from "./uiThemes";
 
 describe("computeDarkMode", () => {
   it("resolves 'light' to light regardless of system preference", () => {

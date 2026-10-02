@@ -49,6 +49,11 @@ export interface ApplicationContextStruct {
   uiTheme: UiTheme;
 
   /**
+   * Themes the user may pick (shipped and not hidden by the platform).
+   */
+  offeredUiThemes: UiTheme[];
+
+  /**
    * Toggles the sidebar collapsed state.
    */
   toggleSidebar: () => void;

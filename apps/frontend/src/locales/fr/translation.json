@@ -2257,7 +2257,8 @@
           "tasks": "Activité",
           "teams": "Equipes",
           "platformPrompt": "Prompt global de la plateforme",
-          "announcements": "Annonces"
+          "announcements": "Annonces",
+          "uiSettings": "Interface utilisateur"
         },
         "title": "Espace administration"
       },
@@ -3000,6 +3001,31 @@
           "errors": "Erreurs"
         }
       }
+    },
+    "uiSettings": {
+      "title": "Interface utilisateur",
+      "subtitle": "Thème proposé par défaut et thèmes disponibles pour les utilisateurs. Les changements s'appliquent au prochain chargement de l'application par chaque utilisateur.",
+      "default": {
+        "title": "Thème par défaut",
+        "hint": "Thème des utilisateurs qui n'en ont pas encore choisi, ou dont le thème choisi n'est plus proposé.",
+        "none": "Aucun (premier thème proposé)"
+      },
+      "offered": {
+        "title": "Thèmes proposés aux utilisateurs",
+        "hint": "Un thème décoché disparaît du profil des utilisateurs. Leur choix est conservé et revient si le thème est de nouveau proposé."
+      },
+      "unknown": "Thèmes inconnus de cette version, conservés à l'enregistrement : {{ids}}",
+      "errors": {
+        "noneOffered": "Proposez au moins un thème.",
+        "defaultHidden": "Le thème par défaut doit faire partie des thèmes proposés."
+      },
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Paramètres d'interface enregistrés",
+      "saveFailed": "Les paramètres d'interface n'ont pas été enregistrés",
+      "lastUpdated": "Modifié par {{who}} le {{when}}",
+      "loadFailed": "Impossible de charger les paramètres d'interface. Rechargez la page.",
+      "unknownAuthor": "un administrateur"
     },
     "platformPrompt": {
       "title": "Prompt global de la plateforme",

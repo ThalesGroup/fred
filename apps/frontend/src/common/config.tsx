@@ -14,6 +14,7 @@
 
 import { createKeycloakInstance } from "../security/KeycloakService";
 import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
+import { cachePlatformUiThemes, type PlatformUiThemes } from "../app/uiThemes.ts";
 
 /** Public pre-auth control-plane config surface. */
 const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
@@ -49,6 +50,8 @@ export interface AppConfig {
    * marker is also `false`.
    */
   root_bootstrap_required: boolean;
+  /** Platform default and hidden UI themes, or null when never saved (public pre-auth config). */
+  ui_themes: PlatformUiThemes | null;
 }
 
 type RawAppConfig = {
@@ -83,7 +86,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version, root_bootstrap_required } = await loadPublicConfig();
+  const { user_auth, gcu_version, root_bootstrap_required, ui_themes } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
@@ -92,7 +95,9 @@ export const loadConfig = async () => {
     user_auth,
     gcu_version,
     root_bootstrap_required,
+    ui_themes,
   };
+  cachePlatformUiThemes(ui_themes);
 
   if (config.user_auth?.enabled) {
     const { realm_url, client_id } = config.user_auth;
@@ -120,7 +125,7 @@ export const loadConfig = async () => {
  *   `/config.json`, since the control-plane is required to run the app
  */
 const loadPublicConfig = async (): Promise<
-  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required">
+  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required" | "ui_themes">
 > => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
@@ -141,6 +146,7 @@ const loadPublicConfig = async (): Promise<
     // frontend must not otherwise re-derive ReBAC/auth policy itself.
     root_bootstrap_required:
       payload.root_bootstrap_required ?? (payload.user_auth.enabled && !payload.root_bootstrap_completed),
+    ui_themes: payload.ui_themes ?? null,
   };
 };
 
@@ -161,6 +167,9 @@ export const getConfig = (): AppConfig => {
   if (!config) throw new Error("Config not loaded yet. Call loadConfig() first.");
   return config;
 };
+
+/** Platform UI theme settings, or null before loadConfig() or when never saved. */
+export const getPlatformUiThemes = (): PlatformUiThemes | null => config?.ui_themes ?? null;
 
 /**
  * Read one static frontend property by key.

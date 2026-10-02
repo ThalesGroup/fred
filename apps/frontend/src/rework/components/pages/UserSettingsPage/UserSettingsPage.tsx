@@ -20,7 +20,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
-import type { UiTheme } from "../../../../app/uiThemes.ts";
+import { UI_THEME_LABEL_KEYS, type UiTheme } from "../../../../app/uiThemes.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";
@@ -29,7 +29,7 @@ export default function UserSettingsPage() {
   const navigate = useNavigate();
   const { siteTitle, siteSubtitle } = useFrontendProperties();
   const { t } = useTranslation();
-  const { themeMode, setThemeMode, uiTheme, setUiTheme } = useContext(ApplicationContext);
+  const { themeMode, setThemeMode, uiTheme, setUiTheme, offeredUiThemes } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
 
   const userFullName = KeyCloakService.GetUserFullName();
@@ -75,20 +75,23 @@ export default function UserSettingsPage() {
         <section className={styles.userSettingsCard}>
           <h2 className={styles.userSettingsCardTitle}>{t("rework.userSettings.app.interfaceTitle")}</h2>
           <div className={styles.userSettingsCardRow}>
-            <div className={styles.userSettingsThemeSelect}>
-              <Select<UiTheme>
-                size="xs"
-                compact
-                options={[
-                  { key: "pebble", value: "pebble", label: t("rework.userSettings.app.themePebble") },
-                  { key: "cobalt", value: "cobalt", label: t("rework.userSettings.app.themeCobalt") },
-                  { key: "cloud", value: "cloud", label: t("rework.userSettings.app.themeCloud") },
-                ]}
-                value={uiTheme}
-                onChange={setUiTheme}
-                ariaLabel={t("rework.userSettings.app.uiThemeAria")}
-              />
-            </div>
+            {/* Nothing to choose when the platform offers a single theme. */}
+            {offeredUiThemes.length > 1 && (
+              <div className={styles.userSettingsThemeSelect}>
+                <Select<UiTheme>
+                  size="xs"
+                  compact
+                  options={offeredUiThemes.map((theme) => ({
+                    key: theme,
+                    value: theme,
+                    label: t(UI_THEME_LABEL_KEYS[theme]),
+                  }))}
+                  value={uiTheme}
+                  onChange={setUiTheme}
+                  ariaLabel={t("rework.userSettings.app.uiThemeAria")}
+                />
+              </div>
+            )}
             <ButtonGroup
               variant="radio"
               aria-label={t("rework.userSettings.app.themeAria")}

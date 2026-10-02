@@ -8,15 +8,15 @@
 
 ## 2. Frontend resolution
 
-- [ ] 2.1 Add `resolveUiTheme` with the spec's rules and a case-table test (offered set, stored hidden, default hidden or unknown, nothing offered)
-- [ ] 2.2 Cache `ui_themes` from `/frontend/config` in localStorage, apply the boot-script copy of the rules to it, and re-resolve in `index.tsx` after `loadConfig()` before render; verify the boot script passes the same case table
-- [ ] 2.3 Make `ApplicationContextProvider` expose the offered themes and resolve with `resolveUiTheme`; verify the `src/app` tests pass
+- [x] 2.1 Add `resolveUiTheme` with the spec's rules and a case-table test (offered set, stored hidden, default hidden or unknown, nothing offered)
+- [x] 2.2 Cache `ui_themes` from `/frontend/config` in localStorage, apply the boot-script copy of the rules to it, and re-resolve in `index.tsx` after `loadConfig()` before render; verify the boot script passes the same case table
+- [x] 2.3 Make `ApplicationContextProvider` expose the offered themes and resolve with `resolveUiTheme`; verify the `src/app` tests pass
 
 ## 3. Admin page and profile
 
-- [ ] 3.1 Add the "Interface utilisateur" admin page, nav entry and protected route (fr/en strings), using the generated hooks; verify a test covers loading, saving and the two blocking states
-- [ ] 3.2 Make the profile picker list offered themes only and hide it when one is offered; verify a test for the single-theme case
-- [ ] 3.3 Manual check: set default Cobalt and hide Pebble as admin, open a private window as a new user and confirm the first painted screen is Cobalt with no theme switch
+- [x] 3.1 Add the "Interface utilisateur" admin page, nav entry and protected route (fr/en strings), using the generated hooks; verify a test covers loading, saving and the two blocking states
+- [x] 3.2 Make the profile picker list offered themes only and hide it when one is offered; verify a test for the single-theme case
+- [x] 3.3 Manual check: set default Cobalt and hide Pebble as admin, open a private window as a new user and confirm the first painted screen is Cobalt with no theme switch
 
 ## 4. Docs and close-out
 
