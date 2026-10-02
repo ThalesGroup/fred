@@ -113,6 +113,7 @@ interface InlineDrawerBaseProps {
    * Render the panel as a detached floating card (push layout): inset from every
    * edge, a single `outline-retreat` border, `--radius-l` corners and a subtle
    * shadow, dropping the drawer's flush edge border and the header divider.
+   * Requires layout="push"; other combinations are rejected at runtime.
    * Opt-in — default panels stay flush.
    */
   floating?: boolean;
@@ -182,6 +183,9 @@ export function InlineDrawer({
   const backdropRef = useRef<HTMLDivElement | null>(null);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
+  if (floating && layout !== "push") {
+    throw new Error('InlineDrawer: floating requires layout="push".');
+  }
   if (resizable && layout !== "push") {
     throw new Error('InlineDrawer: resizable requires layout="push".');
   }

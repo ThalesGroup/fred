@@ -421,3 +421,14 @@ it.each([
     renderToStaticMarkup(<InlineDrawer {...props} resizable={{ persistKey: "invalid", ...bounds }} />),
   ).toThrow("usePaneResize:");
 });
+
+it.each([undefined, "overlay"] as const)("rejects floating with layout %s", (layout) => {
+  expect(() =>
+    renderToStaticMarkup(<InlineDrawer open floating layout={layout} title="Panel" onClose={() => {}} />),
+  ).toThrow('floating requires layout="push"');
+});
+it("accepts floating push panels", () => {
+  expect(renderToStaticMarkup(<InlineDrawer open floating layout="push" title="Panel" onClose={() => {}} />)).toContain(
+    'data-floating="true"',
+  );
+});

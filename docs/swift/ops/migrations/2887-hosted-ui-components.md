@@ -49,3 +49,5 @@ Restore the previous Fred frontend image to recover the built-in screens. Keep t
 ## Limitations
 
 Publishing the alpha.3 npm package is a separate operation. Rebuild the candidate archive and regenerate release evidence before publication; evaluator registry pins remain pending that release. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.
+
+`InlineDrawer floating` requires explicit `layout="push"`; the unsupported overlay combination now throws instead of rendering a transparent modal panel.
