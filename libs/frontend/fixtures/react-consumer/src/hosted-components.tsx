@@ -164,6 +164,8 @@ export function HostedComponents() {
   const [drawer, setDrawer] = useState(false);
   const [drawerGeneration, setDrawerGeneration] = useState(0);
   const [overlay, setOverlay] = useState(false);
+  const [wideOverlay, setWideOverlay] = useState(false);
+  const [lowerClicks, setLowerClicks] = useState(0);
   const [copied, setCopied] = useState("");
   const [standalone, setStandalone] = useState(true);
   const [page, setPage] = useState(0);
@@ -198,11 +200,16 @@ export function HostedComponents() {
         <button type="reset">Reset native notes</button>
       </form>
       <Switch
+        className="consumer-switch"
         aria-label="Enable evaluation"
         checked={enabled}
         onChange={(event) => setEnabled(event.currentTarget.checked)}
       />
-      <Switch aria-label="Disabled switch" disabled />
+      <Switch
+        className="consumer-switch"
+        aria-label="Disabled switch"
+        disabled
+      />
       <ProgressBar
         theme="primary"
         current={3}
@@ -378,7 +385,28 @@ export function HostedComponents() {
       <button type="button" onClick={() => setOverlay(true)}>
         Open overlay drawer
       </button>
+      <button type="button" onClick={() => setWideOverlay(true)}>
+        Open wide overlay
+      </button>
       <InlineDrawer
+        title="Wide overlay"
+        open={wideOverlay}
+        width="700px"
+        onClose={() => setWideOverlay(false)}
+      >
+        <button
+          type="button"
+          data-lower-action
+          onClick={() => setLowerClicks((value) => value + 1)}
+        >
+          Lower action {lowerClicks}
+        </button>
+        <button type="button" onClick={() => setOverlay(true)}>
+          Open narrow overlay
+        </button>
+      </InlineDrawer>
+      <InlineDrawer
+        width="240px"
         title="Hosted overlay"
         open={overlay}
         onClose={() => setOverlay(false)}

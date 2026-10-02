@@ -63,3 +63,12 @@ it("keeps checkbox behavior for an untyped consumer passing another input type",
   act(() => input.click());
   expect(input.checked).toBe(true);
 });
+
+it("merges consumer classes with the native checkbox styling", () => {
+  render(<Switch className="consumer-switch" aria-label="toggle" />);
+  const input = container.querySelector("input")!;
+  expect(input.className).toContain("native-input");
+  expect(input.classList.contains("consumer-switch")).toBe(true);
+  act(() => input.click());
+  expect(input.checked).toBe(true);
+});

@@ -1001,3 +1001,53 @@ it("accepts zero server count and offset as an empty first page", () => {
   );
   expect(onOffsetChange).not.toHaveBeenCalled();
 });
+
+it("exposes table relationships, absolute row positions and sort state outside pagination controls", () => {
+  render(
+    <DataTable
+      columns={[{ label: "Id", sortable: true, sortValue: (row: Row) => row.id, cellRenderer: (row) => row.id }]}
+      data={[{ id: 7 }]}
+      selectable
+      rowKey={(row) => row.id}
+      selectedKeys={new Set()}
+      onSelectionChange={vi.fn()}
+      serverPagination={{ offset: 6, limit: 2, totalCount: 9, onOffsetChange: vi.fn() }}
+    />,
+  );
+  const table = container.querySelector('[role="table"]')!;
+  expect(table).not.toBeNull();
+  expect(table.getAttribute("aria-rowcount")).toBe("10");
+  expect(table.getAttribute("aria-colcount")).toBe("2");
+  expect(table.querySelectorAll('[role="columnheader"]')).toHaveLength(2);
+  expect(table.querySelector('[role="rowgroup"] [role="row"]')?.getAttribute("aria-rowindex")).toBe("8");
+  expect(table.querySelectorAll('[role="cell"]')).toHaveLength(2);
+  const header = table.querySelectorAll('[role="columnheader"]')[1];
+  expect(header.getAttribute("aria-sort")).toBe("none");
+  click(header.querySelector("button"));
+  expect(header.getAttribute("aria-sort")).toBe("ascending");
+  expect(table.querySelector('[class*="pagination"]')).toBeNull();
+});
+
+it("keeps numeric and text domain keys distinct for cell state and selection after reordering", () => {
+  const rows = [{ id: 1 }, { id: "1" }];
+  const onSelectionChange = vi.fn();
+  const props = {
+    columns: [
+      { label: "Draft", cellRenderer: (row: { id: string | number }) => <input defaultValue={typeof row.id} /> },
+    ],
+    rowKey: (row: { id: string | number }) => row.id,
+    selectable: true as const,
+    selectedKeys: new Set<string | number>([1]),
+    onSelectionChange,
+  };
+  render(<DataTable {...props} data={rows} />);
+  const inputs = () => Array.from(container.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])'));
+  inputs()[0].value = "edited numeric";
+  act(() => root.render(<DataTable {...props} data={[rows[1], rows[0]]} />));
+  expect(inputs().map((input) => input.value)).toEqual(["string", "edited numeric"]);
+  const boxes = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+  expect(boxes[1].checked).toBe(false);
+  expect(boxes[2].checked).toBe(true);
+  click(boxes[1]);
+  expect(onSelectionChange).toHaveBeenLastCalledWith(new Set([1, "1"]));
+});

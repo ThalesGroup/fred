@@ -392,128 +392,152 @@ export default function DataTable<T>({
         } as React.CSSProperties
       }
     >
-      <div className={styles["datatable-header"]}>
-        {selectable && (
-          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
-            <Checkbox
-              checked={allOnPageSelected}
-              indeterminate={someOnPageSelected}
-              onChange={toggleAllOnPage}
-              aria-label={labels?.selectAllOnPage ?? "Select all on page"}
-            />
-          </div>
-        )}
-        {columns.map((column, columnIndex) => {
-          const isSorted = sortState?.columnLabel === column.label;
-          return (
-            <div className={styles["datatable-cell"]} key={columnIndex}>
-              {column.sortable ? (
-                <button
-                  type="button"
-                  className={styles["header-sort-button"]}
-                  aria-label={
-                    labels?.sortColumn?.(column.label, isSorted ? sortState.direction : null) ??
-                    `${column.label}, ${isSorted ? (sortState.direction === "asc" ? "ascending" : "descending") : "not sorted"}`
-                  }
-                  data-active={isSorted || undefined}
-                  onClick={() => handleHeaderSortClick(column)}
-                >
-                  <span className={styles["header-content"]}>{column.label}</span>
-                  <span className={styles["sort-icon"]} data-visible={isSorted || undefined}>
-                    {/* The arrow points the way the list runs, as a file
+      <div
+        role="table"
+        style={{ display: "contents" }}
+        aria-rowcount={(serverPagination?.totalCount ?? data.length) + 1}
+        aria-colcount={columns.length + (selectable ? 1 : 0)}
+      >
+        <div role="row" aria-rowindex={1} className={styles["datatable-header"]}>
+          {selectable && (
+            <div role="columnheader" className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
+              <Checkbox
+                checked={allOnPageSelected}
+                indeterminate={someOnPageSelected}
+                onChange={toggleAllOnPage}
+                aria-label={labels?.selectAllOnPage ?? "Select all on page"}
+              />
+            </div>
+          )}
+          {columns.map((column, columnIndex) => {
+            const isSorted = sortState?.columnLabel === column.label;
+            return (
+              <div
+                role="columnheader"
+                aria-sort={
+                  column.sortable
+                    ? isSorted
+                      ? sortState.direction === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : "none"
+                    : undefined
+                }
+                className={styles["datatable-cell"]}
+                key={columnIndex}
+              >
+                {column.sortable ? (
+                  <button
+                    type="button"
+                    className={styles["header-sort-button"]}
+                    aria-label={
+                      labels?.sortColumn?.(column.label, isSorted ? sortState.direction : null) ??
+                      `${column.label}, ${isSorted ? (sortState.direction === "asc" ? "ascending" : "descending") : "not sorted"}`
+                    }
+                    data-active={isSorted || undefined}
+                    onClick={() => handleHeaderSortClick(column)}
+                  >
+                    <span className={styles["header-content"]}>{column.label}</span>
+                    <span className={styles["sort-icon"]} data-visible={isSorted || undefined}>
+                      {/* The arrow points the way the list runs, as a file
                         explorer does: down for ascending (A at the top, Z at
                         the bottom), up for descending. */}
-                    <Icon type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"} />
-                  </span>
-                </button>
-              ) : (
-                <span className={styles["header-content"]}>{column.label}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className={styles["datatable-body"]}>
-        {pageData.map((line, lineIndex) => {
-          const identity = rowKey ? undefined : fallbackKey(line);
-          const occurrence = identity === undefined ? 0 : (keyOccurrences.get(identity) ?? 0);
-          if (identity !== undefined) keyOccurrences.set(identity, occurrence + 1);
-          const key = rowKey ? rowKey(line) : `${identity}:${occurrence}`;
-          const isSelected = selectable && (selectedKeys?.has(key) ?? false);
-          return (
-            <div
-              className={styles["datatable-row"]}
-              key={key}
-              data-selected={isSelected || undefined}
-              data-activatable={!!onRowClick || undefined}
-              onClick={
-                onRowClick || selectable
-                  ? (event) => {
-                      const target = event.target as HTMLElement;
-                      // Portaled cell controls bubble through React, outside the row's DOM.
-                      if (!event.currentTarget.contains(target)) return;
-                      const control = target.closest(EMBEDDED_CONTROL_SELECTOR);
-                      if (control && control !== event.currentTarget && event.currentTarget.contains(control)) return;
-                      if (onRowClick) onRowClick(line);
-                      else toggleRow(key);
-                    }
-                  : undefined
-              }
-            >
-              {selectable && (
-                <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
-                  <Checkbox
-                    checked={selectedKeys?.has(key) ?? false}
-                    onChange={() => toggleRow(key)}
-                    aria-label={
-                      typeof labels?.selectRow === "function"
-                        ? labels.selectRow(key)
-                        : `${labels?.selectRow ?? "Select row"} ${key}`
-                    }
-                  />
-                </div>
-              )}
-              {columns.map((column, columnIndex) => {
-                const cellContent = column.cellRenderer?.(line);
-                const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
-                return (
-                  <div className={styles["datatable-cell"]} key={columnIndex}>
-                    {/* Primitive cell values get single-line ellipsis
-                     * truncation, with the full value readable via the
-                     * native title tooltip — free-length text (usernames,
-                     * team names) must never spill under the neighbouring
-                     * column. Element values are the caller's own layout
-                     * and pass through untouched. */}
-                    {onRowClick && columnIndex === 0 && (
-                      <button
-                        type="button"
-                        data-row-action
-                        className={styles["row-action"]}
-                        aria-label={labels?.activateRow ?? "Activate row"}
-                        aria-describedby={`${tableId}-${lineIndex}-content`}
-                        onClick={() => onRowClick(line)}
-                      >
-                        <Icon type="chevron_right" />
-                      </button>
-                    )}
-                    <div
-                      id={columnIndex === 0 ? `${tableId}-${lineIndex}-content` : undefined}
-                      className={styles["cell-content"]}
-                    >
-                      {isPrimitive ? (
-                        <span className={styles["cell-text"]} title={String(cellContent)}>
-                          {cellContent}
-                        </span>
-                      ) : (
-                        cellContent
-                      )}
-                    </div>
+                      <Icon type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"} />
+                    </span>
+                  </button>
+                ) : (
+                  <span className={styles["header-content"]}>{column.label}</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div role="rowgroup" className={styles["datatable-body"]}>
+          {pageData.map((line, lineIndex) => {
+            const identity = rowKey ? undefined : fallbackKey(line);
+            const occurrence = identity === undefined ? 0 : (keyOccurrences.get(identity) ?? 0);
+            if (identity !== undefined) keyOccurrences.set(identity, occurrence + 1);
+            const key = rowKey ? rowKey(line) : `${identity}:${occurrence}`;
+            const isSelected = selectable && (selectedKeys?.has(key) ?? false);
+            return (
+              <div
+                role="row"
+                aria-rowindex={
+                  (serverPagination?.offset ?? (paginationEnabled ? currentPage * rowsPerPage : 0)) + lineIndex + 2
+                }
+                className={styles["datatable-row"]}
+                key={`${typeof key}:${key}`}
+                data-selected={isSelected || undefined}
+                data-activatable={!!onRowClick || undefined}
+                onClick={
+                  onRowClick || selectable
+                    ? (event) => {
+                        const target = event.target as HTMLElement;
+                        // Portaled cell controls bubble through React, outside the row's DOM.
+                        if (!event.currentTarget.contains(target)) return;
+                        const control = target.closest(EMBEDDED_CONTROL_SELECTOR);
+                        if (control && control !== event.currentTarget && event.currentTarget.contains(control)) return;
+                        if (onRowClick) onRowClick(line);
+                        else toggleRow(key);
+                      }
+                    : undefined
+                }
+              >
+                {selectable && (
+                  <div role="cell" className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
+                    <Checkbox
+                      checked={selectedKeys?.has(key) ?? false}
+                      onChange={() => toggleRow(key)}
+                      aria-label={
+                        typeof labels?.selectRow === "function"
+                          ? labels.selectRow(key)
+                          : `${labels?.selectRow ?? "Select row"} ${key}`
+                      }
+                    />
                   </div>
-                );
-              })}
-            </div>
-          );
-        })}
+                )}
+                {columns.map((column, columnIndex) => {
+                  const cellContent = column.cellRenderer?.(line);
+                  const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
+                  return (
+                    <div role="cell" className={styles["datatable-cell"]} key={columnIndex}>
+                      {/* Primitive cell values get single-line ellipsis
+                       * truncation, with the full value readable via the
+                       * native title tooltip — free-length text (usernames,
+                       * team names) must never spill under the neighbouring
+                       * column. Element values are the caller's own layout
+                       * and pass through untouched. */}
+                      {onRowClick && columnIndex === 0 && (
+                        <button
+                          type="button"
+                          data-row-action
+                          className={styles["row-action"]}
+                          aria-label={labels?.activateRow ?? "Activate row"}
+                          aria-describedby={`${tableId}-${lineIndex}-content`}
+                          onClick={() => onRowClick(line)}
+                        >
+                          <Icon type="chevron_right" />
+                        </button>
+                      )}
+                      <div
+                        id={columnIndex === 0 ? `${tableId}-${lineIndex}-content` : undefined}
+                        className={styles["cell-content"]}
+                      >
+                        {isPrimitive ? (
+                          <span className={styles["cell-text"]} title={String(cellContent)}>
+                            {cellContent}
+                          </span>
+                        ) : (
+                          cellContent
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
       {paginationEnabled && (
         <TablePagination

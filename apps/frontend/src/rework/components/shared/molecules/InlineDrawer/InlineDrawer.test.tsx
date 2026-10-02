@@ -98,16 +98,18 @@ it.each([false, true])("Escape closes only the dialog with initially open child=
           trigger.click();
         });
       const field = document.querySelector("input")!;
-      await act(async () =>
-        field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })),
-      );
+      await act(async () => {
+        field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
       expect(child).toHaveBeenCalledTimes(cycle + 1);
       expect(parent).not.toHaveBeenCalled();
       expect(document.querySelector('[role="dialog"]')).toBeNull();
     }
-    await act(async () =>
-      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })),
-    );
+    await act(async () => {
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(parent).toHaveBeenCalledOnce();
   } finally {
     act(() => root.unmount());
@@ -189,11 +191,17 @@ it.each([false, true])("Escape preserves the lower drawer (nested=%s)", async (n
             .find((b) => b.textContent === "Reopen")!
             .click(),
         );
-      await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
       expect(upper).toHaveBeenCalledTimes(cycle + 1);
       expect(lower).not.toHaveBeenCalled();
     }
-    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(lower).toHaveBeenCalledOnce();
   } finally {
     act(() => root.unmount());
@@ -215,9 +223,75 @@ it("peer overlays use paint order, independently of listener re-registration", a
   try {
     act(() => root.render(view(first)));
     act(() => root.render(view(() => first())));
-    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(last).toHaveBeenCalledOnce();
     expect(first).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
+
+it.each([false, true])("blocks lower drawer controls and restores them on close, nested=%s", (nested) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const view = (open: boolean) => {
+    const upper = (
+      <InlineDrawer title="Upper" open={open} onClose={() => {}} width="200px">
+        <button>Upper action</button>
+      </InlineDrawer>
+    );
+    return (
+      <>
+        <InlineDrawer title="Lower" open onClose={() => {}} width="600px">
+          <button data-lower>Lower action</button>
+          {nested && upper}
+        </InlineDrawer>
+        {!nested && upper}
+      </>
+    );
+  };
+  try {
+    act(() => root.render(view(true)));
+    const lower = host.querySelector<HTMLElement>("[data-lower]")!;
+    const upper = Array.from(host.querySelectorAll("button")).find((el) => el.textContent === "Upper action")!;
+    expect(lower.closest("[inert]")).not.toBeNull();
+    expect(upper.closest("[inert]")).toBeNull();
+    act(() => root.render(view(false)));
+    expect(lower.closest("[inert]")).toBeNull();
+    expect(upper.closest("[inert]")).not.toBeNull();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
+
+it("keeps a lower drawer inert if it closes underneath an overlay", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const view = (lowerOpen: boolean, upperOpen: boolean) => (
+    <>
+      <InlineDrawer title="Lower" open={lowerOpen} onClose={() => {}}>
+        Lower
+      </InlineDrawer>
+      <InlineDrawer title="Upper" open={upperOpen} onClose={() => {}}>
+        Upper
+      </InlineDrawer>
+    </>
+  );
+  try {
+    act(() => root.render(view(true, true)));
+    act(() => root.render(view(false, true)));
+    act(() => root.render(view(false, false)));
+    expect(host.querySelector("aside")?.inert).toBe(true);
+    expect((host.querySelector("aside")?.previousElementSibling as HTMLElement).inert).toBe(true);
+    act(() => root.render(view(true, false)));
+    expect(host.querySelector("aside")?.inert).toBe(false);
   } finally {
     act(() => root.unmount());
     host.remove();

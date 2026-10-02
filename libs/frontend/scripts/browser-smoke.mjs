@@ -931,9 +931,32 @@ async function verifyHostedComponents(page) {
   await nativeForm.getByText("7 / 50", { exact: true }).waitFor();
 
   const toggle = hosted.getByRole("checkbox", { name: "Enable evaluation" });
+  assert.equal(
+    await toggle.evaluate((el) => getComputedStyle(el).width),
+    "1px",
+  );
+  assert.equal(
+    await toggle.evaluate((el) => el.classList.contains("consumer-switch")),
+    true,
+  );
+  const beforeToggle = await toggle.evaluate(
+    (el) => getComputedStyle(el.nextElementSibling).backgroundColor,
+  );
   await toggle.focus();
   await page.keyboard.press("Space");
   assert.equal(await toggle.isChecked(), true);
+  assert.notEqual(
+    await toggle.evaluate(
+      (el) => getComputedStyle(el.nextElementSibling).backgroundColor,
+    ),
+    beforeToggle,
+  );
+  assert.equal(
+    await hosted
+      .getByRole("checkbox", { name: "Disabled switch" })
+      .evaluate((el) => getComputedStyle(el.nextElementSibling).opacity),
+    "0.5",
+  );
   assert.equal(
     await hosted
       .getByRole("checkbox", { name: "Disabled switch" })
@@ -993,6 +1016,10 @@ async function verifyHostedComponents(page) {
     await hosted.getByText(text, { exact: true }).waitFor({ state: "visible" });
   }
   const identityTable = hosted.locator("[data-identity-table]");
+  assert.equal(await identityTable.getByRole("table").count(), 1);
+  assert.equal(await identityTable.getByRole("row").count(), 3);
+  assert.equal(await identityTable.getByRole("columnheader").count(), 1);
+  assert.equal(await identityTable.getByRole("cell").count(), 2);
   await identityTable
     .getByRole("textbox", { name: "Draft 2", exact: true })
     .fill("Edited record 2");
@@ -1186,6 +1213,26 @@ async function verifyHostedComponents(page) {
   await overlay.waitFor({ state: "visible" });
   await page.keyboard.press("Escape");
   await overlay.waitFor({ state: "hidden" });
+
+  await hosted.getByRole("button", { name: "Open wide overlay" }).click();
+  const wide = hosted.getByRole("complementary", { name: "Wide overlay" });
+  await wide.getByRole("button", { name: "Open narrow overlay" }).click();
+  await overlay.waitFor({ state: "visible" });
+  const lowerAction = hosted.locator("[data-lower-action]");
+  assert.equal(
+    await lowerAction.evaluate((el) => {
+      el.focus();
+      return el === document.activeElement;
+    }),
+    false,
+  );
+  const exposed = await lowerAction.boundingBox();
+  await page.mouse.click(exposed.x + 5, exposed.y + 5);
+  assert.equal(await lowerAction.textContent(), "Lower action 0");
+  await overlay.waitFor({ state: "hidden" });
+  await lowerAction.click();
+  assert.equal(await lowerAction.textContent(), "Lower action 1");
+  await wide.getByRole("button", { name: "Close panel" }).click();
 
   await hosted.getByRole("button", { name: "Show hosted errors" }).click();
   assert.equal(

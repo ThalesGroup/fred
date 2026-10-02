@@ -23,10 +23,15 @@ export interface SwitchProps extends Omit<ComponentPropsWithRef<"input">, "size"
   size?: SwitchSize;
 }
 
-export default function Switch({ ref, size = "medium", ...rest }: SwitchProps) {
+export default function Switch({ ref, size = "medium", className, ...rest }: SwitchProps) {
   return (
     <label className={styles["switch-container"]} data-size={size}>
-      <input ref={ref} className={styles["native-input"]} {...rest} type="checkbox" />
+      <input
+        ref={ref}
+        className={[styles["native-input"], className].filter(Boolean).join(" ")}
+        {...rest}
+        type="checkbox"
+      />
       <div className={styles["switch"]}>
         <div className={styles["state-layer"]}>
           <div className={styles["switch-handle"]}></div>

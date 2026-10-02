@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useLayoutEffect, useId, useRef } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
@@ -27,6 +27,39 @@ function topDrawer(document: Document): HTMLElement | undefined {
       return layer(a) - layer(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
     })
     .pop();
+}
+
+// Preserve consumer-owned inert state while an overlay owns interaction.
+// Ancestors of a nested overlay cannot themselves be inert: block their other
+// branches, leaving the path to the active drawer and its backdrop available.
+const backdrops = new WeakMap<HTMLElement, HTMLElement>();
+const blockedBranches = new Map<HTMLElement, boolean>();
+function syncDrawerInteraction(document: Document) {
+  for (const [node, wasInert] of blockedBranches) {
+    if (node.ownerDocument !== document) continue;
+    node.inert = wasInert || node.dataset.open === "false";
+    blockedBranches.delete(node);
+  }
+  const top = topDrawer(document);
+  if (!top || top.dataset.layout !== "overlay") return;
+  const backdrop = backdrops.get(top);
+  const block = (node: HTMLElement) => {
+    if (node === top || node === backdrop) return;
+    if (node.contains(top) || (backdrop && node.contains(backdrop))) {
+      for (const child of node.children) {
+        if (child instanceof HTMLElement) block(child);
+      }
+    } else {
+      if (!blockedBranches.has(node)) blockedBranches.set(node, node.inert);
+      node.inert = true;
+    }
+  };
+  for (const drawer of openDrawers) {
+    if (drawer.ownerDocument !== document || drawer === top) continue;
+    block(drawer);
+    const lowerBackdrop = backdrops.get(drawer);
+    if (lowerBackdrop) block(lowerBackdrop);
+  }
 }
 
 export interface InlineDrawerResizeSpec {
@@ -128,6 +161,7 @@ export function InlineDrawer({
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
   const drawerRef = useRef<HTMLElement | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
   if (resizable && layout !== "push") {
@@ -174,31 +208,44 @@ export function InlineDrawer({
     onClose();
   }, [onClose]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
     const drawer = drawerRef.current!;
     openDrawers.add(drawer);
-    let active = true;
+    if (backdropRef.current) backdrops.set(drawer, backdropRef.current);
+    else backdrops.delete(drawer);
+    syncDrawerInteraction(drawer.ownerDocument);
+    let pendingClose: ReturnType<typeof setTimeout> | undefined;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.isComposing || topDrawer(drawer.ownerDocument) !== drawer) return;
       // Dialog and drawer listeners can register in either order on window.
-      // Wait until dispatch completes before deciding whether a child consumed Escape.
-      queueMicrotask(() => {
-        if (active && !e.defaultPrevented) handleClose();
-      });
+      // Browsers can flush microtasks between native listeners. A timer waits
+      // for every listener, including a nested Dialog, to consume the event.
+      clearTimeout(pendingClose);
+      pendingClose = setTimeout(() => {
+        if (!e.defaultPrevented && topDrawer(drawer.ownerDocument) === drawer) handleClose();
+      }, 0);
     };
     window.addEventListener("keydown", handleKey);
     return () => {
-      active = false;
+      clearTimeout(pendingClose);
       openDrawers.delete(drawer);
+      syncDrawerInteraction(drawer.ownerDocument);
       window.removeEventListener("keydown", handleKey);
     };
-  }, [open, handleClose]);
+  });
 
   return (
     <>
       {layout === "overlay" && (
-        <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={handleClose} />
+        <div
+          ref={backdropRef}
+          className={styles.backdrop}
+          data-open={open}
+          aria-hidden="true"
+          inert={!open}
+          onClick={handleClose}
+        />
       )}
       <aside
         ref={drawerRef}
@@ -208,6 +255,7 @@ export function InlineDrawer({
         data-floating={floating ? "true" : undefined}
         data-compact-header={compactHeader ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
+        inert={!open}
         aria-hidden={!open}
         aria-labelledby={hideHeader ? undefined : titleId}
         aria-label={hideHeader ? title : undefined}
