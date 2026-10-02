@@ -62,6 +62,7 @@ export default function FileDropzone({ accept, hint, subHint, onFile, error }: F
           className={styles.input}
           onChange={(e) => {
             const file = e.target.files?.[0];
+            e.target.value = "";
             if (file) onFile(file);
           }}
         />

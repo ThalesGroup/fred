@@ -187,9 +187,10 @@ export default function ResourceExplorer<T>({
             rowKey={rowKey}
             rowHeight={rowHeight}
             firstColumnInset={firstColumnInset}
-            selectable={selectable}
+            {...(selectable && onSelectedKeysChange
+              ? { selectable: true, onSelectionChange: onSelectedKeysChange }
+              : { selectable: false })}
             selectedKeys={selectedKeys}
-            onSelectionChange={onSelectedKeysChange}
             backgroundColor={tableBackgroundColor}
             serverPagination={serverPagination}
             sortState={sortState}

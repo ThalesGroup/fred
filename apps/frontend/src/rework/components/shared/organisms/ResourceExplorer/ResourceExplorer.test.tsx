@@ -178,6 +178,7 @@ describe("ResourceExplorer", () => {
     );
     expect(container.textContent).toContain("Row 1");
     expect(container.textContent).toContain("Row 2");
+    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
   });
 
   it("forwards selectedKeys/onSelectedKeysChange to DataTable's row checkboxes", () => {

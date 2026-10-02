@@ -25,7 +25,7 @@ Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `l
 
 `TextArea` consumers must supply a controlled `value` (`""` for empty content), with `onChange` or `readOnly`; `defaultValue` is rejected.
 
-Selectable `DataTable` consumers must supply a stable `rowKey` function (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected. Controlled sorting requires both `sortState` (including `null`) and `onSortChange`; omit both for internal sorting.
+Selectable `DataTable` consumers must supply a stable `rowKey` function and `onSelectionChange` handler (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected. Controlled sorting requires both `sortState` (including `null`) and `onSortChange`; omit both for internal sorting, with `sortValue` on every sortable column.
 
 ## Validation
 

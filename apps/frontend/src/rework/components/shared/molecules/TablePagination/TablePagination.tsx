@@ -74,7 +74,15 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
-  const text = { ...defaultLabels, ...labels };
+  const text: TablePaginationLabels = {
+    totalItems: labels?.totalItems ?? defaultLabels.totalItems,
+    itemsPerPage: labels?.itemsPerPage ?? defaultLabels.itemsPerPage,
+    pageNumber: labels?.pageNumber ?? defaultLabels.pageNumber,
+    first: labels?.first ?? defaultLabels.first,
+    prev: labels?.prev ?? defaultLabels.prev,
+    next: labels?.next ?? defaultLabels.next,
+    last: labels?.last ?? defaultLabels.last,
+  };
 
   return (
     <div className={styles["datatable-footer"]}>

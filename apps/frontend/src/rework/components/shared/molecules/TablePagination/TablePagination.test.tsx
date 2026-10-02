@@ -115,3 +115,17 @@ it("names the size selector using caller-owned localized text", () => {
   );
   expect(container.querySelector('button[aria-label="Éléments par page"]')).not.toBeNull();
 });
+
+it("retains defaults for explicitly undefined partial labels", () => {
+  render(
+    <TablePagination
+      {...baseProps}
+      labels={{ totalItems: undefined, pageNumber: undefined, itemsPerPage: undefined, first: undefined }}
+      onRowsPerPageChange={vi.fn()}
+    />,
+  );
+  expect(container.textContent).toContain("45 items");
+  expect(container.textContent).toContain("Page 2 of 3");
+  expect(container.querySelector('[aria-label="Items per page"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="First page"]')).not.toBeNull();
+});

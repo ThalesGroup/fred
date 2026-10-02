@@ -289,7 +289,16 @@ describe("DataTable selection", () => {
   }
 
   it("renders one checkbox per row plus a header checkbox", () => {
-    render(<DataTable columns={columns} data={rows} selectable rowKey={(r) => r.id} selectedKeys={new Set()} />);
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={vi.fn()}
+      />,
+    );
     expect(checkboxes()).toHaveLength(4);
   });
 
@@ -784,3 +793,15 @@ it.each([{ sortState: null }, { onSortChange: () => {} }])(
     expect(() => render(<DataTable {...invalid} />)).toThrow("sortState and onSortChange must be supplied together");
   },
 );
+
+it("rejects untyped selectable tables without a selection handler", () => {
+  const invalid = { data: makeRows(2), columns, selectable: true, rowKey: (row: Row) => row.id } as DataTableProps<Row>;
+  expect(() => render(<DataTable {...invalid} />)).toThrow("selectable requires onSelectionChange");
+});
+
+it("rejects local sortable columns without comparators but permits controlled sorting", () => {
+  const cols: DataTableColumn<Row>[] = [{ label: "Id", sortable: true, cellRenderer: (row) => row.id }];
+  expect(() => render(<DataTable data={makeRows(2)} columns={cols} />)).toThrow("require sortValue");
+  act(() => root.render(<DataTable data={makeRows(2)} columns={cols} sortState={null} onSortChange={vi.fn()} />));
+  expect(container.textContent).toContain("Id");
+});

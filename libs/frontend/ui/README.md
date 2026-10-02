@@ -94,7 +94,7 @@ candidates must still be compared with a complete, maintainer-confirmed contract
 Real-consumer interaction props: `DataTable<T>.onRowClick(row)` activates row
 background/cells by pointer or Enter/Space while leaving embedded controls alone.
 When combined with selection, background activates and checkboxes select.
-Selectable tables require `rowKey`, including when `selectable` is a dynamic
+Selectable tables require `rowKey` and `onSelectionChange`, including when `selectable` is a dynamic
 boolean, so row and page-wide selection use stable identities across sorting
 and pagination.
 `InlineDrawer.closeLabel` supplies the accessible close action name.
@@ -116,3 +116,8 @@ DataTable rejects ambiguous labels instead of choosing another column’s compar
 Controlled DataTable sorting requires both `sortState` (use `null` for no sort)
 and `onSortChange`; omit both for internal sorting. The page-size selector includes
 the active limit even when it is outside the default choices.
+
+Uncontrolled sortable columns require `sortValue`; controlled sorting delegates
+ordering to the caller and may omit it. Undefined partial pagination labels retain
+their defaults. FileDropzone clears its input after capture so the same file can
+be selected again.

@@ -204,14 +204,24 @@ export { uncontrolledTextArea, missingTextAreaValue };
 
 const selectableTableWithoutKeys = (
   // @ts-expect-error Selection requires stable row keys for page-wide actions.
-  <DataTable data={[{ id: 1 }]} columns={[]} selectable />
+  <DataTable
+    data={[{ id: 1 }]}
+    columns={[]}
+    selectable
+    onSelectionChange={() => {}}
+  />
 );
 export { selectableTableWithoutKeys };
 
 export function dynamicSelectionContract(selectable: boolean) {
   const missingKeys = (
     // @ts-expect-error A dynamic selection flag also requires stable keys.
-    <DataTable data={[{ id: 1 }]} columns={[]} selectable={selectable} />
+    <DataTable
+      data={[{ id: 1 }]}
+      columns={[]}
+      selectable={selectable}
+      onSelectionChange={() => {}}
+    />
   );
   const keyed = (
     <DataTable
@@ -219,6 +229,7 @@ export function dynamicSelectionContract(selectable: boolean) {
       columns={[]}
       selectable={selectable}
       rowKey={(row) => row.id}
+      onSelectionChange={() => {}}
     />
   );
   const nonSelectable = (
@@ -257,4 +268,14 @@ export const missingSortCallback = (
 export const missingSortState = (
   // @ts-expect-error Controlled sort requires an explicit state, including null.
   <DataTable data={[]} columns={[]} onSortChange={() => {}} />
+);
+
+export const missingSelectionHandler = (
+  // @ts-expect-error Enabled selection requires a callback.
+  <DataTable
+    data={[{ id: 1 }]}
+    columns={[]}
+    selectable
+    rowKey={(row) => row.id}
+  />
 );

@@ -143,6 +143,7 @@ export type DataTableProps<T> = DataTableBaseProps<T> &
       }
     | {
         selectable: boolean;
+        onSelectionChange: (keys: ReadonlySet<string | number>) => void;
         /** Required when selection can be enabled, including a dynamic boolean. */
         rowKey: (element: T) => string | number;
       }
@@ -203,6 +204,12 @@ export default function DataTable<T>({
 }: DataTableProps<T>) {
   if ((controlledSortState !== undefined) !== (onSortChange !== undefined)) {
     throw new Error("DataTable: sortState and onSortChange must be supplied together.");
+  }
+  if (selectable && !onSelectionChange) {
+    throw new Error("DataTable: selectable requires onSelectionChange.");
+  }
+  if (!onSortChange && columns.some((column) => column.sortable && !column.sortValue)) {
+    throw new Error("DataTable: uncontrolled sortable columns require sortValue.");
   }
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);

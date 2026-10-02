@@ -927,6 +927,16 @@ async function verifyHostedComponents(page) {
     await hosted.locator("[data-upload]").textContent(),
     "suite.json",
   );
+  assert.equal(await hosted.locator('input[type="file"]').inputValue(), "");
+  await hosted.locator('input[type="file"]').setInputFiles({
+    name: "suite.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("{}"),
+  });
+  assert.equal(
+    await hosted.locator("[data-upload]").getAttribute("data-upload-count"),
+    "2",
+  );
   await hosted.getByRole("button", { name: "Create evaluation" }).click();
   assert.equal(await card.getAttribute("aria-pressed"), "true");
   for (const text of [

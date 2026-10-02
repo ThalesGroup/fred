@@ -153,6 +153,7 @@ export function HostedComponents() {
   const [enabled, setEnabled] = useState(false);
   const [selected, setSelected] = useState(false);
   const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+  const [uploads, setUploads] = useState(0);
   const [file, setFile] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [drawerGeneration, setDrawerGeneration] = useState(0);
@@ -201,9 +202,14 @@ export function HostedComponents() {
       <FileDropzone
         accept=".json"
         hint="Upload suite"
-        onFile={(value) => setFile(value.name)}
+        onFile={(value) => {
+          setFile(value.name);
+          setUploads((count) => count + 1);
+        }}
       />
-      <output data-upload>{file}</output>
+      <output data-upload data-upload-count={uploads}>
+        {file}
+      </output>
       <ServiceNotice
         icon="cloud_off"
         title="Service unavailable"
