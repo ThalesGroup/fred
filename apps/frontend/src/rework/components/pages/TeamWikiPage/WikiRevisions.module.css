@@ -82,14 +82,14 @@
      every other one — a current revision that grew by 4px would jump. */
   border: 2px solid transparent;
   border-radius: var(--radius-s);
-  background: var(--surface-container-high);
+  background: var(--surface-container);
   padding: var(--spacing-xs);
 }
 
-/* A validation records that someone read the version above it. Recessed, so the
-   timeline still reads as a list of versions with events between them. */
+/* A validation records that someone read the version above it. Half-way between
+   the panel and a version card, so events read lighter than versions in both themes. */
 .entryEvent {
-  background: var(--surface-container);
+  background: color-mix(in srgb, var(--surface-container) 50%, var(--surface-floating));
 }
 
 /* The current revision is outlined rather than only tagged: in a list of

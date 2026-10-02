@@ -70,6 +70,12 @@ is the token FRED components typically used for that role before the change.
 | Bordered content sheet on the page, nav rail, faint decorative block | `--surface-container-lowest`                                                                  | unchanged                                  |
 | Card, sidebar, chip, list row, track, badge, hover, focus            | any `--surface-container-*`                                                                   | unchanged (tone shifts only)               |
 
+Inside a floating surface, do not use `--surface-container-high`: in dark it
+has the same tone as `--surface-floating` and disappears. Use
+`--surface-container` for inset content, `--surface-container-highest` for
+tracks and fields, and a `--state-*` layer for hover. Chart and canvas tooltips
+that read a token from JavaScript count as floating too.
+
 A positioned element (`position: absolute` or `fixed`) with a shadow is almost
 always floating. A component that overrode a group or track background to
 `--surface-container-lowest` to make it darker in light should drop the

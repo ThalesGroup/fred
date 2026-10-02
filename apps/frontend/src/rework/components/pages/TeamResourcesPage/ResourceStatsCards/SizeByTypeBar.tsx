@@ -75,7 +75,7 @@ export default function SizeByTypeBar({
   const sectionRef = useRef<HTMLElement>(null);
   const css = useCssVars(
     sectionRef,
-    "--surface-container-highest",
+    "--surface-floating",
     "--outline-retreat",
     "--on-surface",
     "--on-surface-retreat",
@@ -128,7 +128,7 @@ export default function SizeByTypeBar({
                   wrapperStyle={{ zIndex: 1 }}
                   labelFormatter={() => tooltipTitle}
                   contentStyle={{
-                    background: css["--surface-container-highest"],
+                    background: css["--surface-floating"],
                     border: `1px solid ${css["--outline-retreat"]}`,
                     borderRadius: css["--radius-s"],
                     color: css["--on-surface"],

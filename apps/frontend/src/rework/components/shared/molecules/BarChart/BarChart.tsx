@@ -78,6 +78,7 @@ export default function BarChart({
     "--on-surface-retreat",
     "--outline-retreat",
     "--surface-container-highest",
+    "--surface-floating",
     "--on-surface",
     "--primary",
     "--font-family-base",
@@ -149,7 +150,7 @@ export default function BarChart({
                 <Tooltip
                   cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
-                    background: css["--surface-container-highest"],
+                    background: css["--surface-floating"],
                     border: `1px solid ${css["--outline-retreat"]}`,
                     borderRadius: css["--radius-s"],
                     color: css["--on-surface"],
@@ -187,7 +188,7 @@ export default function BarChart({
                 <Tooltip
                   cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
-                    background: css["--surface-container-highest"],
+                    background: css["--surface-floating"],
                     border: `1px solid ${css["--outline-retreat"]}`,
                     borderRadius: css["--radius-s"],
                     color: css["--on-surface"],

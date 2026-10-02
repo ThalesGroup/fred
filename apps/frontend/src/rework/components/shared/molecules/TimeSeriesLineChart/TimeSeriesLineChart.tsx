@@ -56,7 +56,7 @@ export default function TimeSeriesLineChart({
     sectionRef,
     "--on-surface-retreat",
     "--outline-retreat",
-    "--surface-container-highest",
+    "--surface-floating",
     "--on-surface",
     "--primary",
     "--font-family-base",
@@ -104,7 +104,7 @@ export default function TimeSeriesLineChart({
             <Tooltip
               cursor={{ stroke: css["--outline-retreat"] }}
               contentStyle={{
-                background: css["--surface-container-highest"],
+                background: css["--surface-floating"],
                 border: `1px solid ${css["--outline-retreat"]}`,
                 borderRadius: css["--radius-s"],
                 color: css["--on-surface"],

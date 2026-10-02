@@ -29,13 +29,15 @@ Light currently orders containers "higher = lighter" (90 → 100) around a tone-
 | Inset well (code, raw output, tables) | `surface-container-lowest` | `surface-container` | CodeBlock (CSS and `customStyle`), TabularToolDetail, PlatformPromptPage instructions, LibraryTreePlayground card |
 | Zebra row | `surface-container-lowest` | `surface-container-low` | MarkdownRenderer even rows |
 | Main nav rail | `surface-container-lowest` | unchanged (sits closer to the page than the `surface-container-low` sidebar) | MainNavBar |
-| Floating element | `surface-container-highest`, `-high`, `-low`, `surface-container`, `surface-container-lowest` | `surface-floating` | Menu, MenuPopover, CommandMenu, Tooltip, Toast, TaskDetailPopover, TaskTray panel, HelpSearch panel, TimeRangeSelector dropdown, HomeSearch menu, WikiRevisions panel, WritableDocumentPane popup and tooltip, Dialog, ConfirmationDialog, CodenameModal, SourceDetailModal, DocumentUploadDrawer, AddTeamMembersDialog, ManageLabels/Rename/CreateFolder modals, DuplicatePrompt/DuplicateAgent dialogs |
+| Floating element | `surface-container-highest`, `-high`, `-low`, `surface-container`, `surface-container-lowest` | `surface-floating` | Menu, MenuPopover, CommandMenu, Tooltip, chart tooltips (BarChart, PieChart, TimeSeriesLineChart, MultiSeriesLineChart, SizeByTypeBar, MindMapBlock), Toast, TaskDetailPopover, TaskTray panel, HelpSearch panel, TimeRangeSelector dropdown, HomeSearch menu, WikiRevisions panel, WritableDocumentPane popup and tooltip, Dialog, ConfirmationDialog, CodenameModal, SourceDetailModal, DocumentUploadDrawer, AddTeamMembersDialog, ManageLabels/Rename/CreateFolder modals, DuplicatePrompt/DuplicateAgent dialogs |
 | Track, badge, hover, focus, pending row, path chip, editor toolbar | `surface-container-highest` | unchanged | ProgressBar, TaskProgressBar, badges, TimeRangeSelector hover, RichInputField/HomeSearch focus, CleanupDialog header, TaskTray/UserProfile trigger, AddTeamMembers pending row, DocumentUploadDrawer/CreateFolderModal path, WikiEditor toolbar |
 | Decorative low-contrast blocks | `surface-container-lowest` | unchanged | AgentCard disabled icon, ChatList group header, MindMapBlock gradient and chart pane (its `surface-container` glow needs the lower base) |
 
 `ButtonGroup` overrides to `surface-container-lowest` in TeamSettingsParameters are removed: the component default (`surface-container`) keeps the track visible. Full-screen modals that already sit on `surface-main` (FullPageModal, SettingsModal, PromptsPage modal card) and inline panels (ImportPanel, InlineDrawer) are not floating and keep their token.
 
-Floating elements were found by scanning every rule with `position: absolute|fixed` plus a `--shadow`/`--elevation` box-shadow and a surface background.
+Inside a floating surface, `surface-container-high` equals `surface-floating` in dark (both tone 15), so nested fills use `surface-container` for inset content (WikiRevisions entries), `surface-container-highest` for tracks (MenuPopover toggle) and state layers for hover (Toast action button).
+
+Floating elements were found by scanning every rule with `position: absolute|fixed` plus a `--shadow`/`--elevation` box-shadow and a surface background, plus TSX inline styles that set a tooltip background.
 
 ## Risks / Trade-offs
 

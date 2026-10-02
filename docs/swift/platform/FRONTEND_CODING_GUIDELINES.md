@@ -228,6 +228,11 @@ Pick the token by the element's role, not by how it looks in one theme:
 | Filled fields, tracks, badges, focus                        | `--surface-container-highest`              |
 | Menus, popovers, tooltips, dialogs, toasts, floating panels | `--surface-floating` (with a `--shadow-*`) |
 
+Inside a floating surface, avoid `--surface-container-high`: it has the same
+dark tone as `--surface-floating`. Use `--surface-container` for inset content,
+`--surface-container-highest` for tracks and fields, and a `--state-*` layer for
+hover.
+
 Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
 in `libs/frontend/design-tokens/README.md` (Token migrations).
 

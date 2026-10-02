@@ -93,7 +93,7 @@
 }
 
 .actionBtn:hover {
-  background: var(--surface-container-high);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 

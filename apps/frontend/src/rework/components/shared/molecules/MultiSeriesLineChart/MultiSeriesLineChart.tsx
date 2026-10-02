@@ -72,7 +72,7 @@ export default function MultiSeriesLineChart({
     sectionRef,
     "--on-surface-retreat",
     "--outline-retreat",
-    "--surface-container-highest",
+    "--surface-floating",
     "--on-surface",
     "--font-family-base",
     "--radius-s",
@@ -124,7 +124,7 @@ export default function MultiSeriesLineChart({
             <Tooltip
               cursor={{ stroke: css["--outline-retreat"] }}
               contentStyle={{
-                background: css["--surface-container-highest"],
+                background: css["--surface-floating"],
                 border: `1px solid ${css["--outline-retreat"]}`,
                 borderRadius: css["--radius-s"],
                 color: css["--on-surface"],
