@@ -14,7 +14,7 @@
 
 import React, { createContext, useCallback, useContext, useRef, useState } from "react";
 import { Toast, ToastContainer } from "./Toast";
-import type { ToastData, ToastSeverity } from "./Toast";
+import type { ToastActions, ToastData, ToastSeverity } from "./Toast";
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ export interface ToastInput {
   duration?: number | null;
 }
 
-interface ToastContextValue {
+export interface ToastContextValue {
   showSuccess: (msg: ToastInput) => void;
   showError: (msg: ToastInput) => void;
   showInfo: (msg: ToastInput) => void;
@@ -42,7 +42,11 @@ interface ToastState extends ToastData {
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
-export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export interface ToastProviderProps extends ToastActions {
+  children: React.ReactNode;
+}
+
+export const ToastProvider = ({ children, ...actions }: ToastProviderProps) => {
   const [toasts, setToasts] = useState<ToastState[]>([]);
   // Date.now() alone isn't unique enough here: two toasts pushed within the
   // same millisecond (e.g. a failing action whose command and caller both
@@ -78,7 +82,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {children}
       <ToastContainer>
         {toasts.map((toast) => (
-          <Toast key={toast.id} {...toast} onClose={dismiss} onExited={remove} />
+          <Toast key={toast.id} {...toast} {...actions} onClose={dismiss} onExited={remove} />
         ))}
       </ToastContainer>
     </ToastContext.Provider>

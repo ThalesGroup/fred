@@ -2239,10 +2239,6 @@
       "knowledgeService": {
         "description": "Démarrez le service knowledge-flow pour accéder aux ressources.",
         "title": "Service de connaissance non démarré"
-      },
-      "evaluationService": {
-        "title": "Service d'évaluation indisponible",
-        "description": "Démarrez le service fred-evaluation pour gérer les évaluations et les exécutions."
       }
     },
     "sidebar": {
@@ -2347,7 +2343,6 @@
         "ingestion": "Traitement",
         "migration": "Migration",
         "reindex": "Réindexation",
-        "evaluation": "Évaluation",
         "erasure": "Effacement"
       },
       "migration": {
@@ -2619,7 +2614,6 @@
         "members": "Membres",
         "settings": "Paramètres",
         "activity": "Activité",
-        "evaluations": "Évaluations",
         "usage": "Consommation",
         "responsibilities": "Responsabilités",
         "routing": "Routage des modèles",
@@ -2950,311 +2944,12 @@
       "disconnect": "Déconnexion",
       "title": "Votre profil"
     },
-    "evaluation": {
-      "comingSoon": "Cet écran arrive ici — bientôt disponible.",
-      "create": {
-        "back": "Retour",
-        "target": {
-          "managed": {
-            "title": "Instance gérée",
-            "desc": "Une instance d'agent d'équipe approuvée via le control plane"
-          }
-        },
-        "instance": {
-          "label": "Instance d'agent",
-          "placeholder": "Sélectionnez une instance",
-          "loading": "Chargement des instances..."
-        },
-        "instanceTools": {
-          "label": "Tools activés sur cet agent",
-          "inherited": "Cette instance suit les tools par défaut de son template — aucune personnalisation propre à l'instance.",
-          "none": "Aucun tool activé sur cette instance."
-        },
-        "modelOverride": {
-          "label": "Surcharge de modèle (optionnel)",
-          "placeholder": "Utiliser le modèle par défaut de l'équipe"
-        },
-        "agent": {
-          "label": "Identifiant d'agent",
-          "placeholder": "agent-..."
-        },
-        "securityNote": "Les URLs de runtime ne sont jamais exposées au navigateur. Seuls des identifiants contrôlés sont acceptés.",
-        "manual": {
-          "label": "Cas de test"
-        },
-        "case": {
-          "n": "Cas {{n}}",
-          "input": "Entrée",
-          "expected": "Sortie attendue (optionnel)",
-          "add": "Ajouter un cas",
-          "remove": "Supprimer le cas"
-        },
-        "import": {
-          "json": "Importer du JSON",
-          "dropHint": "Glissez-déposez un fichier {{mode}}, ou cliquez pour parcourir",
-          "dropSub": "Jusqu'à 200 cas",
-          "jsonImported": "{{count}} cas importés depuis le JSON",
-          "error": "Fichier invalide. Vérifiez le format JSON ou CSV.",
-          "tooMany": "200 cas maximum autorisés.",
-          "total": "Total : {{count}} cas à évaluer",
-          "empty": "Le fichier ne contient aucun cas."
-        },
-        "judge": {
-          "label": "Profil du juge",
-          "help": "Profil de modèle utilisé pour noter les réponses"
-        },
-        "concurrency": {
-          "label": "Concurrence max"
-        },
-        "timeout": {
-          "label": "Délai par cas (s)"
-        },
-        "builtinMetrics": {
-          "label": "Métriques",
-          "help": "Choisis les métriques à calculer pour ce run — rien n'est ajouté automatiquement.",
-          "answerRelevancy": "Pertinence de la réponse",
-          "answerRelevancyDesc": "La réponse traite-t-elle la question posée ?",
-          "faithfulness": "Fidélité",
-          "faithfulnessDesc": "La réponse reste-t-elle ancrée dans le contexte récupéré ?",
-          "contextualRelevancy": "Pertinence contextuelle",
-          "contextualRelevancyDesc": "Le contexte récupéré est-il pertinent pour la question ?",
-          "contextualPrecision": "Précision contextuelle",
-          "contextualPrecisionDesc": "Les extraits les plus pertinents sont-ils classés en premier ? Nécessite une réponse attendue.",
-          "contextualRecall": "Rappel contextuel",
-          "contextualRecallDesc": "Le contexte couvre-t-il tout ce que la réponse attendue nécessite ? Nécessite une réponse attendue.",
-          "none": "Sélectionne au moins une métrique pour lancer un run."
-        },
-        "metrics": {
-          "label": "Métriques personnalisées",
-          "help": "Critères en langage naturel, notés par le juge en plus des métriques intégrées",
-          "add": "Ajouter un critère",
-          "remove": "Retirer le critère",
-          "n": "Critère {{n}}",
-          "name": "Nom",
-          "namePlaceholder": "ex. ancrage_source",
-          "criteria": "Critère à évaluer",
-          "criteriaPlaceholder": "ex. La réponse doit nommer la méthode et citer le chiffre rapporté du papier.",
-          "parameters": "Champs évalués par le juge",
-          "parameterOptions": {
-            "input": "Entrée",
-            "actualOutput": "Réponse produite",
-            "expectedOutput": "Réponse attendue",
-            "retrievalContext": "Contexte récupéré"
-          },
-          "threshold": "Seuil de réussite"
-        },
-        "recap": {
-          "title": "Récapitulatif",
-          "targetType": "Type de cible",
-          "managed": "Instance gérée",
-          "runtime": "Agent runtime",
-          "instance": "Instance",
-          "runtimeId": "Identifiant runtime",
-          "agent": "Identifiant d'agent",
-          "judge": "Juge",
-          "concurrency": "Concurrence",
-          "timeout": "Délai",
-          "metrics": "Métriques",
-          "customMetrics": "Métriques personnalisées",
-          "profile": "Profil",
-          "profileAuto": "Automatique",
-          "modelOverride": "Surcharge de modèle"
-        }
-      },
-      "detail": {
-        "cancelError": "Impossible d'annuler l'exécution",
-        "analyzeError": "Échec de l'analyse",
-        "loading": "Chargement de l'exécution...",
-        "notFound": "Exécution introuvable",
-        "loadingCases": "Chargement des cas...",
-        "subtitle": "Exécution · {{id}}",
-        "back": "Retour",
-        "rerun": "↻ Relancer cette exécution",
-        "cancel": "Annuler",
-        "cancelling": "Annulation...",
-        "analyze": "Analyser",
-        "analyzing": "Analyse...",
-        "langfuseOpen": "Voir sur Langfuse ↗",
-        "langfuseWaiting": "En attente de Langfuse...",
-        "langfuseOffline": "Langfuse hors ligne",
-        "running": "En cours d'exécution",
-        "verdictLabel": "Verdict : {{verdict}}",
-        "rateSummary": "{{rate}}% de réussite · {{done}}/{{total}} cas",
-        "stats": {
-          "passed": "Réussis",
-          "failed": "Échoués",
-          "insufficient": "Insuffisants",
-          "execErrors": "Erreurs exéc.",
-          "scoringErrors": "Erreurs scoring"
-        },
-        "metricScores": "Scores par métrique",
-        "metricScoresPartial": "Scores par métrique — partiel, {{done}}/{{total}} cas notés pour l'instant",
-        "globalScore": "Score global",
-        "analysisTitle": "Analyse",
-        "risk": "risque : {{level}}",
-        "dismiss": "Fermer",
-        "strengths": "Points forts",
-        "weaknesses": "Points faibles",
-        "recommendations": "Recommandations",
-        "campaignInfo": "Informations de l'exécution",
-        "meta": {
-          "dataset": "Évaluation",
-          "author": "Auteur",
-          "profile": "Profil de vérifications structurelles",
-          "judge": "Juge",
-          "modelOverride": "Surcharge de modèle",
-          "team": "Identifiant d'évaluation",
-          "created": "Créée le",
-          "started": "Démarrée le",
-          "completed": "Terminée le"
-        },
-        "cases": "Cas ({{count}})",
-        "col": {
-          "id": "ID",
-          "input": "Entrée",
-          "status": "Statut",
-          "verdict": "Verdict",
-          "latency": "Latence",
-          "metrics": "Métriques"
-        },
-        "caseTitle": "Détail du cas",
-        "copyJson": "Copier en JSON",
-        "copied": "Copié",
-        "downloadJson": "Télécharger le JSON",
-        "downloadRun": "Télécharger le JSON",
-        "downloading": "Préparation…",
-        "downloadError": "Échec du téléchargement",
-        "latency": "Latence",
-        "actualModel": "Modèle réel",
-        "input": "Entrée",
-        "expected": "Sortie attendue",
-        "actual": "Sortie réelle",
-        "execError": "Erreur d'exécution",
-        "scoringErrors": "Erreurs de scoring",
-        "metrics": "Métriques ({{count}})",
-        "structural": "Vérifications structurelles ({{count}})",
-        "skipped": "ignoré",
-        "passed": "réussi",
-        "failed": "échoué"
-      },
-      "controls": {
-        "searchEvaluations": "Rechercher par nom…",
-        "sortLabel": "Trier",
-        "sort": {
-          "newest": "Plus récentes d'abord",
-          "oldest": "Plus anciennes d'abord",
-          "name": "Nom (A–Z)"
-        },
-        "page": "Page {{current}} sur {{total}}",
-        "prev": "Précédent",
-        "next": "Suivant"
-      },
-      "evaluations": {
-        "title": "Évaluations",
-        "description": "Jeux de cas versionnés et réutilisables. Ouvrez-en une pour voir ses exécutions.",
-        "new": "+ Nouvelle évaluation",
-        "empty": "Aucune évaluation. Créez-en une pour commencer.",
-        "openRuns": "Exécutions",
-        "caseCount": "{{count}} cas",
-        "col": {
-          "name": "Nom / ID",
-          "version": "Version",
-          "author": "Auteur",
-          "origin": "Origine",
-          "cases": "Cas"
-        },
-        "origin": {
-          "upload": "Import",
-          "manual": "Manuel",
-          "capture": "Capture"
-        },
-        "deleteTitle": "Supprimer l'évaluation",
-        "deleteMessage": "Supprimer l'évaluation {{id}} ? Cela supprime définitivement l'évaluation ainsi que toutes ses exécutions, cas, métriques et événements.",
-        "deleteSuccess": "Évaluation supprimée",
-        "deleteError": "Échec de la suppression de l'évaluation"
-      },
-      "evaluationCreate": {
-        "title": "Nouvelle évaluation",
-        "description": "Nommez l'évaluation et donnez-lui ses cas. Aucune exécution n'est lancée.",
-        "name": {
-          "label": "Nom de l'évaluation",
-          "placeholder": "ex. usage-arxivai"
-        },
-        "versionNote": "Réutiliser un nom existant crée une nouvelle version (v1 → v2), qui devient la version courante.",
-        "submit": "Créer l'évaluation",
-        "saving": "Création...",
-        "success": "Évaluation « {{name}} » créée en {{version}}",
-        "error": "Échec de la création de l'évaluation",
-        "mode": {
-          "label": "Comment fournir les cas ?",
-          "import": {
-            "title": "Importer mon dataset",
-            "desc": "Un fichier JSON contenant les cas (input / expected_output)"
-          },
-          "manual": {
-            "title": "Écrire les cas à la main",
-            "desc": "Saisir chaque cas directement dans le formulaire"
-          }
-        }
-      },
-      "runs": {
-        "casesError": "Erreur lors du chargement des cas.",
-        "noCases": "Aucun cas disponible.",
-        "drawerTitle": "Cas de l'exécution",
-        "drawerHint": "Cliquez sur un cas pour voir tous les détails",
-        "inputLabel": "Entrée",
-        "executionError": "Erreur d'exécution",
-        "viewFullDetail": "Voir le détail complet →",
-        "metricsCount": "{{count}} métriques",
-        "targetInstance": "Instance · {{id}}",
-        "targetManaged": "Instance gérée",
-        "detail": "Détail",
-        "deleteTitle": "Supprimer l'exécution",
-        "deleteSuccess": "Exécution supprimée",
-        "deleteError": "Échec de la suppression de l'exécution",
-        "loadError": "Erreur lors du chargement des exécutions.",
-        "description": "Exécutions de cette évaluation",
-        "backToEvaluations": "Évaluations",
-        "newRun": "+ Nouvelle exécution",
-        "rerun": "↻ Relancer · {{target}}",
-        "rerunHint": "Relance immédiatement avec la dernière cible ({{target}} · {{model}}). Utilisez « Nouvelle exécution… » pour en choisir une autre.",
-        "rerunRow": "↻ Relancer",
-        "empty": "Aucune exécution pour cette évaluation",
-        "versionLabel": "Évaluation {{version}}",
-        "deleteMessage": "Supprimer l'exécution {{id}} ? Cela supprime définitivement ses cas, métriques et événements.",
-        "kpi": {
-          "active": "Exécutions actives",
-          "completed": "Exécutions terminées",
-          "casesEvaluated": "Cas évalués",
-          "criticalFailures": "Échecs critiques"
-        },
-        "col": {
-          "run": "Run",
-          "target": "Agent",
-          "state": "Statut",
-          "verdict": "Verdict",
-          "progress": "Fait",
-          "judge": "Juge"
-        }
-      },
-      "runCreate": {
-        "title": "Nouvelle exécution",
-        "description": "Évaluation « {{name}} » — choisissez l'agent à évaluer.",
-        "submit": "Lancer l'exécution",
-        "starting": "Lancement...",
-        "success": "Exécution lancée",
-        "error": "Échec du lancement de l'exécution",
-        "recap": {
-          "evaluation": "Évaluation"
-        }
-      }
-    },
     "taskActivity": {
       "title": "Activité",
       "subtitle": "Tâches planifiées, en cours et terminées.",
       "loading": "Chargement de l'activité…",
       "loadError": "Impossible de charger l'activité.",
-      "empty": "Aucune tâche planifiée ou en cours. Les tâches (effacements, imports, évaluations) apparaissent ici jusqu'à leur achèvement.",
+      "empty": "Aucune tâche planifiée ou en cours. Les tâches (effacements, imports) apparaissent ici jusqu'à leur achèvement.",
       "scheduled": "Planifiées",
       "inProgress": "En cours",
       "completed": "Terminées",

@@ -11,13 +11,15 @@ Comment savoir si un agent répond bien — et s'il s'améliore quand vous ajust
 sa configuration ? En le mesurant, plutôt qu'en s'en remettant à une impression
 formée sur quelques questions.
 
-> Les évaluations demandent le rôle **Analyste** ou **Admin** dans l'équipe.
+> L’evaluator autonome doit être déployé, enregistré dans Fred et activé pour
+> votre équipe. S’il manque dans **Apps**, contactez votre administrateur.
 
 ## 1. Créer l'évaluation
 
-Dans les **Réglages** de l'équipe, section **Évaluations**, créez une
-**évaluation** : un nom et ses cas. C'est une définition réutilisable et
-versionnée — la créer ne lance aucune exécution.
+Sélectionnez votre équipe, ouvrez **Apps**, puis l’application evaluator
+enregistrée. Créez-y une **évaluation** : un nom et ses cas. C’est une définition
+réutilisable et versionnée — la créer ne lance aucune exécution. Les évaluations
+ne se trouvent plus dans les réglages de l’équipe.
 
 Un bon jeu de cas ressemble à ce que vos collègues demanderont vraiment, y
 compris les questions auxquelles l'agent **ne devrait pas** savoir répondre :

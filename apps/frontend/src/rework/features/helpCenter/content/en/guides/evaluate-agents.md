@@ -11,13 +11,14 @@ How do you know whether an agent answers well — and whether it improves when y
 tune it? By measuring it, rather than relying on an impression formed over a
 few questions.
 
-> Evaluations need the **Analyst** or **Admin** role in the team.
+> The standalone evaluator must be deployed, registered in Fred and enabled for
+> your team. If it is missing from **Apps**, ask your administrator.
 
 ## 1. Create the evaluation
 
-In the team's **Settings**, under **Evaluations**, create an **evaluation**: a
-name and its cases. It is a reusable, versioned definition — creating it runs
-nothing.
+Select your team, open **Apps**, then open the registered evaluator application.
+Create an **evaluation** there: a name and its cases. It is a reusable, versioned
+definition — creating it runs nothing. Evaluations are no longer in team settings.
 
 A good set of cases looks like what your colleagues will actually ask, including
 the questions the agent **should not** be able to answer: that is how invented

@@ -15,7 +15,7 @@
 import type { ReactNode } from "react";
 import styles from "./PageHeader.module.css";
 
-interface PageHeaderProps {
+export interface PageHeaderProps {
   title: string;
   subtitle?: string;
   /** Optional icon button (e.g. a page-level "more" menu) rendered immediately
