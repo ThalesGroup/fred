@@ -39,7 +39,7 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **GIVEN** several `ask_user` calls in one exchange are awaiting answers
 - **WHEN** managed chat receives their pauses or reloads their history
 - **THEN** it displays one HITL card with a tab for each unanswered question in call order, selecting the first by default
-- **AND** each tab displays a short subject title, or a localized numbered fallback when no title exists, with horizontal scrolling when needed
+- **AND** each tab displays a short subject title, or a localized numbered fallback when no title exists; overflowing titles scroll horizontally with the mouse wheel or trackpad without dragging the scrollbar, while vertical page scrolling remains available at the ends
 - **AND** selecting a choice records a draft answer and advances to the next question without resuming the agent
 - **AND** nonblank free text counts as a draft answer while the person types, without requiring Next or changing the active tab; clearing it removes that draft unless a choice remains selected
 - **AND** the person can revisit a tab, change its choice or text answer, and skip an individual question

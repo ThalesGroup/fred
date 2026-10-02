@@ -5071,7 +5071,8 @@ the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
 While the person is answering, the `ask_user` tool line stays in progress.
 Simultaneous questions share one card with short subject tabs that scroll
-horizontally when needed. A choice or Skip records a local draft and advances
+horizontally when needed. The mouse wheel and trackpad scroll overflowing
+titles without dragging the scrollbar; page scrolling continues at the ends. A choice or Skip records a local draft and advances
 to the next unanswered tab. Nonblank free text counts as an answer while typing,
 without requiring Next or switching tabs; clearing it removes that answer unless
 a choice remains selected. The person can revisit any tab and revise the choice

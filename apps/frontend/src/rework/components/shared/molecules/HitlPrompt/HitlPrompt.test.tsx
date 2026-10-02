@@ -100,6 +100,32 @@ describe("HitlPrompt agent questions", () => {
 });
 
 describe("HitlPrompt question tabs", () => {
+  it("scrolls overflowing subjects with the wheel and releases page scrolling at the edge", () => {
+    const first = { ...event, payload: { stage: "agent_question", title: "Duration", occurrence_id: "call-a" } };
+    const second = { ...event, payload: { stage: "agent_question", title: "Transport", occurrence_id: "call-b" } };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<HitlPrompt event={first} siblingQuestions={[first, second]} onAnswer={() => undefined} />));
+    const strip = container.querySelector('[role="tablist"]')?.parentElement as HTMLDivElement;
+    Object.defineProperty(strip, "scrollWidth", { value: 600 });
+    Object.defineProperty(strip, "clientWidth", { value: 200 });
+
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+    act(() => strip.dispatchEvent(wheel));
+    expect(strip.scrollLeft).toBe(100);
+    expect(wheel.defaultPrevented).toBe(true);
+
+    strip.scrollLeft = 400;
+    const edgeWheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+    act(() => strip.dispatchEvent(edgeWheel));
+    expect(edgeWheel.defaultPrevented).toBe(false);
+
+    const trackpad = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: -50 });
+    act(() => strip.dispatchEvent(trackpad));
+    expect(trackpad.defaultPrevented).toBe(false);
+    act(() => root.unmount());
+  });
+
   it("uses compact subjects and switches the selected question", () => {
     const first = {
       ...event,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
@@ -81,6 +81,28 @@ export function HitlPrompt({
   );
   const hasChoiceTextRow = isAgentQuestion && payload.free_text && (payload.choices?.length ?? 0) > 0;
   const [localFreeText, setLocalFreeText] = useState("");
+  const questionTabsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const tabs = questionTabsRef.current;
+    if (!tabs) return;
+    const scrollWithWheel = (wheel: WheelEvent) => {
+      if (wheel.ctrlKey || wheel.shiftKey || Math.abs(wheel.deltaX) >= Math.abs(wheel.deltaY)) return;
+      const maxScroll = tabs.scrollWidth - tabs.clientWidth;
+      if (maxScroll <= 0) return;
+      const unit =
+        wheel.deltaMode === WheelEvent.DOM_DELTA_LINE
+          ? 16
+          : wheel.deltaMode === WheelEvent.DOM_DELTA_PAGE
+            ? tabs.clientWidth
+            : 1;
+      const next = Math.max(0, Math.min(maxScroll, tabs.scrollLeft + wheel.deltaY * unit));
+      if (next === tabs.scrollLeft) return;
+      tabs.scrollLeft = next;
+      wheel.preventDefault();
+    };
+    tabs.addEventListener("wheel", scrollWithWheel, { passive: false });
+    return () => tabs.removeEventListener("wheel", scrollWithWheel);
+  }, [hasQuestionTabs]);
   const freeText = freeTextValue ?? localFreeText;
   const characterInfoId = useId();
   const characterCount = countUnicodeCodePoints(freeText);
@@ -104,7 +126,7 @@ export function HitlPrompt({
       aria-label={t("chatbot.hitlWaitingAria")}
     >
       {hasQuestionTabs && (
-        <div className={styles.questionTabs}>
+        <div ref={questionTabsRef} className={styles.questionTabs}>
           <ButtonGroup
             variant="tabs"
             size="small"
