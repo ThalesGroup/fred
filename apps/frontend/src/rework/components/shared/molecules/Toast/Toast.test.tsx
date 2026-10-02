@@ -111,3 +111,28 @@ it.each([0, null, undefined])("handles duration %s without confusing zero with m
   if (duration === 0) expect(onClose).toHaveBeenCalledWith(7);
   else expect(onClose).not.toHaveBeenCalled();
 });
+
+it("keeps its expiry deadline while calling the latest parent callback", () => {
+  vi.useFakeTimers();
+  const callbacks = [vi.fn(), vi.fn(), vi.fn()];
+  const toast = (onClose: (id: number) => void) => (
+    <Toast
+      id={7}
+      severity="info"
+      summary="Notice"
+      duration={6000}
+      exiting={false}
+      onClose={onClose}
+      onExited={() => {}}
+    />
+  );
+  render(toast(callbacks[0]));
+  act(() => vi.advanceTimersByTime(2000));
+  act(() => root.render(toast(callbacks[1])));
+  act(() => vi.advanceTimersByTime(2000));
+  act(() => root.render(toast(callbacks[2])));
+  act(() => vi.advanceTimersByTime(2000));
+  expect(callbacks[0]).not.toHaveBeenCalled();
+  expect(callbacks[1]).not.toHaveBeenCalled();
+  expect(callbacks[2]).toHaveBeenCalledExactlyOnceWith(7);
+});

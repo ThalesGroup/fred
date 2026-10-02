@@ -329,6 +329,8 @@ export function InlineDrawer({
         data-compact-header={compactHeader ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
         inert={!open}
+        role={layout === "overlay" ? "dialog" : undefined}
+        aria-modal={layout === "overlay" && open ? true : undefined}
         aria-hidden={!open}
         aria-labelledby={hideHeader ? undefined : titleId}
         aria-label={hideHeader ? title : undefined}

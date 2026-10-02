@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./Toast.module.css";
 
@@ -74,11 +74,16 @@ export function Toast({
   copyLabel = "Copy error",
   dismissLabel = "Dismiss",
 }: ToastProps) {
+  const closeRef = useRef(onClose);
+  useLayoutEffect(() => {
+    closeRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (duration == null || exiting) return;
-    const timer = setTimeout(() => onClose(id), duration);
+    const timer = setTimeout(() => closeRef.current(id), duration);
     return () => clearTimeout(timer);
-  }, [id, duration, exiting, onClose]);
+  }, [id, duration, exiting]);
 
   const handleAnimationEnd = (e: React.AnimationEvent) => {
     if (exiting && e.target === e.currentTarget) onExited(id);

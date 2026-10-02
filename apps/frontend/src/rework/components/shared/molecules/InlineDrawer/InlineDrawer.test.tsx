@@ -104,7 +104,7 @@ it.each([false, true])("Escape closes only the dialog with initially open child=
       });
       expect(child).toHaveBeenCalledTimes(cycle + 1);
       expect(parent).not.toHaveBeenCalled();
-      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.querySelector('[role="dialog"] input')).toBeNull();
     }
     await act(async () => {
       trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
@@ -365,4 +365,13 @@ it("contains overlay focus and restores the opener after closing", async () => {
     act(() => root.unmount());
     host.remove();
   }
+});
+
+it.each(["overlay", "push"] as const)("announces %s drawer semantics", (layout) => {
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(<InlineDrawer open layout={layout} title="Details" onClose={() => {}} />);
+  const drawer = host.querySelector("aside")!;
+  expect(drawer.getAttribute("role")).toBe(layout === "overlay" ? "dialog" : null);
+  expect(drawer.getAttribute("aria-modal")).toBe(layout === "overlay" ? "true" : null);
+  expect(host.querySelector('[id="' + drawer.getAttribute("aria-labelledby") + '"]')?.textContent).toBe("Details");
 });

@@ -1140,7 +1140,7 @@ async function verifyHostedComponents(page) {
   await drawer
     .getByRole("button", { name: "Open detail above drawer" })
     .click();
-  const upperDrawer = hosted.getByRole("complementary", {
+  const upperDrawer = hosted.getByRole("dialog", {
     name: "Hosted overlay",
   });
   await upperDrawer.waitFor({ state: "visible" });
@@ -1231,7 +1231,7 @@ async function verifyHostedComponents(page) {
   const persisted = await drawer.boundingBox();
   await drawer.getByRole("button", { name: "Close panel" }).click();
   await hosted.getByRole("button", { name: "Open overlay drawer" }).click();
-  const overlay = hosted.getByRole("complementary", { name: "Hosted overlay" });
+  const overlay = hosted.getByRole("dialog", { name: "Hosted overlay" });
   await overlay.waitFor({ state: "visible" });
   const overlayClose = overlay.getByRole("button", { name: "Close panel" });
   await page.waitForFunction(
@@ -1280,7 +1280,7 @@ async function verifyHostedComponents(page) {
   await overlay.waitFor({ state: "hidden" });
 
   await hosted.getByRole("button", { name: "Open wide overlay" }).click();
-  const wide = hosted.getByRole("complementary", { name: "Wide overlay" });
+  const wide = hosted.getByRole("dialog", { name: "Wide overlay" });
   await wide.getByRole("button", { name: "Open narrow overlay" }).click();
   await overlay.waitFor({ state: "visible" });
   const lowerAction = hosted.locator("[data-lower-action]");
