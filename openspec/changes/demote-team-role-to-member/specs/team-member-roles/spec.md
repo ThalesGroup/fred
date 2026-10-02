@@ -30,7 +30,7 @@ When an authorized actor revokes a member's only stored elevated team role, the 
 
 ### Requirement: Role revocation preserves authorization and explicit removal
 
-The control-plane MUST enforce the existing permission for the role being revoked and, when it creates a direct `team_member` relation, the permission to administer members. Only an active `team_admin` MAY revoke a `pending_team_admin` nomination. It MUST prevent removal of the team's last active `team_admin`, even when pending nominations exist. It MUST NOT remove a person from the team through role revocation. Removing the person entirely SHALL remain an explicit member-removal action. Revoking a sole direct `team_member` relation MUST remain refused.
+The control-plane MUST enforce the existing permission for the role being revoked and, when it creates a direct `team_member` relation, the permission to administer members. Only an active `team_admin` MAY revoke a `pending_team_admin` nomination. It MUST prevent removal of the team's last active `team_admin`, even when pending nominations exist. A concurrent role revocation MUST NOT restore membership after explicit member removal. It MUST NOT remove a person from the team through role revocation. Removing the person entirely SHALL remain an explicit member-removal action. Revoking a sole direct `team_member` relation MUST remain refused.
 
 #### Scenario: Last active administrator is protected
 
@@ -56,6 +56,11 @@ The control-plane MUST enforce the existing permission for the role being revoke
 
 - **WHEN** a caller revokes the only stored `team_member` relation
 - **THEN** the request fails and the person remains on the team until an explicit member-removal action succeeds
+
+#### Scenario: Concurrent explicit removal wins over role revocation
+
+- **WHEN** a role revocation and an explicit removal target the same person concurrently
+- **THEN** their relation writes are serialized and a completed removal leaves the person without team membership
 
 #### Scenario: Explicit member removal remains separate
 

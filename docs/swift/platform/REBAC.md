@@ -89,6 +89,8 @@ replacement. Revoking the only stored elevated role grants a direct
 `team_member` relation before removing that role, so the person remains a simple
 member. Revoking a sole direct `team_member` is refused; use
 `DELETE /teams/{team_id}/members/{user_id}` to remove the person entirely.
+Role revocation and explicit removal of the same person use a shared advisory
+lock so a concurrent demotion cannot restore membership after removal.
 
 ### Team admin — team `team_admin`
 

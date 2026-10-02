@@ -1440,6 +1440,10 @@ async def search_candidate_team_members(
     ]
 
 
+def _team_member_role_lock_key(team_id: TeamId, user_id: str) -> str:
+    return f"team_member_roles:{team_id}:{user_id}"
+
+
 async def remove_team_member(
     user: KeycloakUser,
     team_id: TeamId,
@@ -1467,31 +1471,34 @@ async def remove_team_member(
     # full removal must be checked against every one of them, not just a
     # single "primary" role, and the last-admin guard applies whenever
     # team_admin is among them.
-    target_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
-    if UserTeamRelation.TEAM_ADMIN in target_roles:
-        await _ensure_team_keeps_at_least_one_admin(
-            rebac=rebac,
-            team_id=team_id,
-            user_id=user_id,
-            revoked_role=UserTeamRelation.TEAM_ADMIN,
-        )
-    permissions_to_check = [
-        _get_administer_permission_for_team_role_relation(role)
-        for role in (target_roles or {UserTeamRelation.TEAM_MEMBER})
-    ]
+    async with deps.get_team_metadata_store().advisory_lock(
+        _team_member_role_lock_key(team_id, user_id)
+    ):
+        target_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
+        if UserTeamRelation.TEAM_ADMIN in target_roles:
+            await _ensure_team_keeps_at_least_one_admin(
+                rebac=rebac,
+                team_id=team_id,
+                user_id=user_id,
+                revoked_role=UserTeamRelation.TEAM_ADMIN,
+            )
+        permissions_to_check = [
+            _get_administer_permission_for_team_role_relation(role)
+            for role in (target_roles or {UserTeamRelation.TEAM_MEMBER})
+        ]
 
-    # AUTHZ-09 (RFC Part 9 §43-44): a caller removing themselves ("leave
-    # team") needs no administer permission — the last-admin invariant above
-    # already covers the one case that must still be blocked.
-    await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        permissions_to_check,
-        deps,
-        skip_permission_check=user.uid == user_id,
-    )
-    await _remove_all_team_member_relations(rebac, team_id, user_id)
+        # AUTHZ-09 (RFC Part 9 §43-44): a caller removing themselves ("leave
+        # team") needs no administer permission — the last-admin invariant above
+        # already covers the one case that must still be blocked.
+        await _validate_team_and_check_permission(
+            user,
+            team_id,
+            rebac,
+            permissions_to_check,
+            deps,
+            skip_permission_check=user.uid == user_id,
+        )
+        await _remove_all_team_member_relations(rebac, team_id, user_id)
 
     policy = evaluate_policy_for_request(
         PolicyResolutionRequest(
@@ -1625,41 +1632,46 @@ async def revoke_team_member_role(
     """
     rebac = deps.rebac
 
-    current_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
-    if relation not in current_roles:
-        raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
-    sole_elevated_role = (
-        current_roles == {relation} and relation != UserTeamRelation.TEAM_MEMBER
-    )
-    if current_roles == {UserTeamRelation.TEAM_MEMBER}:
-        raise TeamMemberLastRoleError(team_id, user_id, relation)
-
-    if relation == UserTeamRelation.TEAM_ADMIN:
-        await _ensure_team_keeps_at_least_one_admin(
-            rebac=rebac,
-            team_id=team_id,
-            user_id=user_id,
-            revoked_role=relation,
-        )
-    permission_to_check = _get_administer_permission_for_team_role_relation(relation)
-    permissions_to_check = [permission_to_check]
-    if (
-        sole_elevated_role
-        and permission_to_check != TeamPermission.CAN_ADMINISTER_MEMBERS
+    async with deps.get_team_metadata_store().advisory_lock(
+        _team_member_role_lock_key(team_id, user_id)
     ):
-        permissions_to_check.append(TeamPermission.CAN_ADMINISTER_MEMBERS)
-    await _validate_team_and_check_permission(
-        user,
-        team_id,
-        rebac,
-        permissions_to_check,
-        deps,
-    )
-    if sole_elevated_role:
-        await _add_team_member_relation(
-            rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+        current_roles = await _get_user_roles_in_team(rebac, team_id, user_id)
+        if relation not in current_roles:
+            raise TeamMemberRoleNotHeldError(team_id, user_id, relation)
+        sole_elevated_role = (
+            current_roles == {relation} and relation != UserTeamRelation.TEAM_MEMBER
         )
-    await _remove_team_member_relation(rebac, team_id, user_id, relation)
+        if current_roles == {UserTeamRelation.TEAM_MEMBER}:
+            raise TeamMemberLastRoleError(team_id, user_id, relation)
+
+        if relation == UserTeamRelation.TEAM_ADMIN:
+            await _ensure_team_keeps_at_least_one_admin(
+                rebac=rebac,
+                team_id=team_id,
+                user_id=user_id,
+                revoked_role=relation,
+            )
+        permission_to_check = _get_administer_permission_for_team_role_relation(
+            relation
+        )
+        permissions_to_check = [permission_to_check]
+        if (
+            sole_elevated_role
+            and permission_to_check != TeamPermission.CAN_ADMINISTER_MEMBERS
+        ):
+            permissions_to_check.append(TeamPermission.CAN_ADMINISTER_MEMBERS)
+        await _validate_team_and_check_permission(
+            user,
+            team_id,
+            rebac,
+            permissions_to_check,
+            deps,
+        )
+        if sole_elevated_role:
+            await _add_team_member_relation(
+                rebac, team_id, user_id, UserTeamRelation.TEAM_MEMBER
+            )
+        await _remove_team_member_relation(rebac, team_id, user_id, relation)
 
     logger.info(
         "Revoked role %s from user %s on team %s",

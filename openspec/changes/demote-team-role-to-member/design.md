@@ -22,6 +22,10 @@ After reading the target's direct roles, the service identifies a sole elevated 
 
 This keeps the frontend's existing one-click toggle and the API's existing request shape. A frontend-only grant-then-revoke sequence was rejected: the member-list projection hides a direct baseline tuple whenever an elevated role is present, so the client cannot safely decide whether a grant would duplicate a tuple. A new endpoint would duplicate the existing revoke surface for this one outcome.
 
+### Serialize demotion with full member removal
+
+Both role revocation and explicit member removal hold the same Postgres advisory lock for the target team and user from the first direct-role read through their relation writes. This prevents a stale demotion from granting `team_member` after a concurrent full removal has deleted the person's roles. It works across control-plane replicas. The lock is scoped to one team member; concurrent revocations of two different administrators still need the separate last-admin concurrency fix.
+
 ### Add the baseline before removing the elevated role
 
 The two writes are ordered so an interrupted request cannot silently remove the person's last membership relation. If the second write fails, the person keeps the elevated role and gains an explicit baseline; retrying the same revoke removes only the elevated role. This uses the existing audited relation-write path. No schema or client generation is needed because the route signature and response stay the same.

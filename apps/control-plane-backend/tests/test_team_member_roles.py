@@ -30,6 +30,8 @@ primitives directly (no HTTP layer) so the invariants are unambiguous:
 
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -225,9 +227,15 @@ class _FakeRebac:
 class _FakeMetadataStore:
     def __init__(self, team_id: str, name: str = "Fredlab") -> None:
         self._metadata = TeamMetadata(id=TeamId(team_id), name=name)
+        self._locks: dict[str, asyncio.Lock] = {}
 
     async def get_by_team_id(self, team_id, session=None):
         return self._metadata if str(team_id) == str(self._metadata.id) else None
+
+    @asynccontextmanager
+    async def advisory_lock(self, key: str):
+        async with self._locks.setdefault(key, asyncio.Lock()):
+            yield
 
 
 def _user() -> KeycloakUser:
@@ -803,6 +811,77 @@ async def test_remove_team_member_checks_permission_for_every_held_role(
         TeamPermission.CAN_ADMINISTER_ADMINS,
         TeamPermission.CAN_ADMINISTER_EDITORS,
     }
+    assert rebac.roles["bob"] == set()
+
+
+@pytest.mark.asyncio
+async def test_role_revoke_cannot_restore_member_after_concurrent_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from control_plane_backend.scheduler.policies.policy_models import (
+        PolicyEvaluationResult,
+        PurgeMode,
+    )
+
+    revoke_checked = asyncio.Event()
+    resume_revoke = asyncio.Event()
+
+    class PausedRebac(_FakeRebac):
+        async def check_user_team_permissions_or_raise(
+            self, *, user, team_id, permissions
+        ) -> str | None:
+            if tuple(permissions) == (
+                TeamPermission.CAN_ADMINISTER_EDITORS,
+                TeamPermission.CAN_ADMINISTER_MEMBERS,
+            ):
+                revoke_checked.set()
+                await resume_revoke.wait()
+            return await super().check_user_team_permissions_or_raise(
+                user=user, team_id=team_id, permissions=permissions
+            )
+
+    class EmptySessionStore:
+        async def get_for_user(self, _user_id, _team_id, db_session=None):
+            return []
+
+    class EmptyPurgeQueueStore:
+        async def enqueue(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "control_plane_backend.teams.service.evaluate_policy_for_request",
+        lambda *_a, **_k: PolicyEvaluationResult(
+            mode=PurgeMode.IMMEDIATE_DELETE,
+            retention="PT0S",
+            retention_seconds=0,
+            cancel_on_rejoin=True,
+            matched_rule_id=None,
+            matched_rule_specificity=0,
+        ),
+    )
+    rebac = PausedRebac(roles={"bob": {UserTeamRelation.TEAM_EDITOR}})
+    deps = _deps(
+        rebac,
+        "fredlab",
+        get_session_store=lambda: EmptySessionStore(),
+        get_purge_queue_store=lambda: EmptyPurgeQueueStore(),
+    )
+
+    revoke = asyncio.create_task(
+        revoke_team_member_role(
+            _user(), TeamId("fredlab"), "bob", UserTeamRelation.TEAM_EDITOR, deps
+        )
+    )
+    await revoke_checked.wait()
+    removal = asyncio.create_task(
+        remove_team_member(_user(), TeamId("fredlab"), "bob", deps)
+    )
+    await asyncio.sleep(0)
+    assert not removal.done()
+
+    resume_revoke.set()
+    await revoke
+    await removal
     assert rebac.roles["bob"] == set()
 
 
