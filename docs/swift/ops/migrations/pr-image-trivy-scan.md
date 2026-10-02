@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-On a pull request, confirm each Docker image job publishes a Trivy summary and attaches its JSON report. A critical finding produces a warning annotation without failing that job.
+On a pull request, confirm each publishable Docker image job publishes a Trivy summary and attaches its JSON report, while `ws-bench` remains build-only. A critical finding produces a warning annotation without failing that job.
 
 ## Rollback
 

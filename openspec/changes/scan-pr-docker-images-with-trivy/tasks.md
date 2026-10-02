@@ -1,7 +1,7 @@
 ## 1. Pull request scan
 
-- [x] 1.1 Load each pre-merge matrix build under a local Docker tag and verify the reusable workflow still selects the same five images and preserves publication settings.
-- [x] 1.2 Run Trivy against each local image, emit a warning and summary for critical findings, and retain the JSON report; verify clean results and scanner failures have distinct outcomes.
+- [ ] 1.1 Load the four publishable pre-merge matrix builds under local Docker tags and verify all five images still build, including `ws-bench` with its explicit scan exception, while publication settings stay intact.
+- [ ] 1.2 Run Trivy against the four local images, emit a warning and summary for critical findings, and retain the JSON report; verify clean results and scanner failures have distinct outcomes.
 
 ## 2. Delivery
 

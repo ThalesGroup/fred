@@ -5,7 +5,7 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 ## Goals / Non-Goals
 
 **Goals:**
-- Scan the exact image built by each pull request matrix job without registry credentials.
+- Scan the exact image built by each publishable pull request matrix job without registry credentials; `ws-bench` remains build-only.
 - Distinguish vulnerability findings from build or scanner failures.
 
 **Non-Goals:**
@@ -14,8 +14,8 @@ The reusable `Docker-images.yml` workflow builds every `.github/docker-images.js
 
 ## Decisions
 
-- Load only pre-merge Buildx output into the runner Docker store under a local tag. This preserves the existing build recipe and release push path. A separate rebuild would waste time and could scan a different artifact.
-- Run the versioned Trivy action against that local tag, limited to critical OS and library vulnerabilities. Produce JSON so a following step can distinguish an empty result from a failed scan. `exit-code: 0` keeps findings advisory; an action failure still fails the job.
+- The image manifest marks `ws-bench` with `scan: false`; matrix resolution defaults all other images to scanning. Load only scan-enabled Buildx output from `pull_request` runs into the runner Docker store under a local tag; release pushes never load or scan images. This preserves the existing build recipe and release push path. A separate rebuild would waste time and could scan a different artifact.
+- Run the versioned Trivy action against the scan-enabled local tags, limited to critical OS and library vulnerabilities. Produce JSON so a following step can distinguish an empty result from a failed scan. `exit-code: 0` keeps findings advisory; an action failure still fails the job.
 - Count findings from Trivy JSON and emit one GitHub warning annotation per affected image. Add a short job summary and upload the full JSON report for review. A warning annotation is visible without adding PR write permissions or a comment bot.
 
 ## Risks / Trade-offs

@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           include=$(jq -c --argjson publish ${{ inputs.publish }} \
-            '[.images[] | select(($publish | not) or .publish)]' \
+            '[.images[] | select(($publish | not) or .publish) | . + {scan: (.scan != false)}]' \
             .github/docker-images.json)
           echo "include=$include" >> "$GITHUB_OUTPUT"
           echo "$include" | jq -r '.[] | "\(.name)\t\(.dockerfile)"'
@@ -127,7 +127,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_args }}
           push: ${{ inputs.publish }}
-          load: ${{ !inputs.publish }}
+          load: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
           tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
           # The empty string is falsy in expressions, so it has to sit on the
@@ -140,7 +140,7 @@ jobs:
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
 
       - name: Scan built image for critical CVEs
-        if: ${{ !inputs.publish }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ format('fred-pr/{0}:scan', matrix.name) }}
@@ -152,7 +152,7 @@ jobs:
           exit-code: '0'
 
       - name: Summarize critical CVEs
-        if: ${{ !inputs.publish }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
         env:
           IMAGE_NAME: ${{ matrix.name }}
         run: |
@@ -168,7 +168,7 @@ jobs:
           fi
 
       - name: Upload Trivy report
-        if: ${{ !inputs.publish }}
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
         uses: actions/upload-artifact@v4
         with:
           name: trivy-${{ matrix.name }}

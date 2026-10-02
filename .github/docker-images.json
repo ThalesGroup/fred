@@ -33,7 +33,8 @@
       "context": "developer_tools/benchmarks",
       "dockerfile": "developer_tools/benchmarks/Dockerfile",
       "build_args": "",
-      "publish": false
+      "publish": false,
+      "scan": false
     }
   ],
   "excluded": [
