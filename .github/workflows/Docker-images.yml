@@ -200,7 +200,7 @@ jobs:
           retention-days: 14
 
   trivy:
-    name: Trivy critical CVEs / ${{ matrix.name }}
+    name: Scan Trivy / ${{ matrix.name }}
     if: ${{ github.event_name == 'pull_request' && !inputs.publish }}
     needs: [resolve, build]
     runs-on: ubuntu-latest
@@ -216,7 +216,7 @@ jobs:
         with:
           name: trivy-${{ matrix.name }}
 
-      - name: Report critical CVEs
+      - name: Report scan findings
         env:
           IMAGE_NAME: ${{ matrix.name }}
         run: |
@@ -246,7 +246,7 @@ jobs:
           fi
 
   trivy-dependencies:
-    name: Trivy critical CVEs / lockfiles
+    name: Scan Trivy / lockfiles
     if: ${{ github.event_name == 'pull_request' && !inputs.publish }}
     needs: build
     runs-on: ubuntu-latest
