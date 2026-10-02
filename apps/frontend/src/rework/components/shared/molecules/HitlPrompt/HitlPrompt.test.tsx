@@ -99,6 +99,67 @@ describe("HitlPrompt agent questions", () => {
   });
 });
 
+describe("HitlPrompt question tabs", () => {
+  it("scrolls overflowing subjects with the wheel and releases page scrolling at the edge", () => {
+    const first = { ...event, payload: { stage: "agent_question", title: "Duration", occurrence_id: "call-a" } };
+    const second = { ...event, payload: { stage: "agent_question", title: "Transport", occurrence_id: "call-b" } };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => root.render(<HitlPrompt event={first} siblingQuestions={[first, second]} onAnswer={() => undefined} />));
+    const strip = container.querySelector('[role="tablist"]')?.parentElement as HTMLDivElement;
+    Object.defineProperty(strip, "scrollWidth", { value: 600 });
+    Object.defineProperty(strip, "clientWidth", { value: 200 });
+
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+    act(() => strip.dispatchEvent(wheel));
+    expect(strip.scrollLeft).toBe(100);
+    expect(wheel.defaultPrevented).toBe(true);
+
+    strip.scrollLeft = 400;
+    const edgeWheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+    act(() => strip.dispatchEvent(edgeWheel));
+    expect(edgeWheel.defaultPrevented).toBe(false);
+
+    const trackpad = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaX: -50 });
+    act(() => strip.dispatchEvent(trackpad));
+    expect(trackpad.defaultPrevented).toBe(false);
+    act(() => root.unmount());
+  });
+
+  it("uses compact subjects and switches the selected question", () => {
+    const first = {
+      ...event,
+      payload: { stage: "agent_question", title: "Trip duration", question: "How long?", occurrence_id: "call-a" },
+    };
+    const second = {
+      ...event,
+      payload: { stage: "agent_question", question: "What budget?", occurrence_id: "call-b" },
+    };
+    const onSelectQuestion = vi.fn();
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onSelectQuestion={onSelectQuestion}
+          onAnswer={() => undefined}
+        />,
+      );
+    });
+    const tabs = container.querySelectorAll('[role="tab"]');
+    expect(tabs).toHaveLength(2);
+    expect(tabs[0].textContent).toBe("Trip duration");
+    expect(tabs[0].getAttribute("title")).toBe("Trip duration");
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    expect(tabs[1].textContent).toBe("chatbot.hitlQuestionTabFallback 2");
+    act(() => (tabs[1] as HTMLButtonElement).click());
+    expect(onSelectQuestion).toHaveBeenCalledWith(second);
+    act(() => root.unmount());
+  });
+});
+
 describe("HitlPrompt choice descriptions", () => {
   it("renders each description below its label inside one selectable button", () => {
     const question = {
@@ -120,6 +181,68 @@ describe("HitlPrompt choice descriptions", () => {
     expect(choiceButtons).toHaveLength(2);
     expect(choiceButtons[0].textContent).toBe("BaguettePain blanc croustillant");
     expect(choiceButtons[1].textContent).toBe("Pain completRiche en fibres");
+  });
+});
+
+describe("HitlPrompt Other answer row", () => {
+  it("places a gray Other label beside an editable fifth row", () => {
+    const question = {
+      ...event,
+      payload: {
+        stage: "agent_question",
+        free_text: true,
+        choices: [
+          { id: "one", label: "One" },
+          { id: "two", label: "Two" },
+          { id: "three", label: "Three" },
+          { id: "four", label: "Four" },
+        ],
+      },
+    };
+    const container = document.createElement("div");
+    container.innerHTML = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    const input = container.querySelector("input");
+    expect(input?.getAttribute("placeholder")).toBeNull();
+    expect(input?.parentElement?.tagName).toBe("LABEL");
+    expect(input?.previousElementSibling?.textContent).toBe("chatbot.hitlOtherAnswerPlaceholder");
+    const rows = input?.parentElement?.parentElement;
+    expect(rows?.children).toHaveLength(5);
+    expect(
+      Array.from(rows?.children ?? [])
+        .slice(0, 4)
+        .map((row) => row.textContent),
+    ).toEqual(["One", "Two", "Three", "Four"]);
+    expect(rows?.lastElementChild?.contains(input ?? null)).toBe(true);
+    expect(container.querySelector("textarea")).toBeNull();
+  });
+
+  it("renders question emphasis as Markdown", () => {
+    const question = {
+      ...event,
+      payload: {
+        stage: "agent_question",
+        free_text: true,
+        choices: [
+          { id: "train", label: "Train" },
+          { id: "plane", label: "Plane" },
+        ],
+        question: "Dates validées : **20 au 27 décembre**.\n\nPassons aux **transports**.",
+      },
+    };
+    const html = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    expect(html).toContain("<strong>20 au 27 décembre</strong>");
+    expect(html).toContain("<strong>transports</strong>");
+    expect(html).not.toContain("**");
+  });
+
+  it("keeps the multiline field for a text-only question", () => {
+    const question = {
+      ...event,
+      payload: { stage: "agent_question", free_text: true, choices: [] },
+    };
+    const html = renderToStaticMarkup(<HitlPrompt event={question} onAnswer={() => undefined} />);
+    expect(html).toContain("<textarea");
+    expect(html).not.toContain("chatbot.hitlOtherAnswerPlaceholder");
   });
 });
 
@@ -172,8 +295,12 @@ describe("HitlPrompt answer actions", () => {
     expect(onAnswer).toHaveBeenLastCalledWith("proceed", " note ");
     act(() =>
       container
-        .querySelector("textarea")
-        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true })),
+        .querySelector("input")
+        ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, isComposing: true })),
+    );
+    expect(onAnswer).toHaveBeenCalledTimes(1);
+    act(() =>
+      container.querySelector("input")?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),
     );
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, " note ");
     act(() => skip?.click());
@@ -182,5 +309,91 @@ describe("HitlPrompt answer actions", () => {
     expect(onAnswer).toHaveBeenLastCalledWith(undefined, undefined, true);
     act(() => root.unmount());
     container.remove();
+  });
+});
+
+describe("HitlPrompt staged batch answers", () => {
+  it("closes a grouped card by skipping the whole group", () => {
+    const first = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", occurrence_id: "call-a" },
+    };
+    const second = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", occurrence_id: "call-b" },
+    };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onSkipAll = vi.fn();
+    const onStageAnswer = vi.fn();
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSkipAll={onSkipAll}
+          onAnswer={() => undefined}
+        />,
+      ),
+    );
+    const close = container.querySelector('button[aria-label="chatbot.skipAllHitlQuestionsAria"]');
+    act(() => (close as HTMLButtonElement | null)?.click());
+    expect(onSkipAll).toHaveBeenCalledOnce();
+    expect(onStageAnswer).not.toHaveBeenCalled();
+    act(() => root.unmount());
+  });
+
+  it("advances through choices while keeping every tab editable until Send all", () => {
+    const first = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", title: "Trip duration", occurrence_id: "call-a" },
+    };
+    const second = {
+      ...event,
+      payload: { ...event.payload, stage: "agent_question", title: "Travel budget", occurrence_id: "call-b" },
+    };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onStageAnswer = vi.fn();
+    const onSendAll = vi.fn();
+    const onAnswer = vi.fn();
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSendAll={onSendAll}
+          onAnswer={onAnswer}
+          canSendAll={false}
+        />,
+      ),
+    );
+    const choice = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Proceed");
+    act(() => choice?.click());
+    expect(onStageAnswer).toHaveBeenCalledWith("proceed", undefined, false);
+    expect(onAnswer).not.toHaveBeenCalled();
+    const sendAll = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "chatbot.sendAllHitlAnswers",
+    );
+    expect(sendAll?.hasAttribute("disabled")).toBe(true);
+    act(() =>
+      root.render(
+        <HitlPrompt
+          event={first}
+          siblingQuestions={[first, second]}
+          onStageAnswer={onStageAnswer}
+          onSendAll={onSendAll}
+          onAnswer={onAnswer}
+          canSendAll
+          stagedAnswer={{ answer: "proceed", skipped: false }}
+        />,
+      ),
+    );
+    expect(choice?.getAttribute("aria-pressed")).toBe("true");
+    act(() => sendAll?.click());
+    expect(onSendAll).toHaveBeenCalledOnce();
+    act(() => root.unmount());
   });
 });

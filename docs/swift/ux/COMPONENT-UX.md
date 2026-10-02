@@ -5059,14 +5059,34 @@ thing the user will type in the chat.
 The tune menu contains a platform-owned on/off row for agent questions. It
 starts enabled, persists by conversation, and affects new turns. A pending
 question stays answerable after the row is switched off. The existing HITL
-card shows a single-choice list, a free-text field, or both. A choice may carry
-the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. Choices
-appear in a centered column for both agent questions and tool approval. An
-optional choice description appears beneath its label inside the same
-button. After an agent question is answered or skipped, a compact card below
+card shows a single-choice list, a free-text field, or both. For an agent
+question with two or more choices, free text is always available. It appears
+as the final row in the centered choice column, styled like the outlined
+choices with a fixed gray "Other" / "Autre" label to the left of the editable text; Enter submits that text. The question uses the shared Markdown renderer, so emphasis displays as formatting.
+A choice may carry the typed comment. Text-only questions retain the multiline
+field and Ctrl+Enter or Cmd+Enter submission. Tool approvals keep their choice
+layout. An optional choice description appears beneath its label inside the
+same button. After an agent question is answered or skipped, a compact card below
 the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
-While the person is answering, the `ask_user` tool line stays in progress.
+For a free-text answer, it shows one highlighted "Other: <answer>" / "Autre : <réponse>"
+row among the offered choices, including when an offered option is also named
+Other. A choice with an optional comment keeps its selected option and separate
+comment. While the person is answering, the `ask_user` tool line stays in progress.
+Active agent-question cards use a compact width, spacing, and text size; choice
+descriptions and actions stay readable. Simultaneous questions share one card
+with short subject tabs that scroll horizontally when needed. The mouse wheel
+and trackpad scroll overflowing titles without dragging the scrollbar; page
+scrolling continues at the ends. A choice or Skip records a local draft and advances
+to the next unanswered tab. Nonblank free text counts as an answer while typing,
+without requiring Next or switching tabs; clearing it removes that answer unless
+a choice remains selected. The person can revisit any tab and revise the choice
+or text. Send all becomes available only when every tab has an answer or skip;
+it sends one request for the complete set. Closing the grouped card skips all
+pending questions in one request, replacing any local drafts. The card stays
+visible until the runtime accepts the batch, then removes the submitted tabs
+while the resumed stream continues. New questions in that stream appear without
+the answered tabs. A failed submission keeps the drafts.
 For free text, a compact filled Send button sits directly left of Skip in the
 card footer. Choice-only questions keep Skip at the bottom right.
 The chat composer blocks new messages and commands in that conversation while
@@ -5074,4 +5094,7 @@ the question or its resume is in progress, then becomes available again.
 Approval actions use the same neutral outline style and offer a conversation-scoped
 choice; the browser answers later matching approval pauses through the existing
 resume flow. Skip at the bottom right and close at the top right appear only
-for `stage="agent_question"`. Both resume the turn as skipped. A skipped answer is shown in the same card, including after history reload.
+for `stage="agent_question"`. For one question, both resume it as skipped. With
+grouped questions, Skip records a draft for the active tab, while close skips
+the entire group in one request. Skipped answers appear in the same cards,
+including after history reload.

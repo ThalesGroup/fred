@@ -528,7 +528,11 @@
       "toolApprovalSaveFailedSummary": "Approval not saved",
       "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
     },
+    "hitlOtherAnswerPlaceholder": "Other",
+    "hitlOtherAnswerWithText": "Other: {{answer}}",
     "hitlFreeTextLabel": "Your answer",
+    "hitlQuestionTabsAria": "Questions",
+    "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "Agent is waiting for your input",
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
@@ -536,9 +540,12 @@
       "empty": "No markdown preview available."
     },
     "recordAudio": "Record audio",
+    "nextHitlQuestion": "Next",
+    "sendAllHitlAnswers": "Send all",
     "sendHitlAnswer": "Send",
     "skipHitlQuestion": "Skip",
     "skipHitlQuestionAria": "Skip this question",
+    "skipAllHitlQuestionsAria": "Skip all questions",
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
