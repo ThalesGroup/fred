@@ -19,3 +19,12 @@ Evidence for `rework-neutral-surface-scale` on branch `ui-theme-polish` (2026-10
 
 - Computed values were not read in a browser; the in-app check in both themes is left to the developer on the running Vite.
 - Contrast ratios of text on the new surfaces were not measured (text tokens are out of scope; tones are unchanged, hue only).
+
+## Before the PR
+
+Rebased on `swift` (2026-10-02). An independent review of the whole PR found fills that the late
+"higher = lighter" light flip had made white on white inside floating elements (menu badge, pending
+member rows, path chips): moved to `-high` / `-low`, rule added to the guidelines and the
+design-tokens README, whose role table was also brought in line with the code. Frontend `make
+code-quality` and `make test` (3204 passed, 7 skipped) and `libs/frontend` `npm test` (378 passed)
+pass on this branch alone. Not verified: the developer's in-app pass in both themes.

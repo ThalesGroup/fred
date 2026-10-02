@@ -25,7 +25,7 @@
 - [x] 4.3 Add the English migration note (patch, no operator action) per `docs/swift/ops/MIGRATION-GUIDES.md`; verify it follows the template
 - [x] 4.4 Add a token migration section to `libs/frontend/design-tokens/README.md` (rule, value table, old → new token by role, steps an assistant can follow), built from the final diff; verify every remap in the diff appears in it
 - [x] 4.5 Run `/code-review` on the diff and record exact verification evidence in `verification.md`; verify every finding is fixed or answered
-- [ ] 4.6 After the developer's in-app check in both themes, archive the change with `openspec archive` and close #2915 once the PR is merged
+- [x] 4.6 Archive the change with `openspec archive` (done before the developer's in-app check, which stays to do on the PR); close #2915 once the PR is merged
 
 ## 5. Surfaces by role everywhere
 
