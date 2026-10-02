@@ -2848,8 +2848,6 @@ export type ApplicationList = {
   items: ApplicationSummary[];
 };
 export type FrontendFeatureFlags = {
-  enableK8Features?: boolean;
-  enableElecWarfare?: boolean;
   /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled. */
   enableApplications?: boolean;
   /** Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe. */

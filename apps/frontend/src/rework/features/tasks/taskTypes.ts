@@ -96,28 +96,6 @@ export interface MigrationTaskEvent {
   } | null;
 }
 
-export interface EvaluationTaskEvent {
-  kind: "evaluation";
-  task_id: string;
-  state: TaskState;
-  seq: number;
-  timestamp: string;
-  progress: number | null;
-  step: string | null;
-  error: string | null;
-  target?: TaskTarget | null;
-  owner?: string | null;
-  detail: {
-    campaign_id: string;
-    completed: number;
-    total: number;
-    passed: number;
-    failed: number;
-    execution_errors: number;
-    scoring_errors: number;
-  } | null;
-}
-
 export interface ErasureTaskEvent {
   kind: "erasure";
   task_id: string;
@@ -141,7 +119,7 @@ export interface ErasureTaskEvent {
   } | null;
 }
 
-export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | EvaluationTaskEvent | ErasureTaskEvent;
+export type AnyTaskEvent = IngestionTaskEvent | MigrationTaskEvent | ErasureTaskEvent;
 
 export interface TaskViewModel {
   taskId: string;

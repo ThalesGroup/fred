@@ -18,7 +18,6 @@ import {
   taskRegistered,
   taskEventReceived,
   taskEvicted,
-  trayClockTicked,
   taskAcknowledged,
   completedTasksCleared,
   selectActiveTasks,
@@ -240,22 +239,6 @@ describe("taskEvicted", () => {
     const init = { byId: { t1: vm() } };
     const s = reducer(init, taskEvicted("unknown"));
     expect(Object.keys(s.byId)).toHaveLength(1);
-  });
-});
-
-// ── trayClockTicked ───────────────────────────────────────────────────────────
-
-describe("trayClockTicked", () => {
-  it("advances the tick counter without touching tasks", () => {
-    const init = { byId: { t1: vm() }, tick: 0 };
-    const s = reducer(init, trayClockTicked());
-    expect(s.tick).toBe(1);
-    expect(s.byId).toEqual(init.byId);
-  });
-
-  it("treats a missing tick as zero", () => {
-    const s = reducer({ byId: {} }, trayClockTicked());
-    expect(s.tick).toBe(1);
   });
 });
 
@@ -602,7 +585,7 @@ describe("selectAllTasks", () => {
     vi.useFakeTimers();
     const now = 1_000_000;
     vi.setSystemTime(now);
-    // Older than the tray eviction window — selectVisibleTasks would drop this,
+    // Older than the visible-task window: selectVisibleTasks drops this,
     // but the admin history must retain it.
     const s = { byId: { old: vm({ taskId: "old", state: "succeeded", terminalAt: now - EVICTION_DELAY_MS - 1 }) } };
     expect(selectVisibleTasks(root(s))).toHaveLength(0);

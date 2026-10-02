@@ -145,8 +145,7 @@ describe("ImportPanel", () => {
       });
       expect(cards()).toEqual([]);
       // Gone from this list only. The task keeps its own window in the store:
-      // the documents table reads it to mark the row as just completed, and
-      // the tray reads it to show the task at all.
+      // the documents table reads it to mark the row as just completed.
       expect(store.getState().tasks.byId["t1"]?.state).toBe("succeeded");
 
       // And it stays gone without scheduling itself again. The task keeps

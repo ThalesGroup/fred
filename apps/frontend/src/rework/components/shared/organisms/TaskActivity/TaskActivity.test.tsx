@@ -23,7 +23,6 @@ import type { TaskSummary } from "../../../../../slices/controlPlane/controlPlan
 const h = vi.hoisted(() => ({
   tasks: [] as TaskSummary[],
   kfTasks: [] as TaskSummary[],
-  evalTasks: [] as TaskSummary[],
   acknowledge: vi.fn(),
   acknowledging: null as string | null,
 }));
@@ -46,9 +45,6 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
 }));
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useListTasksKnowledgeFlowV1TasksGetQuery: mockListTasks(() => h.kfTasks),
-}));
-vi.mock("../../../../../slices/evaluation/evaluationOpenApi", () => ({
-  useListTasksEvaluationV1TasksGetQuery: mockListTasks(() => h.evalTasks),
 }));
 vi.mock("@shared/atoms/TaskStateBadge/TaskStateBadge", () => ({
   TaskStateBadge: ({ state }: { state: string }) => <span data-badge={state} />,
@@ -362,7 +358,6 @@ describe("TaskActivity multi-backend aggregation", () => {
   beforeEach(() => {
     h.tasks = [];
     h.kfTasks = [];
-    h.evalTasks = [];
   });
 
   it("merges control-plane and knowledge-flow tasks when no kind filter is given", () => {
@@ -387,17 +382,5 @@ describe("TaskActivity multi-backend aggregation", () => {
     const html = render({ kind: "migration" });
     expect(html).toContain(">cp3<");
     expect(html).not.toContain(">kf3<");
-  });
-
-  it("includes evaluation tasks when scope is 'team' and no kind filter is given", () => {
-    h.evalTasks = [task({ task_id: "ev1", state: "succeeded", kind: "evaluation", target: labelled("ev1") })];
-    const html = render({ scope: "team", teamId: "nb" });
-    expect(html).toContain(">ev1<");
-  });
-
-  it("never queries evaluation for scope 'platform' (no platform-wide evaluation listing exists)", () => {
-    h.evalTasks = [task({ task_id: "ev2", state: "succeeded", kind: "evaluation", target: labelled("ev2") })];
-    const html = render({ scope: "platform" });
-    expect(html).not.toContain(">ev2<");
   });
 });

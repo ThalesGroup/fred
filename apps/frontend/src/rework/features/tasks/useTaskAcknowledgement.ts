@@ -23,9 +23,8 @@ import { taskAcknowledged } from "./taskSlice";
  * Shared per-task acknowledgement — `POST /tasks/{id}/ack`
  * (TASK-EVENT-STREAM-RFC.md §2.10), a server-persisted record visible to
  * every other admin of that scope, replacing the old per-browser
- * `failuresAcknowledged` bulk flag. Used by every place a `TaskCard`/
- * `TaskDetailPopover` renders a dismiss affordance (`TaskTray`,
- * `MigrationPage`), so the call + local-store update happens exactly once.
+ * `failuresAcknowledged` bulk flag. Shared by task detail and migration
+ * surfaces so the call and local store update happen in one place.
  *
  * Routed by `taskBackendFor` (same map `useTaskSseManager` uses for its SSE
  * stream) — this used to always call control-plane regardless of which
@@ -52,12 +51,6 @@ export function useTaskAcknowledgement() {
       return;
     }
     const backend = taskBackendFor(kind);
-    if (backend === "evaluation") {
-      // No acknowledgement endpoint exists on the evaluation backend yet
-      // (tracked separately, not part of #2123) — nothing to call; the
-      // button stays visible rather than silently pretending to succeed.
-      return;
-    }
     setPendingTaskId(taskId);
     try {
       const result = await (

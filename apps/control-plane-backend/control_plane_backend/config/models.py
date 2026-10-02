@@ -90,8 +90,6 @@ class ObservabilityConfig(BaseModel):
 class FrontendFeatureFlags(BaseModel):
     """Typed feature flags exposed to the frontend bootstrap."""
 
-    enableK8Features: bool = False
-    enableElecWarfare: bool = False
     enableApplications: bool = Field(
         default=False,
         description=(

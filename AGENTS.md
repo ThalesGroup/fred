@@ -122,6 +122,22 @@ for each image and in total to the user and in the PR. List introduced and
 resolved CVE IDs, link the scan jobs or reports, and state any coverage or
 comparison that could not be verified. A scanner error is not a clean result.
 
+## Author review before readiness
+
+Before declaring implementation ready or requesting final PR review, apply
+[the branch review procedure](.agents/skills/audit-branch/SKILL.md) to the full
+change against its actual target branch, including affected consumers and docs.
+Passing lint, compilation and tests does not replace this review. Scale depth
+to risk; localized documentation/mechanical changes need only relevant checks.
+
+For non-trivial logic or public-contract changes, obtain an independent,
+read-only review using a separate agent or reviewer with fresh context when
+available. This rule authorizes that bounded delegation for repository work;
+provide requirements and the diff, not expected findings. Record the reviewed
+base/head, coverage, findings and dispositions, verification, and exclusions in
+the existing PR or task response. If independent review is unavailable, state
+that limitation. Do not present a focused patch review as a full PR review.
+
 ## Branch and draft PR workflow
 
 For implementation work, identify or create the tracking GitHub issue and use

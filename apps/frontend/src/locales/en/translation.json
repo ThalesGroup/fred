@@ -2239,10 +2239,6 @@
       "knowledgeService": {
         "description": "Start the knowledge-flow service to browse resources.",
         "title": "Knowledge service not running"
-      },
-      "evaluationService": {
-        "title": "Evaluation service not running",
-        "description": "Start the fred-evaluation service to manage evaluations and runs."
       }
     },
     "sidebar": {
@@ -2347,7 +2343,6 @@
         "ingestion": "Processing",
         "migration": "Migration",
         "reindex": "Reindexing",
-        "evaluation": "Evaluation",
         "erasure": "Erasure"
       },
       "migration": {
@@ -2439,14 +2434,6 @@
         "hoursAgo": "{{count}}h ago",
         "justNow": "just now",
         "minAgo": "{{count}} min ago"
-      },
-      "tray": {
-        "empty": "No recent tasks",
-        "failed": "{{count}} failed",
-        "progress": "Task progress",
-        "running": "{{count}} running",
-        "title": "Recent tasks",
-        "trigger": "Tasks"
       },
       "due": {
         "imminent": "imminent",
@@ -2627,7 +2614,6 @@
         "members": "Members",
         "settings": "Settings",
         "activity": "Activity",
-        "evaluations": "Evaluations",
         "usage": "Usage",
         "responsibilities": "Responsibilities",
         "routing": "Model routing",
@@ -2958,311 +2944,12 @@
       "disconnect": "Disconnect",
       "title": "Your profile"
     },
-    "evaluation": {
-      "comingSoon": "This screen is moving here — coming next.",
-      "create": {
-        "back": "Back",
-        "target": {
-          "managed": {
-            "title": "Managed instance",
-            "desc": "A team agent instance approved through the control plane"
-          }
-        },
-        "instance": {
-          "label": "Agent instance",
-          "placeholder": "Select an instance",
-          "loading": "Loading instances..."
-        },
-        "instanceTools": {
-          "label": "Tools enabled on this agent",
-          "inherited": "This instance follows its template's default tools — no per-instance override.",
-          "none": "No tools enabled on this instance."
-        },
-        "modelOverride": {
-          "label": "Model override (optional)",
-          "placeholder": "Use the team's default model"
-        },
-        "agent": {
-          "label": "Agent ID",
-          "placeholder": "agent-..."
-        },
-        "securityNote": "Runtime URLs are never exposed to the browser. Only controlled identifiers are accepted.",
-        "manual": {
-          "label": "Test cases"
-        },
-        "case": {
-          "n": "Case {{n}}",
-          "input": "Input",
-          "expected": "Expected output (optional)",
-          "add": "Add a case",
-          "remove": "Remove case"
-        },
-        "import": {
-          "json": "Import JSON",
-          "dropHint": "Drag & drop a {{mode}} file, or click to browse",
-          "dropSub": "Up to 200 cases",
-          "jsonImported": "{{count}} cases imported from JSON",
-          "error": "Invalid file. Check the JSON or CSV format.",
-          "tooMany": "Maximum 200 cases allowed.",
-          "total": "Total: {{count}} cases to evaluate",
-          "empty": "The file contains no cases."
-        },
-        "judge": {
-          "label": "Judge profile",
-          "help": "Model profile used to score answers"
-        },
-        "concurrency": {
-          "label": "Max concurrency"
-        },
-        "timeout": {
-          "label": "Case timeout (s)"
-        },
-        "builtinMetrics": {
-          "label": "Metrics",
-          "help": "Pick which metrics to score this run against — nothing is added automatically.",
-          "answerRelevancy": "Answer Relevancy",
-          "answerRelevancyDesc": "Does the answer address the question asked?",
-          "faithfulness": "Faithfulness",
-          "faithfulnessDesc": "Does the answer stay grounded in the retrieved context?",
-          "contextualRelevancy": "Contextual Relevancy",
-          "contextualRelevancyDesc": "Is the retrieved context relevant to the question?",
-          "contextualPrecision": "Contextual Precision",
-          "contextualPrecisionDesc": "Are the most relevant chunks ranked first? Requires an expected output.",
-          "contextualRecall": "Contextual Recall",
-          "contextualRecallDesc": "Does the context cover everything the expected output needs? Requires an expected output.",
-          "none": "Select at least one metric to start a run."
-        },
-        "metrics": {
-          "label": "Custom metrics",
-          "help": "Natural-language criteria, judged alongside the built-in metrics",
-          "add": "Add a criterion",
-          "remove": "Remove criterion",
-          "n": "Criterion {{n}}",
-          "name": "Name",
-          "namePlaceholder": "e.g. cites_source",
-          "criteria": "Criterion to evaluate",
-          "criteriaPlaceholder": "e.g. The answer must name the method and cite the figure reported in the paper.",
-          "parameters": "Fields the judge may read",
-          "parameterOptions": {
-            "input": "Input",
-            "actualOutput": "Actual output",
-            "expectedOutput": "Expected output",
-            "retrievalContext": "Retrieved context"
-          },
-          "threshold": "Pass threshold"
-        },
-        "recap": {
-          "title": "Summary",
-          "targetType": "Target type",
-          "managed": "Managed instance",
-          "runtime": "Runtime agent",
-          "instance": "Instance",
-          "runtimeId": "Runtime ID",
-          "agent": "Agent ID",
-          "judge": "Judge",
-          "concurrency": "Concurrency",
-          "timeout": "Timeout",
-          "metrics": "Metrics",
-          "customMetrics": "Custom metrics",
-          "profile": "Profile",
-          "profileAuto": "Automatic",
-          "modelOverride": "Model override"
-        }
-      },
-      "detail": {
-        "cancelError": "Could not cancel the run",
-        "analyzeError": "Analysis failed",
-        "loading": "Loading run...",
-        "notFound": "Run not found",
-        "loadingCases": "Loading cases...",
-        "subtitle": "Run · {{id}}",
-        "back": "Back",
-        "rerun": "↻ Rerun this run",
-        "cancel": "Cancel",
-        "cancelling": "Cancelling...",
-        "analyze": "Analyze",
-        "analyzing": "Analyzing...",
-        "langfuseOpen": "View on Langfuse ↗",
-        "langfuseWaiting": "Waiting for Langfuse...",
-        "langfuseOffline": "Langfuse offline",
-        "running": "Running",
-        "verdictLabel": "Verdict: {{verdict}}",
-        "rateSummary": "{{rate}}% pass · {{done}}/{{total}} cases",
-        "stats": {
-          "passed": "Passed",
-          "failed": "Failed",
-          "insufficient": "Insufficient",
-          "execErrors": "Exec. errors",
-          "scoringErrors": "Scoring errors"
-        },
-        "metricScores": "Scores by metric",
-        "metricScoresPartial": "Scores by metric — partial, {{done}}/{{total}} cases scored so far",
-        "globalScore": "Global score",
-        "analysisTitle": "Analysis",
-        "risk": "risk: {{level}}",
-        "dismiss": "Dismiss",
-        "strengths": "Strengths",
-        "weaknesses": "Weaknesses",
-        "recommendations": "Recommendations",
-        "campaignInfo": "Run information",
-        "meta": {
-          "dataset": "Evaluation",
-          "author": "Author",
-          "profile": "Structural-check profile",
-          "judge": "Judge",
-          "modelOverride": "Model override",
-          "team": "Evaluation ID",
-          "created": "Created",
-          "started": "Started",
-          "completed": "Completed"
-        },
-        "cases": "Cases ({{count}})",
-        "col": {
-          "id": "ID",
-          "input": "Input",
-          "status": "Status",
-          "verdict": "Verdict",
-          "latency": "Latency",
-          "metrics": "Metrics"
-        },
-        "caseTitle": "Case detail",
-        "copyJson": "Copy JSON",
-        "copied": "Copied",
-        "downloadJson": "Download JSON",
-        "downloadRun": "Download JSON",
-        "downloading": "Preparing…",
-        "downloadError": "Download failed",
-        "latency": "Latency",
-        "actualModel": "Actual model",
-        "input": "Input",
-        "expected": "Expected output",
-        "actual": "Actual output",
-        "execError": "Execution error",
-        "scoringErrors": "Scoring errors",
-        "metrics": "Metrics ({{count}})",
-        "structural": "Structural checks ({{count}})",
-        "skipped": "skipped",
-        "passed": "passed",
-        "failed": "failed"
-      },
-      "controls": {
-        "searchEvaluations": "Search by name…",
-        "sortLabel": "Sort",
-        "sort": {
-          "newest": "Newest first",
-          "oldest": "Oldest first",
-          "name": "Name (A–Z)"
-        },
-        "page": "Page {{current}} of {{total}}",
-        "prev": "Previous",
-        "next": "Next"
-      },
-      "evaluations": {
-        "title": "Evaluations",
-        "description": "Versioned, reusable case sets. Open one to see its runs.",
-        "new": "+ New evaluation",
-        "empty": "No evaluation yet. Create one to get started.",
-        "openRuns": "Runs",
-        "caseCount": "{{count}} cases",
-        "col": {
-          "name": "Name / ID",
-          "version": "Version",
-          "author": "Author",
-          "origin": "Origin",
-          "cases": "Cases"
-        },
-        "origin": {
-          "upload": "Import",
-          "manual": "Manual",
-          "capture": "Capture"
-        },
-        "deleteTitle": "Delete evaluation",
-        "deleteMessage": "Delete evaluation {{id}}? This permanently removes it and every one of its runs, cases, metrics and events.",
-        "deleteSuccess": "Evaluation deleted",
-        "deleteError": "Failed to delete evaluation"
-      },
-      "evaluationCreate": {
-        "title": "New evaluation",
-        "description": "Name the evaluation and give it its cases. No run is started.",
-        "name": {
-          "label": "Evaluation name",
-          "placeholder": "e.g. usage-arxivai"
-        },
-        "versionNote": "Reusing an existing name creates a new version (v1 → v2), which becomes the current one.",
-        "submit": "Create evaluation",
-        "saving": "Creating...",
-        "success": "Evaluation “{{name}}” created as {{version}}",
-        "error": "Could not create the evaluation",
-        "mode": {
-          "label": "How do you want to supply the cases?",
-          "import": {
-            "title": "Import my dataset",
-            "desc": "A JSON file holding the cases (input / expected_output)"
-          },
-          "manual": {
-            "title": "Write the cases by hand",
-            "desc": "Type each case directly into the form"
-          }
-        }
-      },
-      "runs": {
-        "casesError": "Failed to load cases.",
-        "noCases": "No cases available.",
-        "drawerTitle": "Run cases",
-        "drawerHint": "Click a case to see full details",
-        "inputLabel": "Input",
-        "executionError": "Execution error",
-        "viewFullDetail": "View full detail →",
-        "metricsCount": "{{count}} metrics",
-        "targetInstance": "Instance · {{id}}",
-        "targetManaged": "Managed instance",
-        "detail": "Detail",
-        "deleteTitle": "Delete run",
-        "deleteSuccess": "Run deleted",
-        "deleteError": "Failed to delete run",
-        "loadError": "Failed to load runs.",
-        "description": "Runs of this evaluation",
-        "backToEvaluations": "Evaluations",
-        "newRun": "+ New run",
-        "rerun": "↻ Rerun · {{target}}",
-        "rerunHint": "Reruns immediately with the last target ({{target}} · {{model}}). Use “New run…” to pick a different one.",
-        "rerunRow": "↻ Rerun",
-        "empty": "No run for this evaluation yet",
-        "versionLabel": "Evaluation {{version}}",
-        "deleteMessage": "Delete run {{id}}? This permanently removes its cases, metrics and events.",
-        "kpi": {
-          "active": "Active runs",
-          "completed": "Completed runs",
-          "casesEvaluated": "Cases evaluated",
-          "criticalFailures": "Critical failures"
-        },
-        "col": {
-          "run": "Run",
-          "target": "Agent",
-          "state": "Status",
-          "verdict": "Verdict",
-          "progress": "Done",
-          "judge": "Judge"
-        }
-      },
-      "runCreate": {
-        "title": "New run",
-        "description": "Evaluation “{{name}}” — pick the agent to evaluate.",
-        "submit": "Start run",
-        "starting": "Starting...",
-        "success": "Run started",
-        "error": "Could not start the run",
-        "recap": {
-          "evaluation": "Evaluation"
-        }
-      }
-    },
     "taskActivity": {
       "title": "Activity",
       "subtitle": "Scheduled, running and completed tasks.",
       "loading": "Loading activity…",
       "loadError": "Could not load activity.",
-      "empty": "No scheduled or running tasks. Tasks (erasures, imports, evaluations) appear here until they complete.",
+      "empty": "No scheduled or running tasks. Tasks (erasures, imports) appear here until they complete.",
       "scheduled": "Scheduled",
       "inProgress": "In progress",
       "completed": "Completed",
