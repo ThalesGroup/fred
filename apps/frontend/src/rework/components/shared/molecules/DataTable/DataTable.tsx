@@ -74,7 +74,7 @@ export interface SortState {
 export interface ServerPagination {
   /** True row count across every page — not `data.length`, which is only this page. */
   totalCount: number;
-  /** Current page's starting index (0-based). */
+  /** Current page's starting index (0-based), a multiple of limit. */
   offset: number;
   /** Rows per page, as already used for the `data` the caller fetched. */
   limit: number;
@@ -258,13 +258,18 @@ export default function DataTable<T>({
       }
     }
   }
+  if (serverPagination && serverPagination.offset % serverPagination.limit !== 0) {
+    throw new Error("DataTable: serverPagination.offset must be a multiple of limit.");
+  }
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
-  const rowsPerPageOptions: SelectOption<number>[] = [...new Set([...ROWS_PER_PAGE_OPTIONS, effectiveRowsPerPage])]
-    .sort((a, b) => a - b)
-    .map((value) => ({ value, label: String(value), key: String(value) }));
+  const rowsPerPageOptions: SelectOption<number>[] = ROWS_PER_PAGE_OPTIONS.map((value) => ({
+    value,
+    label: String(value),
+    key: String(value),
+  }));
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;

@@ -74,6 +74,12 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
+  let displayedOptions = rowsPerPageOptions;
+  if (!rowsPerPageOptions.some((option) => option.value === rowsPerPage)) {
+    let key = `active-page-size:${rowsPerPage}`;
+    while (rowsPerPageOptions.some((option) => option.key === key)) key += ":";
+    displayedOptions = [...rowsPerPageOptions, { value: rowsPerPage, label: String(rowsPerPage), key }];
+  }
   const text: TablePaginationLabels = {
     totalItems: labels?.totalItems ?? defaultLabels.totalItems,
     itemsPerPage: labels?.itemsPerPage ?? defaultLabels.itemsPerPage,
@@ -99,7 +105,7 @@ export default function TablePagination({
                 size="xs"
                 compact
                 value={rowsPerPage}
-                options={rowsPerPageOptions}
+                options={displayedOptions}
                 onChange={onRowsPerPageChange}
               />
             </div>

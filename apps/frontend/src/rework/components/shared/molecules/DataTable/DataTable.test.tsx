@@ -1051,3 +1051,18 @@ it("keeps numeric and text domain keys distinct for cell state and selection aft
   click(boxes[1]);
   expect(onSelectionChange).toHaveBeenLastCalledWith(new Set([1, "1"]));
 });
+
+it.each([
+  { offset: 15, limit: 10 },
+  { offset: 1, limit: 20 },
+])("rejects non-page-aligned server offsets %j", (page) => {
+  expect(() =>
+    renderToStaticMarkup(
+      <DataTable
+        columns={columns}
+        data={makeRows(1)}
+        serverPagination={{ ...page, totalCount: 100, onOffsetChange: vi.fn() }}
+      />,
+    ),
+  ).toThrow("offset must be a multiple of limit");
+});

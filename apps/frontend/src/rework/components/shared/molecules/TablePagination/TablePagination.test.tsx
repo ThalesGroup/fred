@@ -148,3 +148,32 @@ it("navigates from an enclosing form without submitting it", () => {
   callbacks.forEach((callback) => expect(callback).toHaveBeenCalledOnce());
   expect(submit).not.toHaveBeenCalled();
 });
+
+it.each([{ options: [] }, { options: baseProps.rowsPerPageOptions }])(
+  "displays an active size missing from standalone options %j",
+  ({ options }) => {
+    render(
+      <TablePagination {...baseProps} rowsPerPage={25} rowsPerPageOptions={options} onRowsPerPageChange={vi.fn()} />,
+    );
+    expect(buttons()[0].textContent).toContain("25");
+    act(() =>
+      root.render(
+        <TablePagination {...baseProps} rowsPerPage={37} rowsPerPageOptions={options} onRowsPerPageChange={vi.fn()} />,
+      ),
+    );
+    expect(buttons()[0].textContent).toContain("37");
+    expect(options).not.toContainEqual(expect.objectContaining({ value: 25 }));
+  },
+);
+
+it("preserves the caller label for an existing active option", () => {
+  render(
+    <TablePagination
+      {...baseProps}
+      rowsPerPage={25}
+      rowsPerPageOptions={[{ key: "custom", value: 25, label: "Twenty-five" }]}
+      onRowsPerPageChange={vi.fn()}
+    />,
+  );
+  expect(buttons()[0].textContent).toContain("Twenty-five");
+});
