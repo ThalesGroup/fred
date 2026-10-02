@@ -22,4 +22,4 @@
 ## 5. Docs and close-out
 
 - [x] 5.1 Update the theme section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (one file per theme, complete token set, base contents) and the stale `colors-semantic-*.css` references in `docs/swift/design/CHAT-COMPONENT-SPECS.md` and `docs/swift/ux/COMPONENT-UX.md` and add a migration note with `impact: none`; verify `make migration-check` passes
-- [ ] 5.2 Run `npx tsc --noEmit`, prettier, eslint and the frontend vitest suites for `src/app`, `src/styles` and `libs/frontend`; record the evidence in `verification.md`
+- [x] 5.2 Run `npx tsc --noEmit`, prettier, eslint and the frontend vitest suites for `src/app`, `src/styles` and `libs/frontend`; record the evidence in `verification.md`

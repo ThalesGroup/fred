@@ -78,7 +78,8 @@ rebuilt token set (names and values) with the one produced before the change.
 - [localStorage unavailable (private mode, blocked storage)] → the boot script catches the error and
   falls back to the default theme and the OS mode.
 - [A blocking script in `<head>` delays the first paint] → it is a few hundred bytes, no network
-  call, no dependency.
+  call, no dependency. Served with `Cache-Control: no-cache` so it is never stale: each load pays
+  one revalidation round trip (304), accepted for a script that decides the first frame.
 - [Package consumers relied on `colors-semantic-*.css` file paths] → only the built output is
   published, not the source paths; the output is unchanged.
 
