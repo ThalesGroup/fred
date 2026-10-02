@@ -14,7 +14,8 @@
 
 import { createContext, PropsWithChildren, useEffect, useState } from "react";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
-import { ApplicationContextStruct, ThemeMode, UiTheme } from "./ApplicationContextStruct.tsx";
+import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
+import { DEFAULT_UI_THEME, resolveUiTheme, THEME_MODE_STORAGE_KEY, UI_THEME_STORAGE_KEY, UiTheme } from "./uiThemes.ts";
 
 /**
  * Our application context.
@@ -29,15 +30,13 @@ const getSystemDarkMode = (): boolean => {
 };
 
 /**
- * Computes the effective dark mode based on theme mode and system preference
+ * Computes the effective dark mode: an explicit light/dark choice wins, anything
+ * else (system, absent, unknown) follows the OS, as public/theme-boot.js does.
  */
-const UI_THEMES: UiTheme[] = ["pebble", "cobalt", "cloud"];
-
 export const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
-  if (themeMode === "system") {
-    return systemDarkMode;
-  }
-  return themeMode === "dark";
+  if (themeMode === "dark") return true;
+  if (themeMode === "light") return false;
+  return systemDarkMode;
 };
 
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
@@ -47,10 +46,9 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   );
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
   // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
-  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
-  const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme>("ApplicationContextProvider.uiTheme", "pebble");
-  // A stored value from an older theme list falls back to the default theme.
-  const uiTheme: UiTheme = UI_THEMES.includes(storedUiTheme) ? storedUiTheme : "pebble";
+  const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>(THEME_MODE_STORAGE_KEY, "system");
+  const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme>(UI_THEME_STORAGE_KEY, DEFAULT_UI_THEME);
+  const uiTheme = resolveUiTheme(storedUiTheme);
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
   const darkMode = computeDarkMode(themeMode, systemDarkMode);
 

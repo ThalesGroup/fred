@@ -10,9 +10,9 @@
 
 ## 3. Theme before the first paint
 
-- [ ] 3.1 Add `public/theme-boot.js` and load it from `<head>` in `index.html`: resolve the stored theme (catalog or default) and mode (stored or OS) and set `data-ui-theme` / `data-theme` on `<html>`, tolerating unavailable localStorage; give `html` the `--surface-main` background; verify a reload in Cloud dark shows no frame in another theme (Performance panel screenshots)
-- [ ] 3.2 Make `ApplicationContextProvider` resolve theme and mode with the same rules and a single exported catalog constant; add unit tests that the boot script's catalog matches it and that the theme files in `styles/themes/` match the catalog; verify the tests for `src/app` pass
-- [ ] 3.3 Verify an unknown stored theme (`"corporate"`) resolves to `pebble` before the first paint and in React
+- [x] 3.1 Add `public/theme-boot.js` and load it from `<head>` in `index.html`: resolve the stored theme (catalog or default) and mode (stored or OS) and set `data-ui-theme` / `data-theme` on `<html>`, tolerating unavailable localStorage; give `html` the `--surface-main` background; verify a reload in Cloud dark shows no frame in another theme (Performance panel screenshots)
+- [x] 3.2 Make `ApplicationContextProvider` resolve theme and mode with the same rules and a single exported catalog constant; add unit tests that the boot script's catalog matches it and that the theme files in `styles/themes/` match the catalog; verify the tests for `src/app` pass
+- [x] 3.3 Verify an unknown stored theme (`"corporate"`) resolves to `pebble` before the first paint and in React
 
 ## 4. Design tokens package
 
@@ -21,5 +21,5 @@
 
 ## 5. Docs and close-out
 
-- [ ] 5.1 Update the theme section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (one file per theme, complete token set, base contents) and the stale `colors-semantic-*.css` references in `docs/swift/design/CHAT-COMPONENT-SPECS.md` and `docs/swift/ux/COMPONENT-UX.md` and add a migration note with `impact: none`; verify `make migration-check` passes
+- [x] 5.1 Update the theme section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (one file per theme, complete token set, base contents) and the stale `colors-semantic-*.css` references in `docs/swift/design/CHAT-COMPONENT-SPECS.md` and `docs/swift/ux/COMPONENT-UX.md` and add a migration note with `impact: none`; verify `make migration-check` passes
 - [ ] 5.2 Run `npx tsc --noEmit`, prettier, eslint and the frontend vitest suites for `src/app`, `src/styles` and `libs/frontend`; record the evidence in `verification.md`

@@ -20,7 +20,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
-import type { UiTheme } from "../../../../app/ApplicationContextStruct.tsx";
+import type { UiTheme } from "../../../../app/uiThemes.ts";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { Link, useNavigate } from "react-router-dom";

@@ -12,15 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { UiTheme } from "./uiThemes.ts";
+
 /**
  * Theme mode options
  */
 export type ThemeMode = "light" | "system" | "dark";
-
-/**
- * UI theme (palette, font, radii); each one has a light and a dark mode.
- */
-export type UiTheme = "pebble" | "cobalt" | "cloud";
 
 /**
  * The Application context keeps track of all the clusters known to frugal IT.
