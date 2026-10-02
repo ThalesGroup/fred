@@ -1449,7 +1449,7 @@ describe("useManagedChat — session write reliability", () => {
       expect.any(Object),
       undefined,
       false,
-      undefined,
+      expect.any(Function),
       [
         { event: first, answer: "rome", freeText: undefined, skipped: false },
         { event: second, answer: undefined, freeText: "No limit", skipped: false },
@@ -1502,13 +1502,83 @@ describe("useManagedChat — session write reliability", () => {
       expect.any(Object),
       undefined,
       false,
-      undefined,
+      expect.any(Function),
       [
         { event: first, answer: undefined, freeText: undefined, skipped: true },
         { event: second, answer: undefined, freeText: undefined, skipped: true },
       ],
     );
     expect(latest.pendingHitl).toBeNull();
+  });
+
+  it("removes an accepted batch before the stream finishes and preserves new questions", async () => {
+    const first = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        free_text: true,
+      },
+    };
+    const second = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        free_text: true,
+      },
+    };
+    const followup = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Transport?",
+        interrupt_id: "interrupt-c",
+        occurrence_id: "call-c",
+        free_text: true,
+      },
+    };
+    let acceptResume: (() => void) | undefined;
+    let finishResume: (accepted: boolean) => void = () => {};
+    sendHitlResumeMock.mockImplementationOnce(
+      (...args: unknown[]) =>
+        new Promise<boolean>((resolve) => {
+          acceptResume = args[6] as () => void;
+          finishResume = resolve;
+        }),
+    );
+    mount();
+    bindSession("session-1");
+    act(() => {
+      capturedOnAwaitingHuman?.(first);
+      capturedOnAwaitingHuman?.(second);
+    });
+    rerender();
+    act(() => latest.setHitlFreeText("Paris"));
+    act(() => latest.selectHitlTab(second));
+    act(() => latest.setHitlFreeText("No limit"));
+    act(() => latest.handleSendAllHitl());
+    expect(latest.pendingHitlTabs).toEqual([first, second]);
+
+    act(() => {
+      capturedOnAwaitingHuman?.(followup);
+      acceptResume?.();
+    });
+    expect(latest.pendingHitlTabs).toEqual([followup]);
+    expect(latest.pendingHitl).toEqual(followup);
+    act(() => capturedOnAwaitingHuman?.(first));
+    expect(latest.pendingHitlTabs).toEqual([followup]);
+
+    await act(async () => {
+      finishResume(true);
+      await Promise.resolve();
+    });
+    expect(latest.pendingHitlTabs).toEqual([followup]);
+    expect(latest.hitlFreeText).toBe("");
   });
 
   it("keeps all staged answers editable when a batch resume fails", async () => {

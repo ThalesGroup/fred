@@ -20,6 +20,7 @@
 - [x] 2.4 Record the observed one-versus-two-call latency trade-off and the batch resume result in the PR.
 - [x] 2.5 Stage every simultaneous question answer locally, allow edits and skips, then send one complete batch; verify no card flicker and failed-send recovery.
 - [x] 2.6 Count nonblank free text as a draft during typing without requiring Next, and make closing the grouped card skip every pending question in one batch; verify both behaviors in focused frontend tests.
+- [x] 2.7 Remove submitted tabs when the runtime accepts a batch, before the resumed stream ends, while preserving any later questions in the same exchange; verify the SSE ordering regression.
 
 ## 3. Close-out
 

@@ -5078,7 +5078,9 @@ a choice remains selected. The person can revisit any tab and revise the choice
 or text. Send all becomes available only when every tab has an answer or skip;
 it sends one request for the complete set. Closing the grouped card skips all
 pending questions in one request, replacing any local drafts. The card stays
-visible during submission and keeps the drafts if submission fails.
+visible until the runtime accepts the batch, then removes the submitted tabs
+while the resumed stream continues. New questions in that stream appear without
+the answered tabs. A failed submission keeps the drafts.
 For free text, a compact filled Send button sits directly left of Skip in the
 card footer. Choice-only questions keep Skip at the bottom right.
 The chat composer blocks new messages and commands in that conversation while

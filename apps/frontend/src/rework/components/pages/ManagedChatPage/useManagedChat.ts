@@ -954,20 +954,32 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       setResumingAgentQuestionSessionId(owner.session_id);
       const submittedKeys = new Set(prompts.map(hitlKey));
       submittedBatchKeysRef.current = submittedKeys;
+      let cleared = false;
+      const clearAcceptedBatch = () => {
+        if (cleared) return;
+        cleared = true;
+        if (activeSessionIdRef.current !== owner.session_id) return;
+        const current = pendingHitlsRef.current;
+        const remaining = current.filter((event) => !submittedKeys.has(hitlKey(event)));
+        if (remaining.length === current.length) return;
+        replacePendingHitls(remaining);
+        const staged = new Map(stagedHitlAnswersRef.current);
+        for (const key of submittedKeys) {
+          staged.delete(key);
+          hitlDraftsRef.current.delete(key);
+        }
+        replaceStagedHitlAnswers(staged);
+        setSelectedHitlKey(remaining.length ? hitlKey(remaining[0]) : null);
+        setHitlFreeText(remaining.length ? (hitlDraftsRef.current.get(hitlKey(remaining[0])) ?? "") : "");
+      };
       const { runtimeContext, turnOptions } = buildTurnContextRef.current();
-      void sendHitlResume(owner, undefined, undefined, runtimeContext, turnOptions, false, undefined, answers)
+      void sendHitlResume(owner, undefined, undefined, runtimeContext, turnOptions, false, clearAcceptedBatch, answers)
         .then((accepted) => {
           if (!accepted) {
             if (submittedBatchKeysRef.current === submittedKeys) submittedBatchKeysRef.current = new Set();
             return;
           }
-          if (activeSessionIdRef.current !== owner.session_id) return;
-          const remaining = pendingHitlsRef.current.filter((event) => !submittedKeys.has(hitlKey(event)));
-          replacePendingHitls(remaining);
-          replaceStagedHitlAnswers(new Map());
-          for (const key of submittedKeys) hitlDraftsRef.current.delete(key);
-          setSelectedHitlKey(remaining.length ? hitlKey(remaining[0]) : null);
-          setHitlFreeText(remaining.length ? (hitlDraftsRef.current.get(hitlKey(remaining[0])) ?? "") : "");
+          clearAcceptedBatch();
         })
         .catch((error) => {
           console.error("[useManagedChat] HITL batch resume failed", error);

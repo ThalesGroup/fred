@@ -45,7 +45,8 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **AND** the person can revisit a tab, change its choice or text answer, and skip an individual question
 - **AND** closing the grouped card submits a skip for every pending question, including tabs with drafted answers, in one batch
 - **AND** once every tab has a draft answer or skip, one Send action submits all answers together to their own calls
-- **AND** the card stays open until the batch is accepted, and failed submission preserves editable answers
+- **AND** the card stays open until the batch is accepted, then removes the submitted tabs even while the resumed stream continues; later questions in that exchange appear without the submitted tabs
+- **AND** failed submission preserves editable answers
 
 #### Scenario: Question Markdown in managed chat
 
