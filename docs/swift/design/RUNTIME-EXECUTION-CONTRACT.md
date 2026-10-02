@@ -6405,7 +6405,8 @@ choice helpers expose the same typed answer through `choice_step_response`;
 Graph agents stream with `durability="sync"`: a step's checkpoint is persisted
 before the next step starts. A run ending in a live process (success, unhandled
 node error, step limit) leaves no pending step, via LangGraph's
-`aupdate_state(config, None, as_node=END)`. A cancelled or disconnected run keeps
+`aupdate_state(config, None, as_node=END)`. The clearing only applies while the head
+is still the run's own (`fred_graph_run` in checkpoint metadata). A cancelled or disconnected run keeps
 its pending step.
 
 A Graph thread with pending steps and no pending interrupt is therefore an
@@ -6419,8 +6420,9 @@ no turn KPI.
 `RuntimeExecuteRequest.interrupted_action` answers it:
 
 - `continue` requires `interruption_id`, allows empty `input` and excludes
-  `resume_payload`. It resumes the interrupted step with `astream(None)`, behind
-  the HITL single-use claim keyed `continue:{interruption_id}`. A stale or
+  `resume_payload`. It resumes the interrupted step with `astream(None)`. The id is
+  validated read-only first, then the HITL single-use claim keyed
+  `continue:{interruption_id}` is taken. A stale or
   unknown id, or a non-Graph agent, gets an execution error and nothing runs.
   The continued exchange persists its assistant rows without a user row.
 - `restart` runs the input as an ordinary new turn. Non-Graph agents ignore it.
@@ -6428,8 +6430,9 @@ no turn KPI.
 `GraphExecutor.invoke`, in-process child invocations and the OpenAI-compatible
 route have no one to ask, so they restart. Pending steps cannot tell a lost run
 from one still running elsewhere; nothing stops a user from continuing a run that
-is still live on another replica or tab. The chat renders the event with `HitlPrompt` and sends `restart`
-for the first message after the user presses Stop. A step re-run by `continue`
+is still live on another replica or tab. The chat renders the event with `HitlPrompt`, puts the card back when
+the answer never started, and sends `restart` for the first message of a session the
+user stopped. A step re-run by `continue`
 repeats any side effect inside it: commit externally with a key fixed in an
 earlier step. Full rationale:
 `openspec/changes/resume-interrupted-graph-execution/design.md`.

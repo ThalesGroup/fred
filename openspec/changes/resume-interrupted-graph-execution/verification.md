@@ -42,3 +42,13 @@ Frontend:
 
 - PostgreSQL-specific concurrency. The claim reuses the HITL claim, whose PostgreSQL behaviour is covered by its own suite.
 - Latency under load.
+
+## PR #2903 review round (2026-10-02)
+
+| Comment | Outcome | Evidence |
+|---|---|---|
+| P1: failure cleanup could clear a head that another run had advanced | Fixed. Cleanup is fenced on the run's start head or on its `fred_graph_run` checkpoint metadata. | `test_a_failing_run_never_clears_a_head_another_run_wrote`; the step-limit test also covers a checkpoint saved but not yet streamed |
+| P2: the claim was started before validation | Fixed. The id is validated read-only before the claim is taken. | `test_pod_rejects_a_stale_continue_without_leaving_a_claim` |
+| P2: Stop memory was hook-wide | Fixed. It is now a per-session set that survives `reset()`. | `useChatSse.test.tsx` › "after Stop, the next message of that session restarts, even after visiting another session" |
+| P2: the card was lost when the request never started | Fixed. `send()` returns whether the turn started, and the card is restored otherwise. | `useManagedChat.test.tsx` › "keeps offering the choice when the continue request never started"; `useChatSse.test.tsx` › "send() reports whether the turn started" |
+| Code-quality bot: "statement has no effect" (`await run` in the test helper) | No change. It awaits the cancelled task's teardown. | — |

@@ -5093,6 +5093,9 @@ plus **Continue** and **Restart** (FR: *Continuer*, *Recommencer*).
 - **Continue** resumes the run at that step. No user bubble is added, and the
   composer keeps the draft.
 - **Restart** sends the draft as a new turn.
-- After **Stop**, the next message restarts without showing the card. The flag
-  is in memory only, so a reload right after Stop may still show the card.
+- If the chosen request never starts (token, session write or preparation failure),
+  the card comes back.
+- After **Stop**, the next message of that conversation restarts without showing the
+  card, even after visiting another conversation. The memory lives in the page, so a
+  reload right after Stop may still show the card.
 

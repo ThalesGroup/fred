@@ -82,6 +82,13 @@ turn is unchanged. The clearing is best-effort and logged. If it fails, the next
 offers `continue`, which re-runs the failed step, fails, and is then cleared: a degraded
 but safe path.
 
+The clearing is fenced to the failing run. Each run puts a `fred_graph_run` id in its
+`configurable`, and LangGraph copies that id into the metadata of every checkpoint the
+run writes. A run clears the thread only when the head is still the one it started from,
+or carries its own run id. A head that another run has advanced keeps its pending steps.
+The check covers a checkpoint saved but not yet streamed, which happens at the step
+limit.
+
 Cancellation is deliberately **not** cleared. A closed tab or a network loss looks like a
 crash to the user and stays continuable. The deliberate Stop case is handled by the
 client (D6).
@@ -139,9 +146,11 @@ Alternative considered: emitting a real `awaiting_human` event and answering it 
   The internal `_AgentExecuteRequest` and `_to_internal_request` mirror these fields.
   `ExecutionConfig` carries both fields to the executor.
 - **Graph branch of `agent_app`.**
-  - For `continue`, the existing claim helper is called with
-    `interrupt_id=f"continue:{interruption_id}"` on the agent's thread, then consumed
-    after the stream.
+  - For `continue`, `GraphExecutor.interruption_id()` first validates the id read-only,
+    so a stale id or a failed read leaves no claim. The existing claim helper is then
+    called with `interrupt_id=f"continue:{interruption_id}"` on the agent's thread, and
+    the claim is consumed after the stream. The executor re-checks the id after the
+    claim, to cover races.
   - For a non-Graph executor, `continue` raises an execution error and `restart` is
     ignored.
   - Authorization runs before any of this, unchanged. The event is only produced inside
@@ -170,9 +179,14 @@ Alternative considered: emitting a real `awaiting_human` event and answering it 
     this stage.
 - **Continue** sends a turn with `interrupted_action: "continue"` and the
   `interruption_id`, with empty input and no new user bubble.
-- **Restart** re-sends the restored draft with `interrupted_action: "restart"`.
-- A session-scoped flag records that the user pressed Stop. The next send in that
-  session adds `interrupted_action: "restart"`, and the flag is cleared after the send.
+- **Restart** re-sends the same wire text and command with
+  `interrupted_action: "restart"`.
+- `send()` reports whether the turn started. Either choice puts the card back when its
+  request never started (token, session write or preparation failure), as the HITL
+  resume path already does.
+- A set of session ids records which sessions the user stopped; switching sessions
+  does not clear it. The next send in a stopped session adds
+  `interrupted_action: "restart"`, and the session leaves the set when that turn starts.
 - Types come from the regenerated runtime client. No hand-written duplicate is added.
 
 ## Risks / Trade-offs
@@ -191,8 +205,8 @@ Alternative considered: emitting a real `awaiting_human` event and answering it 
   Attachments were cleared when the turn started.
 
 - **[A continue that crashes again inside the same step leaves its claim `started` for
-  that interruption, so a further `continue` is refused.]** The HITL claim is single-use
-  by design. The head checkpoint, and therefore `interruption_id`, only changes once a
+  that interruption, so a further `continue` is refused.]** A stale id or a failed
+  pre-claim read no longer leaves a claim, but the claim stays single-use by design. The head checkpoint, and therefore `interruption_id`, only changes once a
   step completes. Mitigation: the refusal names the cause, and `restart` remains
   available. A lease-based claim is a possible follow-up.
 - **[Threads left with pending tasks before deployment are offered `continue` after
