@@ -49,7 +49,6 @@ jobs:
               - 'scripts/makefiles/python-deps.mk'
               - 'scripts/makefiles/python-venv-bootstrap.mk'
               - 'scripts/makefiles/python-vars.mk'
-              - '.dockerignore'
               - '.github/docker-images.json'
               - '.github/workflows/Check-docker-images.yml'
               - '.github/workflows/Docker-images.yml'
