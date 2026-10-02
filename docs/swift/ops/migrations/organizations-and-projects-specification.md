@@ -1,10 +1,10 @@
 ---
 schema: 1
-title: "Specify organizations and projects (RFC and OpenSpec changes only)"
+title: "Specify the organizations and projects target model (RFC only)"
 impact: none
 configuration: none
-configuration_reason: "Adds an RFC and two OpenSpec changes under docs/ and openspec/; no code, configuration key or default changes."
-no_action_reason: "Specification documents only; nothing deployed reads them, so a normal deployment is unaffected."
+configuration_reason: "Adds an RFC under docs/swift/rfc/; no code, configuration key or default changes."
+no_action_reason: "A design document only; nothing deployed reads it, so a normal deployment is unaffected."
 ---
 ## Applicability
 
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-`openspec validate platform-type-and-explicit-team-kind --strict` and `openspec validate explicit-organization-and-org-admin --strict` both report the change as valid.
+`docs/swift/rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md` is present and renders on GitHub.
 
 ## Rollback
 
@@ -32,4 +32,4 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-The specified changes, once implemented, will require operator action (a new required organization setting); their own PRs carry that note.
+Migration toward this target is specified separately; its PRs carry their own notes.

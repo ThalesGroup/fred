@@ -1,6 +1,6 @@
 # RFC: Organizations and projects
 
-**Status:** model agreed (2026-10-02); release 1 specified as two OpenSpec changes (`platform-type-and-explicit-team-kind`, `explicit-organization-and-org-admin`), not implemented
+**Status:** target model agreed (2026-10-02), for team review; migration and delivery are specified separately, after this target is validated
 **Author:** Dimitri Tombroff
 **Date:** 2026-10-02
 **Related:** issue #2921; `docs/swift/platform/REBAC.md`
@@ -27,6 +27,12 @@ No structural fact is hard-coded or derived from an identifier convention:
 every node, its kind and its parent are explicit data. The platform is its own
 ReBAC type (`platform`), carrying platform roles and catalog anchors;
 `organization` is a tenant only.
+
+No deployment variant exists in code or configuration: a single-user laptop is
+an installation with no shared team, which is data, not a mode.
+
+Organizations are invisible to users; only `platform_admin` and `org_admin`
+see them.
 
 A node never changes parent: a project stays in its team, a team in its
 organization. Moving one would silently change who reads what.
@@ -92,48 +98,13 @@ organization. Moving one would silently change who reads what.
 - S2. A team's kind (`shared` or `personal`) is explicit data, answered by a
   single authority. No other code infers it from an identifier.
 
-## 3. Migration
+## 3. Open questions
 
-- MG1. An existing installation upgrades into one organization. Every team,
-  personal space, membership, role, agent, resource and conversation keeps its
-  id and works unchanged. No project exists after the upgrade.
-- MG2. Platform roles and catalog anchors move to the `platform` object with
-  the same holders. `team_manager` holders become `org_admin` of that
-  organization.
-- MG3. The upgrade is repeatable and never reattaches a team that is already
-  explicitly attached to an organization.
-- MG4. Existing APIs keep their behavior for an installation with a single
-  organization.
-- MG5. The operator supplies that organization's id and name in configuration,
-  with no default; the upgrade refuses to run without them.
+- How a new account enters its organization: invitation by an `org_admin`, or
+  a landing page outside any organization that routes to an external request,
+  as team requests already do.
 
-- MG6. No deployment variant in code or configuration. A single-user laptop is
-  an installation where no shared team exists: data, not a mode.
-
-## 4. Delivery
-
-**Release 1 — the model under existing behavior, no user-facing change.**
-Organizations stay invisible to users; only `platform_admin` and `org_admin`
-see them, on the admin pages.
-
-1. Refactor, behavior unchanged: the `platform` type takes over platform roles
-   and anchors; team kind becomes explicit (S2).
-2. Explicit organization (MG1–MG5); `org_admin` replaces
-   `team_manager` (R5).
-
-Release 1 deletes nothing it migrates, so rollback stays open; a cleanup change
-removes the legacy data once release 1 has run in production.
-
-In release 1 every new account joins the configured organization (MG5); the
-configuration states it as such.
-
-**Later releases, each with its UI:** projects; organization-level content,
-`org_editor` and organization agents; creating further organizations, with an
-explicit way in for a new account (invitation by an `org_admin`, or a landing
-page outside any organization that routes to an external request, as team
-requests already do).
-
-## 5. Impact on existing contracts
+## 4. Target impact on existing contracts
 
 - **ReBAC schema** (`fred_core/security/rebac/schema.fga`). `organization`
   stops being a singleton; `team#organization` already exists. New `platform`
