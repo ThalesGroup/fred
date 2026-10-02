@@ -37,8 +37,14 @@ from fred_sdk.contracts.execution import (
     TeamType,
     TraceContext,
 )
-from fred_sdk.contracts.runtime import RuntimeEventKind, TurnPersistedEvent
-from pydantic import ValidationError
+from fred_sdk.contracts.runtime import (
+    ExecutionInterruptedRuntimeEvent,
+    HumanInputRequest,
+    RuntimeEvent,
+    RuntimeEventKind,
+    TurnPersistedEvent,
+)
+from pydantic import TypeAdapter, ValidationError
 
 # ---------------------------------------------------------------------------
 # ActorContext
@@ -376,6 +382,56 @@ def test_occurrence_id_without_resume_payload_is_rejected() -> None:
         RuntimeExecuteRequest(
             agent_id="my-agent", input="hello", occurrence_id="tool-call-1"
         )
+
+
+def test_continue_needs_no_input_but_an_interruption_id() -> None:
+    req = RuntimeExecuteRequest(
+        agent_id="my-agent", interrupted_action="continue", interruption_id="i-1"
+    )
+    assert req.input == ""
+    with pytest.raises(Exception, match="requires interruption_id"):
+        RuntimeExecuteRequest(agent_id="my-agent", interrupted_action="continue")
+
+
+def test_continue_is_not_a_hitl_resume() -> None:
+    with pytest.raises(Exception, match="requires interruption_id"):
+        RuntimeExecuteRequest(
+            agent_id="my-agent",
+            interrupted_action="continue",
+            interruption_id="i-1",
+            resume_payload={"choice_id": "ok"},
+        )
+
+
+def test_interruption_id_is_only_valid_with_continue() -> None:
+    with pytest.raises(Exception, match="only valid with interrupted_action"):
+        RuntimeExecuteRequest(
+            agent_id="my-agent",
+            input="hello",
+            interrupted_action="restart",
+            interruption_id="i-1",
+        )
+
+
+def test_restart_still_needs_input() -> None:
+    assert (
+        RuntimeExecuteRequest(
+            agent_id="my-agent", input="hello", interrupted_action="restart"
+        ).interrupted_action
+        == "restart"
+    )
+    with pytest.raises(Exception, match="input is required"):
+        RuntimeExecuteRequest(agent_id="my-agent", interrupted_action="restart")
+
+
+def test_execution_interrupted_event_round_trips() -> None:
+    event = ExecutionInterruptedRuntimeEvent(
+        request=HumanInputRequest(stage="execution_interrupted", title="Publish"),
+        interruption_id="i-1",
+    )
+    parsed = TypeAdapter(RuntimeEvent).validate_python(event.model_dump(mode="json"))
+    assert parsed == event
+    assert parsed.kind == RuntimeEventKind.EXECUTION_INTERRUPTED
 
 
 def test_occurrence_id_is_carried_with_a_resume() -> None:

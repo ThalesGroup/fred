@@ -31,6 +31,7 @@ import type {
   NodeErrorRuntimeEvent,
   RuntimeContext,
   RuntimeErrorEvent,
+  ExecutionInterruptedRuntimeEvent,
   RuntimeExecuteRequest,
   StatusRuntimeEvent,
   ThoughtDeltaEvent,
@@ -183,7 +184,14 @@ type AnyRuntimeEvent =
   | ({ kind: "tool_call" } & ToolCallRuntimeEvent)
   | ({ kind: "tool_result" } & ToolResultRuntimeEvent)
   | ({ kind: "turn_persisted" } & TurnPersistedEvent)
-  | ({ kind: "execution_error" } & RuntimeErrorEvent);
+  | ({ kind: "execution_error" } & RuntimeErrorEvent)
+  | ({ kind: "execution_interrupted" } & ExecutionInterruptedRuntimeEvent);
+
+/** The user's answer to an interrupted Graph run, sent with the next turn. */
+export type InterruptedRunChoice = {
+  action: NonNullable<RuntimeExecuteRequest["interrupted_action"]>;
+  interruptionId?: string;
+};
 
 class RuntimeHttpError extends Error {
   constructor(
@@ -329,6 +337,10 @@ export function useChatSse(
   // Per-hook warn-once latch for the degraded token preflight (see
   // `preflightTurnToken`), so two mounted chats do not silence each other.
   const degradedTokenWarnedRef = useRef(false);
+  // A deliberate Stop is never offered back as an interrupted run: the next
+  // send in that session restarts instead. Survives session switches.
+  const stoppedSessionsRef = useRef(new Set<string>());
+  const turnSessionRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   const thoughtBufsRef = useRef<
     Map<
@@ -398,6 +410,13 @@ export function useChatSse(
     setMaxChatInputChars(undefined);
   }, [setAll]);
   const replaceAllMessages = useCallback((msgs: ChatMessage[]) => setAll(msgs), [setAll]);
+  // A turn the runtime refused before running: its optimistic bubble goes away.
+  const dropOptimisticTurn = useCallback((exchangeId: string) => {
+    messagesRef.current = messagesRef.current.filter(
+      (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
+    );
+    setMessages([...messagesRef.current]);
+  }, []);
 
   const abort = useCallback(() => {
     console.debug("[useChatSse] abort() called — clearing waitResponse");
@@ -407,6 +426,7 @@ export function useChatSse(
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
+    if (turnSessionRef.current) stoppedSessionsRef.current.add(turnSessionRef.current);
     setWaitResponse(false);
   }, []);
 
@@ -582,6 +602,30 @@ export function useChatSse(
           break;
         }
 
+        case "execution_interrupted": {
+          // Nothing ran: drop the optimistic message, give the draft back, and
+          // offer the choice on the human-input card.
+          dropOptimisticTurn(exchangeId);
+          onTurnRejected?.("", sessionId);
+          const step = String(event.request.metadata?.node_title ?? event.request.metadata?.node_id ?? "");
+          onAwaitingHuman?.({
+            type: "awaiting_human",
+            session_id: sessionId,
+            exchange_id: exchangeId,
+            payload: {
+              ...event.request,
+              title: i18n.t("chatbot.interruptedRun.title", { step }),
+              question: i18n.t("chatbot.interruptedRun.question"),
+              choices: [
+                { id: "continue", label: i18n.t("chatbot.interruptedRun.continue") },
+                { id: "restart", label: i18n.t("chatbot.interruptedRun.restart") },
+              ],
+              metadata: { ...event.request.metadata, interruption_id: event.interruption_id },
+            },
+          });
+          break;
+        }
+
         case "turn_persisted": {
           onBindDraftAgentToSessionId?.(event.session_id);
           onTurnPersisted?.(event.session_id);
@@ -693,7 +737,7 @@ export function useChatSse(
           break;
       }
     },
-    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onError],
+    [onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onTurnRejected, onError, dropOptimisticTurn, i18n],
   );
 
   const streamToMessages = useCallback(
@@ -751,8 +795,12 @@ export function useChatSse(
       sessionId: string | null,
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
-    ) => {
+      interrupted?: InterruptedRunChoice,
+    ): Promise<boolean> => {
       const sendId = Math.random().toString(36).slice(2, 8);
+      const stopped = stoppedSessionsRef.current.has(sessionId ?? "draft");
+      const choice = interrupted ?? (stopped ? { action: "restart" as const } : undefined);
+      const continuing = choice?.action === "continue";
       console.debug(
         `[useChatSse][${sendId}] send() START — sessionId=${sessionId ?? "null"} inputChars=${countUnicodeCodePoints(input)}`,
       );
@@ -762,7 +810,7 @@ export function useChatSse(
       // is dropped here, outright: not cancelled, not merged, not queued.
       if (preflightOwnerRef.current) {
         console.debug(`[useChatSse][${sendId}] IGNORED — a send() is already preflighting`);
-        return;
+        return false;
       }
 
       if (abortRef.current) {
@@ -830,11 +878,11 @@ export function useChatSse(
       if (ac.signal.aborted) {
         console.debug(`[useChatSse][${sendId}] aborted during token refresh — never reaching onTurnStarted`);
         releasePreflightLock();
-        return;
+        return false;
       }
       if (tokenProblem) {
         failPreflight("token refresh", new Error(tokenProblem));
-        return;
+        return false;
       }
       // Ordering barrier: any in-flight session row creation and context-prompt
       // PATCH must commit before prepare-execution reads them, otherwise the
@@ -849,17 +897,17 @@ export function useChatSse(
         writesCommitted = await flushPendingWrites?.(sessionId ?? "");
       } catch (err) {
         failPreflight("session write flush", err);
-        return;
+        return false;
       }
       if (ac.signal.aborted) {
         console.debug(`[useChatSse][${sendId}] aborted during flush — never reaching onTurnStarted`);
         releasePreflightLock();
-        return;
+        return false;
       }
       if (writesCommitted === false) {
         console.debug(`[useChatSse][${sendId}] aborting — a pending session write failed`);
         releasePreflightLock();
-        return;
+        return false;
       }
 
       console.debug(`[useChatSse][${sendId}] calling prepareExecution...`);
@@ -878,7 +926,7 @@ export function useChatSse(
         if (ac.signal.aborted) {
           console.debug(`[useChatSse][${sendId}] aborted right after prepare-execution — never reaching onTurnStarted`);
           releasePreflightLock();
-          return;
+          return false;
         }
         console.debug(
           `[useChatSse][${sendId}] prepareExecution done — aborted=${ac.signal.aborted} execute_stream_url=${prep.execute_stream_url}`,
@@ -918,7 +966,7 @@ export function useChatSse(
         // toast and `waitResponse` never set, so the composer looked idle
         // with no sign the message never sent.
         failPreflight("prepare-execution", err);
-        return;
+        return false;
       }
 
       // Last gate BEFORE the turn commits. Deliberately above `onTurnStarted`
@@ -936,11 +984,11 @@ export function useChatSse(
           `[useChatSse][${sendId}] aborted during the wire-time token check — never reaching onTurnStarted`,
         );
         releasePreflightLock();
-        return;
+        return false;
       }
       if (staleToken) {
         failPreflight("token refresh", new Error(staleToken));
-        return;
+        return false;
       }
 
       // The turn is now genuinely starting. Preflight is over — release the
@@ -952,7 +1000,10 @@ export function useChatSse(
       if (preflightOwnerRef.current === ac) {
         preflightOwnerRef.current = null;
       }
-      onTurnStarted?.();
+      stoppedSessionsRef.current.delete(effectiveSessionId);
+      turnSessionRef.current = effectiveSessionId;
+      // A continue sends no message: the composer keeps the user's draft.
+      if (!continuing) onTurnStarted?.();
 
       // Optimistic user message for immediate UI feedback before the first SSE frame.
       const userMsg: ChatMessage = {
@@ -971,8 +1022,10 @@ export function useChatSse(
           ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
         },
       };
-      messagesRef.current = upsertOne(messagesRef.current, userMsg);
-      setMessages([...messagesRef.current]);
+      if (!continuing) {
+        messagesRef.current = upsertOne(messagesRef.current, userMsg);
+        setMessages([...messagesRef.current]);
+      }
       console.debug(`[useChatSse][${sendId}] starting streamToMessages`);
 
       // Read as LATE as possible — right before the bearer goes on the wire.
@@ -990,6 +1043,7 @@ export function useChatSse(
             session_id: sessionId,
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
+            ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),
           },
           prep.execute_stream_url,
           token,
@@ -1006,10 +1060,7 @@ export function useChatSse(
         } else if (name === "AbortError") {
           console.debug(`[useChatSse][${sendId}] streamToMessages aborted (AbortError) — swallowed`);
         } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
-          messagesRef.current = messagesRef.current.filter(
-            (message) => !(message.exchange_id === exchangeId && message.metadata?.extras?.optimistic_user === true),
-          );
-          setMessages([...messagesRef.current]);
+          dropOptimisticTurn(exchangeId);
           onTurnRejected?.(input, effectiveSessionId);
           if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
           onError?.(
@@ -1031,6 +1082,7 @@ export function useChatSse(
           setWaitResponse(false);
         }
       }
+      return true;
     },
     [
       agentInstanceId,
@@ -1040,6 +1092,7 @@ export function useChatSse(
       onError,
       onTurnStarted,
       onTurnRejected,
+      dropOptimisticTurn,
       isTurnCurrent,
       flushPendingWrites,
       applyPreparation,
@@ -1074,6 +1127,7 @@ export function useChatSse(
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
+      turnSessionRef.current = pending.session_id;
       // Takes over `abortRef` from outside, exactly like abort()/reset() do —
       // so it must also unconditionally free preflightOwnerRef the same way
       // they do. Without this, a send() still preflighting when this fires

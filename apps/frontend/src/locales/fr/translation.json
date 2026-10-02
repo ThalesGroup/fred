@@ -530,6 +530,12 @@
     },
     "hitlFreeTextLabel": "Votre réponse",
     "hitlWaitingAria": "L'agent attend votre réponse",
+    "interruptedRun": {
+      "title": "La réponse précédente a été interrompue pendant « {{step}} ».",
+      "question": "Reprendre à cette étape, ou recommencer avec votre message ?",
+      "continue": "Continuer",
+      "restart": "Recommencer"
+    },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
       "closeAria": "Fermer l'aperçu markdown",

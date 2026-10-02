@@ -6399,3 +6399,66 @@ choice, free text, and choice with comment through this platform tool.
 A skipped question writes a response row even without choice or text. Graph
 choice helpers expose the same typed answer through `choice_step_response`;
 `choice_step` keeps its string return contract for existing authors.
+
+### 8.100 A Graph run left unfinished by a lost process is offered back (2026-10-01)
+
+Graph agents stream with `durability="sync"`: a step's checkpoint is persisted
+before the next step starts. A run ending in a live process (success, unhandled
+node error, step limit) leaves no pending step, via LangGraph's
+`aupdate_state(config, None, as_node=END)`. The clearing only applies while the head
+is still the run's own (`fred_graph_run` in checkpoint metadata). A cancelled or disconnected run keeps
+its pending step.
+
+A Graph thread with pending steps and no pending interrupt is therefore an
+interrupted execution. A new turn on it runs nothing and returns one
+`ExecutionInterruptedRuntimeEvent` (`kind="execution_interrupted"`). The event
+carries a `HumanInputRequest` (`stage="execution_interrupted"`, choices
+`continue`/`restart`, `metadata.node_id`/`node_title`) and an opaque
+`interruption_id` derived from the thread head. That turn writes no history and
+no turn KPI.
+
+`RuntimeExecuteRequest.interrupted_action` answers it:
+
+- `continue` requires `interruption_id`, allows empty `input` and excludes
+  `resume_payload`. It resumes the interrupted step with `astream(None)`. The id is
+  validated read-only first, then the HITL single-use claim keyed
+  `continue:{interruption_id}` is taken. A stale or
+  unknown id, or a non-Graph agent, gets an execution error and nothing runs.
+  The continued exchange persists its assistant rows without a user row.
+- `restart` runs the input as an ordinary new turn. Non-Graph agents ignore it.
+
+`GraphExecutor.invoke`, in-process child invocations and the OpenAI-compatible
+route have no one to ask, so they restart. Pending steps cannot tell a lost run
+from one still running elsewhere; nothing stops a user from continuing a run that
+is still live on another replica or tab. The chat renders the event with `HitlPrompt`, puts the card back when
+the answer never started, and sends `restart` for the first message of a session the
+user stopped. A step re-run by `continue`
+repeats any side effect inside it: commit externally with a key fixed in an
+earlier step. Full rationale:
+`openspec/changes/resume-interrupted-graph-execution/design.md`.
+
+### 8.101 Technical Graph continuation survives the continuing process's loss (2026-10-02)
+
+Supersedes the technical-continuation HITL claim reuse in §8.100. Ordinary HITL
+claims remain single-use and unchanged. `GraphExecutor` holds owner-lifetime
+admission on the Graph thread around a `continue`, including direct SDK calls.
+It validates the current interruption inside admission and resumes with
+`astream(None)`, preserving checkpoint identity and persisted tool-task results.
+
+PostgreSQL uses a non-blocking transaction-scoped advisory lock; ownership ends
+when the transaction exits or the database observes connection loss. Pooled
+engines require at least two base connections; a pod-local capacity guard leaves
+checkpoint connections available and rejects excess continuation admission.
+File-backed SQLite on a local POSIX filesystem uses non-blocking file locks in
+`<database>.graph-locks/`; closing the handle or process loss releases ownership.
+Other providers fail explicitly. SQLite sidecars must not be removed while any
+runtime process is running. No schema migration or claim purge is required.
+
+A continuation lost in the same step is continuable again without restarting
+completed preparation. Concurrent continuations are refused while an owner is
+live. This does not coordinate new turns/Restart or fence late checkpoint writers.
+
+Checkpoint persistence is not atomic with an external operation. An interrupted
+step may execute again even if its external effect committed. Agent authors own
+idempotent replay or reconciliation using identity/content prepared in an earlier
+persisted step. The runtime does not promise exactly-once external effects.

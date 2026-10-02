@@ -5075,3 +5075,27 @@ Approval actions use the same neutral outline style and offer a conversation-sco
 choice; the browser answers later matching approval pauses through the existing
 resume flow. Skip at the bottom right and close at the top right appear only
 for `stage="agent_question"`. Both resume the turn as skipped. A skipped answer is shown in the same card, including after history reload.
+
+### Interrupted Graph run card (2026-10-01)
+
+**Location:** `src/rework/core/hooks/useChatSse.ts`,
+`src/rework/components/pages/ManagedChatPage/useManagedChat.ts`,
+`src/rework/components/shared/molecules/HitlPrompt/`
+
+**Status:** `Functional`
+
+When a message reaches a Graph agent whose previous run was cut short by a lost
+process, the runtime answers `execution_interrupted` instead of running. The
+optimistic user bubble is removed, the message goes back to the composer, and the
+existing `HitlPrompt` card shows a localized title naming the interrupted step,
+plus **Continue** and **Restart** (FR: *Continuer*, *Recommencer*).
+
+- **Continue** resumes the run at that step. No user bubble is added, and the
+  composer keeps the draft.
+- **Restart** sends the draft as a new turn.
+- If the chosen request never starts (token, session write or preparation failure),
+  the card comes back.
+- After **Stop**, the next message of that conversation restarts without showing the
+  card, even after visiting another conversation. The memory lives in the page, so a
+  reload right after Stop may still show the card.
+

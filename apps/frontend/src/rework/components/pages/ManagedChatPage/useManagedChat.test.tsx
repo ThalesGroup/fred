@@ -91,7 +91,7 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // a fresh `vi.fn()` per render would make those deps look "changed" every
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
-const sendMock = vi.fn(async (..._args: unknown[]) => {});
+const sendMock = vi.fn(async (..._args: unknown[]) => true);
 const prepareChatControlsMock = vi.fn(async () => ({}));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
@@ -1385,6 +1385,81 @@ describe("useManagedChat — session write reliability", () => {
     },
   };
   const grantScope = { userId: "alice", agentInstanceId: "agent-1", sessionId: "session-1" };
+
+  const interruptedEvent = {
+    type: "awaiting_human",
+    session_id: "session-1",
+    exchange_id: "exchange-1",
+    payload: {
+      stage: "execution_interrupted",
+      choices: [
+        { id: "continue", label: "Continue" },
+        { id: "restart", label: "Restart" },
+      ],
+      metadata: { node_id: "publish", interruption_id: "int-1" },
+    },
+  };
+
+  it("continue on an interrupted run sends the interruption, not a HITL resume, and keeps the draft", async () => {
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("again"));
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("continue");
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledWith("", "session-1", expect.any(Object), undefined, {
+      action: "continue",
+      interruptionId: "int-1",
+    });
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.input).toBe("again");
+  });
+
+  it("keeps offering the choice when the continue request never started", async () => {
+    sendMock.mockResolvedValueOnce(false);
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("continue");
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(interruptedEvent);
+  });
+
+  it("restart on an interrupted run re-sends the same turn, command included, with restart", async () => {
+    mount();
+    bindSession("session-1");
+    const command = { command: "plan", prompt_name: "Plan", appended_text: "" };
+    act(() => latest.setInput("/plan"));
+    rerender();
+    await act(async () => {
+      await latest.runCommand({ text: "assembled prompt", command } as never);
+    });
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("restart");
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    const restart = sendMock.mock.calls[1];
+    expect(restart[0]).toBe("assembled prompt");
+    expect(restart[2]).toMatchObject({ command });
+    expect(restart[4]).toEqual({ action: "restart" });
+  });
 
   it("remembers only the gated tool after the approval resume is accepted", async () => {
     localStorage.clear();

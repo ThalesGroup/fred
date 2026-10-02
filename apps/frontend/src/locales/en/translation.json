@@ -530,6 +530,12 @@
     },
     "hitlFreeTextLabel": "Your answer",
     "hitlWaitingAria": "Agent is waiting for your input",
+    "interruptedRun": {
+      "title": "The previous answer was interrupted during “{{step}}”.",
+      "question": "Continue from that step, or restart with your message?",
+      "continue": "Continue",
+      "restart": "Restart"
+    },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",

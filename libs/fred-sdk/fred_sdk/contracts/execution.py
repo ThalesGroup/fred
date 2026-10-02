@@ -61,6 +61,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .context import ConversationTurn, RuntimeContext
 from .models import TuningValue
+from .runtime import InterruptedAction
 
 
 class FrozenModel(BaseModel):
@@ -328,6 +329,24 @@ class RuntimeExecuteRequest(BaseModel):
         ),
     )
 
+    # Graph execution left unfinished by a lost process
+    interrupted_action: InterruptedAction | None = Field(
+        default=None,
+        description=(
+            "Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the "
+            "unfinished Graph execution at its interrupted step (input may be "
+            "empty); 'restart' runs this input as a new turn."
+        ),
+    )
+    interruption_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; "
+            "required with interrupted_action='continue' and valid only there."
+        ),
+    )
+
     # Optional per-request runtime context (typed)
     runtime_context: RuntimeContext | None = Field(
         default=None,
@@ -400,7 +419,18 @@ class RuntimeExecuteRequest(BaseModel):
             raise ValueError(
                 "runtime_context.team_id is required for managed agent execution."
             )
-        if self.resume_payload is None and not self.input.strip():
+        continuing = self.interrupted_action == "continue"
+        if continuing and (
+            self.interruption_id is None or self.resume_payload is not None
+        ):
+            raise ValueError(
+                "interrupted_action='continue' requires interruption_id and no resume_payload."
+            )
+        if self.interruption_id is not None and not continuing:
+            raise ValueError(
+                "interruption_id is only valid with interrupted_action='continue'."
+            )
+        if self.resume_payload is None and not continuing and not self.input.strip():
             raise ValueError("input is required when resume_payload is not set.")
         if self.interrupt_id is not None and self.resume_payload is None:
             raise ValueError("interrupt_id is only valid together with resume_payload.")
