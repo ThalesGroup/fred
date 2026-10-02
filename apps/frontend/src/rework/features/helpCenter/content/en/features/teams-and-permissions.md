@@ -62,9 +62,14 @@ depends on your role.
   permanently erased (**Admin**).
 - **Model routing** — which model profile the team's agents use, by default and
   per operation. Left empty, the deployment's profile applies (**Editor**).
-- **Evaluations** — campaigns measuring an agent's quality (**Analyst** or
-  **Admin**). See the guide
-  [Evaluate an agent](/help/en/guides/evaluate-agents).
+
+## Evaluation application
+
+Open the registered evaluator through the team's **Apps** entry. It is a
+standalone application, not a team settings section. It must be deployed,
+registered and enabled for your team; its access permissions still apply.
+If it is unavailable, contact your administrator. See
+[Evaluate an agent](/help/en/guides/evaluate-agents).
 
 ## Platform roles
 

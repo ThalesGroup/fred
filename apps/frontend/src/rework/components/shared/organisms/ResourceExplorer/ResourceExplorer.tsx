@@ -18,7 +18,7 @@ import DataTable, {
   type DataTableColumn,
   type ServerPagination,
   type SortState,
-} from "@shared/molecules/DataTable/DataTable.tsx";
+} from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";

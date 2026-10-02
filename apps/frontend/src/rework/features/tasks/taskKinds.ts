@@ -24,7 +24,6 @@ export const TASK_KINDS: Record<string, TaskKindMeta> = {
   ingestion: { labelKey: "rework.tasks.kind.ingestion" },
   erasure: { labelKey: "rework.tasks.kind.erasure" },
   migration: { labelKey: "rework.tasks.kind.migration" },
-  evaluation: { labelKey: "rework.tasks.kind.evaluation" },
   reindex: { labelKey: "rework.tasks.kind.reindex" },
 };
 
@@ -41,12 +40,11 @@ export function getKindMeta(kind: string | null): TaskKindMeta {
 // and `useTaskAcknowledgement` both route off, so the two can never drift apart
 // the way ack silently did (#2123 review). Add a kind here (and to TASK_KINDS
 // above) when the backend adds one.
-export type TaskBackend = "knowledge-flow" | "control-plane" | "evaluation";
+export type TaskBackend = "knowledge-flow" | "control-plane";
 
 const BACKEND_BY_KIND: Record<string, TaskBackend> = {
   migration: "control-plane",
   erasure: "control-plane",
-  evaluation: "evaluation",
 };
 
 export function taskBackendFor(kind: string | null): TaskBackend {

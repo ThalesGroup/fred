@@ -47,6 +47,7 @@ import type {
 import "@fred-oss/design-tokens/tokens.css";
 import "@fred-oss/ui/styles.css";
 import "./consumer.css";
+import { HostedComponents } from "./hosted-components";
 
 const reviewedIcon: MaterialIconType = "search";
 const typedIcon: IconProps = {
@@ -257,6 +258,7 @@ function App() {
           </Dialog>
         </section>
       </section>
+      <HostedComponents />
     </main>
   );
 }

@@ -16,7 +16,7 @@ import { Dispatch, SetStateAction, useCallback, useEffect, useMemo, useRef, useS
 
 type Initializer<T> = T | (() => T);
 
-const isBrowser = typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+const isBrowser = typeof window !== "undefined";
 
 const resolveInitializer = <T>(value: Initializer<T>): T =>
   typeof value === "function" ? (value as () => T)() : value;
@@ -45,12 +45,11 @@ function readFromStorage<T>(key: string): T | undefined {
 function writeToStorage<T>(key: string, value: T): void {
   if (!isBrowser) return;
 
-  if (value === undefined) {
-    window.localStorage.removeItem(key);
-    return;
-  }
-
   try {
+    if (value === undefined) {
+      window.localStorage.removeItem(key);
+      return;
+    }
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch (error) {
     console.warn(`useLocalStorageState: failed to write key "${key}" to localStorage`, error);

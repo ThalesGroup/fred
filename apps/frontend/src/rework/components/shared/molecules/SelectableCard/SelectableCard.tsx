@@ -14,7 +14,7 @@
 
 import styles from "./SelectableCard.module.css";
 
-interface SelectableCardProps {
+export interface SelectableCardProps {
   selected: boolean;
   title: string;
   description: string;

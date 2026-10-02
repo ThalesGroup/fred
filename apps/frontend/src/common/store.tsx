@@ -14,7 +14,6 @@
 
 import { combineReducers, configureStore, createReducer, isFulfilled, isPending, isRejected } from "@reduxjs/toolkit";
 import { controlPlaneApi } from "../slices/controlPlane/controlPlaneApi.ts";
-import { evaluationApi } from "../slices/evaluation/evaluationApi.ts";
 import { knowledgeFlowApi } from "../slices/knowledgeFlow/knowledgeFlowApi.ts";
 import { taskSlice } from "../rework/features/tasks/taskSlice.ts";
 import { capabilityRoutingSlice } from "./capabilityRoutingSlice.ts";
@@ -51,7 +50,6 @@ const combinedReducer = combineReducers({
   ),
   [knowledgeFlowApi.reducerPath]: knowledgeFlowApi.reducer,
   [controlPlaneApi.reducerPath]: controlPlaneApi.reducer,
-  [evaluationApi.reducerPath]: evaluationApi.reducer,
   tasks: taskSlice.reducer,
   capabilityRouting: capabilityRoutingSlice.reducer,
   [writableDocumentCapabilityApi.reducerPath]: writableDocumentCapabilityApi.reducer,
@@ -69,7 +67,6 @@ export const store = configureStore({
     getDefaultMiddleware().concat(
       knowledgeFlowApi.middleware,
       controlPlaneApi.middleware,
-      evaluationApi.middleware,
       writableDocumentCapabilityApi.middleware,
       pptFillerCapabilityApi.middleware,
       loggingMiddleware,

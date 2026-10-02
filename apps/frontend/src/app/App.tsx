@@ -13,6 +13,8 @@
 // limitations under the License.
 
 // FredUi.tsx
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+
 import React, { useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RouterProvider } from "react-router-dom";
@@ -113,7 +115,11 @@ function FredUiContent() {
                 <AnnouncementStack />
                 <div className={styles.routedContent}>
                   <ConfirmationDialogProvider>
-                    <ToastProvider>
+                    <ToastProvider
+                      onCopy={async (text) => {
+                        await writeRichClipboard("", text);
+                      }}
+                    >
                       <RouterProvider router={router} />
                     </ToastProvider>
                   </ConfirmationDialogProvider>

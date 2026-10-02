@@ -31,10 +31,6 @@ describe("taskBackendFor", () => {
     expect(taskBackendFor("migration")).toBe("control-plane");
   });
 
-  it("routes evaluation tasks to the evaluation backend", () => {
-    expect(taskBackendFor("evaluation")).toBe("evaluation");
-  });
-
   it("routes ingestion tasks to the knowledge-flow backend", () => {
     expect(taskBackendFor("ingestion")).toBe("knowledge-flow");
   });

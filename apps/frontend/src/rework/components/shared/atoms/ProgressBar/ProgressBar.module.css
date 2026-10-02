@@ -25,6 +25,42 @@
 .fill {
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 10px;
-  background-color: var(--main-color);
+  background-color: var(--primary);
   height: 100%;
+}
+
+.fill[data-color="primary"] {
+  background-color: var(--primary);
+}
+
+.fill[data-color="secondary"] {
+  background-color: var(--secondary);
+}
+
+.fill[data-color="tertiary"] {
+  background-color: var(--tertiary);
+}
+
+.fill[data-color="error"] {
+  background-color: var(--error);
+}
+
+.fill[data-color="success"] {
+  background-color: var(--success);
+}
+
+.fill[data-color="warning"] {
+  background-color: var(--warning);
+}
+
+.fill[data-color="info"] {
+  background-color: var(--info);
+}
+
+.fill[data-color="on-surface"] {
+  background-color: var(--on-surface);
+}
+
+.fill[data-color="on-surface-retreat"] {
+  background-color: var(--on-surface-retreat);
 }

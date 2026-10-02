@@ -42,10 +42,13 @@ const MenuInternal = <T,>({
     if (activeId && listRef.current) {
       const activeElement = Array.from(listRef.current.children).find((item) => item.id === activeId);
       if (activeElement) {
-        activeElement.scrollIntoView({
-          block: "nearest",
-          behavior: "smooth",
-        });
+        // Scroll only this list: scrollIntoView also moves an iframe's host page.
+        const list = listRef.current;
+        const top = list.getBoundingClientRect().top + list.clientTop;
+        const bottom = top + list.clientHeight;
+        const item = activeElement.getBoundingClientRect();
+        if (item.top < top) list.scrollTop += item.top - top;
+        else if (item.bottom > bottom) list.scrollTop += Math.min(item.bottom - bottom, item.top - top);
       }
     }
   }, [activeId]);

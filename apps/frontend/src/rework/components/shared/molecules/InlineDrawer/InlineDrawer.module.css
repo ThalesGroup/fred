@@ -50,6 +50,7 @@
     visibility 250ms;
   border-left: 1px solid var(--outline-retreat);
   width: var(--drawer-width);
+  max-width: 100vw;
   /* No overflow:hidden here — keep main content interactive at all times */
 }
 

@@ -13,8 +13,7 @@
 // limitations under the License.
 
 import React, { useEffect } from "react";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { writeRichClipboard } from "@rework/utils/clipboardUtils";
+import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./Toast.module.css";
 
 export type ToastSeverity = "success" | "error" | "warning" | "info";
@@ -27,7 +26,13 @@ export interface ToastData {
   duration?: number | null;
 }
 
-interface ToastProps extends ToastData {
+export interface ToastActions {
+  onCopy?: (text: string) => void | Promise<void>;
+  copyLabel?: string;
+  dismissLabel?: string;
+}
+
+export interface ToastProps extends ToastData, ToastActions {
   exiting: boolean;
   onClose: (id: number) => void;
   onExited: (id: number) => void;
@@ -56,7 +61,19 @@ function renderDetail(text: string) {
     });
 }
 
-export function Toast({ id, severity, summary, detail, duration, exiting, onClose, onExited }: ToastProps) {
+export function Toast({
+  id,
+  severity,
+  summary,
+  detail,
+  duration,
+  exiting,
+  onClose,
+  onExited,
+  onCopy,
+  copyLabel = "Copy error",
+  dismissLabel = "Dismiss",
+}: ToastProps) {
   useEffect(() => {
     if (!duration || exiting) return;
     const timer = setTimeout(() => onClose(id), duration);
@@ -68,7 +85,7 @@ export function Toast({ id, severity, summary, detail, duration, exiting, onClos
   };
 
   const handleCopy = async () => {
-    await writeRichClipboard("", [summary, detail].filter(Boolean).join("\n"));
+    await onCopy?.([summary, detail].filter(Boolean).join("\n"));
   };
 
   return (
@@ -82,13 +99,13 @@ export function Toast({ id, severity, summary, detail, duration, exiting, onClos
       <div className={styles.header}>
         <span className={styles.summary}>{summary}</span>
         <div className={styles.actions}>
-          {severity === "error" && (
-            <button className={styles.actionBtn} onClick={handleCopy} aria-label="Copy error">
-              <Icon category="outlined" type="content_copy" />
+          {severity === "error" && onCopy && (
+            <button type="button" className={styles.actionBtn} onClick={handleCopy} aria-label={copyLabel}>
+              <Icon type="content_copy" />
             </button>
           )}
-          <button className={styles.actionBtn} onClick={() => onClose(id)} aria-label="Dismiss">
-            <Icon category="outlined" type="close" />
+          <button type="button" className={styles.actionBtn} onClick={() => onClose(id)} aria-label={dismissLabel}>
+            <Icon type="close" />
           </button>
         </div>
       </div>
