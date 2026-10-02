@@ -198,15 +198,38 @@ Verify that a token exists before using it. The authoritative token files are:
 | `--success-container`   | `--on-success-container`   |
 | `--warning-container`   | `--on-warning-container`   |
 
-### Available surface container tokens (elevation scale, low → high)
+### Surface tokens
 
-```
---surface-container-lowest
---surface-container-low
---surface-container
---surface-container-high
---surface-container-highest
-```
+One rule in both themes: each `surface-container-*` level sits further from
+`surface-main` than the one below it (darker in light, lighter in dark), so a
+component keeps its rank when the theme switches. `surface-floating` is the
+single exception, for everything that floats above the page. Tones (CIE L\*)
+of the neutral ramp:
+
+| Token                         | Light | Dark |
+| ----------------------------- | ----- | ---- |
+| `--surface-main`              | 100   | 6    |
+| `--surface-container-lowest`  | 99    | 8    |
+| `--surface-container-low`     | 97.5  | 10   |
+| `--surface-container`         | 96    | 12   |
+| `--surface-container-high`    | 94.5  | 15   |
+| `--surface-container-highest` | 93    | 18   |
+| `--surface-floating`          | 100   | 15   |
+
+Pick the token by the element's role, not by how it looks in one theme:
+
+| Role                                                        | Token                                      |
+| ----------------------------------------------------------- | ------------------------------------------ |
+| Page background                                             | `--surface-main`                           |
+| Bordered content sheet, nav rail, faint decorative block    | `--surface-container-lowest`               |
+| Sidebar, chips, zebra rows                                  | `--surface-container-low`                  |
+| Cards, inset wells (code, raw output, tables)               | `--surface-container`                      |
+| List rows, hover                                            | `--surface-container-high`                 |
+| Filled fields, tracks, badges, focus                        | `--surface-container-highest`              |
+| Menus, popovers, tooltips, dialogs, toasts, floating panels | `--surface-floating` (with a `--shadow-*`) |
+
+Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
+in `libs/frontend/design-tokens/README.md` (Token migrations).
 
 ### Disabled state tokens
 

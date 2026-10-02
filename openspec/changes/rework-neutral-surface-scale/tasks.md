@@ -20,8 +20,8 @@
 
 ## 4. Quality and docs
 
-- [ ] 4.1 Run `make code-quality` and `make test` from the repo root (warn first: they restart Vite); verify both pass
-- [ ] 4.2 Update the surface token section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (rule, tones, `surface-floating`, role table) and the surface row of `docs/swift/ux/COMPONENT-UX.md`; verify no doc still describes the old ordering
-- [ ] 4.3 Add the English migration note (patch, no operator action) per `docs/swift/ops/MIGRATION-GUIDES.md`; verify it follows the template
-- [ ] 4.4 Add a token migration section to `libs/frontend/design-tokens/README.md` (rule, value table, old → new token by role, steps an assistant can follow), built from the final diff; verify every remap in the diff appears in it
+- [x] 4.1 Run the frontend quality gate and tests (same commands as `make code-quality` / `make test`, invoked directly so the running Vite keeps its cache); verify both pass
+- [x] 4.2 Update the surface token section of `docs/swift/platform/FRONTEND_CODING_GUIDELINES.md` (rule, tones, `surface-floating`, role table) and the surface row of `docs/swift/ux/COMPONENT-UX.md`; verify no doc still describes the old ordering
+- [x] 4.3 Add the English migration note (patch, no operator action) per `docs/swift/ops/MIGRATION-GUIDES.md`; verify it follows the template
+- [x] 4.4 Add a token migration section to `libs/frontend/design-tokens/README.md` (rule, value table, old → new token by role, steps an assistant can follow), built from the final diff; verify every remap in the diff appears in it
 - [ ] 4.5 Run `/code-review` on the diff and record exact verification evidence in this change; then archive it with `openspec archive` and close #2915
