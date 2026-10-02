@@ -2282,7 +2282,7 @@ The extended UI surface MUST work without FRED aliases, application models, tran
 
 ### Requirement: Drawer and toast behavior remains independently usable
 
-InlineDrawer SHALL retain its overlay/push, close, and optional pointer-resize behavior, including width bounds and persistence, without application state dependencies. Toast and ToastProvider SHALL retain severity, dismissal, expiry, and error-copy behavior through a caller-supplied copy action. Toast action names SHALL be caller-configurable. FRED SHALL supply its existing clipboard action. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
+InlineDrawer SHALL retain its overlay/push, close, and optional pointer-resize behavior, including width bounds and persistence, without application state dependencies. When resizing is enabled, the initial width MUST be a pixel string (default `"480px"`); other CSS units MUST be rejected by the public types and at runtime. Without resizing, CSS width units remain unrestricted. Toast and ToastProvider SHALL retain severity, dismissal, expiry, and error-copy behavior through a caller-supplied copy action. Toast action names SHALL be caller-configurable. FRED SHALL supply its existing clipboard action. Visible content MUST retain consumer-root styles and light/dark theme inheritance.
 
 #### Scenario: Drawer is resized and reopened
 - **WHEN** a consumer resizes a push drawer with a persistence key, closes it, and reopens it

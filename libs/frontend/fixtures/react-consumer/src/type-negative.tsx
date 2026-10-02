@@ -16,6 +16,7 @@ import {
   Button,
   Checkbox,
   Dialog,
+  InlineDrawer,
   IconButton,
   Select,
   type SelectOption,
@@ -154,3 +155,35 @@ const badKpiTone = (
   />
 );
 export { badRowActivation, badKpiTone };
+
+const badRemDrawer = (
+  // @ts-expect-error Resizable drawers require pixel widths, not relative CSS units.
+  <InlineDrawer
+    open
+    onClose={() => {}}
+    title="Bad"
+    width="30rem"
+    resizable={{ persistKey: "bad" }}
+  />
+);
+const badPercentDrawer = (
+  // @ts-expect-error Percentage widths cannot seed persisted pixel widths.
+  <InlineDrawer
+    open
+    onClose={() => {}}
+    title="Bad"
+    width="50%"
+    resizable={{ persistKey: "bad" }}
+  />
+);
+const badViewportDrawer = (
+  // @ts-expect-error Viewport widths cannot seed persisted pixel widths.
+  <InlineDrawer
+    open
+    onClose={() => {}}
+    title="Bad"
+    width="30vw"
+    resizable={{ persistKey: "bad" }}
+  />
+);
+export { badRemDrawer, badPercentDrawer, badViewportDrawer };

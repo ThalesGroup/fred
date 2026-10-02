@@ -53,7 +53,9 @@ application adapters supply its existing translations. Pagination options use
 
 `StatusBadge` renders a label with `success`, `error`, `warning`, `info`, or
 `neutral` tone; use `Chip` for removable input tokens. `InlineDrawer` supports
-both overlay and push layouts; push drawers accept `resizable` bounds and a
+both overlay and push layouts. With `resizable`, `width` must be a pixel string
+(e.g. `"480px"`); other CSS units are rejected. Without resizing, CSS units remain
+unrestricted. Push drawers accept `resizable` bounds and a
 `persistKey`. Resize/storage hooks are private implementation dependencies.
 `ToastProvider` and direct `Toast` accept `onCopy(text)`, `copyLabel`, and
 `dismissLabel`. Supply your application's clipboard action to enable error

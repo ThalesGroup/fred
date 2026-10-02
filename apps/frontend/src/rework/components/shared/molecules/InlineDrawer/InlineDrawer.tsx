@@ -28,7 +28,7 @@ export interface InlineDrawerResizeSpec {
   maxViewportFraction?: number;
 }
 
-export interface InlineDrawerProps {
+interface InlineDrawerBaseProps {
   open: boolean;
   onClose: () => void;
   title: string;
@@ -37,8 +37,6 @@ export interface InlineDrawerProps {
   titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
-  /** Width in CSS units. Defaults to "480px". */
-  width?: string;
   /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
   background?: string;
   /**
@@ -58,13 +56,6 @@ export interface InlineDrawerProps {
    * rest of the content lives in a sibling `flex: 1` column.
    */
   layout?: "overlay" | "push";
-  /**
-   * Drag-to-resize (push layout only): renders a grab handle on the drawer's
-   * left edge and persists the chosen width under `persistKey`. `width` then
-   * only seeds the first-ever width. Ported from the legacy chat's
-   * ResizablePaneShell so capability panels keep the same UX.
-   */
-  resizable?: InlineDrawerResizeSpec;
   /**
    * Drop the body's default padding so full-bleed content (a PDF page, an image)
    * can use the whole width. The content then owns its own insets.
@@ -86,6 +77,21 @@ export interface InlineDrawerProps {
    */
   hideHeader?: boolean;
 }
+
+export type InlineDrawerProps = InlineDrawerBaseProps &
+  (
+    | {
+        resizable?: undefined;
+        /** Width in CSS units. Defaults to "480px". */
+        width?: string;
+      }
+    | {
+        /** Push-layout drag resize; persists the chosen pixel width under persistKey. */
+        resizable: InlineDrawerResizeSpec;
+        /** Initial width in pixels only. Defaults to "480px"; persisted widths take precedence. */
+        width?: `${number}px`;
+      }
+  );
 
 export function InlineDrawer({
   open,
@@ -109,10 +115,13 @@ export function InlineDrawer({
   const drawerRef = useRef<HTMLElement | null>(null);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
-  const seedWidthPx = Number.parseInt(width, 10);
+  const seedWidthPx = Number(width.slice(0, -2));
+  if (resizable && (!width.endsWith("px") || !Number.isFinite(seedWidthPx))) {
+    throw new Error('InlineDrawer: resizable width must use pixels (for example, "480px").');
+  }
   const resize = usePaneResize({
     storageKey: `inline-drawer:${resizable?.persistKey ?? "unused"}:width`,
-    initialWidth: Number.isFinite(seedWidthPx) ? seedWidthPx : 480,
+    initialWidth: resizable ? seedWidthPx : 480,
     minWidth: resizable?.minWidth,
     maxWidth: resizable?.maxWidth,
     maxViewportFraction: resizable?.maxViewportFraction,

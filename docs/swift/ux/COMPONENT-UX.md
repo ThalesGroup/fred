@@ -1196,7 +1196,7 @@ beside the conversation; the settings and admin drawers keep the default),
 the insets the drawer's own padding would double up (`0 16px 16px` — the header
 already leaves the top gap) and a `--spacing-s` column gap, and drag-to-resize
 with a persisted width (`persistKey`, unique per panel; `width` seeds the
-first-ever value only).
+first-ever value in pixels only, e.g. `"480px"`).
 
 **Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
 (150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
