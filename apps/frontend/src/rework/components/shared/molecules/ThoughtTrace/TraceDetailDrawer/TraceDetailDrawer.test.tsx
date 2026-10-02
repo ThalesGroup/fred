@@ -21,7 +21,11 @@ import { TraceDetailDrawer } from "./TraceDetailDrawer";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { count?: number; duration?: string; name?: string; number?: number }) => {
+    t: (
+      key: string,
+      options?: { answer?: string; count?: number; duration?: string; name?: string; number?: number },
+    ) => {
+      if (key === "chatbot.hitlOtherAnswerWithText") return `Other: ${options?.answer ?? ""}`;
       if (key === "rework.chatTrace.sqlQuery") return "Query";
       if (key === "rework.chatTrace.sqlResponse") return "Response";
       if (key === "rework.chatTrace.tabular.keyword") return "Search term:";
@@ -278,6 +282,51 @@ describe("TraceDetailDrawer ask_user choices", () => {
     expect(html).toContain("High in fibre");
     expect(html).toMatch(/data-selected="true"[^>]*>.*Pain complet/s);
     expect(html).not.toMatch(/data-selected="true"[^>]*>.*Baguette/s);
+  });
+});
+
+describe("TraceDetailDrawer free-text question answer", () => {
+  it("shows the user's text as the highlighted Other choice", () => {
+    const call = message({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "call-hotel", name: "ask_user", args: {} }],
+    });
+    const messages = [
+      message({
+        channel: "hitl_request",
+        role: "system",
+        parts: [
+          {
+            type: "hitl_request",
+            question: "Which accommodation?",
+            stage: "agent_question",
+            occurrence_id: "call-hotel",
+            choices: [
+              { id: "hotel", label: "Hotel" },
+              { id: "other", label: "Autre" },
+            ],
+          },
+        ],
+      }),
+      message({
+        channel: "hitl_response",
+        role: "user",
+        parts: [
+          {
+            type: "hitl_response",
+            occurrence_id: "call-hotel",
+            choice_id: null,
+            text: "hotel avec piscine",
+          },
+        ],
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <TraceDetailDrawer entry={{ kind: "combo", call }} messages={messages} onClose={() => undefined} />,
+    );
+    expect(html).toMatch(/data-selected="true"[^>]*>.*Other: hotel avec piscine/s);
+    expect(html.match(/role="listitem"/g)).toHaveLength(3);
+    expect(html.match(/hotel avec piscine/g)).toHaveLength(1);
   });
 });
 

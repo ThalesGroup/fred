@@ -23,6 +23,7 @@
 - [x] 2.7 Remove submitted tabs when the runtime accepts a batch, before the resumed stream ends, while preserving any later questions in the same exchange; verify the SSE ordering regression.
 - [x] 2.8 Scroll overflowing subject tabs with wheel or trackpad input without dragging the scrollbar, and release vertical page scrolling at the strip ends; verify the focused card interaction.
 - [x] 2.9 Reduce active agent-question card width, typography, padding, and choice spacing slightly while retaining readable descriptions and controls; verify focused component tests and frontend quality.
+- [x] 2.10 Render a free-text answer to a choice question as one highlighted localized Other row in the tool detail drawer, preserving offered choices and choice comments; verify the drawer regression.
 
 ## 3. Close-out
 

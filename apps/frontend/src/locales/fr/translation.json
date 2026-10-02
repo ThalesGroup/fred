@@ -529,6 +529,7 @@
       "toolApprovalSaveFailedDetail": "Cet outil a été approuvé une fois, mais la préférence de la conversation n'a pas pu être enregistrée."
     },
     "hitlOtherAnswerPlaceholder": "Autre",
+    "hitlOtherAnswerWithText": "Autre : {{answer}}",
     "hitlFreeTextLabel": "Votre réponse",
     "hitlQuestionTabsAria": "Questions",
     "hitlQuestionTabFallback": "Question",

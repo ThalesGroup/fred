@@ -529,6 +529,7 @@
       "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
     },
     "hitlOtherAnswerPlaceholder": "Other",
+    "hitlOtherAnswerWithText": "Other: {{answer}}",
     "hitlFreeTextLabel": "Your answer",
     "hitlQuestionTabsAria": "Questions",
     "hitlQuestionTabFallback": "Question",

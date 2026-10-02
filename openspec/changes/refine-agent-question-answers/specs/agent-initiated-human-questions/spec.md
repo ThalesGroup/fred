@@ -74,6 +74,7 @@ The platform SHALL offer one `ask_user` tool to an interactive ReAct or Deep age
 - **WHEN** the conversation renders or reloads
 - **THEN** a compact card below the matching `ask_user` tool line shows its question and selected choice label, text answer, or skipped state, including an optional comment, without waiting for reload
 - **AND** the `ask_user` tool detail drawer lists the offered choices and highlights the selected one when the response is available
+- **AND** a free-text answer to a question with choices appears once as a highlighted localized "Other: <answer>" row in that drawer, even when the agent offered an option named Other
 
 #### Scenario: No-LLM Graph test assistant uses the question tool
 

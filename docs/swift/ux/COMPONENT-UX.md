@@ -5069,12 +5069,15 @@ layout. An optional choice description appears beneath its label inside the
 same button. After an agent question is answered or skipped, a compact card below
 the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
-While the person is answering, the `ask_user` tool line stays in progress.
+For a free-text answer, it shows one highlighted "Other: <answer>" / "Autre : <réponse>"
+row among the offered choices, including when an offered option is also named
+Other. A choice with an optional comment keeps its selected option and separate
+comment. While the person is answering, the `ask_user` tool line stays in progress.
 Active agent-question cards use a compact width, spacing, and text size; choice
 descriptions and actions stay readable. Simultaneous questions share one card
-with short subject tabs that scroll
-horizontally when needed. The mouse wheel and trackpad scroll overflowing
-titles without dragging the scrollbar; page scrolling continues at the ends. A choice or Skip records a local draft and advances
+with short subject tabs that scroll horizontally when needed. The mouse wheel
+and trackpad scroll overflowing titles without dragging the scrollbar; page
+scrolling continues at the ends. A choice or Skip records a local draft and advances
 to the next unanswered tab. Nonblank free text counts as an answer while typing,
 without requiring Next or switching tabs; clearing it removes that answer unless
 a choice remains selected. The person can revisit any tab and revise the choice
