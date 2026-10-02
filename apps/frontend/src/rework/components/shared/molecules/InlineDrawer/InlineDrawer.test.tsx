@@ -149,3 +149,77 @@ it("keyboard resizing shares pointer bounds and persists its width", () => {
     act(() => root.unmount());
   }
 });
+
+it.each([false, true])("Escape preserves the lower drawer (nested=%s)", async (nested) => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const lower = vi.fn(),
+    upper = vi.fn();
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    const detail = (
+      <InlineDrawer
+        open={open}
+        title="Detail"
+        onClose={() => {
+          upper();
+          setOpen(false);
+        }}
+      >
+        <input />
+      </InlineDrawer>
+    );
+    return (
+      <>
+        <InlineDrawer open layout="push" title="Base" onClose={lower}>
+          <button onClick={() => setOpen(true)}>Reopen</button>
+          {nested && detail}
+        </InlineDrawer>
+        {!nested && detail}
+      </>
+    );
+  }
+  try {
+    act(() => root.render(<Harness />));
+    for (let cycle = 0; cycle < 2; cycle++) {
+      if (cycle)
+        act(() =>
+          Array.from(host.querySelectorAll("button"))
+            .find((b) => b.textContent === "Reopen")!
+            .click(),
+        );
+      await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+      expect(upper).toHaveBeenCalledTimes(cycle + 1);
+      expect(lower).not.toHaveBeenCalled();
+    }
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+    expect(lower).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});
+it("peer overlays use paint order, independently of listener re-registration", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const first = vi.fn(),
+    last = vi.fn();
+  const view = (callback: () => void) => (
+    <>
+      <InlineDrawer open title="First" onClose={callback} />
+      <InlineDrawer open title="Last" onClose={last} />
+    </>
+  );
+  try {
+    act(() => root.render(view(first)));
+    act(() => root.render(view(() => first())));
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", cancelable: true })));
+    expect(last).toHaveBeenCalledOnce();
+    expect(first).not.toHaveBeenCalled();
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

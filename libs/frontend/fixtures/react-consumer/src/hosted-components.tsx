@@ -149,6 +149,7 @@ function ToastTriggers() {
     </>
   );
 }
+const identityRows = [{ id: 2 }, { id: 1 }, { id: 3 }];
 export function HostedComponents() {
   const [text, setText] = useState("");
   const [enabled, setEnabled] = useState(false);
@@ -302,6 +303,25 @@ export function HostedComponents() {
         />
       </div>
       <output data-activations>{activations}</output>
+      <div data-identity-table>
+        <DataTable
+          data={identityRows}
+          pageSize={2}
+          columns={[
+            {
+              label: "Identity",
+              sortable: true,
+              sortValue: (row) => row.id,
+              cellRenderer: (row) => (
+                <input
+                  aria-label={`Draft ${row.id}`}
+                  defaultValue={`Record ${row.id}`}
+                />
+              ),
+            },
+          ]}
+        />
+      </div>
       <output data-selection>{keys.size}</output>
       <TablePagination
         totalItems={3}
@@ -332,6 +352,9 @@ export function HostedComponents() {
           resizable={{ persistKey: "hosted-fixture", maxViewportFraction: 0.8 }}
         >
           <span>Drawer content</span>
+          <button type="button" onClick={() => setOverlay(true)}>
+            Open detail above drawer
+          </button>
           <button type="button" onClick={() => setNestedDialog(true)}>
             Open nested dialog
           </button>

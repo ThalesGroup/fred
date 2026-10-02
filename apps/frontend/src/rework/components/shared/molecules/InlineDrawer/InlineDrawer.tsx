@@ -17,6 +17,18 @@ import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 
+// Overlay drawers paint above push drawers; peers follow DOM paint order.
+const openDrawers = new Set<HTMLElement>();
+function topDrawer(document: Document): HTMLElement | undefined {
+  return [...openDrawers]
+    .filter((node) => node.ownerDocument === document && node.isConnected)
+    .sort((a, b) => {
+      const layer = (node: HTMLElement) => (node.dataset.layout === "overlay" ? 1 : 0);
+      return layer(a) - layer(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    })
+    .pop();
+}
+
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
   persistKey: string;
@@ -164,9 +176,11 @@ export function InlineDrawer({
 
   useEffect(() => {
     if (!open) return;
+    const drawer = drawerRef.current!;
+    openDrawers.add(drawer);
     let active = true;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.isComposing) return;
+      if (e.key !== "Escape" || e.isComposing || topDrawer(drawer.ownerDocument) !== drawer) return;
       // Dialog and drawer listeners can register in either order on window.
       // Wait until dispatch completes before deciding whether a child consumed Escape.
       queueMicrotask(() => {
@@ -176,6 +190,7 @@ export function InlineDrawer({
     window.addEventListener("keydown", handleKey);
     return () => {
       active = false;
+      openDrawers.delete(drawer);
       window.removeEventListener("keydown", handleKey);
     };
   }, [open, handleClose]);

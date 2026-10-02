@@ -906,3 +906,67 @@ it.each([0, -1, NaN, Infinity, -Infinity, 0.5, Number.MAX_SAFE_INTEGER + 1])(
     ).toThrow("serverPagination.limit must be a positive safe integer");
   },
 );
+
+it("retains each object's uncontrolled cell and focus after sorting without rowKey", () => {
+  const data = [{ id: 2 }, { id: 1 }];
+  render(
+    <DataTable
+      data={data}
+      columns={[
+        {
+          label: "Id",
+          sortable: true,
+          sortValue: (r) => r.id,
+          cellRenderer: (r) => <input data-record={r.id} defaultValue={String(r.id)} />,
+        },
+      ]}
+    />,
+  );
+  const edited = container.querySelector('input[data-record="2"]') as HTMLInputElement;
+  edited.value = "draft for 2";
+  edited.focus();
+  click(container.querySelector('[class*="header-sort-button"]'));
+  expect(container.querySelector('input[data-record="2"]')).toBe(edited);
+  expect(document.activeElement).toBe(edited);
+  expect((container.querySelector('input[data-record="1"]') as HTMLInputElement).value).toBe("1");
+  expect(edited.value).toBe("draft for 2");
+});
+it("does not transfer input state across client pages without rowKey", () => {
+  render(
+    <DataTable
+      data={[{ id: 1 }, { id: 2 }]}
+      pageSize={1}
+      columns={[{ label: "Id", cellRenderer: (r) => <input data-record={r.id} defaultValue={String(r.id)} /> }]}
+    />,
+  );
+  (container.querySelector("input") as HTMLInputElement).value = "draft for 1";
+  click(container.querySelector('[aria-label="dataTable.pagination.next"]'));
+  expect((container.querySelector("input") as HTMLInputElement).value).toBe("2");
+});
+it("does not transfer input state to replacement server records without rowKey", () => {
+  const props = {
+    columns: [{ label: "Id", cellRenderer: (r: Row) => <input defaultValue={String(r.id)} /> }],
+    serverPagination: { totalCount: 2, offset: 0, limit: 1, onOffsetChange: () => {} },
+  };
+  render(<DataTable {...props} data={[{ id: 1 }]} />);
+  const input = container.querySelector("input") as HTMLInputElement;
+  input.value = "draft for 1";
+  act(() =>
+    root.render(
+      <DataTable {...props} data={[{ id: 2 }]} serverPagination={{ ...props.serverPagination, offset: 1 }} />,
+    ),
+  );
+  expect(container.querySelector("input")).not.toBe(input);
+  expect((container.querySelector("input") as HTMLInputElement).value).toBe("2");
+});
+it("keeps distinct symbol rows distinct when their descriptions match", () => {
+  const a = Symbol("same"),
+    b = Symbol("same");
+  const cols = [{ label: "Id", cellRenderer: (r: symbol) => <input defaultValue={r === a ? "A" : "B"} /> }];
+  render(<DataTable data={[a, b]} columns={cols} />);
+  const first = container.querySelector("input") as HTMLInputElement;
+  first.value = "draft A";
+  act(() => root.render(<DataTable data={[b, a]} columns={cols} />));
+  expect((container.querySelector("input") as HTMLInputElement).value).toBe("B");
+  expect(container.querySelectorAll("input")[1]).toBe(first);
+});

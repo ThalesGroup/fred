@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useEffect, useId, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
 import TablePagination from "../TablePagination/TablePagination.tsx";
@@ -142,7 +142,7 @@ export type DataTableProps<T> = DataTableBaseProps<T> &
   (
     | {
         selectable?: false;
-        /** Stable row identity; omit only for data that never reorders. */
+        /** Stable domain identity. Without it, object references (or primitive values) identify rows. */
         rowKey?: (element: T) => string | number;
       }
     | {
@@ -208,6 +208,26 @@ export default function DataTable<T>({
   sortClearable = true,
 }: DataTableProps<T>) {
   const tableId = useId();
+  const objectKeys = useRef(new WeakMap<object, number>());
+  const primitiveKeys = useRef(new Map<unknown, number>());
+  const nextObjectKey = useRef(0);
+  const fallbackKey = (row: T): string => {
+    if ((typeof row === "object" && row !== null) || typeof row === "function") {
+      const object = row as object;
+      let key = objectKeys.current.get(object);
+      if (key === undefined) {
+        key = nextObjectKey.current++;
+        objectKeys.current.set(object, key);
+      }
+      return `object:${key}`;
+    }
+    let key = primitiveKeys.current.get(row);
+    if (key === undefined) {
+      key = nextObjectKey.current++;
+      primitiveKeys.current.set(row, key);
+    }
+    return `primitive:${key}`;
+  };
   if ((controlledSortState !== undefined) !== (onSortChange !== undefined)) {
     throw new Error("DataTable: sortState and onSortChange must be supplied together.");
   }
@@ -320,6 +340,7 @@ export default function DataTable<T>({
     }
   };
 
+  const keyOccurrences = new Map<string, number>();
   const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
   const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
@@ -404,7 +425,10 @@ export default function DataTable<T>({
       </div>
       <div className={styles["datatable-body"]}>
         {pageData.map((line, lineIndex) => {
-          const key = rowKey ? rowKey(line) : lineIndex;
+          const identity = rowKey ? undefined : fallbackKey(line);
+          const occurrence = identity === undefined ? 0 : (keyOccurrences.get(identity) ?? 0);
+          if (identity !== undefined) keyOccurrences.set(identity, occurrence + 1);
+          const key = rowKey ? rowKey(line) : `${identity}:${occurrence}`;
           const isSelected = selectable && (selectedKeys?.has(key) ?? false);
           return (
             <div

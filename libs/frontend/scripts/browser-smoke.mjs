@@ -992,6 +992,34 @@ async function verifyHostedComponents(page) {
   ]) {
     await hosted.getByText(text, { exact: true }).waitFor({ state: "visible" });
   }
+  const identityTable = hosted.locator("[data-identity-table]");
+  await identityTable
+    .getByRole("textbox", { name: "Draft 2", exact: true })
+    .fill("Edited record 2");
+  await identityTable
+    .getByRole("button", { name: "Identity, not sorted", exact: true })
+    .click();
+  assert.equal(
+    await identityTable
+      .getByRole("textbox", { name: "Draft 2", exact: true })
+      .inputValue(),
+    "Edited record 2",
+  );
+  assert.equal(
+    await identityTable
+      .getByRole("textbox", { name: "Draft 1", exact: true })
+      .inputValue(),
+    "Record 1",
+  );
+  await identityTable
+    .getByRole("button", { name: "Next page", exact: true })
+    .click();
+  assert.equal(
+    await identityTable
+      .getByRole("textbox", { name: "Draft 3", exact: true })
+      .inputValue(),
+    "Record 3",
+  );
   const table = hosted.locator(".hosted-table");
   const rowAction = table
     .getByRole("button", { name: "Open record", exact: true })
@@ -1068,6 +1096,16 @@ async function verifyHostedComponents(page) {
       document.querySelector('[data-layout="push"]').getBoundingClientRect()
         .width >= 319,
   );
+  await drawer
+    .getByRole("button", { name: "Open detail above drawer" })
+    .click();
+  const upperDrawer = hosted.getByRole("complementary", {
+    name: "Hosted overlay",
+  });
+  await upperDrawer.waitFor({ state: "visible" });
+  await page.keyboard.press("Escape");
+  await upperDrawer.waitFor({ state: "hidden" });
+  assert.equal(await drawer.getAttribute("data-open"), "true");
   for (let cycle = 0; cycle < 2; cycle++) {
     const trigger = drawer.getByRole("button", { name: "Open nested dialog" });
     await trigger.click();

@@ -147,3 +147,13 @@ InlineDrawer leaves consumed Escape events to nested dialogs, so dismissing the
 dialog preserves the drawer. Its resize handle supports Left/Right (10px),
 Home/End, visible keyboard focus and accessible bounds; `resizeLabel` localizes
 its name. Keyboard widths persist with the same bounds as pointer resizing.
+
+For non-selectable tables, omitted `rowKey` uses object reference identity (or
+primitive value identity), so sorting and page changes do not transfer cell
+state between records. Replacing an object resets its cell state; supply a
+stable domain `rowKey` to preserve it across refetches. Duplicate occurrences of
+the same value are distinguished by occurrence; use domain keys for distinct
+records with otherwise identical values.
+When multiple drawers are open, Escape closes only the uppermost drawer:
+overlay before push, and DOM paint order among peers. A nested Dialog still
+consumes Escape before any drawer closes.
