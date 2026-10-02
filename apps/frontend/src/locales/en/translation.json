@@ -1956,7 +1956,8 @@
     },
     "profileMenu": {
       "contactSupport": "Contact support",
-      "profile": "Profile"
+      "profile": "Profile",
+      "trigger": "{{name}}'s account"
     },
     "promptCategories": {
       "pickerTitle": "Category",

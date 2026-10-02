@@ -1967,9 +1967,9 @@ row and making the list unreadable. Two changes:
   fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
   of which digits it contains.
 - All four nav panels went **240px → 272px**, then **254px** (2026-10-02, UI
-  polish). They swap into the same sidebar
-  grid column, so the width must stay identical across them or the column
-  jumps when switching between Home / team / marketplace / admin.
+  polish). They swap inside the same nav panel card, next to the rail, so the
+  width must stay identical across them or the card jumps when switching
+  between Home / team / marketplace / admin.
 
 ---
 

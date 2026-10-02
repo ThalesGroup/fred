@@ -38,7 +38,7 @@ export default function Sidebar() {
           <MainNavBar />
         </div>
         <div className={styles["user-profile-container"]}>
-          <UserProfile compact />
+          <UserProfile />
         </div>
       </div>
       <div className={styles["nav-panel-card"]}>

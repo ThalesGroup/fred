@@ -19,18 +19,18 @@ import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 
 /**
- * Bottom-of-rail user entry. Clicking the row opens a popover above it grouping
+ * Bottom-of-rail user entry: an avatar button. Clicking it opens a popover above it grouping
  * user-scoped actions: Profile (the existing settings page), optional Contact
  * support, and Logout. The Help Center and the platform admin console moved out
  * of this menu to the mainNavBar (#2298); team admin stays on the team banner
  * gear. This menu is global only.
  */
-export default function UserProfile({ compact = false }: { compact?: boolean }) {
+export default function UserProfile() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { contactSupportLink } = useFrontendProperties();
@@ -38,7 +38,6 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
   const containerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
-  const username = KeyCloakService.GetUserName();
   const userEmail = KeyCloakService.GetUserMail();
 
   useEffect(() => {
@@ -65,7 +64,7 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
   return (
     <div className={styles.container} ref={containerRef}>
       {open && (
-        <div className={compact ? styles.popoverWrapCompact : styles.popoverWrap}>
+        <div className={styles.popoverWrap}>
           <MenuPopover
             className={styles.popoverBox}
             headerTitle={userFullName}
@@ -106,35 +105,18 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
         </div>
       )}
 
-      {compact ? (
-        <button
-          type="button"
-          className={styles.triggerCompact}
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          aria-haspopup="menu"
-          aria-label={userFullName}
-        >
-          <UserAvatar name={userFullName} size="small" />
-        </button>
-      ) : (
+      <Tooltip text={t("rework.profileMenu.trigger", { name: userFullName })} placement="right">
         <button
           type="button"
           className={styles.trigger}
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
           aria-haspopup="menu"
+          aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
         >
-          <UserAvatar name={userFullName} size="medium" />
-          <span className={styles.identity}>
-            <span className={styles.identityName}>{userFullName}</span>
-            <span className={styles.identityId}>{username}</span>
-          </span>
-          <span className={styles.chevron} aria-hidden>
-            <Icon category="outlined" type={open ? "expand_more" : "expand_less"} />
-          </span>
+          <UserAvatar name={userFullName} size="small" />
         </button>
-      )}
+      </Tooltip>
     </div>
   );
 }
