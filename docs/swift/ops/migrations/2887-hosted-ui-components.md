@@ -8,7 +8,7 @@ configuration_reason: "Affected deployments must update existing production Helm
 ---
 ## Applicability
 
-Fred deployments upgrading with PR #2890, including the built-in evaluator removal tracked by #2904, and consumers of the unpublished UI alpha.3 candidate.
+Fred deployments upgrading with PR #2890, including the built-in evaluator removal tracked by #2904.
 
 ## Prerequisites
 
@@ -24,23 +24,11 @@ No new configuration fields are introduced. Existing application registration an
 
 Only after the authorization prerequisite is verified, validate that an authorized team can open the evaluator through Apps, then deploy Fred. The built-in Evaluations settings entry, screens and direct evaluator task polling are removed. Use Apps to inspect evaluation runs and progress; the old settings URL falls back to Members.
 
-Hosted UI consumers using `InlineDrawer` with `resizable` must explicitly use `layout="push"` and provide `width` as a pixel string (for example, `"480px"`, also the default). Relative CSS units remain supported without `resizable`; invalid resize widths are rejected by TypeScript and at runtime.
-
-`TextArea` retains native uncontrolled usage, including `defaultValue`. Controlled `value` requires `onChange`, `readOnly={true}` or `disabled={true}`; do not combine `value` and `defaultValue`. Its counter follows edits and native form reset.
-
-Selectable `DataTable` consumers must supply a stable `rowKey` function, controlled `selectedKeys` set and `onSelectionChange` handler (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript. Sortable column labels must be unique across all columns; ambiguous labels are rejected. Controlled sorting requires both `sortState` (including `null`) and `onSortChange`; omit both for internal sorting, with `sortValue` on every sortable column.
-
-ProgressBar consumers must provide `aria-label` or `aria-labelledby`. DataTable consumers should supply stable column `key` values when labels change or duplicate-label column objects are recreated.
-
-Standalone `TablePagination` requires a nonnegative safe-integer page count and a current index inside that count (index zero for an empty result). When filtering reduces the count, update the controlled index together with the count; inconsistent props are rejected explicitly. Its `rowsPerPage` and every `rowsPerPageOptions` value must be positive safe integers, including when the selector is hidden; invalid sizes are rejected before rendering.
-
-Hosted consumers can opt into typed table-row activation, localized drawer action labels and semantic KPI tones after the UI package release. Server pagination counts and offsets must be nonnegative safe integers; page sizes must be positive safe integers.
-
 ## Validation
 
 Confirm Apps opens the evaluator for an authorized team. Independently verify that direct API requests from authenticated users without the target team membership or application grant are denied, through both the application gateway and legacy `/evaluation/` path. For a member of a granted team, also verify denial of viewing without `CAN_READ`, creation/cancellation without `CAN_UPDATE_AGENTS`, and real-conversation evaluation without `CAN_READ_CONVERSATIONS`, through both paths; verify permitted operations succeed for appropriately authorized users. An Apps admission check alone is insufficient; failed or missing API authorization blocks rollout. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.
 
-In the evaluation application, activate a run row with Enter, close the case drawer using its localized close action, and inspect outcome KPI values in both themes. Open the agent selector in a scrolled hosted form and navigate its options: only the options list should scroll, while the form and Fred host retain their position.
+In the evaluation application, activate a run row with Enter, close the case drawer using its localized close action, and inspect outcome KPI values in both themes.
 
 ## Rollback
 
@@ -48,10 +36,4 @@ Restore the previous Fred frontend image to recover the built-in screens. Keep t
 
 ## Limitations
 
-Publishing the alpha.3 npm package is a separate operation. Rebuild the candidate archive and regenerate release evidence before publication; evaluator registry pins remain pending that release. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.
-
-`InlineDrawer floating` requires explicit `layout="push"`; the unsupported overlay combination now throws instead of rendering a transparent modal panel.
-
-Activatable `DataTable` rows require at least one column. Their action labels include row identity independently of cell content; use `labels.activateRow(key)` for localized human-readable names.
-
-Raw React portals with drawer controls must use dedicated containers supplied through `InlineDrawer portalRoots`. Pass container elements (or null while mounting), not `document.body` or a shared application root. This lets Tab and Shift+Tab include those controls without discovering React internals. Nested Dialogs retain their own focus trap. Switch excludes `children` and `dangerouslySetInnerHTML`, which are invalid on its native input.
+Publishing the alpha.3 npm package is a separate operation. Its hosted surface is limited to what hosted applications use: `DataTable` without row selection, a single overlay `InlineDrawer`, and `ToastProvider`/`useToast`; `TablePagination` and the direct `Toast` are not exported. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.

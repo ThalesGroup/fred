@@ -17,12 +17,12 @@ import { Breadcrumb, type BreadcrumbSegment } from "@shared/molecules/Breadcrumb
 import DataTable, {
   type DataTableColumn,
   type ServerPagination,
+  type SortState,
 } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
-import type { DataTableSortProps } from "../../molecules/DataTable/DataTable.tsx";
 import styles from "./ResourceExplorer.module.css";
 
 export interface ResourceExplorerBreadcrumbProps {
@@ -44,7 +44,7 @@ export interface ResourceExplorerSearchProps {
   clearAriaLabel: string;
 }
 
-interface ResourceExplorerBaseProps<T> {
+export interface ResourceExplorerProps<T> {
   breadcrumb: ResourceExplorerBreadcrumbProps;
   /** Omit to hide the search box entirely (a tab that doesn't need one yet).
    * Filtering is caller-owned — `rows` must already be filtered; this only
@@ -67,6 +67,11 @@ interface ResourceExplorerBaseProps<T> {
   onSelectedKeysChange?: (keys: ReadonlySet<string | number>) => void;
   /** Mutually exclusive with `pageSize` — same contract as DataTable. */
   serverPagination?: ServerPagination;
+  /** Controlled sort, passed straight through — a server-paginated explorer
+   *  has to order server-side too, or the sort covers one page instead of the
+   *  whole collection. Omit both for DataTable's own in-memory sort. */
+  sortState?: SortState | null;
+  onSortChange?: (next: SortState | null) => void;
   /** See DataTable: pass `false` when the order comes from the server, where
    *  there is no unsorted state to clear back to. */
   sortClearable?: boolean;
@@ -75,11 +80,6 @@ interface ResourceExplorerBaseProps<T> {
   firstColumnInset?: boolean;
   tableBackgroundColor?: string;
 }
-
-/** Controlled sort, passed straight through — a server-paginated explorer
- *  has to order server-side too, or the sort covers one page instead of the
- *  whole collection. Omit both for DataTable's own in-memory sort. */
-export type ResourceExplorerProps<T> = ResourceExplorerBaseProps<T> & DataTableSortProps;
 
 /**
  * The reusable "card with a header and a table" shell behind the Resources
@@ -114,9 +114,6 @@ export default function ResourceExplorer<T>({
   firstColumnInset = true,
   tableBackgroundColor = "var(--surface-container-high)",
 }: ResourceExplorerProps<T>) {
-  if ((sortState !== undefined) !== (onSortChange !== undefined)) {
-    throw new Error("ResourceExplorer: sortState and onSortChange must be supplied together.");
-  }
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -190,12 +187,13 @@ export default function ResourceExplorer<T>({
             rowKey={rowKey}
             rowHeight={rowHeight}
             firstColumnInset={firstColumnInset}
-            {...(selectable && onSelectedKeysChange && selectedKeys
-              ? { selectable: true, onSelectionChange: onSelectedKeysChange, selectedKeys }
-              : { selectable: false })}
+            selectable={selectable}
+            selectedKeys={selectedKeys}
+            onSelectionChange={onSelectedKeysChange}
             backgroundColor={tableBackgroundColor}
             serverPagination={serverPagination}
-            {...(onSortChange ? { sortState, onSortChange } : { sortState: undefined, onSortChange: undefined })}
+            sortState={sortState}
+            onSortChange={onSortChange}
             sortClearable={sortClearable}
             pageSize={pageSize}
           />

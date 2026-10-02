@@ -26,22 +26,17 @@
 }
 
 .toneSuccess {
-  background-color: var(--success-container);
-  color: var(--on-success-container);
+  color: var(--success);
 }
 .toneError {
-  background-color: var(--error-container);
-  color: var(--on-error-container);
+  color: var(--error);
 }
 .toneWarning {
-  background-color: var(--warning-container);
-  color: var(--on-warning-container);
+  color: var(--warning);
 }
 .toneInfo {
-  background-color: var(--info-container);
-  color: var(--on-info-container);
+  color: var(--info);
 }
 .toneNeutral {
-  background-color: var(--surface-container);
-  color: var(--on-surface);
+  color: var(--on-surface-retreat);
 }

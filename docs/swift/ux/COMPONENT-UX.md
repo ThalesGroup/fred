@@ -1196,7 +1196,7 @@ beside the conversation; the settings and admin drawers keep the default),
 the insets the drawer's own padding would double up (`0 16px 16px` — the header
 already leaves the top gap) and a `--spacing-s` column gap, and drag-to-resize
 with a persisted width (`persistKey`, unique per panel; `width` seeds the
-first-ever value in pixels only, e.g. `"480px"`).
+first-ever value only).
 
 **Open/close speed (2026-09-04).** These panels run at `--duration-short-3`
 (150ms) through `InlineDrawer`'s `duration` prop, against the 250ms default a
@@ -4402,8 +4402,8 @@ _Priority order for the next UX session. Update before each session._
 **CHAT-05 new components (first design review needed):**
 
 1. **RichInputField — composer-control chips** — define final visual density for `Hybrid`, `Corpus + web`, `3 libraries`, and attachment chips so they stay quieter than replies and textarea content.
-2. **InlineDrawer — mobile width** — overlay width is capped at `100vw`; verify long content on small screens.
-3. **InlineDrawer — WCAG / screen reader** — overlay keyboard focus is contained and restored on close; retain manual screen-reader validation in the accessibility review.
+2. **InlineDrawer — mobile width** — `480px` covers most of a phone screen; need a `100vw` breakpoint (code change, blocked on breakpoint decision)
+3. **InlineDrawer — WCAG / screen reader** — no focus trap; need `aria-live` region or `aria-label` on the drawer (accessibility review)
 4. **ContextualPicker — keyboard navigation** — `ArrowUp`/`ArrowDown` not wired; `aria-activedescendant` missing (code change needed)
 5. **SourceCard — active state** — no visual change when the corresponding source is selected (design decision: border? background?)
 6. **IndicatorDot — pulse speed** — 1.2 s pulse; validate not distracting during long streaming turns
@@ -5106,9 +5106,7 @@ see [the package README](../../../libs/frontend/ui/README.md) for exports and
 neutral contracts. KPI/table primitives take caller labels, while FRED's thin
 application adapters supply translations. Toast copying is application-owned.
 The generic StatusBadge is available to hosted applications, which own their
-domain-specific labels and tone mappings. Each tone pairs its container background
-with the corresponding on-container foreground; neutral uses surface-container
-and on-surface. Task/ingestion
+domain-specific labels and tone mappings. Task/ingestion
 badges and charts remain separate domain components.
 
 ### Hosted UI consumer interaction contracts

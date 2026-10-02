@@ -26,8 +26,8 @@ export interface ChatSidePanelProps {
   title: string;
   /** Storage key for the drag-to-resize width. Must be unique per panel. */
   persistKey: string;
-  /** Seeds the first-ever width in pixels only; the user's drag wins afterwards. */
-  width?: `${number}px`;
+  /** Seeds the first-ever width only; the user's drag wins afterwards. */
+  width?: string;
   /** Rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
   /**

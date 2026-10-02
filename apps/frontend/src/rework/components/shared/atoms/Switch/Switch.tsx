@@ -18,21 +18,16 @@ import { ComponentSize } from "../../utils/Type.ts";
 
 export type SwitchSize = Extract<ComponentSize, "small" | "medium">;
 
-// `size` is the native input's character width, meaningless on a checkbox.
+// `size` is a text-input width; `type`, `children` and inner HTML would break the checkbox input.
 export interface SwitchProps
   extends Omit<ComponentPropsWithRef<"input">, "size" | "type" | "children" | "dangerouslySetInnerHTML"> {
   size?: SwitchSize;
 }
 
-export default function Switch({ ref, size = "medium", className, ...rest }: SwitchProps) {
+export default function Switch({ ref, size = "medium", ...rest }: SwitchProps) {
   return (
     <label className={styles["switch-container"]} data-size={size}>
-      <input
-        ref={ref}
-        className={[styles["native-input"], className].filter(Boolean).join(" ")}
-        {...rest}
-        type="checkbox"
-      />
+      <input type="checkbox" ref={ref} className={styles["native-input"]} {...rest} />
       <div className={styles["switch"]}>
         <div className={styles["state-layer"]}>
           <div className={styles["switch-handle"]}></div>

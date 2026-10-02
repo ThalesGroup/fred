@@ -648,12 +648,6 @@
     "vectorsColumn": "Vecteurs"
   },
   "dataTable": {
-    "sort": {
-      "label": "{{label}}, {{direction}}",
-      "asc": "croissant",
-      "desc": "décroissant",
-      "none": "non trié"
-    },
     "pagination": {
       "first": "Première page",
       "itemsPerPage": "Éléments par page",
@@ -665,7 +659,6 @@
     },
     "selection": {
       "selectAllOnPage": "Sélectionner toutes les lignes de cette page",
-      "activateRow": "Ouvrir la ligne",
       "selectRow": "Sélectionner la ligne"
     }
   },

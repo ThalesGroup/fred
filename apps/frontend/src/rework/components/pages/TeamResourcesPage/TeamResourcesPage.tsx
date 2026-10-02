@@ -197,7 +197,6 @@ export default function TeamResourcesPage() {
                 </span>
               </div>
               <ProgressBar
-                aria-label={t("rework.resources.storageQuota")}
                 theme="primary"
                 current={team!.current_resources_storage_size ?? 0}
                 max={team!.max_resources_storage_size!}

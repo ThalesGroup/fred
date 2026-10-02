@@ -18,8 +18,6 @@ import { type ColorTheme } from "../../utils/Type";
 import { Portal, uiPortalRoot } from "../../utils/Portal";
 import styles from "./Dialog.module.css";
 
-import { FOCUSABLE, isVisibleFocusable } from "../../utils/focus";
-
 const NON_TEXT_INPUT_TYPES = new Set([
   "button",
   "checkbox",
@@ -31,6 +29,18 @@ const NON_TEXT_INPUT_TYPES = new Set([
   "reset",
   "submit",
 ]);
+const FOCUSABLE =
+  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+function isVisibleFocusable(node: HTMLElement, dialog: HTMLElement): boolean {
+  if (node.tabIndex < 0 || node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
+  for (let ancestor: HTMLElement | null = node; ancestor; ancestor = ancestor.parentElement) {
+    const style = getComputedStyle(ancestor);
+    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+    if (ancestor === dialog) break;
+  }
+  return true;
+}
 
 export interface DialogProps {
   open: boolean;

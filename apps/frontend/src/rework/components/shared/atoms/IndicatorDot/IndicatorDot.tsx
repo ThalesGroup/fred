@@ -18,7 +18,7 @@ export type IndicatorStatus = "idle" | "active" | "streaming" | "error";
 
 export interface IndicatorDotProps {
   status: IndicatorStatus;
-  /** Localized accessible label. Omit to make the dot decorative. */
+  /** Accessible label — screen readers announce this instead of the visual dot. */
   label?: string;
 }
 
@@ -35,9 +35,8 @@ export function IndicatorDot({ status, label }: IndicatorDotProps) {
       className={styles.dot}
       data-status={status}
       style={{ "--dot-color": STATUS_COLOR[status] } as React.CSSProperties}
-      role={label ? "img" : undefined}
-      aria-label={label || undefined}
-      aria-hidden={label ? undefined : true}
+      role="img"
+      aria-label={label ?? status}
     />
   );
 }

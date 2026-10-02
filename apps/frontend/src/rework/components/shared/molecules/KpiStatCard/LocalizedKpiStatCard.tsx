@@ -19,10 +19,10 @@ export default function LocalizedKpiStatCard(props: KpiStatCardProps) {
   const { t } = useTranslation();
   return (
     <KpiStatCard
+      loadingLabel={t("common.loading")}
+      errorLabel={t("common.loadingError")}
+      noDataLabel={t("common.noData")}
       {...props}
-      loadingLabel={props.loadingLabel ?? t("common.loading")}
-      errorLabel={props.errorLabel ?? t("common.loadingError")}
-      noDataLabel={props.noDataLabel ?? t("common.noData")}
     />
   );
 }

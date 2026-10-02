@@ -12,58 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { PropsWithChildren, ReactNode, useCallback, useLayoutEffect, useId, useRef, useState } from "react";
+import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useRef } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
-import { FOCUSABLE, isVisibleFocusable } from "../../utils/focus";
 import styles from "./InlineDrawer.module.css";
-
-// Overlay drawers paint above push drawers; peers follow DOM paint order.
-const openDrawers = new Set<HTMLElement>();
-const orderObservers = new Map<Document, MutationObserver>();
-function topDrawer(document: Document): HTMLElement | undefined {
-  return [...openDrawers]
-    .filter((node) => node.ownerDocument === document && node.isConnected)
-    .sort((a, b) => {
-      const layer = (node: HTMLElement) => (node.dataset.layout === "overlay" ? 1 : 0);
-      return layer(a) - layer(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-    })
-    .pop();
-}
-
-// Preserve consumer-owned inert state while an overlay owns interaction.
-// Ancestors of a nested overlay cannot themselves be inert: block their other
-// branches, leaving the path to the active drawer and its backdrop available.
-const backdrops = new WeakMap<HTMLElement, HTMLElement>();
-const drawerElements = new WeakSet<HTMLElement>();
-const blockedBranches = new Map<HTMLElement, boolean>();
-function syncDrawerInteraction(document: Document) {
-  for (const [node, wasInert] of blockedBranches) {
-    if (node.ownerDocument !== document) continue;
-    node.inert = wasInert || (drawerElements.has(node) && node.dataset.open === "false");
-    blockedBranches.delete(node);
-  }
-  const top = topDrawer(document);
-  if (!top || top.dataset.modal !== "true") return;
-  const backdrop = backdrops.get(top);
-  const block = (node: HTMLElement) => {
-    if (node === top || node === backdrop) return;
-    if (node.contains(top) || (backdrop && node.contains(backdrop))) {
-      for (const child of node.children) {
-        if (child instanceof HTMLElement) block(child);
-      }
-    } else {
-      if (!blockedBranches.has(node)) blockedBranches.set(node, node.inert);
-      node.inert = true;
-    }
-  };
-  for (const drawer of openDrawers) {
-    if (drawer.ownerDocument !== document || drawer === top) continue;
-    block(drawer);
-    const lowerBackdrop = backdrops.get(drawer);
-    if (lowerBackdrop) block(lowerBackdrop);
-  }
-}
 
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
@@ -76,19 +28,17 @@ export interface InlineDrawerResizeSpec {
   maxViewportFraction?: number;
 }
 
-interface InlineDrawerBaseProps {
+export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
   title: string;
   closeLabel?: string;
-  /** Dedicated raw-portal containers to include in modal keyboard navigation.
-   * Never pass body or a shared application root. Null mounting refs are ignored. */
-  portalRoots?: readonly (HTMLElement | null)[];
-  resizeLabel?: string;
   /** Optional content rendered immediately after the visible title. */
   titleAccessory?: ReactNode;
   /** Optional action(s) rendered in the header, immediately left of the close button. */
   headerActions?: ReactNode;
+  /** Width in CSS units. Defaults to "480px". */
+  width?: string;
   /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
   background?: string;
   /**
@@ -109,6 +59,13 @@ interface InlineDrawerBaseProps {
    */
   layout?: "overlay" | "push";
   /**
+   * Drag-to-resize (push layout only): renders a grab handle on the drawer's
+   * left edge and persists the chosen width under `persistKey`. `width` then
+   * only seeds the first-ever width. Ported from the legacy chat's
+   * ResizablePaneShell so capability panels keep the same UX.
+   */
+  resizable?: InlineDrawerResizeSpec;
+  /**
    * Drop the body's default padding so full-bleed content (a PDF page, an image)
    * can use the whole width. The content then owns its own insets.
    */
@@ -117,7 +74,6 @@ interface InlineDrawerBaseProps {
    * Render the panel as a detached floating card (push layout): inset from every
    * edge, a single `outline-retreat` border, `--radius-l` corners and a subtle
    * shadow, dropping the drawer's flush edge border and the header divider.
-   * Requires layout="push"; other combinations are rejected at runtime.
    * Opt-in — default panels stay flush.
    */
   floating?: boolean;
@@ -131,29 +87,11 @@ interface InlineDrawerBaseProps {
   hideHeader?: boolean;
 }
 
-export type InlineDrawerProps = InlineDrawerBaseProps &
-  (
-    | {
-        resizable?: undefined;
-        /** Width in CSS units. Defaults to "480px". */
-        width?: string;
-      }
-    | {
-        /** Push-layout drag resize; persists the chosen pixel width under persistKey. */
-        resizable: InlineDrawerResizeSpec;
-        layout: "push";
-        /** Initial width in pixels only. Defaults to "480px"; persisted widths take precedence. */
-        width?: `${number}px`;
-      }
-  );
-
 export function InlineDrawer({
   open,
   onClose,
   title,
   closeLabel = "Close panel",
-  portalRoots,
-  resizeLabel = "Resize panel",
   titleAccessory,
   headerActions,
   width = "480px",
@@ -168,42 +106,13 @@ export function InlineDrawer({
   children,
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
-  const [mobile, setMobile] = useState(
-    () => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 720px)").matches,
-  );
-  useLayoutEffect(() => {
-    const query = window.matchMedia?.("(max-width: 720px)");
-    if (!query) return;
-    const update = () => setMobile(query.matches);
-    update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
-  }, []);
-  const modal = layout === "overlay" || mobile;
   const drawerRef = useRef<HTMLElement | null>(null);
-  const portalRootsRef = useRef(portalRoots);
-  useLayoutEffect(() => {
-    portalRootsRef.current = portalRoots;
-  });
-  const hadModal = useRef(false);
-  const ownedFocusEvents = useRef(new WeakSet<Event>());
-  const lastOwnedFocus = useRef<HTMLElement | null>(null);
-  const backdropRef = useRef<HTMLDivElement | null>(null);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
-  if (floating && layout !== "push") {
-    throw new Error('InlineDrawer: floating requires layout="push".');
-  }
-  if (resizable && layout !== "push") {
-    throw new Error('InlineDrawer: resizable requires layout="push".');
-  }
-  const seedWidthPx = Number(width.slice(0, -2));
-  if (resizable && (!width.endsWith("px") || !Number.isFinite(seedWidthPx))) {
-    throw new Error('InlineDrawer: resizable width must use pixels (for example, "480px").');
-  }
+  const seedWidthPx = Number.parseInt(width, 10);
   const resize = usePaneResize({
     storageKey: `inline-drawer:${resizable?.persistKey ?? "unused"}:width`,
-    initialWidth: resizable ? seedWidthPx : 480,
+    initialWidth: Number.isFinite(seedWidthPx) ? seedWidthPx : 480,
     minWidth: resizable?.minWidth,
     maxWidth: resizable?.maxWidth,
     maxViewportFraction: resizable?.maxViewportFraction,
@@ -238,168 +147,28 @@ export function InlineDrawer({
     onClose();
   }, [onClose]);
 
-  const closeRef = useRef(handleClose);
-  useLayoutEffect(() => {
-    closeRef.current = handleClose;
-  }, [handleClose]);
-
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (!open) return;
-    const drawer = drawerRef.current!;
-    drawerElements.add(drawer);
-    if (backdropRef.current) drawerElements.add(backdropRef.current);
-    openDrawers.add(drawer);
-    if (backdropRef.current) backdrops.set(drawer, backdropRef.current);
-    else backdrops.delete(drawer);
-    syncDrawerInteraction(drawer.ownerDocument);
-    if (!orderObservers.has(drawer.ownerDocument)) {
-      const observer = new MutationObserver(() => syncDrawerInteraction(drawer.ownerDocument));
-      observer.observe(drawer.ownerDocument.documentElement, { childList: true, subtree: true });
-      orderObservers.set(drawer.ownerDocument, observer);
-    }
-    let pendingClose: ReturnType<typeof setTimeout> | undefined;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.isComposing || topDrawer(drawer.ownerDocument) !== drawer) return;
-      // Dialog and drawer listeners can register in either order on window.
-      // Browsers can flush microtasks between native listeners. A timer waits
-      // for every listener, including a nested Dialog, to consume the event.
-      clearTimeout(pendingClose);
-      pendingClose = setTimeout(() => {
-        if (!e.defaultPrevented && topDrawer(drawer.ownerDocument) === drawer) closeRef.current();
-      }, 0);
+      if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", handleKey);
-    return () => {
-      clearTimeout(pendingClose);
-      openDrawers.delete(drawer);
-      if (![...openDrawers].some((node) => node.ownerDocument === drawer.ownerDocument)) {
-        orderObservers.get(drawer.ownerDocument)?.disconnect();
-        orderObservers.delete(drawer.ownerDocument);
-      }
-      syncDrawerInteraction(drawer.ownerDocument);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [open, modal]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    hadModal.current = false;
-    return () => {
-      const restore = hadModal.current;
-      queueMicrotask(() => {
-        if (restore && origin?.isConnected && !origin.closest("[inert]")) origin.focus();
-      });
-    };
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open || !modal) return;
-    hadModal.current = true;
-    const drawer = drawerRef.current!;
-    const doc = drawer.ownerDocument;
-    const roots = () => [
-      drawer,
-      ...(portalRootsRef.current ?? []).filter(
-        (root): root is HTMLElement => !!root && root.isConnected && root.ownerDocument === doc,
-      ),
-    ];
-    const inScope = (node: Node) => roots().some((root) => root.contains(node));
-    const focusable = () =>
-      [
-        ...new Set(
-          roots().flatMap((root) => [
-            ...(root !== drawer && root.matches(FOCUSABLE) ? [root] : []),
-            ...root.querySelectorAll<HTMLElement>(FOCUSABLE),
-          ]),
-        ),
-      ]
-        .filter((node) => isVisibleFocusable(node, doc.documentElement))
-        .sort((a, b) => {
-          const tabOrder = (node: HTMLElement) => (node.tabIndex > 0 ? node.tabIndex : Infinity);
-          return (
-            tabOrder(a) - tabOrder(b) || (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
-          );
-        });
-    const focusInside = () => (focusable().find((node) => drawer.contains(node)) ?? drawer).focus();
-    const onFocus = (event: FocusEvent) => {
-      if (topDrawer(doc) !== drawer || ownedFocusEvents.current.has(event) || inScope(event.target as Node)) return;
-      const last = lastOwnedFocus.current;
-      if (last?.isConnected && isVisibleFocusable(last, drawer)) last.focus();
-      else focusInside();
-    };
-    const onTab = (event: KeyboardEvent) => {
-      if (event.key !== "Tab" || event.defaultPrevented || topDrawer(doc) !== drawer || !inScope(event.target as Node))
-        return;
-      const nestedModal = (event.target as Element).closest('[aria-modal="true"]');
-      if (nestedModal && nestedModal !== drawer) return;
-      const nodes = focusable();
-      const index = nodes.indexOf(doc.activeElement as HTMLElement);
-      const next =
-        index < 0
-          ? event.shiftKey
-            ? nodes.length - 1
-            : 0
-          : (index + (event.shiftKey ? -1 : 1) + nodes.length) % nodes.length;
-      event.preventDefault();
-      (nodes[next] ?? drawer).focus();
-    };
-    doc.defaultView!.addEventListener("focusin", onFocus);
-    doc.defaultView!.addEventListener("keydown", onTab);
-    const focusOnOpen = () => {
-      if (
-        topDrawer(doc) === drawer &&
-        (!drawer.contains(doc.activeElement) || doc.activeElement === drawer) &&
-        (doc.activeElement !== lastOwnedFocus.current || doc.activeElement === drawer)
-      )
-        focusInside();
-    };
-    const onTransitionEnd = (event: TransitionEvent) => {
-      if (event.target === drawer) focusOnOpen();
-    };
-    drawer.addEventListener("transitionend", onTransitionEnd);
-    focusOnOpen();
-    // visibility transitions can still hide the panel during the layout effect.
-    const focusFrame = doc.defaultView!.requestAnimationFrame(focusOnOpen);
-    return () => {
-      drawer.removeEventListener("transitionend", onTransitionEnd);
-      doc.defaultView!.cancelAnimationFrame(focusFrame);
-      doc.defaultView!.removeEventListener("focusin", onFocus);
-      doc.defaultView!.removeEventListener("keydown", onTab);
-      lastOwnedFocus.current = null;
-    };
-  }, [open, modal]);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, handleClose]);
 
   return (
     <>
-      {modal && (
-        <div
-          ref={backdropRef}
-          className={styles.backdrop}
-          data-layout={layout}
-          data-open={open}
-          aria-hidden="true"
-          inert={!open}
-          onClick={handleClose}
-        />
+      {layout === "overlay" && (
+        <div className={styles.backdrop} data-open={open} aria-hidden={!open} onClick={handleClose} />
       )}
       <aside
         ref={drawerRef}
-        tabIndex={-1}
-        onFocusCapture={(event) => {
-          ownedFocusEvents.current.add(event.nativeEvent);
-          lastOwnedFocus.current = event.target as HTMLElement;
-        }}
         className={styles.drawer}
         data-open={open}
         data-layout={layout}
-        data-modal={modal}
         data-floating={floating ? "true" : undefined}
         data-compact-header={compactHeader ? "true" : undefined}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
-        inert={!open}
-        role={modal ? "dialog" : undefined}
-        aria-modal={modal && open ? true : undefined}
         aria-hidden={!open}
         aria-labelledby={hideHeader ? undefined : titleId}
         aria-label={hideHeader ? title : undefined}
@@ -416,7 +185,7 @@ export function InlineDrawer({
             className={styles.resizeHandle}
             role="separator"
             aria-orientation="vertical"
-            aria-label={resizeLabel}
+            aria-label="Resize panel"
             {...resize.handleProps}
           />
         )}

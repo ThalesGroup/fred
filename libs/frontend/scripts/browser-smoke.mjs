@@ -878,85 +878,13 @@ async function verifyFonts(browser, origin) {
 
 async function verifyHostedComponents(page) {
   const hosted = page.locator("[data-hosted]");
-  assert.equal(
-    await hosted
-      .getByRole("progressbar", { name: "Evaluation progress" })
-      .count(),
-    1,
-  );
   const notes = hosted.getByRole("textbox", { name: "Evaluation notes" });
-  assert.equal(await notes.getAttribute("id"), "evaluation-notes");
-  await hosted.locator('label[for="evaluation-notes"]').click();
-  assert.equal(
-    await notes.evaluate((element) => element === document.activeElement),
-    true,
-  );
-  await hosted.getByRole("button", { name: "Toggle notes error" }).click();
-  assert.equal(await notes.getAttribute("aria-invalid"), "true");
-  const hintId = await notes.getAttribute("aria-describedby");
-  assert.equal(
-    await page.locator(`[id="${hintId}"]`).textContent(),
-    "Invalid evaluation notes",
-  );
-  await hosted.getByRole("button", { name: "Toggle notes error" }).click();
-  assert.equal(await notes.getAttribute("aria-invalid"), null);
-  assert.equal(
-    await page.locator(`[id="${hintId}"]`).textContent(),
-    "Describe the evaluation",
-  );
   await notes.fill("Package-only notes");
   assert.equal(await notes.inputValue(), "Package-only notes");
-  const nativeNotes = hosted.getByRole("textbox", {
-    name: "Native notes",
-    exact: true,
-  });
-  const nativeForm = hosted.locator("[data-native-notes]");
-  assert.equal(await nativeNotes.inputValue(), "Bonjour");
-  await nativeNotes.fill("Bonsoir!");
-  assert.ok((await nativeForm.textContent()).includes("8 / 50"));
-  await nativeForm.evaluate((form) =>
-    form.addEventListener("reset", (event) => event.preventDefault(), {
-      once: true,
-    }),
-  );
-  await hosted
-    .getByRole("button", { name: "Reset native notes", exact: true })
-    .click();
-  assert.equal(await nativeNotes.inputValue(), "Bonsoir!");
-  assert.ok((await nativeForm.textContent()).includes("8 / 50"));
-  await hosted
-    .getByRole("button", { name: "Reset native notes", exact: true })
-    .click();
-  assert.equal(await nativeNotes.inputValue(), "Bonjour");
-  await nativeForm.getByText("7 / 50", { exact: true }).waitFor();
-
   const toggle = hosted.getByRole("checkbox", { name: "Enable evaluation" });
-  assert.equal(
-    await toggle.evaluate((el) => getComputedStyle(el).width),
-    "1px",
-  );
-  assert.equal(
-    await toggle.evaluate((el) => el.classList.contains("consumer-switch")),
-    true,
-  );
-  const beforeToggle = await toggle.evaluate(
-    (el) => getComputedStyle(el.nextElementSibling).backgroundColor,
-  );
   await toggle.focus();
   await page.keyboard.press("Space");
   assert.equal(await toggle.isChecked(), true);
-  assert.notEqual(
-    await toggle.evaluate(
-      (el) => getComputedStyle(el.nextElementSibling).backgroundColor,
-    ),
-    beforeToggle,
-  );
-  assert.equal(
-    await hosted
-      .getByRole("checkbox", { name: "Disabled switch" })
-      .evaluate((el) => getComputedStyle(el.nextElementSibling).opacity),
-    "0.5",
-  );
   assert.equal(
     await hosted
       .getByRole("checkbox", { name: "Disabled switch" })
@@ -993,18 +921,7 @@ async function verifyHostedComponents(page) {
     await hosted.locator("[data-upload]").textContent(),
     "suite.json",
   );
-  assert.equal(await hosted.locator('input[type="file"]').inputValue(), "");
-  await hosted.locator('input[type="file"]').setInputFiles({
-    name: "suite.json",
-    mimeType: "application/json",
-    buffer: Buffer.from("{}"),
-  });
-  assert.equal(
-    await hosted.locator("[data-upload]").getAttribute("data-upload-count"),
-    "2",
-  );
   await hosted.getByRole("button", { name: "Create evaluation" }).click();
-  assert.equal(await hosted.locator("[data-submissions]").textContent(), "0");
   assert.equal(await card.getAttribute("aria-pressed"), "true");
   for (const text of [
     "Service unavailable",
@@ -1015,93 +932,13 @@ async function verifyHostedComponents(page) {
   ]) {
     await hosted.getByText(text, { exact: true }).waitFor({ state: "visible" });
   }
-  const identityTable = hosted.locator("[data-identity-table]");
-  assert.equal(await identityTable.getByRole("table").count(), 1);
-  assert.equal(await identityTable.getByRole("row").count(), 3);
-  assert.equal(await identityTable.getByRole("columnheader").count(), 1);
-  assert.equal(await identityTable.getByRole("cell").count(), 2);
-  await identityTable
-    .getByRole("textbox", { name: "Draft 2", exact: true })
-    .fill("Edited record 2");
-  await identityTable
-    .getByRole("button", { name: "Identity, not sorted", exact: true })
-    .click();
-  assert.equal(
-    await identityTable
-      .getByRole("textbox", { name: "Draft 2", exact: true })
-      .inputValue(),
-    "Edited record 2",
-  );
-  assert.equal(
-    await identityTable
-      .getByRole("textbox", { name: "Draft 1", exact: true })
-      .inputValue(),
-    "Record 1",
-  );
-  await identityTable
-    .getByRole("button", { name: "Next page", exact: true })
-    .click();
-  assert.equal(
-    await identityTable
-      .getByRole("textbox", { name: "Draft 3", exact: true })
-      .inputValue(),
-    "Record 3",
-  );
   const table = hosted.locator(".hosted-table");
-  const rowAction = table
-    .getByRole("button", { name: /^Open record \d+$/ })
-    .first();
-  await rowAction.focus();
-  await rowAction.press("Shift+Tab");
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await rowAction.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  assert.equal(
-    await rowAction.evaluate(
-      (el) =>
-        document.getElementById(el.getAttribute("aria-describedby"))
-          ?.textContent,
-    ),
-    "Row 1",
-  );
-  await rowAction.press("Enter");
-  await rowAction.press("Space");
-  assert.equal(await hosted.locator("[data-activations]").textContent(), "2");
-  assert.equal(
-    await rowAction.evaluate((el) => getComputedStyle(el).outlineStyle),
-    "solid",
-  );
-  assert.equal(
-    await rowAction.evaluate(
-      (el) => getComputedStyle(el.parentElement).outlineStyle,
-    ),
-    "solid",
-  );
-
-  await table
-    .getByRole("checkbox", { name: "Select visible records" })
-    .locator("..")
-    .click();
-  assert.equal(await hosted.locator("[data-selection]").textContent(), "20");
+  await table.getByText("Row 2", { exact: true }).click();
+  assert.equal(await hosted.locator("[data-activated]").textContent(), "Row 2");
   await table.getByRole("button", { name: "Next records" }).click();
-  assert.equal(
-    await table.getByRole("checkbox", { name: /^Select record \d+$/ }).count(),
-    5,
-  );
-  await table
-    .getByRole("button", { name: "Record, not sorted", exact: true })
-    .click();
-  await table
-    .getByRole("button", { name: "Record, ascending", exact: true })
-    .click();
-  assert.equal(
-    await table
-      .getByRole("button", { name: "Record, descending", exact: true })
-      .count(),
-    1,
-  );
+  assert.equal(await table.locator('[class*="datatable-row"]').count(), 5);
+  await table.getByRole("button", { name: "Record", exact: true }).click();
+  await table.getByRole("button", { name: "Record", exact: true }).click();
   await table.getByRole("button", { name: "Start records" }).click();
   assert.equal(
     await table
@@ -1110,282 +947,12 @@ async function verifyHostedComponents(page) {
       .textContent(),
     "Row 25",
   );
-  assert.deepEqual(
-    await hosted
-      .locator('[class*="footer-nav"] button')
-      .evaluateAll((buttons) => [
-        ...new Set(buttons.map((button) => button.type)),
-      ]),
-    ["button"],
-  );
-  await hosted.getByRole("button", { name: "Standalone next" }).click();
-  await hosted
-    .getByText("Standalone 2", { exact: true })
-    .waitFor({ state: "visible" });
 
-  await hosted.getByRole("button", { name: "Open push drawer" }).click();
-  const drawer = hosted.getByRole("complementary", { name: "Hosted drawer" });
-  await drawer.waitFor({ state: "visible" });
-  assert.equal(
-    await drawer
-      .getByRole("button", { name: "Close panel" })
-      .getAttribute("type"),
-    "button",
-  );
-  await page.waitForFunction(
-    () =>
-      document.querySelector('[data-layout="push"]').getBoundingClientRect()
-        .width >= 319,
-  );
-  await drawer
-    .getByRole("button", { name: "Open detail above drawer" })
-    .click();
-  const upperDrawer = hosted.getByRole("dialog", {
-    name: "Hosted overlay",
-  });
-  await upperDrawer.waitFor({ state: "visible" });
-  await page.keyboard.press("Escape");
-  await upperDrawer.waitFor({ state: "hidden" });
-  assert.equal(await drawer.getAttribute("data-open"), "true");
-  for (let cycle = 0; cycle < 2; cycle++) {
-    const trigger = drawer.getByRole("button", { name: "Open nested dialog" });
-    await trigger.click();
-    const dialog = page.getByRole("dialog", { name: "Nested confirmation" });
-    await dialog.waitFor({ state: "visible" });
-    assert.deepEqual(
-      await dialog
-        .locator('[class*="actions"] button')
-        .evaluateAll((buttons) => [
-          ...new Set(buttons.map((button) => button.type)),
-        ]),
-      ["button"],
-    );
-    await page.keyboard.press("Escape");
-    await dialog.waitFor({ state: "hidden" });
-    assert.equal(await drawer.getAttribute("data-open"), "true");
-    assert.equal(
-      await trigger.evaluate((el) => el === document.activeElement),
-      true,
-    );
-  }
-  await page.keyboard.press("Escape");
-  await drawer.waitFor({ state: "hidden" });
-  await hosted.getByRole("button", { name: "Open push drawer" }).click();
-  await drawer.waitFor({ state: "visible" });
-  const keyboardHandle = drawer.getByRole("separator", {
-    name: "Resize panel",
-  });
-  await keyboardHandle.focus();
-  await page.keyboard.press("Shift+Tab");
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await keyboardHandle.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  assert.equal(
-    await keyboardHandle.evaluate((el) => getComputedStyle(el).outlineStyle),
-    "solid",
-  );
-  const initialKeyboardWidth = Number(
-    await keyboardHandle.getAttribute("aria-valuenow"),
-  );
-  await page.keyboard.press("ArrowLeft");
-  assert.equal(
-    Number(await keyboardHandle.getAttribute("aria-valuenow")),
-    initialKeyboardWidth + 10,
-  );
-  await page.keyboard.press("Home");
-  assert.equal(
-    await keyboardHandle.getAttribute("aria-valuenow"),
-    await keyboardHandle.getAttribute("aria-valuemin"),
-  );
-  await page.waitForFunction(
-    () =>
-      Math.abs(
-        document.querySelector('[data-layout="push"]').getBoundingClientRect()
-          .width - 320,
-      ) < 1,
-  );
-  const before = await drawer.boundingBox();
-  const handle = drawer.getByRole("separator", { name: "Resize panel" });
-  const box = await handle.boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x - 60, box.y + box.height / 2, { steps: 8 });
-  await page.mouse.up();
-  const resized = await drawer.boundingBox();
-  assert(resized.width > before.width + 40, "drawer did not resize");
-  await drawer.getByRole("button", { name: "Close panel" }).click();
-  await drawer.waitFor({ state: "hidden" });
-  await hosted.getByRole("button", { name: "Remount drawer" }).click();
-  await hosted.getByRole("button", { name: "Open push drawer" }).click();
-  await drawer.waitFor({ state: "visible" });
-  await page.waitForFunction(
-    (width) =>
-      Math.abs(
-        document.querySelector('[data-layout="push"]').getBoundingClientRect()
-          .width - width,
-      ) < 2,
-    resized.width,
-  );
-  const desktopViewport = page.viewportSize();
-  await page.setViewportSize({ width: 375, height: 812 });
-  const mobileDrawer = hosted.getByRole("dialog", { name: "Hosted drawer" });
-  await mobileDrawer.waitFor({ state: "visible" });
-  assert.equal(await mobileDrawer.getAttribute("aria-modal"), "true");
-  await mobileDrawer.evaluate(async (el) => {
-    await Promise.all(
-      el.getAnimations().map((animation) => animation.finished),
-    );
-  });
-  // Exercise the floating variant's CSS at the responsive modal breakpoint.
-  const floatingBounds = await mobileDrawer.evaluate((el) => {
-    el.setAttribute("data-floating", "true");
-    const panel = el.querySelector("[class*=panel]").getBoundingClientRect();
-    return { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
-  });
-  assert.ok(Math.abs(floatingBounds.x) < 2 && Math.abs(floatingBounds.y) < 2);
-  assert.ok(
-    Math.abs(floatingBounds.width - 375) < 2,
-    JSON.stringify(floatingBounds),
-  );
-  assert.ok(Math.abs(floatingBounds.height - 812) < 2);
-  await mobileDrawer.evaluate((el) => el.removeAttribute("data-floating"));
-  const mobileField = mobileDrawer.getByRole("button", {
-    name: "Open nested dialog",
-  });
-  await mobileField.focus();
-  await page.setViewportSize(desktopViewport);
-  await drawer.waitFor({ state: "visible" });
-  assert.equal(
-    await drawer
-      .getByRole("button", { name: "Open nested dialog" })
-      .evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.setViewportSize({ width: 375, height: 812 });
-  await mobileDrawer.waitFor({ state: "visible" });
-  await page.keyboard.press("Escape");
-  await mobileDrawer.waitFor({ state: "hidden" });
-  await page.setViewportSize(desktopViewport);
-  await hosted
-    .getByRole("button", { name: "Open push drawer", exact: true })
-    .click();
-  await drawer.waitFor({ state: "visible" });
-  const persisted = await drawer.boundingBox();
-  await drawer.getByRole("button", { name: "Close panel" }).click();
   await hosted.getByRole("button", { name: "Open overlay drawer" }).click();
-  const overlay = hosted.getByRole("dialog", { name: "Hosted overlay" });
+  const overlay = hosted.getByRole("complementary", { name: "Hosted overlay" });
   await overlay.waitFor({ state: "visible" });
-  const overlayClose = overlay.getByRole("button", { name: "Close panel" });
-  await page.waitForFunction(
-    () =>
-      document.activeElement?.getAttribute("aria-label") === "Close panel" &&
-      document.activeElement?.closest('[data-layout="overlay"]'),
-  );
-  const overlayDialogTrigger = overlay.getByRole("button", {
-    name: "Open overlay dialog",
-  });
-  assert.equal(
-    await overlayClose.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  const portalFirst = page.getByRole("button", {
-    name: "Portal first",
-    exact: true,
-  });
-  const portalLast = page.getByRole("button", {
-    name: "Portal last",
-    exact: true,
-  });
-  await page.keyboard.press("Shift+Tab");
-  assert.equal(
-    await portalLast.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Shift+Tab");
-  assert.equal(
-    await portalFirst.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Shift+Tab");
-  assert.equal(
-    await overlay
-      .getByRole("textbox", { name: "Overlay editor" })
-      .evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await portalFirst.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await portalLast.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await overlayClose.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await page.keyboard.press("Tab");
-  assert.equal(
-    await overlay
-      .locator("summary")
-      .evaluate((el) => el === document.activeElement),
-    true,
-  );
-  await overlayDialogTrigger.click();
-  const overlayDialog = page.getByRole("dialog", {
-    name: "Overlay confirmation",
-  });
-  await overlayDialog.waitFor({ state: "visible" });
-  await overlayDialog.getByRole("textbox").fill("Nested portal remains usable");
-  for (const key of ["Tab", "Shift+Tab"]) {
-    await page.keyboard.press(key);
-    assert.equal(
-      await overlayDialog.evaluate((el) => el.contains(document.activeElement)),
-      true,
-    );
-  }
-  await page.keyboard.press("Escape");
-  await overlayDialog.waitFor({ state: "hidden" });
-  assert.equal(
-    await overlayDialogTrigger.evaluate((el) => el === document.activeElement),
-    true,
-  );
-  const previousViewport = page.viewportSize();
-  await page.setViewportSize({ width: 375, height: 812 });
-  const mobile = await overlay.boundingBox();
-  assert.ok(
-    mobile.x >= -1 && mobile.width <= 375,
-    "overlay exceeds mobile viewport",
-  );
-  await page.setViewportSize(previousViewport);
   await page.keyboard.press("Escape");
   await overlay.waitFor({ state: "hidden" });
-
-  await hosted.getByRole("button", { name: "Open wide overlay" }).click();
-  const wide = hosted.getByRole("dialog", { name: "Wide overlay" });
-  await wide.getByRole("button", { name: "Open narrow overlay" }).click();
-  await overlay.waitFor({ state: "visible" });
-  const lowerAction = hosted.locator("[data-lower-action]");
-  assert.equal(
-    await lowerAction.evaluate((el) => {
-      el.focus();
-      return el === document.activeElement;
-    }),
-    false,
-  );
-  const exposed = await lowerAction.boundingBox();
-  await page.mouse.click(exposed.x + 5, exposed.y + 5);
-  assert.equal(await lowerAction.textContent(), "Lower action 0");
-  await overlay.waitFor({ state: "hidden" });
-  await lowerAction.click();
-  assert.equal(await lowerAction.textContent(), "Lower action 1");
-  await wide.getByRole("button", { name: "Close panel" }).click();
 
   await hosted.getByRole("button", { name: "Show hosted errors" }).click();
   assert.equal(
@@ -1418,11 +985,6 @@ async function verifyHostedComponents(page) {
   await hosted
     .getByText("Timed notification", { exact: true })
     .waitFor({ state: "detached" });
-  await hosted.getByRole("button", { name: "Dismiss direct toast" }).click();
-  await hosted
-    .getByText("Direct toast", { exact: true })
-    .waitFor({ state: "detached" });
-
   const colors = await hosted.evaluate((root) => {
     const selectors = {
       TextArea: "textarea",
@@ -1455,56 +1017,13 @@ async function verifyHostedComponents(page) {
   const badges = await hosted
     .locator("[data-badge] span")
     .evaluateAll((elements) =>
-      elements.map((element) => {
-        const tone = element.parentElement.dataset.badge;
-        const container =
-          tone === "neutral" ? "surface-container" : `${tone}-container`;
-        const foreground =
-          tone === "neutral" ? "on-surface" : `on-${tone}-container`;
-        const probe = document.createElement("span");
-        probe.style.backgroundColor = `var(--${container})`;
-        probe.style.color = `var(--${foreground})`;
-        element.parentElement.append(probe);
-        const expected = getComputedStyle(probe);
-        const actual = getComputedStyle(element);
-        const result = {
-          label: element.textContent,
-          color: actual.color,
-          background: actual.backgroundColor,
-          expectedColor: expected.color,
-          expectedBackground: expected.backgroundColor,
-        };
-        probe.remove();
-        return result;
-      }),
+      elements.map((element) => ({
+        label: element.textContent,
+        color: getComputedStyle(element).color,
+      })),
     );
   assert.equal(badges.length, 5);
-  for (const badge of badges) {
-    assert.equal(
-      badge.color,
-      badge.expectedColor,
-      `${badge.label}: foreground token`,
-    );
-    assert.equal(
-      badge.background,
-      badge.expectedBackground,
-      `${badge.label}: container token`,
-    );
-    assert.notEqual(
-      badge.background,
-      "rgba(0, 0, 0, 0)",
-      `${badge.label}: transparent container`,
-    );
-  }
-  return {
-    colors,
-    badges,
-    drawer: {
-      initialWidth: before.width,
-      resizedWidth: resized.width,
-      persistedWidth: persisted.width,
-    },
-  };
+  return { colors, badges };
 }
 
 async function verifyUiTheme(browser, origin, theme) {

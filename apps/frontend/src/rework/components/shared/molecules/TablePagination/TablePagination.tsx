@@ -40,11 +40,9 @@ const defaultLabels: TablePaginationLabels = {
 export interface TablePaginationProps {
   labels?: Partial<TablePaginationLabels>;
   totalItems: number;
-  /** 0-based, within pageCount (0 for empty results). Update with count changes. */
+  /** 0-based. */
   currentPage: number;
-  /** Nonnegative safe integer. Zero represents an empty result. */
   pageCount: number;
-  /** Positive safe integer, as must be every rowsPerPageOptions value. */
   rowsPerPage: number;
   rowsPerPageOptions: SelectOption<number>[];
   /** Omit to keep rowsPerPage fixed and hide the selector. */
@@ -76,40 +74,7 @@ export default function TablePagination({
   onNext,
   onLast,
 }: TablePaginationProps) {
-  if (!Number.isSafeInteger(totalItems) || totalItems < 0) {
-    throw new Error("TablePagination: totalItems must be a nonnegative safe integer.");
-  }
-  if (!Number.isSafeInteger(pageCount) || pageCount < 0) {
-    throw new Error("TablePagination: pageCount must be a nonnegative safe integer.");
-  }
-  if (!Number.isSafeInteger(currentPage) || currentPage < 0 || currentPage >= Math.max(1, pageCount)) {
-    throw new Error(
-      "TablePagination: currentPage must be within pageCount; update both together when the count shrinks (use page 0 for an empty result).",
-    );
-  }
-  if (!Number.isSafeInteger(rowsPerPage) || rowsPerPage <= 0) {
-    throw new Error("TablePagination: rowsPerPage must be a positive safe integer.");
-  }
-  if (rowsPerPageOptions.some(({ value }) => !Number.isSafeInteger(value) || value <= 0)) {
-    throw new Error("TablePagination: rowsPerPageOptions values must be positive safe integers.");
-  }
-  const displayedPageCount = Math.max(1, pageCount);
-  const displayedPage = pageCount === 0 ? 0 : currentPage;
-  let displayedOptions = rowsPerPageOptions;
-  if (!rowsPerPageOptions.some((option) => option.value === rowsPerPage)) {
-    let key = `active-page-size:${rowsPerPage}`;
-    while (rowsPerPageOptions.some((option) => option.key === key)) key += ":";
-    displayedOptions = [...rowsPerPageOptions, { value: rowsPerPage, label: String(rowsPerPage), key }];
-  }
-  const text: TablePaginationLabels = {
-    totalItems: labels?.totalItems ?? defaultLabels.totalItems,
-    itemsPerPage: labels?.itemsPerPage ?? defaultLabels.itemsPerPage,
-    pageNumber: labels?.pageNumber ?? defaultLabels.pageNumber,
-    first: labels?.first ?? defaultLabels.first,
-    prev: labels?.prev ?? defaultLabels.prev,
-    next: labels?.next ?? defaultLabels.next,
-    last: labels?.last ?? defaultLabels.last,
-  };
+  const text = { ...defaultLabels, ...labels };
 
   return (
     <div className={styles["datatable-footer"]}>
@@ -122,11 +87,10 @@ export default function TablePagination({
             <span className={styles["footer-label"]}>{text.itemsPerPage}</span>
             <div className={styles["footer-rows-per-page-select"]}>
               <Select<number>
-                ariaLabel={text.itemsPerPage}
                 size="xs"
                 compact
                 value={rowsPerPage}
-                options={displayedOptions}
+                options={rowsPerPageOptions}
                 onChange={onRowsPerPageChange}
               />
             </div>
@@ -139,7 +103,7 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "first_page" }}
             aria-label={text.first}
-            disabled={displayedPage <= 0}
+            disabled={currentPage <= 0}
             onClick={onFirst}
           />
           <IconButton
@@ -148,11 +112,11 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "chevron_left" }}
             aria-label={text.prev}
-            disabled={displayedPage <= 0}
+            disabled={currentPage <= 0}
             onClick={onPrev}
           />
           <span className={`${styles["footer-label"]} ${styles["footer-page-label"]}`}>
-            {text.pageNumber(displayedPage + 1, displayedPageCount)}
+            {text.pageNumber(currentPage + 1, pageCount)}
           </span>
           <IconButton
             type="button"
@@ -160,7 +124,7 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "chevron_right" }}
             aria-label={text.next}
-            disabled={displayedPage >= displayedPageCount - 1}
+            disabled={currentPage >= pageCount - 1}
             onClick={onNext}
           />
           <IconButton
@@ -169,7 +133,7 @@ export default function TablePagination({
             size="small"
             icon={{ category: "outlined", type: "last_page" }}
             aria-label={text.last}
-            disabled={displayedPage >= displayedPageCount - 1}
+            disabled={currentPage >= pageCount - 1}
             onClick={onLast}
           />
         </div>

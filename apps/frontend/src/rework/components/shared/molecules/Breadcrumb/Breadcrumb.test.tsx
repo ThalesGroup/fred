@@ -98,9 +98,3 @@ describe("Breadcrumb", () => {
     expect(nav?.getAttribute("aria-label")).toBe("Breadcrumb");
   });
 });
-
-it("allows the consumer to localize the landmark", () => {
-  render([{ label: "Accueil" }]);
-  act(() => root.render(<Breadcrumb segments={[{ label: "Accueil" }]} ariaLabel="Fil d’Ariane" />));
-  expect(container.querySelector("nav")!.getAttribute("aria-label")).toBe("Fil d’Ariane");
-});

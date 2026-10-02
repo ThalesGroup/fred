@@ -58,7 +58,6 @@ export default function PageEmptyState({ icon, message, action }: PageEmptyState
       </div>
       {action && (
         <Button
-          type="button"
           color="primary"
           variant="filled"
           size="medium"

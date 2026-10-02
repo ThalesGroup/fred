@@ -12,78 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ComponentPropsWithRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
+import { ComponentPropsWithRef, useId } from "react";
 import styles from "./TextArea.module.scss";
 
-interface TextAreaBaseProps extends Omit<ComponentPropsWithRef<"textarea">, "value" | "defaultValue"> {
+export interface TextAreaProps extends ComponentPropsWithRef<"textarea"> {
   label: string;
   explanation?: string;
   error?: string;
 }
 
-export type TextAreaProps = TextAreaBaseProps &
-  (
-    | ({ value: NonNullable<ComponentPropsWithRef<"textarea">["value"]>; defaultValue?: never } & (
-        | { onChange: NonNullable<ComponentPropsWithRef<"textarea">["onChange"]> }
-        | { readOnly: true }
-        | { disabled: true }
-      ))
-    | { value?: undefined; defaultValue?: ComponentPropsWithRef<"textarea">["defaultValue"] }
-  );
-
-export default function TextArea({
-  label,
-  explanation,
-  error,
-  maxLength,
-  value,
-  defaultValue,
-  ref,
-  onChange,
-  required,
-  id: suppliedId,
-  ...props
-}: TextAreaProps) {
-  const generatedId = useId();
-  const id = suppliedId ?? generatedId;
-  const hintId = `${generatedId}-hint`;
-  const describedBy =
-    [props["aria-describedby"], error || explanation ? hintId : undefined].filter(Boolean).join(" ") || undefined;
-  const controlled = value !== undefined;
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  useImperativeHandle(ref, () => inputRef.current!, []);
-  const [uncontrolledValue, setUncontrolledValue] = useState(() => String(defaultValue ?? ""));
-  useEffect(() => {
-    if (!controlled && inputRef.current) setUncontrolledValue(inputRef.current.value);
-  });
-  useEffect(() => {
-    if (controlled) return;
-    const input = inputRef.current;
-    const form = input?.form;
-    let resetTimer: ReturnType<typeof setTimeout> | undefined;
-    if (input) setUncontrolledValue(input.value);
-    const onReset = (event: Event) => {
-      // The browser restores defaultValue after dispatching the cancelable reset event.
-      clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => {
-        if (!event.defaultPrevented && inputRef.current === input && input) setUncontrolledValue(input.value);
-      });
-    };
-    form?.addEventListener("reset", onReset);
-    return () => {
-      clearTimeout(resetTimer);
-      form?.removeEventListener("reset", onReset);
-    };
-  }, [controlled, props.form]);
-  if (value === null || (controlled && defaultValue !== undefined)) {
-    throw new Error("TextArea: use either a non-null controlled value or defaultValue, not both.");
-  }
-  if (controlled && !onChange && !props.readOnly && !props.disabled) {
-    throw new Error("TextArea requires onChange, readOnly or disabled for a controlled value.");
-  }
-  const characterCounter = String(controlled ? value : uncontrolledValue).length;
-  // Keep the live region mounted before content arrives, without reserving an empty row.
-  const hasInformation = !!error || !!explanation || maxLength !== undefined;
+export default function TextArea({ label, explanation, error, maxLength, value, required, ...props }: TextAreaProps) {
+  const id = useId();
+  const characterCounter = String(value).length;
+  // No hint/error/counter to show — drop the container entirely rather than
+  // leaving an empty row under the field.
+  const hasInformation = !!error || !!explanation || !!maxLength;
 
   return (
     <div
@@ -93,28 +36,14 @@ export default function TextArea({
         {required ? `${label} *` : label}
       </label>
 
-      <textarea
-        {...props}
-        aria-invalid={error ? true : props["aria-invalid"]}
-        aria-describedby={describedBy}
-        ref={inputRef}
-        id={id}
-        value={value}
-        defaultValue={defaultValue}
-        maxLength={maxLength}
-        required={required}
-        onChange={(event) => {
-          if (!controlled) setUncontrolledValue(event.currentTarget.value);
-          onChange?.(event);
-        }}
-      />
+      <textarea id={id} value={value} maxLength={maxLength} required={required} {...props} />
 
-      <span className={`${styles.information} ${hasInformation ? "" : styles.informationEmpty}`}>
-        <span id={hintId} className={styles.hint} aria-live="polite">
-          {error || explanation || null}
+      {hasInformation && (
+        <span className={styles.information}>
+          <span className={styles.hint}>{error || explanation || null}</span>
+          <span className={styles.maxLength}>{maxLength && `${characterCounter} / ${maxLength}`}</span>
         </span>
-        <span className={styles.maxLength}>{maxLength !== undefined && `${characterCounter} / ${maxLength}`}</span>
-      </span>
+      )}
     </div>
   );
 }

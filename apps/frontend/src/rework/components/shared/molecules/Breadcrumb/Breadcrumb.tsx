@@ -28,8 +28,6 @@ export interface BreadcrumbSegment {
 export interface BreadcrumbProps {
   /** Ordered from the shallowest (root) to the deepest (current) level. */
   segments: BreadcrumbSegment[];
-  /** Accessible name of the navigation landmark. */
-  ariaLabel?: string;
 }
 
 /**
@@ -41,13 +39,13 @@ export interface BreadcrumbProps {
  * Not tied to any domain — any feature with a drill-down hierarchy can reuse
  * this by supplying its own segments and `onClick` handlers.
  */
-export function Breadcrumb({ segments, ariaLabel = "Breadcrumb" }: BreadcrumbProps) {
+export function Breadcrumb({ segments }: BreadcrumbProps) {
   if (segments.length === 0) return null;
 
   const lastIndex = segments.length - 1;
 
   return (
-    <nav aria-label={ariaLabel} className={styles.nav}>
+    <nav aria-label="Breadcrumb" className={styles.nav}>
       <ol className={styles.list}>
         {segments.map((segment, index) => {
           const isCurrent = index === lastIndex;

@@ -15,29 +15,17 @@
 import { ColorTheme } from "../../utils/Type.ts";
 import styles from "./ProgressBar.module.css";
 
-export type ProgressBarProps = {
+export interface ProgressBarProps {
   theme: ColorTheme;
   current: number;
   max: number;
-} & ({ "aria-label": string; "aria-labelledby"?: string } | { "aria-label"?: string; "aria-labelledby": string });
+}
 
-export default function ProgressBar({ theme, current, max, ...accessibleName }: ProgressBarProps) {
-  if (!accessibleName["aria-label"]?.trim() && !accessibleName["aria-labelledby"]?.trim()) {
-    throw new Error("ProgressBar requires an accessible name.");
-  }
-  const boundedMax = Number.isFinite(max) && max > 0 ? max : 0;
-  const boundedCurrent = Number.isNaN(current) ? 0 : Math.min(boundedMax, Math.max(0, current));
-  const percentage = boundedMax > 0 ? (boundedCurrent / boundedMax) * 100 : 0;
+export default function ProgressBar({ theme, current, max }: ProgressBarProps) {
+  const percentage = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
 
   return (
-    <div
-      {...accessibleName}
-      className={styles.track}
-      role="progressbar"
-      aria-valuenow={boundedCurrent}
-      aria-valuemin={0}
-      aria-valuemax={boundedMax}
-    >
+    <div className={styles.track} role="progressbar" aria-valuenow={current} aria-valuemin={0} aria-valuemax={max}>
       <div data-color={theme} className={styles.fill} style={{ width: `${percentage}%` }} />
     </div>
   );

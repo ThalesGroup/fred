@@ -54,6 +54,14 @@ import type {
   IconButtonVariant,
   MaterialIconType,
 } from "../.generated/src/rework/components/shared/utils/Type.ts";
+import CanonicalDataTable, {
+  type DataTableProps as CanonicalDataTableProps,
+} from "../.generated/src/rework/components/shared/molecules/DataTable/DataTable.tsx";
+import {
+  InlineDrawer as CanonicalInlineDrawer,
+  type InlineDrawerProps as CanonicalInlineDrawerProps,
+} from "../.generated/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx";
+import type { PropsWithChildren, ReactElement } from "react";
 import "../.generated/base.css";
 
 export type IconProps = MaterialIconProps;
@@ -166,9 +174,14 @@ export type {
 export { default as KpiStatCard } from "../.generated/src/rework/components/shared/molecules/KpiStatCard/KpiStatCard.tsx";
 export type { KpiStatCardProps } from "../.generated/src/rework/components/shared/molecules/KpiStatCard/KpiStatCard.tsx";
 
-export { default as DataTable } from "../.generated/src/rework/components/shared/molecules/DataTable/DataTable.tsx";
+// Hosted consumers need display, sorting, pagination and row activation, not selection.
+export type DataTableProps<T> = Omit<
+  CanonicalDataTableProps<T>,
+  "selectable" | "selectedKeys" | "onSelectionChange"
+>;
+export const DataTable: <T>(props: DataTableProps<T>) => ReactElement =
+  CanonicalDataTable;
 export type {
-  DataTableProps,
   DataTableLabels,
   DataTableColumn,
   DataTableRowSize,
@@ -177,25 +190,19 @@ export type {
   SortDirection,
 } from "../.generated/src/rework/components/shared/molecules/DataTable/DataTable.tsx";
 
-export { default as TablePagination } from "../.generated/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx";
-export type {
-  TablePaginationProps,
-  TablePaginationLabels,
-} from "../.generated/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx";
+export type { TablePaginationLabels } from "../.generated/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx";
 
-export { InlineDrawer } from "../.generated/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx";
-export type {
-  InlineDrawerProps,
-  InlineDrawerResizeSpec,
-} from "../.generated/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx";
+// Hosted drawers are single overlays; push, resize and floating layouts stay FRED-internal.
+export type InlineDrawerProps = PropsWithChildren<
+  Pick<
+    CanonicalInlineDrawerProps,
+    "open" | "onClose" | "title" | "closeLabel" | "width" | "headerActions"
+  >
+>;
+export const InlineDrawer: (props: InlineDrawerProps) => ReactElement =
+  CanonicalInlineDrawer;
 
-export { Toast } from "../.generated/src/rework/components/shared/molecules/Toast/Toast.tsx";
-export type {
-  ToastProps,
-  ToastData,
-  ToastSeverity,
-  ToastActions,
-} from "../.generated/src/rework/components/shared/molecules/Toast/Toast.tsx";
+export type { ToastSeverity } from "../.generated/src/rework/components/shared/molecules/Toast/Toast.tsx";
 
 export {
   ToastProvider,

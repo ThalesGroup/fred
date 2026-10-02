@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
 import TablePagination from "../TablePagination/TablePagination.tsx";
@@ -21,38 +21,6 @@ import type { SelectOption } from "../Select/Select.tsx";
 import type { TablePaginationLabels } from "../TablePagination/TablePagination.tsx";
 
 const ROWS_PER_PAGE_OPTIONS = [20, 50, 100];
-
-const EMBEDDED_CONTROL_SELECTOR = [
-  "button, a, input, label, select, textarea, summary, audio[controls], video[controls], [tabindex]",
-  '[contenteditable]:not([contenteditable="false" i])',
-  ...[
-    "button",
-    "checkbox",
-    "combobox",
-    "grid",
-    "link",
-    "listbox",
-    "menu",
-    "menubar",
-    "menuitem",
-    "menuitemcheckbox",
-    "menuitemradio",
-    "option",
-    "radio",
-    "radiogroup",
-    "scrollbar",
-    "searchbox",
-    "slider",
-    "spinbutton",
-    "switch",
-    "tab",
-    "tablist",
-    "textbox",
-    "tree",
-    "treegrid",
-    "treeitem",
-  ].map((role) => `[role~="${role}"]`),
-].join(", ");
 
 export type DataTableRowSize = "medium" | "small";
 
@@ -74,7 +42,7 @@ export interface SortState {
 export interface ServerPagination {
   /** True row count across every page — not `data.length`, which is only this page. */
   totalCount: number;
-  /** Current page's starting index (0-based), a multiple of limit. */
+  /** Current page's starting index (0-based). */
   offset: number;
   /** Rows per page, as already used for the `data` the caller fetched. */
   limit: number;
@@ -85,15 +53,11 @@ export interface ServerPagination {
 
 export interface DataTableLabels {
   selectAllOnPage: string;
-  /** String prefixes include the stable key; callbacks can resolve a human-readable identity. */
-  selectRow: string | ((key: string | number) => string);
-  sortColumn: (label: string, direction: SortDirection | null) => string;
-  /** String prefixes include row identity; callbacks can provide a localized row name. */
-  activateRow: string | ((key: string | number) => string);
+  selectRow: string;
   pagination?: Partial<TablePaginationLabels>;
 }
 
-interface DataTableBaseProps<T> {
+export interface DataTableProps<T> {
   labels?: Partial<DataTableLabels>;
   columns: DataTableColumn<T>[];
   data: T[];
@@ -118,10 +82,28 @@ interface DataTableBaseProps<T> {
   pageSize?: number;
   /** Server-side pagination — see `ServerPagination`. Takes precedence over `pageSize`. */
   serverPagination?: ServerPagination;
+  /** Stable per-row identity, e.g. `(member) => member.user.id`. Omit only
+   *  for data that never reorders between renders — without it, React falls
+   *  back to array index as key, which misattributes any row-scoped
+   *  component state (open menus, in-flight click handlers) to the wrong
+   *  item as soon as `data` re-sorts (e.g. after an edit changes sort
+   *  order). Required when `selectable` is set. */
+  rowKey?: (element: T) => string | number;
+  /** Adds a leading checkbox column. Selection is scoped to the checkbox
+   *  itself (not the whole row) — rows here typically carry their own
+   *  clickable actions (preview, menu), so a whole-row click target would
+   *  fight with those instead of being an unambiguous convenience. */
+  selectable?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
-  /** Activates the row background; requires at least one column. Embedded controls keep their own actions. */
+  /** Activates the row background; embedded controls keep their own actions. */
   onRowClick?: (row: T) => void;
+  /** Controlled sort — pass together with `onSortChange` when the caller
+   *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
+   *  for DataTable to sort `data` internally using each column's
+   *  `sortValue`. */
+  sortState?: SortState | null;
+  onSortChange?: (next: SortState | null) => void;
   /** Whether a third press on the sorted column clears the sort (default) or
    *  simply flips it back to ascending.
    *
@@ -133,31 +115,7 @@ interface DataTableBaseProps<T> {
   sortClearable?: boolean;
 }
 
-export type DataTableSortProps =
-  | { sortState?: undefined; onSortChange?: undefined }
-  | { sortState: SortState | null; onSortChange: (next: SortState | null) => void };
-
-/** Selection requires stable keys so individual and page-wide actions share identity. */
-export type DataTableProps<T> = DataTableBaseProps<T> &
-  DataTableSortProps &
-  (
-    | {
-        selectable?: false;
-        /** Stable domain identity. Without it, object references (or primitive values) identify rows. */
-        rowKey?: (element: T) => string | number;
-      }
-    | {
-        selectable: boolean;
-        selectedKeys: ReadonlySet<string | number>;
-        onSelectionChange: (keys: ReadonlySet<string | number>) => void;
-        /** Required when selection can be enabled, including a dynamic boolean. */
-        rowKey: (element: T) => string | number;
-      }
-  );
-
 export interface DataTableColumn<T> {
-  /** Stable column identity. Unique labels are the default; duplicate labels use object identity. Supply for duplicate or changing labels across recreated column objects. */
-  key?: string;
   label: string;
   /** A `grid-template-columns` track (e.g. "2fr", "6.5rem"). Avoid `"auto"`
    *  for a column whose header label and cell content differ meaningfully in
@@ -191,6 +149,12 @@ function compareSortValues(
   return String(a).localeCompare(String(b));
 }
 
+const rowsPerPageOptions: SelectOption<number>[] = ROWS_PER_PAGE_OPTIONS.map((n) => ({
+  value: n,
+  label: String(n),
+  key: String(n),
+}));
+
 export default function DataTable<T>({
   labels,
   columns,
@@ -210,104 +174,13 @@ export default function DataTable<T>({
   onSortChange,
   sortClearable = true,
 }: DataTableProps<T>) {
-  const tableId = useId();
-  const columnKeys = useRef(new WeakMap<object, string>());
-  const nextColumnKey = useRef(0);
-  const objectKeys = useRef(new WeakMap<object, number>());
-  const primitiveKeys = useRef(new Map<unknown, number>());
-  const nextObjectKey = useRef(0);
-  const fallbackKey = (row: T): string => {
-    if ((typeof row === "object" && row !== null) || typeof row === "function") {
-      const object = row as object;
-      let key = objectKeys.current.get(object);
-      if (key === undefined) {
-        key = nextObjectKey.current++;
-        objectKeys.current.set(object, key);
-      }
-      return `object:${key}`;
-    }
-    let key = primitiveKeys.current.get(row);
-    if (key === undefined) {
-      key = nextObjectKey.current++;
-      primitiveKeys.current.set(row, key);
-    }
-    return `primitive:${key}`;
-  };
-  if (onRowClick && columns.length === 0) {
-    throw new Error("DataTable: row activation requires at least one column.");
-  }
-  if ((controlledSortState !== undefined) !== (onSortChange !== undefined)) {
-    throw new Error("DataTable: sortState and onSortChange must be supplied together.");
-  }
-  if (selectable && selectedKeys === undefined) {
-    throw new Error("DataTable: selectable requires selectedKeys.");
-  }
-  if (selectable && !onSelectionChange) {
-    throw new Error("DataTable: selectable requires onSelectionChange.");
-  }
-  if (!onSortChange && columns.some((column) => column.sortable && !column.sortValue)) {
-    throw new Error("DataTable: uncontrolled sortable columns require sortValue.");
-  }
-  for (const [name, value] of [
-    ["pageSize", pageSize],
-    ["serverPagination.limit", serverPagination?.limit],
-  ] as const) {
-    if (value !== undefined && (!Number.isSafeInteger(value) || value <= 0)) {
-      throw new Error(`DataTable: ${name} must be a positive safe integer.`);
-    }
-  }
-  if (serverPagination) {
-    for (const [name, value] of [
-      ["totalCount", serverPagination.totalCount],
-      ["offset", serverPagination.offset],
-    ] as const) {
-      if (!Number.isSafeInteger(value) || value < 0) {
-        throw new Error(`DataTable: serverPagination.${name} must be a nonnegative safe integer.`);
-      }
-    }
-  }
-  if (serverPagination && serverPagination.offset % serverPagination.limit !== 0) {
-    throw new Error("DataTable: serverPagination.offset must be a multiple of limit.");
-  }
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
-  const rowsPerPageOptions: SelectOption<number>[] = ROWS_PER_PAGE_OPTIONS.map((value) => ({
-    value,
-    label: String(value),
-    key: String(value),
-  }));
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
-
-  const columnLabels = new Set<string>();
-  const duplicateLabels = new Set<string>();
-  for (const column of columns) {
-    if (columnLabels.has(column.label)) duplicateLabels.add(column.label);
-    columnLabels.add(column.label);
-  }
-  if (columns.some((column) => column.sortable && duplicateLabels.has(column.label))) {
-    throw new Error("DataTable: sortable column labels must be unique across all columns.");
-  }
-  const assignedColumnKeys = new Set(columns.map((column) => columnKeys.current.get(column)));
-  const columnKey = (column: DataTableColumn<T>) => {
-    if (column.key !== undefined) return `key:${column.key}`;
-    const assigned = columnKeys.current.get(column);
-    if (assigned !== undefined) return assigned;
-    const labelKey = `label:${column.label}`;
-    const key =
-      duplicateLabels.has(column.label) || assignedColumnKeys.has(labelKey)
-        ? `object:${nextColumnKey.current++}`
-        : labelKey;
-    columnKeys.current.set(column, key);
-    assignedColumnKeys.add(key);
-    return key;
-  };
-  if (new Set(columns.map(columnKey)).size !== columns.length) {
-    throw new Error("DataTable: column keys must be unique.");
-  }
 
   const sortedData = useMemo(() => {
     // Controlled sort: the caller already ordered `data` (e.g. a sorted
@@ -354,7 +227,7 @@ export default function DataTable<T>({
   // row on a later page must not leave the caller re-fetching a stale,
   // now-out-of-range offset forever).
   const currentPage = serverPagination
-    ? Math.min(Math.floor(serverPagination.offset / serverPagination.limit), pageCount - 1)
+    ? Math.floor(serverPagination.offset / serverPagination.limit)
     : Math.min(page, pageCount - 1);
 
   useEffect(() => {
@@ -367,18 +240,6 @@ export default function DataTable<T>({
   }, [serverPagination]);
   // Server-paginated `data` already IS the current page's rows (the caller
   // fetched exactly that window) — slicing it again here would drop rows.
-  const keyOccurrences = new Map<string, number>();
-  const sortedKeys = sortedData.map((row) => {
-    if (rowKey) return rowKey(row);
-    const identity = fallbackKey(row);
-    const occurrence = keyOccurrences.get(identity) ?? 0;
-    keyOccurrences.set(identity, occurrence + 1);
-    return `${identity}:${occurrence}`;
-  });
-  const visibleKeys =
-    paginationEnabled && !serverPagination
-      ? sortedKeys.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
-      : sortedKeys;
   const pageData =
     paginationEnabled && !serverPagination
       ? sortedData.slice(currentPage * rowsPerPage, currentPage * rowsPerPage + rowsPerPage)
@@ -392,7 +253,7 @@ export default function DataTable<T>({
     }
   };
 
-  const pageKeys = selectable && rowKey ? visibleKeys : [];
+  const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
   const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
   const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
@@ -433,153 +294,107 @@ export default function DataTable<T>({
         } as React.CSSProperties
       }
     >
-      <div
-        role="table"
-        style={{ display: "contents" }}
-        aria-rowcount={(serverPagination?.totalCount ?? data.length) + 1}
-        aria-colcount={columns.length + (selectable ? 1 : 0)}
-      >
-        <div role="row" aria-rowindex={1} className={styles["datatable-header"]}>
-          {selectable && (
-            <div role="columnheader" className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
-              <Checkbox
-                checked={allOnPageSelected}
-                indeterminate={someOnPageSelected}
-                onChange={toggleAllOnPage}
-                aria-label={labels?.selectAllOnPage ?? "Select all on page"}
-              />
-            </div>
-          )}
-          {columns.map((column) => {
-            const isSorted = sortState?.columnLabel === column.label;
-            return (
-              <div
-                role="columnheader"
-                aria-sort={
-                  column.sortable
-                    ? isSorted
-                      ? sortState.direction === "asc"
-                        ? "ascending"
-                        : "descending"
-                      : "none"
-                    : undefined
-                }
-                className={styles["datatable-cell"]}
-                key={columnKey(column)}
-              >
-                {column.sortable ? (
-                  <button
-                    type="button"
-                    className={styles["header-sort-button"]}
-                    aria-label={
-                      labels?.sortColumn?.(column.label, isSorted ? sortState.direction : null) ??
-                      `${column.label}, ${isSorted ? (sortState.direction === "asc" ? "ascending" : "descending") : "not sorted"}`
-                    }
-                    data-active={isSorted || undefined}
-                    onClick={() => handleHeaderSortClick(column)}
-                  >
-                    <span className={styles["header-content"]}>{column.label}</span>
-                    <span className={styles["sort-icon"]} data-visible={isSorted || undefined}>
-                      {/* The arrow points the way the list runs, as a file
+      <div className={styles["datatable-header"]}>
+        {selectable && (
+          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
+            <Checkbox
+              checked={allOnPageSelected}
+              indeterminate={someOnPageSelected}
+              onChange={toggleAllOnPage}
+              aria-label={labels?.selectAllOnPage ?? "Select all on page"}
+            />
+          </div>
+        )}
+        {columns.map((column, columnIndex) => {
+          const isSorted = sortState?.columnLabel === column.label;
+          return (
+            <div className={styles["datatable-cell"]} key={columnIndex}>
+              {column.sortable ? (
+                <button
+                  type="button"
+                  className={styles["header-sort-button"]}
+                  data-active={isSorted || undefined}
+                  onClick={() => handleHeaderSortClick(column)}
+                >
+                  <span className={styles["header-content"]}>{column.label}</span>
+                  <span className={styles["sort-icon"]} data-visible={isSorted || undefined}>
+                    {/* The arrow points the way the list runs, as a file
                         explorer does: down for ascending (A at the top, Z at
                         the bottom), up for descending. */}
-                      <Icon type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"} />
-                    </span>
-                  </button>
-                ) : (
-                  <span className={styles["header-content"]}>{column.label}</span>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div role="rowgroup" className={styles["datatable-body"]}>
-          {pageData.map((line, lineIndex) => {
-            const key = visibleKeys[lineIndex];
-            const isSelected = selectable && (selectedKeys?.has(key) ?? false);
-            return (
-              <div
-                role="row"
-                aria-rowindex={
-                  (serverPagination?.offset ?? (paginationEnabled ? currentPage * rowsPerPage : 0)) + lineIndex + 2
-                }
-                className={styles["datatable-row"]}
-                key={`${typeof key}:${key}`}
-                data-selected={isSelected || undefined}
-                data-activatable={!!onRowClick || undefined}
-                onClick={
-                  onRowClick || selectable
-                    ? (event) => {
-                        const target = event.target as HTMLElement;
-                        // Portaled cell controls bubble through React, outside the row's DOM.
-                        if (!event.currentTarget.contains(target)) return;
-                        const control = target.closest(EMBEDDED_CONTROL_SELECTOR);
-                        if (control && control !== event.currentTarget && event.currentTarget.contains(control)) return;
-                        if (onRowClick) onRowClick(line);
-                        else toggleRow(key);
-                      }
-                    : undefined
-                }
-              >
-                {selectable && (
-                  <div role="cell" className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
-                    <Checkbox
-                      checked={selectedKeys?.has(key) ?? false}
-                      onChange={() => toggleRow(key)}
-                      aria-label={
-                        typeof labels?.selectRow === "function"
-                          ? labels.selectRow(key)
-                          : `${labels?.selectRow ?? "Select row"} ${key}`
-                      }
-                    />
+                    <Icon type={isSorted && sortState?.direction === "desc" ? "arrow_upward" : "arrow_downward"} />
+                  </span>
+                </button>
+              ) : (
+                <span className={styles["header-content"]}>{column.label}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className={styles["datatable-body"]}>
+        {pageData.map((line, lineIndex) => {
+          const key = rowKey ? rowKey(line) : lineIndex;
+          const isSelected = selectable && (selectedKeys?.has(key) ?? false);
+          return (
+            <div
+              className={styles["datatable-row"]}
+              key={key}
+              data-selected={isSelected || undefined}
+              data-activatable={!!onRowClick || undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (event) => {
+                      if (event.target !== event.currentTarget || !["Enter", " "].includes(event.key)) return;
+                      event.preventDefault();
+                      onRowClick(line);
+                    }
+                  : undefined
+              }
+              onClick={
+                onRowClick || selectable
+                  ? (event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      if (onRowClick) onRowClick(line);
+                      else toggleRow(key);
+                    }
+                  : undefined
+              }
+            >
+              {selectable && (
+                <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
+                  <Checkbox
+                    checked={selectedKeys?.has(key) ?? false}
+                    onChange={() => toggleRow(key)}
+                    aria-label={labels?.selectRow ?? "Select row"}
+                  />
+                </div>
+              )}
+              {columns.map((column, columnIndex) => {
+                const cellContent = column.cellRenderer?.(line);
+                const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
+                return (
+                  <div className={styles["datatable-cell"]} key={columnIndex}>
+                    {/* Primitive cell values get single-line ellipsis
+                     * truncation, with the full value readable via the
+                     * native title tooltip — free-length text (usernames,
+                     * team names) must never spill under the neighbouring
+                     * column. Element values are the caller's own layout
+                     * and pass through untouched. */}
+                    {isPrimitive ? (
+                      <span className={styles["cell-text"]} title={String(cellContent)}>
+                        {cellContent}
+                      </span>
+                    ) : (
+                      cellContent
+                    )}
                   </div>
-                )}
-                {columns.map((column, columnIndex) => {
-                  const cellContent = column.cellRenderer?.(line);
-                  const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
-                  return (
-                    <div role="cell" className={styles["datatable-cell"]} key={columnKey(column)}>
-                      {/* Primitive cell values get single-line ellipsis
-                       * truncation, with the full value readable via the
-                       * native title tooltip — free-length text (usernames,
-                       * team names) must never spill under the neighbouring
-                       * column. Element values are the caller's own layout
-                       * and pass through untouched. */}
-                      {onRowClick && columnIndex === 0 && (
-                        <button
-                          type="button"
-                          data-row-action
-                          className={styles["row-action"]}
-                          aria-label={
-                            typeof labels?.activateRow === "function"
-                              ? labels.activateRow(key)
-                              : `${labels?.activateRow ?? "Activate row"} ${key}`
-                          }
-                          aria-describedby={`${tableId}-${lineIndex}-content`}
-                          onClick={() => onRowClick(line)}
-                        >
-                          <Icon type="chevron_right" />
-                        </button>
-                      )}
-                      <div
-                        id={columnIndex === 0 ? `${tableId}-${lineIndex}-content` : undefined}
-                        className={styles["cell-content"]}
-                      >
-                        {isPrimitive ? (
-                          <span className={styles["cell-text"]} title={String(cellContent)}>
-                            {cellContent}
-                          </span>
-                        ) : (
-                          cellContent
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
       {paginationEnabled && (
         <TablePagination
@@ -593,7 +408,6 @@ export default function DataTable<T>({
             !serverPagination || serverPagination.onLimitChange
               ? (value) => {
                   if (serverPagination?.onLimitChange) {
-                    serverPagination.onOffsetChange(0);
                     serverPagination.onLimitChange(value);
                   } else {
                     setRowsPerPage(value);

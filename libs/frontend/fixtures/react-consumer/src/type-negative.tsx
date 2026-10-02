@@ -16,8 +16,6 @@ import {
   Button,
   Checkbox,
   Dialog,
-  TextArea,
-  InlineDrawer,
   IconButton,
   Select,
   type SelectOption,
@@ -81,7 +79,7 @@ import {
   Switch,
   DataTable,
   KpiStatCard,
-  TablePagination,
+  InlineDrawer,
   ToastProvider,
   type DataTableColumn,
 } from "@fred-oss/ui";
@@ -103,19 +101,18 @@ const badTable = (
   // @ts-expect-error Table row keys are string or number, never an arbitrary object.
   <DataTable data={[{ id: 1 }]} columns={[]} rowKey={(row) => row} />
 );
-const badPagination = (
-  <TablePagination
-    totalItems={1}
-    currentPage={0}
-    pageCount={1}
-    rowsPerPage={1}
-    // @ts-expect-error Numeric pagination options cannot contain string values.
-    rowsPerPageOptions={[{ key: "bad", label: "Bad", value: "one" }]}
-    onFirst={() => {}}
-    onPrev={() => {}}
-    onNext={() => {}}
-    onLast={() => {}}
+const badSelection = (
+  <DataTable
+    data={[{ id: 1 }]}
+    columns={[]}
+    rowKey={(row) => row.id}
+    // @ts-expect-error Row selection is not part of the hosted table contract.
+    selectable
   />
+);
+const badDrawerLayout = (
+  // @ts-expect-error Push, resize and floating layouts stay FRED-internal.
+  <InlineDrawer open title="Bad" onClose={() => {}} layout="push" />
 );
 const badToast = (
   <ToastProvider
@@ -134,7 +131,8 @@ export {
   badSwitch,
   badColumn,
   badTable,
-  badPagination,
+  badSelection,
+  badDrawerLayout,
   badToast,
 };
 
@@ -142,6 +140,7 @@ const badRowActivation = (
   <DataTable<{ id: string }>
     data={[]}
     columns={[]}
+    rowKey={(row) => row.id}
     // @ts-expect-error The row callback retains the table row type.
     onRowClick={(row: number) => void row}
   />
@@ -156,155 +155,3 @@ const badKpiTone = (
   />
 );
 export { badRowActivation, badKpiTone };
-
-const badRemDrawer = (
-  // @ts-expect-error Resizable drawers require pixel widths, not relative CSS units.
-  <InlineDrawer
-    open
-    onClose={() => {}}
-    title="Bad"
-    layout="push"
-    width="30rem"
-    resizable={{ persistKey: "bad" }}
-  />
-);
-const badPercentDrawer = (
-  // @ts-expect-error Percentage widths cannot seed persisted pixel widths.
-  <InlineDrawer
-    open
-    onClose={() => {}}
-    title="Bad"
-    layout="push"
-    width="50%"
-    resizable={{ persistKey: "bad" }}
-  />
-);
-const badViewportDrawer = (
-  // @ts-expect-error Viewport widths cannot seed persisted pixel widths.
-  <InlineDrawer
-    open
-    onClose={() => {}}
-    title="Bad"
-    layout="push"
-    width="30vw"
-    resizable={{ persistKey: "bad" }}
-  />
-);
-export { badRemDrawer, badPercentDrawer, badViewportDrawer };
-
-const uncontrolledTextArea = (
-  <TextArea label="Notes" defaultValue="abc" maxLength={100} />
-);
-const missingTextAreaValue = <TextArea label="Notes" maxLength={100} />;
-export { uncontrolledTextArea, missingTextAreaValue };
-
-const selectableTableWithoutKeys = (
-  // @ts-expect-error Selection requires stable row keys for page-wide actions.
-  <DataTable
-    data={[{ id: 1 }]}
-    columns={[]}
-    selectable
-    selectedKeys={new Set()}
-    onSelectionChange={() => {}}
-  />
-);
-export { selectableTableWithoutKeys };
-
-export function dynamicSelectionContract(selectable: boolean) {
-  const missingKeys = (
-    // @ts-expect-error A dynamic selection flag also requires stable keys.
-    <DataTable
-      data={[{ id: 1 }]}
-      columns={[]}
-      selectable={selectable}
-      selectedKeys={new Set()}
-      onSelectionChange={() => {}}
-    />
-  );
-  const keyed = (
-    <DataTable
-      data={[{ id: 1 }]}
-      columns={[]}
-      selectable={selectable}
-      selectedKeys={new Set()}
-      rowKey={(row) => row.id}
-      onSelectionChange={() => {}}
-    />
-  );
-  const nonSelectable = (
-    <DataTable data={[{ id: 1 }]} columns={[]} selectable={false} />
-  );
-  return { missingKeys, keyed, nonSelectable };
-}
-
-// @ts-expect-error Switch always renders a checkbox; callers cannot override its type.
-export const badSwitchType = <Switch type="text" />;
-
-export const missingResizeLayout = (
-  // @ts-expect-error Resizing requires an explicit push layout.
-  <InlineDrawer
-    open
-    onClose={() => {}}
-    title="Bad"
-    resizable={{ persistKey: "bad" }}
-  />
-);
-export const overlayResizeLayout = (
-  // @ts-expect-error Overlay drawers cannot resize.
-  <InlineDrawer
-    open
-    onClose={() => {}}
-    title="Bad"
-    layout="overlay"
-    resizable={{ persistKey: "bad" }}
-  />
-);
-
-export const missingSortCallback = (
-  // @ts-expect-error Controlled sort requires both state and callback.
-  <DataTable data={[]} columns={[]} sortState={null} />
-);
-export const missingSortState = (
-  // @ts-expect-error Controlled sort requires an explicit state, including null.
-  <DataTable data={[]} columns={[]} onSortChange={() => {}} />
-);
-
-export const missingSelectionHandler = (
-  // @ts-expect-error Enabled selection requires a callback.
-  <DataTable
-    data={[{ id: 1 }]}
-    columns={[]}
-    selectable
-    rowKey={(row) => row.id}
-  />
-);
-
-export const missingSelectedKeys = (
-  // @ts-expect-error Selection is controlled and requires its current set.
-  <DataTable
-    data={[{ id: 1 }]}
-    columns={[]}
-    selectable
-    rowKey={(row) => row.id}
-    onSelectionChange={() => {}}
-  />
-);
-
-const frozenTextArea = (
-  // @ts-expect-error A controlled TextArea needs an explicit editable, read-only or disabled mode.
-  <TextArea label="Notes" value="abc" />
-);
-export { frozenTextArea };
-
-const mixedTextArea = (
-  // @ts-expect-error Controlled and uncontrolled initial values cannot be mixed.
-  <TextArea label="Notes" value="abc" defaultValue="abc" readOnly />
-);
-export { mixedTextArea };
-
-// @ts-expect-error Native input elements cannot contain children.
-export const badSwitchChildren = <Switch aria-label="Switch">text</Switch>;
-export const badSwitchHtml = (
-  // @ts-expect-error Native input elements cannot accept inner HTML.
-  <Switch aria-label="Switch" dangerouslySetInnerHTML={{ __html: "text" }} />
-);

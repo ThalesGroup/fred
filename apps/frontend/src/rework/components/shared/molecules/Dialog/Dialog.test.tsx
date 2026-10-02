@@ -421,25 +421,3 @@ describe("Dialog Enter-key handling", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });
-
-it("runs dialog callbacks without submitting its portal container's form", () => {
-  const form = document.createElement("form");
-  document.body.append(form);
-  const submit = vi.fn((event: Event) => event.preventDefault());
-  form.addEventListener("submit", submit);
-  const confirm = vi.fn();
-  const cancel = vi.fn();
-  try {
-    render(
-      <Dialog open title="Edit" confirmLabel="Save" onConfirm={confirm} onCancel={cancel} portalContainer={form}>
-        Edit content
-      </Dialog>,
-    );
-    act(() => form.querySelectorAll<HTMLButtonElement>("button").forEach((button) => button.click()));
-    expect(confirm).toHaveBeenCalledOnce();
-    expect(cancel).toHaveBeenCalledOnce();
-    expect(submit).not.toHaveBeenCalled();
-  } finally {
-    form.remove();
-  }
-});
