@@ -59,6 +59,19 @@ linear Alembic ancestry and the repository's required migration checks. For
 merges within the reviewed range, use the relevant merge-review procedure.
 Do not expand a targeted review into unrelated cleanup or speculative hardening.
 
+## Composition and extraction review
+
+When exporting reusable UI or changing event/focus handling, read
+[the composition review procedure](references/ui-composition.md). Follow events
+through realistic parent/child combinations, including unchanged dependencies;
+separate component tests do not establish composition correctness.
+
+For moves/extractions, compare representative valid calls against the merge
+base before accepting a correction. Classify findings as introduced regression,
+pre-existing defect newly exposed, or deliberate contract change. Rejecting a
+previously valid input is a compatibility change, not evidence that the original
+bug is fixed. Document it as such and check it against the authorized scope.
+
 ## Evidence and verification
 
 - Existing tests show what is covered, not that all accepted inputs work. Seek
