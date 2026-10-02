@@ -2,7 +2,7 @@
 
 - [x] 1.1 Create or reuse a GitHub issue and a dedicated branch for this change; verify the branch and issue refer to the same scope and preserve unrelated local edits.
 - [x] 1.2 Update `revoke_team_member_role` to grant direct `team_member` before removing a sole elevated role, after the last-admin and both permission checks; verify focused service tests for active and pending admins, editors and analysts, an existing direct baseline, and a sole member.
-- [x] 1.3 Cover write failure after baseline grant and retry, and verify no membership loss or unauthorized grant with the focused service tests.
+- [x] 1.3 Cover write failure and retry, shared locking with explicit removal and charter promotion, and higher-consistency role reads with focused service tests.
 
 ## 2. Integrate and close
 

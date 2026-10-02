@@ -47,6 +47,16 @@ The control-plane MUST enforce the existing permission for the role being revoke
 - **WHEN** a caller with only `pending_team_admin` attempts to cancel another pending nomination and no active `team_admin` exists
 - **THEN** the request fails and the nominee's stored relations remain unchanged
 
+#### Scenario: Cancelled nomination cannot be promoted by concurrent charter acceptance
+
+- **WHEN** nomination cancellation completes before charter acceptance promotes the nominee
+- **THEN** the nominee remains a simple member without `pending_team_admin` or `team_admin`
+
+#### Scenario: Cancelled nomination cannot be promoted by concurrent reconciliation
+
+- **WHEN** startup reconciliation reads a pending nomination and an administrator cancels it before the reconciliation promotion
+- **THEN** reconciliation does not grant `team_admin` and the person remains a simple member
+
 #### Scenario: Unauthorized revocation is refused
 
 - **WHEN** a caller lacks permission to administer the requested role

@@ -110,7 +110,8 @@ charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:
 a `team_member` with no admin authority. Accepting the charter
 (`POST /team-admin-charter`) turns it into `team_admin`, and a version change
 moves admins back to pending at the next startup. The last-admin guard and the
-rescue check count `team_admin` only. Contract:
+rescue check count `team_admin` only. Charter acceptance and startup reconciliation recheck a pending nomination
+under the same per-member lock as cancellation before promotion. Contract:
 `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54.
 
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see

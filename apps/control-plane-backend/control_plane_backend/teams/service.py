@@ -511,13 +511,29 @@ async def accept_team_admin_charter(
     if not isinstance(pending_teams, RebacDisabledResult):
         await asyncio.gather(
             *(
-                _swap_team_admin_relation(
-                    deps.rebac, TeamId(team.id), user.uid, promote=True
+                _promote_pending_team_admin_after_acceptance(
+                    deps, TeamId(team.id), user.uid
                 )
                 for team in pending_teams
             )
         )
     return TeamAdminCharterAcceptance(accepted_at=accepted_at)
+
+
+async def _promote_pending_team_admin_after_acceptance(
+    deps: TeamServiceDependencies, team_id: TeamId, user_id: str
+) -> None:
+    async with deps.get_team_metadata_store().advisory_lock(
+        _team_member_role_lock_key(team_id, user_id)
+    ):
+        roles = await _get_user_roles_in_team(
+            deps.rebac,
+            team_id,
+            user_id,
+            consistency_token=RebacEngine.HIGHER_CONSISTENCY,
+        )
+        if UserTeamRelation.PENDING_TEAM_ADMIN in roles:
+            await _swap_team_admin_relation(deps.rebac, team_id, user_id, promote=True)
 
 
 _TEAM_ADMIN_CHARTER_RECONCILE_LOCK_KEY = "team_admin_charter_reconcile"
@@ -550,18 +566,27 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
             relations = await deps.rebac.list_direct_relations(
                 RebacReference(Resource.TEAM, metadata.id)
             )
-            for user_id, held in _fold_team_role_relations(relations).items():
-                active = version is None or user_id in accepted
-                if UserTeamRelation.PENDING_TEAM_ADMIN in held and active:
-                    await _swap_team_admin_relation(
-                        deps.rebac, metadata.id, user_id, promote=True
+            for user_id in _fold_team_role_relations(relations):
+                async with metadata_store.advisory_lock(
+                    _team_member_role_lock_key(metadata.id, user_id)
+                ):
+                    held = await _get_user_roles_in_team(
+                        deps.rebac,
+                        metadata.id,
+                        user_id,
+                        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
                     )
-                    moved += 1
-                elif UserTeamRelation.TEAM_ADMIN in held and not active:
-                    await _swap_team_admin_relation(
-                        deps.rebac, metadata.id, user_id, promote=False
-                    )
-                    moved += 1
+                    active = version is None or user_id in accepted
+                    if UserTeamRelation.PENDING_TEAM_ADMIN in held and active:
+                        await _swap_team_admin_relation(
+                            deps.rebac, metadata.id, user_id, promote=True
+                        )
+                        moved += 1
+                    elif UserTeamRelation.TEAM_ADMIN in held and not active:
+                        await _swap_team_admin_relation(
+                            deps.rebac, metadata.id, user_id, promote=False
+                        )
+                        moved += 1
         await charter_store.set_applied_version(version or "")
     return moved
 

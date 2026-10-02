@@ -4006,7 +4006,10 @@ team creation, import) writes `pending_team_admin` instead while a version is
 set and the user has not accepted it. `pending_team_admin` cannot be requested
 directly (422). Revoking it cancels the nomination and needs
 `can_administer_admins`; removing the member deletes it with the other roles.
-`my_relations` and the member list expose it.
+`my_relations` and the member list expose it. Charter acceptance and startup
+reconciliation take the same per-member lock as nomination cancellation and
+recheck the pending tuple with higher consistency before promotion; a
+completed cancellation cannot be promoted from a stale lookup.
 
 **Endpoint.**
 
