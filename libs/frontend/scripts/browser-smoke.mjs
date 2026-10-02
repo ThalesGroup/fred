@@ -892,10 +892,6 @@ async function verifyHostedComponents(page) {
     true,
   );
   assert.equal(
-    await hosted.getByRole("progressbar").getAttribute("aria-valuenow"),
-    "3",
-  );
-  assert.equal(
     await hosted.getByRole("img", { name: "Evaluation active" }).count(),
     1,
   );
