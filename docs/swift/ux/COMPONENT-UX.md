@@ -4402,8 +4402,8 @@ _Priority order for the next UX session. Update before each session._
 **CHAT-05 new components (first design review needed):**
 
 1. **RichInputField — composer-control chips** — define final visual density for `Hybrid`, `Corpus + web`, `3 libraries`, and attachment chips so they stay quieter than replies and textarea content.
-2. **InlineDrawer — mobile width** — `480px` covers most of a phone screen; need a `100vw` breakpoint (code change, blocked on breakpoint decision)
-3. **InlineDrawer — WCAG / screen reader** — no focus trap; need `aria-live` region or `aria-label` on the drawer (accessibility review)
+2. **InlineDrawer — mobile width** — overlay width is capped at `100vw`; verify long content on small screens.
+3. **InlineDrawer — WCAG / screen reader** — overlay keyboard focus is contained and restored on close; retain manual screen-reader validation in the accessibility review.
 4. **ContextualPicker — keyboard navigation** — `ArrowUp`/`ArrowDown` not wired; `aria-activedescendant` missing (code change needed)
 5. **SourceCard — active state** — no visual change when the corresponding source is selected (design decision: border? background?)
 6. **IndicatorDot — pulse speed** — 1.2 s pulse; validate not distracting during long streaming turns

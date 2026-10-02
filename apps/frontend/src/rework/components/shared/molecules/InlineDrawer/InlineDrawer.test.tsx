@@ -320,3 +320,49 @@ it("closes inside a form without submitting", () => {
     host.remove();
   }
 });
+
+it("contains overlay focus and restores the opener after closing", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button data-opener onClick={() => setOpen(true)}>
+          Open
+        </button>
+        <button data-outside>Outside</button>
+        <InlineDrawer title="Modal" open={open} onClose={() => setOpen(false)}>
+          <input aria-label="Last field" />
+        </InlineDrawer>
+      </>
+    );
+  }
+  try {
+    act(() => root.render(<Harness />));
+    const opener = host.querySelector<HTMLButtonElement>("[data-opener]")!;
+    act(() => {
+      opener.focus();
+      opener.click();
+    });
+    const close = host.querySelector<HTMLButtonElement>('button[aria-label="Close panel"]')!;
+    const input = host.querySelector<HTMLInputElement>("input")!;
+    expect(document.activeElement).toBe(close);
+    act(() =>
+      close.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }),
+      ),
+    );
+    expect(document.activeElement).toBe(input);
+    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })));
+    expect(document.activeElement).toBe(close);
+    act(() => host.querySelector<HTMLButtonElement>("[data-outside]")!.focus());
+    expect(document.activeElement).toBe(close);
+    await act(async () => close.click());
+    expect(document.activeElement).toBe(opener);
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

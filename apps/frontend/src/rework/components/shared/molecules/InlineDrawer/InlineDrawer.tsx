@@ -15,6 +15,7 @@
 import { PropsWithChildren, ReactNode, useCallback, useLayoutEffect, useId, useRef } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
+import { FOCUSABLE, isVisibleFocusable } from "../../utils/focus";
 import styles from "./InlineDrawer.module.css";
 
 // Overlay drawers paint above push drawers; peers follow DOM paint order.
@@ -161,6 +162,8 @@ export function InlineDrawer({
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
   const drawerRef = useRef<HTMLElement | null>(null);
+  const ownedFocusEvents = useRef(new WeakSet<Event>());
+  const lastOwnedFocus = useRef<HTMLElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
@@ -235,6 +238,71 @@ export function InlineDrawer({
     };
   });
 
+  useLayoutEffect(() => {
+    if (!open || layout !== "overlay") return;
+    const drawer = drawerRef.current!;
+    const doc = drawer.ownerDocument;
+    const origin = doc.activeElement instanceof HTMLElement ? doc.activeElement : null;
+    const focusable = () =>
+      [...drawer.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => isVisibleFocusable(node, drawer));
+    const focusInside = () => (focusable()[0] ?? drawer).focus();
+    const onFocus = (event: FocusEvent) => {
+      if (topDrawer(doc) !== drawer || ownedFocusEvents.current.has(event) || drawer.contains(event.target as Node))
+        return;
+      const last = lastOwnedFocus.current;
+      if (last?.isConnected && isVisibleFocusable(last, drawer)) last.focus();
+      else focusInside();
+    };
+    const onTab = (event: KeyboardEvent) => {
+      if (
+        event.key !== "Tab" ||
+        event.defaultPrevented ||
+        topDrawer(doc) !== drawer ||
+        !drawer.contains(event.target as Node)
+      )
+        return;
+      const nodes = focusable();
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (
+        !first ||
+        (event.shiftKey && (doc.activeElement === first || doc.activeElement === drawer)) ||
+        (!event.shiftKey && doc.activeElement === last)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? (last ?? drawer) : (first ?? drawer)).focus();
+      }
+    };
+    doc.defaultView!.addEventListener("focusin", onFocus);
+    doc.defaultView!.addEventListener("keydown", onTab);
+    const focusOnOpen = () => {
+      if (
+        topDrawer(doc) === drawer &&
+        (!drawer.contains(doc.activeElement) || doc.activeElement === drawer) &&
+        (doc.activeElement !== lastOwnedFocus.current || doc.activeElement === drawer)
+      )
+        focusInside();
+    };
+    const onTransitionEnd = (event: TransitionEvent) => {
+      if (event.target === drawer) focusOnOpen();
+    };
+    drawer.addEventListener("transitionend", onTransitionEnd);
+    focusOnOpen();
+    // visibility transitions can still hide the panel during the layout effect.
+    const focusFrame = doc.defaultView!.requestAnimationFrame(focusOnOpen);
+    return () => {
+      drawer.removeEventListener("transitionend", onTransitionEnd);
+      doc.defaultView!.cancelAnimationFrame(focusFrame);
+      doc.defaultView!.removeEventListener("focusin", onFocus);
+      doc.defaultView!.removeEventListener("keydown", onTab);
+      lastOwnedFocus.current = null;
+      // Registration cleanup restores underlying drawers before focus returns.
+      queueMicrotask(() => {
+        if (origin?.isConnected && !origin.closest("[inert]")) origin.focus();
+      });
+    };
+  }, [open, layout]);
+
   return (
     <>
       {layout === "overlay" && (
@@ -249,6 +317,11 @@ export function InlineDrawer({
       )}
       <aside
         ref={drawerRef}
+        tabIndex={-1}
+        onFocusCapture={(event) => {
+          ownedFocusEvents.current.add(event.nativeEvent);
+          lastOwnedFocus.current = event.target as HTMLElement;
+        }}
         className={styles.drawer}
         data-open={open}
         data-layout={layout}

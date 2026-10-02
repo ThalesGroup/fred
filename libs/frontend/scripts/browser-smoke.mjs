@@ -1233,6 +1233,49 @@ async function verifyHostedComponents(page) {
   await hosted.getByRole("button", { name: "Open overlay drawer" }).click();
   const overlay = hosted.getByRole("complementary", { name: "Hosted overlay" });
   await overlay.waitFor({ state: "visible" });
+  const overlayClose = overlay.getByRole("button", { name: "Close panel" });
+  await page.waitForFunction(
+    () =>
+      document.activeElement?.getAttribute("aria-label") === "Close panel" &&
+      document.activeElement?.closest('[data-layout="overlay"]'),
+  );
+  const overlayDialogTrigger = overlay.getByRole("button", {
+    name: "Open overlay dialog",
+  });
+  assert.equal(
+    await overlayClose.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(
+    await overlayDialogTrigger.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await overlayClose.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  await overlayDialogTrigger.click();
+  const overlayDialog = page.getByRole("dialog", {
+    name: "Overlay confirmation",
+  });
+  await overlayDialog.waitFor({ state: "visible" });
+  await overlayDialog.getByRole("textbox").fill("Nested portal remains usable");
+  await page.keyboard.press("Escape");
+  await overlayDialog.waitFor({ state: "hidden" });
+  assert.equal(
+    await overlayDialogTrigger.evaluate((el) => el === document.activeElement),
+    true,
+  );
+  const previousViewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const mobile = await overlay.boundingBox();
+  assert.ok(
+    mobile.x >= -1 && mobile.width <= 375,
+    "overlay exceeds mobile viewport",
+  );
+  await page.setViewportSize(previousViewport);
   await page.keyboard.press("Escape");
   await overlay.waitFor({ state: "hidden" });
 

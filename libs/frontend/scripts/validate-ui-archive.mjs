@@ -85,6 +85,7 @@ export const expectedUiArchiveFiles = [
   "dist/types/.generated/src/rework/components/shared/molecules/Select/Select.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/Portal.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/Type.d.ts",
+  "dist/types/.generated/src/rework/components/shared/utils/focus.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/viewport.d.ts",
   "dist/types/src/index.d.ts",
   "licenses/Material-Symbols-Apache-2.0.txt",

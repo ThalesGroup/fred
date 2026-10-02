@@ -164,6 +164,7 @@ export function HostedComponents() {
   const [drawer, setDrawer] = useState(false);
   const [drawerGeneration, setDrawerGeneration] = useState(0);
   const [overlay, setOverlay] = useState(false);
+  const [overlayDialog, setOverlayDialog] = useState(false);
   const [wideOverlay, setWideOverlay] = useState(false);
   const [lowerClicks, setLowerClicks] = useState(0);
   const [copied, setCopied] = useState("");
@@ -406,12 +407,24 @@ export function HostedComponents() {
         </button>
       </InlineDrawer>
       <InlineDrawer
-        width="240px"
+        width="480px"
         title="Hosted overlay"
         open={overlay}
         onClose={() => setOverlay(false)}
       >
         <span>Overlay content</span>
+        <button type="button" onClick={() => setOverlayDialog(true)}>
+          Open overlay dialog
+        </button>
+        <Dialog
+          open={overlayDialog}
+          title="Overlay confirmation"
+          confirmLabel="Confirm"
+          onConfirm={() => setOverlayDialog(false)}
+          onCancel={() => setOverlayDialog(false)}
+        >
+          <input aria-label="Overlay dialog field" />
+        </Dialog>
       </InlineDrawer>
       <ToastProvider
         onCopy={setCopied}
