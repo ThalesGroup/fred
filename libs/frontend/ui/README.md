@@ -94,6 +94,9 @@ candidates must still be compared with a complete, maintainer-confirmed contract
 Real-consumer interaction props: `DataTable<T>.onRowClick(row)` activates row
 background/cells by pointer or Enter/Space while leaving embedded controls alone.
 When combined with selection, background activates and checkboxes select.
+Selectable tables require `rowKey`, including when `selectable` is a dynamic
+boolean, so row and page-wide selection use stable identities across sorting
+and pagination.
 `InlineDrawer.closeLabel` supplies the accessible close action name.
 `KpiStatCard.tone` accepts the shared `StatusBadgeTone` vocabulary and defaults to
 neutral. These additive alpha.3 props preserve existing consumer defaults.

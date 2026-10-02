@@ -89,7 +89,7 @@ export interface DataTableLabels {
   pagination?: Partial<TablePaginationLabels>;
 }
 
-export interface DataTableProps<T> {
+interface DataTableBaseProps<T> {
   labels?: Partial<DataTableLabels>;
   columns: DataTableColumn<T>[];
   data: T[];
@@ -114,18 +114,6 @@ export interface DataTableProps<T> {
   pageSize?: number;
   /** Server-side pagination — see `ServerPagination`. Takes precedence over `pageSize`. */
   serverPagination?: ServerPagination;
-  /** Stable per-row identity, e.g. `(member) => member.user.id`. Omit only
-   *  for data that never reorders between renders — without it, React falls
-   *  back to array index as key, which misattributes any row-scoped
-   *  component state (open menus, in-flight click handlers) to the wrong
-   *  item as soon as `data` re-sorts (e.g. after an edit changes sort
-   *  order). Required when `selectable` is set. */
-  rowKey?: (element: T) => string | number;
-  /** Adds a leading checkbox column. Selection is scoped to the checkbox
-   *  itself (not the whole row) — rows here typically carry their own
-   *  clickable actions (preview, menu), so a whole-row click target would
-   *  fight with those instead of being an unambiguous convenience. */
-  selectable?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Activates the row background; embedded controls keep their own actions. */
@@ -146,6 +134,21 @@ export interface DataTableProps<T> {
    *  another column. Pass `false` there. */
   sortClearable?: boolean;
 }
+
+/** Selection requires stable keys so individual and page-wide actions share identity. */
+export type DataTableProps<T> = DataTableBaseProps<T> &
+  (
+    | {
+        selectable?: false;
+        /** Stable row identity; omit only for data that never reorders. */
+        rowKey?: (element: T) => string | number;
+      }
+    | {
+        selectable: boolean;
+        /** Required when selection can be enabled, including a dynamic boolean. */
+        rowKey: (element: T) => string | number;
+      }
+  );
 
 export interface DataTableColumn<T> {
   label: string;

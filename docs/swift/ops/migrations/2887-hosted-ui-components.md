@@ -25,6 +25,8 @@ Hosted UI consumers using `InlineDrawer` with `resizable` must provide `width` a
 
 `TextArea` consumers must supply a controlled `value` (`""` for empty content), with `onChange` or `readOnly`; `defaultValue` is rejected.
 
+Selectable `DataTable` consumers must supply a stable `rowKey` function (also when `selectable` is a dynamic boolean). This enforces the existing documented selection requirement in TypeScript.
+
 ## Validation
 
 Confirm Apps opens the evaluator for an authorized team, while unauthorized teams retain the existing admission restrictions. Verify Members and Activity still work and Fred no longer calls `/evaluation/v1` directly. The shared UI package must pass archive/consumer validation; StatusBadge and other reusable exports remain available.

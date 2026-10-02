@@ -198,3 +198,28 @@ const missingTextAreaValue = (
   <TextArea label="Notes" maxLength={100} />
 );
 export { uncontrolledTextArea, missingTextAreaValue };
+
+const selectableTableWithoutKeys = (
+  // @ts-expect-error Selection requires stable row keys for page-wide actions.
+  <DataTable data={[{ id: 1 }]} columns={[]} selectable />
+);
+export { selectableTableWithoutKeys };
+
+export function dynamicSelectionContract(selectable: boolean) {
+  const missingKeys = (
+    // @ts-expect-error A dynamic selection flag also requires stable keys.
+    <DataTable data={[{ id: 1 }]} columns={[]} selectable={selectable} />
+  );
+  const keyed = (
+    <DataTable
+      data={[{ id: 1 }]}
+      columns={[]}
+      selectable={selectable}
+      rowKey={(row) => row.id}
+    />
+  );
+  const nonSelectable = (
+    <DataTable data={[{ id: 1 }]} columns={[]} selectable={false} />
+  );
+  return { missingKeys, keyed, nonSelectable };
+}
