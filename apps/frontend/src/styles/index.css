@@ -25,6 +25,7 @@
 @import "./shadow-dark.css";
 
 @import "./themes/cobalt.css";
+@import "./themes/cloud.css";
 
 @import "spacings.css";
 @import "radius.css";

@@ -82,6 +82,7 @@ export default function UserSettingsPage() {
                 options={[
                   { key: "pebble", value: "pebble", label: t("rework.userSettings.app.themePebble") },
                   { key: "cobalt", value: "cobalt", label: t("rework.userSettings.app.themeCobalt") },
+                  { key: "cloud", value: "cloud", label: t("rework.userSettings.app.themeCloud") },
                 ]}
                 value={uiTheme}
                 onChange={setUiTheme}

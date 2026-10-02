@@ -31,7 +31,7 @@ const getSystemDarkMode = (): boolean => {
 /**
  * Computes the effective dark mode based on theme mode and system preference
  */
-const UI_THEMES: UiTheme[] = ["pebble", "cobalt"];
+const UI_THEMES: UiTheme[] = ["pebble", "cobalt", "cloud"];
 
 export const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
   if (themeMode === "system") {

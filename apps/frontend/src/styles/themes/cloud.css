@@ -1,0 +1,118 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Cloud UI theme ("Nuage"): airy sky blue with a lagoon accent, the roundest
+   shapes and Nunito. Colors come from LCh seeds (neutral 245/3 in light,
+   270/4 in dark; primary 250/48; secondary 280/20; tertiary 190/30) with the
+   accent rules of the token rework; info follows primary in this theme. */
+/* :root raises specificity above the :root blocks of radius.css and typography.css. */
+:root[data-ui-theme="cloud"] {
+  --font-family-base: "Nunito", sans-serif;
+  --radius-xs: 6px;
+  --radius-s: 12px;
+  --radius-ms: 18px;
+  --radius-m: 22px;
+}
+
+[data-ui-theme="cloud"][data-theme="light"] {
+  --primary: #00658c;
+  --on-primary: #fafdff;
+  --primary-container: #c7e7ff;
+  --on-primary-container: #001e2e;
+  --secondary: #515e7e;
+  --on-secondary: #fbfcff;
+  --secondary-container: #d9e2fe;
+  --on-secondary-container: #081b36;
+  --tertiary: #036a65;
+  --on-tertiary: #f3fffd;
+  --tertiary-container: #95f3eb;
+  --on-tertiary-container: #00201e;
+  --on-surface: #181c1f;
+  --on-surface-retreat: #5a5f63;
+  --on-surface-muted: #666b6f;
+  --surface-main: #fdfefe;
+  --surface-container-highest: #ffffff;
+  --surface-container-high: #f3f9fd;
+  --surface-container: #eef4f9;
+  --surface-container-low: #eaf0f4;
+  --surface-container-lowest: #e6ecf0;
+  --surface-floating: #ffffff;
+  --error: #b12938;
+  --on-error: #fefcfb;
+  --error-container: #fedad8;
+  --on-error-container: #430002;
+  --success: #2c6a41;
+  --on-success: #f7fef8;
+  --success-container: #cdead3;
+  --on-success-container: #002207;
+  --info: #00658c;
+  --on-info: #fafdff;
+  --info-container: #c7e7ff;
+  --on-info-container: #001e2e;
+  --warning: #825501;
+  --on-warning: #fffcf8;
+  --warning-container: #f6dfc5;
+  --on-warning-container: #281900;
+  --folder: #f7bb6c;
+  --outline: #72787b;
+  --outline-variant: #c1c7cb;
+  --outline-muted: #d8dee2;
+}
+
+[data-ui-theme="cloud"][data-theme="dark"] {
+  --primary: #83cfff;
+  --on-primary: #001e2e;
+  --primary-container: #014c6a;
+  --on-primary-container: #c7e7ff;
+  --secondary: #b9c6eb;
+  --on-secondary: #081b36;
+  --secondary-container: #394665;
+  --on-secondary-container: #d9e2fe;
+  --tertiary: #78d6cf;
+  --on-tertiary: #00201e;
+  --tertiary-container: #00504c;
+  --on-tertiary-container: #95f3eb;
+  --on-surface: #edf1f8;
+  --on-surface-retreat: #b5b9c0;
+  --on-surface-muted: #8d9198;
+  --surface-main: #101419;
+  --surface-container-highest: #292c32;
+  --surface-container-high: #23262b;
+  --surface-container: #1d2025;
+  --surface-container-low: #191c21;
+  --surface-container-lowest: #15181d;
+  --surface-floating: #2d3136;
+  --error: #ffb3b0;
+  --on-error: #430002;
+  --error-container: #610f1a;
+  --on-error-container: #fedad8;
+  --success: #94d5a5;
+  --on-success: #002207;
+  --success-container: #003918;
+  --on-success-container: #b0f2c0;
+  --info: #83cfff;
+  --on-info: #001e2e;
+  --info-container: #00344b;
+  --on-info-container: #c7e7ff;
+  --warning: #f7bb6c;
+  --on-warning: #281900;
+  --warning-container: #623f03;
+  --on-warning-container: #ffeedc;
+  --folder: #f7bb6c;
+  --outline: #8d9198;
+  --outline-variant: #5b5e65;
+  --outline-muted: #383c41;
+}
