@@ -557,6 +557,68 @@ def test_shared_output_contract_and_repeat_setup(
         root.setLevel(saved[0])
 
 
+@pytest.mark.parametrize("log_format", ["json", "text"])
+@pytest.mark.parametrize(
+    ("message", "args", "expected"),
+    [
+        ("pool_size=%s max_overflow=%d", (5, 10), "pool_size=5 max_overflow=10"),
+        ("pool_size=%(size)s", ({"size": 5},), "pool_size=5"),
+        ("Started server process [%d]", (123,), "Started server process [123]"),
+        ("literal 50% done", (), "literal 50% done"),
+        ("progress=%d%%", (50,), "progress=50%"),
+        ("first=%s\nsecond=%s", ("a", "b"), "first=a\nsecond=b"),
+    ],
+)
+def test_shared_output_preserves_legacy_arguments_and_structured_fields(
+    capsys: pytest.CaptureFixture[str],
+    log_format: Literal["json", "text"],
+    message: str,
+    args: tuple[object, ...],
+    expected: str,
+) -> None:
+    from fred_core.logs.context import log_context
+
+    with _wired_uvicorn_logging():
+        store = _StubLogStore()
+        log_setup(
+            service_name="legacy-compatibility",
+            store=store,
+            log_format=log_format,
+            use_rich=False,
+        )
+        logger = logging.getLogger("uvicorn.error")
+        with log_context(correlation_id="operation-a"):
+            record = logger.makeRecord(
+                logger.name,
+                logging.INFO,
+                __file__,
+                1,
+                message,
+                args,
+                None,
+                extra={"count": 3},
+            )
+            original_args = record.args
+            logger.handle(record)
+
+        output = capsys.readouterr().out
+        if log_format == "json":
+            assert len(output.splitlines()) == 1
+            event = json.loads(output)
+            assert event["message"] == expected
+            assert event["count"] == 3
+            assert event["correlation_id"] == "operation-a"
+        else:
+            assert expected in output
+            assert "count=3" in output
+            assert "correlation_id=operation-a" in output
+        assert len(store.indexed) == 1
+        assert store.indexed[0].msg == expected
+        assert store.indexed[0].extra == {"count": 3, "correlation_id": "operation-a"}
+        assert record.msg == message
+        assert record.args == original_args
+
+
 def test_dependency_child_diagnostics_remain_sanitized(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
