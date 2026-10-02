@@ -70,7 +70,9 @@ one theme and float in the other.
 
 **Neutral ramp:** every `--core-cold-grey-*` step was regenerated as a discreet
 blue-grey (CIE LCh chroma 1.5, hue 280°) instead of lavender, at the same
-lightness. Steps `--core-cold-grey-97-5` and `--core-cold-grey-94-5` were added.
+lightness. Steps `--core-cold-grey-99-5`, `--core-cold-grey-97-5`,
+`--core-cold-grey-94-5` and `--core-cold-grey-25` were added, as well as
+`--radius-ms` (12px), between `--radius-s` and `--radius-m`.
 
 | Token                         | Light before → after | Dark before → after |
 | ----------------------------- | -------------------- | ------------------- |
@@ -86,19 +88,21 @@ lightness. Steps `--core-cold-grey-97-5` and `--core-cold-grey-94-5` were added.
 styles, identify what the element _is_, and apply this table. The left column
 is the token FRED components typically used for that role before the change.
 
-| Element role                                                         | Typical token before                                                                          | Token now                                     |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Page background                                                      | `--surface-container-lowest`                                                                  | `--surface-main`                              |
-| Element that must blend with the page (fade masks, rings, cut-outs)  | `--surface-container-lowest`                                                                  | the page's token, usually `--surface-main`    |
-| Input, textarea, select, search field, tag input (bordered)          | `--surface-container-lowest`                                                                  | unchanged — keep a `--outline-variant` border |
-| Inset well: code block, raw output, embedded table                   | `--surface-container-lowest`                                                                  | `--surface-container`                         |
-| Zebra row                                                            | `--surface-container-lowest`                                                                  | `--surface-container-low`                     |
-| Menu, popover, tooltip, dropdown, dialog, toast, floating panel      | `--surface-container-high` or `-highest` (sometimes `--surface-container`, `-low`, `-lowest`) | `--surface-floating`                          |
-| Bordered content sheet on the page, nav rail, faint decorative block | `--surface-container-lowest`                                                                  | unchanged                                     |
-| Card, sidebar, chip, list row, track, badge, hover, focus            | any `--surface-container-*`                                                                   | unchanged (tone shifts only)                  |
+| Element role                                                        | Typical token before                                                                          | Token now                                                    |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Page background                                                     | `--surface-container-lowest`                                                                  | `--surface-main`                                             |
+| Element that must blend with the page (fade masks, rings, cut-outs) | `--surface-container-lowest`                                                                  | the page's token, usually `--surface-main`                   |
+| Input, textarea, select, search field, tag input (bordered)         | `--surface-container-lowest`                                                                  | `--surface-container-low`, keep a `--outline-variant` border |
+| Inset well: code block, raw output, embedded table                  | `--surface-container-lowest`                                                                  | `--surface-container`                                        |
+| Zebra row                                                           | `--surface-container-lowest`                                                                  | `--surface-container-low`                                    |
+| Menu, popover, tooltip, dropdown, dialog, toast, floating panel     | `--surface-container-high` or `-highest` (sometimes `--surface-container`, `-low`, `-lowest`) | `--surface-floating`                                         |
+| Bordered content sheet on the page, faint decorative block          | `--surface-container-lowest`                                                                  | unchanged                                                    |
+| Nav rail                                                            | `--surface-container-lowest`                                                                  | `--surface-container`                                        |
+| Card, sidebar, chip, list row, track, badge, hover, focus           | any `--surface-container-*`                                                                   | unchanged (tone shifts only)                                 |
 
-Every container level reads darker than `--surface-floating` in both themes,
-so any of them can be nested in a floating element. Chart and canvas tooltips
+In dark every container level reads darker than `--surface-floating`; in light
+`--surface-container-highest` equals it. Inside a floating element, never fill
+with `-highest`: use `-high` for a badge or a list row, `-low` for a chip. Chart and canvas tooltips
 that read a token from JavaScript count as floating too.
 
 A positioned element (`position: absolute` or `fixed`) with a shadow is almost

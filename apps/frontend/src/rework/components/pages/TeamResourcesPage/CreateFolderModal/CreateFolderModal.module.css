@@ -62,7 +62,7 @@
 
 .path {
   border-radius: var(--radius-xs);
-  background: var(--surface-container-highest);
+  background: var(--surface-container-low);
   padding: 0 var(--spacing-2xs);
   color: var(--on-surface);
   font-family: monospace;

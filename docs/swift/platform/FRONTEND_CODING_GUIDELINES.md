@@ -232,9 +232,9 @@ element's role, not by how it looks in one theme:
 | Tracks, badges, focus of raised search bars                               | `--surface-container-highest`              |
 | Menus, popovers, tooltips, dialogs, toasts, overlay drawers               | `--surface-floating` (with a `--shadow-*`) |
 
-In dark every container level reads darker than `--surface-floating`, so any of
-them can be nested in a floating element; in light `--surface-container-highest`
-matches it.
+In dark every container level reads darker than `--surface-floating`; in light
+`--surface-container-highest` matches it. Inside a floating element, never fill
+with `-highest`: a badge or a list row there uses `-high`, a chip `-low`.
 
 Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
 in `libs/frontend/design-tokens/README.md` (Token migrations).
