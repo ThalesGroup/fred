@@ -29,10 +29,26 @@ do not necessarily reach the same page.
 - **Users** — the platform's accounts.
 - **Features** — the catalogue of functions and their opening per team.
 - **Platform prompt** — the shared instructions prepended to every agent's own.
+- **User interface** — the default theme and the themes available to users.
 - **Analytics** — platform-wide usage indicators.
 - **Activity** — running work and its history.
 - **Self-test** and **Corpus audit** — the health checks.
 - **Platform data** — export and import of the platform's state.
+
+## The interface theme
+
+Each user picks their theme (Pebble, Cobalt, Cloud…) and their light, dark or
+system mode in **Profile** → **Interface: theme and mode**.
+
+On the **User interface** page, a **Platform admin** decides:
+
+- the **default theme**, the one users get until they choose one;
+- the **offered themes**: an unchecked theme disappears from users' profile.
+
+A user whose theme is no longer offered moves to the default theme. Their
+choice is kept: it comes back if the theme is offered again. Picking a theme in
+the profile, even the one already shown, keeps it afterwards if the default
+theme changes. Changes apply the next time each user loads the application.
 
 ## Who opens functions to your team
 

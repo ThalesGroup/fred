@@ -81,5 +81,6 @@ but not shipped are kept on save and listed as "Unknown to this version".
 Alembic migration creating `platform_ui_settings` (re-parented on the current `swift` head before
 merge, one head). No configuration key. With no row, behavior is exactly that of
 `make-ui-themes-peers`. Rollback: image rollback; the table is unused by the previous version. Migration
-note: no operator action beyond the normal upgrade; impact level to confirm against
-`docs/swift/ops/MIGRATION-GUIDES.md` (new table, automatic migration).
+note `platform-ui-theme-settings.md`: `impact: minor`, required by the repo policy for any new
+Alembic revision; the chart's migration hook runs it on a normal upgrade, before the new control
+plane serves the public config that reads the table.

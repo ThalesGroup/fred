@@ -20,7 +20,7 @@
 
 ## 4. Docs and close-out
 
-- [ ] 4.1 Add the dated `FrontendConfig.ui_themes` and admin endpoints entry to `CONTROL-PLANE-PRODUCT-CONTRACT.md`, update the theme section of `FRONTEND_CODING_GUIDELINES.md`
-- [ ] 4.2 Add the Help Center fr/en page for the admin setting and the migration note; verify `make migration-check` passes
+- [x] 4.1 Add the dated `FrontendConfig.ui_themes` and admin endpoints entry to `CONTROL-PLANE-PRODUCT-CONTRACT.md`, update the theme section of `FRONTEND_CODING_GUIDELINES.md`
+- [x] 4.2 Add the Help Center fr/en page for the admin setting and the migration note; verify `make migration-check` passes
 - [ ] 4.3 Run `/code-review` on the diff, then record frontend and control-plane verification evidence in `verification.md`
 - [ ] 4.4 Before merge, after rebasing on `swift`: re-parent `c4d7e2a91b30` on the current `swift` Alembic head (`down_revision` and `Revises:`); verify `alembic heads` shows one head and `alembic upgrade head` succeeds

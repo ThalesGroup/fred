@@ -186,6 +186,14 @@ stored theme and mode to `<html>` before the first paint (its copy of the
 catalog is checked by `src/app/uiThemes.test.ts`). The `@fred-oss/design-tokens`
 package publishes Pebble only, under plain `[data-theme]` selectors.
 
+The active theme resolves to the user's choice if the platform offers it, else
+the platform default (admin page "User interface", served in the public
+`/frontend/config`), else the first offered theme. `resolveUiTheme` in
+`src/app/uiThemes.ts` is the one implementation; `theme-boot.js` repeats it on
+the cached platform settings and `index.tsx` re-applies it with the fresh ones
+before the first render. Adding a theme means a theme file, a catalog entry
+(both lists) and a label key in `UI_THEME_LABEL_KEYS`.
+
 ### Available shadow and overlay tokens
 
 | Token        | Use case                                    |
