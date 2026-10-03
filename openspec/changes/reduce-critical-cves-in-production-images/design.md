@@ -10,7 +10,7 @@ The production Dockerfiles copy a Python virtual environment created by `make de
 
 ## Decisions
 
-- Make the production target reuse `make dev` for dependency setup and the pandoc shim, then run a locked `uv sync --no-default-groups` to remove development packages from the final environment. Lock the first sync as well and clear its dev stamp after the production sync, so a later `make dev` restores development tools.
+- Add a production dependency target to the shared Make recipe, using locked `uv sync --no-default-groups`. Keep `make dev` behavior for local development. The production target retains the existing pandoc shim where pypandoc is installed.
 - Build the three Python production environments with that target. This removes basedpyright and its embedded Node.js packages from the shipped virtual environments without changing runtime lock resolution.
 - Refresh OS packages at build time in each final stage. Align Knowledge Flow's builder and final stages with the Debian 13 Python 3.12 base already used by the other services. This provides available security fixes and keeps Python ABI consistent across build and runtime stages.
 - Use the existing PR Trivy workflow to compare findings with the original JSON reports. Record unfixed and Chroma server findings explicitly; do not add ignore rules for them.
@@ -18,7 +18,6 @@ The production Dockerfiles copy a Python virtual environment created by `make de
 ## Risks / Trade-offs
 
 - A package incorrectly classified as development-only could be needed at runtime. Mitigation: inspect the production environment and run service smoke checks in CI.
-- The builder installs development packages before removing them, increasing build time. The final image copies only the environment after the production sync; compare CI build durations before accepting the trade-off.
 - A newer OS package or Debian release could affect document processing or native libraries. Mitigation: keep Python minor version 3.12, validate image builds and representative imports, and document image rollback.
 - Debian packages without published fixed versions remain visible. Mitigation: report residual CVEs and follow upstream fixes separately.
 
