@@ -1,100 +1,154 @@
 ## Purpose
 
-Authorize corpus access consistently through the containing folder while keeping
-authorization work bounded independently of the number of documents it holds.
+Provide team and project collaboration spaces with uniform corpus permissions,
+context-bound agent access and authorization work independent of corpus size.
 
 ## ADDED Requirements
 
-### Requirement: A corpus document has one immutable folder
+### Requirement: Projects are explicit collaboration spaces
 
-Every corpus document SHALL belong to exactly one existing folder. Creation,
-overwrite, synchronization and import SHALL enforce this invariant; document
-links and moves SHALL NOT be supported. Session attachments SHALL retain their
-separate owner/session isolation and SHALL NOT become unfiled corpus documents.
+The system SHALL support creating and administering projects under teams in the
+current organization. A project SHALL have one immutable parent team; its members
+SHALL be team members with explicitly assigned project roles. Team membership or
+team editor/analyst status SHALL NOT implicitly grant project access. The UI SHALL
+distinguish project membership management from ordinary folder organization.
 
-#### Scenario: A producer attempts to change membership
-- **WHEN** an API, source sync or archive supplies zero/multiple folders or tries
-  to attach an existing document to another folder
-- **THEN** the operation is explicitly rejected before document content or
-  membership changes, and the original document remains intact
+#### Scenario: Clara is outside Atlas
 
-#### Scenario: An attachment is accessed outside its session authority
-- **WHEN** a caller has corpus-folder access but lacks the attachment's existing
-  owner/session authorization
-- **THEN** that folder access does not grant access to the attachment
+- **WHEN** Clara is a team member, editor or analyst but has no Atlas role
+- **THEN** those roles alone do not reveal Atlas or its corpus and conversations
 
-### Requirement: Folder permissions govern every corpus access path
+#### Scenario: A project is created
 
-The system SHALL authenticate callers through the existing identity boundary and
-use ReBAC folder permissions for corpus operations. It SHALL resolve membership
-from canonical metadata, not a caller-supplied folder or search index. Read SHALL
-require folder READ; document update, deletion and processing SHALL require folder
-UPDATE. No metadata, content, counts, citations or tool results SHALL bypass this
-rule, including service-principal and agent calls.
+- **WHEN** an authorized team admin/editor creates Atlas and nominates its admins
+- **THEN** Atlas has explicit parentage and membership, and creating it does not
+  automatically grant its creator a project content role
 
-#### Scenario: A caller supplies an authorized folder for another document
-- **WHEN** a requested document belongs to an unauthorized folder, despite the
-  supplied scope or stale index claiming an authorized folder
-- **THEN** no document information or content is returned
+### Requirement: Space permissions govern corpus access
 
-#### Scenario: A reader attempts a mutation
-- **WHEN** a caller can read the folder but cannot update it
-- **THEN** reading is allowed and document update, deletion and processing are denied
+The system SHALL authenticate through the existing IdP and authorize space
+operations through ReBAC. All members SHALL read their space's corpus; corpus
+mutation SHALL require that space's editing permission. Folders SHALL have no
+independent grants, restrictions or cross-space sharing. Canonical ownership SHALL
+be resolved server-side, never trusted from a caller or index.
 
-### Requirement: Authorization work has a finite request bound
+#### Scenario: A confidentially named subfolder is created
 
-The system SHALL enforce finite scope, page, candidate and retry limits.
-Authorization checks for a fixed folder-scoped operation SHALL NOT grow with its
-document count. Folder discovery and unscoped retrieval SHALL inspect bounded
-candidate pages and expose continuation/incompleteness, never silently present a
-truncated authorization set as complete. Over-limit inputs SHALL be rejected.
+- **WHEN** Atlas contains General and Confidential folders
+- **THEN** every Atlas member can read both, and neither folder can override access
 
-#### Scenario: The same folder grows from hundreds to many thousands of documents
-- **WHEN** the same content-page, count or scoped-search request is repeated
-- **THEN** its number of authorization checks and maximum transport calls remain
-  within the same bound, without enumerating readable documents
+#### Scenario: Two teams want a common folder
 
-#### Scenario: A candidate page contains only denied folders
-- **WHEN** more candidates remain beyond that page
-- **THEN** the response discloses no denied data and provides continuation rather
-  than incorrectly declaring the authorized result set exhausted
+- **WHEN** a folder belongs to one team
+- **THEN** it cannot be shared with another team; organization-common resources,
+  when exposed, are readable by all organization members, not selected teams
 
-### Requirement: Requested scopes and revocations fail closed
+### Requirement: Corpus membership is exclusive
 
-An explicitly requested scope SHALL NOT be broadened. Any unauthorized requested
-folder SHALL cause rejection. Authorization-service failure SHALL NOT yield corpus
-data. A completed permission revocation SHALL be respected by subsequent requests;
-already authorized in-flight operations need not be cancelled.
+Every corpus document SHALL belong to one immutable folder in one owning space.
+All writers SHALL enforce this invariant. Links and moves SHALL NOT be supported.
+Session attachments SHALL retain their distinct owner/session isolation.
 
-#### Scenario: A mixed scope includes a denied folder
-- **WHEN** a user or agent requests both readable and unreadable folders
-- **THEN** the request is rejected, without falling back to global search
+#### Scenario: A writer attempts reparenting
 
-#### Scenario: Permission is revoked between requests
-- **WHEN** a grant is revoked successfully before the next content or agent request
-- **THEN** that request cannot use an earlier positive authorization result
+- **WHEN** import, overwrite or source sync supplies multiple/no folders or changes
+  an existing document's folder or space
+- **THEN** it is rejected before content or membership mutation
 
-### Requirement: Folder browsing separates summaries from contents
+### Requirement: Editor and analyst authority is local and traceable
 
-Folder summaries SHALL NOT enumerate contained document identifiers or metadata.
-Contents SHALL be paginated separately; counts and sizes SHALL cover only the
-authorized scope. Result-label enrichment SHALL NOT fetch folder contents.
+Project editing and analysis SHALL require the corresponding explicit project
+roles. Project analysts SHALL be able to analyze project conversation history,
+including history predating their appointment; derived datasets SHALL remain in
+that project. Grants and removals SHALL record actor, subject, role, space and time.
+Ordinary membership SHALL NOT make all members' conversations mutually visible.
 
-#### Scenario: Many search hits belong to one large folder
-- **WHEN** folder labels are added to the returned hits
-- **THEN** no scan of that folder's documents is performed
+#### Scenario: An analyst works across two projects
 
-### Requirement: Lifecycle operations preserve the authorization boundary
+- **WHEN** Antoine has analyst roles in Atlas and Boreal but not a third project
+- **THEN** he can analyze the first two histories independently, cannot inspect the
+  third, and cannot publish either project's datasets into the team via that role
 
-Concurrent creation/deletion and retried ingestion SHALL NOT produce accessible
-orphan documents. Removed canonical documents SHALL NOT remain accessible through
-stale indexes. Target-format exports/imports SHALL preserve single membership and
-folder grants; incompatible legacy input SHALL be explicitly rejected.
+### Requirement: Conversations have an immutable execution space
 
-#### Scenario: Deletion leaves stale search data
-- **WHEN** search returns a candidate whose canonical document or folder is gone
-- **THEN** the candidate's content and metadata are withheld
+Every conversation SHALL remain bound to its initial team or project. Team agents
+SHALL be reusable in child projects without copying. Their reachable corpus SHALL
+be determined by conversation space and user authorization, not agent authorship
+or the user's membership in other projects. History, generated content and memory
+SHALL NOT flow into another space when navigation changes.
 
-#### Scenario: Ingestion races with folder deletion
-- **WHEN** a worker attempts to commit a document after its folder is deleted
-- **THEN** no orphan corpus document becomes accessible and cleanup remains retryable
+#### Scenario: Alice uses a team agent in Atlas
+
+- **WHEN** Alice belongs to Atlas and Boreal and starts a conversation in Atlas
+- **THEN** the unrestricted agent can use Atlas and applicable ancestor-common
+  resources, but cannot use Boreal; the same agent in team context sees no projects
+
+#### Scenario: Alice switches to Boreal
+
+- **WHEN** Alice changes the selected space in the UI
+- **THEN** working in Boreal requires another conversation without Atlas history
+
+#### Scenario: An agent belongs to Atlas
+
+- **WHEN** a user tries to use the Atlas-owned agent in team or Boreal context
+- **THEN** that agent is unavailable there, even if the user also belongs to Atlas
+
+### Requirement: Document scope narrows contextual access
+
+Folder selection SHALL include descendants. Agent restrictions SHALL remain binding
+in every execution space; existing chat scope controls SHALL only narrow authorized
+reach according to their supported mode. No selection SHALL mean the contextual
+corpus subject to configured restrictions. An empty or invalid scope SHALL NOT
+widen to global search. Existing direct-document selection SHALL remain supported.
+
+#### Scenario: A team agent is fixed to Process documents
+
+- **WHEN** that agent is used in Atlas
+- **THEN** it remains restricted to Process documents and cannot read Atlas offers
+
+#### Scenario: A selectable scope names Technique
+
+- **WHEN** the agent permits chat selection and Alice selects Technique
+- **THEN** retrieval includes its descendants but excludes Commercial
+
+#### Scenario: A selected scope resolves to nothing
+
+- **WHEN** a nonempty explicit selection resolves to zero permitted folders or
+  documents after contextual and configured restrictions
+- **THEN** the request returns no corpus results or an explicit scope error,
+  never treating that result as an omitted selection authorizing the whole context
+
+### Requirement: Authorization precedes retrieval and has a bounded cost
+
+Corpus retrieval SHALL constrain its candidate universe to authorized contextual
+spaces before ranking. For fixed context and operation, permission checks SHALL
+NOT grow with folder/document counts. Discovery SHALL use finite pages and explicit
+continuation; input and retry limits SHALL be enforced. Counts, content, citations
+and agent tools SHALL obey the same boundary. Folder summaries and label enrichment
+SHALL NOT enumerate contained document IDs or metadata.
+
+#### Scenario: Atlas gains thousands of folders and documents
+
+- **WHEN** the same scoped or unrestricted Atlas corpus request is repeated
+- **THEN** space-authorization work remains within the same bound and no global
+  document permission list or per-folder permission loop is required
+
+#### Scenario: An index contains stale or misleading ownership
+
+- **WHEN** a candidate has no canonical row or its ownership disagrees with the filter
+- **THEN** its content and metadata are withheld regardless of the index label
+
+### Requirement: Lifecycle and audit preserve the space boundary
+
+Import/export SHALL preserve space ownership, roles and single document membership;
+incompatible legacy archives SHALL be rejected. Retried ingestion and deletion
+SHALL NOT expose orphan corpus content. Execution evidence SHALL identify the user,
+space, agent/configuration, effective scope and sources. Project access removal
+SHALL follow the same access-removal principle as team membership removal; detailed
+revocation timing and active-session mechanisms are outside this change's decisions.
+
+#### Scenario: An attachment or deleted hit is requested
+
+- **WHEN** corpus permission exists but the requested item is a session attachment
+  without session authority or a deleted canonical document
+- **THEN** corpus access alone does not permit serving that item

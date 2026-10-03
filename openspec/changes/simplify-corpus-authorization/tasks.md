@@ -1,21 +1,26 @@
-Implementation starts only after developer review of this scope and acceptance
-criteria. All validation below uses an isolated fresh dataset; migration and the
-Monday Swift validation remain separate.
+Implementation requires approval of the revised scope. This PR remains planning
+only; the provisional admin policy must be resolved before its implementation.
+All validation uses isolated fresh data; migration and Monday validation are separate.
 
-## 1. Establish the target model
+## 1. Project and ownership foundations
 
-- [ ] 1.1 Replace corpus `tag_ids` membership with the mandatory indexed folder reference and same-folder filename constraint; verify fresh schema creation, invalid membership rejection and concurrent name conflicts.
-- [ ] 1.2 Remove document FGA relations and consolidate folder authorization in the existing facade, including bounded heterogeneous batches and higher-consistency checks; verify permission mapping, revocation, service identities and FGA failure behavior.
-- [ ] 1.3 Update ingestion, overwrite, source synchronization and target-format import/export writers; verify same-folder UID preservation, round-trip grants, attachment isolation and rejection of multi-folder, legacy and reparenting input.
+- [ ] 1.1 Resolve the admin review gate and reconcile the project slice of RFC #2921 with this change; verify one authoritative target and agree dependent PR boundaries before coding.
+- [ ] 1.2 Add explicit project/parent identities, membership and scoped ReBAC roles using existing services; verify creation/bootstrap, team-membership constraints and no implicit editor/analyst project access.
+- [ ] 1.3 Provide project creation, membership/role management and navigation with generated clients and audit events; verify a team can create and administer Atlas without treating it as a folder.
 
-## 2. Converge corpus access paths
+## 2. Corpus conversion
 
-- [ ] 2.1 Replace metadata/tag global document enumeration with bounded folder discovery, authorized SQL pages/counts and summary-only folder reads; verify sparse authorization continuation and absence of eager item scans.
-- [ ] 2.2 Apply canonical folder gates to content, vector and tabular retrieval and agent filesystem navigation; verify denied/mixed scopes, stale indexes, request limits and no widening or silent incompleteness.
-- [ ] 2.3 Regenerate affected OpenAPI clients and update Resources and ReAct/Deep consumers for single membership, pagination and retrieval continuation; verify UI browsing/import and representative scoped/unscoped agent answers.
-- [ ] 2.4 Align deletion, cleanup retries and quota accounting with single membership; verify deletion racing ingestion, residual index entries and overwrite size deltas without orphan access.
+- [ ] 2.1 Enforce space-owned folders and single document membership; remove corpus folder ACLs/document tuples and writers while preserving non-corpus policies; verify fresh schema, name conflicts and no per-folder grants.
+- [ ] 2.2 Update ingestion/sync, overwrite, deletion, team quota accounting and clean import/export; verify reparenting rejection, round-trip space roles and no orphan access under retry/concurrency.
+- [ ] 2.3 Gate metadata/content/vector/tabular/filesystem access by contextual spaces before retrieval; verify subtree scope, stale-index rejection, bounded calls and summary-only folder reads.
 
-## 3. Validate and consolidate
+## 3. Conversation and consumer integration
 
-- [ ] 3.1 Validate fresh-install scenarios with real OpenFGA and increasing corpora (including 200 teams/2,000 members and sparse grants): record configured limits, checked tuples, transport calls, metadata rows read and latency for fixed requests; demonstrate the design's bounds and run the agreed manual cases plus relevant automated checks.
-- [ ] 3.2 Apply the design's documentation dispositions without dropping unresolved RFC decisions; verify links, remove superseded paths, run root quality/migration checks and obtain independent branch review. Record evidence in the PR, then sync/archive the completed specs; do not claim existing-deployment upgrade readiness.
+- [ ] 3.1 Carry immutable team/project context through sessions, history, runtime grants, delegated tools and attachments; verify server-side ancestry, no context switching and no sibling access for multi-project users.
+- [ ] 3.2 Enable team-agent reuse and project-owned agents with existing fixed/selectable scope controls; regenerate APIs and verify ReAct/Deep scoped and unscoped behavior without new picker variants.
+- [ ] 3.3 Scope analyst history, datasets and generated content to their origin and expose effective context in UI/audit; verify retrospective analyst access, ordinary conversation privacy and no cross-space publication.
+
+## 4. Validation and close-out
+
+- [ ] 4.1 Validate fresh setup with real OpenFGA, 200 teams/2,000 members, multiple projects and increasing folder/document counts; record whole-turn and request check counts, transport attempts, rows read and latency against fixed-context bounds, plus agreed manual scenarios.
+- [ ] 4.2 Complete documentation dispositions, root quality/migration checks and independent full-branch review; record evidence in the PR, then sync/archive shipped specs only after complete integration. Keep offline translation and detailed revocation design separately tracked.

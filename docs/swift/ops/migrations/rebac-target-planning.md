@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Plan folder-owned corpus authorization"
+title: "Plan team and project corpus authorization"
 impact: none
 configuration: none
 configuration_reason: "Only OpenSpec planning documents are added; runtime and chart settings are unchanged."

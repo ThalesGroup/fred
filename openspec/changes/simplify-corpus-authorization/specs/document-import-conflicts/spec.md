@@ -3,9 +3,9 @@
 ### Requirement: Overwrite preserves the document identity
 
 When the user chooses to overwrite, the system SHALL replace the content of the
-existing document and SHALL preserve its `document_uid` and its single folder.
+existing document and SHALL preserve its `document_uid`, single folder and owning space.
 It SHALL NOT create a second document, retain the previous content indexed, or
-adopt a document from another folder.
+adopt a document from another folder or space.
 
 #### Scenario: A cited document is overwritten
 
