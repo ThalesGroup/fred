@@ -423,7 +423,7 @@ export default function PromptsPage() {
                     <Button
                       color="primary"
                       variant="filled"
-                      size="medium"
+                      size="small"
                       icon={{ category: "outlined", type: "add" }}
                       onClick={openCreate}
                     >
@@ -437,13 +437,13 @@ export default function PromptsPage() {
                         onChange={setSearch}
                         placeholder={t("rework.teams.prompts.searchPlaceholder")}
                         clearAriaLabel={t("rework.teams.prompts.clearSearch")}
-                        size="small"
+                        size="xs"
                       />
                     </div>
                     {canManage && (
                       <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
                         <IconButton
-                          size="medium"
+                          size="small"
                           color="on-surface-retreat"
                           variant="icon"
                           icon={{ category: "outlined", type: "tune" }}

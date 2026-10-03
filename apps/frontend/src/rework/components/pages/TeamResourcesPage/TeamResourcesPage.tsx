@@ -16,7 +16,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
-import { SettingChip } from "@shared/atoms/SettingChip/SettingChip.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
@@ -180,13 +181,17 @@ export default function TeamResourcesPage() {
           </p>
         </div>
         <div className={styles.headerEnd}>
-          <SettingChip
-            label={t("rework.resources.stats.toggle")}
-            icon={{ category: "outlined", type: "bar_chart" }}
-            open={statsOpen}
-            activeColor="secondary"
-            onClick={() => setStatsOpen((value) => !value)}
-          />
+          <Tooltip text={t("rework.resources.stats.toggle")}>
+            <IconButton
+              color={statsOpen ? "secondary" : "on-surface-retreat"}
+              variant={statsOpen ? "tonal" : "icon"}
+              size="medium"
+              icon={{ category: "outlined", type: "bar_chart", filled: statsOpen }}
+              aria-expanded={statsOpen}
+              aria-label={t("rework.resources.stats.toggle")}
+              onClick={() => setStatsOpen((value) => !value)}
+            />
+          </Tooltip>
           {hasQuota && (
             <div className={styles.quota}>
               <div className={styles.quotaLabelRow}>

@@ -15,6 +15,7 @@
 import type { CSSProperties } from "react";
 import styles from "./MainNavBar.module.scss";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 
 // Medium button footprint (40px) but with the `small` tier's 1.25rem glyph.
@@ -92,18 +93,18 @@ export default function MainNavBar() {
   return (
     <nav className={styles.bar} aria-label={t("rework.mainNav.ariaLabel")}>
       {entries.map((entry) => (
-        <IconButton
-          key={entry.key}
-          variant="icon"
-          size="medium"
-          style={ICON_STYLE}
-          color={entry.active ? "primary" : "on-surface-retreat"}
-          icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
-          title={entry.label}
-          aria-label={entry.label}
-          aria-current={entry.active || undefined}
-          onClick={entry.onClick}
-        />
+        <Tooltip key={entry.key} text={entry.label} placement="right">
+          <IconButton
+            variant="icon"
+            size="medium"
+            style={ICON_STYLE}
+            color={entry.active ? "primary" : "on-surface-retreat"}
+            icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
+            aria-label={entry.label}
+            aria-current={entry.active || undefined}
+            onClick={entry.onClick}
+          />
+        </Tooltip>
       ))}
     </nav>
   );

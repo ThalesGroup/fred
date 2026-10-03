@@ -76,7 +76,7 @@ export default function TeamSelectionListItem({
       : heldRoles.map((relation) => t(`rework.teamRoles.${relation}`)).join(" · ");
 
   return (
-    <Link to={redirection} className={styles.item} aria-label={name}>
+    <Link to={redirection} className={`${styles.item}${personal ? ` ${styles.itemPersonal}` : ""}`} aria-label={name}>
       {personal ? (
         <UserAvatar name={avatarName} size="small" />
       ) : imgUrl ? (
