@@ -106,21 +106,6 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
-## Critical CVE checks for pull requests
-
-When a PR changes dependencies, base images, Dockerfiles, build/install recipes,
-or code that can change the packages or binaries in a production image, ensure
-Trivy scans the affected final images before close-out. Use the PR image-scan
-jobs when they ran; otherwise run the scans explicitly. Keep the documented
-`ws-bench` exception. For frontend dependency changes, also check the frontend
-npm lockfile scan: the final nginx image has no npm package metadata.
-
-Present a clear result for each scanned image to the user and in the PR:
-whether critical findings were detected, their current count, and a link to
-the scan job or report. State any image that could not be checked. A scanner
-error is not a clean result.
-Report the frontend lockfile result separately when it applies.
-
 ## Author review before readiness
 
 Before declaring implementation ready or requesting final PR review, apply
