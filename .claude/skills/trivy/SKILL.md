@@ -1,0 +1,50 @@
+---
+name: trivy
+description: Audit Fred's published swift-dev images or fresh local final-image builds with Trivy, and report vulnerabilities and available fixed versions. Use for an on-demand image assessment or before a swift release.
+---
+
+# Trivy image assessment
+
+Run from the Fred repository root with Python 3 and a working Docker daemon. The
+helper reads the publishable images from `.github/docker-images.json`; `ws-bench`
+is excluded. It uses the official Trivy container and writes a Markdown summary
+and full JSON reports to a new directory outside the checkout by default.
+
+## Published `swift-dev` images
+
+Use this mode before release approval on the `swift` checkout:
+
+```bash
+git fetch origin swift
+python3 .agents/skills/trivy/scripts/scan.py swift-dev
+```
+
+The helper explicitly runs `docker pull` for each `swift-dev` image, then checks
+that its OCI revision label matches the checkout HEAD and `origin/swift`. If a
+pull, revision check, or scan fails, resolve it and rerun before presenting the
+assessment. Release tags rebuild from the release-notes commit, so call these
+the latest published `swift-dev` images, not bit-identical release images.
+
+## Local assessment
+
+```bash
+python3 .agents/skills/trivy/scripts/scan.py build
+```
+
+This builds all publishable final images from the current working tree with
+`docker build --pull --no-cache`, then scans them. It also scans the frontend npm
+lockfile because the final nginx image does not retain npm package metadata.
+Use `--use-cache` only when a cached build is acceptable for the question at
+hand. `--output-dir /absolute/new/path` selects a report directory.
+
+Both modes scan all severities and keep package inventories in JSON. The report
+separates findings whose `FixedVersion` is listed from those without a listed
+fixed version. An empty `FixedVersion` does not prove a fix is impossible.
+Critical findings are advisory and do not change the helper's exit status;
+missing images, stale revisions, incomplete inventories, and scanner errors do.
+
+Show the user the report path, a per-image critical count, and which critical
+findings have a fixed version listed. Report the frontend lockfile separately.
+For a release, include this assessment in the `push-release` approval packet.
+Do not print registry credentials; if GHCR requires authentication, have the
+operator authenticate Docker before rerunning.
