@@ -79,7 +79,7 @@ Before submitting a pull request, please ensure:
 - [ ] You included relevant unit or integration tests for your changes
 - [ ] The PR includes a clear **description** and motivation
 
-A CI pipeline will automatically run all tests when you open or update a pull request. The internal maintainers will review only those MRs that pass all CI checks.
+CI runs when you open or update a pull request, and each check only covers what your changes can affect: a documentation-only PR builds no Docker image, a frontend-only PR builds only the frontend image. The run summary of `Check docker images` lists why each image was built or skipped (rules in `.github/docker-images.json`); run that workflow manually on your branch to build every image. The internal maintainers will review only those PRs that pass all CI checks.
 
 ## 📜 Developer Contract
 

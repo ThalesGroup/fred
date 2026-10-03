@@ -46,6 +46,7 @@ from fred_core.documents.document_structures import (
     FileInfo,
     FileType,
     Identity,
+    ProcessingStage,
     SourceInfo,
     SourceType,
     Tagging,
@@ -64,6 +65,7 @@ from knowledge_flow_backend.common.structures import (
     Status,
 )
 from knowledge_flow_backend.core.processors.input.common.base_input_processor import InputValidationError
+from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_text_processor import (
     BaseFastTextProcessor,
     FastTextOptions,
@@ -97,6 +99,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_plain
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_spreadsheet_processor import (
     FastSpreadsheetProcessor,
 )
+from knowledge_flow_backend.core.processors.output.excel_processor.excel_table_registration_processor import ExcelTableRegistrationProcessor
 from knowledge_flow_backend.core.processors.output.tabular_processor.tabular_processor import TabularProcessor
 from knowledge_flow_backend.core.stores.vector.base_vector_store import (
     CHUNK_ID_FIELD,
@@ -110,7 +113,7 @@ from knowledge_flow_backend.features.scheduler.scheduler_structures import (
     FileToProcess,
     FileToProcessWithoutUser,
 )
-from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, document_artifact_prefix, read_tabular_artifact, read_tabular_multi_artifact
 from knowledge_flow_backend.features.tag.synchronized import refuse_if_synchronized_by_id
 
 logger = logging.getLogger(__name__)
@@ -126,7 +129,7 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
 
     Fast-ingested attachments carry no ReBAC tuple, so a document-level READ
     check can never resolve for them: classification (tagged documents
-    refused outright; otherwise CSV-tabular ownership via `uploaded_by`, or
+    refused outright; otherwise tabular ownership via `uploaded_by`, or
     vectors-only ownership via the chunk's own `scope`/`user_id`) always runs
     first, for every caller including the platform-admin bypass
     (`can_manage_platform`, e.g. the control-plane lifecycle worker erasing a
@@ -145,7 +148,7 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     if metadata is not None and metadata.tags.tag_ids:
         raise deny()
 
-    if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and read_tabular_artifact(metadata) is not None:
+    if metadata is not None and metadata.source_tag == FAST_INGEST_SOURCE_TAG and (read_tabular_artifact(metadata) is not None or read_tabular_multi_artifact(metadata) is not None):
         if is_platform_admin:
             return True
         if metadata.identity.uploaded_by == user.uid:
@@ -333,11 +336,9 @@ class ImportNameCheckResponse(BaseModel):
 class FastIngestResponse(BaseModel):
     """Result of one fast-ingested chat attachment (`POST /fast/ingest`).
 
-    `tabular_available` is `True` only for a `.csv` attachment (ATTACH-TAB-01)
-    — non-CSV attachments never attempt a tabular build. It's never `False`
-    on a 200: a failed tabular build rejects the whole upload (422) rather
-    than returning a degraded success, since a CSV attachment has no vector
-    chunks to fall back to (DESIGN.md, "Session-Scoped Attachment Datasets").
+    `tabular_available` is true for new CSV and Excel attachments, whose
+    complete datasets are stored without vector previews. A failed build
+    rejects the upload rather than returning an unusable attachment.
     """
 
     document_uid: str
@@ -719,8 +720,8 @@ class IngestionController:
           accept an attachment the agent can neither search nor query,
           exactly like the "no text could be extracted" empty-file check
           above.
-        - Reuses `document_uid` from the fast-ingest vector chunks so the one
-          bracketed id the agent is given works for both search and SQL.
+        - Reuses the upload `document_uid` so the bracketed id given to the
+          agent resolves to this SQL dataset.
         - Persists metadata with no tags, so no ReBAC tuple is created —
           `TabularService._resolve_owned_attachment_dataset` authorizes this
           document class by ownership metadata instead.
@@ -766,6 +767,53 @@ class IngestionController:
                     document_uid,
                     exc_info=True,
                 )
+            raise
+
+    async def _build_attachment_excel_dataset(self, *, user: KeycloakUser, document_uid: str, filename: str, raw_path: pathlib.Path) -> str:
+        """Run the corpus Excel processors and persist their table roadmap."""
+        metadata = DocumentMetadata(
+            identity=Identity(document_name=filename, document_uid=document_uid, title=filename, uploaded_by=user.uid),
+            source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),  # type: ignore[reportCallIssue]
+            file=FileInfo(
+                file_type=FileType.XLSX,
+                mime_type={
+                    ".xls": "application/vnd.ms-excel",
+                    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ".xlsm": "application/vnd.ms-excel.sheet.macroEnabled.12",
+                }[pathlib.Path(filename).suffix.lower()],
+            ),
+            tags=Tagging(tag_ids=[]),
+        )
+
+        def build() -> str:
+            with tempfile.TemporaryDirectory(prefix="fred-attachment-excel-") as temporary:
+                output_dir = pathlib.Path(temporary) / "output"
+                converted = ExcelProcessor().convert_file_to_markdown(raw_path, output_dir, document_uid)
+                entries = json.loads((output_dir / "tables.json").read_text(encoding="utf-8"))
+                if not entries or any(not entry.get("object_key") for entry in entries):
+                    raise ValueError("Workbook contains no complete set of queryable tables")
+                ExcelTableRegistrationProcessor().process(converted["md_file"], metadata)
+                artifact = read_tabular_multi_artifact(metadata)
+                if artifact is None or not artifact.tables:
+                    raise ValueError("Workbook contains no queryable table")
+                ApplicationContext.get_instance().get_content_store().save_output(document_uid, output_dir)
+                metadata.mark_stage_done(ProcessingStage.PREVIEW_READY)
+                return pathlib.Path(converted["md_file"]).read_text(encoding="utf-8")
+
+        try:
+            preview = await asyncio.to_thread(build)
+            await self.service.metadata_service.save_document_metadata(user, metadata)
+            return preview
+        except Exception:
+            try:
+                await asyncio.to_thread(self._delete_tabular_artifact_objects, document_uid=document_uid)
+                await asyncio.to_thread(ApplicationContext.get_instance().get_content_store().delete_content, document_uid)
+            except Exception:
+                logger.warning("Failed to clean up Excel attachment artifacts for %s", document_uid, exc_info=True)
+            try:
+                await ApplicationContext.get_instance().get_metadata_store().delete_metadata(document_uid)
+            except Exception:
+                logger.warning("Failed to clean up Excel attachment metadata for %s", document_uid, exc_info=True)
             raise
 
     async def _delete_fast_ingest_artifacts(
@@ -824,7 +872,7 @@ class IngestionController:
         context = ApplicationContext.get_instance()
         metadata_store = context.get_metadata_store()
         metadata = await metadata_store.get_metadata_by_uid(document_uid)
-        if metadata is None or read_tabular_artifact(metadata) is None:
+        if metadata is None or (read_tabular_artifact(metadata) is None and read_tabular_multi_artifact(metadata) is None):
             return
         if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
             return
@@ -833,6 +881,8 @@ class IngestionController:
         if not is_platform_bypass and metadata.identity.uploaded_by != user.uid:
             return
         await asyncio.to_thread(self._delete_tabular_artifact_objects, document_uid=document_uid)
+        if read_tabular_multi_artifact(metadata) is not None:
+            await asyncio.to_thread(context.get_content_store().delete_content, document_uid)
         await metadata_store.delete_metadata(document_uid)
 
     @staticmethod
@@ -1477,9 +1527,9 @@ class IngestionController:
             summary="Fast ingest of a single file (fast path for attachments)",
             description=(
                 """
-                Extract compact text via the fast processor and store it as vectors with user/session scoping.
-                Uses scheduler backend from configuration (memory or temporal) for vector storage.
-                Returns vector ingest metadata and a compact summary for UI previews.
+                Ingest a chat attachment as scoped vectors or a complete tabular dataset.
+                CSV and Excel use the tabular route; other supported files use fast text extraction.
+                Returns ingest metadata and a compact summary for UI previews.
             """
             ),
         )
@@ -1492,12 +1542,12 @@ class IngestionController:
         ) -> FastIngestResponse:
             """
             Why this exists:
-            - Chat attachments need a lightweight ingestion path that stays responsive for the UI.
-            - The route extracts compact text, splits oversized payloads, then stores session-scoped vectors.
+            - Chat attachments need a direct ingestion path for text or tabular content.
+            - Spreadsheets build complete datasets; other supported files store scoped vectors.
 
             How to use:
             - Upload one file plus optional `options_json`, `session_id`, and `scope`.
-            - The handler extracts text with the fast attachment processor, chunks it for embeddings, and returns summary metadata for the UI.
+            - The handler builds tabular artifacts for spreadsheets or text vectors for other files, then returns UI preview metadata.
             """
             # AUTHZ-05 §27/8a: session-scoped chat-attachment vectors, not
             # team-owned — the org-level CAN_PROCESS_CONTENT gate it used is
@@ -1532,6 +1582,35 @@ class IngestionController:
             raw_path = uploadfile_to_path(file)
             document_uid = uuid.uuid4().hex
             tabular_available = False
+
+            if pathlib.Path(filename).suffix.lower() in {".xls", ".xlsx", ".xlsm"}:
+                try:
+                    try:
+                        roadmap = await self._build_attachment_excel_dataset(user=user, document_uid=document_uid, filename=filename, raw_path=raw_path)
+                    except Exception:
+                        logger.exception("[FAST TEXT][INGEST] Failed to build Excel dataset for %s", filename)
+                        raise HTTPException(
+                            status_code=422,
+                            detail={"code": "tabular_dataset_build_failed", "message": f"Could not build a queryable dataset from {filename}."},
+                        )
+                finally:
+                    cleanup_uploaded_temp_file(raw_path)
+                summary_md = roadmap.replace("\x00", "").strip() if include_summary else ""
+                summary_truncated = False
+                if summary_max_chars is not None and len(summary_md) > summary_max_chars:
+                    summary_md = summary_md[:summary_max_chars].rstrip() + "\n…"
+                    summary_truncated = True
+                return FastIngestResponse(
+                    document_uid=document_uid,
+                    chunks=0,
+                    total_chars=len(roadmap),
+                    truncated=False,
+                    scope=scope,
+                    summary_md=summary_md,
+                    summary_chars=len(summary_md),
+                    summary_truncated=summary_truncated,
+                    tabular_available=True,
+                )
 
             # The tabular build (best-effort, after vectors below) still needs
             # the raw file, so cleanup now wraps the whole handler instead of

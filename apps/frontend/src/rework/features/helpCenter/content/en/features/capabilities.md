@@ -22,29 +22,37 @@ useful.
 
 ### Access to team resources
 
-**What it does** — the agent consults the team's corpus: it searches for the
-useful passages and cites them, reads a document verbatim, or extracts a piece
-of information exhaustively. The three ways of reading are detailed on
-[Resources](/help/en/features/resources).
+**What it does** - the agent consults the team's corpus and files attached
+to the current conversation. It searches for useful passages, cites them,
+reads a document verbatim, or extracts information exhaustively. The ways of
+reading are detailed on [Resources](/help/en/features/resources).
 
-**Its limits** — the agent only sees the libraries attached to its settings,
-and a document uploaded outside a library stays invisible. Search returns the
-passages it judges relevant: it is fast, but not exhaustive. The agent chooses
-how to read, according to the request.
+**Its limits** - corpus search sees only the libraries attached to the agent.
+A conversation attachment stays in that conversation and does not enter the
+team's corpus. Search returns the passages it judges relevant: it is fast, but
+not exhaustive.
 
-**An example** — "What do our procedures say about incident response time?" The
-agent searches the corpus and answers, citing the passages it relies on.
+**Examples** - ask what the team's procedures say about incident response, or
+attach a contract and ask the agent to list its deadlines.
 
 This capability groups several functions, which the **Advanced** view separates:
 
-| Function                 | What it does                                         | Worth knowing                                                          |
-| ------------------------ | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| Search team resources    | Finds the relevant passages and cites them           | May show a library or document selector in the conversation            |
-| Use tabular files        | Uses the data of a CSV or Excel file from the corpus | The file must be uploaded into a library; this is not a reporting tool |
-| Summarize a document     | Produces a document's summary                        | Asks for your confirmation before each summary; adjustable length      |
-| Compare documents        | Finds the passages closest to a given passage        | Works on the corpus, never on an attachment                            |
-| Read a document verbatim | Returns the exact text, page by page                 | The pages returned have a limited length                               |
-| Extract information      | Goes through the whole document, omitting nothing    | The slowest and most expensive; confirmation asked by default          |
+| Function                  | What it does                                                         | Worth knowing                                                                                         |
+| ------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Search team resources     | Finds the relevant passages and cites them                           | May show a library or document selector in the conversation                                           |
+| Attach conversation files | Adds files to the conversation for the agent to read                 | Files stay in that conversation, outside the team corpus                                              |
+| Use tabular files         | Queries tabular files from libraries and attached CSV or Excel files | New CSV and Excel attachments are SQL-queryable; older Excel attachments may have only a text preview |
+| Summarize a document      | Produces a document's summary                                        | Asks for your confirmation before each summary; adjustable length                                     |
+| Compare documents         | Finds the passages closest to a given passage                        | Works on the corpus, never on an attachment                                                           |
+| Read a document verbatim  | Returns the exact text, page by page                                 | The pages returned have a limited length                                                              |
+| Extract information       | Goes through the whole document, omitting nothing                    | The slowest and most expensive; confirmation asked by default                                         |
+
+In **Simple**, this one pack initially enables team resources and conversation
+attachments together. Below the library scope, switch on **Search in attachments
+only** to stop corpus document search and turn off the comparison tool. Tabular
+analysis remains available for attached CSV and Excel files. Use tabular analysis to read their complete tables; document reading tools are for text attachments. Switch the scope off to restore both sources. In **Advanced**, you can select attachments
+without enabling the other resource tools. Existing agents keep their selected
+capabilities until you change them.
 
 ### Access to the team wiki
 
@@ -63,19 +71,6 @@ and notes written by the team; it does not replace the document corpus.
 
 **An example** — a team records its naming conventions in its wiki; the agent
 in charge of writing minutes applies them without being reminded every time.
-
-### Attachments in a conversation
-
-**What it does** — adds a button to the conversation that attaches a file (PDF,
-image, text) to a message. The agent can then summarize it, read it verbatim or
-extract information from it.
-
-**Its limits** — an attachment belongs to the conversation: it does not enter
-the team's corpus and cannot be reused elsewhere. If this is the only capability
-enabled, the agent works **only** on attachments and never queries the corpus.
-
-**An example** — you receive a contract by email, attach it to a conversation
-and ask the agent to list its deadlines.
 
 ## Document production
 

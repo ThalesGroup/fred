@@ -1,5 +1,10 @@
 # Ingestion: workers, queues and performance
 
+> **Scope:** this document describes current behavior and its stated limitations.
+> Proposed changes to corpus ownership, folder permissions and project context
+> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
+> not implemented by this documentation update.
+
 Reference for the Knowledge Flow ingestion architecture.
 **Branch status:** normal-path local test passed; failure recovery and production sizing remain to validate.
 

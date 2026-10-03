@@ -55,7 +55,7 @@ from knowledge_flow_backend.features.ingestion.ingestion_controller import (
     _authorize_fast_ingest_delete,
 )
 from knowledge_flow_backend.features.metadata.service import MetadataService
-from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, TabularMultiArtifactV1, TabularTableArtifactV1, write_tabular_multi_artifact
 
 
 def _user(uid: str = "svc-control-plane") -> KeycloakUser:
@@ -379,3 +379,37 @@ async def test_non_admin_delete_propagates_a_vector_store_outage_instead_of_auth
     with pytest.raises(RuntimeError):
         await _authorize_fast_ingest_delete(rebac, _user("alice"), "doc-1", vector_store)
     assert vector_store.checked is True
+
+
+@pytest.mark.asyncio
+async def test_excel_attachment_delete_authorizes_owner_and_platform_only() -> None:
+    metadata = DocumentMetadata(
+        identity=Identity(document_name="book.xlsx", document_uid="doc-excel", title="book.xlsx", uploaded_by="alice"),
+        source=SourceInfo(source_type=SourceType.PUSH, source_tag=FAST_INGEST_SOURCE_TAG),
+        file=FileInfo(file_type=FileType.XLSX),
+        tags=Tagging(tag_ids=[]),
+    )
+    write_tabular_multi_artifact(
+        metadata,
+        TabularMultiArtifactV1(
+            tables=[
+                TabularTableArtifactV1(
+                    dataset_uid="doc-excel",
+                    object_key="tabular/datasets/doc-excel/rev/table.parquet",
+                    source_revision="rev",
+                    row_count=1,
+                    generated_at="2026-01-01T00:00:00+00:00",
+                    query_alias="book_sheet",
+                    sheet="Sheet1",
+                    table_id="table_1",
+                )
+            ]
+        ),
+    )
+    await MetadataService().save_document_metadata(_user("alice"), metadata)
+    vector_store = _FakeVectorStore(may_delete=True)
+    assert await _authorize_fast_ingest_delete(_FakeRebac(is_platform_admin=False), _user("alice"), "doc-excel", vector_store) is False
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(_FakeRebac(is_platform_admin=False), _user("mallory"), "doc-excel", vector_store)
+    assert await _authorize_fast_ingest_delete(_FakeRebac(is_platform_admin=True), _user(), "doc-excel", vector_store) is True
+    assert vector_store.checked is False

@@ -50,7 +50,6 @@ function render(availableIds: ReadonlySet<string>, supportsCapabilities: boolean
 const DATA_KNOWLEDGE_KEY = "rework.teams.formAgent.capabilities.sections.dataKnowledge";
 const DOCUMENT_PRODUCTION_KEY = "rework.teams.formAgent.capabilities.sections.documentProduction";
 const TEAM_RESOURCES_KEY = "rework.teams.formAgent.capabilities.packs.teamResources.title";
-const ATTACHMENTS_KEY = "rework.teams.formAgent.capabilities.packs.conversationAttachments.title";
 const WIKI_KEY = "rework.teams.formAgent.capabilities.packs.teamWiki.title";
 const WORD_KEY = "rework.teams.formAgent.capabilities.packs.wordDocument.title";
 const PPT_KEY = "rework.teams.formAgent.capabilities.packs.powerpointDocument.title";
@@ -73,18 +72,15 @@ describe("SimpleCapabilitiesView hides packs the team cannot use", () => {
     expect(html).not.toContain(DATA_KNOWLEDGE_KEY);
   });
 
-  it("hides both resource packs when document_access is closed, whatever else is open", () => {
-    // The reading capabilities are granted, but both packs hang on
-    // document_access — conversation_attachments does not even list it.
+  it("hides the resource pack when document access is closed", () => {
     const html = render(new Set(["document_summarize", "document_verbatim", "document_extract"]), true);
     expect(html).not.toContain(TEAM_RESOURCES_KEY);
-    expect(html).not.toContain(ATTACHMENTS_KEY);
   });
 
-  it("keeps both resource packs as soon as document_access is open", () => {
+  it("shows one resource pack when document access is open", () => {
     const html = render(new Set(["document_access"]), true);
     expect(html).toContain(TEAM_RESOURCES_KEY);
-    expect(html).toContain(ATTACHMENTS_KEY);
+    expect(html).not.toContain("rework.teams.formAgent.capabilities.packs.conversationAttachments.title");
   });
 
   it("keeps the wiki pack independent of the packs beside it in its section", () => {
