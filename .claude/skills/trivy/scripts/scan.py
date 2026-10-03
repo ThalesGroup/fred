@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -61,16 +62,22 @@ def build_image(image: dict, head: str, use_cache: bool) -> dict:
 def trivy_run(
     output: Path, *args: str, mount_repo: bool = False, mount_docker: bool = False
 ) -> None:
-    command = ["docker", "run", "--rm"]
+    command = ["docker", "run", "--rm", "--user", f"{os.getuid()}:{os.getgid()}"]
     if mount_docker:
-        command += ["--volume", "/var/run/docker.sock:/var/run/docker.sock"]
+        socket = Path("/var/run/docker.sock")
+        command += [
+            "--group-add",
+            str(socket.stat().st_gid),
+            "--volume",
+            f"{socket}:{socket}",
+        ]
     if mount_repo:
         command += ["--volume", f"{ROOT}:/workspace:ro"]
     command += [
         "--volume",
         f"{output}:/reports",
         "--volume",
-        f"{output / 'cache'}:/root/.cache/trivy",
+        f"{output / 'cache'}:/cache",
         TRIVY_IMAGE,
         *args,
     ]
@@ -84,9 +91,11 @@ def scan_image(image: dict, output: Path) -> Path:
         "image",
         "--image-src",
         "docker",
+        "--cache-dir",
+        "/cache",
         "--scanners",
         "vuln",
-        "--vuln-type",
+        "--pkg-types",
         "os,library",
         "--severity",
         ",".join(SEVERITIES),
@@ -108,11 +117,13 @@ def scan_frontend_lockfile(output: Path) -> Path:
     trivy_run(
         output,
         "fs",
+        "--cache-dir",
+        "/cache",
         "--config",
         "/workspace/.github/trivy-frontend.yaml",
         "--scanners",
         "vuln",
-        "--vuln-type",
+        "--pkg-types",
         "library",
         "--severity",
         ",".join(SEVERITIES),
