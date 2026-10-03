@@ -10,7 +10,7 @@ The production Dockerfiles copy a Python virtual environment created by `make de
 
 ## Decisions
 
-- Add a production dependency target to the shared Make recipe, using locked `uv sync --no-default-groups`. Keep `make dev` behavior for local development. The production target retains the existing pandoc shim where pypandoc is installed.
+- Add a standalone production dependency target to the shared Make recipe, using `uv sync --locked --no-default-groups`. Leave `make dev` unchanged. The final Knowledge Flow image installs system pandoc.
 - Build the three Python production environments with that target. This removes basedpyright and its embedded Node.js packages from the shipped virtual environments without changing runtime lock resolution.
 - Refresh OS packages at build time in each final stage. Align Knowledge Flow's builder and final stages with the Debian 13 Python 3.12 base already used by the other services. This provides available security fixes and keeps Python ABI consistent across build and runtime stages.
 - Use the existing PR Trivy workflow to compare findings with the original JSON reports. Record unfixed and Chroma server findings explicitly; do not add ignore rules for them.

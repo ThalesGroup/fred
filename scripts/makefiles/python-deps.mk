@@ -10,7 +10,8 @@ include $(dir $(lastword $(MAKEFILE_LIST)))python-venv-bootstrap.mk
 $(TARGET)/.compiled: pyproject.toml $(TARGET)/.uv-installed
 	flock $(TARGET)/.compiled.lock sh -c '$(UV) sync --extra dev && touch $@'
 
-define ensure_tool_shims
+.PHONY: _ensure-tool-shims
+_ensure-tool-shims: $(TARGET)/.compiled
 	@# Some processors invoke `pandoc` directly via subprocess. We depend on
 	@# `pypandoc-binary`, which bundles pandoc but doesn't put it on PATH.
 	@# Create a lightweight shim in the venv so `pandoc` is available when installed.
@@ -20,17 +21,14 @@ define ensure_tool_shims
 			ln -sf "$$pandoc_path" "$(VENV)/bin/pandoc"; \
 		fi; \
 	fi
-endef
 
 .PHONY: dev
-dev: $(TARGET)/.compiled ## Install from compiled lock
-	$(ensure_tool_shims)
+dev: $(TARGET)/.compiled _ensure-tool-shims ## Install from compiled lock
 	@echo "✅ Dependencies installed using uv."
 
 .PHONY: prod
 prod: $(TARGET)/.uv-installed ## Install locked runtime dependencies only
 	$(UV) sync --locked --no-default-groups
-	$(ensure_tool_shims)
 	@echo "✅ Production dependencies installed using uv."
 
 

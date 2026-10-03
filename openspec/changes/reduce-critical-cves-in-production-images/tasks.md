@@ -1,6 +1,6 @@
 ## 1. Production dependency environment
 
-- [x] 1.1 Add a locked production sync target to the shared Make recipe and verify it excludes the default dev group while preserving the pandoc shim.
+- [x] 1.1 Add a standalone locked production sync target to the shared Make recipe and verify it excludes the default dev group without changing `make dev`.
 - [x] 1.2 Switch the three Python production Dockerfiles to the new target and verify their build commands use it.
 
 ## 2. OS package remediation
