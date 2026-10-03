@@ -2757,15 +2757,11 @@
           "packs": {
             "teamResources": {
               "title": "Access to team resources",
-              "description": "Lets the agent use the team's resources to carry out its mission."
+              "description": "Lets the agent use team resources and files attached to conversations."
             },
             "teamWiki": {
               "title": "Access to the team wiki",
               "description": "Lets the agent read the team's wiki pages and follow the rules the team set there."
-            },
-            "conversationAttachments": {
-              "title": "Attachments in a conversation",
-              "description": "Allows adding documents to a conversation to use their information."
             },
             "wordDocument": {
               "title": "Generate a Word document",

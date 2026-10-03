@@ -1,11 +1,13 @@
 name: Check docker images
 
-# Build and scan on every PR: changes outside dependency files can still alter
-# an image or break a Docker COPY.
+# Keep the PR trigger unfiltered so changes outside an image's directory can
+# still expose a missing Docker COPY. The reusable workflow selects affected
+# builds; a manual run builds all images.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 # A pull request only needs its newest commit checked, so a push supersedes the
 # run it interrupts. A base-branch commit groups by sha instead: it keeps its own
