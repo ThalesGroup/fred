@@ -140,13 +140,14 @@ class ChangedPathsTest(unittest.TestCase):
             git("commit", "-q", "-m", "base")
             base = git("rev-parse", "HEAD")
             (Path(tmp) / "libs/fred-core").mkdir(parents=True)
-            git("mv", "docs/moved.md", "libs/fred-core/moved.md")
+            # A non-ASCII name must come back verbatim, not C-quoted, to match pr_inputs.
+            git("mv", "docs/moved.md", "libs/fred-core/café.md")
             git("rm", "-q", "docs/gone.md")
             git("commit", "-q", "-m", "head")
 
             changed = s.changed_paths(base, git("rev-parse", "HEAD"), repo=tmp)
 
-        self.assertEqual(set(changed), {"docs/moved.md", "libs/fred-core/moved.md", "docs/gone.md"})
+        self.assertEqual(set(changed), {"docs/moved.md", "libs/fred-core/café.md", "docs/gone.md"})
         self.assertIn(KF, built(*changed))
 
 

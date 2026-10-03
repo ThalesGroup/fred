@@ -51,14 +51,15 @@ def select(manifest: dict, changed: list[str]) -> dict[str, list[str]]:
 def changed_paths(base: str, head: str, repo: str = ".") -> list[str]:
     # Three dots: the PR's own changes against its merge base, so the final head
     # is always checked against the target branch. --no-renames reports a rename
-    # as a deletion plus an addition, so both sides are classified.
+    # as a deletion plus an addition, so both sides are classified. -z keeps
+    # non-ASCII paths verbatim instead of C-quoted.
     out = subprocess.run(
-        ["git", "-C", repo, "diff", "--name-only", "--no-renames", f"{base}...{head}"],
+        ["git", "-C", repo, "diff", "--name-only", "-z", "--no-renames", f"{base}...{head}"],
         check=True,
         capture_output=True,
         text=True,
     ).stdout
-    return [line for line in out.splitlines() if line]
+    return [path for path in out.split("\0") if path]
 
 
 def report(selected: dict[str, list[str]], full_reason: str | None) -> str:
