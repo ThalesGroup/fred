@@ -2,11 +2,13 @@ name: Check docker images
 
 # No paths filter on purpose: an image breaks from far outside its own directory
 # — a libs/ package added as a path dependency but never COPYed is exactly the
-# release-blocking bug this gate exists to catch.
+# release-blocking bug this gate exists to catch. Docker-images.yml selects the
+# affected images instead; a manual run on a branch builds all of them.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 # A pull request only needs its newest commit checked, so a push supersedes the
 # run it interrupts. A base-branch commit groups by sha instead: it keeps its own
