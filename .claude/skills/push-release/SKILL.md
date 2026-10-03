@@ -177,10 +177,10 @@ needs changes. Resolve all coverage blockers before requesting tag approval.
 
 ### Assess the published release candidate images
 
-Run [the Trivy skill](../trivy/SKILL.md) before Step 5:
+Run [the vulnerability-scan skill](../vulnerability-scan/SKILL.md) before Step 5:
 
 ```bash
-python3 .agents/skills/trivy/scripts/scan.py swift-dev
+python3 .agents/skills/vulnerability-scan/scripts/scan.py swift-dev
 ```
 
 It forcibly pulls every publishable `swift-dev` image, verifies each image's

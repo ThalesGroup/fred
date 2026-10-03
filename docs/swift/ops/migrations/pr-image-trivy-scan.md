@@ -26,7 +26,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 On a pull request that selects Docker images for building, confirm each selected publishable final image receives a separate Trivy check and JSON report. A frontend build also runs a check of its npm lockfile, including development dependencies. Job logs list findings from CRITICAL through UNKNOWN, and the JSON reports include package inventories; critical findings produce warning annotations without failing the checks. `ws-bench` remains build-only. A documentation-only pull request can select no images and run no Trivy checks.
 
-Before a `swift` release, the `push-release` skill audits freshly pulled `swift-dev` images and the frontend lockfile. It presents per-image critical findings and whether Trivy lists a fixed package version before requesting tag approval. An operator can also use the Trivy skill to build and audit final images from a local checkout.
+Before a `swift` release, the `push-release` skill audits freshly pulled `swift-dev` images and the frontend lockfile. It presents per-image critical findings and whether Trivy lists a fixed package version before requesting tag approval. An operator can also use the `vulnerability-scan` skill to build and audit final images from a local checkout.
 
 ## Rollback
 
