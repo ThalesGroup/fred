@@ -214,8 +214,8 @@ def render_report(mode: str, head: str, images: list[dict], output: Path) -> str
         "",
         "## Fix availability reported by Trivy",
         "",
-        "A nonempty `FixedVersion` means Trivy lists a fixed package version. "
-        "An empty value means no fixed version is listed; it does not prove "
+        "A nonempty `FixedVersion` means Trivy lists a fixed package version.",
+        "An empty value means no fixed version is listed; it does not prove",
         "remediation is impossible.",
         "",
         "| Severity | Findings | Fixed version listed | No fixed version listed |",
