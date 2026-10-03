@@ -2,6 +2,13 @@
 
 Fred supports relationship-aware authorization so users can keep resources private, share them with teams, or publish them broadly.
 
+> **Current behavior versus proposed target:** this page describes the shipped
+> model. The [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
+> defines the proposed corpus replacement; it is not yet implemented. Use that
+> change for target decisions, including its governance/content-access decision.
+> The [organization RFC](../rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md) covers the later
+> multi-organization extension only.
+
 > Frontend counterpart: [`FRONTEND-AUTHZ-PATTERN.md`](./FRONTEND-AUTHZ-PATTERN.md) —
 > how the two hooks (`useUserCapabilities`, `useTeamCapabilities`) consume the
 > model described below, and how that layer is tested.

@@ -1,5 +1,10 @@
 # Knowledge Base integration
 
+> **Scope:** this document describes current behavior and its stated limitations.
+> Proposed changes to corpus ownership, folder permissions and project context
+> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
+> not implemented by this documentation update.
+
 **Status:** current — describes what is shipped.
 
 A Knowledge Base is a document source that fills one corpus folder by itself.

@@ -1,119 +1,61 @@
-# RFC: Organizations and projects
+# RFC: Future organization administration
 
-**Status:** target model agreed (2026-10-02), for team review; migration and delivery are specified separately, after this target is validated
+**Status:** future multi-organization target, not shipped; project delivery is
+specified separately below. Organization onboarding remains open.
 **Author:** Dimitri Tombroff
-**Date:** 2026-10-02
-**Related:** issue #2921; `docs/swift/platform/REBAC.md`
+**Related:** [#2921](https://github.com/ThalesGroup/fred/issues/2921)
 
----
+## Scope and authoritative references
 
-## 1. Problem
+[Team/project authorization OpenSpec](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
+is the proposed authority for projects, local roles, corpus ownership, agent reach
+and conversation context in the current single organization. This RFC no longer
+maintains parallel project rules. Its former transversal editor/analyst access and
+folder-parent permission model are superseded by that proposal. The governance/content-access decision is recorded in its
+[canonical design](../../../openspec/changes/simplify-corpus-authorization/design.md#governance-decision-and-delivery).
 
-Fred knows two levels: the platform and its teams. Two common needs fit neither.
+[REBAC.md](../platform/REBAC.md) describes the shipped authorization model.
+Neither this RFC nor the OpenSpec changes runtime behavior by being merged.
 
-- **Multi-tenancy.** Several organizations share one instance with real isolation
-  between them. Today `organization:fred` is a hard-coded singleton.
-- **Sub-teams.** Inside a team, a subset of members wants to work among
-  themselves. Today the only answer is a new team, which loses what the parent
-  team shares.
+## Remaining future target
 
-## 2. Model
+Several organizations may eventually share an instance with tenant isolation,
+in place of today's singleton `organization:fred`. Extend the explicit ownership
+tree above teams; do not infer organization identity from naming conventions.
+Each person belongs to exactly one organization; a team never changes organization.
+Organizations are visible to platform/organization administrators, not ordinary
+users. A deployment with one user is data, not a separate operating mode.
 
-A strict tree, each node with exactly one parent:
+The future `platform` ReBAC type holds platform roles and catalog anchors;
+`organization` denotes a tenant only. Platform and organization governance grant
+no implicit access to team or project content. Organization-level resources and
+prompts are common to that organization's members; organization-defined agents
+can serve its descendant spaces under the contextual-access contract linked above.
+That contract also governs inherited read versus local write authority and keeps
+conversation outputs and memory in their execution space.
+Existing platform-common resources/prompts remain above the tenant boundary;
+there are no platform-owned agents in this target.
 
-    platform → organization → team → project
+Two proposed organization roles:
 
-No structural fact is hard-coded or derived from an identifier convention:
-every node, its kind and its parent are explicit data. The platform is its own
-ReBAC type (`platform`), carrying platform roles and catalog anchors;
-`organization` is a tenant only.
+- `org_admin` manages organization membership, team creation and nomination of
+  initial team administrators, without implicit access to their content.
+- `org_editor` manages organization-common prompts and resources.
 
-No deployment variant exists in code or configuration: a single-user laptop is
-an installation with no shared team, which is data, not a mode.
+A `platform_admin` creates organizations and nominates their first `org_admin`.
+The future organization administration replaces `team_manager`; that role remains
+unchanged in the current single-organization project delivery.
+A personal space remains a one-member team under its owner's organization;
+its kind is explicit data and it holds no project.
 
-Organizations are invisible to users; only `platform_admin` and `org_admin`
-see them.
+## Remaining design and delivery work
 
-A node never changes parent: a project stays in its team, a team in its
-organization. Moving one would silently change who reads what.
+- Decide how an account joins its organization: invitation or an external request
+  reached from a landing page outside any organization.
+- Specify organization administration and membership lifecycle, tenant isolation
+  validation, and the separation of platform anchors from the current singleton.
+- Scope existing-data translation and rollout independently, including an explicit
+  assignment of existing teams/users and backup/restore behavior.
 
-| Object               | platform | organization | team | project |
-| -------------------- | :------: | :----------: | :--: | :-----: |
-| Prompts              |    ✓     |      ✓       |  ✓   |    ✓    |
-| Resources (KB docs)  |    ✓     |      ✓       |  ✓   |    ✓    |
-| Agents               |          |      ✓       |  ✓   |    ✓    |
-
-**Membership**
-
-- M1. A person belongs to exactly one organization.
-- M2. A project member is a member of the project's team. A team member is not
-  implicitly a project member.
-
-**Isolation**
-
-- I1. Read access flows down, never up or sideways: an object at one level is
-  readable from every level below it. A project sees nothing of a sibling
-  project; an organization sees nothing of another.
-- I2. Write access requires a role at the object's own level.
-- I3. Nothing flows up: content of a level never reaches a level above it,
-  whether through a conversation, a write, or agent memory.
-- I4. Platform and organization roles govern (membership, structure) and grant
-  no access to team or project content — the rule `platform_admin` already
-  follows today.
-- I5. `team_admin`, `team_editor` and `team_analyst` read the content of every
-  project of their team. `team_member` does not.
-
-**Agents**
-
-- A1. An agent is available at its own level and below, like a prompt.
-- A2. An agent's reach is set by where the conversation runs, not where the
-  agent is defined: it reads that level and above, and everything it produces
-  stays at that level. A team agent used in a project reads the project; used
-  in the team, it never does. An organization agent's author holds no right on
-  team content (I4): only I3 keeps that content from reaching them.
-- A3. An agent's configuration (e.g. a pinned folder) references only objects
-  at its own level or above. The pin narrows A2, never widens it. An agent
-  pinned to a project folder therefore lives in that project; copying a team
-  agent into a project is a plain UI copy, with no link to the original.
-
-**Roles**
-
-- R1. Existing team roles are unchanged; platform roles too, except R5.
-- R2. Two organization roles: `org_admin` governs (organization members, team
-  creation, naming each team's first `team_admin`) with no access to team
-  content; `org_editor` writes organization-level prompts and resources.
-  `platform_admin` creates organizations and names their first `org_admin`.
-- R3. A project carries the four team roles, with the same meaning, scoped to
-  the project.
-- R4. `team_admin` and `team_editor` create projects. The creator names the
-  project's initial `project_admin`(s), who must be team members; the creator
-  gets no project role by creating it. Same shape as team creation today.
-- R5. The platform role `team_manager` is deleted: `org_admin` covers it.
-
-**Personal space**
-
-- S1. A personal space is a one-member team, placed under its owner's
-  organization. It follows the general rules: reads organization and platform
-  content, sees no other team, holds no project.
-- S2. A team's kind (`shared` or `personal`) is explicit data, answered by a
-  single authority. No other code infers it from an identifier.
-
-## 3. Open questions
-
-- How a new account enters its organization: invitation by an `org_admin`, or
-  a landing page outside any organization that routes to an external request,
-  as team requests already do.
-
-## 4. Target impact on existing contracts
-
-- **ReBAC schema** (`fred_core/security/rebac/schema.fga`). `organization`
-  stops being a singleton; `team#organization` already exists. New `platform`
-  type takes over platform roles and every platform-level `… from organization`
-  anchor (capability, app, knowledge-base definition). New `project`
-  type with parent `team` and the four roles. `organization` and `project`
-  join `[user, team]` as owners of `tag` (libraries, folders) and `agent`;
-  documents and resources inherit through `tag#parent` unchanged.
-- **Control-plane.** `team_metadata` gains its organization; new organization
-  and project registries; team creation moves to `org_admin`.
-- **Conversation context.** A conversation carries its level (team or
-  project); agent reach (A2) and every write resolve from it.
+Explicit ancestry in the project change prepares this extension; it does not
+establish multi-tenant safety or deliver the administration above.

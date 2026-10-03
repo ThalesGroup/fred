@@ -1,5 +1,10 @@
 # Resources Dashboard
 
+> **Scope:** this document describes current behavior and its stated limitations.
+> Proposed changes to corpus ownership, folder permissions and project context
+> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
+> not implemented by this documentation update.
+
 ## Purpose
 
 `TeamResourcesPage` (`apps/frontend/src/rework/components/pages/TeamResourcesPage/`) is
