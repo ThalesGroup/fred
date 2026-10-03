@@ -18,16 +18,23 @@
    shapes and Nunito. Colors come from LCh seeds (neutral 245/3 in light,
    270/4 in dark; primary 250/48; secondary 280/20; tertiary 190/30) with the
    accent rules of the token rework; info follows primary in this theme. */
-/* :root raises specificity above the :root blocks of radius.css and typography.css. */
-:root[data-ui-theme="cloud"] {
+[data-ui-theme="cloud"] {
   --font-family-base: "Nunito", sans-serif;
   --radius-xs: 6px;
   --radius-s: 12px;
   --radius-ms: 18px;
   --radius-m: 22px;
+  --radius-2xl: 48px;
+  --radius-xl: 32px;
+  --radius-l: 24px;
+  --font-headline-large-emphasized: 600 2rem / 1.25 var(--font-family-base);
+  --font-headline-medium-emphasized: 600 1.75rem / 1.28 var(--font-family-base);
+  --font-headline-small-emphasized: 500 1.5rem / 1.33 var(--font-family-base);
+  --font-title-large-emphasized: 500 1.375rem / 1.27 var(--font-family-base);
 }
 
 [data-ui-theme="cloud"][data-theme="light"] {
+  color-scheme: light;
   --primary: #00658c;
   --on-primary: #fafdff;
   --primary-container: #c7e7ff;
@@ -70,9 +77,12 @@
   --outline: #72787b;
   --outline-variant: #c1c7cb;
   --outline-muted: #d8dee2;
+  --scrim: rgba(0, 0, 0, 0.44);
+  --surface-picture: #ffffff;
 }
 
 [data-ui-theme="cloud"][data-theme="dark"] {
+  color-scheme: dark;
   --primary: #83cfff;
   --on-primary: #001e2e;
   --primary-container: #014c6a;
@@ -115,4 +125,6 @@
   --outline: #8d9198;
   --outline-variant: #5b5e65;
   --outline-muted: #383c41;
+  --scrim: rgba(0, 0, 0, 0.64);
+  --surface-picture: #ffffff;
 }

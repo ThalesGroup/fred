@@ -23,7 +23,8 @@ import { createRoot } from "react-dom/client";
 import FredUi from "./app/App.tsx";
 import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
-import { loadConfig } from "./common/config.tsx";
+import { getPlatformUiThemes, loadConfig } from "./common/config.tsx";
+import { applyResolvedTheme } from "./app/uiThemes.ts";
 import "./i18n";
 import "@fontsource/inter/100.css";
 import "@fontsource/inter/200.css";
@@ -65,6 +66,8 @@ const startApp = async () => {
   console.info("Starting Fred UI...");
   try {
     await loadConfig(); // <-- await config loading FIRST
+    // theme-boot.js used the cached platform settings; apply the fresh ones before anything renders.
+    applyResolvedTheme(getPlatformUiThemes());
     console.info("Configuration loaded successfully");
     KeyCloakService.CallLogin(() => {
       const root = createRoot(document.getElementById("root"), { onCaughtError: reportCaughtReactError });

@@ -24,7 +24,7 @@ list of those issues, organized per component. It feeds the UX review session ag
 
 ## Design token reference
 
-Token names confirmed from `src/styles/colors-semantic-{light,dark}.css`.
+Token names confirmed from `src/styles/themes/pebble.css` (every theme declares the same names).
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
 | Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |

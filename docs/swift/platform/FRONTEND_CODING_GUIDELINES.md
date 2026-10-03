@@ -165,14 +165,35 @@ Verify that a token exists before using it. The authoritative token files are:
 
 | File                                   | Contains                                          |
 | -------------------------------------- | ------------------------------------------------- |
-| `src/styles/colors-semantic-dark.css`  | Semantic color tokens (dark theme)                |
-| `src/styles/colors-semantic-light.css` | Semantic color tokens (light theme)               |
+| `src/styles/themes/<id>.css`           | One UI theme: colors (light + dark), font, radii  |
 | `src/styles/colors-state-semantic.css` | Hover / pressed / disabled / focused state tokens |
 | `src/styles/shadow-dark.css`           | Shadow + elevation tokens (dark theme)            |
 | `src/styles/shadow-light.css`          | Shadow + elevation tokens (light theme)           |
 | `src/styles/spacings.css`              | `--spacing-*` tokens                              |
-| `src/styles/radius.css`                | `--radius-*` tokens                               |
-| `src/styles/typography.css`            | `--font-*` tokens                                 |
+| `src/styles/radius.css`                | `--radius-full` and `--border-radius-*` aliases   |
+| `src/styles/typography.css`            | `--font-*` composite tokens (size, weight, line)  |
+
+### UI themes
+
+Every UI theme (`pebble`, `cobalt`, `cloud`) is a peer: one file in
+`src/styles/themes/` with a `[data-ui-theme="<id>"]` block (font family,
+radius scale, emphasized headline weights; not bound to `:root`, so an element
+can preview another theme's shapes and font) and one block per mode
+(`[data-ui-theme="<id>"][data-theme="light|dark"]`, semantic colors and
+`color-scheme`). All themes declare the same tokens and the base stylesheets
+declare none of them; `src/styles/themes/themes.test.ts` enforces both. The
+catalog lives in `src/app/uiThemes.ts`, and `public/theme-boot.js` applies the
+stored theme and mode to `<html>` before the first paint (its copy of the
+catalog is checked by `src/app/uiThemes.test.ts`). The `@fred-oss/design-tokens`
+package publishes Pebble only, under plain `[data-theme]` selectors.
+
+The active theme resolves to the user's choice if the platform offers it, else
+the platform default (admin page "User interface", served in the public
+`/frontend/config`), else the first offered theme. `resolveUiTheme` in
+`src/app/uiThemes.ts` is the one implementation; `theme-boot.js` repeats it on
+the cached platform settings and `index.tsx` re-applies it with the fresh ones
+before the first render. Adding a theme means a theme file, a catalog entry
+(both lists) and a label key in `UI_THEME_LABEL_KEYS`.
 
 ### Available shadow and overlay tokens
 
@@ -282,14 +303,15 @@ requires no JavaScript, and works in all browsers.
 
 ## 5. Token Completeness Rule
 
-If a token you need does not exist, **add it to the token file** — do not
-work around it with a hardcoded value or a fallback. Adding a token is a
-two-line change (one per theme file). This is always the right answer.
+If a token you need does not exist, **add it to the token files** — do not
+work around it with a hardcoded value or a fallback. This is always the right
+answer.
 
 When adding a token:
 
-- Add it to both `colors-semantic-light.css` and `colors-semantic-dark.css`
-  (or the appropriate shadow/spacing file).
+- A theme token goes in every file of `src/styles/themes/`, in both mode
+  blocks (the theme test fails otherwise); a theme-independent token goes in
+  the matching base file (shadow, spacing, radius alias, typography).
 - Choose a value consistent with the M3 elevation or colour scale already
   present in the file.
 - Use the existing naming convention: `--category-variant` or

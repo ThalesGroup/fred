@@ -16,14 +16,12 @@
 
 @import "./color-ramps.css";
 
-@import "./colors-semantic-light.css";
-@import "./colors-semantic-dark.css";
-
 @import "./colors-state-semantic.css";
 
 @import "./shadow-light.css";
 @import "./shadow-dark.css";
 
+@import "./themes/pebble.css";
 @import "./themes/cobalt.css";
 @import "./themes/cloud.css";
 
@@ -104,6 +102,9 @@
 }
 
 html {
+  /* The boot script sets the theme before the first paint; painting html too
+     keeps the area outside body on the theme's page color. */
+  background-color: var(--surface-main);
   width: 100%;
   height: 100%;
   overflow: hidden;

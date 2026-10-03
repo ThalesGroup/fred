@@ -56,6 +56,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneAgentInstance",
     "ControlPlanePlatformModelBinding",
     "ControlPlanePlatformPrompt",
+    "ControlPlanePlatformUiSettings",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
@@ -604,6 +605,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformPromptControlPlaneV1AdminPlatformPromptPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
     },
+    // Platform UI theme settings: a single row, one LIST tag.
+    getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: {
+      providesTags: [{ type: "ControlPlanePlatformUiSettings" as const, id: "LIST" }],
+    },
+    putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
+    },
     // Read-only and shipped with the platform: it can only change on deploy, so
     // it carries no cache tag — nothing in this app can invalidate it.
     getPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGet: {},
@@ -731,6 +739,9 @@ export const {
   // Platform-wide platform prompt — the first block of every agent's system prompt.
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
+  // Platform UI theme settings (default theme, hidden themes).
+  useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
+  usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
   // Read-only platform operating instructions, shown under the editable prompt.
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery: usePlatformInstructionsQuery,
   // Team wiki (WIKI-01/02), and whether the team has one at all (WIKI-03).

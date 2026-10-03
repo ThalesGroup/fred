@@ -47,4 +47,13 @@ export default [
       "@typescript-eslint/no-unused-expressions": "error",
     },
   },
+  {
+    // Served as-is from public/ (theme-boot.js runs before the bundle), never
+    // transpiled: parsing as ES5 makes any newer syntax a lint error.
+    files: ["public/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 5,
+      sourceType: "script",
+    },
+  },
 ];
