@@ -49,7 +49,6 @@ export default function DocumentPreviewDrawer({ target, onClose }: DocumentPrevi
       onClose={onClose}
       title={target?.fileName ?? t("rework.resources.preview.title")}
       width="80vw"
-      background="var(--surface-container-high)"
       headerActions={
         hasNativePreview(target?.fileName) ? <DocumentViewerModeToggle view={view} onChange={setView} /> : undefined
       }

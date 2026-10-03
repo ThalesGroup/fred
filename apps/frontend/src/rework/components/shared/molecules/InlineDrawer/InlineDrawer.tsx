@@ -39,7 +39,7 @@ export interface InlineDrawerProps {
   headerActions?: ReactNode;
   /** Width in CSS units. Defaults to "480px". */
   width?: string;
-  /** Drawer shell background (CSS color/token). Defaults to `--surface-container`. */
+  /** Drawer shell background (CSS color/token). Defaults to `--surface-floating`, or `--surface-container-low` for a flush push panel. */
   background?: string;
   /**
    * Open/close duration for the push layout (any CSS time, ideally a
@@ -72,7 +72,7 @@ export interface InlineDrawerProps {
   flushBody?: boolean;
   /**
    * Render the panel as a detached floating card (push layout): inset from every
-   * edge, a single `outline-retreat` border, `--radius-l` corners and a subtle
+   * edge, a single `outline-muted` border, `--radius-l` corners and a subtle
    * shadow, dropping the drawer's flush edge border and the header divider.
    * Opt-in — default panels stay flush.
    */

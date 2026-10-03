@@ -19,9 +19,9 @@
   position: relative;
   flex-direction: column;
   gap: var(--spacing-s);
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
-  background: var(--surface-container-high);
+  background: var(--surface-container);
   padding: var(--spacing-m);
 }
 

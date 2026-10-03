@@ -18,6 +18,11 @@
 export type ThemeMode = "light" | "system" | "dark";
 
 /**
+ * UI theme (palette, font, radii); each one has a light and a dark mode.
+ */
+export type UiTheme = "pebble" | "cobalt" | "cloud";
+
+/**
  * The Application context keeps track of all the clusters known to frugal IT.
  * If a cluster is selected as the current cluster, its namespaces will be
  * loaded.
@@ -42,6 +47,11 @@ export interface ApplicationContextStruct {
   themeMode: ThemeMode;
 
   /**
+   * The current UI theme.
+   */
+  uiTheme: UiTheme;
+
+  /**
    * Toggles the sidebar collapsed state.
    */
   toggleSidebar: () => void;
@@ -50,4 +60,9 @@ export interface ApplicationContextStruct {
    * Sets the theme mode.
    */
   setThemeMode: (mode: ThemeMode) => void;
+
+  /**
+   * Sets the UI theme.
+   */
+  setUiTheme: (theme: UiTheme) => void;
 }

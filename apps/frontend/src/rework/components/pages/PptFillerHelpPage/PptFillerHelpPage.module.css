@@ -61,7 +61,7 @@
   hr {
     margin: var(--spacing-xl) 0;
     border: none;
-    border-top: 1px solid var(--outline-retreat);
+    border-top: 1px solid var(--outline-muted);
   }
 
   ul,
@@ -75,7 +75,7 @@
 
   code {
     border-radius: var(--radius-xs);
-    background-color: var(--surface-container-high);
+    background-color: var(--surface-container);
     padding: 0.1em 0.35em;
     font-size: 0.9em;
   }
@@ -96,7 +96,7 @@
   img {
     display: block;
     margin: var(--spacing-m) 0;
-    border: 1px solid var(--outline-retreat);
+    border: 1px solid var(--outline-muted);
     border-radius: var(--radius-s);
     width: 100%;
     height: auto;

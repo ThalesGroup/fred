@@ -74,7 +74,7 @@
 .sectionDivider {
   margin: 0;
   border: none;
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
 }
 
 /* "Advanced settings" toggle: plain left-aligned text + chevron, no button
@@ -116,6 +116,6 @@
  * indented behind a thin vertical guide, the classic nested-setting cue. */
 .dependentField {
   margin-left: var(--spacing-2xs);
-  border-left: 2px solid var(--outline-retreat);
+  border-left: 2px solid var(--outline-muted);
   padding-left: var(--spacing-m);
 }

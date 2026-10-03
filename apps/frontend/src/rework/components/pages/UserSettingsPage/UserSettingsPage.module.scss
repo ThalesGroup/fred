@@ -53,7 +53,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
-  border-radius: var(--spacing-s);
+  border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   padding: var(--spacing-m);
 }
@@ -86,11 +86,40 @@
 
 .userSettingsApplication {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+}
+
+/* Settings card: a titled group of related controls. */
+.userSettingsCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-ms);
+  background-color: var(--surface-container);
+  padding: var(--spacing-m);
+}
+
+.userSettingsCardTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.userSettingsCardRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--spacing-m);
 }
 
+.userSettingsThemeSelect {
+  width: 200px;
+}
+
 .userSettingsConversation {
-  border-radius: var(--spacing-s);
+  border-radius: var(--radius-ms);
   background-color: var(--surface-container);
   padding: var(--spacing-m);
   min-height: 15rem;

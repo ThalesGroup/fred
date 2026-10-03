@@ -14,7 +14,7 @@
 
 import { createContext, PropsWithChildren, useEffect, useState } from "react";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
-import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
+import { ApplicationContextStruct, ThemeMode, UiTheme } from "./ApplicationContextStruct.tsx";
 
 /**
  * Our application context.
@@ -31,6 +31,8 @@ const getSystemDarkMode = (): boolean => {
 /**
  * Computes the effective dark mode based on theme mode and system preference
  */
+const UI_THEMES: UiTheme[] = ["pebble", "cobalt", "cloud"];
+
 export const computeDarkMode = (themeMode: ThemeMode, systemDarkMode: boolean): boolean => {
   if (themeMode === "system") {
     return systemDarkMode;
@@ -46,6 +48,9 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   // Default to "system" so the first load honours the OS preference (prefers-color-scheme);
   // an explicit Light/Dark/System choice from the settings toggle then persists in localStorage.
   const [themeMode, setThemeMode] = useLocalStorageState<ThemeMode>("ApplicationContextProvider.themeMode", "system");
+  const [storedUiTheme, setUiTheme] = useLocalStorageState<UiTheme>("ApplicationContextProvider.uiTheme", "pebble");
+  // A stored value from an older theme list falls back to the default theme.
+  const uiTheme: UiTheme = UI_THEMES.includes(storedUiTheme) ? storedUiTheme : "pebble";
   const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
   const darkMode = computeDarkMode(themeMode, systemDarkMode);
 
@@ -68,8 +73,10 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
     isSidebarCollapsed,
     darkMode,
     themeMode,
+    uiTheme,
     toggleSidebar,
     setThemeMode,
+    setUiTheme,
   };
 
   return <ApplicationContext.Provider value={contextValue}>{props.children}</ApplicationContext.Provider>;

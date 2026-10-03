@@ -33,7 +33,7 @@
   gap: var(--spacing-m);
   box-shadow: var(--shadow-s);
   border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-floating);
   padding: var(--spacing-l);
   width: min(640px, 92vw);
 }
@@ -68,7 +68,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   padding: var(--spacing-s);
 }
@@ -111,7 +111,7 @@
   align-items: center;
   gap: var(--spacing-m);
   border-radius: var(--radius-s);
-  background-color: var(--surface-container-highest);
+  background-color: var(--surface-container-high);
   padding: 0 var(--spacing-xs) 0 var(--spacing-m);
   height: var(--row-height);
 }

@@ -38,7 +38,7 @@
 }
 
 .kind {
-  color: var(--color-on-surface-retreat);
+  color: var(--on-surface-retreat);
 }
 
 .loadingState {

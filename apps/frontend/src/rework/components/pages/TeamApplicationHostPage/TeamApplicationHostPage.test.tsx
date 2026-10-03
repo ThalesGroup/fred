@@ -134,6 +134,8 @@ async function rerender() {
           value={{
             darkMode: h.darkMode,
             themeMode: "system",
+            uiTheme: "pebble",
+            setUiTheme: () => undefined,
             isSidebarCollapsed: false,
             toggleSidebar: () => undefined,
             setThemeMode: () => undefined,

@@ -29,7 +29,7 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   border-radius: var(--radius-m);
-  background: var(--surface-container-lowest);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
   min-width: 0;
   color: var(--on-surface);
@@ -43,7 +43,7 @@
 
 .catalogMarkdown {
   border-radius: var(--radius-m);
-  background: var(--surface-container-lowest);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-surface);
 }
@@ -88,7 +88,7 @@
   flex-direction: column;
   gap: var(--spacing-xs);
   border-radius: var(--radius-m);
-  background: var(--surface-container-lowest);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
   min-width: 0;
   color: var(--on-surface);
