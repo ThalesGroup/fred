@@ -1,9 +1,8 @@
 name: Check docker images
 
-# No paths filter on purpose: an image breaks from far outside its own directory
-# — a libs/ package added as a path dependency but never COPYed is exactly the
-# release-blocking bug this gate exists to catch. Docker-images.yml selects the
-# affected images instead; a manual run on a branch builds all of them.
+# Keep the PR trigger unfiltered so changes outside an image's directory can
+# still expose a missing Docker COPY. The reusable workflow selects affected
+# builds; a manual run builds all images.
 
 on:
   pull_request:

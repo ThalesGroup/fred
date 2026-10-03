@@ -104,10 +104,15 @@ def main() -> int:
         selected = {image["name"]: ["*"] for image in candidates}
 
     matrix = [
-        {key: image[key] for key in ("name", "context", "dockerfile", "build_args")}
+        {
+            **{key: image[key] for key in ("name", "context", "dockerfile", "build_args")},
+            "scan": image.get("scan", True),
+        }
         for image in candidates
         if selected.get(image["name"])
     ]
+    scan_matrix = [{"name": image["name"]} for image in matrix if image["scan"]]
+    frontend_scan = any(image["name"] == "frontend" for image in scan_matrix)
     summary = report({image["name"]: selected[image["name"]] for image in candidates}, full_reason)
     print(summary)
     if "GITHUB_STEP_SUMMARY" in os.environ:
@@ -116,6 +121,8 @@ def main() -> int:
     if "GITHUB_OUTPUT" in os.environ:
         with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
             handle.write(f"include={json.dumps(matrix, separators=(',', ':'))}\n")
+            handle.write(f"scan_include={json.dumps(scan_matrix, separators=(',', ':'))}\n")
+            handle.write(f"frontend_scan={str(frontend_scan).lower()}\n")
     return 0
 
 

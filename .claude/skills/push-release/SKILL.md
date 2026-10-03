@@ -175,12 +175,32 @@ Review `docs/swift/ops/releases/vX.Y.Z/migration.md` and the source notes. Keep
 operator steps out of the UI document; fix sources and regenerate if the guide
 needs changes. Resolve all coverage blockers before requesting tag approval.
 
+### Assess the published release candidate images
+
+Run [the vulnerability-scan skill](../vulnerability-scan/SKILL.md) before Step 5:
+
+```bash
+python3 .agents/skills/vulnerability-scan/scripts/scan.py swift-dev
+```
+
+It forcibly pulls every publishable `swift-dev` image, verifies each image's
+source revision, scans the final images and the frontend lockfile, and writes a
+Markdown summary plus JSON reports. Include the per-image critical counts and
+fixed-version availability in the approval packet. Critical findings are
+advisory; explain them clearly and let the developer decide whether to proceed.
+A failed pull, stale image, or incomplete scan is not a vulnerability result:
+resolve it and rerun before requesting tag approval. The code tag rebuilds
+images from the release-notes commit, so describe this as the latest published
+`swift-dev` assessment.
+
 ## Step 5 — present and STOP for approval (mandatory)
 
 Show the developer the **full new entry** verbatim, plus:
 
 - the branch, the ancestry-based baseline, maximum migration impact and proposed version,
 - the generated operator guide, its ordered procedures and remaining deployment limitations,
+- the Trivy report location and per-image critical findings, including whether
+  Trivy lists a fixed package version,
 - the two tags that will be created (`code/vX.Y.Z`, `chart/vX.Y.Z`) and what each publishes,
 - the commit + push commands you will run.
 
