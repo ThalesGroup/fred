@@ -4,7 +4,7 @@ All validation uses isolated fresh data; migration and Monday validation are sep
 
 ## 1. Project and ownership foundations
 
-- [ ] 1.1 Resolve the admin review gate and reconcile the project slice of RFC #2921 with this change; verify one authoritative target and agree dependent PR boundaries before coding.
+- [ ] 1.1 Resolve the admin review gate and agree dependent PR boundaries before coding; verify approved permissions and one authoritative target (the RFC now delegates its project slice here).
 - [ ] 1.2 Add explicit project/parent identities, membership and scoped ReBAC roles using existing services; verify creation/bootstrap, team-membership constraints and no implicit editor/analyst project access.
 - [ ] 1.3 Provide project creation, membership/role management and navigation with generated clients and audit events; verify a team can create and administer Atlas without treating it as a folder.
 

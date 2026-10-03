@@ -3,7 +3,7 @@ schema: 1
 title: "Plan team and project corpus authorization"
 impact: none
 configuration: none
-configuration_reason: "Only OpenSpec planning documents are added; runtime and chart settings are unchanged."
+configuration_reason: "Documentation and planning only; runtime and chart settings are unchanged."
 no_action_reason: "This PR implements no model, API or data changes; no operator action is needed."
 ---
 ## Applicability
@@ -28,7 +28,7 @@ Run `openspec validate simplify-corpus-authorization --strict`.
 
 ## Rollback
 
-Revert the planning documents; there is no data migration.
+Revert the documentation changes; there is no data migration.
 
 ## Limitations
 

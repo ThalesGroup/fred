@@ -15,6 +15,13 @@ authorization cost independent of documents and folders inside a fixed context.
 links/moves, new scope controls, online compatibility or detailed revocation design.
 Personal spaces and session attachments retain their existing isolation.
 
+Existing contracts remain authoritative: [admin charter](../add-team-admin-charter/design.md)
+(pending nominees have only member rights), [conversation filesystem](../add-deep-agent-conversation-filesystem/design.md)
+(session ID remains its physical ownership key), and [application entitlement](../first-class-application-rebac/design.md)
+(corpus authorization does not redefine application grants). The older
+[version-retirement migration](../retire-document-versioning/specs/document-import-conflicts/spec.md)
+handles legacy multi-folder input; it is not a permission model for this target.
+
 ## Decisions
 
 ### 1. An explicit ownership tree, not projects disguised as folders
@@ -122,18 +129,19 @@ sessions, caches or streams is deferred to a focused revocation design.
 ### 6. Documentation consolidation
 
 This change is the proposed authority for the scoped team/project target; it is
-not a description of shipped behavior. Reconcile the broader RFC before declaring
-the specification approved, then update shipped docs when implementation lands.
+not a description of shipped behavior. The broader RFC now links here for project rules and retains only the future
+organization extension. Current-behavior docs are explicitly distinguished from
+this proposal; replace their obsolete implementation details only when code lands.
 Paths below are relative to `docs/swift/`.
 
 | Document | Disposition |
 | --- | --- |
-| `rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md` | Link its project slice here; remove duplicate target rules. Replace I5 (editor/analyst transversal read) and folder-ACL inheritance assumptions; keep multi-organization/onboarding work and identify the admin review gate. |
+| `rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md` | Project rules replaced by links to this change; only future organization work remains. |
 | `platform/REBAC.md` | Keep canonical cross-capability overview; link shipped corpus rules and describe the space boundary. Preserve non-corpus policies. |
-| `platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md` | Correct the stale global admin/editor/viewer RBAC opening; link the identity/ReBAC contract. |
+| `platform/CONFIGURATION_AND_POLICY_CONVENTIONS.md` | Stale global app-role guidance replaced by the canonical ReBAC reference. |
 | `design/INGESTION.md` | Keep operations; replace duplicated import rules with spec links and remove multiple-membership assumptions. |
 | `design/KNOWLEDGE-BASE.md`, `design/RESOURCES-DASHBOARD.md` | Update sync moves, space ownership and eager item-list assumptions. |
-| `backlog/AUTHZ-MIGRATION-BACKLOG.md` | Retirement candidate: closed #1875, deleted registry link and mixed statuses. Preserve useful guardrails and repoint references before retirement. |
+| `backlog/AUTHZ-MIGRATION-BACKLOG.md` | Retain unresolved Step 6 obligations and historical references; scope clarified and dead registry link removed. Retirement requires their disposition first. |
 | `rfc/RESOURCE-INGESTION-UX-RFC.md` | Trim settled portions after checking its remaining questions; retire only if none remains. |
 | `rfc/DOCUMENT-VIEWER-AI-PANEL-RFC.md` | Keep unrelated open product decisions. |
 
