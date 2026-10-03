@@ -51,7 +51,7 @@ redesign is included. Preserve existing personal and platform resource policies.
 | Member | Reads common team corpus | Reads all corpus of projects joined |
 | Editor | Manages team corpus/agents | Requires explicit project editor role |
 | Analyst | Analyzes team conversations/datasets | Requires explicit project analyst role |
-| Admin | Team governance | Transversal governance read is provisional; see review gate |
+| Admin | Team/project governance and habilitations | No implicit content access; explicit project roles required |
 
 Project roles have the corresponding scoped responsibilities; being a project
 member does not make every conversation visible to every other member. Project
@@ -153,16 +153,26 @@ No new RFC/status report or blanket deletion of historical documents.
   acceptance, not just a new FGA type. Preserve ordinary conversation privacy.
 - Hidden team-only assumptions → trace SDK/runtime grants, session stores, tools,
   quotas and generated APIs; explicit project context must survive every boundary.
-- Pending governance decision → no new transversal permission silently implemented.
+- Governance versus content access → test admin-only callers as well as ordinary
+  members; role-management authority must not bypass content checks.
 - Multiple organizations later → explicit ancestry helps, but tenant isolation and
   onboarding remain separate work requiring their own validation.
 
-## Review gates and delivery
+## Governance decision and delivery
 
-The team-admin read of project documents, conversations and datasets is a working
-hypothesis, not approved policy. It grants neither editor/analyst mutation powers
-nor permission to publish project content at team level. Resolve this gate before
-implementing that relation. No detailed revocation mechanism is selected here.
+Team administration grants no implicit access to project documents, conversations
+or evaluation datasets. Project membership permits corpus reading; analysis of
+other members' conversations requires an explicit project analyst role. Roles may
+be combined, but assignment remains explicit and audited. Administrating structure
+and habilitations is distinct from exercising those content permissions.
+
+This is Fred's design application of least privilege, not a claim that ANSSI
+prescribes these exact product roles: see [ANSSI measures 0098/0101](https://monservicesecurise.cyber.gouv.fr/referentiel-mesures)
+and [CNIL habilitation guidance](https://www.cnil.fr/fr/securite-gerer-les-habilitations).
+Audit does not substitute for limiting access. Self-assignment rules need separate
+specification before implementing role-management paths; explicit assignment alone
+is not a barrier against a malicious administrator who can grant themselves roles.
+Detailed revocation mechanisms also remain deferred.
 
 Keep this PR specification-only. Subsequent dependent PRs should group coherent
 project foundations, corpus conversion, then context/consumer integration, with

@@ -1,10 +1,10 @@
-Implementation requires approval of the revised scope. This PR remains planning
-only; the provisional admin policy must be resolved before its implementation.
+This PR records the target design only. The agreed admin policy separates governance
+from project content access; implementation starts in a separate authorized task.
 All validation uses isolated fresh data; migration and Monday validation are separate.
 
 ## 1. Project and ownership foundations
 
-- [ ] 1.1 Resolve the admin review gate and agree dependent PR boundaries before coding; verify approved permissions and one authoritative target (the RFC now delegates its project slice here).
+- [ ] 1.1 Agree dependent PR boundaries and explicit role-assignment/self-assignment rules before coding; verify they preserve the decided governance/content separation and canonical charter rules.
 - [ ] 1.2 Add explicit project/parent identities, membership and scoped ReBAC roles using existing services; verify creation/bootstrap, team-membership constraints and no implicit editor/analyst project access.
 - [ ] 1.3 Provide project creation, membership/role management and navigation with generated clients and audit events; verify a team can create and administer Atlas without treating it as a folder.
 

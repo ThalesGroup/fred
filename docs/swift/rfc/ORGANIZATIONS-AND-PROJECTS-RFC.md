@@ -11,8 +11,8 @@ specified separately below. Organization onboarding remains open.
 is the proposed authority for projects, local roles, corpus ownership, agent reach
 and conversation context in the current single organization. This RFC no longer
 maintains parallel project rules. Its former transversal editor/analyst access and
-folder-parent permission model are superseded by that proposal. The outstanding
-admin policy is recorded only in its [review gate](../../../openspec/changes/simplify-corpus-authorization/design.md#review-gates-and-delivery).
+folder-parent permission model are superseded by that proposal. The governance/content-access decision is recorded in its
+[canonical design](../../../openspec/changes/simplify-corpus-authorization/design.md#governance-decision-and-delivery).
 
 [REBAC.md](../platform/REBAC.md) describes the shipped authorization model.
 Neither this RFC nor the OpenSpec changes runtime behavior by being merged.

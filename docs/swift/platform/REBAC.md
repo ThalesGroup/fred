@@ -5,7 +5,7 @@ Fred supports relationship-aware authorization so users can keep resources priva
 > **Current behavior versus proposed target:** this page describes the shipped
 > model. The [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md)
 > defines the proposed corpus replacement; it is not yet implemented. Use that
-> change for target decisions, including its single governance review gate.
+> change for target decisions, including its governance/content-access decision.
 > The [organization RFC](../rfc/ORGANIZATIONS-AND-PROJECTS-RFC.md) covers the later
 > multi-organization extension only.
 

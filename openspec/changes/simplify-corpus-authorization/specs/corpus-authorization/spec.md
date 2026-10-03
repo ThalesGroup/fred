@@ -43,6 +43,20 @@ be resolved server-side, never trusted from a caller or index.
 - **THEN** it cannot be shared with another team; organization-common resources,
   when exposed, are readable by all organization members, not selected teams
 
+### Requirement: Team governance does not grant project content access
+
+Team administrators SHALL be able to govern project structure and habilitations
+without implicit permission to read project documents, conversations or evaluation
+datasets. Corpus reading SHALL require explicit project membership; evaluation
+access to project conversations and datasets SHALL require an explicit project
+analyst role. Governance authority SHALL NOT bypass these content checks.
+
+#### Scenario: Claire administers the team but has no Atlas role
+
+- **WHEN** Claire attempts to read Atlas documents, conversations or datasets
+- **THEN** her team-admin role alone grants none of those accesses
+- **AND** she retains authorized structure and habilitation management operations
+
 ### Requirement: Corpus membership is exclusive
 
 Every corpus document SHALL belong to one immutable folder in one owning space.

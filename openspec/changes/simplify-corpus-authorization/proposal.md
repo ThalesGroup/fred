@@ -28,8 +28,7 @@ organization/project context: [#2921](https://github.com/ThalesGroup/fred/issues
 
 Multiple-organization administration, offline data translation/rollout, new scope
 widget variants, detailed revocation mechanisms, graph checkpoints and unidentified
-MCP removals are excluded. This is not the Monday validation branch. Cross-project
-admin governance access remains a team-review assumption, not a settled permission.
+MCP removals are excluded. This is not the Monday validation branch. Team administration grants no implicit project-content access.
 
 ## Capabilities
 
