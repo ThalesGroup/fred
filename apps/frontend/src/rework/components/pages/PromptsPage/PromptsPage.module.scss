@@ -24,7 +24,7 @@
 /* Only the inset the header sits in: PageHeader owns its type, colour and the
    right-alignment of the controls. */
 .pageTitle {
-  padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
+  padding: var(--spacing-m);
 }
 
 /* Search field + category-management button, grouped at the far right of the
@@ -41,7 +41,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
-  padding: 0 var(--spacing-l) var(--spacing-m);
+  padding: 0 var(--spacing-m) var(--spacing-m);
 }
 
 /* The favorites toggle leads; the category chips wrap beside it. */
@@ -51,9 +51,10 @@
   gap: var(--spacing-xs);
 }
 
+/* Fixed width: PageHeader sizes its actions to their content, so a percentage
+   width here resolves after that sizing and can push the toolbar onto two lines. */
 .searchBar {
-  width: 100%;
-  max-width: 320px;
+  width: 224px;
 }
 
 /* ── Prompt grid ────────────────────────────────────────────────────────────── */
@@ -63,8 +64,8 @@
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   grid-auto-rows: auto;
   align-items: stretch;
-  gap: var(--spacing-m);
-  padding: 0 var(--spacing-l) var(--spacing-l);
+  gap: var(--spacing-s);
+  padding: 0 var(--spacing-m) var(--spacing-m);
   overflow: auto;
 }
 

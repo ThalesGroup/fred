@@ -23,7 +23,7 @@ may import:
 | Layout   | `shared/layouts/`   | Atoms + Molecules + Organisms                                       |
 | Page     | `pages/`            | Atoms + Molecules + Organisms + Layouts                             |
 
-**Ruling — atom→atom:** a composite atom (e.g. `SettingChip` using `Icon`) may import
+**Ruling — atom→atom:** a composite atom (e.g. `IconButton` using `Icon`) may import
 sibling atoms. This is an explicit allowance, not a violation.
 
 **Ruling — molecule→molecule:** composable molecules (e.g. `Autocomplete`, `Select`,

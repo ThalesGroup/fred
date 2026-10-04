@@ -294,7 +294,7 @@ describe("TeamResourcesPage storage meter freshness", () => {
 describe("TeamResourcesPage stats toggle", () => {
   function statsToggle(): HTMLButtonElement {
     const button = Array.from(container.querySelectorAll("button")).find((b) => b.hasAttribute("aria-expanded"));
-    if (!button) throw new Error("stats toggle chip not rendered");
+    if (!button) throw new Error("stats toggle button not rendered");
     return button;
   }
 
@@ -304,7 +304,7 @@ describe("TeamResourcesPage stats toggle", () => {
     expect(statsToggle().getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("shows the stats cards when the header chip is toggled on, and back off when clicked again", () => {
+  it("shows the stats cards when the header button is toggled on, and back off when clicked again", () => {
     render();
 
     click(statsToggle());

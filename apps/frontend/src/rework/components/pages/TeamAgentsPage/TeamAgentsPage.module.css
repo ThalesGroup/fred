@@ -24,14 +24,13 @@
 /* Only the inset the header sits in: PageHeader owns its type, colour and the
    right-alignment of the controls. */
 .title {
-  padding: var(--spacing-l) var(--spacing-l) var(--spacing-m);
+  padding: var(--spacing-m);
 }
 
-/* Caps the field so it stays a compact search box in a wide toolbar rather
-   than stretching across the freed space (matches the team prompts page). */
+/* Fixed width: PageHeader sizes its actions to their content, so a percentage
+   width here resolved after that sizing and pushed the toolbar onto two lines. */
 .searchBar {
-  width: 100%;
-  max-width: 250px;
+  width: 250px;
 }
 
 /* Fixed width so the control does not resize as the selected option changes
@@ -61,17 +60,18 @@
 
 .agentList {
   display: grid;
-  grid-template-columns: repeat(auto-fit, 320px);
+  /* Cards stretch to fill the row; a new column appears as soon as each can keep 288px. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 288px), 1fr));
   grid-auto-rows: minmax(200px, auto);
-  gap: var(--spacing-m);
-  padding: 0 var(--spacing-l) var(--spacing-l);
+  gap: var(--spacing-s);
+  padding: 0 var(--spacing-m) var(--spacing-m);
   overflow: auto;
 }
 
 .podFilter {
   display: flex;
   justify-content: center;
-  padding: 0 var(--spacing-l) var(--spacing-s);
+  padding: 0 var(--spacing-m) var(--spacing-s);
 }
 
 .loadingState {

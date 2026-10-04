@@ -14,34 +14,25 @@
  * limitations under the License.
  */
 
-/* The main nav panel — the second column that swaps content by mainNavBar
- * selection (team nav here, Home team list, marketplace, admin). Renamed from
- * `teamContentNavbarContainer` (#2298): it is no longer team-only.
- *
- * 272px (was 240px): the conversation list's meta line "<agent> · DD/MM/YY -
- * HH:mm" is the widest content this column carries, and at 240px it left too
- * little room for the agent name once the date is kept intact. All four panels
- * share this width — they swap in the same grid column, so any mismatch shows
- * up as the column jumping when switching modes. */
+/* The main nav panel: the second column, whose content swaps with the
+ * mainNavBar selection (team, Home, marketplace, admin). All four panels share
+ * this width, or the column jumps when switching modes. */
 .mainNavPanel {
   display: flex;
   flex-direction: column;
-  width: 272px;
+  width: 254px;
   height: 100%;
   min-height: 0;
 }
 
-/* Team panel header (#2298): flat header that replaces the coloured banner for
- * real teams — 16px left / 8px right / 8px top-bottom padding on a
- * surface-container-high surface. Labels on the left, settings gear on the
- * right, vertically centred. */
+/* Team panel header: flat, on the panel's own background. Labels on the left,
+ * settings gear on the right, vertically centred. */
 .teamPanelHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
-  background-color: var(--surface-container-high);
-  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-s) var(--spacing-m);
+  padding: var(--spacing-s) var(--spacing-xs) var(--spacing-3xs) var(--spacing-m);
   min-height: 48px;
   color: var(--on-surface);
 }
@@ -121,6 +112,6 @@
 /* "Back" out of team settings, above the settings section menu. */
 .settings-back-container {
   display: flex;
-  background-color: var(--surface-container);
+  margin-top: var(--spacing-xs);
   padding: var(--spacing-2xs) 0 var(--spacing-2xs) var(--spacing-2xs);
 }
