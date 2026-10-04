@@ -105,6 +105,13 @@ class FrontendUserAuthConfig(BaseModel):
     client_id: str | None = None
 
 
+class FrontendUiThemes(BaseModel):
+    """Platform default UI theme and hidden theme ids, as the frontend reads them."""
+
+    default_theme: str | None = None
+    hidden_themes: list[str] = Field(default_factory=list)
+
+
 class FrontendConfig(BaseModel):
     """Public pre-auth frontend configuration surface.
 
@@ -154,6 +161,14 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
+        ),
+    )
+    ui_themes: FrontendUiThemes | None = Field(
+        default=None,
+        description=(
+            "Platform UI theme settings, omitted when never saved. Public on "
+            "purpose: the frontend resolves the theme before its first paint, "
+            "before authentication. Theme ids only, no admin-authored content."
         ),
     )
 
@@ -591,6 +606,8 @@ class PromptSummary(BaseModel):
     avg_output_tokens: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # For the caller only; set on the team listing, False elsewhere.
+    is_favorite: bool = False
 
 
 class PromptCommandSummary(BaseModel):
@@ -652,6 +669,7 @@ class ContextPromptSummary(BaseModel):
     version: int
     session_count: int
     score: float | None = None
+    is_favorite: bool = False
 
 
 class PromptScoreUpdateRequest(BaseModel):

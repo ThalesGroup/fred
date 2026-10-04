@@ -37,7 +37,7 @@
   position: relative;
   box-sizing: border-box;
   border: 1px solid var(--outline-muted);
-  border-radius: 16px;
+  border-radius: var(--radius-s);
   background: var(--surface-container);
   width: 100%;
   height: 100%;

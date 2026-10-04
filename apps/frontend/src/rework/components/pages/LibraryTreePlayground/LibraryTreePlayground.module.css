@@ -63,7 +63,7 @@
   gap: var(--spacing-3xs);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-l);
-  background: var(--surface-container-lowest);
+  background: var(--surface-container);
   padding: var(--spacing-s);
 }
 

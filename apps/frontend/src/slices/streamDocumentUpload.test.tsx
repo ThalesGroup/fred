@@ -297,8 +297,8 @@ describe("streamUploadOrProcessDocument", () => {
   });
 
   it("does not reject on a later failure once a task_id was already discovered", async () => {
-    // The tray/Activity SSE feed for that task_id is the source of truth once
-    // a task exists — re-throwing here would double-report the same failure.
+    // The task SSE feed is the source of truth once a task exists;
+    // re-throwing here would double-report the same failure.
     stubFetch([
       JSON.stringify({ step: "prep", status: "success", filename: "a.pdf", document_uid: "doc-1", task_id: "t-1" }),
       JSON.stringify({

@@ -13,14 +13,11 @@
 // limitations under the License.
 
 import { createSelector, createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import type { TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { TERMINAL_STATES, type AnyTaskEvent, type ImportStage, type TaskTarget, type TaskViewModel } from "./taskTypes";
 
 export interface TasksState {
   byId: Record<string, TaskViewModel>;
-  // Monotonic counter bumped by the tray clock (see `trayClockTicked`). Terminal
-  // tasks age out of the tray purely by elapsed wall-clock, which `byId` does not
-  // reflect; this gives `selectVisibleTasks` an input to recompute on.
-  tick?: number;
   // Bumped when something asks the import panel to show itself
   // (see `importPanelOpenRequested`).
   importPanelOpenRequest?: number;
@@ -32,7 +29,7 @@ interface TasksRootState {
   tasks: TasksState;
 }
 
-const initialState: TasksState = { byId: {}, tick: 0, importPanelOpenRequest: 0 };
+const initialState: TasksState = { byId: {}, importPanelOpenRequest: 0 };
 
 export const EVICTION_DELAY_MS = 5 * 60 * 1000;
 
@@ -78,6 +75,7 @@ export const taskSlice = createSlice({
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
+        untracked: false,
       };
     },
 
@@ -102,6 +100,7 @@ export const taskSlice = createSlice({
         existing.conflict = null;
         existing.terminalAt = null;
         existing.acknowledgedAt = null;
+        existing.untracked = false;
         return;
       }
       state.byId[localId] = {
@@ -126,6 +125,7 @@ export const taskSlice = createSlice({
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
+        untracked: false,
       };
     },
 
@@ -161,6 +161,7 @@ export const taskSlice = createSlice({
         terminalAt: null,
         acknowledgedAt: null,
         warnings: null,
+        untracked: false,
       };
     },
 
@@ -228,6 +229,33 @@ export const taskSlice = createSlice({
       }
     },
 
+    /** The owning backend's current state for the tasks a read asked about.
+     *
+     *  A task that has an outcome keeps it: following ends there, as the
+     *  stream did when it closed on it. A task the answer leaves out is marked
+     *  untracked: its outcome is unknown, never assumed. */
+    taskSnapshotsReceived(state, action: PayloadAction<{ requestedIds: string[]; tasks: TaskSummary[] }>) {
+      const returned = new Map(action.payload.tasks.map((task) => [task.task_id, task]));
+      for (const taskId of action.payload.requestedIds) {
+        const vm = state.byId[taskId];
+        if (!vm || vm.untracked || TERMINAL_STATES.has(vm.state)) continue;
+        const task = returned.get(taskId);
+        if (!task) {
+          vm.untracked = true;
+          continue;
+        }
+        vm.state = task.state;
+        // Same sparse-field rule as `taskEventReceived`.
+        if (task.progress != null) vm.progress = task.progress;
+        if (task.step != null) vm.step = task.step;
+        vm.error = task.error ?? null;
+        if (task.target) vm.target = task.target;
+        const result = task.kind === "migration" && task.detail && "result" in task.detail ? task.detail.result : null;
+        if (result && "warnings" in result && result.warnings) vm.warnings = result.warnings;
+        if (TERMINAL_STATES.has(task.state) && vm.terminalAt === null) vm.terminalAt = Date.now();
+      }
+    },
+
     taskEvicted(state, action: PayloadAction<string>) {
       delete state.byId[action.payload];
     },
@@ -245,30 +273,19 @@ export const taskSlice = createSlice({
       state.importPanelOpenRequest = (state.importPanelOpenRequest ?? 0) + 1;
     },
 
-    /** Advance the tray clock so time-based selectors (`selectVisibleTasks`)
-     *  recompute. Dispatched by a timer when a succeeded task crosses its
-     *  eviction window — it must drop out of the floating tray without being
-     *  removed from the store (admin history keeps it for the session). */
-    trayClockTicked(state) {
-      state.tick = (state.tick ?? 0) + 1;
-    },
-
-    /** Manually drop every terminal task (succeeded/failed/cancelled). Backs the
+    /** Manually drop every terminal or untracked task. Backs the
      *  admin "Clear completed" button — done tasks are kept for the whole session
      *  (useful after big ingestions) and only removed when the user asks. */
     completedTasksCleared(state) {
       for (const id of Object.keys(state.byId)) {
-        if (TERMINAL_STATES.has(state.byId[id].state)) {
+        if (!isFollowed(state.byId[id])) {
           delete state.byId[id];
         }
       }
     },
 
-    /** A single task was acknowledged server-side (`POST /tasks/{id}/ack`,
-     *  TASK-EVENT-STREAM-RFC.md §2.10) — mirror the server's timestamp into
-     *  the local view model so `selectVisibleTasks`'s eviction timer and
-     *  `selectUnacknowledgedFailures` see it, same as before, but driven by a
-     *  real per-task server record instead of a per-browser bulk flag. */
+    /** Mirror the server's per-task acknowledgement timestamp so task
+     *  selectors update without a browser-local bulk flag. */
     taskAcknowledged(state, action: PayloadAction<{ taskId: string; acknowledgedAt: string }>) {
       const vm = state.byId[action.payload.taskId];
       if (!vm) return;
@@ -285,8 +302,8 @@ export const {
   uploadFinished,
   uploadFailed,
   taskEventReceived,
+  taskSnapshotsReceived,
   taskEvicted,
-  trayClockTicked,
   importPanelOpenRequested,
   taskAcknowledged,
   completedTasksCleared,
@@ -295,34 +312,34 @@ export const {
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
 const selectById = (state: TasksRootState) => state.tasks.byId;
-const selectTick = (state: TasksRootState) => state.tasks.tick;
+
+/** Still being followed: no outcome yet, and not untracked. An untracked task
+ *  has stopped like a finished one, and is dismissed like a failure. */
+const isFollowed = (vm: TaskViewModel) => !TERMINAL_STATES.has(vm.state) && !vm.untracked;
 
 /** Bumped every time something asks the import panel to open; it watches this. */
 export const selectImportPanelOpenRequest = (state: TasksRootState) => state.tasks.importPanelOpenRequest ?? 0;
 
-export const selectActiveTasks = createSelector(selectById, (byId) =>
-  Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)),
-);
+/** Tasks still being followed: no outcome yet, and not untracked. */
+export const selectActiveTasks = createSelector(selectById, (byId) => Object.values(byId).filter(isFollowed));
 
-// `selectTick` is a memoization input only: it carries no data into the result but
-// forces a recompute when the tray clock advances, so terminal tasks age out on time.
-export const selectVisibleTasks = createSelector([selectById, selectTick], (byId) => {
+export const selectVisibleTasks = createSelector(selectById, (byId) => {
   const now = Date.now();
   return Object.values(byId)
     .filter((vm) => {
-      if (!TERMINAL_STATES.has(vm.state)) return true;
+      if (isFollowed(vm)) return true;
       if (vm.state === "succeeded") {
         return vm.terminalAt !== null && now - vm.terminalAt < EVICTION_DELAY_MS;
       }
-      // failed/cancelled: show until acknowledgedAt + 5min, or until acknowledged
+      // failed/cancelled/untracked: shown until acknowledged, then for 5 more minutes
       if (vm.acknowledgedAt !== null) {
         return now - vm.acknowledgedAt < EVICTION_DELAY_MS;
       }
       return true;
     })
     .sort((a, b) => {
-      const aActive = !TERMINAL_STATES.has(a.state);
-      const bActive = !TERMINAL_STATES.has(b.state);
+      const aActive = isFollowed(a);
+      const bActive = isFollowed(b);
       if (aActive !== bActive) return aActive ? -1 : 1;
       return b.registeredAt - a.registeredAt;
     });
@@ -348,7 +365,7 @@ export const makeSelectImportTasks = (teamId: string | null) =>
       .filter(
         (vm) => vm.kind === "ingestion" && vm.stage !== null && vm.target?.type === "document" && vm.teamId === teamId,
       )
-      // Oldest first, unlike the tray: these are the files of one import, and
+      // Oldest first: these are the files of one import, and
       // reading them in the order they were sent beats having the list reshuffle
       // under the eye as each new one registers.
       .sort((a, b) => a.registeredAt - b.registeredAt),
@@ -357,21 +374,18 @@ export const makeSelectImportTasks = (teamId: string | null) =>
 /**
  * All tasks in the store, active first then most-recently-finished, with NO age
  * cutoff. Backs the admin Tasks page, which keeps the full session history until
- * the user clears it — unlike `selectVisibleTasks` (tray) which drops old ones.
+ * the user clears it; `selectVisibleTasks` drops old ones.
  */
 export const selectAllTasks = createSelector(selectById, (byId) =>
   Object.values(byId).sort((a, b) => {
-    const aActive = !TERMINAL_STATES.has(a.state);
-    const bActive = !TERMINAL_STATES.has(b.state);
+    const aActive = isFollowed(a);
+    const bActive = isFollowed(b);
     if (aActive !== bActive) return aActive ? -1 : 1;
     return b.registeredAt - a.registeredAt;
   }),
 );
 
-export const selectActiveCount = createSelector(
-  selectById,
-  (byId) => Object.values(byId).filter((vm) => !TERMINAL_STATES.has(vm.state)).length,
-);
+export const selectActiveCount = createSelector(selectById, (byId) => Object.values(byId).filter(isFollowed).length);
 
 export const selectUnacknowledgedFailures = createSelector(
   selectById,
@@ -392,7 +406,8 @@ export const selectActiveTaskForTarget =
   (type: string, id: string) =>
   (state: TasksRootState): TaskViewModel | undefined =>
     Object.values(state.tasks.byId).find(
-      (vm) => vm.state !== "succeeded" && vm.target?.type === type && vm.target?.id === id,
+      // An untracked task says nothing about the entity: its own status does.
+      (vm) => vm.state !== "succeeded" && !vm.untracked && vm.target?.type === type && vm.target?.id === id,
     );
 
 /** A task that settled on an outcome which changed its entity, paired with that entity's id. */
@@ -416,7 +431,9 @@ export interface SettledTarget {
  * its storage quota (`delete_cancelled_document`, #2315). The entity the caller
  * cached is gone, so it needs the same refresh a success gets. `failed` is
  * deliberately excluded: the document survives, and its row keeps rendering
- * from the retained task rather than from a refetched snapshot.
+ * from the retained task rather than from a refetched snapshot. An untracked
+ * task counts too: the row falls back to the entity, whose cached copy may
+ * predate the task.
  *
  * Factory (one memoized selector per `type`); memoize the call with `useMemo`.
  */
@@ -424,7 +441,10 @@ export const makeSelectSettledTargetsOfType = (type: string) =>
   createSelector(selectById, (byId): SettledTarget[] =>
     Object.values(byId)
       .filter(
-        (vm) => (vm.state === "succeeded" || vm.state === "cancelled") && vm.target?.type === type && !!vm.target?.id,
+        (vm) =>
+          (vm.state === "succeeded" || vm.state === "cancelled" || vm.untracked) &&
+          vm.target?.type === type &&
+          !!vm.target?.id,
       )
       .map((vm) => ({ taskId: vm.taskId, targetId: vm.target!.id })),
   );

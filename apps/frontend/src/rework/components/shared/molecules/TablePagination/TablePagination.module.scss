@@ -19,7 +19,7 @@
   flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid var(--surface-container-highest);
+  border-top: 1px solid var(--outline-muted);
   background-color: var(--datatable-background-color);
   /* Sized by its 32px controls rather than a fixed height, to stay compact. */
   padding: var(--spacing-xs) 0;

@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Button from "@shared/atoms/Button/Button.tsx";
-import Icon from "@shared/atoms/Icon/Icon.tsx";
-import { IconType } from "@shared/utils/Type.ts";
+import Button from "../../atoms/Button/Button.tsx";
+import Icon from "../../atoms/Icon/Icon.tsx";
+import type { IconType } from "../../utils/Type.ts";
 import styles from "./PageEmptyState.module.scss";
 
-interface PageEmptyStateAction {
+export interface PageEmptyStateAction {
   label: string;
   onClick: () => void;
   disabled?: boolean;
 }
 
-interface PageEmptyStateProps {
+export interface PageEmptyStateProps {
   /** Material symbol name for the large centred icon. */
   icon: IconType;
   /** Primary message shown below the icon. */
@@ -58,6 +58,7 @@ export default function PageEmptyState({ icon, message, action }: PageEmptyState
       </div>
       {action && (
         <Button
+          type="button"
           color="primary"
           variant="filled"
           size="medium"

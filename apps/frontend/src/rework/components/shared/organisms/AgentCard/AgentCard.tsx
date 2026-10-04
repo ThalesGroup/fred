@@ -168,7 +168,7 @@ export default function AgentCard({
                 iconButton={{
                   color: "on-surface-retreat",
                   variant: "icon",
-                  size: "medium",
+                  size: "small",
                   icon: { category: "outlined", type: "more_vert" },
                 }}
                 options={[

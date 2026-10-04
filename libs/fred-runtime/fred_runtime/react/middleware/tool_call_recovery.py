@@ -27,7 +27,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage
 from langchain_core.messages.tool import ToolCall, tool_call
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, InjectedToolCallId
 from pydantic import BaseModel, ValidationError
 
 from ..react_model_adapter import (
@@ -68,6 +68,28 @@ _JSON_DECODER = json.JSONDecoder(
     parse_constant=_reject_json_constant,
     object_pairs_hook=_strict_json_object,
 )
+_LINE_BREAK_JSON_DECODER = json.JSONDecoder(
+    strict=False,
+    parse_constant=_reject_json_constant,
+    object_pairs_hook=_strict_json_object,
+)
+
+
+def _has_other_raw_string_controls(text: str) -> bool:
+    in_string = False
+    escaped = False
+    for char in text:
+        if not in_string:
+            in_string = char == '"'
+        elif escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == '"':
+            in_string = False
+        elif ord(char) < 0x20 and char not in "\r\n":
+            return True
+    return False
 
 
 def is_mistral_model_name(model_name: str | None) -> bool:
@@ -175,11 +197,32 @@ def _parse_sequence(
 
     def decode_args(name: str, start: int) -> tuple[dict[str, Any], int] | None:
         try:
-            args, end = _JSON_DECODER.raw_decode(text, start)
+            try:
+                args, end = _JSON_DECODER.raw_decode(text, start)
+            except json.JSONDecodeError:
+                args, end = _LINE_BREAK_JSON_DECODER.raw_decode(text, start)
+                if _has_other_raw_string_controls(text[start:end]):
+                    return None
             if not isinstance(args, dict):
                 return None
-            schema = cast(type[BaseModel], tools_by_name[name].get_input_schema())
-            schema.model_validate(args, extra="forbid")
+            tool = tools_by_name[name]
+            full_schema = cast(type[BaseModel], tool.get_input_schema())
+            public_schema = tool.tool_call_schema
+            validation_args = args
+            if isinstance(public_schema, type):
+                schema = cast(type[BaseModel], public_schema)
+                schema.model_validate(args, extra="forbid")
+                hidden_fields = (
+                    full_schema.model_fields.keys() - schema.model_fields.keys()
+                )
+                if hidden_fields:
+                    if hidden_fields != {"tool_call_id"} or (
+                        InjectedToolCallId
+                        not in full_schema.model_fields["tool_call_id"].metadata
+                    ):
+                        return None
+                    validation_args = {**args, "tool_call_id": "recovery-validation"}
+            full_schema.model_validate(validation_args, extra="forbid")
         except (
             json.JSONDecodeError,
             RecursionError,

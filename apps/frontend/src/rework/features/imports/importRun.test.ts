@@ -117,7 +117,7 @@ describe("scheduleFiles", () => {
   it("reports the mid-stream failure only for files still pending when it happened", async () => {
     // a.pdf already got its task before the connection drops; b.pdf and c.pdf
     // never got any outcome — only the generic transport error covers them,
-    // and a.pdf must not be reported a second time (the tray owns it).
+    // and a.pdf must not be reported a second time (its task owns it).
     streamMock.mockImplementation((_files, _mode, _meta, discover) => {
       discover({ taskId: "t-1", documentUid: "doc-1", filename: "a.pdf" });
       return Promise.reject(new Error("connection reset"));
@@ -208,7 +208,7 @@ describe("scheduleFiles", () => {
     await scheduleFiles([new File(["x"], "a.pdf")], "process", {}, onDiscovered, onBackgroundError);
 
     // The task was already discovered (scheduleFiles resolved on it); the request
-    // now fails in the background — the tray/Activity owns reporting that, not us.
+    // now fails in the background; the task UI owns reporting that.
     rejectFull(new Error("late failure"));
     await new Promise((r) => setTimeout(r, 0));
 

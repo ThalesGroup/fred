@@ -17,9 +17,9 @@ import { taskBackendFor } from "./taskKinds";
 
 // ── taskBackendFor ────────────────────────────────────────────────────────────
 //
-// The single source of truth useTaskSseManager.taskEventsBasePath and
-// useTaskAcknowledgement both route off — a mismatch here means either the
-// SSE stream or the acknowledgement POST hits the wrong backend and 404s
+// The single source of truth useTaskPolling and useTaskAcknowledgement both
+// route off — a mismatch here means either the progress read or the
+// acknowledgement POST hits the wrong backend
 // (#2123 review: ack always called control-plane regardless of kind).
 
 describe("taskBackendFor", () => {
@@ -29,10 +29,6 @@ describe("taskBackendFor", () => {
 
   it("routes migration tasks to the control-plane backend", () => {
     expect(taskBackendFor("migration")).toBe("control-plane");
-  });
-
-  it("routes evaluation tasks to the evaluation backend", () => {
-    expect(taskBackendFor("evaluation")).toBe("evaluation");
   });
 
   it("routes ingestion tasks to the knowledge-flow backend", () => {

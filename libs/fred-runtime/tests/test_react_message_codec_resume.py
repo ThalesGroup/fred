@@ -90,3 +90,29 @@ def test_fresh_turn_ignores_interrupt_id_and_builds_message_payload() -> None:
     messages = result["messages"]
     assert isinstance(messages, list)
     assert len(messages) == 1
+
+
+def test_batch_resume_targets_every_pending_interrupt() -> None:
+    payload = {
+        "answers": [
+            {
+                "interrupt_id": "interrupt-a",
+                "occurrence_id": "call-a",
+                "answer": {"text": "one"},
+            },
+            {
+                "interrupt_id": "interrupt-b",
+                "occurrence_id": "call-b",
+                "answer": {"skipped": True},
+            },
+        ]
+    }
+    config = ExecutionConfig(session_id="s1", resume_payload=payload)
+    result = graph_input_from_react_input(
+        ReActInput.model_construct(messages=()), config, sanitize_tool_name=_sanitize
+    )
+    assert isinstance(result, Command)
+    assert result.resume == {
+        "interrupt-a": {"text": "one"},
+        "interrupt-b": {"skipped": True},
+    }

@@ -248,7 +248,7 @@
 }
 
 .root :global(tr:nth-child(even)) {
-  background: var(--surface-container-lowest);
+  background: var(--surface-container-low);
 }
 
 /* ---- Inline elements ---- */

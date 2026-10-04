@@ -18,7 +18,7 @@ import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import DataTable, { DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Separator from "@shared/atoms/Separator/Separator.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";

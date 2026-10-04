@@ -14,6 +14,7 @@
 
 import { createKeycloakInstance } from "../security/KeycloakService";
 import type { FrontendConfig } from "../slices/controlPlane/controlPlaneOpenApi";
+import { cachePlatformUiThemes, type PlatformUiThemes } from "../app/uiThemes.ts";
 
 /** Public pre-auth control-plane config surface. */
 const FRONTEND_CONFIG_URL = "/control-plane/v1/frontend/config";
@@ -49,6 +50,8 @@ export interface AppConfig {
    * marker is also `false`.
    */
   root_bootstrap_required: boolean;
+  /** Platform default and hidden UI themes, or null when never saved (public pre-auth config). */
+  ui_themes: PlatformUiThemes | null;
 }
 
 type RawAppConfig = {
@@ -56,12 +59,6 @@ type RawAppConfig = {
   feature_flags?: Record<string, boolean>;
   properties?: Record<string, string>;
 };
-
-export const FeatureFlagKey = {
-  ENABLE_K8_FEATURES: "enableK8Features",
-  ENABLE_ELEC_WARFARE: "enableElecWarfare",
-} as const;
-export type FeatureFlagKeyType = (typeof FeatureFlagKey)[keyof typeof FeatureFlagKey];
 
 let config: AppConfig | null = null;
 
@@ -89,7 +86,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version, root_bootstrap_required } = await loadPublicConfig();
+  const { user_auth, gcu_version, root_bootstrap_required, ui_themes } = await loadPublicConfig();
 
   config = {
     frontend_basename: base.frontend_basename ?? "/",
@@ -98,7 +95,9 @@ export const loadConfig = async () => {
     user_auth,
     gcu_version,
     root_bootstrap_required,
+    ui_themes,
   };
+  cachePlatformUiThemes(ui_themes);
 
   if (config.user_auth?.enabled) {
     const { realm_url, client_id } = config.user_auth;
@@ -126,7 +125,7 @@ export const loadConfig = async () => {
  *   `/config.json`, since the control-plane is required to run the app
  */
 const loadPublicConfig = async (): Promise<
-  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required">
+  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required" | "ui_themes">
 > => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
@@ -147,6 +146,7 @@ const loadPublicConfig = async (): Promise<
     // frontend must not otherwise re-derive ReBAC/auth policy itself.
     root_bootstrap_required:
       payload.root_bootstrap_required ?? (payload.user_auth.enabled && !payload.root_bootstrap_completed),
+    ui_themes: payload.ui_themes ?? null,
   };
 };
 
@@ -168,20 +168,8 @@ export const getConfig = (): AppConfig => {
   return config;
 };
 
-/**
- * Read one pre-auth static feature flag by key.
- *
- * Why this function exists:
- * - a few startup decisions still read from the tiny static config before the
- *   control-plane bootstrap has hydrated the shell
- *
- * How to use it:
- * - call after `loadConfig()` and pass a `FeatureFlagKey` value
- *
- * Example:
- * - `const enabled = isFeatureEnabled(FeatureFlagKey.ENABLE_K8_FEATURES);`
- */
-export const isFeatureEnabled = (flag: FeatureFlagKeyType): boolean => !!getConfig().feature_flags?.[flag];
+/** Platform UI theme settings, or null before loadConfig() or when never saved. */
+export const getPlatformUiThemes = (): PlatformUiThemes | null => config?.ui_themes ?? null;
 
 /**
  * Read one static frontend property by key.

@@ -23,6 +23,18 @@ catégories et prompts d'exemple, pour ne pas partir d'une page blanche.
 Supprimer une catégorie qui contient encore des prompts est bloqué : videz-la ou
 reclassez-les d'abord.
 
+## Favoris
+
+Cliquez sur l'**étoile** d'un prompt pour le mettre en favori ; cliquez à
+nouveau pour le retirer. Vos favoris n'appartiennent qu'à vous : les autres
+membres de l'équipe ne les voient pas.
+
+Le filtre **Favoris**, en tête de la page Prompts et à côté de la recherche dans
+le panneau des prompts d'une conversation, n'affiche que vos favoris. Il se
+combine avec la catégorie choisie.
+
+Si vous quittez une équipe, vos favoris sur ses prompts sont retirés.
+
 ## Créer, consulter, réutiliser
 
 Un prompt porte un titre et un contenu. Sa fiche permet de le consulter et de le

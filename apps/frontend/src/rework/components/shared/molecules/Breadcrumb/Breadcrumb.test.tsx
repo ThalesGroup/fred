@@ -27,12 +27,12 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
 
-function render(segments: BreadcrumbSegment[]) {
+function render(segments: BreadcrumbSegment[], label?: string) {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => {
-    root.render(<Breadcrumb segments={segments} />);
+    root.render(<Breadcrumb segments={segments} label={label} />);
   });
 }
 
@@ -96,5 +96,10 @@ describe("Breadcrumb", () => {
     render([{ label: "Evaluations" }]);
     const nav = container.querySelector("nav");
     expect(nav?.getAttribute("aria-label")).toBe("Breadcrumb");
+  });
+
+  it("names the landmark with the caller's label", () => {
+    render([{ label: "Accueil" }], "Fil d'Ariane");
+    expect(container.querySelector("nav")?.getAttribute("aria-label")).toBe("Fil d'Ariane");
   });
 });

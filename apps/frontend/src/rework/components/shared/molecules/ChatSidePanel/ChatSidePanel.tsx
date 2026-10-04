@@ -58,7 +58,6 @@ export default function ChatSidePanel({
       layout="push"
       floating
       compactHeader
-      background="var(--surface-container-high)"
       // Snappier than the 250ms default: these panels are a quick detour from
       // the conversation, not a context switch.
       duration="var(--duration-short-3)"

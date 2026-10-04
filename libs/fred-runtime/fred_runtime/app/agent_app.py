@@ -209,6 +209,10 @@ from fred_runtime.runtime_support.checkpoints import (
     graph_thread_prefix,
     load_checkpoint,
 )
+from fred_runtime.runtime_support.hitl_batch import (
+    BatchedHumanAnswer,
+    parse_batched_human_answers,
+)
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
 from ..common.structures import AgentSettingsLike
@@ -2530,7 +2534,73 @@ def _pending_interrupt_occurrences(
 
 
 async def _validate_agent_question_answer(request: RuntimeExecuteRequest) -> bool:
-    """Validate a pending platform question before the single-use resume claim."""
+    """Validate pending platform questions before the single-use resume claim."""
+    try:
+        batch = parse_batched_human_answers(request.resume_payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if batch is not None:
+        session_id = request.effective_session_id()
+        checkpointer = get_runtime_context().config.checkpointer
+        if not session_id or checkpointer is None:
+            return False
+        for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+            request, session_id
+        ):
+            loaded = await load_checkpoint(
+                checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
+            )
+            if loaded is None:
+                continue
+            _, pending_writes = loaded
+            prompts: dict[tuple[str, str], HumanInputRequest] = {}
+            for _task_id, channel, value in pending_writes:
+                if channel != _REACT_V2_INTERRUPT_CHANNEL:
+                    continue
+                candidates = value if isinstance(value, (list, tuple)) else (value,)
+                for candidate in candidates:
+                    interrupt_id = getattr(candidate, "id", None)
+                    payload = getattr(candidate, "value", None)
+                    if isinstance(candidate, dict):
+                        interrupt_id = candidate.get("id")
+                        payload = candidate.get("value")
+                    if (
+                        not isinstance(payload, dict)
+                        or payload.get("stage") != "agent_question"
+                    ):
+                        continue
+                    occurrence_id = payload.get("occurrence_id")
+                    if isinstance(interrupt_id, str) and isinstance(occurrence_id, str):
+                        try:
+                            prompts[(interrupt_id, occurrence_id)] = (
+                                HumanInputRequest.model_validate(payload)
+                            )
+                        except ValidationError as exc:
+                            raise HTTPException(
+                                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                detail=str(exc),
+                            ) from exc
+            if set(prompts) != {
+                (item.interrupt_id, item.occurrence_id) for item in batch
+            }:
+                continue
+            for item in batch:
+                try:
+                    parse_human_input_answer(
+                        item.answer, prompts[(item.interrupt_id, item.occurrence_id)]
+                    )
+                except (ValueError, ValidationError) as exc:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail=str(exc),
+                    ) from exc
+            return True
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="batch answers do not match pending agent questions",
+        )
     if request.resume_payload is None or not request.interrupt_id:
         return False
     session_id = request.effective_session_id()
@@ -2684,6 +2754,26 @@ async def _validate_session_checkpoint_access(
             status_code=status.HTTP_409_CONFLICT,
             detail="checkpoint is not waiting for resume.",
         )
+    try:
+        batch = parse_batched_human_answers(request.resume_payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if batch is not None:
+        if request.interrupt_id is not None or request.occurrence_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="batch resumes use item identities only",
+            )
+        if {
+            (item.interrupt_id, item.occurrence_id) for item in batch
+        } != pending_occurrences:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="batch answers must match every pending HITL occurrence",
+            )
+        return tuple(item.occurrence_id for item in batch)
     matching_occurrence_ids = {
         occurrence_id
         for interrupt_id, occurrence_id in pending_occurrences
@@ -2837,40 +2927,47 @@ async def _write_turn_history(
     messages: list[ChatMessage] = []
     rank = base_rank
 
-    # 1. Opening row: user text on normal turns, HITL response on resume turns.
+    # 1. Opening rows: user text or one HITL response per resumed occurrence.
     if resume_payload is not None:
-        choice_id: str | None = None
-        text: str | None = None
-        skipped = False
-        if isinstance(resume_payload, dict):
-            skipped = resume_payload.get("skipped") is True
-            raw_choice_id = resume_payload.get("choice_id")
-            if isinstance(raw_choice_id, str) and raw_choice_id:
-                choice_id = raw_choice_id
-            raw_text = resume_payload.get("text")
-            if isinstance(raw_text, str) and raw_text:
-                text = raw_text
-            elif choice_id is None:
-                raw_answer = resume_payload.get("answer")
-                if isinstance(raw_answer, str) and raw_answer:
-                    text = raw_answer
-        elif isinstance(resume_payload, str):
-            choice_id = resume_payload
-        else:
-            choice_id = str(resume_payload)
-        if choice_id or text or skipped:
-            messages.append(
-                make_hitl_response(
-                    session_id,
-                    exchange_id,
-                    rank,
-                    choice_id=choice_id,
-                    text=text,
-                    skipped=skipped,
-                    occurrence_id=occurrence_id,
+        batch = parse_batched_human_answers(resume_payload)
+        answer_rows = (
+            tuple((item.answer, item.occurrence_id) for item in batch)
+            if batch is not None
+            else ((resume_payload, occurrence_id),)
+        )
+        for answer_payload, answer_occurrence_id in answer_rows:
+            choice_id: str | None = None
+            text: str | None = None
+            skipped = False
+            if isinstance(answer_payload, dict):
+                skipped = answer_payload.get("skipped") is True
+                raw_choice_id = answer_payload.get("choice_id")
+                if isinstance(raw_choice_id, str) and raw_choice_id:
+                    choice_id = raw_choice_id
+                raw_text = answer_payload.get("text")
+                if isinstance(raw_text, str) and raw_text:
+                    text = raw_text
+                elif choice_id is None:
+                    raw_answer = answer_payload.get("answer")
+                    if isinstance(raw_answer, str) and raw_answer:
+                        text = raw_answer
+            elif isinstance(answer_payload, str):
+                choice_id = answer_payload
+            else:
+                choice_id = str(answer_payload)
+            if choice_id or text or skipped:
+                messages.append(
+                    make_hitl_response(
+                        session_id,
+                        exchange_id,
+                        rank,
+                        choice_id=choice_id,
+                        text=text,
+                        skipped=skipped,
+                        occurrence_id=answer_occurrence_id,
+                    )
                 )
-            )
-            rank += 1
+                rank += 1
     elif request_message:
         messages.append(
             make_user_text(
@@ -3016,6 +3113,48 @@ async def _write_turn_history(
             # AND a reload while the gate is still open can reconstruct a
             # working (not just readable) prompt.
             req = payload.get("request", {})
+            raw_usage = payload.get("token_usage")
+            pause_sources = [
+                VectorSearchHit.model_validate(source)
+                for source in (payload.get("sources") or [])
+                if isinstance(source, dict)
+            ]
+            pause_ui_parts = [
+                part
+                for part in (payload.get("ui_parts") or [])
+                if isinstance(part, dict) and isinstance(part.get("type"), str)
+            ]
+            if (
+                isinstance(raw_usage, dict)
+                or pause_sources
+                or pause_ui_parts
+                or payload.get("model_name") is not None
+                or payload.get("context_tokens") is not None
+            ):
+                messages.append(
+                    ChatMessage(
+                        session_id=session_id,
+                        exchange_id=exchange_id,
+                        rank=rank,
+                        timestamp=datetime.now(timezone.utc),
+                        role=Role.system,
+                        channel=Channel.system_note,
+                        parts=[],
+                        metadata=ChatMetadata.model_validate(
+                            {
+                                "model": payload.get("model_name"),
+                                "token_usage": raw_usage
+                                if isinstance(raw_usage, dict)
+                                else None,
+                                "context_tokens": payload.get("context_tokens"),
+                                "sources": pause_sources,
+                                "ui_parts": pause_ui_parts,
+                                "extras": {"pause_metadata": True},
+                            }
+                        ),
+                    )
+                )
+                rank += 1
             # A resumed run re-raises the siblings still waiting, so the same
             # pause is emitted again. One question keeps one row: the run that
             # first surfaced it already wrote it.
@@ -3028,36 +3167,35 @@ async def _write_turn_history(
             question = req.get("question") or req.get("title") or "HITL pause"
             raw_choices = req.get("choices") or []
             raw_pending_calls = req.get("pending_calls") or []
-            messages.append(
-                make_hitl_request(
-                    session_id,
-                    exchange_id,
-                    rank,
-                    question=question,
-                    choices=[
-                        {
-                            "id": c.get("id", ""),
-                            "label": c.get("label", c.get("id", "")),
-                        }
-                        for c in raw_choices
-                        if isinstance(c, dict)
-                    ],
-                    stage=req.get("stage"),
-                    title=req.get("title"),
-                    free_text=bool(req.get("free_text")),
-                    interrupt_id=req.get("interrupt_id"),
-                    occurrence_id=req.get("occurrence_id"),
-                    pending_calls=[
-                        {
-                            "tool_call_id": c.get("tool_call_id", ""),
-                            "tool_name": c.get("tool_name", ""),
-                            "args_preview": c.get("args_preview", ""),
-                        }
-                        for c in raw_pending_calls
-                        if isinstance(c, dict)
-                    ],
-                )
+            hitl_message = make_hitl_request(
+                session_id,
+                exchange_id,
+                rank,
+                question=question,
+                choices=[
+                    {
+                        "id": c.get("id", ""),
+                        "label": c.get("label", c.get("id", "")),
+                    }
+                    for c in raw_choices
+                    if isinstance(c, dict)
+                ],
+                stage=req.get("stage"),
+                title=req.get("title"),
+                free_text=bool(req.get("free_text")),
+                interrupt_id=req.get("interrupt_id"),
+                occurrence_id=req.get("occurrence_id"),
+                pending_calls=[
+                    {
+                        "tool_call_id": c.get("tool_call_id", ""),
+                        "tool_name": c.get("tool_name", ""),
+                        "args_preview": c.get("args_preview", ""),
+                    }
+                    for c in raw_pending_calls
+                    if isinstance(c, dict)
+                ],
             )
+            messages.append(hitl_message)
             rank += 1
 
         elif kind == "node_error":
@@ -3839,6 +3977,82 @@ class _HitlResumeClaim:
         )
 
 
+@dataclass(slots=True)
+class _BatchHitlResumeClaim:
+    _checkpointer: FredSqlCheckpointer
+    _thread_id: str
+    _checkpoint_ns: str
+    _occurrences: tuple[tuple[str, str], ...]
+    _claim_token: str
+
+    async def consume(self) -> None:
+        for interrupt_id, occurrence_id in self._occurrences:
+            await self._checkpointer.aconsume_hitl_resume(
+                thread_id=self._thread_id,
+                checkpoint_ns=self._checkpoint_ns,
+                interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
+                claim_token=self._claim_token,
+            )
+
+
+async def _claim_hitl_resumes_before_invocation(
+    *,
+    session_id: str | None,
+    checkpoint_ns: str,
+    answers: tuple[BatchedHumanAnswer, ...],
+) -> _BatchHitlResumeClaim | None:
+    """Acquire and start the complete sibling set without partial claims."""
+    if not session_id:
+        raise RuntimeError("Cannot claim HITL answers without a session_id.")
+    checkpointer = get_runtime_context().config.checkpointer
+    if not isinstance(checkpointer, FredSqlCheckpointer):
+        logger.warning(
+            "[fred-runtime][HITL] checkpointer does not support batch resume claims"
+        )
+        return None
+    occurrences = tuple((item.interrupt_id, item.occurrence_id) for item in answers)
+    token = await checkpointer.aclaim_hitl_resumes(
+        thread_id=session_id, checkpoint_ns=checkpoint_ns, occurrences=occurrences
+    )
+    if token is None:
+        raise HitlResumeAlreadyClaimedError(
+            "Another attempt holds a sibling resume claim."
+        )
+    try:
+        started = await checkpointer.astart_hitl_resumes(
+            thread_id=session_id,
+            checkpoint_ns=checkpoint_ns,
+            occurrences=occurrences,
+            claim_token=token,
+        )
+    except Exception:
+        for interrupt_id, occurrence_id in occurrences:
+            await checkpointer.arelease_hitl_resume(
+                thread_id=session_id,
+                checkpoint_ns=checkpoint_ns,
+                interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
+                claim_token=token,
+            )
+        raise
+    if not started:
+        for interrupt_id, occurrence_id in occurrences:
+            await checkpointer.arelease_hitl_resume(
+                thread_id=session_id,
+                checkpoint_ns=checkpoint_ns,
+                interrupt_id=interrupt_id,
+                occurrence_id=occurrence_id,
+                claim_token=token,
+            )
+        raise HitlResumeAlreadyClaimedError(
+            "Lost a sibling resume claim before invocation."
+        )
+    return _BatchHitlResumeClaim(
+        checkpointer, session_id, checkpoint_ns, occurrences, token
+    )
+
+
 async def _claim_hitl_resume_before_invocation(
     *,
     session_id: str | None,
@@ -4330,8 +4544,15 @@ async def _iterate_runtime_event_payloads_inner(
                 )
             # A graph pause is a native interrupt too: its resume takes the
             # same single-use claim as ReAct, on the agent's own thread.
-            graph_claim: _HitlResumeClaim | None = None
-            if (
+            graph_claim: _HitlResumeClaim | _BatchHitlResumeClaim | None = None
+            graph_batch = parse_batched_human_answers(request.resume_payload)
+            if isinstance(executor, GraphExecutor) and graph_batch is not None:
+                graph_claim = await _claim_hitl_resumes_before_invocation(
+                    session_id=executor.thread_id(execution_config),
+                    checkpoint_ns="",
+                    answers=graph_batch,
+                )
+            elif (
                 isinstance(executor, GraphExecutor)
                 and request.resume_payload is not None
                 and request.interrupt_id
@@ -4401,8 +4622,15 @@ async def _iterate_runtime_event_payloads_inner(
             # claim behind. See `_claim_hitl_resume_before_invocation`'s
             # docstring for the full claimed → started lifecycle and the
             # guarantees it does and does not provide.
-            hitl_claim: _HitlResumeClaim | None = None
-            if request.resume_payload is not None and request.interrupt_id:
+            hitl_claim: _HitlResumeClaim | _BatchHitlResumeClaim | None = None
+            react_batch = parse_batched_human_answers(request.resume_payload)
+            if react_batch is not None:
+                hitl_claim = await _claim_hitl_resumes_before_invocation(
+                    session_id=ctx.get("session_id"),
+                    checkpoint_ns="",
+                    answers=react_batch,
+                )
+            elif request.resume_payload is not None and request.interrupt_id:
                 hitl_claim = await _claim_hitl_resume_before_invocation(
                     session_id=ctx.get("session_id"),
                     # Unnamespaced: this branch is ReAct/Deep only (never Graph),

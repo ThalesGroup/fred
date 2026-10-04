@@ -12,155 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/**
- * Pure logic for the Simple capabilities view (#2220): derive each pack's
- * on/off + available state from the form's capability selection, and compute
- * the new selection when a pack is toggled.
- *
- * The only subtle part is the two resource packs sharing `document_access`,
- * whose config is computed from their combination (see the truth table in
- * `toolPacks.ts`). Everything else is a plain add/remove of capability ids.
- *
- * These functions are pure and side-effect free so they can be unit-tested
- * against the truth table without React.
- */
+/** Pure selection logic shared by the Simple pack switches. */
 
 import {
   CAP_DOCUMENT_ACCESS,
-  CAP_DOCUMENT_EXTRACT,
   CAP_DOCUMENT_SIMILARITY,
-  CAP_DOCUMENT_SUMMARIZE,
-  CAP_DOCUMENT_VERBATIM,
   CAP_TABULAR,
   DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
   DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL,
   type ToolPack,
 } from "./toolPacks";
 
-/** The slice of agent-form state the Simple view reads and writes. Mirrors the
- *  fields already held by `AgentFormBody` — no new storage. */
+/** The agent-form fields used by the Simple pack switches. */
 export interface CapabilitySelectionState {
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   reasoningEnabled: boolean;
 }
 
-/** Capabilities governed by the two resource packs in Simple view. Recomputed
- *  as a set from (corpus, attachments) so a capability both packs share is never
- *  dropped while still required by the other pack. */
-const RESOURCE_PACK_CAPABILITIES = new Set<string>([
-  CAP_DOCUMENT_ACCESS,
-  CAP_TABULAR,
-  CAP_DOCUMENT_SUMMARIZE,
-  CAP_DOCUMENT_SIMILARITY,
-  CAP_DOCUMENT_VERBATIM,
-  CAP_DOCUMENT_EXTRACT,
-]);
+const CORPUS_ONLY_IDS = [CAP_DOCUMENT_SIMILARITY];
 
-function documentAccessSelected(state: CapabilitySelectionState): boolean {
-  return state.selectedCapabilityIds.includes(CAP_DOCUMENT_ACCESS);
-}
-
-/** Corpus is reachable when document_access is on and NOT pinned to
- *  attachments-only (default `search_attachments_only` is false). */
-function corpusOn(state: CapabilitySelectionState): boolean {
-  if (!documentAccessSelected(state)) return false;
-  return state.capabilityConfigValues[CAP_DOCUMENT_ACCESS]?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY] !== true;
-}
-
-/** Files can be attached when document_access is on and the attach-files
- *  control is shown. */
-function attachmentsOn(state: CapabilitySelectionState): boolean {
-  if (!documentAccessSelected(state)) return false;
-  return state.capabilityConfigValues[CAP_DOCUMENT_ACCESS]?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL] === true;
-}
-
-/**
- * Recompute the resource-pack-owned capabilities for a target (corpus,
- * attachments) combination, preserving every other selected capability and all
- * config for non-resource capabilities. This is the single place the
- * `document_access` truth table is enforced.
- */
-function withResourceState(
-  state: CapabilitySelectionState,
-  nextCorpus: boolean,
-  nextAttachments: boolean,
-  availableIds: ReadonlySet<string>,
-): CapabilitySelectionState {
-  // Keep everything the resource packs don't own (word/ppt/reasoning + any
-  // capability enabled directly in the Advanced view).
-  const ids = state.selectedCapabilityIds.filter((id) => !RESOURCE_PACK_CAPABILITIES.has(id));
-
-  const add = (id: string, wanted: boolean) => {
-    if (wanted && availableIds.has(id)) ids.push(id);
-  };
-  add(CAP_TABULAR, nextCorpus);
-  // Shared by both resource packs: on when either is on.
-  const eitherPack = nextCorpus || nextAttachments;
-  add(CAP_DOCUMENT_SUMMARIZE, eitherPack);
-  add(CAP_DOCUMENT_VERBATIM, eitherPack);
-  add(CAP_DOCUMENT_EXTRACT, eitherPack);
-  // Corpus only: Knowledge Flow never searches the conversation's attachments
-  // in this mode, so it would contribute nothing to an attachments-only agent.
-  add(CAP_DOCUMENT_SIMILARITY, nextCorpus);
-
-  const capabilityConfigValues = { ...state.capabilityConfigValues };
-  if (eitherPack && availableIds.has(CAP_DOCUMENT_ACCESS)) {
-    ids.push(CAP_DOCUMENT_ACCESS);
-    capabilityConfigValues[CAP_DOCUMENT_ACCESS] = {
-      ...(capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}),
-      // attachments-only only when attachments are on WITHOUT corpus.
-      [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: nextAttachments && !nextCorpus,
-      [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: nextAttachments,
-    };
-  }
-
-  return { ...state, selectedCapabilityIds: ids, capabilityConfigValues };
-}
-
-/**
- * Can this pack's switch do anything for this team?
- *
- * A pack whose capabilities the admin never opened is a dead control:
- * `applyPackToggle` only ever adds ids present in `availableIds`, and
- * `derivePackChecked` requires at least one selectable id — so the switch can
- * neither be turned on nor already be on. The Simple view hides such a pack
- * rather than offering a switch that does nothing.
- *
- * What decides is what the pack ENABLES, not what it lists: both resource
- * packs hang on `document_access`, which `conversation_attachments`
- * deliberately keeps out of its `includes` (see `toolPacks.ts`). Without it,
- * `corpusOn`/`attachmentsOn` stay false however many of the listed reading
- * capabilities the team holds.
- */
+/** Hide a pack if its switch cannot enable anything for this team. */
 export function isPackSelectable(pack: ToolPack, availableIds: ReadonlySet<string>): boolean {
-  // Reasoning is a form field (`reasoningEnabled`), not a capability, so team
-  // grants never gate it. Whether it will RUN depends on the model's admin
-  // setting, which needs an agent_instance_id the creation form has not got.
   if (pack.kind === "reasoning") return true;
-  if (pack.documentAccessIntent) return availableIds.has(CAP_DOCUMENT_ACCESS);
+  if (pack.resourceBundle) return availableIds.has(CAP_DOCUMENT_ACCESS);
   return pack.enablesCapabilityIds.some((id) => availableIds.has(id));
 }
 
-/** Is the pack currently active, derived from the underlying selection so the
- *  Simple and Advanced views stay in sync automatically. */
+/** Read a pack's switch from the current selection, including Advanced edits. */
 export function derivePackChecked(
   pack: ToolPack,
   state: CapabilitySelectionState,
   availableIds: ReadonlySet<string>,
 ): boolean {
   if (pack.kind === "reasoning") return state.reasoningEnabled;
-  if (pack.documentAccessIntent === "corpus") return corpusOn(state);
-  if (pack.documentAccessIntent === "attachments") return attachmentsOn(state);
-  // Plain packs: on when every id the team can ACTUALLY select is selected.
-  // Requiring the full list would leave the switch stuck off whenever a member
-  // is not admin-enabled — `applyPackToggle` never adds those.
+
   const selectable = pack.enablesCapabilityIds.filter((id) => availableIds.has(id));
-  return selectable.length > 0 && selectable.every((id) => state.selectedCapabilityIds.includes(id));
+  const membersSelected = selectable.length > 0 && selectable.every((id) => state.selectedCapabilityIds.includes(id));
+  if (!pack.resourceBundle) return membersSelected;
+
+  const config = state.capabilityConfigValues[CAP_DOCUMENT_ACCESS];
+  if (!availableIds.has(CAP_DOCUMENT_ACCESS) || config?.[DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL] !== true) return false;
+
+  const searchAttachmentsOnly = config?.[DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY] === true;
+  if (!searchAttachmentsOnly) return membersSelected;
+
+  return (
+    selectable
+      .filter((id) => !CORPUS_ONLY_IDS.includes(id) && id !== CAP_TABULAR)
+      .every((id) => state.selectedCapabilityIds.includes(id)) &&
+    CORPUS_ONLY_IDS.every((id) => !state.selectedCapabilityIds.includes(id))
+  );
 }
 
-/** Compute the new selection state when a pack switch is flipped. Only touches
- *  what the pack owns; everything else is preserved. */
+/** Toggle a pack's available members while preserving unrelated selections. */
 export function applyPackToggle(
   pack: ToolPack,
   nextOn: boolean,
@@ -170,14 +75,8 @@ export function applyPackToggle(
   if (pack.kind === "reasoning") {
     return { ...state, reasoningEnabled: nextOn };
   }
+  if (pack.resourceBundle && nextOn && !availableIds.has(CAP_DOCUMENT_ACCESS)) return state;
 
-  if (pack.documentAccessIntent) {
-    const nextCorpus = pack.documentAccessIntent === "corpus" ? nextOn : corpusOn(state);
-    const nextAttachments = pack.documentAccessIntent === "attachments" ? nextOn : attachmentsOn(state);
-    return withResourceState(state, nextCorpus, nextAttachments, availableIds);
-  }
-
-  // Plain packs (word/ppt): add/remove the pack's available capability ids.
   const ids = new Set(state.selectedCapabilityIds);
   for (const id of pack.enablesCapabilityIds) {
     if (nextOn) {
@@ -186,7 +85,48 @@ export function applyPackToggle(
       ids.delete(id);
     }
   }
+
+  if (pack.resourceBundle && nextOn) {
+    return {
+      ...state,
+      selectedCapabilityIds: [...ids],
+      capabilityConfigValues: {
+        ...state.capabilityConfigValues,
+        [CAP_DOCUMENT_ACCESS]: {
+          ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS],
+          [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: false,
+          [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+        },
+      },
+    };
+  }
   return { ...state, selectedCapabilityIds: [...ids] };
+}
+
+/** Switch the active Simple pack between corpus plus attachments and attachments only. */
+export function applyResourceSearchScope(
+  searchAttachmentsOnly: boolean,
+  state: CapabilitySelectionState,
+  availableIds: ReadonlySet<string>,
+): CapabilitySelectionState {
+  const ids = new Set(state.selectedCapabilityIds);
+  if (availableIds.has(CAP_TABULAR)) ids.add(CAP_TABULAR);
+  for (const id of CORPUS_ONLY_IDS) {
+    if (searchAttachmentsOnly) ids.delete(id);
+    else if (availableIds.has(id)) ids.add(id);
+  }
+  return {
+    ...state,
+    selectedCapabilityIds: [...ids],
+    capabilityConfigValues: {
+      ...state.capabilityConfigValues,
+      [CAP_DOCUMENT_ACCESS]: {
+        ...state.capabilityConfigValues[CAP_DOCUMENT_ACCESS],
+        [DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY]: searchAttachmentsOnly,
+        [DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL]: true,
+      },
+    },
+  };
 }
 
 /** Tri-state of an included capability, driving its badge in the pack card. */

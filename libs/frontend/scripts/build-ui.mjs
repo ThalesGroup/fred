@@ -177,6 +177,27 @@ async function copyCanonical(relativePath) {
     );
     generated = `${generated.slice(0, materialTypeEnd)}\n`;
   }
+  if (
+    [
+      "apps/frontend/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.tsx",
+      "apps/frontend/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx",
+      "apps/frontend/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx",
+    ].includes(relativePath)
+  ) {
+    generated = generated.replaceAll('category: "outlined", ', "");
+  }
+  if (
+    relativePath ===
+    "apps/frontend/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.tsx"
+  ) {
+    generated = generated
+      .replace(
+        'import Icon from "../../atoms/Icon/Icon.tsx";',
+        'import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";',
+      )
+      .replaceAll("IconType", "MaterialIconType")
+      .replace('category="outlined" ', "");
+  }
   await writeFile(target, generated);
 }
 

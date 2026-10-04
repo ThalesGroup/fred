@@ -241,7 +241,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     "uses the current preparation for first-turn ask_user availability ($offered, $requested)",
     async ({ offered, requested, expected }) => {
       prepareExecutionImpl = async () => ({
-        execute_stream_url: "http://runtime.test/execute_stream",
+        execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
         chat_controls: offered
           ? [{ capability_id: "platform", widget: "ask_user_toggle", params: { default: true } }]
           : [],
@@ -1225,6 +1225,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(reached).toBe(false);
     expect(onErrorMock).toHaveBeenCalledTimes(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(0);
     fetchSpy.mockRestore();
   });
 
@@ -1286,6 +1287,139 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(bodies[1].resume_payload).toEqual({ skipped: true });
     expect((bodies[0].runtime_context as Record<string, unknown>).ask_user).toBe(true);
     expect((bodies[1].runtime_context as Record<string, unknown>).ask_user).toBe(true);
+    fetchSpy.mockRestore();
+  });
+
+  it("sends simultaneous question answers in one runtime request", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 });
+    });
+    mount();
+    const first = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "yes", label: "Yes" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    const second = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "agent_question",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        choices: [],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    await act(async () => {
+      await latest.sendHitlResume(first, undefined, undefined, undefined, undefined, false, undefined, [
+        { event: first, answer: "yes", skipped: false },
+        { event: second, answer: undefined, freeText: " Other ", skipped: false },
+      ]);
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].interrupt_id).toBeNull();
+    expect(bodies[0]).not.toHaveProperty("occurrence_id");
+    expect(bodies[0].resume_payload).toEqual({
+      answers: [
+        { interrupt_id: "interrupt-a", occurrence_id: "call-a", answer: { choice_id: "yes" } },
+        { interrupt_id: "interrupt-b", occurrence_id: "call-b", answer: { text: " Other " } },
+      ],
+    });
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(2);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    { answer: "proceed", skipped: false, expectedChoice: "proceed" },
+    { answer: "cancel", skipped: false, expectedChoice: "cancel" },
+    { answer: undefined, skipped: true, expectedChoice: null },
+  ])(
+    "shows an accepted tool approval response for $answer (skipped: $skipped)",
+    async ({ answer, skipped, expectedChoice }) => {
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+      mount();
+      const approval = {
+        ...hitlEvent,
+        payload: {
+          ...hitlEvent.payload,
+          stage: "tool_approval",
+          question: "Execute Summarize Document?",
+          choices: [
+            { id: "proceed", label: "Continue" },
+            { id: "cancel", label: "Cancel" },
+          ],
+        },
+      } as RuntimeAwaitingHumanEvent;
+
+      await act(async () => {
+        await latest.sendHitlResume(approval, answer, undefined, undefined, undefined, skipped);
+      });
+
+      expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+      expect(latest.messages.find((message) => message.channel === "hitl_request")?.parts[0]).toMatchObject({
+        stage: "tool_approval",
+        interrupt_id: "interrupt-a",
+      });
+      expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
+      expect(latest.messages.find((message) => message.channel === "hitl_response")?.parts[0]).toMatchObject({
+        choice_id: expectedChoice,
+        skipped,
+      });
+      fetchSpy.mockRestore();
+    },
+  );
+
+  it("does not duplicate an existing tool approval prompt when showing its answer", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response('data: {"kind":"status","status":"running"}\n\n', { status: 200 }));
+    mount();
+    const approval = {
+      ...hitlEvent,
+      payload: {
+        ...hitlEvent.payload,
+        stage: "tool_approval",
+        question: "Execute Summarize Document?",
+        choices: [{ id: "proceed", label: "Continue" }],
+      },
+    } as RuntimeAwaitingHumanEvent;
+    act(() => {
+      latest.replaceAllMessages([
+        {
+          session_id: "session-1",
+          exchange_id: "exch-1",
+          rank: 1,
+          timestamp: new Date().toISOString(),
+          role: "system",
+          channel: "hitl_request",
+          parts: [
+            {
+              type: "hitl_request",
+              stage: "tool_approval",
+              question: "Execute Summarize Document?",
+              interrupt_id: "interrupt-a",
+              choices: [{ id: "proceed", label: "Continue" }],
+            },
+          ],
+        } as Parameters<typeof latest.replaceAllMessages>[0][number],
+      ]);
+    });
+
+    await act(async () => {
+      await latest.sendHitlResume(approval, "proceed");
+    });
+
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(latest.messages.filter((message) => message.channel === "hitl_response")).toHaveLength(1);
     fetchSpy.mockRestore();
   });
 
@@ -1416,6 +1550,72 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     await expect(result).resolves.toBe(false);
     expect(prepareExecutionCalls).toHaveLength(0);
     expect(onErrorMock).not.toHaveBeenCalled();
+  });
+
+  it("retains pause metadata when a sibling request is re-emitted", async () => {
+    flushPendingWrites = async () => true;
+    const event = {
+      kind: "awaiting_human",
+      sequence: 1,
+      request: {
+        stage: "agent_question",
+        question: "Continue?",
+        choices: [
+          { id: "yes", label: "Yes" },
+          { id: "no", label: "No" },
+        ],
+        free_text: true,
+        interrupt_id: "interrupt-1",
+        occurrence_id: "question-1",
+      },
+      sources: [{ uid: "source-1", title: "Guide", content: "Evidence", score: 1 }],
+      ui_parts: [{ type: "link", href: "https://example.test/guide" }],
+      token_usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 },
+      context_tokens: 100,
+      model_name: "test-model",
+    };
+    const previouslySurfaced = {
+      ...event,
+      sources: [],
+      ui_parts: [],
+      token_usage: null,
+      context_tokens: null,
+      model_name: null,
+    };
+    const bytes = new TextEncoder().encode(
+      `data: ${JSON.stringify(previouslySurfaced)}\n\ndata: ${JSON.stringify(event)}\n\n`,
+    );
+    let readCount = 0;
+    const body = {
+      getReader: () => ({
+        read: async () => (readCount++ === 0 ? { done: false, value: bytes } : { done: true, value: undefined }),
+        releaseLock: () => {},
+      }),
+    } as unknown as ReadableStream<Uint8Array>;
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body,
+    } as Response);
+    mount();
+
+    await act(async () => {
+      await latest.send("hello", "session-1");
+    });
+
+    const request = latest.messages.find((message) => message.channel === "hitl_request");
+    const metadata = latest.messages.find(
+      (message) => message.channel === "system_note" && message.metadata?.extras?.pause_metadata,
+    );
+    expect(request?.parts[0].type).toBe("hitl_request");
+    expect(latest.messages.filter((message) => message.channel === "hitl_request")).toHaveLength(1);
+    expect(metadata?.metadata?.sources?.[0].uid).toBe("source-1");
+    expect(metadata?.metadata?.ui_parts?.[0].type).toBe("link");
+    expect(metadata?.metadata?.token_usage?.total_tokens).toBe(120);
+    expect(metadata?.metadata?.context_tokens).toBe(100);
+    expect(latest.messages.some((message) => message.role === "assistant" && message.channel === "final")).toBe(false);
+    fetchSpy.mockRestore();
   });
 
   it("a user abort of an accepted stream reports no error and never re-requests", async () => {

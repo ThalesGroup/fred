@@ -23,7 +23,7 @@ may import:
 | Layout   | `shared/layouts/`   | Atoms + Molecules + Organisms                                       |
 | Page     | `pages/`            | Atoms + Molecules + Organisms + Layouts                             |
 
-**Ruling — atom→atom:** a composite atom (e.g. `SettingChip` using `Icon`) may import
+**Ruling — atom→atom:** a composite atom (e.g. `IconButton` using `Icon`) may import
 sibling atoms. This is an explicit allowance, not a violation.
 
 **Ruling — molecule→molecule:** composable molecules (e.g. `Autocomplete`, `Select`,
@@ -165,14 +165,35 @@ Verify that a token exists before using it. The authoritative token files are:
 
 | File                                   | Contains                                          |
 | -------------------------------------- | ------------------------------------------------- |
-| `src/styles/colors-semantic-dark.css`  | Semantic color tokens (dark theme)                |
-| `src/styles/colors-semantic-light.css` | Semantic color tokens (light theme)               |
+| `src/styles/themes/<id>.css`           | One UI theme: colors (light + dark), font, radii  |
 | `src/styles/colors-state-semantic.css` | Hover / pressed / disabled / focused state tokens |
 | `src/styles/shadow-dark.css`           | Shadow + elevation tokens (dark theme)            |
 | `src/styles/shadow-light.css`          | Shadow + elevation tokens (light theme)           |
 | `src/styles/spacings.css`              | `--spacing-*` tokens                              |
-| `src/styles/radius.css`                | `--radius-*` tokens                               |
-| `src/styles/typography.css`            | `--font-*` tokens                                 |
+| `src/styles/radius.css`                | `--radius-full` and `--border-radius-*` aliases   |
+| `src/styles/typography.css`            | `--font-*` composite tokens (size, weight, line)  |
+
+### UI themes
+
+Every UI theme (`pebble`, `cobalt`, `cloud`) is a peer: one file in
+`src/styles/themes/` with a `[data-ui-theme="<id>"]` block (font family,
+radius scale, emphasized headline weights; not bound to `:root`, so an element
+can preview another theme's shapes and font) and one block per mode
+(`[data-ui-theme="<id>"][data-theme="light|dark"]`, semantic colors and
+`color-scheme`). All themes declare the same tokens and the base stylesheets
+declare none of them; `src/styles/themes/themes.test.ts` enforces both. The
+catalog lives in `src/app/uiThemes.ts`, and `public/theme-boot.js` applies the
+stored theme and mode to `<html>` before the first paint (its copy of the
+catalog is checked by `src/app/uiThemes.test.ts`). The `@fred-oss/design-tokens`
+package publishes Pebble only, under plain `[data-theme]` selectors.
+
+The active theme resolves to the user's choice if the platform offers it, else
+the platform default (admin page "User interface", served in the public
+`/frontend/config`), else the first offered theme. `resolveUiTheme` in
+`src/app/uiThemes.ts` is the one implementation; `theme-boot.js` repeats it on
+the cached platform settings and `index.tsx` re-applies it with the fresh ones
+before the first render. Adding a theme means a theme file, a catalog entry
+(both lists) and a label key in `UI_THEME_LABEL_KEYS`.
 
 ### Available shadow and overlay tokens
 
@@ -198,15 +219,59 @@ Verify that a token exists before using it. The authoritative token files are:
 | `--success-container`   | `--on-success-container`   |
 | `--warning-container`   | `--on-warning-container`   |
 
-### Available surface container tokens (elevation scale, low → high)
+### Surface tokens
 
-```
---surface-container-lowest
---surface-container-low
---surface-container
---surface-container-high
---surface-container-highest
-```
+`--surface-main` is the background of a surface that shows main content (the
+page, a reading pane): it carries the strongest text contrast, and its tone is
+the designer's choice per theme for that contrast (just under
+`surface-container-highest` in light, under every container in dark). In both
+themes the `surface-container-*` levels get lighter from `-lowest` to
+`-highest`. `surface-floating` is for everything that floats above the page. Tones (CIE L\*) of the neutral ramp:
+
+| Token                         | Light | Dark |
+| ----------------------------- | ----- | ---- |
+| `--surface-container-highest` | 100   | 18   |
+| `--surface-main`              | 99.5  | 6    |
+| `--surface-container-high`    | 97.5  | 15   |
+| `--surface-container`         | 96    | 12   |
+| `--surface-container-low`     | 94.5  | 10   |
+| `--surface-container-lowest`  | 93    | 8    |
+| `--surface-floating`          | 100   | 20   |
+
+Design a page with `--surface-main` and `--surface-container` first; reach for
+the other levels only when those two are not enough. Pick the token by the
+element's role, not by how it looks in one theme:
+
+| Role                                                                      | Token                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------ |
+| Background of a surface showing main content (page, reading pane)         | `--surface-main`                           |
+| Bordered content sheet                                                    | `--surface-container-lowest`               |
+| Form fields (bordered), chips, zebra rows                                 | `--surface-container-low`                  |
+| Tiles and cards (small components) on `--surface-main`, `-low`, `-lowest` | `--surface-container`                      |
+| Inset wells (code, raw output, tables), nav rail                          | `--surface-container`                      |
+| List rows, hover, chat side panels (push, floating card)                  | `--surface-container-high`                 |
+| Tracks, badges, focus of raised search bars                               | `--surface-container-highest`              |
+| Menus, popovers, tooltips, dialogs, toasts, overlay drawers               | `--surface-floating` (with a `--shadow-*`) |
+
+In dark every container level reads darker than `--surface-floating`; in light
+`--surface-container-highest` matches it. Inside a floating element, never fill
+with `-highest`: a badge or a list row there uses `-high`, a chip `-low`.
+
+Token renames and remaps for consumers of `@fred-oss/design-tokens` are listed
+in `libs/frontend/design-tokens/README.md` (Token migrations).
+
+### Text and outline tokens
+
+| Token                  | Role                                           | Light | Dark |
+| ---------------------- | ---------------------------------------------- | ----- | ---- |
+| `--on-surface`         | Primary text and icons                         | 10    | 95   |
+| `--on-surface-retreat` | Secondary text and icons (AA on every surface) | 40    | 75   |
+| `--on-surface-muted`   | Meta text, placeholders (AA on the page)       | 45    | 60   |
+| `--outline`            | Form control hover, focus outlines (3:1)       | 50    | 60   |
+| `--outline-variant`    | Form control borders, scrollbar thumb          | 80    | 40   |
+| `--outline-muted`      | Default borders and dividers                   | 88    | 25   |
+
+Borders and dividers use an `--outline-*` token, never a surface token.
 
 ### Disabled state tokens
 
@@ -238,14 +303,15 @@ requires no JavaScript, and works in all browsers.
 
 ## 5. Token Completeness Rule
 
-If a token you need does not exist, **add it to the token file** — do not
-work around it with a hardcoded value or a fallback. Adding a token is a
-two-line change (one per theme file). This is always the right answer.
+If a token you need does not exist, **add it to the token files** — do not
+work around it with a hardcoded value or a fallback. This is always the right
+answer.
 
 When adding a token:
 
-- Add it to both `colors-semantic-light.css` and `colors-semantic-dark.css`
-  (or the appropriate shadow/spacing file).
+- A theme token goes in every file of `src/styles/themes/`, in both mode
+  blocks (the theme test fails otherwise); a theme-independent token goes in
+  the matching base file (shadow, spacing, radius alias, typography).
 - Choose a value consistent with the M3 elevation or colour scale already
   present in the file.
 - Use the existing naming convention: `--category-variant` or

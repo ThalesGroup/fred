@@ -76,8 +76,9 @@ export default function BarChart({
   const css = useCssVars(
     sectionRef,
     "--on-surface-retreat",
-    "--outline-retreat",
+    "--outline-muted",
     "--surface-container-highest",
+    "--surface-floating",
     "--on-surface",
     "--primary",
     "--font-family-base",
@@ -114,7 +115,7 @@ export default function BarChart({
                 margin={compact ? { top: 2, right: 2, left: 2, bottom: 2 } : { top: 8, right: 8, left: 8, bottom: 40 }}
                 barCategoryGap={barCategoryGap}
               >
-                {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} vertical={false} />}
+                {!compact && <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} vertical={false} />}
                 <XAxis
                   type="category"
                   dataKey="label"
@@ -124,7 +125,7 @@ export default function BarChart({
                     fontFamily: css["--font-family-base"],
                   }}
                   tickLine={false}
-                  axisLine={compact ? false : { stroke: css["--outline-retreat"] }}
+                  axisLine={compact ? false : { stroke: css["--outline-muted"] }}
                   angle={compact ? 0 : -35}
                   textAnchor={compact ? "middle" : "end"}
                   interval={0}
@@ -149,8 +150,8 @@ export default function BarChart({
                 <Tooltip
                   cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
-                    background: css["--surface-container-highest"],
-                    border: `1px solid ${css["--outline-retreat"]}`,
+                    background: css["--surface-floating"],
+                    border: `1px solid ${css["--outline-muted"]}`,
                     borderRadius: css["--radius-s"],
                     color: css["--on-surface"],
                     fontSize: 12,
@@ -168,13 +169,13 @@ export default function BarChart({
                 margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
                 barCategoryGap={barCategoryGap}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} horizontal={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} horizontal={false} />
                 <XAxis
                   type="number"
                   allowDecimals={false}
                   tick={{ fill: css["--on-surface-retreat"], fontSize: 11, fontFamily: css["--font-family-base"] }}
                   tickLine={false}
-                  axisLine={{ stroke: css["--outline-retreat"] }}
+                  axisLine={{ stroke: css["--outline-muted"] }}
                 />
                 <YAxis
                   type="category"
@@ -187,8 +188,8 @@ export default function BarChart({
                 <Tooltip
                   cursor={{ fill: css["--surface-container-highest"] }}
                   contentStyle={{
-                    background: css["--surface-container-highest"],
-                    border: `1px solid ${css["--outline-retreat"]}`,
+                    background: css["--surface-floating"],
+                    border: `1px solid ${css["--outline-muted"]}`,
                     borderRadius: css["--radius-s"],
                     color: css["--on-surface"],
                     fontSize: 12,

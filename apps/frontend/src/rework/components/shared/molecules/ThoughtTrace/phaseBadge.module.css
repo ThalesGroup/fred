@@ -21,7 +21,7 @@
    flex), so the two classes never conflict regardless of stylesheet order. */
 .phaseBadge {
   border-radius: var(--radius-xs);
-  background: var(--surface-container-high);
+  background: var(--surface-container-highest);
   color: var(--on-surface-retreat);
   letter-spacing: 0.05em;
   text-transform: uppercase;

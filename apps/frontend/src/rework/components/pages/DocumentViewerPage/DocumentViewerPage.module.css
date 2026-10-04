@@ -17,7 +17,7 @@
 .page {
   display: flex;
   flex-direction: column;
-  background: var(--surface-container-lowest);
+  background: var(--surface-main);
   height: 100%;
   overflow: hidden;
 }

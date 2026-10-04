@@ -24,16 +24,16 @@ list of those issues, organized per component. It feeds the UX review session ag
 
 ## Design token reference
 
-Token names confirmed from `src/styles/colors-semantic-{light,dark}.css`.
+Token names confirmed from `src/styles/themes/pebble.css` (every theme declares the same names).
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
 | Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Elevated surface (hover states) | `--surface-container-high`                                                                                    | ~~`--surface-container-hight`~~ (extra `t`)                                          |
-| Surfaces                        | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` |                                                                                      |
+| Surfaces                        | `--surface-main`, `--surface-container-*`, `--surface-floating` (by role: FRONTEND_CODING_GUIDELINES §Surface tokens) |                                                                                      |
 | Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
 | Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders                         | `--outline-muted`, `--outline-variant`, `--outline-retreat`                                                   | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
+| Borders                         | `--outline`, `--outline-variant`, `--outline-muted`                                                           | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -88,14 +88,13 @@ Portaled listbox with virtual focus (DOM focus stays on the trigger,
 value type and unique key; `emptyMessage` overrides the default empty wording.
 The menu portals into the nearest consumer-owned `.fred-ui` root when present,
 or retains the legacy FRED body portal.
+Opening the menu and moving its active option scroll only the listbox, preserving
+the surrounding form and iframe host page's scroll position.
 
-**Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
-the same token `TextInput` uses, so a `Select` and a text field placed in one
-toolbar match. It previously used `--outline-muted`: identical in the light
-theme (both resolve to `cold-grey-80`) but dimmer in the dark one
-(`cold-grey-20` against `cold-grey-30`), so the two controls disagreed only for
-dark-theme users. `--outline-muted` remains correct for containers and
-dividers; form controls take `--outline-retreat`.
+**Border token.** The trigger borders with `--outline-variant`, the same token
+`TextInput` uses, so a `Select` and a text field placed in one toolbar match.
+Form controls take `--outline-variant` (hover `--outline`); containers and
+dividers take `--outline-muted`.
 
 **Naming the trigger.** A visible `label` names it through `aria-labelledby`. Where a
 toolbar has no room for one, pass `ariaLabel` instead — without either, the
@@ -339,7 +338,7 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `--state-on-surface-hover`, so a selected option reads as chosen at rest. Token-only, no
   content or row removed. Follow-up: the container border was dropped (the `--shadow-m`
   elevation alone separates it from the background) and the group dividers now use
-  `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
+  `--outline-muted` (neutral borders must use an `outline-*` token, never `on-surface`)
   and bleed full width (negative horizontal margins cancel the popover padding).
 
 - **Composer sub-menu container** — the composer's anchored sub-menus reused `MenuPopover`
@@ -1449,7 +1448,7 @@ inline popover into a full-height right-side push panel (#2259).
   picker's own shared strings, e.g. the empty state, still say "bibliothèque").
 - Panel: rendered as a **floating card** (`InlineDrawer floating`, 2026-08-06) — inset from every
   edge with a single `outline-muted` 1px border, `--radius-m` (16px) corners and a subtle
-  `--shadow-s` (border/radius softened from the initial `outline-retreat`/24px on 2026-08-06),
+  `--shadow-s` (border/radius softened from the initial `outline-muted`/24px on 2026-08-06),
   dropping the push drawer's flush edge border and the header divider. Header title "Définir les
   ressources accessibles" + `InlineDrawer`'s built-in close, plus a **Réinitialiser** icon button
   (Tooltip) in `headerActions`. Body reuses the existing `DocumentLibraryScopePicker` at full
@@ -1875,7 +1874,7 @@ _(none yet)_
   signalling "needs your input" with the same visual language as the chat field.
 
 - **Card containment + button restyle (2026-08-05)** — `.card` now uses
-  `surface-container-high` background and an `outline-retreat` border (up from
+  `surface-container-high` background and an `outline-muted` border (up from
   `surface-container`/`outline`). `.title` is `primary`/`title-medium` (was
   `on-surface`/`title-small`); `.question` is `body-medium` (was `body-large`). Choice
   buttons use the shared `Button` atom's `default` signal from
@@ -1967,9 +1966,10 @@ row and making the list unreadable. Two changes:
   everywhere. The date also uses `font-variant-numeric: tabular-nums`, so the
   fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
   of which digits it contains.
-- All four nav panels went **240px → 272px**. They swap into the same sidebar
-  grid column, so the width must stay identical across them or the column
-  jumps when switching between Home / team / marketplace / admin.
+- All four nav panels went **240px → 272px**, then **254px** (2026-10-02, UI
+  polish). They swap inside the same nav panel card, next to the rail, so the
+  width must stay identical across them or the card jumps when switching
+  between Home / team / marketplace / admin.
 
 ---
 
@@ -2257,7 +2257,7 @@ sees inside scales with their role:
   view, just non-interactive, so a plain member can still see who holds
   elevated roles) and nothing else in the sidebar;
 - editors/analysts/admins: the same sections as before (Members with edit
-  controls, Parameters gated on `can_update_info`, Activity/Evaluations per
+  controls, Parameters gated on `can_update_info`, Activity per
   their existing gates) — Activity's gate moved from `canReadMembers` (now
   true for everyone) to a new `hasElevatedTeamRole` helper
   (`teamCapabilities.ts`), since it isn't part of the plain-member baseline.
@@ -2267,7 +2267,7 @@ settings sidebar — now a `filled` / `error` `Button` (`LeaveTeamButton.tsx`)
 rendered inline in the Members section header, `24px` to the right of the
 "Membres" page title (`.team-settings-members-header-left`, `gap:
 var(--spacing-l)`), so it only appears on the Members section, not on
-Parameters/Activity/Evaluations. Disabled with an explanatory `title`
+Parameters/Activity. Disabled with an explanatory `title`
 tooltip only for a team's sole remaining `team_admin` (computed client-side
 from the members list; the backend's last-admin invariant is the actual
 source of truth and still applies server-side regardless). Confirms via
@@ -2476,7 +2476,7 @@ generic `Dialog` primitive exists yet):
   opens once the query is 2+ characters (`minQueryLength={2}`, see below),
   matching the backend search's own minimum.
 - **Pending-list container** — always rendered, even with zero pending
-  candidates (`1px solid outline-retreat` border, `radius-s` (`8px`)
+  candidates (`1px solid outline-muted` border, `radius-s` (`8px`)
   corners, `spacing-s` (`12px`) padding so content isn't flush against the
   border): a fixed `pendingListHeader` label ("Membres à ajouter à
   l'équipe", `label-large`, `on-surface-retreat`) above either —
@@ -2491,7 +2491,7 @@ generic `Dialog` primitive exists yet):
     inside the outer bordered container, not flush rules between rows.
     List capped at `8.5 * var(--row-height)` — the half-row is a deliberate
     "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
-    (thumb color inherited from the app's existing global `outline-retreat`
+    (thumb color inherited from the app's existing global `outline-muted`
     scrollbar rule in `styles/index.css`, already thin by default; this
     only narrows it further for the denser list); or
   - a centered (`body-medium`, `on-surface-muted`) "Aucun utilisateur
@@ -2798,7 +2798,7 @@ Step 1: template browser. Step 2: a full-width `ButtonGroup` tab strip (`variant
 
 - **Général** — Nom, Rôle, Description, plus every tuning field whose `ui.group` is not `"Prompts"` (the pre-#2105 catch-all "Settings" tab content — `Settings`, `Credentials`, `Document reading`, `Mindmap`, `Grounding`, `Comparison`, `Fallback`, ... — verified against real `fred-agents` templates). No template-side (`ui.group`) changes; purely a frontend regrouping.
 - **Prompts** — every `ui.group == "Prompts"` field, unchanged content.
-- **Outils** — capability cards, unchanged content. Hidden when the template has none.
+- **Outils** - the Simple Team resources pack enables corpus access and conversation attachments together. A switch below library scoping narrows it to attachments-only search, withdrawing similarity access while retaining tabular analysis for attached CSV and Excel files and keeping the pack on. Advanced keeps each capability and document-access option separate. A complete legacy attachments-only selection reads on in the scoped profile; an incomplete selection leaves the pack off while its selected members remain visible in the pack's list. Existing agent selections are not rewritten on form load or unrelated save.
 - **Engagement** — required "Cas d'usage" field (large `TextArea`, label + placeholder, no field-level hint text), persisted as `ManagedAgentInstanceSummary.usage_statement` (screens agent purpose for platform/org risk). A compliance-framing paragraph sits above the textarea ("Afin de garantir la conformité de votre agent aux normes et règlementations en vigueur...", i18n'd) explaining why the field is mandatory.
 
 Edit mode: same 4 tabs → metadata footer (created_by · relative date) → delete button.
@@ -2818,7 +2818,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields land in Général.
 - **MCP tools section** — read-only list of tools advertised by the selected template (display_name or id + require_tools).
 - **Header reorg** (#2102) — avatar, back button, and context bar (template name + category pill) removed; team + template now shown as one subtitle line under the title.
-- **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-retreat` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
+- **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-muted` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
 - **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.
@@ -2893,7 +2893,7 @@ and the `TaskActivity` entry below.
 The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
 `/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
 you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
-Activity/Evaluations/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
+Activity/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
 match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
 (no sibling tabs to switch to) keeps the bare Back.
 
@@ -2926,7 +2926,6 @@ now share one consistent header pattern instead of diverging per page:
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
 | `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
-| `Evaluations` (team Evaluations tab)                   | title, subtitle, actions                                                                 |
 | `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
@@ -3527,8 +3526,8 @@ Two call sites remain, both dedicated Activity surfaces rather than embeds insid
 dashboard: `TasksPage` (`/admin/tasks`, `scope="platform"`) and `TeamSettingsPage`'s Activity tab
 (`/team/:teamId/settings/activity`, `scope="team"`). This organism's own rows have no ack/dismiss
 affordance — the per-task acknowledgement UI (`TASK-EVENT-STREAM-RFC.md` §2.10) lives in
-`TaskCard`/`TaskDetailPopover` (the personal tray, `TaskTray`/`MigrationPage`), a different,
-non-overlapping consumer of the same `acknowledged_at`/`acknowledged_by` fields.
+`TaskCard`/`TaskDetailPopover` in `MigrationPage`, a different consumer of the
+same `acknowledged_at`/`acknowledged_by` fields.
 
 **Removed call sites (v3, OBSERV-02, shipped 2026-07-26; reverted 2026-07-30).**
 `AnalyticsPage`'s admin-only section (`scope="platform"`) and `TeamUsagePage`'s team_editor
@@ -3547,7 +3546,7 @@ organism's missing ack affordance ever getting fixed for the duplicate. See
   populated at once.
 - **No ack affordance in this organism's own rows** — a platform/team admin reading
   Activités here has no one-click way to mark a failed/cancelled row seen; only the
-  personal tray (`TaskCard`/`TaskDetailPopover`) offers that today. Lower urgency now
+  migration task cards (`TaskCard`/`TaskDetailPopover`) offer that today. Lower urgency now
   that the only two call sites are the dedicated Activity tabs, not a dashboard embed
   seen incidentally.
 
@@ -3563,7 +3562,7 @@ _(none yet)_
 `src/rework/components/shared/molecules/TaskDetailPopover/TaskDetailPopover.tsx`
 **Status:** `Functional`
 
-The personal-tray task surface (`TaskTray`, `MigrationPage`'s active/terminal grids) —
+The migration task surface (`MigrationPage`'s active/terminal grids):
 `TaskCard` renders one row per task with the ack/dismiss affordance referenced above; clicking
 its status indicator opens `TaskDetailPopover`, a floating detail panel showing state,
 progress %, step, elapsed time, and the raw `task.error` on failure.
@@ -4097,11 +4096,9 @@ is absent. Their stage names are translated (for example, `preview` becomes
 "Content extraction"); copied fallback details retain the technical stage keys
 for support. The document reference remains available.
 
-One coupling worth knowing: terminal tasks are never evicted today because
-`taskEvicted` is only dispatched by `TaskTray`, which is currently unmounted
-from the app. If the tray is remounted, `EVICTION_DELAY_MS` (5 min) starts
-applying and both the session "done" mark and any task-sourced failure would
-begin disappearing on that timer. The snapshot-sourced half is unaffected.
+One coupling worth knowing: task-sourced status can remain in Redux for the
+session. A new task for the same document supersedes an earlier outcome; the
+snapshot-sourced half of the rollup remains independent.
 
 `countUniqueDocs` was deleted in the same change: it had lost its last caller in
 #2173 and its DFS is now `collectDescendantDocUids`.
@@ -4918,14 +4915,12 @@ Three additions, all made for the rail and all useful beyond it:
   having been lost for good — stayed open alongside the next one hovered. On a
   rail of many triggers that meant two panels on screen at once.
 
-
 ### Ingestion actions — 2026-09-23
 
 `DocumentWorkspace` offers no user cancellation while ingestion is pending or
 running. Delete remains disabled until the task settles; its tooltip explains
 that ingestion is active. A durable terminal event refreshes document state and
 quota. Cancellation scope and cleanup are deferred to a separate design.
-
 
 ### Ingestion failure explanations — 2026-09-23
 
@@ -4937,7 +4932,6 @@ an explicit fallback when no reason was recorded and a copyable document ID.
 Personal Resources loads both failures and successes so an old failure does not
 return after a successful retry. Existing tooltip, copy and task components are
 reused. These changes have static review only; runtime/visual checks are pending.
-
 
 ### Ingestion relaunch — 2026-09-26
 
@@ -4952,7 +4946,6 @@ only for documents whose original profile is unknown; in a mixed selection this
 choice applies only to those documents. Cancel submits nothing. Pending requests
 suppress repeated clicks. Completed relaunches supply a new terminal task outcome
 so an earlier failure does not outlive a successful retry.
-
 
 ## Prompt commands in the composer — 2026-09-28
 
@@ -5059,22 +5052,48 @@ thing the user will type in the chat.
 The tune menu contains a platform-owned on/off row for agent questions. It
 starts enabled, persists by conversation, and affects new turns. A pending
 question stays answerable after the row is switched off. The existing HITL
-card shows a single-choice list, a free-text field, or both. A choice may carry
-the typed comment; Ctrl+Enter or Cmd+Enter submits the text field. Choices
-appear in a centered column for both agent questions and tool approval. An
-optional choice description appears beneath its label inside the same
-button. After an agent question is answered or skipped, a compact card below
+card shows a single-choice list, a free-text field, or both. For an agent
+question with two or more choices, free text is always available. It appears
+as the final row in the centered choice column, styled like the outlined
+choices with a fixed gray "Other" / "Autre" label to the left of the editable text; Enter submits that text. The question uses the shared Markdown renderer, so emphasis displays as formatting.
+A choice may carry the typed comment. Text-only questions retain the multiline
+field and Ctrl+Enter or Cmd+Enter submission. Tool approvals keep their choice
+layout. An optional choice description appears beneath its label inside the
+same button. After an agent question is answered or skipped, a compact card below
 the matching `ask_user` trace line shows the question and response immediately.
 The tool drawer lists the offered choices and highlights the selected one.
-While the person is answering, the `ask_user` tool line stays in progress.
+For a free-text answer, it shows one highlighted "Other: <answer>" / "Autre : <réponse>"
+row among the offered choices, including when an offered option is also named
+Other. A choice with an optional comment keeps its selected option and separate
+comment. While the person is answering, the `ask_user` tool line stays in progress.
+Active agent-question cards use a compact width, spacing, and text size; choice
+descriptions and actions stay readable. Simultaneous questions share one card
+with short subject tabs that scroll horizontally when needed. The mouse wheel
+and trackpad scroll overflowing titles without dragging the scrollbar; page
+scrolling continues at the ends. A choice or Skip records a local draft and advances
+to the next unanswered tab. Nonblank free text counts as an answer while typing,
+without requiring Next or switching tabs; clearing it removes that answer unless
+a choice remains selected. The person can revisit any tab and revise the choice
+or text. Send all becomes available only when every tab has an answer or skip;
+it sends one request for the complete set. Closing the grouped card skips all
+pending questions in one request, replacing any local drafts. The card stays
+visible until the runtime accepts the batch, then removes the submitted tabs
+while the resumed stream continues. New questions in that stream appear without
+the answered tabs. A failed submission keeps the drafts.
 For free text, a compact filled Send button sits directly left of Skip in the
 card footer. Choice-only questions keep Skip at the bottom right.
 The chat composer blocks new messages and commands in that conversation while
 the question or its resume is in progress, then becomes available again.
 Approval actions use the same neutral outline style and offer a conversation-scoped
 choice; the browser answers later matching approval pauses through the existing
-resume flow. Skip at the bottom right and close at the top right appear only
-for `stage="agent_question"`. Both resume the turn as skipped. A skipped answer is shown in the same card, including after history reload.
+resume flow. After the runtime accepts an approval, refusal, or skip, the chat
+shows that localized user response below the confirmation card immediately and
+after history reload. A rejected resume does not show a response. Skip at the
+bottom right and close at the top right appear only
+for `stage="agent_question"`. For one question, both resume it as skipped. With
+grouped questions, Skip records a draft for the active tab, while close skips
+the entire group in one request. Skipped answers appear in the same cards,
+including after history reload.
 
 ### Interrupted Graph run card (2026-10-01)
 
@@ -5099,3 +5118,28 @@ plus **Continue** and **Restart** (FR: *Continuer*, *Recommencer*).
   card, even after visiting another conversation. The memory lives in the page, so a
   reload right after Stop may still show the card.
 
+## Shared hosted-application UI components
+
+The alpha.3 package surface reuses canonical atoms and molecules in place;
+see [the package README](../../../libs/frontend/ui/README.md) for exports and
+neutral contracts. KPI/table primitives take caller labels, while FRED's thin
+application adapters supply translations. Toast copying is application-owned.
+The generic StatusBadge is available to hosted applications, which own their
+domain-specific labels and tone mappings. Task/ingestion
+badges and charts remain separate domain components.
+
+### Hosted UI consumer interaction contracts
+
+`DataTable.onRowClick`, `InlineDrawer.closeLabel` and `KpiStatCard.tone` complete
+the evaluator's SDK integration. Defaults preserve current Fred consumers.
+Behavior and acceptance scenarios: [frontend package specs](../../../openspec/specs/frontend-package-archives/spec.md).
+
+### Evaluation application — built-in UI retired (#2904)
+
+Evaluation campaigns are accessed through the registered application under Apps.
+Team settings no longer contain an Evaluations section; old
+`/team/:teamId/settings/evaluations` URLs follow the existing Members fallback.
+Fred's Activity page, task rehydration and task event subscriptions query only
+Fred's control-plane and knowledge-flow services. Evaluation progress belongs
+to the external application's UI. Shared SDK components and backend evaluation
+permissions remain available; no evaluation data is removed.

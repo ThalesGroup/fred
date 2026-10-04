@@ -382,24 +382,16 @@ setting, since the remote path can't be exercised offline to tighten it.
 
 ### Session-Scoped Attachment Datasets (ATTACH-TAB-01)
 
-CSV files attached directly to a chat conversation (`POST /fast/ingest`) get
-a real `tabular_v1` artifact **instead of** the text-chunked vector preview
-every other attachment type gets — not alongside it. A truncated Markdown
-table (20 rows × 10 cols default) is exactly the kind of imprecise answer
-source this feature exists to move away from for CSV, and leaving it in
-place would give the agent two competing ways to answer a question about
-the same file — a fuzzy, incomplete one (vector search over the preview)
-and an exact one (SQL over the full data) — with nothing forcing it toward
-the correct one. `fast_ingest` skips building/storing vectors entirely for
-`.csv` (`chunks: 0` in the response); the fast-text extraction step still
-runs, but only to produce `summary_md` for the frontend's attachment preview
-card — that text never reaches the agent's context or the vector index.
-Excel/XLSX attachments are not covered by the SQL path yet; they keep both
-the text-chunk preview and the "text only" prompt guidance below until a
-follow-up increment generalizes this to `tabular_multi_v1`. That follow-up
-must extend `_resolve_owned_attachment_datasets` for multi-table attachments
-so `TabularService.describe_documents` can return their catalog and typed
-tables under attachment ownership. This increment remains CSV-only.
+CSV files attached to a conversation (`POST /fast/ingest`) receive a
+`tabular_v1` artifact. New `.xls`, `.xlsx`, and `.xlsm` attachments run the
+same `ExcelProcessor` and `ExcelTableRegistrationProcessor` as corpus Excel
+imports, producing a `tabular_multi_v1` artifact with every detected table.
+Both paths skip text-vector indexing (`chunks: 0`) so a clipped Markdown
+preview cannot compete with exact SQL answers. The Excel `output.md` is
+persisted under the normal document output key and returned by the tabular
+schema tool as the roadmap to sheets, tables and query aliases. The frontend
+still receives a bounded `summary_md` for its attachment preview. Older Excel
+attachments keep their existing text vectors; they are not rewritten.
 
 **Ingestion.** `fast_ingest` builds a `DocumentMetadata` for the attachment
 directly (`identity.document_uid` = the same uuid used elsewhere for this
@@ -416,7 +408,9 @@ operator-configured `document_sources` registry, which an attachment was
 never meant to join. The Parquet conversion itself is fully reused —
 `TabularProcessor.process()` (DuckDB CSV→Parquet via the same
 `CsvTabularProcessor` delimiter/encoding detection, `tabular_v1` extension),
-exactly as corpus CSV ingestion does.
+exactly as corpus CSV ingestion does. Excel attaches through the corpus
+`ExcelProcessor` and `ExcelTableRegistrationProcessor`, storing `output.md`
+for table discovery and using the same table aliases as corpus workbooks.
 
 **Why this creates no ReBAC tuple.** `_persist_metadata_and_follow_up` only
 writes a ReBAC parent link when `metadata.tags.tag_ids` is non-empty (see
@@ -454,8 +448,8 @@ a single indexed `metadata_store.get_metadata_by_uid(document_uid)` lookup
 `_resolve_owned_attachment_datasets` for the two multi-uid call sites),
 treated as authorized when `source_tag == "fast_ingest"` and
 `identity.uploaded_by == user.uid` (the same equality check
-`is_own_session_chunk` already applies to vector chunks). Only if that
-doesn't match does the existing ReBAC check decide the `403`.
+`is_own_session_chunk` already applies to vector chunks). The owned resolver expands every Excel table under the same document uid.
+Only if that does not match does the existing ReBAC check decide the `403`.
 
 This is deliberately **not** wired into `_resolve_authorized_datasets`
 itself, which enumerates every document the caller can read (used by
@@ -503,16 +497,16 @@ Corpus ingestion is unaffected (default unchanged).
 caller already got.** `DELETE /fast/delete/{document_uid}` deletes the
 Parquet artifact (`content_store`, same prefix corpus re-ingestion pruning
 already uses) and the metadata record (`metadata_store.delete_metadata`, a
-raw store-level call) alongside the vector cleanup, when a `tabular_v1`
-artifact was produced. `_delete_attachment_tabular_dataset` re-checks
+raw store-level call) alongside the vector cleanup, when a `tabular_v1` or `tabular_multi_v1` artifact was produced.
+For Excel it also removes the stored `output.md` roadmap. `_delete_attachment_tabular_dataset` re-checks
 `source_tag == "fast_ingest"` and `identity.uploaded_by == user.uid` before
 touching anything — the same test `_resolve_owned_attachment_dataset` uses,
 not a rubber stamp of the endpoint's upstream authorization. That upstream
 check (`_authorize_fast_ingest_delete` → `may_delete_session_document`) was
 designed for an idempotent vector-only delete and treats "zero vector
-chunks" as safe-to-retry; since a CSV attachment now *always* has zero
+chunks" as safe-to-retry; since a tabular attachment has zero
 chunks by construction (see above), that upstream check alone would let any
-authenticated user pass it for any CSV attachment uid, corpus or not —
+authenticated user pass it for any tabular attachment uid, corpus or not —
 `_delete_attachment_tabular_dataset`'s own check is what actually stops a
 cross-tenant delete, not merely an extra safety net.
 
@@ -565,7 +559,7 @@ bypass would have deleted its vectors outright for the service principal.
 check and the tabular-ownership branch unconditionally, admin or not — the
 bypass (`is_platform_admin`, computed once up front) only ever waives the
 *ownership* half of a check, never the *classification* half. For the
-metadata-less case (every non-CSV attachment: fast_ingest never writes a
+metadata-less case (text and image attachments: fast_ingest does not write a
 metadata row for them), classification for a service principal can't reuse
 `may_delete_session_document` — its per-user match can never be satisfied by
 a service account, since the chunks belong to whichever end user actually
@@ -670,16 +664,16 @@ judged out of scope for this fix.
 
 **Prompt suffix.** `build_attachment_context_suffix`
 (`libs/fred-runtime/fred_runtime/react/react_prompting.py`) tells agents
-`.csv` attachments are SQL-queryable *only* — not indexed for search at all,
-so the conversation search tool must never be called for one (it would find
-nothing, since no vector chunk exists). `.xlsx`/`.xls`/`.xlsm` keep the
-original "text only, not SQL-queryable" wording, unaffected, until Excel
-gets the same treatment as CSV.
+new CSV and Excel attachments are SQL-queryable and are not indexed as
+text vectors. Excel schemas return the persisted `output.md` roadmap with
+sheet and table aliases. Older Excel attachments retain their text vectors;
+the agent can use conversation search for these, while treating the old
+preview as potentially incomplete.
 
 The suffix only promises SQL-queryability when the calling agent instance
 actually has the tabular MCP server bound: `general_assistant` (#2429) ships
-with zero default capabilities, so a CSV attachment can carry a real
-`tabular_v1` dataset while the agent that sees it has no `read_query`/
+with zero default capabilities, so a spreadsheet attachment can carry a real
+tabular dataset while the agent that sees it has no `read_query`/
 `search_tabular_values` tool to call. `compose_system_prompt` now takes a
 required `tabular_tools_available` flag, computed by each runtime
 (`react_runtime.py`, `deep_runtime.py`) via

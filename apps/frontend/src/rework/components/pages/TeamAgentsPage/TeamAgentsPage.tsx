@@ -439,7 +439,7 @@ export default function TeamAgentsPage() {
                   <Button
                     color={"primary"}
                     variant={"filled"}
-                    size={"medium"}
+                    size={"small"}
                     icon={{ category: "outlined", type: "add" }}
                     onClick={() => setIsEnrollOpen(true)}
                   >
@@ -454,12 +454,12 @@ export default function TeamAgentsPage() {
                       agentsNicknamePlural: agentsNicknamePlural.toLowerCase(),
                     })}
                     clearAriaLabel={t("rework.teams.agents.clearSearch")}
-                    size="small"
+                    size="xs"
                   />
                 </div>
                 <div className={styles.sortSelect}>
                   <Select<AgentSortValue>
-                    size="small"
+                    size="xs"
                     compact
                     options={sortOptions}
                     value={sort}

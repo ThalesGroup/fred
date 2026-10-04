@@ -237,6 +237,13 @@ async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
 
 export type RuntimeHitlPayload = HumanInputRequest;
 
+export type HitlBatchAnswer = {
+  event: RuntimeAwaitingHumanEvent;
+  answer: string | boolean | undefined;
+  freeText?: string;
+  skipped: boolean;
+};
+
 export type RuntimeAwaitingHumanEvent = {
   type?: "awaiting_human";
   session_id: string;
@@ -576,6 +583,66 @@ export function useChatSse(
         }
 
         case "awaiting_human": {
+          if (
+            event.token_usage ||
+            event.sources?.length ||
+            event.ui_parts?.length ||
+            event.model_name ||
+            event.context_tokens != null
+          ) {
+            emit({
+              session_id: sessionId,
+              exchange_id: exchangeId,
+              rank: rankRef.current++,
+              timestamp: ts,
+              role: "system",
+              channel: "system_note",
+              parts: [],
+              metadata: {
+                model: event.model_name ?? null,
+                token_usage: event.token_usage ?? null,
+                context_tokens: event.context_tokens ?? null,
+                sources: event.sources ?? [],
+                ui_parts: event.ui_parts ?? [],
+                extras: { pause_metadata: true },
+              },
+            });
+          }
+          const occurrenceId = event.request.occurrence_id ?? event.request.interrupt_id;
+          const alreadyRecorded =
+            occurrenceId &&
+            messagesRef.current.some(
+              (message) =>
+                message.session_id === sessionId &&
+                message.exchange_id === exchangeId &&
+                message.channel === "hitl_request" &&
+                message.parts.some(
+                  (part) => part.type === "hitl_request" && (part.occurrence_id ?? part.interrupt_id) === occurrenceId,
+                ),
+            );
+          if (!alreadyRecorded) {
+            emit({
+              session_id: sessionId,
+              exchange_id: exchangeId,
+              rank: rankRef.current++,
+              timestamp: ts,
+              role: "system",
+              channel: "hitl_request",
+              parts: [
+                {
+                  type: "hitl_request",
+                  stage: event.request.stage,
+                  title: event.request.title,
+                  question: event.request.question ?? event.request.title ?? "HITL pause",
+                  choices: (event.request.choices ?? []).map(({ id, label }) => ({ id, label })),
+                  free_text: event.request.free_text ?? false,
+                  interrupt_id: event.request.interrupt_id,
+                  occurrence_id: event.request.occurrence_id,
+                  pending_calls: event.request.pending_calls ?? [],
+                },
+              ],
+            });
+          }
           const hitl: RuntimeAwaitingHumanEvent = {
             type: "awaiting_human",
             session_id: sessionId,
@@ -1123,6 +1190,7 @@ export function useChatSse(
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       skipped = false,
       onAccepted?: () => void,
+      batchAnswers?: HitlBatchAnswer[],
     ): Promise<boolean> => {
       abortRef.current?.abort();
       const ac = new AbortController();
@@ -1262,6 +1330,7 @@ export function useChatSse(
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
       const answerValue = !hasChoices && exactFreeText ? exactFreeText : answer;
       const agentQuestion = hitlPayload?.stage === "agent_question";
+      const answersToMirror = batchAnswers ?? [{ event: pending, answer, freeText, skipped }];
 
       setWaitResponse(true);
 
@@ -1278,8 +1347,8 @@ export function useChatSse(
             session_id: sessionId,
             // #2216: a resume echoes interrupt_id (LangGraph's Interrupt.id,
             // validated against the currently pending occurrence backend-side).
-            interrupt_id: hitlPayload?.interrupt_id ?? null,
-            occurrence_id: hitlPayload?.occurrence_id ?? undefined,
+            interrupt_id: batchAnswers ? null : (hitlPayload?.interrupt_id ?? null),
+            occurrence_id: batchAnswers ? undefined : (hitlPayload?.occurrence_id ?? undefined),
             // `language` matters here too: a resumed turn can reach a fresh
             // gated tool call of its own (the model replans and requests more
             // approval-needing tools within the same resumed stream) — see
@@ -1296,18 +1365,34 @@ export function useChatSse(
               prep,
             ),
             turn_options: turnOptions,
-            resume_payload: agentQuestion
-              ? skipped
-                ? { skipped: true }
+            resume_payload: batchAnswers
+              ? {
+                  answers: batchAnswers.map(
+                    ({ event, answer: itemAnswer, freeText: itemText, skipped: itemSkipped }) => ({
+                      interrupt_id: event.payload.interrupt_id,
+                      occurrence_id: event.payload.occurrence_id,
+                      answer: itemSkipped
+                        ? { skipped: true }
+                        : {
+                            choice_id:
+                              event.payload.choices?.length && typeof itemAnswer === "string" ? itemAnswer : undefined,
+                            text: itemText?.trim() ? itemText : undefined,
+                          },
+                    }),
+                  ),
+                }
+              : agentQuestion
+                ? skipped
+                  ? { skipped: true }
+                  : {
+                      choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
+                      text: exactFreeText,
+                    }
                 : {
+                    answer: answerValue,
                     choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
-                    text: exactFreeText,
-                  }
-              : {
-                  answer: answerValue,
-                  choice_id: hasChoices && typeof answer === "string" ? answer : undefined,
-                  text: hasChoices ? exactFreeText : undefined,
-                },
+                    text: hasChoices ? exactFreeText : undefined,
+                  },
           },
           prep.execute_stream_url,
           token,
@@ -1316,58 +1401,77 @@ export function useChatSse(
           ac.signal,
           () => {
             acceptedByRuntime = true;
-            if (agentQuestion) {
+            if (agentQuestion || hitlPayload?.stage === "tool_approval") {
               // The SSE resume does not emit HITL history rows. Mirror the accepted
               // answer now; a later history load replaces these with persisted rows.
-              const occurrenceId = hitlPayload?.occurrence_id ?? null;
-              const sameOccurrence = (message: ChatMessage) =>
-                message.session_id === sessionId &&
-                message.exchange_id === exchangeId &&
-                (message.parts?.[0] as { occurrence_id?: string | null } | undefined)?.occurrence_id === occurrenceId;
               let next = messagesRef.current;
               let rank = next.reduce((max, message) => Math.max(max, message.rank), 0) + 1;
               const timestamp = new Date().toISOString();
-              if (!next.some((message) => message.channel === "hitl_request" && sameOccurrence(message))) {
-                next = upsertOne(next, {
-                  session_id: sessionId,
-                  exchange_id: exchangeId,
-                  rank: rank++,
-                  timestamp,
-                  role: "system",
-                  channel: "hitl_request",
-                  parts: [
-                    {
-                      type: "hitl_request",
-                      question: hitlPayload.question ?? "",
-                      title: hitlPayload.title ?? null,
-                      stage: "agent_question",
-                      choices: (hitlPayload.choices ?? []).map((choice) => ({ id: choice.id, label: choice.label })),
-                      free_text: hitlPayload.free_text ?? false,
-                      occurrence_id: occurrenceId,
-                      interrupt_id: hitlPayload.interrupt_id ?? null,
-                      pending_calls: hitlPayload.pending_calls ?? [],
-                    },
-                  ],
-                });
-              }
-              if (!next.some((message) => message.channel === "hitl_response" && sameOccurrence(message))) {
-                next = upsertOne(next, {
-                  session_id: sessionId,
-                  exchange_id: exchangeId,
-                  rank,
-                  timestamp,
-                  role: "user",
-                  channel: "hitl_response",
-                  parts: [
-                    {
-                      type: "hitl_response",
-                      choice_id: hasChoices && typeof answer === "string" ? answer : null,
-                      text: exactFreeText ?? null,
-                      skipped,
-                      occurrence_id: occurrenceId,
-                    },
-                  ],
-                });
+              for (const item of answersToMirror) {
+                const itemPayload = item.event.payload;
+                const occurrenceId = itemPayload.occurrence_id ?? null;
+                const sameOccurrence = (message: ChatMessage) =>
+                  message.session_id === sessionId &&
+                  message.exchange_id === exchangeId &&
+                  (message.parts?.[0] as { occurrence_id?: string | null } | undefined)?.occurrence_id === occurrenceId;
+                const requestId = occurrenceId ?? itemPayload.interrupt_id;
+                const hasRequest = next.some(
+                  (message) =>
+                    message.session_id === sessionId &&
+                    message.exchange_id === exchangeId &&
+                    message.channel === "hitl_request" &&
+                    (requestId == null
+                      ? agentQuestion && sameOccurrence(message)
+                      : message.parts.some(
+                          (part) =>
+                            part.type === "hitl_request" && (part.occurrence_id ?? part.interrupt_id) === requestId,
+                        )),
+                );
+                if (!hasRequest) {
+                  next = upsertOne(next, {
+                    session_id: sessionId,
+                    exchange_id: exchangeId,
+                    rank: rank++,
+                    timestamp,
+                    role: "system",
+                    channel: "hitl_request",
+                    parts: [
+                      {
+                        type: "hitl_request",
+                        question: itemPayload.question ?? "",
+                        title: itemPayload.title ?? null,
+                        stage: itemPayload.stage ?? "tool_approval",
+                        choices: (itemPayload.choices ?? []).map((choice) => ({ id: choice.id, label: choice.label })),
+                        free_text: itemPayload.free_text ?? false,
+                        occurrence_id: occurrenceId,
+                        interrupt_id: itemPayload.interrupt_id ?? null,
+                        pending_calls: itemPayload.pending_calls ?? [],
+                      },
+                    ],
+                  });
+                }
+                if (
+                  !agentQuestion ||
+                  !next.some((message) => message.channel === "hitl_response" && sameOccurrence(message))
+                ) {
+                  next = upsertOne(next, {
+                    session_id: sessionId,
+                    exchange_id: exchangeId,
+                    rank: rank++,
+                    timestamp,
+                    role: "user",
+                    channel: "hitl_response",
+                    parts: [
+                      {
+                        type: "hitl_response",
+                        choice_id: itemPayload.choices?.length && typeof item.answer === "string" ? item.answer : null,
+                        text: item.freeText?.trim() ? item.freeText : null,
+                        skipped: item.skipped,
+                        occurrence_id: occurrenceId,
+                      },
+                    ],
+                  });
+                }
               }
               messagesRef.current = next;
               setMessages([...next]);

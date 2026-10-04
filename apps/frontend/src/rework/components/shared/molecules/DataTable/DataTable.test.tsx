@@ -16,7 +16,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import DataTable, { DataTableColumn, SortState } from "./DataTable.tsx";
+import DataTable, { DataTableColumn, SortState } from "./LocalizedDataTable.tsx";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -585,5 +585,48 @@ describe("DataTable server pagination", () => {
       />,
     );
     expect(onOffsetChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("row activation", () => {
+  it("activates background by pointer and keyboard without selecting or intercepting controls", () => {
+    const activate = vi.fn();
+    const select = vi.fn();
+    const embedded = vi.fn();
+    render(
+      <DataTable
+        data={[{ id: 1 }]}
+        columns={[
+          {
+            label: "Id",
+            cellRenderer: (row) => (
+              <>
+                <span>{row.id}</span>
+                <button onClick={embedded}>Detail</button>
+                <input aria-label="Input" />
+              </>
+            ),
+          },
+        ]}
+        rowKey={(row) => row.id}
+        onRowClick={activate}
+        selectable
+        selectedKeys={new Set()}
+        onSelectionChange={select}
+      />,
+    );
+    const row = container.querySelector('[data-activatable="true"]')!;
+    click(row.querySelector("span"));
+    expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
+    expect(select).not.toHaveBeenCalled();
+    click(row.querySelector("button"));
+    expect(embedded).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenCalledOnce();
+    expect(row.getAttribute("tabindex")).toBeNull();
+    click(row.querySelector('input[aria-label="Input"]'));
+    expect(activate).toHaveBeenCalledOnce();
+    click(row.querySelector('input[type="checkbox"]'));
+    expect(select).toHaveBeenCalledOnce();
+    expect(activate).toHaveBeenCalledOnce();
   });
 });

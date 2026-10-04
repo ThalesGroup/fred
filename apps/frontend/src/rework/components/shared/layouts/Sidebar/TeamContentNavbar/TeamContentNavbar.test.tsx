@@ -73,7 +73,7 @@ vi.mock("../../../../../../hooks/useSelectedTeam.ts", () => ({
 }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({
-    canUpdateAgents: false,
+    canUpdateAgents: true,
     canUpdateInfo: false,
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
   }),
@@ -336,5 +336,16 @@ describe("TeamContentNavbar Responsibilities entry", () => {
 
     h.charterEnabled = undefined;
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/settings/responsibilities"');
+  });
+});
+
+describe("retired evaluation navigation", () => {
+  it("keeps Members but removes Evaluations for an agent editor", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.relations = ["team_editor"];
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain("/settings/evaluations");
+    expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
   });
 });

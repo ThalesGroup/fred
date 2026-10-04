@@ -6245,7 +6245,10 @@ ReAct and Deep parent/child frames may recover a tool call only at the completed
 assistant-message boundary, only for a Mistral-qualified response, and only when
 the reconstructed provider content contains the exact empty typed sentinel
 `{"type":"reference","reference_ids":[]}` between a registered tool name
-and strict JSON arguments. The bounded content list may mix typed text blocks
+and JSON arguments. Literal CR/LF inside a quoted JSON string are accepted;
+other raw control characters remain invalid. Arguments are checked against the
+model-visible tool schema and the full input schema, using a temporary call ID
+only for an injected `tool_call_id` so cross-field validators still run. The bounded content list may mix typed text blocks
 and plain string fragments; their original order and bytes are retained even
 when they split a tool name or JSON argument. A response may contain several
 exact sentinels when each follows a registered tool name and every resulting
@@ -6375,13 +6378,26 @@ text is the record of what was sent.
 An interactive ReAct or Deep turn exposes the platform `ask_user` tool only when
 `RuntimeContext.ask_user` is explicitly `true`. Graph steps may invoke the same
 platform tool explicitly under that control. An absent value or `false` leaves
-the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, up to
-four distinct single-choice options, and/or free text. The agent selects the
-most relevant options before calling; a longer list is rejected, never trimmed.
+the tool unavailable; ReAct and Deep also omit it from the model catalog. The tool accepts a nonblank question, an optional short subject title, up to
+four distinct single-choice options, and/or free text. Two or more choices
+automatically allow a text answer even when the agent sets `allow_free_text=false`;
+zero- and one-choice questions follow that flag. The agent selects the most
+relevant options before calling; a longer list is rejected, never trimmed.
 Its injected tool call ID is hidden from
 the model and becomes the `HumanInputRequest.occurrence_id`; the platform sets
 `stage="agent_question"`. A collision with a declared, provider or capability
 tool named `ask_user` rejects executor construction.
+
+A pending human interrupt is the turn's result until the person responds. If an
+earlier tool call failed and the agent recovered by asking a valid question, the
+stream retains the failed tool trace but emits no stale failure as a final answer.
+The pause event carries sources, UI parts, model usage and context size accumulated
+before the interrupt. History stores them in a metadata-only system note
+before deduplicating the HITL request row; managed chat combines each pause
+segment with the resumed answer in the same exchange. For parallel pending
+questions, the stream attaches shared metadata only to the first pause event
+so usage is counted once, even when that request was previously surfaced.
+Managed chat also reads metadata stored on older HITL request rows.
 
 The tool pauses through LangGraph before any external effect. A resume must carry
 the pending interrupt and occurrence IDs. After authorization and before the
@@ -6394,6 +6410,24 @@ Approval gates retain their existing resume behavior and do not accept skip.
 A Graph question pause leaves its tool call in progress; only the resumed call
 emits a tool result. The no-LLM Graph test assistant exercises confirmation,
 choice, free text, and choice with comment through this platform tool.
+
+Managed chat groups simultaneous agent questions in one HITL card with short
+subject tabs in call order. Tabs scroll horizontally when needed, and older
+questions without titles use localized numbered labels. The first unanswered
+question is selected initially. Selecting a choice or skipping stages that
+answer and advances to the next unanswered tab. The person can revisit any
+tab and change its answer. Once every tab has an answer or skip, one Send
+resumes all pending calls in a single backend request. The card remains visible
+until that request succeeds and retains every draft if it fails. Reload
+reconstructs unanswered siblings from history by occurrence ID.
+
+A batch resume uses `resume_payload={"answers":[{"interrupt_id":"...",
+"occurrence_id":"...","answer":{...}},...]}` without top-level interrupt or
+occurrence IDs. The request must cover the exact pending set of agent questions.
+The runtime validates each answer, claims the occurrences in one database
+transaction, and resumes LangGraph once with an interrupt-ID-to-answer map.
+It persists one response row per occurrence. Existing single-answer resumes
+remain valid.
 
 `HitlResponsePart.skipped` is optional and defaults to false for old history.
 A skipped question writes a response row even without choice or text. Graph

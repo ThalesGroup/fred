@@ -98,6 +98,7 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
+    FrontendUiThemes,
     FrontendUserAuthConfig,
     InactiveSessionItem,
     InactiveSessionsResponse,
@@ -156,6 +157,9 @@ from control_plane_backend.teams.service import list_teams as list_teams_from_se
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
 logger = logging.getLogger(__name__)
+
+# Non-empty while the platform UI settings store is failing (see build_frontend_config).
+_ui_settings_failure_logged: set[bool] = set()
 
 # Chat-controls cache (#1976, RFC §3.7): computed chat controls are NEVER
 # persisted. Control-plane may cache the pod's per-capability evaluation
@@ -453,11 +457,35 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         if user_security.enabled
         else FrontendUserAuthConfig(enabled=False)
     )
+    try:
+        ui_settings = await deps.get_platform_ui_settings_store().get()
+        _ui_settings_failure_logged.clear()
+    except Exception as exc:
+        # A cosmetic setting must never block login: an unmigrated database
+        # degrades to "no platform theme settings" instead of a failing config.
+        # Logged once per outage: this public endpoint runs on every page load.
+        if not _ui_settings_failure_logged:
+            _ui_settings_failure_logged.add(True)
+            logger.warning(
+                "[frontend-config] platform UI settings unavailable: %s: %s",
+                type(exc).__name__,
+                exc,
+            )
+        ui_settings = None
+    ui_themes = (
+        FrontendUiThemes(
+            default_theme=ui_settings.default_theme,
+            hidden_themes=ui_settings.hidden_themes,
+        )
+        if ui_settings is not None
+        else None
+    )
     return FrontendConfig(
         user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
+        ui_themes=ui_themes,
     )
 
 
@@ -3655,6 +3683,7 @@ async def list_prompts(
     team_id: TeamId,
     deps: ProductServiceDependencies,
     *,
+    user_id: str | None = None,
     limit: int = 100,
 ) -> list[PromptSummary]:
     """
@@ -3676,8 +3705,18 @@ async def list_prompts(
 
     store = deps.get_prompt_store()
     records = await store.list_by_team(team_id, limit=limit)
+    favorites = (
+        await store.favorite_ids(user_id, [r.prompt_id for r in records])
+        if user_id
+        else set()
+    )
     return sorted(
-        (_prompt_record_to_summary(r) for r in records),
+        (
+            _prompt_record_to_summary(r).model_copy(
+                update={"is_favorite": r.prompt_id in favorites}
+            )
+            for r in records
+        ),
         key=lambda p: -p.session_count,
     )
 
@@ -3844,6 +3883,7 @@ async def list_context_prompts(
 
     store = deps.get_prompt_store()
     records = await store.list_context_prompts(personal_team_id(user.uid), team_id)
+    favorites = await store.favorite_ids(user.uid, [r.prompt_id for r in records])
     return [
         ContextPromptSummary(
             id=r.prompt_id,
@@ -3854,9 +3894,31 @@ async def list_context_prompts(
             version=r.version,
             session_count=r.session_count,
             score=r.score,
+            is_favorite=r.prompt_id in favorites,
         )
         for r in records
     ]
+
+
+async def set_prompt_favorite(
+    user: KeycloakUser,
+    team_id: TeamId,
+    prompt_id: str,
+    favorite: bool,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Mark or unmark one of the team's prompts as a favorite of the caller.
+
+    The caller's read access to the team is checked by the route; a prompt
+    that is not the team's is a 404, so an id from elsewhere cannot be starred.
+    """
+
+    store = deps.get_prompt_store()
+    if await store.get_for_team(prompt_id, team_id) is None:
+        raise PromptRequestError(
+            f"Prompt {prompt_id!r} not found for team {team_id!r}.", http_status=404
+        )
+    await store.set_favorite(user.uid, prompt_id, favorite)
 
 
 async def promote_prompt(

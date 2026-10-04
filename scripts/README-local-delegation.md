@@ -94,7 +94,6 @@ A short chat should emit `delegated_run_admitted` in Fred Agents and
 | Workload rejected | Run `make delegation ARGS=--dry-run`; fix the reported client secret, caller role, issuer or audience where it is owned. |
 | Recreated Keycloak | Rerun the deployment-factory post-install step if the role is missing, then `make delegation`, and restart Fred. |
 | Direct OpenAI-compatible endpoint unavailable | This local C3 profile disables `openai_compat`; use the managed chat UI. |
-| Evaluation proxy refuses port 8336 | The optional evaluator is not running; this does not prove delegation failed. |
 
 For an existing Docker realm, the audience repair and the delegation caller role are
 applied without restarting Docker or recreating data:

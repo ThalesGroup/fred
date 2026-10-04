@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The package exposes one theme, the default, under the plain [data-theme]
+// selectors its token contract allows; the app scopes it by data-ui-theme.
+export const PACKAGED_THEME = "pebble";
+
 export const TOKEN_SOURCE_PATHS = [
   "apps/frontend/src/styles/color-ramps.css",
-  "apps/frontend/src/styles/colors-semantic-light.css",
-  "apps/frontend/src/styles/colors-semantic-dark.css",
+  "apps/frontend/src/styles/themes/pebble.css",
   "apps/frontend/src/styles/colors-state-semantic.css",
   "apps/frontend/src/styles/shadow-light.css",
   "apps/frontend/src/styles/shadow-dark.css",
@@ -29,6 +32,44 @@ export const TOKEN_SOURCE_PATHS = [
 export const FONT_STYLESHEET_PATH = "apps/frontend/src/styles/index.css";
 
 export const UI_COMPONENT_SOURCE_PATHS = [
+  "apps/frontend/src/rework/components/shared/atoms/TextArea/TextArea.module.scss",
+  "apps/frontend/src/rework/components/shared/atoms/TextArea/TextArea.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/Switch/Switch.module.scss",
+  "apps/frontend/src/rework/components/shared/atoms/Switch/Switch.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/ProgressBar/ProgressBar.module.css",
+  "apps/frontend/src/rework/components/shared/atoms/ProgressBar/ProgressBar.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/IndicatorDot/IndicatorDot.module.css",
+  "apps/frontend/src/rework/components/shared/atoms/IndicatorDot/IndicatorDot.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/Disclosure/Disclosure.module.css",
+  "apps/frontend/src/rework/components/shared/atoms/Disclosure/Disclosure.tsx",
+  "apps/frontend/src/rework/components/shared/atoms/StatusBadge/StatusBadge.module.css",
+  "apps/frontend/src/rework/components/shared/atoms/StatusBadge/StatusBadge.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/Breadcrumb/Breadcrumb.module.css",
+  "apps/frontend/src/rework/components/shared/molecules/Breadcrumb/Breadcrumb.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/PageHeader/PageHeader.module.css",
+  "apps/frontend/src/rework/components/shared/molecules/PageHeader/PageHeader.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/SelectableCard/SelectableCard.module.css",
+  "apps/frontend/src/rework/components/shared/molecules/SelectableCard/SelectableCard.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/FileDropzone/FileDropzone.module.css",
+  "apps/frontend/src/rework/components/shared/molecules/FileDropzone/FileDropzone.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/ServiceNotice/ServiceNotice.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/ServiceNotice/ServiceNotice.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/KpiStatCard/KpiStatCard.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/KpiStatCard/KpiStatCard.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/DataTable/DataTable.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/DataTable/DataTable.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/TablePagination/TablePagination.module.scss",
+  "apps/frontend/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.module.css",
+  "apps/frontend/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/Toast/Toast.module.css",
+  "apps/frontend/src/rework/components/shared/molecules/Toast/Toast.tsx",
+  "apps/frontend/src/rework/components/shared/molecules/Toast/ToastProvider.tsx",
+  "apps/frontend/src/rework/core/hooks/usePaneResize.ts",
+  "apps/frontend/src/hooks/useLocalStorageState.ts",
+
   "apps/frontend/src/rework/components/shared/utils/Type.ts",
   "apps/frontend/src/rework/components/shared/atoms/Icon/Icon.tsx",
   "apps/frontend/src/rework/components/shared/atoms/Icon/Icon.module.scss",

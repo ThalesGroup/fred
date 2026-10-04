@@ -15,17 +15,27 @@
 import { ColorTheme } from "../../utils/Type.ts";
 import styles from "./ProgressBar.module.css";
 
-interface ProgressBarProps {
+export interface ProgressBarProps {
   theme: ColorTheme;
   current: number;
   max: number;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
 }
 
-export default function ProgressBar({ theme, current, max }: ProgressBarProps) {
+export default function ProgressBar({ theme, current, max, ...names }: ProgressBarProps) {
   const percentage = max > 0 ? Math.min(100, Math.max(0, (current / max) * 100)) : 0;
 
   return (
-    <div className={styles.track} role="progressbar" aria-valuenow={current} aria-valuemin={0} aria-valuemax={max}>
+    <div
+      className={styles.track}
+      role="progressbar"
+      // Announces the same bounded value the fill shows.
+      aria-valuenow={Math.round(percentage)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      {...names}
+    >
       <div data-color={theme} className={styles.fill} style={{ width: `${percentage}%` }} />
     </div>
   );

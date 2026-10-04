@@ -591,25 +591,6 @@ export type HumanInputRequest = {
   stage?: string | null;
   title?: string | null;
 };
-export type AwaitingHumanRuntimeEvent = {
-  kind?: "awaiting_human";
-  request: HumanInputRequest;
-  sequence?: number;
-};
-export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
-export type RuntimeErrorEvent = {
-  kind?: "execution_error";
-  message: string;
-  reason?: RuntimeStopReason | null;
-  sequence?: number;
-};
-export type ExecutionInterruptedRuntimeEvent = {
-  interruption_id: string;
-  kind?: "execution_interrupted";
-  request: HumanInputRequest;
-  sequence?: number;
-};
-export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type VectorSearchHit = {
   author?: string | null;
   /** Position of the chunk inside its source document, used to restore document order */
@@ -677,6 +658,39 @@ export type LinkPart = {
   title?: string | null;
   type?: "link";
 };
+export type AwaitingHumanRuntimeEvent = {
+  context_tokens?: number | null;
+  kind?: "awaiting_human";
+  model_name?: string | null;
+  request: HumanInputRequest;
+  sequence?: number;
+  sources?: VectorSearchHit[];
+  token_usage?: {
+    [key: string]: number;
+  } | null;
+  ui_parts?: (
+    | ({
+        type: "geo";
+      } & GeoPart)
+    | ({
+        type: "link";
+      } & LinkPart)
+  )[];
+};
+export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
+export type RuntimeErrorEvent = {
+  kind?: "execution_error";
+  message: string;
+  reason?: RuntimeStopReason | null;
+  sequence?: number;
+};
+export type ExecutionInterruptedRuntimeEvent = {
+  interruption_id: string;
+  kind?: "execution_interrupted";
+  request: HumanInputRequest;
+  sequence?: number;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
 export type FinalRuntimeEvent = {
   content?: string;
   context_tokens?: number | null;

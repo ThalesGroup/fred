@@ -34,7 +34,7 @@ import { refreshTimeRange, resolvePreset } from "@shared/molecules/TimeRangeSele
 import TimeSeriesLineChart from "@shared/molecules/TimeSeriesLineChart/TimeSeriesLineChart";
 import MultiSeriesLineChart from "@shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import BarChart from "@shared/molecules/BarChart/BarChart";
-import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard";
+import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Disclosure from "@shared/atoms/Disclosure/Disclosure.tsx";

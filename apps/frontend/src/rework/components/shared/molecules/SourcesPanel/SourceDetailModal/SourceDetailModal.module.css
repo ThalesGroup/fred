@@ -32,7 +32,7 @@
   box-shadow: var(--shadow-l);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
-  background: var(--surface-container-lowest);
+  background: var(--surface-floating);
   width: min(640px, 92vw);
   max-height: 80vh;
   overflow: hidden;
@@ -92,7 +92,7 @@
 }
 
 .closeBtn:hover {
-  background: var(--surface-container);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 

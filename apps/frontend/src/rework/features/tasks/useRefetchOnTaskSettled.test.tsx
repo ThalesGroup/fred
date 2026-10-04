@@ -87,7 +87,7 @@ function Page({ onSettled }: { onSettled: (targetId: string, parentReady: boolea
 
 function Workspace({ onSettled, parentReady }: { onSettled: (id: string) => void; parentReady: boolean }) {
   // Read through a prop so the callback the hook holds sees the live value.
-  useRefetchOnTaskSettled("document", (id) => onSettled(id));
+  useRefetchOnTaskSettled("document", (ids) => ids.forEach((id) => onSettled(id)));
   return <div data-ready={String(parentReady)} />;
 }
 
@@ -161,5 +161,28 @@ describe("useRefetchOnTaskSettled", () => {
 
     expect(calls).toEqual([]);
     // afterEach unmounts again; a second unmount of the same root is a no-op.
+  });
+
+  it("hands out tasks that settle together in one call, so a list reloads once", async () => {
+    const batches: string[][] = [];
+    function Batches() {
+      useRefetchOnTaskSettled("document", (ids) => batches.push(ids));
+      return null;
+    }
+    await act(async () => {
+      root.render(
+        <Provider store={store}>
+          <Batches />
+        </Provider>,
+      );
+    });
+    await act(async () => {
+      store.dispatch(register("t1", "doc-1"));
+      store.dispatch(register("t2", "doc-2"));
+      store.dispatch(settle("t1", "succeeded"));
+      store.dispatch(settle("t2", "succeeded"));
+    });
+
+    expect(batches).toEqual([["doc-1", "doc-2"]]);
   });
 });

@@ -33,7 +33,7 @@ from fastapi.testclient import TestClient
 from fred_core import AuthorizationError, KeycloakUser, Resource, get_current_user, get_current_user_or_service
 from fred_core.common.fastapi_handlers import register_exception_handlers
 from fred_core.security.structure import SERVICE_AGENT_ROLE
-from fred_core.tasks.models import TaskState, TaskSummary
+from fred_core.tasks.models import TaskListResponse, TaskState, TaskSummary
 
 import knowledge_flow_backend.features.tasks.controller as controller_module
 from knowledge_flow_backend.application_context import ApplicationContext
@@ -49,6 +49,7 @@ class _FakeTaskService:
     def __init__(self, summary: TaskSummary) -> None:
         self._summary = summary
         self.reconciled: list[str] = []
+        self.listed: list[dict[str, Any]] = []
 
     async def get_run(self, task_id: str) -> Any:
         if task_id != self._summary.task_id:
@@ -61,6 +62,10 @@ class _FakeTaskService:
 
     async def get_task(self, task_id: str) -> TaskSummary | None:
         return self._summary if task_id == self._summary.task_id else None
+
+    async def list_tasks(self, **kwargs: Any) -> TaskListResponse:
+        self.listed.append(kwargs)
+        return TaskListResponse(tasks=[self._summary])
 
 
 class _FakeRebac:
@@ -169,3 +174,19 @@ def test_cancellation_still_checks_authorization(tasks: SimpleNamespace) -> None
     with _client(tasks, _service_identity("someone-else")) as client:
         response = client.post(f"/tasks/{_TASK_ID}/cancel")
     assert response.status_code == 403
+
+
+def test_tasks_are_read_by_repeated_id(tasks: SimpleNamespace) -> None:
+    with _client(tasks, _service_identity(_CREATOR)) as client:
+        response = client.get("/tasks", params=[("scope", "user"), ("task_id", _TASK_ID), ("task_id", "other")])
+
+    assert response.status_code == 200
+    assert tasks.service.listed == [{"created_by": _CREATOR, "kind": None, "state": None, "task_ids": [_TASK_ID, "other"]}]
+
+
+def test_reading_more_ids_than_a_batch_holds_is_rejected(tasks: SimpleNamespace) -> None:
+    with _client(tasks, _service_identity(_CREATOR)) as client:
+        response = client.get("/tasks", params=[("scope", "user"), *(("task_id", f"t{i}") for i in range(51))])
+
+    assert response.status_code == 422
+    assert tasks.service.listed == []

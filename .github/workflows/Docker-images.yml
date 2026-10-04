@@ -1,8 +1,9 @@
 name: Docker images
 
 # Reusable: one definition of how every image in .github/docker-images.json is
-# built. Callers pass publish=false for a pre-merge check, publish=true to
-# release. Nothing else may hold a second copy of the image list.
+# built. Callers pass publish=false for a pre-merge check (affected images
+# only), publish=true to release (all). Nothing else may hold a second copy of
+# the image list.
 
 on:
   workflow_call:
@@ -22,10 +23,16 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.include }}
+      scan_matrix: ${{ steps.matrix.outputs.scan_include }}
+      frontend_scan: ${{ steps.matrix.outputs.frontend_scan }}
 
     steps:
+      # Full history only for a pull-request check: selection diffs against the
+      # merge base. fetch-depth 0 is falsy, hence the order of the expression.
       - name: Check out the repo
         uses: actions/checkout@v5
+        with:
+          fetch-depth: ${{ inputs.publish && 1 || 0 }}
 
       # A Dockerfile nobody listed is a Dockerfile nobody builds — that is how a
       # missing COPY line reached a release tag. Adding one must be a conscious
@@ -65,19 +72,24 @@ jobs:
 
           exit $failed
 
-      - name: Build the matrix
+      - name: Test image selection
+        if: ${{ !inputs.publish }}
+        run: python3 -m unittest discover -s scripts/tests -p 'test_select_docker_images.py' -v
+
+      # A pull request builds only the images its changes reach; the step
+      # summary lists each image with the paths that selected or skipped it.
+      - name: Select images
         id: matrix
-        run: |
-          set -euo pipefail
-          include=$(jq -c --argjson publish ${{ inputs.publish }} \
-            '[.images[] | select(($publish | not) or .publish)]' \
-            .github/docker-images.json)
-          echo "include=$include" >> "$GITHUB_OUTPUT"
-          echo "$include" | jq -r '.[] | "\(.name)\t\(.dockerfile)"'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/select_docker_images.py --publish ${{ inputs.publish }} --base "$BASE_SHA" --head "$HEAD_SHA"
 
   build:
     name: ${{ inputs.publish && 'Push' || 'Build' }} ${{ matrix.name }}
     needs: resolve
+    # An empty matrix is an error in Actions; a docs-only PR builds nothing.
+    if: ${{ needs.resolve.outputs.matrix != '[]' }}
     runs-on: ubuntu-latest
 
     strategy:
@@ -127,7 +139,8 @@ jobs:
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_args }}
           push: ${{ inputs.publish }}
-          tags: ${{ steps.meta.outputs.tags }} # oci://<registry>/<image>:<version>
+          load: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+          tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
           # The empty string is falsy in expressions, so it has to sit on the
           # falsy side: `publish && '' || format(...)` returns the format branch
@@ -137,3 +150,136 @@ jobs:
           # timeout must cost a slower build next time, not a red check on an
           # image that already compiled.
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
+
+      - name: Scan built image for CVEs
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ format('fred-pr/{0}:scan', matrix.name) }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          list-all-pkgs: true
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+
+      - name: Upload Trivy report
+        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+          path: trivy-results.json
+          retention-days: 14
+
+  trivy:
+    name: Scan Trivy / ${{ matrix.name }}
+    if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.scan_matrix != '[]' }}
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.resolve.outputs.scan_matrix) }}
+
+    steps:
+      - name: Download Trivy report
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-${{ matrix.name }}
+
+      - name: Report scan findings
+        env:
+          IMAGE_NAME: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          jq -e '.ArtifactType == "container_image" and (.Results | length > 0)' trivy-results.json > /dev/null
+          count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json)
+          packages=$(jq '[.Results[]?.Packages[]?] | length' trivy-results.json)
+          echo "### Trivy: ${IMAGE_NAME}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Package inventory entries: ${packages}. Full JSON report: artifact \`trivy-${IMAGE_NAME}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo '| Severity | Findings |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| --- | ---: |' >> "$GITHUB_STEP_SUMMARY"
+          for severity in CRITICAL HIGH MEDIUM LOW UNKNOWN; do
+            total=$(jq --arg severity "$severity" '[.Results[]?.Vulnerabilities[]? | select(.Severity == $severity)] | length' trivy-results.json)
+            echo "| ${severity} | ${total} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo -e 'Severity\tCVE\tPackage\tInstalled\tFixed\tTarget'
+          jq -r '
+            def severity_rank:
+              if . == "CRITICAL" then 0 elif . == "HIGH" then 1
+              elif . == "MEDIUM" then 2 elif . == "LOW" then 3 else 4 end;
+            [.Results[]? as $result | $result.Vulnerabilities[]? |
+              [.Severity // "UNKNOWN", .VulnerabilityID // "-", .PkgName // "-",
+               .InstalledVersion // "-", .FixedVersion // "-", $result.Target // "-"]]
+            | sort_by(.[0] | severity_rank)[] | @tsv
+          ' trivy-results.json
+          if (( count > 0 )); then
+            ids=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID // "unknown"] | unique | .[:20] | join(", ")' trivy-results.json)
+            echo "::warning title=Critical CVEs in ${IMAGE_NAME}::Trivy found ${count} critical vulnerability findings. See the job summary and report artifact."
+            echo "${count} critical OS/library vulnerability findings. CVE IDs (first 20): ${ids}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No critical OS/library vulnerabilities found." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  trivy-frontend-dependencies:
+    name: Scan Trivy / frontend dependencies
+    if: ${{ github.event_name == 'pull_request' && !inputs.publish && needs.resolve.outputs.frontend_scan == 'true' }}
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+
+      - name: Scan frontend dependencies
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: apps/frontend
+          trivy-config: .github/trivy-frontend.yaml
+          scanners: vuln
+          vuln-type: library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          list-all-pkgs: true
+          format: json
+          output: trivy-frontend-dependencies.json
+          exit-code: '0'
+
+      - name: Upload frontend dependency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-frontend-dependencies
+          path: trivy-frontend-dependencies.json
+          retention-days: 14
+
+      - name: Report frontend dependency CVEs
+        run: |
+          set -euo pipefail
+          jq -e 'any(.Results[]?; (.Target // "" | endswith("package-lock.json")) and ((.Packages // []) | length > 0))' trivy-frontend-dependencies.json > /dev/null
+          count=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-frontend-dependencies.json)
+          packages=$(jq '[.Results[]?.Packages[]?] | length' trivy-frontend-dependencies.json)
+          echo '### Trivy: frontend dependencies' >> "$GITHUB_STEP_SUMMARY"
+          echo "Package inventory entries: ${packages}. Full JSON report: artifact \`trivy-frontend-dependencies\`." >> "$GITHUB_STEP_SUMMARY"
+          echo '| Severity | Findings |' >> "$GITHUB_STEP_SUMMARY"
+          echo '| --- | ---: |' >> "$GITHUB_STEP_SUMMARY"
+          for severity in CRITICAL HIGH MEDIUM LOW UNKNOWN; do
+            total=$(jq --arg severity "$severity" '[.Results[]?.Vulnerabilities[]? | select(.Severity == $severity)] | length' trivy-frontend-dependencies.json)
+            echo "| ${severity} | ${total} |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo -e 'Severity\tCVE\tPackage\tInstalled\tFixed\tTarget'
+          jq -r '
+            def severity_rank:
+              if . == "CRITICAL" then 0 elif . == "HIGH" then 1
+              elif . == "MEDIUM" then 2 elif . == "LOW" then 3 else 4 end;
+            [.Results[]? as $result | $result.Vulnerabilities[]? |
+              [.Severity // "UNKNOWN", .VulnerabilityID // "-", .PkgName // "-",
+               .InstalledVersion // "-", .FixedVersion // "-", $result.Target // "-"]]
+            | sort_by(.[0] | severity_rank)[] | @tsv
+          ' trivy-frontend-dependencies.json
+          if (( count > 0 )); then
+            echo "::warning title=Critical CVEs in frontend dependencies::Trivy found ${count} critical dependency findings. See the job summary and report artifact."
+          else
+            echo 'No critical frontend dependency vulnerabilities found.' >> "$GITHUB_STEP_SUMMARY"
+          fi

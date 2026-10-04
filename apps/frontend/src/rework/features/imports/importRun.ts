@@ -45,7 +45,7 @@ export interface ImportBatch {
  * failure, or plain success) — resolving on just the first would let the
  * drawer close/refresh while the rest of the batch is still unaccounted for.
  * Each outcome still fires its callback as its own line streams in, so the
- * tray/toast never waits on the slowest file. A mid-stream transport failure
+ * panel/toast never waits on the slowest file. A mid-stream transport failure
  * reports whatever's still pending too, so it isn't silently dropped. Pass
  * files sharing `requestMetadata` (see streamUploadOrProcessDocument).
  */

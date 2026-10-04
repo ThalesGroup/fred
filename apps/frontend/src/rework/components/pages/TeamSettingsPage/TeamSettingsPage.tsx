@@ -17,7 +17,6 @@ import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
 import TeamSettingsMembers from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamSettingsMembers.tsx";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx";
-import TeamSettingsEvaluations from "@shared/organisms/TeamSettingsPanel/TeamSettingsEvaluations/TeamSettingsEvaluations.tsx";
 import TeamSettingsRouting from "@shared/organisms/TeamSettingsPanel/TeamSettingsRouting/TeamSettingsRouting.tsx";
 import TaskActivity from "@shared/organisms/TaskActivity/TaskActivity.tsx";
 import TeamSettingsResponsibilities from "@shared/organisms/TeamSettingsPanel/TeamSettingsResponsibilities/TeamSettingsResponsibilities.tsx";
@@ -38,7 +37,7 @@ export default function TeamSettingsPage() {
   const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
   const charterEnabled = bootstrap?.team_admin_charter_enabled === true;
   const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateInfo, canUpdateAgents, canUpdateResources } = capabilities;
+  const { canUpdateInfo, canUpdateResources } = capabilities;
   // The relations themselves: no permission belongs to team_admin alone.
   const myRelations = selectedTeam && "my_relations" in selectedTeam ? (selectedTeam.my_relations ?? []) : [];
   const isTeamAdmin = myRelations.includes("team_admin");
@@ -63,7 +62,6 @@ export default function TeamSettingsPage() {
     section === "members" ||
     (section === "responsibilities" && charterEnabled && (isTeamAdmin || isPendingTeamAdmin)) ||
     ((section === "parameters" || section === "retention") && canUpdateInfo) ||
-    (section === "evaluations" && canUpdateAgents) ||
     ((section === "activity" || section === "routing") && hasElevatedTeamRole(capabilities));
   if (section && !sectionAllowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
 
@@ -77,8 +75,6 @@ export default function TeamSettingsPage() {
         // Retention now lives inside the Parameters section (no dedicated tab).
         // Redirect any old /settings/retention link there.
         return <Navigate to={`/team/${teamId}/settings/parameters`} replace />;
-      case "evaluations":
-        return <TeamSettingsEvaluations team={selectedTeam} />;
       case "activity":
         // The exact same shared surface the platform admin sees (OPS-04 §3.4),
         // scoped to this team. Server enforces CAN_READ_MEMBERS.

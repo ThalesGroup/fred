@@ -444,6 +444,7 @@ class _FakePromptStore:
 
     def __init__(self, records: list[PromptRecord] | None = None) -> None:
         self._records: list[PromptRecord] = list(records or [])
+        self._favorites: set[tuple[str, str]] = set()
 
     async def create(self, record: PromptRecord) -> PromptRecord:
         if any(
@@ -496,6 +497,23 @@ class _FakePromptStore:
             )
             if record.command is not None
         ]
+
+    async def favorite_ids(self, user_id: str, prompt_ids: list[str]) -> set[str]:
+        return {pid for pid in prompt_ids if (user_id, pid) in self._favorites}
+
+    async def set_favorite(self, user_id: str, prompt_id: str, favorite: bool) -> None:
+        if favorite:
+            self._favorites.add((user_id, prompt_id))
+        else:
+            self._favorites.discard((user_id, prompt_id))
+
+    async def delete_favorites_for_team(self, user_id: str, team_id: object) -> None:
+        team_prompts = {
+            r.prompt_id for r in self._records if str(r.team_id) == str(team_id)
+        }
+        self._favorites = {
+            (u, p) for u, p in self._favorites if u != user_id or p not in team_prompts
+        }
 
     async def get(self, prompt_id: str) -> PromptRecord | None:
         return next((r for r in self._records if r.prompt_id == prompt_id), None)
@@ -917,8 +935,11 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["team_admin_charter_enabled"] is False
-    assert payload["feature_flags"]["enableK8Features"] is False
-    assert payload["feature_flags"]["enableApplications"] is False
+    assert payload["feature_flags"] == {
+        "enableApplications": False,
+        "enableAllResourceSpaces": False,
+        "enableInformationSystems": False,
+    }
     assert "ui_settings" not in payload
     # AUTHZ-05 review item 11: `permissions` only ever carries the
     # OpenFGA-derived role list now — the Keycloak-role-derived `items` list
@@ -3291,6 +3312,7 @@ def _build_erasure_deps(
         get_team_routing_policy_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_model_binding_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_ui_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_announcement_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_session_metadata_store=lambda: session_store,  # type: ignore[arg-type,return-value]
@@ -6376,7 +6398,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         get_team_metadata_store=lambda: cast(Any, object()),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
-        get_prompt_store=cast(Any, object),
+        get_prompt_store=cast(Any, _FakePromptStore),
         get_prompt_category_store=cast(Any, object),
         get_content_store=lambda: cast(Any, object()),
         get_session_store=cast(Any, lambda: fake_session_store),
@@ -8081,6 +8103,69 @@ async def test_list_prompts_returns_team_scoped_summaries(
     assert item["session_count"] == 0
     # score is null and response_model_exclude_none=True strips null fields
     assert item.get("score") is None
+
+
+@pytest.mark.asyncio
+async def test_prompt_favorite_toggles_and_shows_in_the_listing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PUT / DELETE favorite are idempotent and drive `is_favorite` on the listing."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore(
+        [_make_prompt_record(prompt_id="prompt-1", team_id="personal")]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+    url = "/control-plane/v1/teams/personal/prompts"
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is False
+        response = await client.put(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.put(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is True
+        response = await client.delete(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.delete(f"{url}/prompt-1/favorite")
+        assert response.status_code == 204
+        response = await client.get(url)
+        assert response.json()[0]["is_favorite"] is False
+
+
+@pytest.mark.asyncio
+async def test_prompt_favorite_refuses_a_prompt_of_another_team(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prompt id from another team cannot be starred through this team."""
+
+    monkeypatch.setattr(
+        "control_plane_backend.product.api.require_team_access",
+        _fake_require_team_access,
+    )
+    store = _FakePromptStore(
+        [_make_prompt_record(prompt_id="prompt-2", team_id="other-team")]
+    )
+    app = create_app()
+    _patch_prompt_store(monkeypatch, store)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.put(
+            "/control-plane/v1/teams/personal/prompts/prompt-2/favorite"
+        )
+
+    assert resp.status_code == 404
+    assert store._favorites == set()
 
 
 @pytest.mark.asyncio
