@@ -208,17 +208,32 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
       providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
+    // Enablement changes suspend or revive agents server-side, so the agent
+    // lists must be read again: one team's list, or every list for the
+    // platform-wide switches.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
     },
     deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+      ],
     },
     putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+      ],
     },
     putCapabilityPersonalScopeControlPlaneV1AdminCapabilitiesCapabilityIdPersonalScopePut: {
-      invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
+      invalidatesTags: [
+        { type: "ControlPlaneCapability", id: "LIST" },
+        { type: "ControlPlaneAgentInstance", id: "ALL" },
+      ],
     },
     patchCapabilityReasoningControlPlaneV1AdminCapabilitiesCapabilityIdReasoningPatch: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }],
@@ -421,8 +436,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
                 id: instance.agent_instance_id,
               })),
               { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
             ]
-          : [{ type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` }],
+          : [
+              { type: "ControlPlaneAgentInstance" as const, id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+            ],
     },
     postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
       invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],

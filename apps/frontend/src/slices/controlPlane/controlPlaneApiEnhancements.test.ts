@@ -114,3 +114,52 @@ describe("bulk session delete invalidation", () => {
     inactive.unsubscribe();
   });
 });
+
+describe("capability enablement invalidation", () => {
+  const agentsPath = (teamId: string) => `/control-plane/v1/teams/${teamId}/agent-instances`;
+
+  const loadAgentLists = async (store: ReturnType<typeof makeStore>) => {
+    const subs = ["team-a", "team-b"].map((teamId) =>
+      store.dispatch(
+        api.endpoints.getTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGet.initiate({ teamId }),
+      ),
+    );
+    await Promise.all(subs);
+    return () => subs.forEach((sub) => sub.unsubscribe());
+  };
+
+  // A disable suspends the team's agents server-side; without this the list
+  // keeps showing them active until a page reload.
+  it("refetches the agent list of the team whose capability changed, and only that one", async () => {
+    const store = makeStore();
+    const release = await loadAgentLists(store);
+
+    await store.dispatch(
+      api.endpoints.deleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDelete.initiate({
+        capabilityId: "html_artifact",
+        teamId: "team-a",
+        mode: "disable",
+      }),
+    );
+
+    await vi.waitFor(() => expect(callsTo(agentsPath("team-a"))).toBe(2));
+    expect(callsTo(agentsPath("team-b"))).toBe(1);
+    release();
+  });
+
+  it("refetches every agent list after a platform-wide switch", async () => {
+    const store = makeStore();
+    const release = await loadAgentLists(store);
+
+    await store.dispatch(
+      api.endpoints.putCapabilityDefaultOnControlPlaneV1AdminCapabilitiesCapabilityIdDefaultOnPut.initiate({
+        capabilityId: "html_artifact",
+        setCapabilityDefaultOnRequest: { default_on: false },
+      }),
+    );
+
+    await vi.waitFor(() => expect(callsTo(agentsPath("team-a"))).toBe(2));
+    await vi.waitFor(() => expect(callsTo(agentsPath("team-b"))).toBe(2));
+    release();
+  });
+});
