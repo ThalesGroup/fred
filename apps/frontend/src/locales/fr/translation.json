@@ -1603,6 +1603,10 @@
         "action": "Réessayer",
         "relaunchFromRow": "Ce document est déjà arrivé : relancez son traitement depuis sa ligne dans le tableau.",
         "unavailable": "Ce fichier doit être sélectionné à nouveau pour être réessayé."
+      },
+      "untracked": {
+        "summary": "Suivi interrompu",
+        "detail": "Le serveur ne renvoie plus d'information sur ce fichier : son résultat est inconnu ici. Sa ligne dans le tableau affiche l'état propre du document."
       }
     },
     "tokenUsageImpact": {
@@ -2427,7 +2431,8 @@
         "failed": "Échec",
         "pending": "En attente",
         "running": "En cours",
-        "succeeded": "Terminé"
+        "succeeded": "Terminé",
+        "untracked": "Plus suivi"
       },
       "time": {
         "daysAgo": "il y a {{count}} j",

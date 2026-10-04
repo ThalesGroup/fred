@@ -350,3 +350,43 @@ async def test_import_exception_produces_failed_never_succeeded(
     # tells the operator *what* failed, not just that something did.
     assert task["target"]["type"] == import_export_api.IMPORT_TARGET_TYPE
     assert task["target"]["label"] == "will fail"
+
+
+@pytest.mark.asyncio
+async def test_a_finished_task_is_read_by_id_by_its_creator_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = _make_app("admin-poll")
+    _stub_open_bundle(monkeypatch)
+    _stub_run_import(
+        monkeypatch, MigrationReport(import_id="ignored", source_platform="swift")
+    )
+    by_id = lambda task_id: [  # noqa: E731
+        ("scope", "user"),
+        ("task_id", task_id),
+        ("task_id", "unknown-task"),
+    ]
+
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            launch = await _post_import(client, label=None, filename="bundle.zip")
+            own = await client.get(
+                "/control-plane/v1/tasks", params=by_id(launch["task_id"])
+            )
+            app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+                uid="someone-else", username="someone-else", roles=[]
+            )
+            foreign = await client.get(
+                "/control-plane/v1/tasks", params=by_id(launch["task_id"])
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert own.status_code == 200, own.text
+    assert [(t["task_id"], t["state"]) for t in own.json()["tasks"]] == [
+        (launch["task_id"], "succeeded")
+    ]
+    assert foreign.status_code == 200, foreign.text
+    assert foreign.json()["tasks"] == []

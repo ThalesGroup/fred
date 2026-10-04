@@ -129,3 +129,19 @@ async def test_notification_failure_does_not_change_durable_success(
     task = await service.get_task("t1")
     assert task is not None
     assert task.state == TaskState.succeeded
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_by_id_includes_terminal_tasks(tmp_path, build_store):
+    store = await build_store(tmp_path)
+    await store.create(task_id="t1", kind="ingestion", created_by="u1")
+    await store.create(task_id="t2", kind="ingestion", created_by="u1")
+    await store.create(task_id="t3", kind="ingestion", created_by="u1")
+    await store.record_event(_event(TaskState.succeeded))
+
+    listed = await store.list_tasks(created_by="u1", task_ids=["t1", "t2", "missing"])
+
+    assert {(task.task_id, task.state) for task in listed} == {
+        ("t1", TaskState.succeeded),
+        ("t2", TaskState.pending),
+    }

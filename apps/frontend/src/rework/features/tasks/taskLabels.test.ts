@@ -126,6 +126,7 @@ describe("ingestion support labels", () => {
         terminalAt: 2,
         acknowledgedAt: null,
         warnings: null,
+        untracked: false,
       },
       translate,
     );

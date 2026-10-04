@@ -24,6 +24,7 @@ const injectedRtkApi = api.injectEndpoints({
           team_id: queryArg.teamId,
           kind: queryArg.kind,
           state: queryArg.state,
+          task_id: queryArg.taskId,
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -1696,6 +1697,8 @@ export type ListTasksKnowledgeFlowV1TasksGetApiArg = {
   teamId?: string | null;
   kind?: string | null;
   state?: string | null;
+  /** With scope=user: these of the caller's tasks, in any state (1 to 50). */
+  taskId?: string[] | null;
   person?: string | null;
   run?: string | null;
   agent?: string | null;

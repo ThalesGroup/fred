@@ -78,9 +78,20 @@ def build_tasks_router(prefix: str = "") -> APIRouter:
         team_id: str | None = Query(default=None),
         kind: str | None = Query(default=None),
         state: str | None = Query(default=None),
+        task_id: list[str] | None = Query(
+            default=None,
+            description="With scope=user: these of the caller's tasks, in any state (1 to 50).",
+        ),
     ) -> TaskListResponse:
         return await list_tasks_scoped(
-            service, rebac, user, scope=scope, team_id=team_id, kind=kind, state=state
+            service,
+            rebac,
+            user,
+            scope=scope,
+            team_id=team_id,
+            kind=kind,
+            state=state,
+            task_ids=task_id,
         )
 
     @router.get("/tasks/{task_id}/events")

@@ -17,18 +17,27 @@ import type { TaskState, TaskViewModel } from "./taskTypes";
 
 /** Shared task labels keep badges, indicators, cards, and popovers consistent. */
 
+/** What a task shows: the server's state, or `untracked` once the server no
+ *  longer knows it — a state the backend never sends, so it is kept out of
+ *  `TaskState`. */
+export type TaskDisplayState = TaskState | "untracked";
+
+export const displayState = (task: Pick<TaskViewModel, "state" | "untracked">): TaskDisplayState =>
+  task.untracked ? "untracked" : task.state;
+
 /** task-state → CSS color token. */
-export const STATE_COLOR: Record<TaskState, string> = {
+export const STATE_COLOR: Record<TaskDisplayState, string> = {
   pending: "var(--on-surface-retreat)",
   running: "var(--info)",
   cancelling: "var(--warning)",
   succeeded: "var(--success)",
   failed: "var(--error)",
   cancelled: "var(--on-surface-retreat)",
+  untracked: "var(--warning)",
 };
 
 /** Localized task-state label (e.g. "Pending" / "En attente"). */
-export const stateLabel = (state: TaskState, t: TFunction): string => t(`rework.tasks.state.${state}`);
+export const stateLabel = (state: TaskDisplayState, t: TFunction): string => t(`rework.tasks.state.${state}`);
 
 /** Every ingestion step the backend actually emits on the task feed. Anything
  *  outside this set is a pipeline internal we have no wording for — naming the

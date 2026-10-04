@@ -589,10 +589,12 @@ function DocumentWorkspace({
     },
   });
   // Refresh document state and quota after a durable terminal task event.
-  useRefetchOnTaskSettled("document", (documentUid) => {
+  // A batch of tasks settling together reloads each affected folder once.
+  useRefetchOnTaskSettled("document", (documentUids) => {
     onDocumentsChanged?.();
+    const settled = new Set(documentUids);
     for (const [tagId, page] of Object.entries(perTag)) {
-      if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
+      if (page.docs.some((doc) => settled.has(doc.identity.document_uid))) {
         void loadTagPage(tagId, page.offset);
       }
     }
