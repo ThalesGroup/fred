@@ -18,6 +18,12 @@
   position: relative;
 }
 
+/* The Tooltip wraps the trigger in an inline-flex span sized to its content;
+ * stretch it so the trigger keeps the full rail width and stays centred. */
+.container > :last-child {
+  width: 100%;
+}
+
 /* Avatar-only trigger at the bottom of the rail: the hit area spans the whole
  * rail width, not just the avatar circle. */
 .trigger {
