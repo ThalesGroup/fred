@@ -27,6 +27,22 @@
   font: var(--font-body-medium);
 }
 
+.explanation {
+  margin: 0;
+  border-radius: var(--radius-xs);
+  background: var(--warning-container);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-warning-container);
+  font: var(--font-body-small);
+}
+
+.titleInfo {
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: help;
+  color: var(--on-surface-retreat);
+}
+
 .searchBar {
   margin-top: var(--spacing-2xs);
 }
@@ -75,6 +91,22 @@
 .originTag {
   flex-shrink: 0;
   color: var(--primary);
+  font: var(--font-label-small);
+}
+
+.disabledReason {
+  flex-shrink: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
+}
+
+.warning {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-3xs);
+  cursor: help;
+  color: var(--warning);
   font: var(--font-label-small);
 }
 

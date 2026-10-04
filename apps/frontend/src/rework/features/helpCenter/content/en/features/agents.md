@@ -90,13 +90,51 @@ Next to each pack's name, a row of dots gives the overall state:
   pack still works with the rest; ask for it to be opened if you need it (see
   [Administration](/help/en/features/administration)).
 
-## Duplicate, suspended, delete
+## Duplicate, copy, suspended, delete
 
-- **Duplicate** — start from an existing agent to make a variant. The
-  configuration is copied, but **not the files it references**: a PowerPoint
-  template, for instance, has to be uploaded again on the copy.
+- **Duplicate** — start from an existing agent to make a variant in the same
+  team. Everything is carried over, including its files such as a PowerPoint
+  template.
+- **Copy to…** — give a copy of the agent to another team or to your personal
+  space. See below.
 - **Suspended** — a suspended agent stays visible but unusable. A function it
   depends on has been switched off, the team's access to it was withdrawn, or
   its configuration is no longer valid. See
   [Common problems](/help/en/troubleshooting/common-problems).
 - **Delete** — deletion is permanent.
+
+## Copy an agent to another team
+
+The **⋮** menu of an agent card offers **Copy to…**. Pick one or more spaces:
+your personal space and the teams where you are an **Editor**. You also need to
+be an Editor of the agent's own team.
+
+Each team gets its own agent, independent of the original: changing one does
+not change the other. Every editor of the team can use and adjust it right
+away. If the name is already taken, the copy gets a suffix, for example
+`Analyst_imported-1`.
+
+**What is carried over**: the agent's name, description, instructions and
+settings.
+
+**What is reset**: choices that belong to the origin team — a library, a
+folder or documents picked for the agent. The capability stays enabled, but it
+now works on the new team's resources. An agent that read its team's wiki will
+read the wiki of the team receiving the copy.
+
+**What is recreated**: configuration files, such as a PowerPoint template, are
+uploaded again in the new team, as if an editor had done it there. If the
+template takes its images from folders the new team does not have, those image
+fields stay empty: a message tells you which folders to create, then to upload
+the template again.
+
+**What is never copied**: conversations and the files the agent produced.
+
+Before you confirm, the window flags the teams that cannot receive everything:
+
+- **Agent template not enabled** — the team has no access to this agent's
+  template. It cannot be picked.
+- **Missing capabilities** — the team does not have every capability of the
+  agent (hover the message for the list). You can still copy: the agent will
+  work there without them, with its instructions intact. To get them, ask for
+  them to be opened (see [Administration](/help/en/features/administration)).

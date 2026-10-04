@@ -25,7 +25,7 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import { ManagedAgentInstanceSummary, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import styles from "./AgentCard.module.scss";
 
-type MoreMenuAction = "edit" | "toggle" | "duplicate" | "delete";
+type MoreMenuAction = "edit" | "toggle" | "duplicate" | "copyTo" | "delete";
 
 export interface AgentCardProps {
   instance: ManagedAgentInstanceSummary;
@@ -41,6 +41,7 @@ export interface AgentCardProps {
   onEdit: () => void;
   onToggleEnabled: () => void;
   onDuplicate: () => void;
+  onCopyTo: () => void;
   onDelete: () => void;
 }
 
@@ -67,6 +68,7 @@ export default function AgentCard({
   onEdit,
   onToggleEnabled,
   onDuplicate,
+  onCopyTo,
   onDelete,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
@@ -148,6 +150,7 @@ export default function AgentCard({
       if (isSuspended) return;
       onToggleEnabled();
     } else if (action === "duplicate") onDuplicate();
+    else if (action === "copyTo") onCopyTo();
     else if (action === "delete") onDelete();
   };
 
@@ -190,6 +193,12 @@ export default function AgentCard({
                     value: "duplicate",
                     label: t("rework.agentCard.duplicate"),
                     icon: { category: "outlined", type: "content_copy" },
+                  },
+                  {
+                    key: "copyTo",
+                    value: "copyTo",
+                    label: t("rework.agentCard.copyTo"),
+                    icon: { category: "outlined", type: "drive_file_move" },
                   },
                   {
                     key: "delete",

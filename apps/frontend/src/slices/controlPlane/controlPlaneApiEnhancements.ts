@@ -448,6 +448,13 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
       ],
     },
+    // A copy lands in every target team: refresh each team's list it reached.
+    postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: {
+      invalidatesTags: (result) =>
+        (result?.results ?? [])
+          .filter((r) => r.agent)
+          .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+    },
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
     // route needs no team — so it invalidates the whole type rather than one
     // team's list: the alternative is passing a team id the API never asked for.

@@ -1362,6 +1362,36 @@
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "Suspended",
       "duplicate": "Duplicate",
+      "copyTo": "Copy to…",
+      "copyDialog": {
+        "title": "Copy {{name}} to another team",
+        "subtitle": "Select the spaces to copy this agent into.",
+        "confirm": "Copy",
+        "noEditableTeams": "You are not an editor of any team. Only an editor can copy an agent into one — ask a team administrator for that role.",
+        "templateDisabled": "Agent template not enabled",
+        "missingCapabilities_one": "{{count}} missing capability",
+        "missingCapabilities_other": "{{count}} missing capabilities",
+        "missingCapabilitiesTitle": "Not enabled in this team:",
+        "explanation": "Some teams do not have every capability of this agent. The copy will work there without them, but its instructions and other settings stay intact.",
+        "info": {
+          "copiedLabel": "Copied",
+          "copied": "The agent's name, description, instructions and settings",
+          "resetLabel": "Reset",
+          "reset": "Choices that belong to the origin team: libraries, folders, documents. The capabilities stay enabled.",
+          "recreatedLabel": "Recreated",
+          "recreated": "Configuration files, such as a PowerPoint template",
+          "notCopiedLabel": "Not copied",
+          "notCopied": "Conversations, the agent's files and capabilities not enabled in the team"
+        },
+        "loadError": "Could not check the destination teams.",
+        "successToast_one": "Agent copied to {{count}} space",
+        "successToast_other": "Agent copied to {{count}} spaces",
+        "droppedToast": "Copied without some capabilities",
+        "droppedDetail": "{{team}}: without {{capabilities}}",
+        "noticesToast": "Copied, with settings to redo",
+        "errorToast_one": "Copy failed for {{count}} space",
+        "errorToast_other": "Copy failed for {{count}} spaces"
+      },
       "delete": "Delete",
       "tooltip": {
         "label": "Agent details",
@@ -1384,6 +1414,7 @@
       },
       "duplicateSuccess": "{{agent}} duplicated",
       "duplicateError": "Failed to duplicate the {{agent}}",
+      "duplicateDropped": "Without: {{capabilities}}",
       "deleteSuccess": "{{agent}} deleted",
       "deleteError": "Failed to delete the {{agent}}",
       "createSuccess": "{{agent}} created",
@@ -1811,14 +1842,9 @@
           "title": "Copy this prompt to a team",
           "subtitle": "Select the spaces to copy “{{name}}” into.",
           "confirm": "Copy",
-          "personalSpace": "Personal space",
-          "searchPlaceholder": "Search a team",
-          "clearSearch": "Clear search",
-          "noTeams": "No team matches.",
           "noEditableTeams": "You are not an editor of any team. Only an editor can copy a prompt into one — ask a team administrator for that role.",
           "successToast": "Prompt copied ({{count}})",
-          "errorToast": "Copy failed ({{count}})",
-          "originTeam": "Origin team"
+          "errorToast": "Copy failed ({{count}})"
         },
         "unpublish": {
           "title": "Remove this prompt from the marketplace?",
@@ -3308,6 +3334,14 @@
         "title": "Delete this announcement?",
         "message": "\"{{title}}\" will be removed for good. Users who can see it will stop seeing it."
       }
+    },
+    "copyToTeams": {
+      "personalSpace": "Personal space",
+      "searchPlaceholder": "Search a team",
+      "clearSearch": "Clear search",
+      "noTeams": "No team matches.",
+      "originTeam": "Origin team",
+      "infoLabel": "What a copy does"
     }
   },
   "runtime": {

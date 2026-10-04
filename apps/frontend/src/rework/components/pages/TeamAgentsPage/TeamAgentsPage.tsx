@@ -28,12 +28,9 @@ import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts"
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
-import {
-  type AgentFormPayload,
-  buildAgentFormSubmitPayload,
-  extractCapabilityConfigValues,
-  default as AgentFormModal,
-} from "./AgentFormModal/AgentFormModal.tsx";
+import { type AgentFormPayload, default as AgentFormModal } from "./AgentFormModal/AgentFormModal.tsx";
+import CopyAgentDialog from "./CopyAgentDialog/CopyAgentDialog.tsx";
+import { duplicateCopyArgs, duplicateWarning } from "./duplicateAgent.ts";
 import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import { filterAgents } from "./agentFilter.ts";
@@ -49,6 +46,7 @@ import {
   useGetTeamAgentTemplatesControlPlaneV1TeamsTeamIdAgentTemplatesGetQuery,
   usePatchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatchMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
   usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -115,7 +113,7 @@ function extractApiErrorDetail(error: unknown): string | undefined {
 export default function TeamAgentsPage() {
   const { teamId } = useParams();
   const { t } = useTranslation();
-  const { showError, showSuccess } = useToast();
+  const { showError, showSuccess, showWarn } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { activeTeam } = useFrontendBootstrap();
   const { agentsNicknamePlural, agentsNicknameSingular } = useFrontendProperties();
@@ -124,6 +122,7 @@ export default function TeamAgentsPage() {
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [duplicatingInstance, setDuplicatingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
+  const [copyingInstance, setCopyingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<AgentSortValue>(DEFAULT_AGENT_SORT);
 
@@ -179,6 +178,8 @@ export default function TeamAgentsPage() {
   const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
   const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
 
+  const [copyAgent, { isLoading: isCopyingInstance }] =
+    usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation();
   const [createManagedInstance, { isLoading: isCreatingInstance }] =
     usePostTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPostMutation();
   const [createManagedInstanceWithAssets, { isLoading: isCreatingInstanceWithAssets }] =
@@ -309,55 +310,14 @@ export default function TeamAgentsPage() {
 
   const handleDuplicate = async (source: ManagedAgentInstanceSummary, newName: string) => {
     if (!teamId) return;
-    const template = availableTemplates.find((tpl) => tpl.template_id === source.template_id);
-    // Reuse the same payload-building as the normal enroll form (#2096) —
-    // correct capability filtering against the current template state —
-    // rather than hand-rebuilding a parallel, easier-to-get-subtly-wrong
-    // CreateAgentInstanceRequest straight from the source instance's stored
-    // fields. Not reusing `handleEnroll` itself: it always closes/resets the
-    // *enroll* modal's own state, which is wrong for the duplicate dialog.
-    const payload = buildAgentFormSubmitPayload(
-      {
-        templateId: source.template_id,
-        displayName: newName,
-        role: source.role,
-        description: source.description ?? "",
-        usageStatement: source.usage_statement ?? "",
-        // A duplicate must carry the original's reasoning offer, like its role
-        // and description — otherwise duplicating silently drops the feature.
-        // Same for its preselection (Amendment B): a copy that offers reasoning
-        // but starts it off is a different agent from the one being duplicated.
-        reasoningEnabled: source.reasoning_enabled ?? false,
-        reasoningDefaultOn: source.reasoning_default_on ?? false,
-        tuningValues: (source.tuning_field_values as Record<string, unknown>) ?? {},
-        selectedCapabilityIds: source.selected_capability_ids ?? [],
-        capabilityConfigValues: extractCapabilityConfigValues(source.capability_config),
-        capabilityAssetFiles: {},
-        capabilityBlockingErrors: {},
-      },
-      template,
-    );
-    const request: CreateAgentInstanceRequest = {
-      template_id: payload.templateId,
-      display_name: payload.displayName,
-      role: payload.role || undefined,
-      description: payload.description || undefined,
-      usage_statement: payload.usageStatement,
-      reasoning_enabled: payload.reasoningEnabled,
-      reasoning_default_on: payload.reasoningDefaultOn,
-      tuning_field_values:
-        Object.keys(payload.tuningFieldValues).length > 0
-          ? (payload.tuningFieldValues as AgentRequestTuningFieldValues)
-          : undefined,
-      capability_ids: payload.templateHasCapabilities ? payload.selectedCapabilityIds : undefined,
-      capability_config_values:
-        payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
-          ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
-          : undefined,
-    };
     try {
-      await createManagedInstance({ teamId, createAgentInstanceRequest: request }).unwrap();
+      const { results } = await copyAgent(duplicateCopyArgs(source, teamId, newName)).unwrap();
+      const [result] = results;
+      if (!result?.agent) throw new Error(result?.error ?? t("rework.agentCard.unexpectedError"));
       showSuccess({ summary: t("rework.agentCard.duplicateSuccess", { agent: agentsNicknameSingular }) });
+      // Never lose a capability silently: say what was left out or must be redone.
+      const warning = duplicateWarning(result, t);
+      if (warning) showWarn({ summary: t("rework.agentCard.copyDialog.noticesToast"), detail: warning });
       setDuplicatingInstance(null);
       await refetchInstances();
     } catch (error: unknown) {
@@ -510,6 +470,7 @@ export default function TeamAgentsPage() {
                 onEdit={() => setEditingInstance(instance)}
                 onToggleEnabled={() => handleToggleEnabled(instance)}
                 onDuplicate={() => setDuplicatingInstance(instance)}
+                onCopyTo={() => setCopyingInstance(instance)}
                 onDelete={() => handleDelete(instance)}
               />
             );
@@ -541,12 +502,14 @@ export default function TeamAgentsPage() {
       <DuplicateAgentDialog
         open={duplicatingInstance !== null}
         initialName={duplicatingInstance?.display_name ?? ""}
-        isSubmitting={isCreatingInstance}
+        isSubmitting={isCopyingInstance}
         onCancel={() => setDuplicatingInstance(null)}
         onConfirm={(newName) => {
           if (duplicatingInstance) void handleDuplicate(duplicatingInstance, newName);
         }}
       />
+
+      <CopyAgentDialog instance={copyingInstance} onClose={() => setCopyingInstance(null)} />
     </div>
   );
 }

@@ -304,9 +304,15 @@ hover-edit pencil is now an always-visible **more-menu** (`IconButtonMenu`,
 `MarketplacePrompts` ("Prompts de la communauté") reuses the `MarketplaceTeams`
 header pattern (`h1` + `SearchInput`) and `FilterChips` (one chip per author
 team). Reached from a nav item under the teams marketplace (`MarketplaceNavbar`,
-`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`:
-a multi-select of the personal space + every editable team, with an `xs`
-`SearchInput` filter.
+`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`,
+a thin wrapper over the shared `CopyToTeamsDialog` organism: a multi-select of
+the personal space + every editable team, with an `xs` `SearchInput` filter.
+The agent card's **Copy to…** uses the same organism (`CopyAgentDialog`) with
+per-team status: a team without the agent template is disabled with its reason;
+a team missing capabilities shows a `warning`-colored icon + label whose tooltip
+lists them, and a `warning-container` paragraph explains the consequence above
+the list. An info icon in the Dialog's `titleAddon` slot opens a label/value
+tooltip describing what a copy carries.
 
 #### Open UX issues
 
