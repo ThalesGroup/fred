@@ -25,10 +25,12 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import hashlib
 import inspect
 import json
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
+from contextlib import AbstractAsyncContextManager, aclosing, nullcontext
 from dataclasses import dataclass, replace
 from typing import Any, cast
 
@@ -47,8 +49,10 @@ from fred_sdk.contracts.runtime import (
     AgentInvokerPort,
     AwaitingHumanRuntimeEvent,
     ExecutionConfig,
+    ExecutionInterruptedRuntimeEvent,
     Executor,
     FinalRuntimeEvent,
+    HumanChoiceOption,
     HumanInputRequest,
     NodeErrorRuntimeEvent,
     RuntimeEvent,
@@ -85,6 +89,7 @@ from fred_runtime.react.react_stream_adapter import (
 from fred_runtime.runtime_support.checkpoints import graph_thread_id
 from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
+from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_runtime.runtime_support.tool_approval import ToolApproval
 
 logger = logging.getLogger(__name__)
@@ -296,6 +301,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         self._state_model = definition.state_model()
         self._adapters: dict[str, TypeAdapter[Any]] = {}
         self._checkpoint_ns = checkpoint_ns
+        self._checkpointer = checkpointer
         self._compiled = self._compile(checkpointer)
 
     # ── compilation ──────────────────────────────────────────────────────────
@@ -413,6 +419,10 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
     async def invoke(
         self, input_model: BaseModel, config: ExecutionConfig
     ) -> BaseModel:
+        # No one to offer "continue" to: an unfinished execution restarts, as before.
+        config = config.model_copy(
+            update={"interrupted_action": config.interrupted_action or "restart"}
+        )
         outcome = _RunOutcome()
         async for _ in self._run(input_model, config, outcome):
             pass
@@ -427,12 +437,13 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
     async def stream(
         self, input_model: BaseModel, config: ExecutionConfig
-    ) -> AsyncIterator[RuntimeEvent]:
+    ) -> AsyncGenerator[RuntimeEvent, None]:
         outcome = _RunOutcome()
         sequence = 0
-        async for event in self._run(input_model, config, outcome):
-            yield _resequence_event(event, sequence)
-            sequence += 1
+        async with aclosing(self._run(input_model, config, outcome)) as events:
+            async for event in events:
+                yield _resequence_event(event, sequence)
+                sequence += 1
         if outcome.error is not None:
             yield FinalRuntimeEvent(
                 sequence=sequence, content=f"An error occurred: {outcome.error}"
@@ -443,9 +454,36 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         input_model: BaseModel,
         config: ExecutionConfig,
         outcome: _RunOutcome,
-    ) -> AsyncIterator[RuntimeEvent]:
+    ) -> AsyncGenerator[RuntimeEvent, None]:
+        admission: AbstractAsyncContextManager[None] = nullcontext()
+        if config.interrupted_action == "continue":
+            if not isinstance(self._checkpointer, FredSqlCheckpointer):
+                raise RuntimeError(
+                    "Graph continuation requires a persistent SQL checkpointer "
+                    "with owner-lifetime admission."
+                )
+            admission = self._checkpointer.graph_resume_lock.acquire(
+                self.thread_id(config)
+            )
+        async with (
+            admission,
+            aclosing(self._run_admitted(input_model, config, outcome)) as events,
+        ):
+            async for event in events:
+                yield event
+
+    async def _run_admitted(
+        self,
+        input_model: BaseModel,
+        config: ExecutionConfig,
+        outcome: _RunOutcome,
+    ) -> AsyncGenerator[RuntimeEvent, None]:
         thread = self._thread_config(config)
-        graph_input = await self._graph_input(input_model, config, thread)
+        snapshot = await self._compiled.aget_state(thread)
+        graph_input = self._graph_input(input_model, config, snapshot)
+        if isinstance(graph_input, ExecutionInterruptedRuntimeEvent):
+            yield graph_input
+            return
         recorder = _TurnRecorder()
         completed: BaseModel | None = None
         run_config = cast(
@@ -461,20 +499,31 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             },
         )
         try:
-            async for raw_event in self._compiled.astream(
-                graph_input, config=run_config, stream_mode=["custom", "updates"]
-            ):
-                mode, payload = split_stream_event_mode(raw_event)
-                if mode == "custom" and isinstance(payload, RuntimeEventBase):
-                    yield cast(RuntimeEvent, payload)
-                elif mode == "updates":
-                    request = extract_interrupt_request(payload)
-                    if request is not None:
-                        outcome.awaiting = request
-                    if isinstance(payload, dict) and _COMPLETE_NODE in payload:
-                        completed = self._state_model.model_validate(
-                            payload[_COMPLETE_NODE]
-                        )
+            # "sync": a step's checkpoint is persisted before the next step starts.
+            # LangGraph annotates this async generator as AsyncIterator.
+            async with aclosing(
+                cast(
+                    AsyncGenerator[Any, None],
+                    self._compiled.astream(
+                        graph_input,
+                        config=run_config,
+                        stream_mode=["custom", "updates"],
+                        durability="sync",
+                    ),
+                )
+            ) as events:
+                async for raw_event in events:
+                    mode, payload = split_stream_event_mode(raw_event)
+                    if mode == "custom" and isinstance(payload, RuntimeEventBase):
+                        yield cast(RuntimeEvent, payload)
+                    elif mode == "updates":
+                        request = extract_interrupt_request(payload)
+                        if request is not None:
+                            outcome.awaiting = request
+                        if isinstance(payload, dict) and _COMPLETE_NODE in payload:
+                            completed = self._state_model.model_validate(
+                                payload[_COMPLETE_NODE]
+                            )
         except GraphRecursionError:
             outcome.error = RuntimeError(
                 f"Graph execution exceeded max_steps={config.max_steps}."
@@ -507,13 +556,35 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             finish_reason=recorder.finish_reason,
         )
 
-    async def _graph_input(
+    def _interrupted_event(self, snapshot: Any) -> ExecutionInterruptedRuntimeEvent:
+        node_id = snapshot.next[0] if snapshot.next else snapshot.tasks[0].name
+        node = self._nodes_by_id.get(node_id)
+        title = node.title if node is not None else "final step"
+        return ExecutionInterruptedRuntimeEvent(
+            request=HumanInputRequest(
+                stage="execution_interrupted",
+                title=f"The previous execution is unfinished at “{title}”.",
+                question=(
+                    "An external operation may already have happened. "
+                    "Resume only after other executions have stopped. "
+                    "Restart does not undo previous effects."
+                ),
+                choices=(
+                    HumanChoiceOption(id="continue", label="Continue"),
+                    HumanChoiceOption(id="restart", label="Restart"),
+                    HumanChoiceOption(id="later", label="Later"),
+                ),
+                metadata={"node_id": node_id, "node_title": title},
+            ),
+            interruption_id=_interruption_id(snapshot),
+        )
+
+    def _graph_input(
         self,
         input_model: BaseModel,
         config: ExecutionConfig,
-        thread: RunnableConfig,
-    ) -> Command | dict[str, object]:
-        snapshot = await self._compiled.aget_state(thread)
+        snapshot: Any,
+    ) -> Command | dict[str, object] | ExecutionInterruptedRuntimeEvent | None:
         if config.resume_payload is not None:
             pending_ids = {pending.id for pending in snapshot.interrupts}
             if not pending_ids:
@@ -537,6 +608,16 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                     )
                 return Command(resume={config.interrupt_id: config.resume_payload})
             return Command(resume=config.resume_payload)
+
+        interrupted = _is_interrupted(snapshot)
+        if config.interrupted_action == "continue":
+            if not interrupted or config.interruption_id != _interruption_id(snapshot):
+                raise RuntimeError(
+                    "Graph execution has no interrupted step matching this interruption_id."
+                )
+            return None  # LangGraph resumes the thread from its last checkpoint
+        if interrupted and config.interrupted_action != "restart":
+            return self._interrupted_event(snapshot)
 
         # Carry-forward reads the thread's latest values. After an abandoned
         # pause or a failed turn these are that turn's in-flight values.
@@ -614,6 +695,24 @@ def _recorder(config: RunnableConfig) -> _TurnRecorder:
     recorder = (config.get("configurable") or {}).get(_TURN_KEY)
     # A node replayed outside `_run` (never expected) still gets a sink.
     return recorder if isinstance(recorder, _TurnRecorder) else _TurnRecorder()
+
+
+def _is_interrupted(snapshot: Any) -> bool:
+    # Completed task writes can outlive a failed step checkpoint: `next` then
+    # looks empty, but the engine still has tasks to settle on continuation.
+    return bool(snapshot.tasks) and not snapshot.interrupts
+
+
+def _checkpoint_id(config: Any) -> str | None:
+    configurable = (config or {}).get("configurable", {})
+    return configurable.get("checkpoint_id")
+
+
+def _interruption_id(snapshot: Any) -> str:
+    """Opaque id of the thread head; any later checkpoint makes it stale."""
+    thread_id = snapshot.config.get("configurable", {}).get("thread_id")
+    head = f"{thread_id}\0{_checkpoint_id(snapshot.config)}"
+    return hashlib.sha256(head.encode()).hexdigest()[:32]
 
 
 def _as_update(state: BaseModel) -> dict[str, object]:

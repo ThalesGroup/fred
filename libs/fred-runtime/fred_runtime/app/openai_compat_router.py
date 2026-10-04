@@ -259,6 +259,8 @@ def create_openai_compat_router(
             agent_id=request.model,
             message=message,
             context=context or None,
+            # This wire cannot carry a continue choice; a lost run restarts.
+            interrupted_action="restart",
         )
 
         try:

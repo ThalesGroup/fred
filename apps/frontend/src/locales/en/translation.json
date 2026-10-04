@@ -534,6 +534,13 @@
     "hitlQuestionTabsAria": "Questions",
     "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "Agent is waiting for your input",
+    "interruptedRun": {
+      "title": "The previous execution is unfinished at “{{step}}”.",
+      "question": "An external operation may already have happened. Resume only after other executions have stopped. Restart does not undo previous effects.",
+      "continue": "Continue",
+      "restart": "Restart",
+      "later": "Later"
+    },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {
       "closeAria": "Close markdown preview",

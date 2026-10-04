@@ -534,6 +534,13 @@
     "hitlQuestionTabsAria": "Questions",
     "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "L'agent attend votre réponse",
+    "interruptedRun": {
+      "title": "L’exécution précédente reste inachevée à l’étape « {{step}} ».",
+      "question": "Une opération externe a peut-être déjà eu lieu. Reprenez uniquement après l’arrêt des autres exécutions. Recommencer n’annule pas les effets précédents.",
+      "continue": "Continuer",
+      "restart": "Recommencer",
+      "later": "Plus tard"
+    },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {
       "closeAria": "Fermer l'aperçu markdown",

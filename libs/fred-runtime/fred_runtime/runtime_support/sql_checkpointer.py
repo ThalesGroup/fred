@@ -83,6 +83,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
+from fred_runtime.runtime_support.graph_resume_lock import GraphResumeLock
+
 
 def _sync_checkpointer_error(method_name: str) -> RuntimeError:
     return RuntimeError(
@@ -319,6 +321,7 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         ]
         self._metadata = metadata
         self._ddl_lock_id = advisory_lock_key(self.checkpoints_table.name)
+        self.graph_resume_lock = GraphResumeLock(engine, self.checkpoints_table.name)
         self._tables_ready = False
         self._logger = logging.getLogger(__name__)
         self._kpi = kpi

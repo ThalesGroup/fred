@@ -5095,6 +5095,25 @@ grouped questions, Skip records a draft for the active tab, while close skips
 the entire group in one request. Skipped answers appear in the same cards,
 including after history reload.
 
+### Unfinished Graph execution card (revised 2026-10-04)
+
+**Location:** `useChatSse.ts`, `useManagedChat.ts`, existing `HitlPrompt`.
+
+The next message on unfinished non-HITL Graph work restores the user's draft and
+shows the pending step. Wording explains that an external operation may already have
+happened and other executions must have stopped before resuming.
+
+- Continue uses saved state, preserves the draft and adds no user message.
+- Restart resends the original text/command; it does not undo earlier external effects.
+- Later dismisses locally without a request or checkpoint change. A later message
+  rediscovers the work; opening the conversation alone does not.
+- Preparation and HTTP refusal restore the controls. A failure after acceptance does
+  not trigger automatic retry. Stop's session-local intent survives navigation, not
+  reload, and is consumed only after HTTP acceptance.
+
+Choices and explanation are localized in EN/FR. Safe external replay remains the
+agent author's responsibility; a generic confirmation cannot make an unsafe call safe.
+
 ## Shared hosted-application UI components
 
 The alpha.3 package surface reuses canonical atoms and molecules in place;

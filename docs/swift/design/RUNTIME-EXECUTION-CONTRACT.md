@@ -6433,3 +6433,43 @@ remain valid.
 A skipped question writes a response row even without choice or text. Graph
 choice helpers expose the same typed answer through `choice_step_response`;
 `choice_step` keeps its string return contract for existing authors.
+
+### 8.100 Explicit continuation of unfinished Graph work (revised 2026-10-04)
+
+Graph agents await checkpoint persistence before the next step. Pending work without
+HITL is unfinished execution, not evidence that a process died or an external operation
+failed. Errors and step limits are reported without clearing the continuation point.
+A later authorized request receives `execution_interrupted` and a current opaque
+`interruption_id`; discovery runs no step and writes no fictitious history or turn KPI.
+
+`interrupted_action="continue"` requires that id, empty input and no HITL payload.
+It continues with saved state and current authorization, without a user row. `restart`
+starts a new turn and does not undo prior external effects. The chat also offers Later,
+a local dismissal that leaves saved work intact. HTTP refusals restore controls;
+accepted streams are never automatically replayed. Stop intent survives navigation,
+but not reload, and is consumed only on HTTP acceptance.
+
+The author must persist operation identity and content before an external call and
+provide safe replay or reconciliation. A durable receipt permits finalization without
+republishing. Fred does not provide exactly-once external delivery. The supported usage
+has one active execution per Graph conversation; ordinary-turn/Restart races, partitions
+and late writers are not coordinated. Agent definitions must remain compatible with
+saved state. ReAct/Deep and ordinary HITL retain their existing behavior. Non-interactive
+Graph callers retain their documented restart behavior.
+
+Authoring and acceptance scenarios: `openspec/changes/resume-interrupted-graph-execution/`.
+This slice does not complete the broader external-effect contract in #2892.
+
+### 8.101 Bounded admission for technical continuation (revised 2026-10-04)
+
+Technical Continue uses the existing PostgreSQL transaction advisory lock or local
+SQLite POSIX file lock, not a permanent HITL claim. It validates the checkpoint inside
+admission and closes the underlying engine stream before releasing ownership. This
+rejects overlapping continuations while held; it does not establish global ownership
+against ordinary turns, Restart or external requests surviving cancellation.
+
+PostgreSQL requires at least two base pool connections (or NullPool), reserves at most
+half the base pool for continuations and disables transaction timers locally while
+holding admission. File-backed SQLite uses `<database>.graph-locks/`; do not remove
+sidecars while any runtime process is running. Unsupported providers reject Continue.
+No schema migration, claim purge, lease or heartbeat is introduced.

@@ -158,6 +158,10 @@ class RuntimeEventKind(str, Enum):
     FINAL = "final"
     TURN_PERSISTED = "turn_persisted"
     EXECUTION_ERROR = "execution_error"
+    EXECUTION_INTERRUPTED = "execution_interrupted"
+
+
+InterruptedAction: TypeAlias = Literal["continue", "restart"]
 
 
 class ExecutionConfig(FrozenModel):
@@ -189,6 +193,9 @@ class ExecutionConfig(FrozenModel):
     resume_payload: object | None = None
     invocation_turns: tuple[ConversationTurn, ...] = ()
     """Prior conversation turns forwarded by the calling agent for context seeding."""
+    interrupted_action: InterruptedAction | None = None
+    """Choice for a Graph execution with pending non-HITL work."""
+    interruption_id: str | None = None
 
 
 class RuntimeEventBase(FrozenModel):
@@ -402,6 +409,22 @@ class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     context_tokens: int | None = None
 
 
+class ExecutionInterruptedRuntimeEvent(RuntimeEventBase):
+    """
+    A Graph execution has unfinished work; this request ran no step.
+
+    `request` is shown like a human-input card offering `continue` or
+    `restart`; the answer goes back as `interrupted_action` plus
+    `interruption_id`, never as a HITL resume.
+    """
+
+    kind: Literal[RuntimeEventKind.EXECUTION_INTERRUPTED] = (
+        RuntimeEventKind.EXECUTION_INTERRUPTED
+    )
+    request: HumanInputRequest
+    interruption_id: str = Field(..., min_length=1)
+
+
 class AssistantDeltaRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.ASSISTANT_DELTA] = RuntimeEventKind.ASSISTANT_DELTA
     delta: str = Field(..., min_length=1)
@@ -518,7 +541,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | NodeErrorRuntimeEvent
     | FinalRuntimeEvent
     | TurnPersistedEvent
-    | RuntimeErrorEvent,
+    | RuntimeErrorEvent
+    | ExecutionInterruptedRuntimeEvent,
     Field(discriminator="kind"),
 ]
 
