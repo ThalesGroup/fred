@@ -1217,7 +1217,7 @@ wheels = [
 
 [[package]]
 name = "fred-core"
-version = "4.4.0"
+version = "4.4.1"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiosqlite", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -1317,7 +1317,7 @@ dev = [
 
 [[package]]
 name = "fred-pod"
-version = "4.4.0"
+version = "4.4.1"
 source = { editable = "../../libs/fred-pod" }
 dependencies = [
     { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },

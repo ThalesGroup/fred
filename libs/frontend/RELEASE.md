@@ -523,7 +523,7 @@ candidate archive's SHA-512 matched the public coordinate and retained final
 record. The artifacts are retention-limited; their recorded identities and
 results do not authorize rebuilding or replacing the published bytes.
 
-## UI alpha.3 candidate
+## UI alpha.3 candidate (superseded)
 
 The hosted-application component extension prepares only `@fred-oss/ui@0.1.0-alpha.3`.
 Select `ui` under the ordinary independent-release procedure above. Keep the
@@ -533,3 +533,16 @@ type-negative cases, and both-theme browser smoke before preparing immutable
 candidate evidence. This source change does not publish alpha.3 or record it as
 verified in the public registry; use the protected workflow for publication and
 subsequent genuine registry verification.
+
+## Next library release candidates
+
+The next release set is `@fred-oss/design-tokens@0.1.0-alpha.2`,
+`@fred-oss/ui@0.1.0-alpha.4`, and `@fred-oss/iframe-sdk@0.1.0-alpha.4`.
+The UI candidate supersedes the unpublished alpha.3 coordinate above and includes
+its hosted-application extensions. Token consumers should review the removals and
+replacements in [the token migration notes](design-tokens/README.md).
+
+After merge into `swift`, select `designTokens,ui,iframeSdk` in the protected
+workflow using the ordinary independent-release procedure. These are preparation
+coordinates only; publication and registry verification remain separate steps.
+Historical publication evidence and compatibility baselines remain unchanged.

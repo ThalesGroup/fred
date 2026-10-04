@@ -1,5 +1,10 @@
 # UI changelog
 
+## 0.1.0-alpha.4
+
+Review: approved
+Changes: Prepare the current Swift UI components, including the hosted-application extensions from the unpublished alpha.3 candidate, for the next alpha publication. Publication is deferred until after merge into Swift and requires the protected release workflow.
+
 ## 0.1.0-alpha.3
 
 Review: approved

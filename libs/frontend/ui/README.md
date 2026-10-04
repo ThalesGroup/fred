@@ -1,7 +1,7 @@
 # `@fred-oss/ui`
 
 This package is generated from FRED's canonical React components. The reviewed
-`@fred-oss/ui@0.1.0-alpha.3` candidate extends the published alpha.2 surface for
+`@fred-oss/ui@0.1.0-alpha.4` candidate extends the published alpha.2 surface for
 hosted applications. Publication is a separate protected release step.
 
 The public root exports `Button`, `Icon`, `IconButton`, `Spinner`, `TextInput`,
@@ -92,7 +92,7 @@ Canonical ownership, package boundaries, and future work are described by the ex
 Sharp, custom SVG icons, domain-specific components, iframe SDK work, and
 adopter migrations are outside this extension milestone.
 
-The checked-in manifest names the `0.1.0-alpha.3` candidate, which is not yet
+The checked-in manifest names the `0.1.0-alpha.4` candidate, which is not yet
 published. Release candidates must still be compared with a complete, maintainer-confirmed contract as described in
 [../RELEASE.md](../RELEASE.md).
 

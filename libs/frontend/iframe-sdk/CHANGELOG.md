@@ -1,5 +1,10 @@
 # Iframe SDK changelog
 
+## 0.1.0-alpha.4
+
+Review: approved
+Changes: Prepare the current Swift iframe SDK for the next alpha publication, retaining protocol "1" and the live application-context API. Publication is deferred until after merge into Swift and requires the protected release workflow.
+
 ## 0.1.0-alpha.3
 
 Review: approved
