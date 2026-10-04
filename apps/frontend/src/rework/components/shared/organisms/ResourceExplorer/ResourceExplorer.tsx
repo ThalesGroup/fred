@@ -78,7 +78,6 @@ export interface ResourceExplorerProps<T> {
   pageSize?: number;
   rowHeight?: string;
   firstColumnInset?: boolean;
-  tableBackgroundColor?: string;
 }
 
 /**
@@ -112,7 +111,6 @@ export default function ResourceExplorer<T>({
   pageSize,
   rowHeight = "2.5rem",
   firstColumnInset = true,
-  tableBackgroundColor = "var(--surface-container-high)",
 }: ResourceExplorerProps<T>) {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -190,7 +188,6 @@ export default function ResourceExplorer<T>({
             selectable={selectable}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
-            backgroundColor={tableBackgroundColor}
             serverPagination={serverPagination}
             sortState={sortState}
             onSortChange={onSortChange}

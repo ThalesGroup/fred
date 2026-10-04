@@ -26,7 +26,7 @@
    nothing here restyles one. */
 .zone {
   margin: 0;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   padding: 0 var(--spacing-s) var(--spacing-s);
 }

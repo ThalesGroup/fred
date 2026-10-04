@@ -40,7 +40,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background-color: var(--surface-container-lowest);
   min-height: 0;

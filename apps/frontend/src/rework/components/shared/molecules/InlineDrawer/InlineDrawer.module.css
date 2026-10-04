@@ -33,7 +33,7 @@
 
 /* ── Drawer shell ──────────────────────────────────────────────────────── */
 .drawer {
-  background: var(--drawer-background, var(--surface-container));
+  background: var(--drawer-background, var(--surface-floating));
 }
 
 /* Overlay (default): floats over content, the rest is dimmed by .backdrop. */
@@ -48,7 +48,7 @@
   transition:
     transform 250ms ease-out,
     visibility 250ms;
-  border-left: 1px solid var(--outline-retreat);
+  border-left: 1px solid var(--outline-muted);
   width: var(--drawer-width);
   max-width: 100vw;
   /* No overflow:hidden here — keep main content interactive at all times */
@@ -111,7 +111,7 @@
      square corners, flush right against the viewport edge; clip the content
      (iframe, header, tabs) to the edge. */
   border-left: 1px solid var(--outline-muted);
-  background: var(--drawer-background, var(--surface-container));
+  background: var(--drawer-background, var(--surface-container-low));
   width: var(--drawer-width);
   overflow: hidden;
 }
@@ -145,7 +145,7 @@
   box-shadow: var(--shadow-s);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
-  background: var(--drawer-background, var(--surface-container));
+  background: var(--drawer-background, var(--surface-container-high));
   width: calc(var(--drawer-width) - var(--spacing-s) - var(--spacing-xs));
   overflow: hidden;
 }
@@ -229,7 +229,7 @@
   flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--outline-retreat);
+  border-bottom: 1px solid var(--outline-muted);
   padding: var(--spacing-m) var(--spacing-m) var(--spacing-s);
 }
 

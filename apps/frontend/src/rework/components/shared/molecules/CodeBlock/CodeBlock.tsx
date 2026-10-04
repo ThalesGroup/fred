@@ -80,7 +80,7 @@ export function CodeBlock({
           customStyle={{
             margin: 0,
             padding: "var(--spacing-m)",
-            background: "var(--surface-container-lowest)",
+            background: "var(--surface-container)",
             fontSize: "0.875rem",
             lineHeight: "1.6",
             fontFamily: '"Geist Mono", "Fira Code", ui-monospace, monospace',

@@ -6,7 +6,7 @@
   gap: var(--spacing-2xs);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
-  background: var(--surface-container-high);
+  background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
   width: min(65%, 30rem);
   user-select: text;

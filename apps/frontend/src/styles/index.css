@@ -24,6 +24,9 @@
 @import "./shadow-light.css";
 @import "./shadow-dark.css";
 
+@import "./themes/cobalt.css";
+@import "./themes/cloud.css";
+
 @import "spacings.css";
 @import "radius.css";
 @import "motion.css";
@@ -256,7 +259,7 @@ textarea,
 
 /* ── Global scrollbar — thin, matches claude.com aesthetic ─────────────── */
 * {
-  scrollbar-color: var(--outline-retreat) transparent;
+  scrollbar-color: var(--outline-variant) transparent;
   scrollbar-width: thin;
 }
 
@@ -271,7 +274,7 @@ textarea,
 
 *::-webkit-scrollbar-thumb {
   border-radius: var(--radius-2xl);
-  background: var(--outline-retreat);
+  background: var(--outline-variant);
 }
 
 *::-webkit-scrollbar-thumb:hover {

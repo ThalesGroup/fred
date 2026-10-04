@@ -30,14 +30,15 @@
   --tertiary-container: var(--core-light-blue-90);
   --on-tertiary-container: var(--core-light-blue-10);
   --on-surface: var(--core-cold-grey-10);
-  --on-surface-retreat: var(--core-cold-grey-30);
-  --surface-main: var(--core-cold-grey-98);
-  --on-surface-muted: var(--core-cold-grey-40);
+  --on-surface-retreat: var(--core-cold-grey-40);
+  --surface-main: var(--core-cold-grey-99-5);
+  --on-surface-muted: var(--core-cold-grey-45);
   --surface-container-highest: var(--core-cold-grey-100);
-  --surface-container-high: var(--core-cold-grey-96);
-  --surface-container: var(--core-cold-grey-94);
-  --surface-container-low: var(--core-cold-grey-92);
-  --surface-container-lowest: var(--core-cold-grey-90);
+  --surface-container-high: var(--core-cold-grey-97-5);
+  --surface-container: var(--core-cold-grey-96);
+  --surface-container-low: var(--core-cold-grey-94-5);
+  --surface-container-lowest: var(--core-cold-grey-93);
+  --surface-floating: var(--core-cold-grey-100);
   --error: var(--core-red-40);
   --on-error: var(--core-red-99);
   --error-container: var(--core-red-90);
@@ -59,18 +60,8 @@
      folder icons read the same soft yellow regardless of theme. */
   --folder: var(--core-mustard-80);
   --outline: var(--core-cold-grey-50);
-  --outline-variant: var(--core-cold-grey-70);
-  --outline-retreat: var(--core-cold-grey-80);
-  --outline-muted: var(--core-cold-grey-80);
-  --color-background-primary: var(--surface-main);
-  --color-background-secondary: var(--surface-container);
-  --color-background-info: var(--info-container);
-  --color-text-primary: var(--on-surface);
-  --color-text-secondary: var(--on-surface-retreat);
-  --color-text-tertiary: var(--on-surface-muted);
-  --color-text-info: var(--on-info-container);
-  --color-border-secondary: var(--outline-variant);
-  --color-border-tertiary: var(--outline-retreat);
+  --outline-variant: var(--core-cold-grey-80);
+  --outline-muted: var(--core-cold-grey-88);
   --scrim: rgba(0, 0, 0, 0.44);
   --surface-picture: var(--core-cold-grey-100);
 }

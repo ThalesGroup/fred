@@ -87,7 +87,7 @@
 .action:hover,
 .copy:hover,
 .crumb:hover {
-  background: var(--surface-container-low);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 

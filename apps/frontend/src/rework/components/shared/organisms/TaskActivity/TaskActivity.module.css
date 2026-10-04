@@ -43,7 +43,7 @@
 
 .groupCount {
   border-radius: var(--radius-full);
-  background: var(--surface-container-high);
+  background: var(--surface-container-highest);
   padding: 0 var(--spacing-3xs);
   min-width: 18px;
   color: var(--on-surface-retreat);

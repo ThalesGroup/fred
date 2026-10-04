@@ -15,7 +15,7 @@
  */
 
 .wrapper {
-  --scroll-fade-bg: var(--surface-container-lowest);
+  --scroll-fade-bg: var(--surface-main);
   position: relative;
   isolation: isolate;
   overflow: hidden;

@@ -74,8 +74,8 @@
 }
 
 .switch {
-  --switch-border-color: var(--outline-retreat);
-  --switch-background-color: var(--surface-container-high);
+  --switch-border-color: var(--outline-variant);
+  --switch-background-color: var(--surface-container-highest);
   position: relative;
   cursor: pointer;
   border: var(--switch-border-width) solid var(--switch-border-color);

@@ -39,7 +39,7 @@
 
   &:hover:not([data-active="true"]) {
     border-color: var(--outline);
-    background: var(--surface-container-high);
+    background: var(--state-on-surface-hover);
     color: var(--on-surface);
   }
 
@@ -66,7 +66,7 @@
   white-space: nowrap;
 
   &:hover {
-    background: var(--surface-container-high);
+    background: var(--state-on-surface-hover);
     color: var(--on-surface);
   }
 }

@@ -19,7 +19,7 @@
   align-items: center;
   gap: var(--spacing-2xs);
   cursor: pointer;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-2xl);
   background: none;
   padding: var(--spacing-2xs) var(--spacing-s);
