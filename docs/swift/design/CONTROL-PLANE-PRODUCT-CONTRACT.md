@@ -775,6 +775,8 @@ See `docs/swift/design/FILESYSTEM.md`.
 - `POST /teams/{team_id}/agent-instances` → `ManagedAgentInstanceSummary`
 - `PATCH /teams/{team_id}/agent-instances/{id}` → `ManagedAgentInstanceSummary`
 - `DELETE /teams/{team_id}/agent-instances/{id}` → 204
+- `GET /teams/{team_id}/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`
+- `POST /teams/{team_id}/agent-instances/{id}/copy` → `AgentCopyResponse` (§58)
 
 > **2026-07-17 (CAPAB-01, PR review finding — closes an unmet #1980 acceptance
 > criterion).** `capability_ids` omitted (or explicitly `null`) on
@@ -4206,6 +4208,41 @@ no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
 admin-authored content. The frontend caches it so its boot script can apply the
 theme before the next load's config arrives; a change applies to each user at
 their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+
+## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
+
+**What it is.** An editor copies an agent's configuration into the personal
+space or other teams they edit, or duplicates it in its own team. Each
+destination gets a new, independent agent; nothing records its origin except
+the audit event.
+
+**Endpoints.** Both require `team.can_update_agents` on the source team.
+
+- `GET …/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`: for
+  the personal space and every team the caller edits (the source included),
+  `template_enabled` and `missing_capabilities` (`id`, `name` i18n key).
+  Advisory; the copy re-checks everything.
+- `POST …/agent-instances/{id}/copy` with `AgentCopyRequest`
+  (`target_team_ids`, optional `display_name`) → `AgentCopyResponse`, one
+  `AgentCopyResult` per distinct target (`agent` or `error`, plus
+  `dropped_capabilities` and `notices`, each naming the capability by `id` and
+  `name` i18n key; a notice says what an editor must redo there). Each target needs `team.can_update_agents` and is
+  stored under its canonical id (`personal` → `personal-<uid>`). A target where
+  the template is not enabled fails; a failed target never stops the others.
+  `display_name` is only accepted for a single target equal to the source
+  (Duplicate), otherwise 422.
+
+**What a copy carries.** Name (kept when free in the destination, else the
+first free `<name>_imported-<n>`), description, template, tuning values and
+reasoning settings. Each selected capability the destination can use goes
+through the pod's `copy-config` (`RUNTIME-EXECUTION-CONTRACT.md` §8.102):
+scope-private settings are reset when the team changes, configuration files
+are recreated. A capability the destination cannot use, or that the pod
+answers with 404/422, is left out and listed. Not carried: conversations, the
+agent file space, prompt references, team-level settings. Emits the KPI
+`agent.created_total` and the audit event `agent.copied` (source agent and
+team, target team, new agent, user, dropped capabilities). Full behavior:
+OpenSpec `agent-copy`.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
