@@ -36,7 +36,7 @@
   border: 2px solid transparent;
   border-radius: var(--radius-m);
   background-color: var(--surface-container);
-  padding: var(--spacing-s);
+  padding: var(--spacing-xs) var(--spacing-s);
   /* Drop the flex item's automatic min-content minimum, which would otherwise
    * let a tile with a long word grow past the 180px basis. */
   min-width: 0;
@@ -94,7 +94,7 @@
 .name {
   max-width: 100%;
   overflow: hidden;
-  color: var(--secondary);
+  color: var(--primary);
   font: var(--font-title-small);
   text-overflow: ellipsis;
   white-space: nowrap;

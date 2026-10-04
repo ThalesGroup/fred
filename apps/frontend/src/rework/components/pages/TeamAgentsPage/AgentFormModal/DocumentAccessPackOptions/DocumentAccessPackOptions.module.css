@@ -26,6 +26,6 @@
    scale; padding is --spacing-xs (8px). */
 .treeCard {
   border-radius: 12px;
-  background: var(--surface-container-low);
+  background: var(--surface-container);
   padding: var(--spacing-xs);
 }

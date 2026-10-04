@@ -1029,6 +1029,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/instructions` }),
     }),
+    getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
+      GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
+      GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/ui-settings` }),
+    }),
+    putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: build.mutation<
+      PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResponse,
+      PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/ui-settings`,
+        method: "PUT",
+        body: queryArg.setPlatformUiSettingsRequest,
+      }),
+    }),
     getActiveAnnouncementsControlPlaneV1AnnouncementsActiveGet: build.query<
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse,
       GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg
@@ -2208,6 +2224,14 @@ export type PutPlatformPromptControlPlaneV1AdminPlatformPromptPutApiArg = {
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiResponse =
   /** status 200 Successful Response */ PlatformInstructions;
 export type GetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetApiArg = void;
+export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
+  /** status 200 Successful Response */ PlatformUiSettings;
+export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
+export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformUiSettings;
+export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
+  setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiResponse =
   /** status 200 Successful Response */ Announcement[];
 export type GetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetApiArg = void;
@@ -2886,6 +2910,10 @@ export type FrontendUserAuthConfig = {
   realm_url?: string | null;
   client_id?: string | null;
 };
+export type FrontendUiThemes = {
+  default_theme?: string | null;
+  hidden_themes?: string[];
+};
 export type FrontendConfig = {
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
@@ -2893,6 +2921,8 @@ export type FrontendConfig = {
   root_bootstrap_completed: boolean;
   /** The authoritative frontend gating decision for BootstrapGuard — true only when `security.user.enabled AND security.rebac.enabled AND NOT root_bootstrap_completed`. Deliberately distinct from `root_bootstrap_completed`, which stays the truthful durable historical marker and is never reinterpreted: on deployments where user authentication or ReBAC is disabled, `root_bootstrap_completed` is still False on a fresh database even though `POST /bootstrap/platform-admin` deliberately refuses with 503 there, so the frontend must not treat 'not completed' alone as 'must show the bootstrap page'. The frontend must gate on this field, not re-derive the ReBAC/auth predicate itself. */
   root_bootstrap_required: boolean;
+  /** Platform UI theme settings, omitted when never saved. Public on purpose: the frontend resolves the theme before its first paint, before authentication. Theme ids only, no admin-authored content. */
+  ui_themes?: FrontendUiThemes | null;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -3903,6 +3933,19 @@ export type PlatformInstructions = {
   /** True when no runtime pod could be reached to report its shipped instructions. `text` is then empty for lack of an answer, not because agents receive no instructions — the UI must distinguish the two rather than render an empty read-only panel. */
   source_unavailable?: boolean;
 };
+export type PlatformUiSettings = {
+  /** Theme new users get, or null to use the frontend's own default. */
+  default_theme?: string | null;
+  /** Theme ids withdrawn from the users' choice. */
+  hidden_themes?: string[];
+  updated_by?: string | null;
+  /** Null when the settings were never saved. */
+  updated_at?: string | null;
+};
+export type SetPlatformUiSettingsRequest = {
+  default_theme?: string | null;
+  hidden_themes?: string[];
+};
 export type Announcement = {
   id: string;
   severity: "info" | "warning" | "error" | "success";
@@ -4466,6 +4509,9 @@ export const {
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation,
   useGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
   useLazyGetPlatformInstructionsControlPlaneV1AdminPlatformInstructionsGetQuery,
+  useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
+  useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
+  usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
   useGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useLazyGetActiveAnnouncementsControlPlaneV1AnnouncementsActiveGetQuery,
   useListAnnouncementsControlPlaneV1AdminPlatformAnnouncementsGetQuery,

@@ -766,18 +766,18 @@ async function verifyTokens(browser, origin) {
       }, theme);
     }
     assert.deepEqual(themes.light, {
-      backgroundColor: "rgb(251, 248, 255)",
+      backgroundColor: "rgb(252, 253, 255)",
       borderRadius: "8px",
-      color: "rgb(25, 27, 33)",
+      color: "rgb(27, 28, 30)",
       fontFamily: "Geist, sans-serif",
       fontSize: "14px",
       fontWeight: "400",
       padding: "16px",
     });
     assert.deepEqual(themes.dark, {
-      backgroundColor: "rgb(17, 19, 24)",
+      backgroundColor: "rgb(18, 19, 21)",
       borderRadius: "8px",
-      color: "rgb(240, 239, 250)",
+      color: "rgb(240, 241, 244)",
       fontFamily: "Geist, sans-serif",
       fontSize: "14px",
       fontWeight: "400",
@@ -1051,8 +1051,8 @@ async function verifyUiTheme(browser, origin, theme) {
     assert.deepEqual(
       styles.shell,
       theme === "light"
-        ? { backgroundColor: "rgb(251, 248, 255)", color: "rgb(25, 27, 33)" }
-        : { backgroundColor: "rgb(17, 19, 24)", color: "rgb(240, 239, 250)" },
+        ? { backgroundColor: "rgb(252, 253, 255)", color: "rgb(27, 28, 30)" }
+        : { backgroundColor: "rgb(18, 19, 21)", color: "rgb(240, 241, 244)" },
     );
     for (const component of [
       "Button",

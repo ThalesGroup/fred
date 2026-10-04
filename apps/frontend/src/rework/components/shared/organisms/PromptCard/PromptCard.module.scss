@@ -23,12 +23,12 @@
   gap: var(--spacing-xs);
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-ms);
   background: var(--surface-container);
   padding: 12px var(--spacing-m);
 
   &:hover {
-    border-color: var(--outline-retreat);
+    border-color: var(--outline-variant);
     background: var(--state-on-surface-hover);
   }
 
@@ -108,7 +108,7 @@
   margin: 0;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   font-style: italic;
   line-height: 1.45;

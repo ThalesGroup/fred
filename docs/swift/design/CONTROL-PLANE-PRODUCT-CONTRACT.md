@@ -186,6 +186,10 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `ui_themes` → `FrontendUiThemes` — **added 2026-10-02 (#2933)** — platform
+    default UI theme and hidden theme ids, omitted until an admin saves them
+    (§57). Pre-auth for the same reason as `gcu_version`: the frontend resolves
+    the theme before its first paint.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -4173,6 +4177,35 @@ a collision in the destination team, appends the first free `-N` suffix from
 (`RUNTIME-EXECUTION-CONTRACT.md` §8.98) that the composer sets on a command
 turn; the turn's content is the prompt's text, and the runtime knows nothing
 about prompts.
+
+## 57. Contract Notes — platform UI theme settings (2026-10-02, #2933)
+
+**What it is.** A platform admin sets the UI theme users get by default and the
+themes withdrawn from their choice. Theme ids are opaque to the control plane:
+the frontend owns the theme catalog and ignores ids it does not ship.
+
+**Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
+constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
+`updated_by`, `updated_at`. No row means "never set".
+
+**Endpoints.**
+
+- `GET /control-plane/v1/admin/platform/ui-settings` → `PlatformUiSettings`
+  (`default_theme`, `hidden_themes`, `updated_by`, `updated_at`; defaults and
+  `updated_at: null` when never saved).
+- `PUT /control-plane/v1/admin/platform/ui-settings` with
+  `SetPlatformUiSettingsRequest` (`default_theme`, `hidden_themes`) replaces both.
+  Ids match `^[a-z][a-z0-9-]{0,31}$`, at most 32 distinct hidden ids, and the
+  default must not be hidden; violations are 422 at parsing. Emits the audit
+  event `platform.ui_settings.updated`.
+- Both require `organization#can_manage_platform`, like announcements.
+
+**Public exposure.** `FrontendConfig.ui_themes` (`default_theme`,
+`hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
+no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
+admin-authored content. The frontend caches it so its boot script can apply the
+theme before the next load's config arrives; a change applies to each user at
+their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

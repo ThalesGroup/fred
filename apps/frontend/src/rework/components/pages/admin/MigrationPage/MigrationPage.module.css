@@ -61,7 +61,7 @@
   gap: var(--spacing-s);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
-  background: var(--surface-container-low);
+  background: var(--surface-container);
   padding: var(--spacing-m);
   min-width: 280px;
 }

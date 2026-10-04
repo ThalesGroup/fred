@@ -40,7 +40,7 @@
 }
 
 body {
-  background-color: var(--surface-container-lowest) !important;
+  background-color: var(--surface-main) !important;
   font-size: 12px;
 }
 

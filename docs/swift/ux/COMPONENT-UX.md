@@ -24,16 +24,16 @@ list of those issues, organized per component. It feeds the UX review session ag
 
 ## Design token reference
 
-Token names confirmed from `src/styles/colors-semantic-{light,dark}.css`.
+Token names confirmed from `src/styles/themes/pebble.css` (every theme declares the same names).
 Use **only** these names — no hardcoded hex fallbacks for color tokens.
 
 | Purpose                         | Correct token                                                                                                 | Common wrong names                                                                   |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | Elevated surface (hover states) | `--surface-container-high`                                                                                    | ~~`--surface-container-hight`~~ (extra `t`)                                          |
-| Surfaces                        | `--surface-container`, `--surface-container-low`, `--surface-container-lowest`, `--surface-container-highest` |                                                                                      |
+| Surfaces                        | `--surface-main`, `--surface-container-*`, `--surface-floating` (by role: FRONTEND_CODING_GUIDELINES §Surface tokens) |                                                                                      |
 | Text                            | `--on-surface`, `--on-surface-retreat`, `--on-surface-muted`                                                  | ~~`--on-surface-variant`~~ (doesn't exist)                                           |
 | Status colours                  | `--success`, `--error`, `--warning`, `--primary`                                                              | ~~`--success-main`~~, ~~`--error-main`~~, ~~`--warning-main`~~, ~~`--primary-main`~~ |
-| Borders                         | `--outline-muted`, `--outline-variant`, `--outline-retreat`                                                   | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
+| Borders                         | `--outline`, `--outline-variant`, `--outline-muted`                                                           | ~~`--outline-variant`~~ was previously undefined — added to token files 2026-06-02   |
 
 Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to use with numeric fallbacks since they are theme-neutral.
 
@@ -91,13 +91,10 @@ or retains the legacy FRED body portal.
 Opening the menu and moving its active option scroll only the listbox, preserving
 the surrounding form and iframe host page's scroll position.
 
-**Border token (2026-09-04).** The trigger borders with `--outline-retreat`,
-the same token `TextInput` uses, so a `Select` and a text field placed in one
-toolbar match. It previously used `--outline-muted`: identical in the light
-theme (both resolve to `cold-grey-80`) but dimmer in the dark one
-(`cold-grey-20` against `cold-grey-30`), so the two controls disagreed only for
-dark-theme users. `--outline-muted` remains correct for containers and
-dividers; form controls take `--outline-retreat`.
+**Border token.** The trigger borders with `--outline-variant`, the same token
+`TextInput` uses, so a `Select` and a text field placed in one toolbar match.
+Form controls take `--outline-variant` (hover `--outline`); containers and
+dividers take `--outline-muted`.
 
 **Naming the trigger.** A visible `label` names it through `aria-labelledby`. Where a
 toolbar has no room for one, pass `ariaLabel` instead — without either, the
@@ -341,7 +338,7 @@ sibling. Uses the profile-menu token set (`--surface-container-*`, `--on-surface
   `--state-on-surface-hover`, so a selected option reads as chosen at rest. Token-only, no
   content or row removed. Follow-up: the container border was dropped (the `--shadow-m`
   elevation alone separates it from the background) and the group dividers now use
-  `--outline-retreat` (neutral borders must use an `outline-*` token, never `on-surface`)
+  `--outline-muted` (neutral borders must use an `outline-*` token, never `on-surface`)
   and bleed full width (negative horizontal margins cancel the popover padding).
 
 - **Composer sub-menu container** — the composer's anchored sub-menus reused `MenuPopover`
@@ -1451,7 +1448,7 @@ inline popover into a full-height right-side push panel (#2259).
   picker's own shared strings, e.g. the empty state, still say "bibliothèque").
 - Panel: rendered as a **floating card** (`InlineDrawer floating`, 2026-08-06) — inset from every
   edge with a single `outline-muted` 1px border, `--radius-m` (16px) corners and a subtle
-  `--shadow-s` (border/radius softened from the initial `outline-retreat`/24px on 2026-08-06),
+  `--shadow-s` (border/radius softened from the initial `outline-muted`/24px on 2026-08-06),
   dropping the push drawer's flush edge border and the header divider. Header title "Définir les
   ressources accessibles" + `InlineDrawer`'s built-in close, plus a **Réinitialiser** icon button
   (Tooltip) in `headerActions`. Body reuses the existing `DocumentLibraryScopePicker` at full
@@ -1877,7 +1874,7 @@ _(none yet)_
   signalling "needs your input" with the same visual language as the chat field.
 
 - **Card containment + button restyle (2026-08-05)** — `.card` now uses
-  `surface-container-high` background and an `outline-retreat` border (up from
+  `surface-container-high` background and an `outline-muted` border (up from
   `surface-container`/`outline`). `.title` is `primary`/`title-medium` (was
   `on-surface`/`title-small`); `.question` is `body-medium` (was `body-large`). Choice
   buttons use the shared `Button` atom's `default` signal from
@@ -1969,9 +1966,10 @@ row and making the list unreadable. Two changes:
   everywhere. The date also uses `font-variant-numeric: tabular-nums`, so the
   fixed `DD/MM/YY - HH:mm` format always renders at the same width regardless
   of which digits it contains.
-- All four nav panels went **240px → 272px**. They swap into the same sidebar
-  grid column, so the width must stay identical across them or the column
-  jumps when switching between Home / team / marketplace / admin.
+- All four nav panels went **240px → 272px**, then **254px** (2026-10-02, UI
+  polish). They swap inside the same nav panel card, next to the rail, so the
+  width must stay identical across them or the card jumps when switching
+  between Home / team / marketplace / admin.
 
 ---
 
@@ -2478,7 +2476,7 @@ generic `Dialog` primitive exists yet):
   opens once the query is 2+ characters (`minQueryLength={2}`, see below),
   matching the backend search's own minimum.
 - **Pending-list container** — always rendered, even with zero pending
-  candidates (`1px solid outline-retreat` border, `radius-s` (`8px`)
+  candidates (`1px solid outline-muted` border, `radius-s` (`8px`)
   corners, `spacing-s` (`12px`) padding so content isn't flush against the
   border): a fixed `pendingListHeader` label ("Membres à ajouter à
   l'équipe", `label-large`, `on-surface-retreat`) above either —
@@ -2493,7 +2491,7 @@ generic `Dialog` primitive exists yet):
     inside the outer bordered container, not flush rules between rows.
     List capped at `8.5 * var(--row-height)` — the half-row is a deliberate
     "more below" affordance — with a `4px`-wide `::-webkit-scrollbar`
-    (thumb color inherited from the app's existing global `outline-retreat`
+    (thumb color inherited from the app's existing global `outline-muted`
     scrollbar rule in `styles/index.css`, already thin by default; this
     only narrows it further for the denser list); or
   - a centered (`body-medium`, `on-surface-muted`) "Aucun utilisateur
@@ -2820,7 +2818,7 @@ Header reorg (#2102, 2026-07-24): dropped the agent icon/avatar and the back but
 - **Field grouping** — `ui.group` groups fields under labeled sections; ungrouped fields land in Général.
 - **MCP tools section** — read-only list of tools advertised by the selected template (display_name or id + require_tools).
 - **Header reorg** (#2102) — avatar, back button, and context bar (template name + category pill) removed; team + template now shown as one subtitle line under the title.
-- **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-retreat` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
+- **Template browser container** (#2103) — pod filter + card grid sit inside a titled `--surface-container-low` container ("Sélectionner un template d'agent" + explanatory subtitle, i18n'd). Card border 1px `--outline-muted` (`--outline-muted` on hover, no transition), background fixed `--surface-container` in every state (no hover/selected shift), category/pod labels moved to a card footer. Card name `--font-body-large`/`--primary`, description `--font-body-medium`/`--on-surface`, category/pod labels `--font-label-small`/`--on-surface-muted`.
 - **4-tab restructure + Engagement field** (#2105) — see above.
 - **Metadata footer** — created_by + relative date shown in edit mode when `created_by` is set.
 - **Inline validation** — `submitAttempted` gates required-field errors, including displayName (Général tab), missing required tuning fields (routed to their own tab via `sectionOfField`), a blocking capability config error (Outils tab — e.g. ppt_filler's missing mandatory template, #1903), and usage_statement (Engagement tab); no toast for validation. Every tab with an unmet requirement gets the `ButtonGroupItem` `hasError` dot (a plain `--error`-coloured span, not a Material icon despite the "error_dot" naming convention used to describe it) and `handleSubmit`'s "jump to first error tab" logic covers all four tabs, Outils included. The validation banner ("Complétez les champs marqués d'un \*...") renders directly above the tab strip in `AgentFormBody.tsx`, before the user picks which tab to fix first.

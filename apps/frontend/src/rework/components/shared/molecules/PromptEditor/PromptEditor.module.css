@@ -57,12 +57,12 @@
 
 .host {
   --input-outline: transparent;
-  --input-border: var(--outline-retreat);
+  --input-border: var(--outline-variant);
   display: flex;
   outline: 2px solid var(--input-outline);
   border: 1px solid var(--input-border);
-  border-radius: var(--spacing-xs);
-  background-color: var(--surface-container-lowest);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-low);
   /* A definite height, not min-height: the editor inside sizes itself against
      it, and dragging the resize handle rewrites it. A longer prompt scrolls
      rather than pushing the form's buttons out of reach. */

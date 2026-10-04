@@ -25,7 +25,7 @@
    * 2rem (32px) top/bottom once the card is as tall as it's allowed to get. */
   margin: auto;
   border-radius: var(--radius-l);
-  background: var(--surface-container-high);
+  background: var(--surface-floating);
   padding: var(--spacing-l);
   width: min(48rem, calc(100vw - 2rem));
   min-height: 500px;
@@ -121,9 +121,9 @@
    * — see .textSection's min-height: 0 for why that's possible. */
   flex: 1;
   cursor: default;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--spacing-xs);
-  background-color: var(--surface-container-lowest);
+  background-color: var(--surface-container-low);
   padding: var(--spacing-s);
   min-height: 0;
   overflow-y: auto;

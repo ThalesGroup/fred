@@ -96,7 +96,7 @@
 
   &::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background-color: var(--outline-retreat);
+    background-color: var(--outline-muted);
   }
 }
 
@@ -126,7 +126,7 @@
 .datatable-cell {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--surface-container-highest);
+  border-bottom: 1px solid var(--outline-muted);
   padding: 0 var(--spacing-s);
   min-width: 0;
   min-height: var(--datatable-row-height, 3.5rem);

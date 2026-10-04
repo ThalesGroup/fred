@@ -19,7 +19,7 @@
   flex-direction: column;
   gap: var(--spacing-2xs);
   cursor: pointer;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background: transparent;
   padding: var(--spacing-m);

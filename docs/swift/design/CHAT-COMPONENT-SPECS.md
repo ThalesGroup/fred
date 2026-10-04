@@ -23,17 +23,17 @@ Legacy `ChatBot.tsx` components are not covered here.
 
 The mockup uses short token names. The canonical codebase tokens are below.
 **Never add new CSS variables** — use only what exists in
-`src/styles/colors-semantic-{light,dark}.css`, `radius.css`, `typography.css`.
+`src/styles/themes/<id>.css`, `radius.css`, `typography.css`.
 
 | Mockup token                   | Codebase token         | Value (light)       |
 | ------------------------------ | ---------------------- | ------------------- |
 | `--color-text-primary`         | `--on-surface`         | cold-grey-10        |
-| `--color-text-secondary`       | `--on-surface-retreat` | cold-grey-30        |
-| `--color-text-tertiary`        | `--on-surface-muted`   | cold-grey-40        |
-| `--color-background-primary`   | `--surface-main`       | cold-grey-98        |
-| `--color-background-secondary` | `--surface-container`  | cold-grey-94        |
-| `--color-border-tertiary`      | `--outline-muted`      | cold-grey-80        |
-| `--color-border-secondary`     | `--outline-retreat`    | cold-grey-80        |
+| `--color-text-secondary`       | `--on-surface-retreat` | cold-grey-40        |
+| `--color-text-tertiary`        | `--on-surface-muted`   | cold-grey-45        |
+| `--color-background-primary`   | `--surface-main`       | cold-grey-100       |
+| `--color-background-secondary` | `--surface-container`  | cold-grey-96        |
+| `--color-border-tertiary`      | `--outline-muted`      | cold-grey-88        |
+| `--color-border-secondary`     | `--outline-variant`    | cold-grey-80        |
 | `--font-sans`                  | `--font-family-base`   | "Geist", sans-serif |
 | `--border-radius-lg` (12 px)   | `--radius-m` (16 px)   | closest available   |
 | `--border-radius-md` (8 px)    | `--radius-s` (8 px)    | exact               |
@@ -1057,7 +1057,7 @@ closed by tap outside.
 }
 
 .optionCard:hover {
-  border-color: var(--outline-retreat);
+  border-color: var(--outline-muted);
 }
 
 .optionCardHeader {
@@ -1163,8 +1163,8 @@ attachment count) stay attached to the composer:
   `position: sticky; bottom: 0` inside the scroll container — never a flex
   sibling, which would truncate the scrollbar track at the input's top edge.
 - **Native controls follow the active theme.** `color-scheme: dark` /
-  `color-scheme: light` is declared on the `[data-theme]` selectors in
-  `colors-semantic-dark.css` / `colors-semantic-light.css`; otherwise the
+  `color-scheme: light` is declared in each mode block of every
+  `src/styles/themes/<id>.css` file; otherwise the
   browser renders native scrollbars/inputs/selects in light mode regardless
   of the active theme.
 - **Streaming auto-scroll respects the user.** While `isStreaming`, the UI
@@ -1243,7 +1243,7 @@ state: search policy, RAG scope, library selection, selected documents.
 content-formatting principles the system prompt must follow to render well
 under this stack. Does not cover page/component architecture (§1–§11), SSE
 transport (`RUNTIME-EXECUTION-CONTRACT.md`), or color themes
-(`colors-semantic-{dark,light}.css`).
+(`src/styles/themes/`).
 
 ### 14.1 Rendering stack
 

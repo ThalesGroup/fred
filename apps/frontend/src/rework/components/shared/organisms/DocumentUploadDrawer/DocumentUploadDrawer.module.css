@@ -31,7 +31,7 @@
   flex-direction: column;
   box-shadow: var(--shadow-l);
   border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-floating);
   width: min(560px, 92vw);
   max-height: 85vh;
   color: var(--on-surface);
@@ -68,7 +68,7 @@
 
 .path {
   border-radius: var(--radius-xs);
-  background: var(--surface-container-highest);
+  background: var(--surface-container-low);
   padding: 0 var(--spacing-2xs);
   color: var(--on-surface);
   font: var(--font-label-medium);
@@ -111,7 +111,7 @@
     border-color 150ms,
     background 150ms;
   cursor: pointer;
-  border: 1.5px dashed var(--outline-retreat);
+  border: 1.5px dashed var(--outline-muted);
   border-radius: var(--radius-s);
   min-height: 180px;
   overflow-y: auto;
@@ -173,7 +173,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  border-bottom: 1px solid var(--outline-retreat);
+  border-bottom: 1px solid var(--outline-muted);
   padding: var(--spacing-xs) var(--spacing-s);
   font: var(--font-body-small);
 }
@@ -244,7 +244,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container);
   padding: var(--spacing-s) var(--spacing-m);
@@ -287,6 +287,6 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-s);
-  border-top: 1px solid var(--outline-retreat);
+  border-top: 1px solid var(--outline-muted);
   padding: var(--spacing-s) var(--spacing-m);
 }

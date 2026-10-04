@@ -56,6 +56,9 @@ function writeToStorage<T>(key: string, value: T): void {
   }
 }
 
+// The key a value is stored under; public/theme-boot.js reads two of them directly.
+export const localStorageKey = (key: string): string => `localHook:${key}`;
+
 // React state hook with a localStorage backing so values survive reloads and stay in sync across tabs.
 export function useLocalStorageState<T>(key: string, initialValue: Initializer<T>): [T, Dispatch<SetStateAction<T>>] {
   const initialValueRef = useRef<Initializer<T>>(initialValue);
@@ -65,7 +68,7 @@ export function useLocalStorageState<T>(key: string, initialValue: Initializer<T
     initialValueRef.current = initialValue;
   }, [initialValue]);
 
-  const storageKey = useMemo(() => `localHook:${key}`, [key]);
+  const storageKey = useMemo(() => localStorageKey(key), [key]);
 
   const readValue = useCallback(() => {
     const storedValue = readFromStorage<T>(storageKey);

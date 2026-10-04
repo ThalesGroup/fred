@@ -19,7 +19,7 @@
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-container-low);
   padding: var(--spacing-2xs) var(--spacing-xs);

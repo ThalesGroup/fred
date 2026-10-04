@@ -134,12 +134,13 @@ function FredUiContent() {
 }
 
 function AppWithTheme() {
-  const { darkMode } = useContext(ApplicationContext);
+  const { darkMode, uiTheme } = useContext(ApplicationContext);
   const { i18n } = useTranslation();
 
   // Effects run after render, which is too late for the first paint to pick
   // up the right palette — set it synchronously during render instead.
   document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+  document.documentElement.setAttribute("data-ui-theme", uiTheme);
 
   useEffect(() => {
     // Chrome derives 12h/24h for datetime-local from <html lang>.
