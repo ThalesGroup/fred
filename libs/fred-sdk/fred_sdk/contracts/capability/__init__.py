@@ -26,12 +26,17 @@ Why this package exists:
 How to use:
 - `from fred_sdk.contracts.capability import AgentCapability, CapabilityManifest, ...`
 - one module per concern: `base` (the ABC), `manifest` (declaration),
-  `context` (typed runtime/LLM split), `hitl` (approval declarations)
+  `context` (typed runtime/LLM split), `hitl` (approval declarations),
+  `scope` (scope-private / public classification of settings)
 """
 
 from __future__ import annotations
 
-from ..models import StoredCapabilityConfig
+from ..models import (
+    CapabilityConfigCopyRequest,
+    CapabilityConfigCopyResult,
+    StoredCapabilityConfig,
+)
 from .base import AgentCapability, ToolCarrierMiddleware
 from .chat_controls import (
     ChatControlsRequest,
@@ -58,11 +63,23 @@ from .manifest import (
     UploadedFile,
     chat_part_kind,
 )
+from .scope import (
+    AssetKey,
+    Public,
+    ScopePrivate,
+    asset_keys,
+    reset_scope_private,
+    unclassified_reference_fields,
+    unclassified_reference_specs,
+)
 
 __all__ = [
     "AgentCapability",
+    "AssetKey",
     "AssetSlot",
     "CapabilityCatalogEntry",
+    "CapabilityConfigCopyRequest",
+    "CapabilityConfigCopyResult",
     "CapabilityContext",
     "CapabilityIdentity",
     "CapabilityManifest",
@@ -76,11 +93,17 @@ __all__ = [
     "EmptyModel",
     "HitlGateRequest",
     "HitlSpec",
+    "Public",
     "SaveContext",
+    "ScopePrivate",
     "SidePanelSpec",
     "StoredCapabilityConfig",
     "TeamScopePolicy",
     "ToolCarrierMiddleware",
     "UploadedFile",
+    "asset_keys",
     "chat_part_kind",
+    "reset_scope_private",
+    "unclassified_reference_fields",
+    "unclassified_reference_specs",
 ]

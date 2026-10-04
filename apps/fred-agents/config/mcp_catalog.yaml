@@ -44,6 +44,8 @@ servers:
         description: "mcp.servers.search_documents.fields.chat_options.libraries_binding.description"
         default: false
       - key: "chat_options.bound_library_ids"
+        # Library ids belong to the agent's scope: reset when the agent is copied.
+        scope_private: true
         type: "array"
         item_type: "string"
         title: "mcp.servers.search_documents.fields.chat_options.bound_library_ids.title"
@@ -230,6 +232,8 @@ servers:
         description: "mcp.servers.corpus.fields.chat_options.libraries_binding.description"
         default: false
       - key: "chat_options.bound_library_ids"
+        # Library ids belong to the agent's scope: reset when the agent is copied.
+        scope_private: true
         type: "array"
         item_type: "string"
         title: "mcp.servers.corpus.fields.chat_options.bound_library_ids.title"

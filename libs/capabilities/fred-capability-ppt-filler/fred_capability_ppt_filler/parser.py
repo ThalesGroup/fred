@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
+from fred_sdk.contracts.capability import Public, ScopePrivate
 from pptx import Presentation
 from pptx.oxml.ns import qn
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
@@ -119,11 +120,13 @@ class KeyField(BaseModel):
     unchanged while image keys gain their metadata.
     """
 
-    key: str
+    key: Public[str]
     description: str = ""
     type: Literal["text", "image"] = "text"
-    folder: Optional[str] = None  # author's folder string; only meaningful for images
-    folder_tag_id: Optional[str] = None  # resolved tag id, filled later; None here
+    # Author's folder string; only meaningful for images. Resolved on each upload.
+    folder: Public[Optional[str]] = None
+    # Resolved tag id in the saving scope, filled later; None here.
+    folder_tag_id: ScopePrivate[Optional[str]] = None
 
     @model_serializer(mode="wrap")
     def _serialize_additive(self, handler):

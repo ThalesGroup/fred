@@ -157,6 +157,53 @@ migrations described under "Registration, boot invariants, tables" below
 
 ---
 
+## Scope-private settings — what may leave the agent's scope
+
+An agent lives in a **scope**: today a team or a personal space. Projects and
+organisations are expected to become scopes too. When an agent is copied to
+another scope, each capability setting falls into exactly one class:
+
+| Class | Meaning | On a copy to another scope | Declare with |
+| --- | --- | --- | --- |
+| **scope-private** | points to an item the scope owns (library, folder, document, tag) | reset to its default; the capability stays enabled | `ScopePrivate[...]` |
+| **asset key** | names a configuration file stored through `agent_assets` | the file is fetched and re-submitted to your `validate_config` in the target, in its slot | `Annotated[str, AssetKey("<slot>")]` |
+| **public** | everything else (options, limits, texts) | kept as is | nothing, or `Public[...]` for an identifier-like field that is safe to copy |
+
+Classify against "the scope", never against "the team": the question is
+whether the value means anything outside the place the agent lives, and it does
+not change when new kinds of scope arrive. A duplicate in the same scope keeps
+every setting and still re-submits configuration files for the new instance.
+
+```python
+from fred_sdk.contracts.capability import AssetKey, Public, ScopePrivate
+
+class Config(BaseModel):
+    library_tag_ids: ScopePrivate[list[str]] = []      # must have a default
+    template_key: Annotated[str, AssetKey("template")] = "template.pptx"
+    output_key: Public[str] = "summary"                # a name, not a reference
+```
+
+- Markers work at any depth (`KeyField.folder_tag_id` in
+  `fred_capability_ppt_filler/parser.py` is nested in a list of slides).
+- Keep the file extension in an asset key: the slot's `accepted_types` gate
+  runs on it when the file is re-submitted.
+- Catalog-declared fields of an open model (MCP servers in `mcp_catalog.yaml`)
+  classify with `scope_private: true` (or `false` for public) on the field.
+- The runtime does the copy (`POST /agents/capabilities/{id}/copy-config`,
+  `fred_runtime/capabilities/copy.py`); you write no copy code. Your
+  `validate_config` must accept its own stored config back with the files as
+  uploads, which is the normal "editor uploads a file" path.
+- A file may reference items the new scope lacks (ppt-filler image folders).
+  When `ctx.copied_from_another_scope` is true, prefer leaving such a reference
+  unset over rejecting, and append to `ctx.notices` what an editor must redo;
+  the user sees it after the copy.
+- Guard: `apps/fred-agents/tests/test_capability_scope_classification.py` fails
+  on any text field whose name looks like a reference (`*_id(s)`, `*_uid(s)`,
+  `*_key(s)`, `*folder(s)`, `*library/libraries`, `*tag(s)`, `*path(s)`) that
+  carries no class.
+
+---
+
 ## Requirement → hook (RFC §5.1)
 
 Map a runtime need to a primitive; do not invent a new hook. Tools and declarative HITL work on ReAct, Deep and Graph agents. Model-loop hooks
@@ -366,6 +413,8 @@ if you touched the contract surface) — green before you claim done.
   eliminate (RFC §1.1); extend the `UiPart` union by *declaring* a chat part, not by
   editing the union.
 - **No capability runtime code in control-plane** (RFC §7).
+- **Classify every reference-like setting** scope-private, asset key or public (see
+  "Scope-private settings"); the guard test fails otherwise.
 - **Never persist asset blobs in `tuning_json`** — store binaries through a service in
   `validate_config` and keep only their keys (RFC §3.8).
 - **Keep runtime info out of LLM-exposed tool signatures** (RFC §3.5).

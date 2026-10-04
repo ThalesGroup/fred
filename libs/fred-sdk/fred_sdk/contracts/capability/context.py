@@ -84,10 +84,15 @@ class SaveContext:
     How to use:
     - `services` carries the ports a save-time transform may need (e.g. the KF
       workspace client to store uploaded asset binaries, RFC §3.8)
+    - `copied_from_another_scope`: the save recreates a copied agent in a new
+      scope; a reference to an item the scope lacks may be left unset instead
+      of rejected, with a line in `notices` telling an editor what to redo
     """
 
     identity: CapabilityIdentity
     services: RuntimeServices
+    copied_from_another_scope: bool = False
+    notices: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

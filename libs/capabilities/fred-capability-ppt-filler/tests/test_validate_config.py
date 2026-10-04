@@ -39,6 +39,8 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     SaveContext,
     UploadedFile,
+    asset_keys,
+    reset_scope_private,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeAssets, FakeFolders
@@ -276,3 +278,71 @@ async def test_missing_agent_assets_port_fails_loud():
         )
 
     assert "agent_assets" in str(excinfo.value)
+
+
+# --- Copy to another scope ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_copy_to_another_scope_recreates_template_and_resolves_its_folders():
+    """What the runtime's copy-config does: reset scope-private settings, fetch the
+    AssetKey files in the source, re-submit them to validate_config in the target."""
+    deck = build_deck([("{{logo}}", IMAGE_NOTES)])
+    source_assets = FakeAssets()
+    stored = await PptFillerCapability().validate_config(
+        PptFillerConfig(),
+        _uploads(deck),
+        _save_ctx(
+            assets=source_assets,
+            folders=FakeFolders(folder_to_tag={"Brand/Logos": "tag-source"}),
+        ),
+    )
+
+    reset = reset_scope_private(stored)
+    assert reset.schema_slides[0].keys[0].folder_tag_id is None
+    assert asset_keys(reset) == {TEMPLATE_SLOT: [PPT_FILLER_TEMPLATE_KEY]}
+
+    target_assets = FakeAssets()
+    copied = await PptFillerCapability().validate_config(
+        reset,
+        {
+            TEMPLATE_SLOT: [
+                UploadedFile(
+                    filename=PPT_FILLER_TEMPLATE_KEY,
+                    content=await source_assets.fetch(PPT_FILLER_TEMPLATE_KEY),
+                )
+            ]
+        },
+        _save_ctx(
+            assets=target_assets,
+            folders=FakeFolders(folder_to_tag={"Brand/Logos": "tag-target"}),
+        ),
+    )
+
+    assert target_assets.blobs == {PPT_FILLER_TEMPLATE_KEY: deck}
+    assert copied.schema_slides[0].keys[0].folder_tag_id == "tag-target"
+
+
+@pytest.mark.asyncio
+async def test_copy_to_a_space_without_the_image_folder_keeps_the_template():
+    deck = build_deck([("{{logo}}", IMAGE_NOTES)])
+    assets = FakeAssets()
+    ctx = SaveContext(
+        identity=CapabilityIdentity(user_id="u-1", team_id="team-b"),
+        services=RuntimeServices(
+            agent_assets=assets, document_folders=FakeFolders(folder_to_tag={})
+        ),
+        copied_from_another_scope=True,
+    )
+
+    result = await PptFillerCapability().validate_config(
+        PptFillerConfig(), _uploads(deck), ctx
+    )
+
+    logo = result.schema_slides[0].keys[0]
+    assert (logo.folder, logo.folder_tag_id) == ("Brand/Logos", None)
+    assert assets.blobs == {PPT_FILLER_TEMPLATE_KEY: deck}
+    assert ctx.notices == [
+        "Image fields without their folder in this space: {{logo}} (Brand/Logos). "
+        "Create these folders in the resources, then upload the template again."
+    ]

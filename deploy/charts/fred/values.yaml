@@ -1009,6 +1009,8 @@ applications:
               description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
               default: false
             - key: "chat_options.bound_library_ids"
+              # Library ids belong to the agent's scope: reset when the agent is copied.
+              scope_private: true
               type: "array"
               item_type: "string"
               title: "Bound document libraries"
