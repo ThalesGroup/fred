@@ -18,6 +18,7 @@ import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/Announc
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
+import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage.tsx";
@@ -269,6 +270,16 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <AnnouncementsPage />
+          </Protected>
+        ),
+      },
+      {
+        // Platform UI theme settings; same platform-admin gate as the backend's
+        // `can_manage_platform` on /admin/platform/ui-settings.
+        path: "admin/interface",
+        element: (
+          <Protected requires="admin">
+            <UiSettingsPage />
           </Protected>
         ),
       },

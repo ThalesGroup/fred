@@ -842,6 +842,16 @@ operations:
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt. Writes the FIRST block of every agent's system prompt platform-wide, so this gate is the only thing between an actor and prepending text ahead of every agent on the deployment. Carved out of can_manage_platform so this one surface can be delegated to a prompt_editor without import/export, tasks and platform reset coming with it. Body length-capped by SetPlatformPromptRequest (max_length) at parsing, before authz runs. Saving "" suppresses the block; there is no DELETE (row absence means "never set", which is a distinct state).
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/ui-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform, same catch-all gate as announcements. Returns the platform default UI theme and hidden theme ids; defaults (null / []) when never saved. The same two values are public on /frontend/config (theme ids only, no admin-authored content) so the frontend can resolve the theme before its first paint.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/ui-settings
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces both settings; SetPlatformUiSettingsRequest bounds ids to [a-z][a-z0-9-]{0,31}, at most 32 distinct hidden ids, default not hidden (422 at parsing, before authz). Emits audit event platform.ui_settings.updated.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/platform/instructions
     review_status: approved
     required_permission: can_edit_platform_prompt # organization_authz.require_edit_platform_prompt, same gate as its editable sibling above — this pane is the reference an editor needs to know what agents are already told. Read-only: returns the `platform_instructions` field of the pod's `config/platform_prompt.json`, the text shipped with the platform and composed into every agent prompt. No row, no PUT, no DELETE — it exists so an admin can see what agents are told, not change it.

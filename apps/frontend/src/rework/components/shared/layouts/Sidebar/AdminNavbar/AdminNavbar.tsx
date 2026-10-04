@@ -75,6 +75,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.sidebar.admin.menu.uiSettings"),
+      icon: { category: "outlined", type: "dark_mode", filled: false },
+      linkProps: { to: "/admin/interface" },
+      requires: "admin",
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.features"),
       icon: { category: "outlined", type: "tune", filled: false },
       linkProps: { to: "/admin/features" },

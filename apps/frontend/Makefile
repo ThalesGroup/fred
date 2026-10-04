@@ -138,7 +138,7 @@ format-fix: check-node node_modules ## Reformat the codebase in place with prett
 
 .PHONY: lint
 lint: check-node node_modules ## Lint frontend source with ESLint
-	npx eslint --config eslint.config.mjs --no-error-on-unmatched-pattern "src/**/*.{ts,tsx}"
+	npx eslint --config eslint.config.mjs --no-error-on-unmatched-pattern "src/**/*.{ts,tsx}" "public/**/*.js"
 
 # Diagnostic only; version pinned, fetched through npm's cache on first use.
 # Nonzero exit means findings OR execution failure: inspect output and stderr.
