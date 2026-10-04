@@ -194,7 +194,7 @@ class ExecutionConfig(FrozenModel):
     invocation_turns: tuple[ConversationTurn, ...] = ()
     """Prior conversation turns forwarded by the calling agent for context seeding."""
     interrupted_action: InterruptedAction | None = None
-    """Choice for a Graph execution a lost process left unfinished."""
+    """Choice for a Graph execution with pending non-HITL work."""
     interruption_id: str | None = None
 
 
@@ -411,7 +411,7 @@ class AwaitingHumanRuntimeEvent(RuntimeEventBase):
 
 class ExecutionInterruptedRuntimeEvent(RuntimeEventBase):
     """
-    A Graph execution was left unfinished by a lost process; nothing ran.
+    A Graph execution has unfinished work; this request ran no step.
 
     `request` is shown like a human-input card offering `continue` or
     `restart`; the answer goes back as `interrupted_action` plus

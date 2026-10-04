@@ -1400,6 +1400,21 @@ describe("useManagedChat — session write reliability", () => {
     },
   };
 
+  it("Later dismisses unfinished work without sending or losing the draft", () => {
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("draft"));
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+    act(() => latest.handleHitlAnswer("later"));
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.input).toBe("draft");
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    expect(latest.pendingHitl).toEqual(interruptedEvent);
+  });
+
   it("continue on an interrupted run sends the interruption, not a HITL resume, and keeps the draft", async () => {
     mount();
     bindSession("session-1");

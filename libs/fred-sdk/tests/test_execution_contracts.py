@@ -393,6 +393,15 @@ def test_continue_needs_no_input_but_an_interruption_id() -> None:
         RuntimeExecuteRequest(agent_id="my-agent", interrupted_action="continue")
 
 
+@pytest.mark.parametrize("text", ["new instruction", " "])
+def test_continue_rejects_new_input(text: str) -> None:
+    with pytest.raises(ValueError, match="requires empty input"):
+        RuntimeExecuteRequest(
+            agent_id="my-agent", interrupted_action="continue",
+            interruption_id="i-1", input=text,
+        )
+
+
 def test_continue_is_not_a_hitl_resume() -> None:
     with pytest.raises(Exception, match="requires interruption_id"):
         RuntimeExecuteRequest(

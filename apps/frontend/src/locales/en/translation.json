@@ -535,10 +535,11 @@
     "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "Agent is waiting for your input",
     "interruptedRun": {
-      "title": "The previous answer was interrupted during “{{step}}”.",
-      "question": "Continue from that step, or restart with your message?",
+      "title": "The previous execution is unfinished at “{{step}}”.",
+      "question": "An external operation may already have happened. Resume only after other executions have stopped. Restart does not undo previous effects.",
       "continue": "Continue",
-      "restart": "Restart"
+      "restart": "Restart",
+      "later": "Later"
     },
     "loadingHistory": "Loading conversation history...",
     "markdownPreview": {

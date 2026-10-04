@@ -5095,28 +5095,24 @@ grouped questions, Skip records a draft for the active tab, while close skips
 the entire group in one request. Skipped answers appear in the same cards,
 including after history reload.
 
-### Interrupted Graph run card (2026-10-01)
+### Unfinished Graph execution card (revised 2026-10-04)
 
-**Location:** `src/rework/core/hooks/useChatSse.ts`,
-`src/rework/components/pages/ManagedChatPage/useManagedChat.ts`,
-`src/rework/components/shared/molecules/HitlPrompt/`
+**Location:** `useChatSse.ts`, `useManagedChat.ts`, existing `HitlPrompt`.
 
-**Status:** `Functional`
+The next message on unfinished non-HITL Graph work restores the user's draft and
+shows the pending step. Wording explains that an external operation may already have
+happened and other executions must have stopped before resuming.
 
-When a message reaches a Graph agent whose previous run was cut short by a lost
-process, the runtime answers `execution_interrupted` instead of running. The
-optimistic user bubble is removed, the message goes back to the composer, and the
-existing `HitlPrompt` card shows a localized title naming the interrupted step,
-plus **Continue** and **Restart** (FR: *Continuer*, *Recommencer*).
+- Continue uses saved state, preserves the draft and adds no user message.
+- Restart resends the original text/command; it does not undo earlier external effects.
+- Later dismisses locally without a request or checkpoint change. A later message
+  rediscovers the work; opening the conversation alone does not.
+- Preparation and HTTP refusal restore the controls. A failure after acceptance does
+  not trigger automatic retry. Stop's session-local intent survives navigation, not
+  reload, and is consumed only after HTTP acceptance.
 
-- **Continue** resumes the run at that step. No user bubble is added, and the
-  composer keeps the draft.
-- **Restart** sends the draft as a new turn.
-- If the chosen request never starts (token, session write or preparation failure),
-  the card comes back.
-- After **Stop**, the next message of that conversation restarts without showing the
-  card, even after visiting another conversation. The memory lives in the page, so a
-  reload right after Stop may still show the card.
+Choices and explanation are localized in EN/FR. Safe external replay remains the
+agent author's responsibility; a generic confirmation cannot make an unsafe call safe.
 
 ## Shared hosted-application UI components
 

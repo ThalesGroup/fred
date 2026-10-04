@@ -841,7 +841,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     expect(onTurnRejectedMock).toHaveBeenCalledWith("", "session-1");
     const card = onAwaitingHumanMock.mock.calls[0][0] as RuntimeAwaitingHumanEvent;
     expect(card.payload.stage).toBe("execution_interrupted");
-    expect(card.payload.choices?.map((choice) => choice.id)).toEqual(["continue", "restart"]);
+    expect(card.payload.choices?.map((choice) => choice.id)).toEqual(["continue", "restart", "later"]);
     expect(card.payload.metadata?.interruption_id).toBe("int-1");
     fetchSpy.mockRestore();
   });
@@ -878,7 +878,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
   it("after Stop, the next message of that session restarts, even after visiting another session", async () => {
     flushPendingWrites = async () => true;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network in test"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 200 }));
     mount();
 
     await act(async () => {
@@ -889,15 +889,32 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     await act(async () => {
       await latest.send("elsewhere", "session-2");
     });
+    fetchSpy.mockResolvedValueOnce(new Response("refused", { status: 503 }));
     await act(async () => {
       await latest.send("after stop", "session-1");
+    });
+    await act(async () => {
+      await latest.send("retry", "session-1");
     });
     await act(async () => {
       await latest.send("later", "session-1");
     });
 
     const bodies = fetchSpy.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
-    expect(bodies.map((body) => body.interrupted_action)).toEqual([undefined, undefined, "restart", undefined]);
+    expect(bodies.map((body) => body.interrupted_action)).toEqual([undefined, undefined, "restart", "restart", undefined]);
+    fetchSpy.mockRestore();
+  });
+
+  it.each([401, 503])("send() reports HTTP %i as not accepted", async (status) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("refused", { status }));
+    mount();
+    let accepted: boolean | undefined;
+    await act(async () => {
+      accepted = await latest.send("", "session-1", undefined, undefined, {
+        action: "continue", interruptionId: "int-1",
+      });
+    });
+    expect(accepted).toBe(false);
     fetchSpy.mockRestore();
   });
 

@@ -535,10 +535,11 @@
     "hitlQuestionTabFallback": "Question",
     "hitlWaitingAria": "L'agent attend votre réponse",
     "interruptedRun": {
-      "title": "La réponse précédente a été interrompue pendant « {{step}} ».",
-      "question": "Reprendre à cette étape, ou recommencer avec votre message ?",
+      "title": "L’exécution précédente reste inachevée à l’étape « {{step}} ».",
+      "question": "Une opération externe a peut-être déjà eu lieu. Reprenez uniquement après l’arrêt des autres exécutions. Recommencer n’annule pas les effets précédents.",
       "continue": "Continuer",
-      "restart": "Recommencer"
+      "restart": "Recommencer",
+      "later": "Plus tard"
     },
     "loadingHistory": "Chargement de l'historique...",
     "markdownPreview": {

@@ -33,7 +33,6 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, aclosing, nullcontext
 from dataclasses import dataclass, replace
 from typing import Any, cast
-from uuid import uuid4
 
 from fred_core.history.history_schema import coerce_finish_reason
 from fred_sdk.contracts.context import (
@@ -214,8 +213,6 @@ def _final_event_from_output(
 # so the next turn reads the completed state from the thread's last checkpoint.
 _COMPLETE_NODE = "__fred_complete__"
 _TURN_KEY = "fred_graph_turn"
-# Not `__`-prefixed: LangGraph copies it into each checkpoint's metadata.
-_RUN_KEY = "fred_graph_run"
 
 
 @dataclass(slots=True)
@@ -487,8 +484,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         if isinstance(graph_input, ExecutionInterruptedRuntimeEvent):
             yield graph_input
             return
-        # Stamped on every checkpoint this run writes; failure cleanup is fenced on it.
-        run_mark = {"start": _checkpoint_id(snapshot.config), "run": uuid4().hex}
         recorder = _TurnRecorder()
         completed: BaseModel | None = None
         run_config = cast(
@@ -498,7 +493,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                     **thread.get("configurable", {}),
                     **self._owner_keys(),
                     _TURN_KEY: recorder,
-                    _RUN_KEY: run_mark["run"],
                 },
                 # +1: the technical completion node is one more superstep.
                 "recursion_limit": config.max_steps + 1,
@@ -506,28 +500,30 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         )
         try:
             # "sync": a step's checkpoint is persisted before the next step starts.
-            async for raw_event in self._compiled.astream(
-                graph_input,
-                config=run_config,
-                stream_mode=["custom", "updates"],
-                durability="sync",
-            ):
-                mode, payload = split_stream_event_mode(raw_event)
-                if mode == "custom" and isinstance(payload, RuntimeEventBase):
-                    yield cast(RuntimeEvent, payload)
-                elif mode == "updates":
-                    request = extract_interrupt_request(payload)
-                    if request is not None:
-                        outcome.awaiting = request
-                    if isinstance(payload, dict) and _COMPLETE_NODE in payload:
-                        completed = self._state_model.model_validate(
-                            payload[_COMPLETE_NODE]
-                        )
+            async with aclosing(
+                self._compiled.astream(
+                    graph_input,
+                    config=run_config,
+                    stream_mode=["custom", "updates"],
+                    durability="sync",
+                )
+            ) as events:
+                async for raw_event in events:
+                    mode, payload = split_stream_event_mode(raw_event)
+                    if mode == "custom" and isinstance(payload, RuntimeEventBase):
+                        yield cast(RuntimeEvent, payload)
+                    elif mode == "updates":
+                        request = extract_interrupt_request(payload)
+                        if request is not None:
+                            outcome.awaiting = request
+                        if isinstance(payload, dict) and _COMPLETE_NODE in payload:
+                            completed = self._state_model.model_validate(
+                                payload[_COMPLETE_NODE]
+                            )
         except GraphRecursionError:
             outcome.error = RuntimeError(
                 f"Graph execution exceeded max_steps={config.max_steps}."
             )
-            await self._end_unfinished_run(thread, run_mark)
             return
         except Exception as exc:
             logger.exception(
@@ -535,7 +531,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 self._definition.agent_id,
             )
             outcome.error = exc
-            await self._end_unfinished_run(thread, run_mark)
             return
 
         if outcome.awaiting is not None:
@@ -545,7 +540,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
         if completed is None:
             outcome.error = RuntimeError("Graph execution produced no completed state.")
-            await self._end_unfinished_run(thread, run_mark)
             return
         output = self._definition.output_model().model_validate(
             self._definition.build_output(completed)
@@ -558,29 +552,6 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             finish_reason=recorder.finish_reason,
         )
 
-    async def _end_unfinished_run(
-        self, thread: RunnableConfig, run_mark: dict[str, str | None]
-    ) -> None:
-        """
-        Clear the pending steps of a run ending in this live process, so that
-        only a lost process leaves an execution the user can continue. Skipped
-        when another run has since moved the head: its pending steps are its own.
-        """
-        try:
-            snapshot = await self._compiled.aget_state(thread)
-            head_is_ours = _checkpoint_id(snapshot.config) == run_mark["start"] or (
-                (snapshot.metadata or {}).get(_RUN_KEY) == run_mark["run"]
-            )
-            if not head_is_ours:
-                return
-            await self._compiled.aupdate_state(thread, None, as_node=END)
-        except Exception:
-            logger.warning(
-                "[V2][GRAPH] Could not clear pending steps; agent=%s",
-                self._definition.agent_id,
-                exc_info=True,
-            )
-
     def _interrupted_event(self, snapshot: Any) -> ExecutionInterruptedRuntimeEvent:
         node_id = snapshot.next[0]
         node = self._nodes_by_id.get(node_id)
@@ -588,11 +559,16 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         return ExecutionInterruptedRuntimeEvent(
             request=HumanInputRequest(
                 stage="execution_interrupted",
-                title=f"The previous run was interrupted during “{title}”.",
-                question="Continue from that step, or restart with your message?",
+                title=f"The previous execution is unfinished at “{title}”.",
+                question=(
+                    "An external operation may already have happened. "
+                    "Resume only after other executions have stopped. "
+                    "Restart does not undo previous effects."
+                ),
                 choices=(
                     HumanChoiceOption(id="continue", label="Continue"),
                     HumanChoiceOption(id="restart", label="Restart"),
+                    HumanChoiceOption(id="later", label="Later"),
                 ),
                 metadata={"node_id": node_id, "node_title": title},
             ),
@@ -718,8 +694,7 @@ def _recorder(config: RunnableConfig) -> _TurnRecorder:
 
 
 def _is_interrupted(snapshot: Any) -> bool:
-    # Pending steps without a pause: a lost process left them. A run still
-    # live on another replica looks the same; nothing here tells them apart.
+    # Pending non-HITL work does not tell us whether another owner is still live.
     return bool(snapshot.next) and not snapshot.interrupts
 
 

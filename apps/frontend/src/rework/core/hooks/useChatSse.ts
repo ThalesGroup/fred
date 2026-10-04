@@ -686,6 +686,7 @@ export function useChatSse(
               choices: [
                 { id: "continue", label: i18n.t("chatbot.interruptedRun.continue") },
                 { id: "restart", label: i18n.t("chatbot.interruptedRun.restart") },
+                { id: "later", label: i18n.t("chatbot.interruptedRun.later") },
               ],
               metadata: { ...event.request.metadata, interruption_id: event.interruption_id },
             },
@@ -1067,7 +1068,6 @@ export function useChatSse(
       if (preflightOwnerRef.current === ac) {
         preflightOwnerRef.current = null;
       }
-      stoppedSessionsRef.current.delete(effectiveSessionId);
       turnSessionRef.current = effectiveSessionId;
       // A continue sends no message: the composer keeps the user's draft.
       if (!continuing) onTurnStarted?.();
@@ -1102,6 +1102,7 @@ export function useChatSse(
       // awaits triggered would have been discarded.
       const token = KeyCloakService.GetToken() ?? "";
 
+      let accepted = false;
       try {
         await streamToMessages(
           {
@@ -1117,6 +1118,10 @@ export function useChatSse(
           exchangeId,
           effectiveSessionId,
           ac.signal,
+          () => {
+            accepted = true;
+            stoppedSessionsRef.current.delete(effectiveSessionId);
+          },
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
@@ -1149,7 +1154,7 @@ export function useChatSse(
           setWaitResponse(false);
         }
       }
-      return true;
+      return accepted;
     },
     [
       agentInstanceId,

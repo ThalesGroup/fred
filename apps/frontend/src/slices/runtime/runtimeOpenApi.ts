@@ -499,7 +499,7 @@ export type RuntimeExecuteRequest =
       input?: string;
       /** LangGraph's own Interrupt.id for the HITL occurrence being resumed (ReAct and Graph agents). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received, and validated against the currently pending interrupt. */
       interrupt_id?: string | null;
-      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its interrupted step (input may be empty); 'restart' runs this input as a new turn. */
+      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its pending step (input must be empty); 'restart' runs this input as a new turn. */
       interrupted_action?: ("continue" | "restart") | null;
       /** Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; required with interrupted_action='continue' and valid only there. */
       interruption_id?: string | null;
@@ -541,7 +541,7 @@ export type RuntimeExecuteRequest =
       input?: string;
       /** LangGraph's own Interrupt.id for the HITL occurrence being resumed (ReAct and Graph agents). Echoed back verbatim from the AwaitingHumanRuntimeEvent.request.interrupt_id the frontend received, and validated against the currently pending interrupt. */
       interrupt_id?: string | null;
-      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its interrupted step (input may be empty); 'restart' runs this input as a new turn. */
+      /** Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the unfinished Graph execution at its pending step (input must be empty); 'restart' runs this input as a new turn. */
       interrupted_action?: ("continue" | "restart") | null;
       /** Echoed from ExecutionInterruptedRuntimeEvent.interruption_id; required with interrupted_action='continue' and valid only there. */
       interruption_id?: string | null;

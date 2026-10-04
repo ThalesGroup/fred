@@ -329,12 +329,12 @@ class RuntimeExecuteRequest(BaseModel):
         ),
     )
 
-    # Graph execution left unfinished by a lost process
+    # Graph execution with unfinished work
     interrupted_action: InterruptedAction | None = Field(
         default=None,
         description=(
             "Answer to an ExecutionInterruptedRuntimeEvent: 'continue' resumes the "
-            "unfinished Graph execution at its interrupted step (input may be "
+            "unfinished Graph execution at its pending step (input must be "
             "empty); 'restart' runs this input as a new turn."
         ),
     )
@@ -426,6 +426,8 @@ class RuntimeExecuteRequest(BaseModel):
             raise ValueError(
                 "interrupted_action='continue' requires interruption_id and no resume_payload."
             )
+        if continuing and self.input:
+            raise ValueError("interrupted_action='continue' requires empty input.")
         if self.interruption_id is not None and not continuing:
             raise ValueError(
                 "interruption_id is only valid with interrupted_action='continue'."

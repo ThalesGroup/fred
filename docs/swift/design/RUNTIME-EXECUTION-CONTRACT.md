@@ -6434,65 +6434,42 @@ A skipped question writes a response row even without choice or text. Graph
 choice helpers expose the same typed answer through `choice_step_response`;
 `choice_step` keeps its string return contract for existing authors.
 
-### 8.100 A Graph run left unfinished by a lost process is offered back (2026-10-01)
+### 8.100 Explicit continuation of unfinished Graph work (revised 2026-10-04)
 
-Graph agents stream with `durability="sync"`: a step's checkpoint is persisted
-before the next step starts. A run ending in a live process (success, unhandled
-node error, step limit) leaves no pending step, via LangGraph's
-`aupdate_state(config, None, as_node=END)`. The clearing only applies while the head
-is still the run's own (`fred_graph_run` in checkpoint metadata). A cancelled or disconnected run keeps
-its pending step.
+Graph agents await checkpoint persistence before the next step. Pending work without
+HITL is unfinished execution, not evidence that a process died or an external operation
+failed. Errors and step limits are reported without clearing the continuation point.
+A later authorized request receives `execution_interrupted` and a current opaque
+`interruption_id`; discovery runs no step and writes no fictitious history or turn KPI.
 
-A Graph thread with pending steps and no pending interrupt is therefore an
-interrupted execution. A new turn on it runs nothing and returns one
-`ExecutionInterruptedRuntimeEvent` (`kind="execution_interrupted"`). The event
-carries a `HumanInputRequest` (`stage="execution_interrupted"`, choices
-`continue`/`restart`, `metadata.node_id`/`node_title`) and an opaque
-`interruption_id` derived from the thread head. That turn writes no history and
-no turn KPI.
+`interrupted_action="continue"` requires that id, empty input and no HITL payload.
+It continues with saved state and current authorization, without a user row. `restart`
+starts a new turn and does not undo prior external effects. The chat also offers Later,
+a local dismissal that leaves saved work intact. HTTP refusals restore controls;
+accepted streams are never automatically replayed. Stop intent survives navigation,
+but not reload, and is consumed only on HTTP acceptance.
 
-`RuntimeExecuteRequest.interrupted_action` answers it:
+The author must persist operation identity and content before an external call and
+provide safe replay or reconciliation. A durable receipt permits finalization without
+republishing. Fred does not provide exactly-once external delivery. The supported usage
+has one active execution per Graph conversation; ordinary-turn/Restart races, partitions
+and late writers are not coordinated. Agent definitions must remain compatible with
+saved state. ReAct/Deep and ordinary HITL retain their existing behavior. Non-interactive
+Graph callers retain their documented restart behavior.
 
-- `continue` requires `interruption_id`, allows empty `input` and excludes
-  `resume_payload`. It resumes the interrupted step with `astream(None)`. The id is
-  validated read-only first, then the HITL single-use claim keyed
-  `continue:{interruption_id}` is taken. A stale or
-  unknown id, or a non-Graph agent, gets an execution error and nothing runs.
-  The continued exchange persists its assistant rows without a user row.
-- `restart` runs the input as an ordinary new turn. Non-Graph agents ignore it.
+Authoring and acceptance scenarios: `openspec/changes/resume-interrupted-graph-execution/`.
+This slice does not complete the broader external-effect contract in #2892.
 
-`GraphExecutor.invoke`, in-process child invocations and the OpenAI-compatible
-route have no one to ask, so they restart. Pending steps cannot tell a lost run
-from one still running elsewhere; nothing stops a user from continuing a run that
-is still live on another replica or tab. The chat renders the event with `HitlPrompt`, puts the card back when
-the answer never started, and sends `restart` for the first message of a session the
-user stopped. A step re-run by `continue`
-repeats any side effect inside it: commit externally with a key fixed in an
-earlier step. Full rationale:
-`openspec/changes/resume-interrupted-graph-execution/design.md`.
+### 8.101 Bounded admission for technical continuation (revised 2026-10-04)
 
-### 8.101 Technical Graph continuation survives the continuing process's loss (2026-10-02)
+Technical Continue uses the existing PostgreSQL transaction advisory lock or local
+SQLite POSIX file lock, not a permanent HITL claim. It validates the checkpoint inside
+admission and closes the underlying engine stream before releasing ownership. This
+rejects overlapping continuations while held; it does not establish global ownership
+against ordinary turns, Restart or external requests surviving cancellation.
 
-Supersedes the technical-continuation HITL claim reuse in §8.100. Ordinary HITL
-claims remain single-use and unchanged. `GraphExecutor` holds owner-lifetime
-admission on the Graph thread around a `continue`, including direct SDK calls.
-It validates the current interruption inside admission and resumes with
-`astream(None)`, preserving checkpoint identity and persisted tool-task results.
-
-PostgreSQL uses a non-blocking transaction-scoped advisory lock; ownership ends
-when the transaction exits or the database observes connection loss. Pooled
-engines require at least two base connections; a pod-local capacity guard leaves
-checkpoint connections available and rejects excess continuation admission.
-File-backed SQLite on a local POSIX filesystem uses non-blocking file locks in
-`<database>.graph-locks/`; closing the handle or process loss releases ownership.
-Other providers fail explicitly. SQLite sidecars must not be removed while any
-runtime process is running. No schema migration or claim purge is required.
-
-A continuation lost in the same step is continuable again without restarting
-completed preparation. Concurrent continuations are refused while an owner is
-live. This does not coordinate new turns/Restart or fence late checkpoint writers.
-
-Checkpoint persistence is not atomic with an external operation. An interrupted
-step may execute again even if its external effect committed. Agent authors own
-idempotent replay or reconciliation using identity/content prepared in an earlier
-persisted step. The runtime does not promise exactly-once external effects.
+PostgreSQL requires at least two base pool connections (or NullPool), reserves at most
+half the base pool for continuations and disables transaction timers locally while
+holding admission. File-backed SQLite uses `<database>.graph-locks/`; do not remove
+sidecars while any runtime process is running. Unsupported providers reject Continue.
+No schema migration, claim purge, lease or heartbeat is introduced.

@@ -1,3 +1,35 @@
+## Current scope revision — 2026-10-04
+
+The sections below are historical results from the previous scope; they are not
+validation of the revised implementation. In particular, terminal cleanup, permanent
+technical claims and process-death inference are superseded by design.md.
+
+Current work removes terminal cleanup/ownership stamping, retains unfinished state,
+awaits compiled-stream teardown, requires empty Continue input, adds local Later and
+uses HTTP acceptance for controls/Stop intent. The runtime client was regenerated with
+`uv run python scripts/generate_openapi.py` in fred-runtime and
+`npx --no-install @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json`
+in the frontend.
+
+Regression scenarios were updated/added for error and step-limit continuation,
+publication commit/response loss (including a real subprocess), receipt persistence
+failure, finalization after a durable receipt, stream closure during progress, empty
+Continue input, Later, HTTP refusal and retained Stop intent. These tests were NOT RUN:
+the developer explicitly requested no tests or code-quality. Real fred-rags adapter
+validation is also outstanding; its replay support is developer-confirmed, not tested here.
+
+Independent read-only reviews covered the full production branch for minimality and
+the implementation delta for correctness. No production blocker was found within the
+single-active-execution scope. Native LangGraph inspection supports error-task replay
+and renewed recursion budget; that is static evidence, not a runtime test result.
+The review requested unfinished-work wording and step-limit continuation coverage;
+both were addressed. No distributed ownership mechanisms were added.
+
+Acceptance tasks stay open until their requested verification is performed. Do not
+archive the change or describe the PR as verified/ready based on these static reviews.
+
+---
+
 ## Verification evidence (2026-10-01, uncommitted working tree)
 
 | Check | Result |

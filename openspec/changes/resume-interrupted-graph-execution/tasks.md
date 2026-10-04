@@ -6,13 +6,19 @@ The developer currently requests no tests or code-quality execution; verificatio
 scenarios below are planned, not results, and must respect that instruction.
 
 - [x] 1.1 Reframe the existing proposal, design and delta spec around preserved Graph work, explicit choice and single-active-execution usage; verify that distributed recovery and ReAct/Deep implementation are excluded.
-- [ ] 1.2 Retain sync durability, opaque interruption identity, current authorization, existing provider admission and completed-task reuse; verify the retained paths against the revised spec and existing regression coverage.
+- [x] 1.2 Retain sync durability, opaque interruption identity, current authorization, existing provider admission and completed-task reuse; verify the retained paths against the revised spec and existing regression coverage.
+
+Implementation status: the production delta for 2.1–2.2 and 3.1–3.3 and the
+regression scenarios in section 4 are written. Those boxes remain open because their
+execution-based verification has not been authorized/performed. Reviews of the full
+production diff (minimality) and corrective delta (correctness) are recorded in
+verification.md. The change is not ready for archive.
 
 ## 2. Remove terminal cleanup and finish local lifecycle
 
 - [ ] 2.1 Remove `_end_unfinished_run`, `_RUN_KEY`, run ownership stamping and cleanup-only helpers/imports after checking consumers. Replace cleanup tests with preservation scenarios for node errors, step limits and publication timeout. Verify native engine state remains continuable without new recovery machinery; report a contract gap if not.
 - [ ] 2.2 Close and await the underlying compiled stream inside the existing admission scope. Verify a close during a custom progress event waits for node teardown before another continuation can acquire admission.
-- [ ] 2.3 Retain existing provider locks, capacity bounds and unsupported-provider rejection without adding leases, heartbeats or ordinary-turn coordination; verify no permanent technical HITL claim is reintroduced.
+- [x] 2.3 Retain existing provider locks, capacity bounds and unsupported-provider rejection without adding leases, heartbeats or ordinary-turn coordination; verify no permanent technical HITL claim is reintroduced.
 
 ## 3. Align request and user decisions
 
@@ -29,7 +35,7 @@ scenarios below are planned, not results, and must respect that instruction.
 
 ## 5. Reconcile and review
 
-- [ ] 5.1 Update existing runtime contract, UX and migration note to the final implementation. Verify they state single-active-execution usage, retained provider prerequisites and changed behavior after failure, with no process-death or exactly-once claim.
+- [x] 5.1 Update existing runtime contract, UX and migration note to the final implementation. Verify they state single-active-execution usage, retained provider prerequisites and changed behavior after failure, with no process-death or exactly-once claim.
 - [ ] 5.2 Reconcile the existing PR description and verification evidence; preserve historical evidence as such. Record the real fred-rags adapter validation as downstream adoption evidence, not something the generic fixture proves.
 - [ ] 5.3 Review the full final diff against swift, including an independent bounded review. Evaluate findings against this scope before adding mechanisms; prefer deletion or explicit constraints. Run only authorized verification and record exclusions.
 - [ ] 5.4 When revised acceptance is met, sync/archive this change and leave #2892 open for broader guarantees. Record ReAct/Deep lessons without implementing those follow-ups here.

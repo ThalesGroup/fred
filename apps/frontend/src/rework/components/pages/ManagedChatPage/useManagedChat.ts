@@ -875,6 +875,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         const prompt = pendingHitl;
         const interruptionId = prompt.payload.metadata?.interruption_id;
         replacePendingHitls([]);
+        if (answer === "later") return;
         // A request that never started leaves the run interrupted: offer the choice again.
         const restoreIfNotSent = (started: boolean) => {
           if (!started && activeSessionIdRef.current === prompt.session_id) {

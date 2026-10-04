@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Offer to continue a Graph run interrupted by a lost process"
+title: "Explicitly continue unfinished Graph work"
 impact: none
 configuration: none
 configuration_reason: "Runtime and frontend behaviour only; no configuration key, default or chart value changes."
@@ -25,9 +25,8 @@ No configuration changes are required.
 
 Deploy Fred normally. Graph checkpoints are now written synchronously per step.
 A conversation whose Graph thread was already left with pending steps before the
-upgrade is offered **Continue** or **Restart** on its next message. If the
-interrupted step fails again on Continue, the thread is cleared and the next
-message behaves as before.
+upgrade is offered **Continue** or **Restart** on its next message. Node errors and step limits retain pending work instead of automatically clearing
+it. A later message offers explicit recovery; no automatic retry is introduced.
 
 ## Validation
 
@@ -62,3 +61,13 @@ process is running. They may be removed with all runtime processes stopped.
 An interrupted step may repeat an already committed external effect. The agent
 author owns idempotent replay or reconciliation of the same prepared operation;
 checkpoint storage is not atomic with an external destination.
+
+## Supported usage and external effects
+
+Use one active execution per Graph conversation and a compatible agent definition.
+The continuation lock does not coordinate ordinary new turns or Restart across pods;
+stop or wait for other executions before recovering. Fred reports unfinished work,
+not proven owner death. Restart is not rollback; Later leaves the checkpoint intact.
+Persist stable operation identity and content in a preparation step, reconcile/replay
+publication through the destination's idempotency contract, then persist its receipt
+before finalization. An error or timeout is not proof of no external effect.
