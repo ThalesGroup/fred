@@ -1,269 +1,128 @@
 ## Context
 
-The motivation is in proposal.md. The relevant current behaviour of the Graph path:
-
-- `GraphExecutor._run` calls `self._compiled.astream(graph_input, ...)` without
-  `durability`. LangGraph 1.2.x then defaults to `"async"`: a step's checkpoint is written
-  while the next step already runs.
-- `GraphExecutor._graph_input` returns `Command(resume=...)` for a HITL resume. In every
-  other case it returns a full state built by `build_turn_state`, so LangGraph starts at
-  `START`. Only declared carry fields survive from the previous state.
-- A node failure without `on_error`, a `GraphRecursionError` and any other exception end
-  the run in the same process. Each of them can leave the thread's latest checkpoint with
-  pending `next` nodes.
-- A client disconnect or the Stop control cancels the stream (`CancelledError`, which is
-  not an `Exception`). The run ends, and its response, history and KPIs are dropped
-  (contract §8.89).
-- `agent_app` admits a HITL resume through a read-only validation, then a durable claim
-  (`_claim_hitl_resume_before_invocation` over `checkpoint_hitl_claim`), taken just
-  before invoking the executor. The Graph branch keys the claim by
-  `executor.thread_id(execution_config)`.
-- The frontend renders HITL requests with `HitlPrompt`, which is driven by a
-  `HumanInputRequest`. It can already restore a draft into the composer
-  (`onTurnRejected`).
-
-A throwaway spike was run on `FredSqlCheckpointer` (SQLite file) with LangGraph 1.2.12,
-using `Command(goto=...)` nodes `a → b → c` and `durability="sync"`. It was not committed.
-
-| Case | Observed |
-|---|---|
-| Process killed (`os._exit`) inside `b` | A new process reads `next=('b',)`, no interrupts, no task error |
-| `astream(None)` in that new process | Runs `b` and `c` only (`a` is not re-run) and completes |
-| `b` raises | Leaves `next=('b',)` with a task error. `aupdate_state(cfg, None, as_node=END)` then gives `next=()` and keeps the values. |
+See proposal.md for the consumer and scope. The existing branch already provides
+synchronous Graph durability, explicit continuation and PostgreSQL/SQLite admission.
+The revised scope was approved in conversation: preserve Marc's prepared publication,
+ask the user when execution is unfinished, and avoid distributed recovery machinery.
+One active execution per Graph conversation is a usage constraint, not an enforced
+global scheduling guarantee. Graph is not yet in production for this consumer.
 
 ## Goals / Non-Goals
 
-**Goals:**
+**Goals:** preserve prepared state, explicitly resume using current authorization,
+and make uncertainty visible. The reference workflow is prepare -> publish -> finalize.
 
-- Use only public LangGraph APIs: `durability`, `aget_state`, `astream(None, ...)` and
-  `aupdate_state(..., as_node=END)`.
-- Add no new persistent state and no migration.
-- Reuse the HITL request model and card. Keep ordinary HITL single-use admission and
-  history semantics untouched; technical continuation must survive its owner's loss.
-
-**Non-Goals:**
-
-- Automatic continuation, background recovery or retries. A continuation always comes
-  from an explicit user choice.
-- Owner leases, fencing a late writer, or an external-effect journal. Business
-  idempotency of external commits remains the agent author's responsibility: fix the key
-  in an earlier step and publish idempotently.
-- Atomicity between checkpoint storage and an external destination, or exactly-once
-  external effects. An interrupted step may restart even after its external operation
-  committed. The author must safely replay or reconcile the same prepared operation;
-  an unsafe destination must not be blindly retried. Native LangGraph task caching is
-  retained, but does not remove the commit-before-result-persistence window.
-- ReAct and Deep agents.
-- Showing the card when a conversation loads, and recovering the crashed turn's user
-  message.
+**Non-Goals:** process-death detection, automatic retries, concurrent new-turn/Restart
+coordination, late-writer fencing, network-partition recovery, exactly-once delivery,
+a generic external-effect journal, ReAct/Deep changes, or reconstructing the lost
+user message. This slice does not satisfy the whole of #2892.
 
 ## Decisions
 
-### D1. Sync durability for every Graph agent, without a flag
+### 1. Preserve the boundary between preparation and publication
 
-`astream(..., durability="sync")` is passed unconditionally in `GraphExecutor._run`.
-LangGraph then awaits the step's checkpoint future before the next tick.
+Keep `durability="sync"` for Graph. The agent's preparation step records both the exact
+operation content and its stable business identity. The publication step uses that
+identity to replay or query the destination; finalization uses a persisted receipt.
+Checkpoint identity is a runtime continuation identity, not the business idempotency key.
 
-Alternative considered: an SDK opt-in such as `GraphWorkflow(durable=True)`. It was
-rejected. The cost is one awaited database write per step, which is small next to model
-calls. Every Graph agent benefits. A flag would add surface that everyone should enable
-anyway. The latency effect is checked with `fred-performance-reviewer`.
+No runtime-specific publication model is added. A domain-neutral test destination proves
+the contract inside Fred; fred-rags validates its real adapter separately. A received
+but unpersisted acknowledgement still requires safe replay/reconciliation. A failure
+before durable preparation prevents publication.
 
-### D2. "Interrupted" means the process was lost, not that the run failed
+### 2. Preserve unfinished work instead of inferring why it stopped
 
-The executor reads the thread state that `_graph_input` already loads. The thread is
-interrupted when all of the following hold:
+Keep the existing `execution_interrupted` wire kind for compatibility within the branch,
+but describe it as unfinished execution. Pending steps without a HITL pause do not
+prove that an owner died or that an external operation failed.
 
-- `snapshot.next` is non-empty;
-- `snapshot.interrupts` is empty;
-- the request is not a HITL resume.
+Remove `_end_unfinished_run`, its `_RUN_KEY` ownership metadata and cleanup-only helpers
+and tests where no other consumer needs them. Do not clear pending steps on node error,
+step limit or missing completion. Keep error reporting; do not convert the error itself
+into success or automatically resume it. A later request discovers whatever unfinished
+state the engine retained. Completed state and ordinary HITL retain their existing paths.
+Verify native engine behavior for errors and limits before claiming acceptance; if it
+cannot support this contract, report the concrete gap instead of inventing recovery state.
 
-For this test to mean "process lost", every run that ends in a live process must leave
-`next` empty. In the `GraphRecursionError` branch, the generic `Exception` branch and the
-"no completed state" branch, `_run` therefore calls
-`await self._compiled.aupdate_state(thread, None, as_node=END)`. That is LangGraph's
-public "clear all tasks" form. It keeps the channel values, so carry-forward for the next
-turn is unchanged. The clearing is best-effort and logged. If it fails, the next message
-offers `continue`, which re-runs the failed step, fails, and is then cleared: a degraded
-but safe path.
+This supersedes the former terminal-cleanup requirement and its race-fixing task. The
+chosen response to that finding is deletion, not atomic cleanup or additional locks.
 
-The clearing is fenced to the failing run. Each run puts a `fred_graph_run` id in its
-`configurable`, and LangGraph copies that id into the metadata of every checkpoint the
-run writes. A run clears the thread only when the head is still the one it started from,
-or carries its own run id. A head that another run has advanced keeps its pending steps.
-The check covers a checkpoint saved but not yet streamed, which happens at the step
-limit.
+### 3. A user decision is explicit and does not establish an external outcome
 
-Cancellation is deliberately **not** cleared. A closed tab or a network loss looks like a
-crash to the user and stays continuable. The deliberate Stop case is handled by the
-client (D6).
+Reuse the existing card, localized in EN/FR. Explain that the previous execution is
+unfinished and an external operation may already have happened. Present:
 
-Alternative considered: inspecting `snapshot.tasks[*].error`. It was rejected because it
-does not cover the step limit, where pending tasks carry no error. It would also tie the
-result to how LangGraph records failed writes internally.
+- Continue: resume the pending work with the persisted state and current authorization.
+- Restart: start a new turn; warn that prior external effects are not undone.
+- Later: dismiss locally without a request, state mutation or erasure; the next message
+  rediscovers unfinished work. No new persisted dismissed state is needed.
 
-### D3. Interruption identity
+The author must make the continued operation replayable or reconcilable. A generic
+confirmation does not make an unsafe operation safe; unsupported destinations require
+external verification and must not be blindly retried. This is an authoring constraint,
+not a new runtime capability registry or automatic safety classifier.
 
-`interruption_id` is the first 32 hex characters of
-`sha256(thread_id + "\0" + head_checkpoint_id)`. Here `head_checkpoint_id` comes from
-`snapshot.config["configurable"]["checkpoint_id"]`.
+Continue requires its current opaque interruption id and empty input, with no HITL
+resume payload. It preserves the composer draft and adds no user row. Restart keeps
+this branch's original submitted text/command behavior; rebuilding attachments or a
+new draft-editing flow is not added. Discovery on conversation load remains out of scope.
 
-- The identifier is opaque. It does not reintroduce `checkpoint_id` on the wire, which
-  contract §8.86 removed.
-- It changes as soon as the thread advances, so a stale `continue` is detected by
-  recomputing it from the current head. No state is stored for this.
-- The executor recomputes it on `continue`. A mismatch, or no interrupted execution,
-  raises an execution error before anything runs.
+Use the existing HTTP acceptance callback to distinguish a refused request from an
+accepted stream: restore controls on a known refusal and consume Stop intent only on
+acceptance. A transport failure after acceptance is uncertain; do not retry automatically.
+Stop remains a session-local browser intent, retained across navigation but not reload.
 
-### D4. The new event wraps a `HumanInputRequest`
+### 4. Retain bounded admission, not a distributed ownership promise
 
-The new type is
-`ExecutionInterruptedRuntimeEvent(kind="execution_interrupted", request: HumanInputRequest, interruption_id: str)`.
-Its request has these values:
+Keep the current PostgreSQL transaction advisory lock and local SQLite file lock for
+technical continuations, including their pool-capacity guard and cancellation cleanup.
+No new lock protocol, TTL, lease or heartbeat is introduced. Providers that cannot
+support the existing admission explicitly reject Continue.
 
-| Field | Value |
-|---|---|
-| `stage` | `"execution_interrupted"` |
-| `title` | English text naming the interrupted step: the node title, falling back to the node id. `__fred_complete__` is rendered as a generic "final step". |
-| `choices` | `continue` and `restart` |
-| `metadata` | `node_id` and `node_title` |
-| `interrupt_id` | not set |
+Close and await `compiled.astream` inside the admission scope, as well as the Fred
+wrappers, so local engine teardown finishes before release. Test closure during a
+progress event, not only after final output. This does not prove a cancelled external
+request had no effect.
 
-The frontend renders it with `HitlPrompt`. It uses localized strings for this stage and
-takes the step name from `metadata`.
+The supported usage has one active execution per conversation. The existing lock only
+rejects competing continuations while held; it does not coordinate ordinary runs or
+Restart. Users must stop/wait for other executions before resuming. Do not infer owner
+death from elapsed time or offer a force-unlock action. Cross-pod races and late writes
+outside that usage contract remain explicitly unsupported.
 
-Alternative considered: emitting a real `awaiting_human` event and answering it through
-`resume_payload`. It was rejected for three reasons:
+### 5. Keep API and security convergence
 
-- the HITL admission requires a pending LangGraph interrupt, and there is none;
-- faking one would fabricate a human approval, which #2892 forbids;
-- it would write HITL request/response rows into history.
-
-### D5. Request plumbing and admission
-
-- **`RuntimeExecuteRequest`** gains `interrupted_action: Literal["continue", "restart"] | None`
-  and `interruption_id: str | None`. Validation:
-  - `continue` requires `interruption_id` and forbids `resume_payload`; input may be
-    empty;
-  - `interruption_id` is only valid with `continue`;
-  - `restart` keeps the ordinary input rule.
-
-  The internal `_AgentExecuteRequest` and `_to_internal_request` mirror these fields.
-  `ExecutionConfig` carries both fields to the executor.
-- **Graph branch of `agent_app`.**
-  - For `continue`, `GraphExecutor.interruption_id()` first validates the id read-only,
-    so a stale id or a failed read leaves no admission behind. Admission must reject a
-    concurrent continuation and become recoverable if its owner process dies before
-    the pending step completes. The executor re-checks the id after admission.
-  - For a non-Graph executor, `continue` raises an execution error and `restart` is
-    ignored.
-  - Authorization runs before any of this, unchanged. The event is only produced inside
-    the executor stream, which runs after `_authorize_and_resolve`.
-
-**Owner-lifetime admission (confirmed 2026-10-02).** `GraphExecutor` holds a lock
-around a technical continuation, before reading and validating the checkpoint. It
-uses the checkpointer's table namespace and Graph thread identity, so direct SDK calls
-and pod execution share admission. The lock neither advances the checkpoint nor clears
-pending writes; completed LangGraph tool-task results remain reusable. Technical
-continuations no longer consult or write permanent HITL claims. Existing technical
-claim rows are inert; ordinary HITL claims are unchanged.
-
-- PostgreSQL uses `pg_try_advisory_xact_lock`, with Fred's `advisory_lock_key`, on a
-  transaction held for the continuation. Normal exit rolls back/commits the transaction;
-  process loss closes its connection and PostgreSQL releases ownership. The admission
-  transaction locally disables idle-in-transaction and transaction timeouts,
-  so a server timer cannot steal a long-running step; pooled settings are restored
-  afterward. Each live continuation holds one connection in addition to checkpoint I/O. A pod-local capacity
-  guard shared by checkpointers on the same pool reserves at most half the pool's base
-  size for owners, leaving checkpoint capacity. Exhaustion is explicitly rejected.
-  A pooled engine needs at least two base connections; `NullPool` is also supported.
-- File-backed SQLite on a local POSIX filesystem uses non-blocking `flock` on one empty
-  sidecar file per table namespace and Graph thread, under `<database>.graph-locks/`.
-  File acquisition is offloaded; cancellation closes even a late worker's handle.
-  Closing the handle or losing the process releases ownership. Files are never unlinked
-  while the runtime is running, since replacing a locked inode breaks exclusion.
-- Unsupported providers, SQLite memory/URI databases, and insufficient PostgreSQL pools
-  explicitly reject technical continuation; there is no unguarded fallback.
-
-No TTL, lease, heartbeat, new schema or external-effect journal is added. PostgreSQL
-ownership lasts until the database observes transaction/connection termination; network
-partitions or server-side connection termination are not evidence that an old worker's
-external request has stopped. New-turn/Restart races, late-writer fencing and failure
-cleanup remain outside this corrective slice.
-- **`GraphExecutor._graph_input`** decides which mode applies:
-
-  | Request | Thread interrupted? | Mode |
-  |---|---|---|
-  | `continue` | yes, with the matching `interruption_id` | `None` input (continue) |
-  | none | yes | report the interruption |
-  | `restart` or none | no | today's fresh-turn path |
-
-  `_run` turns "report the interruption" into the event and returns. It runs no step and
-  produces no final event.
-- **`_stream` and the non-streaming `execute`.** When a payload of kind
-  `execution_interrupted` is present, they skip `_emit_turn_completed` and
-  `_write_turn_history`. A continued turn has no user message, so `_write_turn_history`
-  writes no user row. Its assistant rows go into a fresh exchange.
-
-### D6. Frontend
-
-- `useChatSse` maps `execution_interrupted` to a new callback. `useManagedChat`:
-  - restores the draft, reusing the `onTurnRejected` mechanism;
-  - stores the request and `interruption_id`;
-  - renders `HitlPrompt` in the thread with localized title, question and choices for
-    this stage.
-- **Continue** sends a turn with `interrupted_action: "continue"` and the
-  `interruption_id`, with empty input and no new user bubble.
-- **Restart** re-sends the same wire text and command with
-  `interrupted_action: "restart"`.
-- `send()` reports whether the turn started. Either choice puts the card back when its
-  request never started (token, session write or preparation failure), as the HITL
-  resume path already does.
-- A set of session ids records which sessions the user stopped; switching sessions
-  does not clear it. The next send in a stopped session adds
-  `interrupted_action: "restart"`, and the session leaves the set when that turn starts.
-- Types come from the regenerated runtime client. No hand-written duplicate is added.
+Retain the event/request types and regenerate the runtime client after validation changes.
+Authorization and current runtime binding precede discovery/continuation. A stale id is
+rejected without running a node. Reporting unfinished work creates no fictitious user
+history or completed-turn KPI. Non-Graph Continue remains rejected; ReAct/Deep are unchanged.
+Existing invoke/child/OpenAI-compatible callers retain their documented restart behavior;
+this is not an assurance that their external operations can safely be repeated.
 
 ## Risks / Trade-offs
 
-- **[A run still executing elsewhere looks interrupted, because its pending steps
-  are identical.]** A second tab or device can be offered Continue for a live run
-  and execute the same step concurrently. Before this change, a second message
-  already started a concurrent turn on the same thread. Mitigation: Continue needs
-  an explicit click, and the single-use claim deduplicates continues. A liveness
-  lease is the follow-up that would close this; it is not built here (#2892 owner
-  recovery).
-- **[Some callers cannot present the choice.]** `GraphExecutor.invoke`, child
-  invocations and the OpenAI-compatible route therefore default to `restart`.
-  Direct `/agents/execute` API clients receive the typed event and must answer it.
-- **[Restart re-sends the same wire text and command, but not attachments.]**
-  Attachments were cleared when the turn started.
-
-- **[Owner-lifetime locks hold resources for the duration of a continuation.]**
-  PostgreSQL reserves connection capacity; SQLite retains empty sidecar files. There is
-  no timer-based stealing of a live owner. Sidecar cleanup is only safe with all runtime
-  processes stopped.
-- **[Threads left with pending tasks before deployment are offered `continue` after
-  deployment]**, including threads that ended in a node failure. Mitigation: a continue
-  re-runs the failed step. If it fails again, the thread is cleared and the next message
-  behaves as before. This is documented in the migration note.
-- **[The step re-run on `continue` may repeat an already committed external effect.]**
-  This is the accepted contract: the agent author fixes identity and content in an
-  earlier persisted step, and owns idempotent replay or outcome reconciliation.
-- **[After a reload, the crashed turn's user message is missing from history]** (§8.89).
-  Mitigation: the card names the interrupted step. Recovery of that message is a
-  non-goal.
-- **[The Stop flag is in memory only.]** A reload right after Stop forgets it, so the card
-  appears. That is harmless, because `restart` is offered.
-- **[The sync write adds latency per step.]** It is measured in the performance review.
-  It is one write per step and is already performed today, only asynchronously.
+- Preserving failed work can offer a retry that fails again: show the error, require an
+  explicit decision and allow Restart/Later; no automatic retry policy.
+- A running execution elsewhere can look unfinished: state that uncertainty and require
+  single-active-execution usage; no claim that user confirmation establishes exclusivity.
+- A repeated external call can duplicate an effect: use the author's stable identity and
+  destination contract; Restart is not rollback.
+- Sync persistence adds awaited database latency; a PostgreSQL continuation holds one
+  extra connection. Retain existing bounded admission, without claiming measured throughput.
+- A deployment changing graph topology/state may invalidate continuation: this slice
+  assumes a compatible agent definition, without adding a version-negotiation system.
 
 ## Migration Plan
 
-- The change is additive on the wire. An old frontend sees `execution_interrupted` as an
-  unknown event: the turn shows no answer. It needs the updated frontend to offer the
-  choice, so the frontend and runtime ship in the same release.
-- No operator action and no schema change. A migration note is required by repository
-  policy.
-- Rollback: revert the runtime and the frontend. Threads keep their checkpoints, and the
-  next message restarts as before.
+Update existing runtime contract, UX description, migration note and PR description when
+implementing the delta. Deploy frontend and runtime together; identify changed behavior
+after node errors and pending pre-upgrade checkpoints. No schema migration is introduced.
+Preserve provider prerequisites from the existing migration note. Rollback restores
+previous restart behavior and does not undo external publications.
+
+## Follow-up for ReAct and Deep
+
+Later examine their shared executor's persistence boundaries, tool-result reuse and
+stream teardown against this concrete Graph example. Do not add Continue to those
+engines or claim generic external-effect guarantees in this change.
