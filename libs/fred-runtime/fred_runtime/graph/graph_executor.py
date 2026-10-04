@@ -500,12 +500,16 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         )
         try:
             # "sync": a step's checkpoint is persisted before the next step starts.
+            # LangGraph annotates this async generator as AsyncIterator.
             async with aclosing(
-                self._compiled.astream(
-                    graph_input,
-                    config=run_config,
-                    stream_mode=["custom", "updates"],
-                    durability="sync",
+                cast(
+                    AsyncGenerator[Any, None],
+                    self._compiled.astream(
+                        graph_input,
+                        config=run_config,
+                        stream_mode=["custom", "updates"],
+                        durability="sync",
+                    ),
                 )
             ) as events:
                 async for raw_event in events:
@@ -553,7 +557,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         )
 
     def _interrupted_event(self, snapshot: Any) -> ExecutionInterruptedRuntimeEvent:
-        node_id = snapshot.next[0]
+        node_id = snapshot.next[0] if snapshot.next else snapshot.tasks[0].name
         node = self._nodes_by_id.get(node_id)
         title = node.title if node is not None else "final step"
         return ExecutionInterruptedRuntimeEvent(
@@ -694,8 +698,9 @@ def _recorder(config: RunnableConfig) -> _TurnRecorder:
 
 
 def _is_interrupted(snapshot: Any) -> bool:
-    # Pending non-HITL work does not tell us whether another owner is still live.
-    return bool(snapshot.next) and not snapshot.interrupts
+    # Completed task writes can outlive a failed step checkpoint: `next` then
+    # looks empty, but the engine still has tasks to settle on continuation.
+    return bool(snapshot.tasks) and not snapshot.interrupts
 
 
 def _checkpoint_id(config: Any) -> str | None:

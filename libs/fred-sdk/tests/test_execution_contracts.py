@@ -397,8 +397,10 @@ def test_continue_needs_no_input_but_an_interruption_id() -> None:
 def test_continue_rejects_new_input(text: str) -> None:
     with pytest.raises(ValueError, match="requires empty input"):
         RuntimeExecuteRequest(
-            agent_id="my-agent", interrupted_action="continue",
-            interruption_id="i-1", input=text,
+            agent_id="my-agent",
+            interrupted_action="continue",
+            interruption_id="i-1",
+            input=text,
         )
 
 

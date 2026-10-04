@@ -878,7 +878,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
   it("after Stop, the next message of that session restarts, even after visiting another session", async () => {
     flushPendingWrites = async () => true;
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => new Response("", { status: 200 }));
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response(": accepted\n\n", { status: 200 }));
     mount();
 
     await act(async () => {
@@ -901,7 +903,13 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     });
 
     const bodies = fetchSpy.mock.calls.map((call) => JSON.parse(String(call[1]?.body)));
-    expect(bodies.map((body) => body.interrupted_action)).toEqual([undefined, undefined, "restart", "restart", undefined]);
+    expect(bodies.map((body) => body.interrupted_action)).toEqual([
+      undefined,
+      undefined,
+      "restart",
+      "restart",
+      undefined,
+    ]);
     fetchSpy.mockRestore();
   });
 
@@ -911,7 +919,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     let accepted: boolean | undefined;
     await act(async () => {
       accepted = await latest.send("", "session-1", undefined, undefined, {
-        action: "continue", interruptionId: "int-1",
+        action: "continue",
+        interruptionId: "int-1",
       });
     });
     expect(accepted).toBe(false);

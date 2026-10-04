@@ -70,9 +70,12 @@ class _State(BaseModel):
 async def _prepare(state: _State, context: GraphNodeContext) -> StepResult:
     RUNS["prepare"] += 1
     ORDER.append("node:prepare")
-    return StepResult(state_update={
-        "plan": f"plan for {state.latest_user_text}", "operation_id": uuid4().hex,
-    })
+    return StepResult(
+        state_update={
+            "plan": f"plan for {state.latest_user_text}",
+            "operation_id": uuid4().hex,
+        }
+    )
 
 
 @typed_node(_State)
@@ -211,7 +214,11 @@ async def test_a_lost_run_is_offered_back_instead_of_restarted(
     assert dict(RUNS) == runs_before  # nothing ran
     assert event.request.stage == "execution_interrupted"
     assert event.request.metadata["node_id"] == "publish"
-    assert [choice.id for choice in event.request.choices] == ["continue", "restart"]
+    assert [choice.id for choice in event.request.choices] == [
+        "continue",
+        "restart",
+        "later",
+    ]
 
 
 _CRASHING_CHILD = """
@@ -452,7 +459,8 @@ async def test_a_node_failure_preserves_preparation_for_explicit_continuation(
     event = await _interruption(checkpointer)
     events = await _turn(
         await _executor(checkpointer),
-        interrupted_action="continue", interruption_id=event.interruption_id,
+        interrupted_action="continue",
+        interruption_id=event.interruption_id,
     )
     assert isinstance(events[-1], FinalRuntimeEvent)
     assert RUNS["prepare"] == 1
@@ -469,7 +477,8 @@ async def test_the_step_limit_preserves_pending_work(
     event = await _interruption(checkpointer)
     result = await _turn(
         await _executor(checkpointer),
-        interrupted_action="continue", interruption_id=event.interruption_id,
+        interrupted_action="continue",
+        interruption_id=event.interruption_id,
     )
     assert result[-1].content == "published plan for migrate"
     assert RUNS["prepare"] == 1
@@ -775,43 +784,59 @@ def test_pod_rejects_a_stale_continue_without_leaving_a_claim(
 
 
 @pytest.mark.asyncio
-async def test_publication_response_loss_reuses_identity_and_content(checkpointer, tmp_path) -> None:
+async def test_publication_response_loss_reuses_identity_and_content(
+    checkpointer, tmp_path
+) -> None:
     BEHAVIOUR.update(destination=str(tmp_path), publish="response_lost")
     events = await _turn(await _executor(checkpointer))
     assert "An error occurred" in events[-1].content
     # Use the persisted identity to inspect the fake destination, not a new key.
     executor = await _executor(checkpointer)
-    state = await executor._compiled.aget_state(executor._thread_config(ExecutionConfig(session_id="s1")))
+    state = await executor._compiled.aget_state(
+        executor._thread_config(ExecutionConfig(session_id="s1"))
+    )
     operation_id = state.values["operation_id"]
     assert (tmp_path / operation_id).read_text() == "plan for migrate"
     BEHAVIOUR.pop("publish")
     event = await _interruption(checkpointer)
-    result = await _turn(executor, interrupted_action="continue", interruption_id=event.interruption_id)
+    result = await _turn(
+        executor, interrupted_action="continue", interruption_id=event.interruption_id
+    )
     assert result[-1].content == "published plan for migrate"
     assert (tmp_path / operation_id).read_text() == "plan for migrate"
     assert RUNS == Counter(prepare=1, publish=2, finalize=1)
 
 
 @pytest.mark.asyncio
-async def test_durable_receipt_skips_publication_when_finalization_is_retried(checkpointer, tmp_path) -> None:
+async def test_durable_receipt_skips_publication_when_finalization_is_retried(
+    checkpointer, tmp_path
+) -> None:
     BEHAVIOUR.update(destination=str(tmp_path), finalize="fail")
     await _turn(await _executor(checkpointer))
     event = await _interruption(checkpointer)
     BEHAVIOUR.pop("finalize")
-    result = await _turn(await _executor(checkpointer), interrupted_action="continue", interruption_id=event.interruption_id)
+    result = await _turn(
+        await _executor(checkpointer),
+        interrupted_action="continue",
+        interruption_id=event.interruption_id,
+    )
     assert result[-1].content == "published plan for migrate"
     assert RUNS == Counter(prepare=1, publish=1, finalize=2)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("boundary", ["preparation", "receipt"])
-async def test_failed_persistence_does_not_advance_to_next_step(checkpointer, tmp_path, monkeypatch, boundary) -> None:
+async def test_failed_persistence_does_not_advance_to_next_step(
+    checkpointer, tmp_path, monkeypatch, boundary
+) -> None:
     BEHAVIOUR["destination"] = str(tmp_path)
     original = checkpointer.aput
 
     async def fail_boundary(config, checkpoint, *args, **kwargs):
         values = checkpoint.get("channel_values", {})
-        if (boundary == "preparation" and values.get("plan")) or (boundary == "receipt" and values.get("receipt")):
+        if (boundary == "preparation" and values.get("plan")) or (
+            boundary == "receipt" and values.get("receipt")
+        ):
             raise OSError("Checkpoint unavailable")
         return await original(config, checkpoint, *args, **kwargs)
 
@@ -822,22 +847,35 @@ async def test_failed_persistence_does_not_advance_to_next_step(checkpointer, tm
     assert RUNS["publish"] == (0 if boundary == "preparation" else 1)
     monkeypatch.setattr(checkpointer, "aput", original)
     event = await _interruption(checkpointer)
-    result = await _turn(await _executor(checkpointer), interrupted_action="continue", interruption_id=event.interruption_id)
+    result = await _turn(
+        await _executor(checkpointer),
+        interrupted_action="continue",
+        interruption_id=event.interruption_id,
+    )
     assert result[-1].content == "published plan for migrate"
 
 
 @pytest.mark.asyncio
-async def test_process_loss_after_publication_reuses_the_same_operation(tmp_path) -> None:
+async def test_process_loss_after_publication_reuses_the_same_operation(
+    tmp_path,
+) -> None:
     destination = tmp_path / "destination"
     destination.mkdir()
     database = tmp_path / "cp.sqlite3"
     child_code = _CRASHING_CHILD.replace(
         'BEHAVIOUR["publish"] = "exit"',
-        'BEHAVIOUR.update(publish="exit_after_commit", destination=' + repr(str(destination)) + ')',
+        'BEHAVIOUR.update(publish="exit_after_commit", destination='
+        + repr(str(destination))
+        + ")",
     )
     assert child_code != _CRASHING_CHILD
-    child = subprocess.run([sys.executable, "-c", child_code, str(database)],
-        env={**os.environ, "PYTHONPATH": str(Path(__file__).parent)}, capture_output=True, text=True, timeout=120)
+    child = subprocess.run(
+        [sys.executable, "-c", child_code, str(database)],
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).parent)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     assert child.returncode == 9, child.stderr
     before = {p.name: p.read_text() for p in destination.iterdir()}
     assert len(before) == 1
@@ -846,7 +884,11 @@ async def test_process_loss_after_publication_reuses_the_same_operation(tmp_path
     try:
         reopened = FredSqlCheckpointer(engine, prefix="v2_")
         event = await _interruption(reopened)
-        result = await _turn(await _executor(reopened), interrupted_action="continue", interruption_id=event.interruption_id)
+        result = await _turn(
+            await _executor(reopened),
+            interrupted_action="continue",
+            interruption_id=event.interruption_id,
+        )
     finally:
         await engine.dispose()
     assert result[-1].content == "published plan for migrate"
@@ -856,7 +898,9 @@ async def test_process_loss_after_publication_reuses_the_same_operation(tmp_path
 
 @pytest.mark.asyncio
 async def test_closing_during_progress_waits_for_node_teardown(checkpointer) -> None:
-    from fred_runtime.runtime_support.graph_resume_lock import GraphResumeAlreadyRunningError
+    from fred_runtime.runtime_support.graph_resume_lock import (
+        GraphResumeAlreadyRunningError,
+    )
     from fred_sdk.contracts.runtime import StatusRuntimeEvent
 
     cleaned = asyncio.Event()
@@ -876,19 +920,28 @@ async def test_closing_during_progress_waits_for_node_teardown(checkpointer) -> 
 
     class Agent(_Agent):
         workflow = GraphWorkflow(
-            entry="prepare", nodes={"prepare": _prepare, "publish": publish, "finalize": _finalize},
+            entry="prepare",
+            nodes={"prepare": _prepare, "publish": publish, "finalize": _finalize},
             edges={"prepare": "publish", "publish": "finalize"},
         )
 
-    runtime = GraphRuntime(definition=Agent(), services=RuntimeServices(checkpointer=checkpointer))
+    runtime = GraphRuntime(
+        definition=Agent(), services=RuntimeServices(checkpointer=checkpointer)
+    )
     runtime.bind(_binding())
     executor = cast(GraphExecutor, await runtime.get_executor())
-    config = ExecutionConfig(session_id="s1", interrupted_action="continue", interruption_id=event.interruption_id)
+    config = ExecutionConfig(
+        session_id="s1",
+        interrupted_action="continue",
+        interruption_id=event.interruption_id,
+    )
     stream = executor.stream(_Input(message="ignored"), config)
     try:
         assert isinstance(await anext(stream), StatusRuntimeEvent)
         with pytest.raises(GraphResumeAlreadyRunningError):
-            async with checkpointer.graph_resume_lock.acquire(executor.thread_id(config)):
+            async with checkpointer.graph_resume_lock.acquire(
+                executor.thread_id(config)
+            ):
                 pytest.fail("Admission released while the node is active")
     finally:
         await stream.aclose()

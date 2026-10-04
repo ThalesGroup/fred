@@ -1,32 +1,52 @@
-## Current scope revision — 2026-10-04
+## Current scope verification — 2026-10-04
 
-The sections below are historical results from the previous scope; they are not
-validation of the revised implementation. In particular, terminal cleanup, permanent
-technical claims and process-death inference are superseded by design.md.
+The historical sections below describe earlier revisions, including superseded
+terminal cleanup and permanent technical claims. Current scope follows design.md.
 
-Current work removes terminal cleanup/ownership stamping, retains unfinished state,
-awaits compiled-stream teardown, requires empty Continue input, adds local Later and
-uses HTTP acceptance for controls/Stop intent. The runtime client was regenerated with
+Automated verification of the revised implementation:
+
+- SDK execution contracts: 53 passed.
+- Targeted runtime continuation, admission, HITL and storage suites: 86 passed,
+  4 integration cases deselected.
+- Full offline runtime suite: 1,777 passed, 11 skipped (optional fastapi_mcp),
+  21 integration cases deselected. PostgreSQL was not rerun in this session.
+- Frontend chat, managed-chat and HITL suites: 132 passed across three files.
+- Root `make code-quality`: exit 0 across all modules. The developer will run
+  final root `make test` and code-quality after the remaining manual acceptance.
+
+Verification exposed a real failed-checkpoint boundary: completed pending task
+writes can leave snapshot.next empty while snapshot.tasks still needs settlement.
+Discovery now uses tasks, and continuation preserves the engine's cached writes.
+The preparation/receipt persistence regressions and full runtime suite pass.
+
+Independent read-only review covered origin/swift ffa228f4c04ff3b918889c14d0d4580c3cce6d67
+through 2ed7c78c4 plus the validation corrections: production Graph/SDK paths,
+generated client, UI consumers, provider admission, tests and documentation.
+No remaining actionable production defect was identified within the approved
+single-active-execution scope. Minimality review retained existing provider admission
+and native task reuse; no distributed recovery mechanisms were added.
+
+Manual evidence from the developer's local Test Assistant session:
+
+- Deliberate crash leaves a recoverable execution and exposes the three choices.
+- Continue retries the failing node, without a new user message; the pending draft remains.
+- Restart executes that draft once, produces a normal Echo answer and clears the composer.
+- The developer reports the subsequent chat/history checks look correct.
+- Two successive errors lack a visible indication that the second was a retry:
+  recorded as a UX observation, not a demonstrated execution defect.
+
+Still pending: explicit Later confirmation, successful continuation after manual
+interruption, and end-to-end publication replay with a suitable destination.
+The automated idempotent fixture covers committed publication with response loss,
+process loss, preparation/receipt persistence and durable receipt reuse; it does not
+prove the real fred-rags adapter. No load campaign or distributed ownership validation
+was performed. ReAct/Deep recovery remains excluded.
+
+The runtime client was regenerated from the SDK using
 `uv run python scripts/generate_openapi.py` in fred-runtime and
 `npx --no-install @rtk-query/codegen-openapi src/slices/runtime/runtimeOpenApiConfig.json`
-in the frontend.
-
-Regression scenarios were updated/added for error and step-limit continuation,
-publication commit/response loss (including a real subprocess), receipt persistence
-failure, finalization after a durable receipt, stream closure during progress, empty
-Continue input, Later, HTTP refusal and retained Stop intent. These tests were NOT RUN:
-the developer explicitly requested no tests or code-quality. Real fred-rags adapter
-validation is also outstanding; its replay support is developer-confirmed, not tested here.
-
-Independent read-only reviews covered the full production branch for minimality and
-the implementation delta for correctness. No production blocker was found within the
-single-active-execution scope. Native LangGraph inspection supports error-task replay
-and renewed recursion budget; that is static evidence, not a runtime test result.
-The review requested unfinished-work wording and step-limit continuation coverage;
-both were addressed. No distributed ownership mechanisms were added.
-
-Acceptance tasks stay open until their requested verification is performed. Do not
-archive the change or describe the PR as verified/ready based on these static reviews.
+in the frontend. Keep the change active until remaining acceptance is settled;
+unperformed interactive checks are not recorded as passes.
 
 ---
 
