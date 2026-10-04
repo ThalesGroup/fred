@@ -30,8 +30,10 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const probe = vi.hoisted(() => ({
   refetchTags: vi.fn(() => Promise.resolve({ data: [] })),
-  browse: vi.fn(() => ({ unwrap: async () => ({ documents: [], total: 0 }) })),
+  browse: vi.fn(() => ({ unwrap: async () => ({ documents: probe.documents, total: probe.documents.length }) })),
   canUpdateResources: true,
+  documents: [] as unknown[],
+  onTasksSettled: (_documentUids: string[]) => {},
 }));
 
 vi.mock("react-i18next", () => ({
@@ -58,7 +60,11 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   ],
 }));
 vi.mock("../../../../features/tasks/taskSlice", () => ({ selectActiveTasks: () => [], selectAllTasks: () => [] }));
-vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({ useRefetchOnTaskSettled: () => {} }));
+vi.mock("../../../../features/tasks/useRefetchOnTaskSettled", () => ({
+  useRefetchOnTaskSettled: (_type: string, onSettled: (documentUids: string[]) => void) => {
+    probe.onTasksSettled = onSettled;
+  },
+}));
 vi.mock("../../../../features/tasks/useNotifyOnNewTaskTarget", () => ({ useNotifyOnNewTaskTarget: () => {} }));
 vi.mock("../../../../../components/documents/common/useDocumentCommands", () => ({
   useDocumentCommands: () => ({
@@ -109,6 +115,7 @@ beforeEach(() => {
   probe.refetchTags.mockClear();
   probe.browse.mockClear();
   probe.canUpdateResources = true;
+  probe.documents = [];
   documentsChanged = 0;
 });
 
@@ -170,5 +177,26 @@ describe("DocumentWorkspace refresh action", () => {
 
     expect(refreshButton()).not.toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.menu.newFolder"]')).toBeNull();
+  });
+
+  it("reloads a folder once when several of its documents settle together", async () => {
+    const doc = (uid: string) => ({
+      identity: { document_uid: uid, title: uid, document_name: `${uid}.pdf`, uploaded_by: null },
+      file: { file_type: "pdf", file_size_bytes: 1024 },
+      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+      processing: { stages: { raw: "done" } },
+      tags: { tag_ids: ["tag-cir"] },
+    });
+    probe.documents = [doc("uid-1"), doc("uid-2")];
+    render();
+    click(folderButton("CIR"));
+    await act(async () => {});
+    probe.browse.mockClear();
+    const changedBefore = documentsChanged;
+
+    await act(async () => probe.onTasksSettled(["uid-1", "uid-2"]));
+
+    expect(probe.browse).toHaveBeenCalledTimes(1);
+    expect(documentsChanged).toBe(changedBefore + 1);
   });
 });

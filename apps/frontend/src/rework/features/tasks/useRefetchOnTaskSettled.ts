@@ -17,9 +17,10 @@ import { useSelector } from "react-redux";
 import { makeSelectSettledTargetsOfType, type SettledTarget } from "./taskSlice";
 
 /**
- * Run `onSettled(targetId)` exactly once when a task acting on an entity of
- * `targetType` settles on an outcome that changed that entity — `succeeded` or
- * `cancelled`.
+ * Run `onSettled(targetIds)` once for the tasks acting on entities of
+ * `targetType` that just settled on an outcome that changed their entity —
+ * `succeeded` or `cancelled` — or stopped being followed (untracked). Tasks that
+ * settle together come in one call, so the consumer can refresh each list once.
  *
  * Why this exists — a list/row derives its status from a cached copy of the
  * entity (e.g. a document's browse snapshot, an erasure schedule query result).
@@ -40,7 +41,7 @@ import { makeSelectSettledTargetsOfType, type SettledTarget } from "./taskSlice"
  *
  * `failed` deliberately does not fire: the document survives a failure and its
  * row keeps rendering from the retained task, so there is nothing to refetch.
- * Each task fires its callback once for the lifetime of the mount, so a task
+ * Each task is handed out once for the lifetime of the mount, so a task
  * already settled before mount triggers a single catch-up refetch.
  *
  * That catch-up is handed out after the mount commit, never inside it — the
@@ -49,7 +50,7 @@ import { makeSelectSettledTargetsOfType, type SettledTarget } from "./taskSlice"
  * mount commit reaches an instance that has not subscribed yet, and RTK Query
  * throws "Cannot refetch a query that has not been started yet".
  */
-export function useRefetchOnTaskSettled(targetType: string, onSettled: (targetId: string) => void): void {
+export function useRefetchOnTaskSettled(targetType: string, onSettled: (targetIds: string[]) => void): void {
   const selectSettled = useMemo(() => makeSelectSettledTargetsOfType(targetType), [targetType]);
   // Content-equality on task ids: only re-render when the settled set changes,
   // not on every progress event that mutates the task store.
@@ -68,11 +69,10 @@ export function useRefetchOnTaskSettled(targetType: string, onSettled: (targetId
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      for (const { taskId, targetId } of settled) {
-        if (handledRef.current.has(taskId)) continue;
-        handledRef.current.add(taskId);
-        onSettledRef.current(targetId);
-      }
+      const fresh = settled.filter(({ taskId }) => !handledRef.current.has(taskId));
+      if (fresh.length === 0) return;
+      for (const { taskId } of fresh) handledRef.current.add(taskId);
+      onSettledRef.current([...new Set(fresh.map(({ targetId }) => targetId))]);
     });
     // Nothing is marked handled until it is actually handed out, so a run
     // superseded by a newer set — or by unmounting — loses nothing.

@@ -1603,6 +1603,10 @@
         "action": "Try again",
         "relaunchFromRow": "This document has already arrived: relaunch its processing from its row in the table.",
         "unavailable": "This file has to be picked again before it can be retried."
+      },
+      "untracked": {
+        "summary": "Following stopped",
+        "detail": "The server no longer reports on this file, so its outcome is unknown here. Its row in the table shows the document's own status."
       }
     },
     "tokenUsageImpact": {
@@ -2429,7 +2433,8 @@
         "failed": "Failed",
         "pending": "Pending",
         "running": "Running",
-        "succeeded": "Done"
+        "succeeded": "Done",
+        "untracked": "No longer followed"
       },
       "time": {
         "daysAgo": "{{count}}d ago",

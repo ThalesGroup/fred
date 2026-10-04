@@ -22,8 +22,8 @@ export interface PlatformImportLaunch {
 }
 
 // Uploads a swift-native export .zip to the control-plane migration import
-// endpoint and returns the task id to follow. Progress is then streamed by the
-// shared task/event infrastructure (see useTaskSseManager), exactly like ingestion.
+// endpoint and returns the task id to follow. Its progress is then followed by
+// the shared task infrastructure (see useTaskPolling), exactly like ingestion.
 // Raw fetch (not the generated mutation) because the multipart upload is not
 // handled by the generated client; the response type is still the generated one.
 // Backend: POST /control-plane/v1/import-export/import (CONTROL-PLANE-PRODUCT-CONTRACT.md §27).

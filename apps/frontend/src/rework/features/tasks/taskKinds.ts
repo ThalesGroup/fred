@@ -35,9 +35,9 @@ export function getKindMeta(kind: string | null): TaskKindMeta {
   return (kind && TASK_KINDS[kind]) || DEFAULT_KIND_META;
 }
 
-// Which backend runs (and owns the SSE stream / acknowledgement endpoint for)
-// each task kind — the single source of truth `useTaskSseManager.taskEventsBasePath`
-// and `useTaskAcknowledgement` both route off, so the two can never drift apart
+// Which backend runs (and owns the task list / acknowledgement endpoint for)
+// each task kind — the single source of truth `useTaskPolling` and
+// `useTaskAcknowledgement` both route off, so the two can never drift apart
 // the way ack silently did (#2123 review). Add a kind here (and to TASK_KINDS
 // above) when the backend adds one.
 export type TaskBackend = "knowledge-flow" | "control-plane";

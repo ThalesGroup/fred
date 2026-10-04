@@ -45,7 +45,7 @@ export type ImportStage = "upload" | "analysis" | "decision";
 // FRONTEND-BACKLOG — "generate TaskEvent union"), these interfaces MIRROR the
 // canonical Pydantic models in libs/fred-core/fred_core/tasks/models.py and must be
 // updated together with them. Adding a backend kind means adding it here too (and
-// to taskEventsBasePath + taskKinds).
+// to taskKinds).
 //
 // `TaskLogEvent` (kind "log") is intentionally omitted: log tasks are an internal
 // diagnostic kind and are never surfaced in this UI, so the union covers only the
@@ -146,4 +146,7 @@ export interface TaskViewModel {
   // Populated from `MigrationTaskEvent.detail.result.warnings` only (see
   // taskSlice's taskEventReceived) — every other task kind leaves this null.
   warnings: string[] | null;
+  /** The owning backend answered without this task, so its outcome is unknown
+   *  and it is no longer followed. Never read as succeeded or failed. */
+  untracked: boolean;
 }

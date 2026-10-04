@@ -1113,6 +1113,7 @@ const injectedRtkApi = api.injectEndpoints({
           team_id: queryArg.teamId,
           kind: queryArg.kind,
           state: queryArg.state,
+          task_id: queryArg.taskId,
         },
       }),
     }),
@@ -2280,6 +2281,8 @@ export type ListTasksControlPlaneV1TasksGetApiArg = {
   teamId?: string | null;
   kind?: string | null;
   state?: string | null;
+  /** With scope=user: these of the caller's tasks, in any state (1 to 50). */
+  taskId?: string[] | null;
 };
 export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiResponse = /** status 200 Successful Response */ any;
 export type StreamTaskEventsControlPlaneV1TasksTaskIdEventsGetApiArg = {

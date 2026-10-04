@@ -81,6 +81,7 @@ function cardForMissingFile(entry: UnfinishedFile): TaskViewModel {
     terminalAt: entry.notedAt ?? null,
     acknowledgedAt: null,
     warnings: null,
+    untracked: false,
   };
 }
 
@@ -95,7 +96,7 @@ export function ImportPanel({ teamId }: { teamId: string | null }) {
   const { showError } = useToast();
   const selectImports = useMemo(() => makeSelectImportTasks(teamId), [teamId]);
   const allImports = useSelector(selectImports);
-  const runningCount = allImports.filter((vm) => !TERMINAL_STATES.has(vm.state)).length;
+  const runningCount = allImports.filter((vm) => !TERMINAL_STATES.has(vm.state) && !vm.untracked).length;
   const { acknowledge, isAcknowledging } = useTaskAcknowledgement();
   const [expanded, setExpanded] = useState(false);
 
@@ -407,11 +408,14 @@ const ImportItem = memo(function ImportItem({
 
   // The single line the markers opposite are about: the phase in flight, or —
   // when something interrupted it — why it stopped, or the question holding it.
-  const statusText =
-    failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t));
+  const statusText = task.untracked
+    ? t("rework.imports.untracked.summary")
+    : (failure?.summary ?? (awaitingDecision ? t("rework.imports.conflict.question") : importPhaseLabel(task, t)));
   // What that line means, for a reader who has not imported before. The same
   // sentence the stepper's markers carry, on whichever phase the line names.
-  const statusDetail = failure?.detail ?? (awaitingDecision ? null : importPhaseHintFor(task, t));
+  const statusDetail = task.untracked
+    ? t("rework.imports.untracked.detail")
+    : (failure?.detail ?? (awaitingDecision ? null : importPhaseHintFor(task, t)));
   // Sending it again cannot change what the folder holds, and the transfer is
   // not what went wrong — only clearing the duplicate name will do.
   const retryable = failed && stillHeld && !failure?.hopeless;
@@ -430,7 +434,13 @@ const ImportItem = memo(function ImportItem({
         // Only while something is moving — once the file is settled the footer
         // goes back to saying when.
         trailingSlot={
-          TERMINAL_STATES.has(task.state) ? timeUnknown ? <span /> : undefined : <ImportStepper task={task} />
+          TERMINAL_STATES.has(task.state) || task.untracked ? (
+            timeUnknown ? (
+              <span />
+            ) : undefined
+          ) : (
+            <ImportStepper task={task} />
+          )
         }
         actions={
           // Sending it again from disk: the only offer left once the browser no

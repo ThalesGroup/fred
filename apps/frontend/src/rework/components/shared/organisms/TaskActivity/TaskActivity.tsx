@@ -27,13 +27,13 @@
 // shared `tasks` module), neither proxying the other. No `kind` filter
 // means "every kind", so this queries both and merges; a `kind` filter narrows both the query args AND which
 // single backend gets queried (`taskBackendFor` — the same map
-// `useTaskSseManager`/`useTaskAcknowledgement` route SSE/ack by), since
+// `useTaskPolling`/`useTaskAcknowledgement` route by), since
 // asking the wrong backend for a kind it doesn't own just returns nothing
 // (#2123 review: kind="ingestion" used to always query control-plane, which
 // never has ingestion tasks — the ingestion panel was silently always empty).
 // Rendering reuses the shared task atoms (`TaskStateBadge`, `TaskProgressBar`);
-// polling covers the scheduled→running→done transitions the client is not
-// SSE-subscribed to.
+// polling covers the scheduled→running→done transitions of tasks the user
+// did not start, which the task store does not follow.
 
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -205,8 +205,8 @@ interface TaskActivityProps {
 }
 
 // Scheduled work can be days out, but a running task finishes in seconds; poll
-// often enough to catch the scheduled→running→done transitions the client is not
-// SSE-subscribed to, without hammering the admin surface.
+// often enough to catch the scheduled→running→done transitions the task store
+// does not follow, without hammering the admin surface.
 const ACTIVITY_POLL_MS = 30_000;
 
 /** Soonest-due first; tasks without a due date sort last. */

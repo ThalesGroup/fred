@@ -52,11 +52,12 @@ export default function MigrationPage() {
   const [resetPlatform, { isLoading: isResetting }] = useResetPlatformMutation();
 
   const migrationTasks = useMemo(() => tasks.filter((t) => t.kind === "migration"), [tasks]);
+  // An untracked task is no longer followed: it belongs with the finished ones.
   const activeTasks = migrationTasks.filter(
-    (t) => t.state === "running" || t.state === "pending" || t.state === "cancelling",
+    (t) => !t.untracked && (t.state === "running" || t.state === "pending" || t.state === "cancelling"),
   );
   const terminalTasks = migrationTasks.filter(
-    (t) => t.state === "succeeded" || t.state === "failed" || t.state === "cancelled",
+    (t) => t.untracked || t.state === "succeeded" || t.state === "failed" || t.state === "cancelled",
   );
 
   // Refresh the summary whenever an import/reset/export task settles (the

@@ -4303,3 +4303,19 @@ enabled default. `false` disables questions on new turns; an absent descriptor
 sends no field. A question already pending remains
 answerable when the control is switched off during its pause. Asserted-person
 preparation does not offer the control.
+
+## Task progress read by id — 2026-10-03
+
+`GET /tasks?scope=user` on Knowledge Flow and Control Plane accepts a repeated
+`task_id` query parameter of 1 to 50 values. With it, the response holds the
+caller's own tasks among those ids, terminal ones included; ids the caller did
+not create are absent, which reveals nothing about them. More than 50 values, or
+the parameter with another scope, is rejected with HTTP 422. Without it, the
+listing is unchanged. The single owner is `fred_core.tasks.authz.list_tasks_scoped`.
+
+The frontend follows the tasks a user started with this read, in rounds five
+seconds apart (batches of 50, one read at a time) while any is active, instead of one SSE connection per task: held-open connections
+filled the browser's six per HTTP/1.1 origin during an import. A task absent from
+the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
+remains for its other consumers. Current behaviour:
+`openspec/specs/task-progress-tracking/spec.md`.

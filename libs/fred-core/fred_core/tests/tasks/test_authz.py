@@ -305,3 +305,50 @@ async def test_platform_admin_can_both_view_and_mutate() -> None:
     await authorize_task_mutation(
         _user("ops"), run, cast(Any, _FakeRebac(platform=True))
     )
+
+
+@pytest.mark.asyncio
+async def test_list_user_scope_by_id_keeps_terminal_and_ownership() -> None:
+    service = _FakeService()
+    await list_tasks_scoped(
+        cast(Any, service),
+        cast(Any, _FakeRebac()),
+        _user("alice"),
+        scope="user",
+        team_id=None,
+        kind=None,
+        state=None,
+        task_ids=["t1", "t2"],
+    )
+    assert service.calls == [
+        {"created_by": "alice", "kind": None, "state": None, "task_ids": ["t1", "t2"]}
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("scope", "task_ids"),
+    [
+        ("platform", ["t1"]),
+        ("team", ["t1"]),
+        ("user", []),
+        ("user", [f"t{i}" for i in range(51)]),
+    ],
+)
+async def test_list_by_id_rejects_other_scopes_and_bad_sizes(
+    scope: str, task_ids: list[str]
+) -> None:
+    service = _FakeService()
+    with pytest.raises(HTTPException) as exc:
+        await list_tasks_scoped(
+            cast(Any, service),
+            cast(Any, _FakeRebac(platform=True, team_ok=True)),
+            _user("u"),
+            scope=scope,
+            team_id="team-1",
+            kind=None,
+            state=None,
+            task_ids=task_ids,
+        )
+    assert exc.value.status_code == 422
+    assert service.calls == []

@@ -16,7 +16,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { TaskViewModel } from "../../../../features/tasks/taskTypes";
 import { TERMINAL_STATES } from "../../../../features/tasks/taskTypes";
-import { STATE_COLOR, relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
+import { STATE_COLOR, displayState, relativeTime, stepLabel } from "../../../../features/tasks/taskLabels";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
@@ -62,11 +62,16 @@ export function TaskCard({
 }: TaskCardProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
-  const isTerminal = TERMINAL_STATES.has(task.state);
+  // Untracked: nothing is moving that the card can know of.
+  const isTerminal = TERMINAL_STATES.has(task.state) || task.untracked;
   const timeMs = task.terminalAt ?? task.registeredAt;
   const displayName = task.target?.label ?? task.taskId;
+  const shown = displayState(task);
+  // An untracked task is dismissed like a failure: it needs the user's eye.
   const needsAttention =
-    (task.state === "failed" || task.state === "cancelled") && task.acknowledgedAt === null && !!onAcknowledge;
+    (shown === "failed" || shown === "cancelled" || shown === "untracked") &&
+    task.acknowledgedAt === null &&
+    !!onAcknowledge;
 
   const handleCopyWarnings = async () => {
     if (!task.warnings || task.warnings.length === 0) return;
@@ -78,11 +83,11 @@ export function TaskCard({
   };
 
   return (
-    <div className={styles.card} data-state={task.state}>
+    <div className={styles.card} data-state={shown}>
       <div className={styles.header}>
         {/* The state reads as a colour before it reads as anything else, so it
             leads the line the name is on. */}
-        <TaskStateBadge state={task.state} showLabel={false} size="sm" />
+        <TaskStateBadge state={shown} showLabel={false} size="sm" />
         {/* Cut by the CSS ellipsis, which cuts at the width actually left —
             a character count cut short names in a wide card. */}
         <span className={styles.filename} title={displayName}>
@@ -108,7 +113,7 @@ export function TaskCard({
 
       <div className={styles.footer}>
         {statusText ? (
-          <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
+          <span className={styles.stepText} style={{ color: STATE_COLOR[shown] }}>
             {statusDetail ? (
               <Tooltip content={statusDetail}>
                 <span className={styles.truncate}>{statusText}</span>
@@ -128,7 +133,7 @@ export function TaskCard({
             </Tooltip>
           </span>
         ) : task.step ? (
-          <span className={styles.stepText} style={{ color: STATE_COLOR[task.state] }}>
+          <span className={styles.stepText} style={{ color: STATE_COLOR[shown] }}>
             {stepLabel(task, t)}
           </span>
         ) : null}
