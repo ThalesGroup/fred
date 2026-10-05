@@ -132,9 +132,10 @@ acceptance; delegated calls rely on the person's acceptance at run admission.
 
 ## Complete local test configurations
 
-Each backend has example overlays in `config/overlays/` for `generic_oidc`,
-`mock_oidc`, `entra` and `zitadel`. Generate complete Keycloak, generic OIDC or
-mock OIDC configurations from the repository root:
+Example overlays for `generic_oidc`, `mock_oidc`, `entra` and `zitadel` live in
+`../fred-deployment-factory/examples/identity-providers/<backend>/`. Clone that
+repository next to Fred. Generate complete Keycloak, generic OIDC or mock OIDC
+configurations from the Fred repository root:
 
 ```bash
 /usr/bin/python3 scripts/prepare_identity_provider_configs.py
@@ -173,7 +174,7 @@ credential file from its dynamic project and client IDs:
 make -C ../fred-deployment-factory zitadel-configure SWIFT_SRC="$PWD"
 ```
 
-The `configuration_zitadel.example.yaml` files show the expected settings for
+The factory `configuration_zitadel.example.yaml` files show the expected settings for
 each backend. Their placeholder IDs are illustrative; use the factory-generated
 files for tests.
 
@@ -195,64 +196,27 @@ URLs are for applications running on the host, not inside Kubernetes pods.
 For Kubernetes with Entra, use
 [`values-entra.example.yaml`](../../../deploy/charts/fred/values-entra.example.yaml).
 
-### Quick launch from VS Code
+### Local launch
 
-Docker infrastructure must already be running. Stop previously launched
-applications before selecting another profile.
+Start the Docker infrastructure and prepare the chosen provider in the sibling
+`fred-deployment-factory` checkout. Generate complete configs with the command
+above, or use `make -C ../fred-deployment-factory zitadel-configure SWIFT_SRC="$PWD"`
+for ZITADEL. Then follow the manual launch below. Stop running Fred applications
+before changing profiles; the provider switch does not reset Fred data.
 
-Open **Terminal → Run Task** and choose one task:
-
-| Task | Profile |
-| --- | --- |
-| `IDP keycloak — launch all` | Existing Keycloak behavior |
-| `IDP generic_oidc — launch all` | Keycloak as a strict generic OIDC provider |
-| `IDP mock_oidc — launch all` | Separate mock provider on 8090 |
-| `IDP zitadel — launch all` | Real independent provider on 8091; factory provisions the SPA and workloads |
-
-Preparation adds the installed Control Plane venv binaries to PATH so the root
-`make delegation` command can find `uv` without a global installation.
-
-Each task first prepares the full configurations and matching provider setup,
-then starts three APIs, two workers and the frontend in separate VS Code
-terminals. Preparation restores Keycloak plus delegation, applies strict generic
-OIDC, starts the mock provider, or provisions ZITADEL. It also creates the Fred
-bootstrap secret if absent. Existing Docker infrastructure is otherwise left
-running. Make targets may prepare dependencies and models during startup.
-
-The worker Control Plane is launched explicitly with the selected YAML because
-its existing `run-worker` target hardcodes a different configuration. Fred
-Agents and frontend proxies use **8000**. No background launcher script is
-needed; stdout/stderr are visible directly in the task terminals.
-
-To stop even orphaned application processes, run **Terminal → Run Task →
-Fred — kill all**. It checks Fred API/frontend/metrics ports and optional runtime
-ports (8010, 8013, 8020, 8336), includes Fred workers without listeners, and stops
-only processes belonging to this checkout. It prints their identities, sends
-SIGTERM, then SIGKILL if needed, and verifies ports are free. Docker infrastructure
-and processes outside this checkout are preserved.
-
-Alternatively: **Terminal → Terminate Task**, select the running component tasks
-(or all tasks if this workspace is only running Fred). Changing a profile
-requires stopping the previous six components first. The tasks do not kill
-unrelated processes occupying their ports. Only the complete profile launch tasks appear in Run Task; their
-preparation and component tasks are hidden. Each service opens its own terminal,
-without split panes.
-
-Open http://localhost:5173/ when Vite is ready and verify that all three APIs
-and both workers have completed startup. Follow the immediate checks below.
-
-### Manual launch (optional)
+### Manual launch
 
 Select one profile in each of six terminals, from the Fred root:
 
 ```bash
-cd /home/thomas/Documents/fred
+cd /path/to/fred
 export FRED_TEST_PROFILE=keycloak
 # Or: export FRED_TEST_PROFILE=generic_oidc
 # Or: export FRED_TEST_PROFILE=mock_oidc
+# Or: export FRED_TEST_PROFILE=zitadel
 ```
 
-Prepare the matching provider using the commands in the preceding section.
+Prepare the matching provider as described above and in the factory guide.
 Stop the six applications before switching profiles; keep the infrastructure
 running. Then set these variables in each terminal:
 
@@ -260,6 +224,9 @@ running. Then set these variables in each terminal:
 export FRED_TEST_ROOT="$PWD"
 export FRED_TEST_CONFIG_DIR="/tmp/fred-idp-tests/$FRED_TEST_PROFILE"
 export FRED_TEST_UV="$FRED_TEST_ROOT/apps/control-plane-backend/.venv/bin/uv"
+if [ "$FRED_TEST_PROFILE" = zitadel ]; then
+  . "$FRED_TEST_CONFIG_DIR/service-credentials.env"
+fi
 # OIDC profiles: allow the mock lifetime and ignore a stale Keycloak policy.
 if [ "$FRED_TEST_PROFILE" != keycloak ]; then
   export FRED_JWT_MAX_LIFETIME_SECONDS=6000
@@ -412,11 +379,10 @@ are explicitly reported as additional coverage, not claimed as a browser pass.
 
 ### ZITADEL local profile
 
-`IDP zitadel — launch all` calls deployment-factory's `make zitadel-configure`.
-This starts an isolated provider on localhost:8091 and generates configs plus
-private service credentials under `/tmp/fred-idp-tests/zitadel/`. Backend tasks
-source those credentials; the frontend uses the provider settings from Control
-Plane. See the factory's `docs/LOCAL-DEVELOPMENT.md` for console credentials and
+`make -C ../fred-deployment-factory zitadel-configure SWIFT_SRC="$PWD"` starts an isolated provider on localhost:8091 and generates configs plus
+private service credentials under `/tmp/fred-idp-tests/zitadel/`. Source
+`service-credentials.env` in each backend terminal; the frontend uses the
+provider settings from Control Plane. See the factory's `docs/LOCAL-DEVELOPMENT.md` for console credentials and
 user creation. Stop Fred before switching profiles. Provider identities and
 platform bootstrap state follow the same rules as the separate mock; existing
 Fred data is preserved. Use a fresh browser session and test CGU, personal space,

@@ -39,6 +39,7 @@ ENTRA_CLIENTS = {
     "fred-agents": "runtime_client",
 }
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_EXAMPLES_DIR = ROOT.parent / "fred-deployment-factory" / "examples" / "identity-providers"
 
 
 def merge(target: dict[str, Any], overlay: dict[str, Any]) -> None:
@@ -51,7 +52,10 @@ def merge(target: dict[str, Any], overlay: dict[str, Any]) -> None:
 
 
 def prepare(
-    profile: str, output_dir: Path, entra: dict[str, str] | None = None
+    profile: str,
+    output_dir: Path,
+    entra: dict[str, str] | None = None,
+    examples_dir: Path = DEFAULT_EXAMPLES_DIR,
 ) -> list[Path]:
     pending: list[tuple[Path, str]] = []
     for application in APPLICATIONS:
@@ -60,7 +64,7 @@ def prepare(
         if profile != "keycloak":
             overlay = yaml.safe_load(
                 (
-                    config_dir / "overlays" / f"configuration_{profile}.example.yaml"
+                    examples_dir / application / f"configuration_{profile}.example.yaml"
                 ).read_text()
             )
             merge(config, overlay)
@@ -105,6 +109,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=(*PROFILES, "all"), default="all")
     parser.add_argument("--output-dir", type=Path, default=Path("/tmp/fred-idp-tests"))
+    parser.add_argument("--examples-dir", type=Path, default=DEFAULT_EXAMPLES_DIR)
     for name in ("tenant", "ui_client", "api_client", *ENTRA_CLIENTS.values()):
         parser.add_argument("--entra-" + name.replace("_", "-"))
     args = parser.parse_args()
@@ -121,7 +126,7 @@ def main() -> None:
         except ValueError:
             parser.error("Entra tenant and client IDs must be UUIDs")
     for profile in profiles:
-        for output in prepare(profile, args.output_dir, entra):
+        for output in prepare(profile, args.output_dir, entra, args.examples_dir):
             print(f"OK {output}")
 
 
