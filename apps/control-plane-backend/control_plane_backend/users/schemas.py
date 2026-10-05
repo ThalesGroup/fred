@@ -39,6 +39,13 @@ class IdentityManagedByProviderError(Exception):
         )
 
 
+class AccountSuspensionDisabledError(Exception):
+    """Local deletion cannot revoke access without account-status enforcement."""
+
+    def __init__(self) -> None:
+        super().__init__("Account suspension is disabled in this deployment.")
+
+
 class UserNotFoundError(Exception):
     """Raised when a user cannot be found in Keycloak."""
 

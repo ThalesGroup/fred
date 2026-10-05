@@ -171,8 +171,8 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        # Guarded so the engine is only built where a switch needs it.
-        if configuration.security.delegation.in_use:
+        # Build the engine where delegation or the local directory needs account status.
+        if configuration.security.delegation.in_use or configuration.security.user_directory == "local":
             await enforce_account_status(application_context.get_rebac_engine())
         # #2314 (closes the #2313 defect): startup creates NO tables — DDL is
         # owned by the Alembic trees alone (see models/table_ownership.py and

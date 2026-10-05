@@ -97,7 +97,7 @@ With `local`, the existence check performed before granting a platform role SHAL
 
 ### Requirement: Account lifecycle belongs to the identity provider
 
-With `local`, creating a user SHALL be refused with HTTP 409 and the reason `managed_by_identity_provider`. Deleting a user SHALL keep the existing suspension-first behavior, SHALL skip the identity-provider deletion step, and SHALL succeed.
+With `local`, creating a user SHALL be refused with HTTP 409 and the reason `managed_by_identity_provider`. Deleting a user SHALL suspend the person independently of delegation and SHALL skip the identity-provider deletion step. An enforced engine SHALL validate its account-status model at startup and check authenticated subjects even when delegation is disabled. If no engine enforces account status, deletion SHALL fail with HTTP 403 `account_suspension_disabled` before any write. Failed suspension writes SHALL NOT return success.
 
 #### Scenario: Create user
 
@@ -111,6 +111,28 @@ With `local`, creating a user SHALL be refused with HTTP 409 and the reason `man
 - **WHEN** an administrator deletes them
 - **THEN** the person is suspended and their next authorization decision is refused
 - **AND** no identity-provider call is made
+
+#### Scenario: Suspension without delegation
+
+- **GIVEN** `user_directory: local`, both delegation switches off and enforced OpenFGA
+- **WHEN** an administrator deletes a person
+- **THEN** the response is 204 and the person's existing token is refused on its next authenticated request
+- **AND** their memberships, identity snapshot and provider account remain unchanged
+- **AND** an active bystander remains authorized
+
+#### Scenario: Suspension cannot be enforced
+
+- **GIVEN** `user_directory: local` and no account-status enforcement
+- **WHEN** an administrator deletes a person
+- **THEN** the response is 403 `account_suspension_disabled` and no state is changed
+
+#### Scenario: Account-status model unavailable
+
+- **GIVEN** `user_directory: local`, both delegation switches off and enforced OpenFGA
+- **WHEN** account-status model validation fails
+- **THEN** service startup fails
+- **WHEN** a started service cannot read a person's account status
+- **THEN** their authenticated request fails with HTTP 503 before endpoint execution
 
 #### Scenario: Root protection still applies
 

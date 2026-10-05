@@ -79,17 +79,19 @@ class _FailingInitializationFakeRebacEngine(_ClosingFakeRebacEngine):
 
 
 class _AccountStatusFakeRebacEngine(_ClosingFakeRebacEngine):
-    def __init__(self, *, model_ok: bool = True) -> None:
+    def __init__(
+        self, *, model_ok: bool = True, requires_active_accounts: bool = True
+    ) -> None:
         super().__init__()
         self.model_ok = model_ok
+        self._requires_active_accounts = requires_active_accounts
         self.model_checks = 0
         self.account_status_checks: list[str] = []
         self.writes: list[object] = []
 
     @property
     def requires_active_accounts(self) -> bool:
-        # The factory builds an enforcing engine whenever a switch is on.
-        return True
+        return self._requires_active_accounts
 
     async def validate_account_status_model(self) -> None:
         self.model_checks += 1
@@ -480,7 +482,9 @@ async def test_factory_skips_the_account_status_preflight_without_delegation(
 ) -> None:
     """An application that enforces no account status has nothing to preflight, and
     must not be blocked by a model that cannot suspend accounts."""
-    engine = _AccountStatusFakeRebacEngine(model_ok=False)
+    engine = _AccountStatusFakeRebacEngine(
+        model_ok=False, requires_active_accounts=False
+    )
     _install_engine(monkeypatch, engine)
 
     await rebac_sdk_factory(_security(), kpi_writer=NoOpKPIWriter())

@@ -142,6 +142,8 @@ Server-side refresh of a person's token remains provider-dependent. Entra refuse
 | `teams/service.py` user count | `count_identities` |
 | `knowledge_flow_backend/features/users/users_service.py::list_users`, `get_users_by_ids` | store reads |
 
+Local suspension uses the existing account-status model independently of delegation. An enforced OpenFGA engine requires active accounts when either delegation is in use or `user_directory == "local"`. Each service validates and installs that engine at startup, then checks authenticated subjects even when both delegation switches are off. Existing Keycloak-directory behavior and delegation checks remain unchanged. A local delete refuses with HTTP 403 `account_suspension_disabled` when account-status enforcement is disabled; it never returns a successful no-op. Model validation failure stops startup, and unavailable request-time checks fail closed. Keep root/wildcard protection, memberships, snapshots and provider accounts unchanged.
+
 *Alternative rejected:* a `UserDirectory` interface with two implementations and a refactor of every caller. It is cleaner in the abstract, but it touches far more Keycloak code for the same behavior; the one-branch approach keeps the Keycloak path untouched.
 
 ### 8. Frontend: one OIDC browser lifecycle behind `KeyCloakService`

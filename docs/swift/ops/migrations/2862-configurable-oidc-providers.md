@@ -12,7 +12,7 @@ Existing Fred deployments retain their Keycloak provider and directory by defaul
 
 ## Prerequisites
 
-Back up the Fred database and current chart values. For optional OIDC activation, register a browser client and separate confidential workload clients with the provider, grant the required API scopes and roles, and store workload credentials in deployment secrets. Confirm that the issuer's discovery document and token endpoints are reachable from Fred.
+Back up the Fred database and current chart values. For optional OIDC activation, register a browser client and separate confidential workload clients with the provider, grant the required API scopes and roles, and store workload credentials in deployment secrets. Confirm that the issuer's discovery document and token endpoints are reachable from Fred. For local-directory deployments, select an OpenFGA model supporting `suspended: [user]` on `organization:fred` before starting the services, even when delegation is disabled.
 
 ## Configuration
 
@@ -24,7 +24,7 @@ Apply the control-plane Alembic migration that adds nullable user identity snaps
 
 ## Validation
 
-With the existing Keycloak configuration, sign in as platform administrator and run the platform self-test. For Entra, provide tenant and public client IDs to the local generator and set workload secrets and the 6000-second token lifetime in the environment. For ZITADEL, use the factory provisioner to generate client IDs, credentials and complete local configurations. For each optional provider, verify issuer discovery and backend startup, sign in as administrator, confirm the displayed identity and local-directory search, run the platform self-test, then check token refresh, agent document access through delegation and logout. Record the result before production rollout.
+With the existing Keycloak configuration, sign in as platform administrator and run the platform self-test. For Entra, provide tenant and public client IDs to the local generator and set workload secrets and the 6000-second token lifetime in the environment. For ZITADEL, use the factory provisioner to generate client IDs, credentials and complete local configurations. For each optional provider, verify issuer discovery and backend startup, sign in as administrator, confirm the displayed identity and local-directory search, run the platform self-test, then check token refresh, agent document access through delegation and logout. Delete a disposable local-directory person with delegation disabled and verify that their existing bearer is refused on the next request while an active bystander retains access. Provider accounts and memberships remain stored. Disabled suspension returns 403 `account_suspension_disabled`; unavailable account-status checks return 503 `account_status_unavailable`. Record the result before production rollout.
 
 ## Rollback
 

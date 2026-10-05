@@ -4292,6 +4292,16 @@ and presents no bearer to the agent pod
 Detailed cases are in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
+## Local-directory suspension is independent of delegation (2026-10-05)
+
+With `security.user_directory: local`, an enforced OpenFGA engine validates
+account-status support at startup and refuses suspended authenticated subjects
+regardless of the delegation switches. `DELETE /users/{user_id}` retains root
+and wildcard protection, writes the suspension and leaves memberships, local
+identity snapshots and provider accounts unchanged. Disabled enforcement returns
+403 with `reason: account_suspension_disabled` before any write; unavailable
+account-status checks retain 503 `account_status_unavailable`.
+
 ## Deleting a person suspends their account first (2026-09-23)
 
 User deletion retains administrator permission and protected-account checks,
@@ -4305,7 +4315,7 @@ already authorized. That includes personal-team routes such as the runtime-bindi
 lookup and execution preparation, which refuse a suspended subject with 403
 `account_suspended`, or 503 `account_status_unavailable` when account status cannot
 be read. Direct identity-provider changes do not update platform account status.
-With account status disabled, deletion writes no suspension. Exact refusal and retry
+With the Keycloak directory and account status disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 

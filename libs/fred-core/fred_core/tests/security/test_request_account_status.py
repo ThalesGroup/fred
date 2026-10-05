@@ -100,11 +100,20 @@ def _restore_delegation(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         yield
 
 
-def _switch_on(config: DelegationConfig, store: AccountStatusStore | None) -> None:
+def _switch_on(
+    config: DelegationConfig,
+    store: AccountStatusStore | None,
+    *,
+    enforced: bool = True,
+) -> None:
     """Start the way a service does: the block, then the engine for the check."""
     delegation.initialize_delegation(config, issuers=[_ISSUER], user_clients=["app"])
     if store is not None:
-        asyncio.run(enforce_account_status(account_status_engine(store)))
+        asyncio.run(
+            enforce_account_status(
+                account_status_engine(store, requires_active_accounts=enforced)
+            )
+        )
 
 
 def _client(store: AccountStatusStore, served: list[str]) -> TestClient:
@@ -270,10 +279,34 @@ def test_a_switch_on_refuses_an_engine_that_does_not_enforce_account_status(
 @pytest.mark.parametrize("bearer", ["person", "service", "workload"])
 def test_both_switches_off_make_no_account_status_check(bearer: str) -> None:
     store, served = AccountStatusStore(suspended={_PERSON, _SERVICE, _WORKLOAD}), []
-    _switch_on(DelegationConfig(), store)
+    _switch_on(DelegationConfig(), store, enforced=False)
 
     response = _get(_client(store, served), bearer, _GRANT)
 
     assert response.status_code == 200
     assert served == [_BEARERS[bearer].uid]
     assert store.account_status_checks() == []
+
+
+@pytest.mark.parametrize(
+    ("suspended", "unavailable", "expected"),
+    [(False, False, 200), (True, False, 403), (False, True, 503)],
+)
+def test_local_account_status_is_checked_without_delegation(
+    suspended: bool, unavailable: bool, expected: int
+) -> None:
+    store = AccountStatusStore(
+        suspended={_PERSON} if suspended else set(), unavailable=unavailable
+    )
+    served: list[str] = []
+    _switch_on(DelegationConfig(), store)
+
+    response = _get(_client(store, served), "person", None)
+
+    assert response.status_code == expected
+    assert served == ([_PERSON] if expected == 200 else [])
+    assert store.account_status_checks() == [(f"user:{_PERSON}", _HIGHER)]
+    if expected != 200:
+        assert response.headers["X-Fred-Denial-Cause"] == (
+            "account_suspended" if suspended else "account_status_unavailable"
+        )

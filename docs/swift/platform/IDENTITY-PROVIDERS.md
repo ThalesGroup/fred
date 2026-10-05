@@ -33,7 +33,7 @@ delegation without `delegation.caller_roles_claim` at startup.
 
 The local directory stores only people who have signed in. It does not create
 or delete accounts at the identity provider: creation returns
-`managed_by_identity_provider`, while deletion suspends the person in Fred.
+`managed_by_identity_provider`, while deletion suspends the person in Fred, including when delegation is disabled. Enforced OpenFGA services validate account-status support at startup. A local delete returns 403 `account_suspension_disabled` if enforcement is disabled; an unavailable account-status check returns 503 `account_status_unavailable`.
 A non-UUID OIDC uid maps to UUIDv5 using the normalized issuer and claim value;
 changing either changes the Fred user ID and personal space. Server-side
 refresh of a person's token depends on the provider. For Entra SPA tokens,

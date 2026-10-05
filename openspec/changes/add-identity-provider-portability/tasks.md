@@ -139,3 +139,30 @@ of accepted CGU on profile updates. Suspension remains in OpenFGA, which the
 identity upsert does not modify. Targeted Ruff and whitespace checks passed.
 Task 11.5 remains pending for manual Keycloak/ZITADEL browser checks. OpenSpec
 CLI is unavailable in this environment; the change is not archived.
+
+## 12. Review correction: local suspension without delegation
+
+- [x] 12.1 Enable account-status enforcement for local-directory OpenFGA engines and install/check it independently of delegation; preserve the default Keycloak-directory path.
+- [x] 12.2 Refuse local deletion when suspension cannot be enforced; preserve root/wildcard protection and retained memberships, snapshots and provider accounts.
+- [x] 12.3 Verify factory configuration, startup model validation, subsequent authenticated admission, unavailable checks and deletion failures with delegation off/on; retain Keycloak regression coverage.
+- [x] 12.4 Update the existing provider/migration guides, regenerate the API client if its controller changes, run focused tests and independent read-only review, then root quality once and commit/push this block on the existing issue/PR.
+
+Correction verification (2026-10-05): targeted offline suites passed: core security
+121, control-plane deletion/startup 38, Knowledge Flow startup/receiver 25,
+runtime admission/receiver 83 with 11 dependency-based skips. Commands used the
+existing module virtual environments, `pytest -q -o addopts='' --disable-socket
+--allow-unix-socket`, with bounded execution. `make update-control-plane-api`
+regenerated OpenAPI and frontend output without a diff. `make migration-check`
+and strict OpenSpec validation passed.
+
+Independent read-only author/performance review covered the corrective worktree
+delta against `740ebdfa6`, including the Knowledge Flow startup guard and shared
+CP/KF/runtime/first-party SDK consumers; no actionable finding remained. The PR
+target is `swift` (`22b597663`); this is a focused correction review, not a new
+full PR review. Local authentication adds one async, timed, higher-consistency
+OpenFGA check per request. No real IdP/OpenFGA/PostgreSQL or load test was run;
+other portability findings and UUID canonicalization are excluded. The original
+manual provider walkthroughs remain pending; this change is not ready to archive.
+
+Root `make code-quality` passed once across all 16 modules after this slice.
+The correction is delivered as a dedicated commit on the existing issue/PR branch.
