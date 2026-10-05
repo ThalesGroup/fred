@@ -1,6 +1,7 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
 app:
   gcu_version: v1
+  team_admin_charter_version: v1
   name: Control Plane Backend
   base_url: /control-plane/v1
 
