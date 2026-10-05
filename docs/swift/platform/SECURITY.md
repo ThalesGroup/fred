@@ -33,6 +33,8 @@ Define how you intend to update users about new security vulnerabilities as they
 
 Settings users should consider that would impact the security posture of deploying this project, such as HTTPS, authorization and many others.
 
+Optional platform admission uses verified JWT attributes and live local user/team exceptions before ordinary resource authorization. Enabled services require the same PostgreSQL authority and enforced OpenFGA; unavailable or inconsistent authority fails closed. Enrollment links are opaque capabilities and must be masked in proxy logs. See the [admission specification](../../../openspec/specs/platform-access-control/spec.md) and [operator migration guide](../ops/migrations/2965-platform-access-planning.md) for activation and rollback.
+
 ## Known security gaps & future enhancements
 
 Security improvements you haven’t gotten to yet.

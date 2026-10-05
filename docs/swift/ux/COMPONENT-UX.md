@@ -5150,3 +5150,9 @@ Fred's Activity page, task rehydration and task event subscriptions query only
 Fred's control-plane and knowledge-flow services. Evaluation progress belongs
 to the external application's UI. Shared SDK components and backend evaluation
 permissions remain available; no evaluation data is removed.
+
+## Platform access screens (2026-10-05)
+
+`PlatformAccessPage` adds the platform-admin navigation entry when configured. It uses the existing switches, inputs and localized tables for filtering, explicit T0 import, local-user exceptions and authorized/Free teams. User rows show independent provenance; a completed T0 cannot be imported again. A generated enrollment link is displayed only after its authorized mutation, ready to copy.
+
+`PlatformAccessDeniedPage` and `FreeEnrollmentPage` render outside the protected shell and its bootstrap/CGU guards. Refusal shows configured support, retry and sign-out. Enrollment preserves the path through OIDC, exposes only the named team's invitation and required terms, then reloads protected state after successful membership. Only the specific admission refusal triggers the denial route; service outages and unrelated authorization errors retain their own handling. Behavioral requirements: `openspec/specs/platform-access-control/spec.md`.

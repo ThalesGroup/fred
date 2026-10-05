@@ -6492,3 +6492,7 @@ Teams are the only scope today; the classification is scope-based so that it hol
 future kinds of scope. `FieldSpec` gains the optional `scope_private`. Authoring rule:
 `capabilities/AUTHORING.md` "Scope-private settings". Acceptance:
 `openspec/changes/copy-agent-across-teams/`.
+
+### 8.103 Shared platform admission (2026-10-05)
+
+When deployment configuration enables `security.platform_access`, HTTP principal resolution checks suspension then live platform admission before legal/resource gates. This also covers runtime query-token resolution and cached verified JWTs. Pure service operations retain their existing checks; delegated people use their own live sources or compatible unexpired verified human evidence. Runtime startup requires the control-plane-owned migrated PostgreSQL authority and an identical configured policy. Missing or inconsistent authority fails closed with 503. See `openspec/specs/platform-access-control/spec.md` and the platform-access migration note for current contracts and rollout.

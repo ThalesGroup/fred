@@ -45,7 +45,7 @@ Publish `supportLink` on public `FrontendConfig`. When configured, it also feeds
 
 Use one additive control-plane migration, based on the actual parent migration head:
 
-| State                                                                           | Proposed storage                                   | Authority                          |
+| State                                                                           | Storage                                   | Authority                          |
 | ------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------- |
 | Filtering state, policy fingerprint and completed T0 marker                     | Singleton `platform_access_settings`               | Control plane                      |
 | Individual user exceptions, manual/T0 origin and grant metadata                 | `platform_access_users`, keyed by stable user UUID | Control plane                      |
@@ -54,9 +54,9 @@ Use one additive control-plane migration, based on the actual parent migration h
 
 Bind admission reads to the existing asynchronous SQL engine and schema guards in each participating backend. Only control plane initializes the singleton or changes its policy fingerprint. Other readers require the initialized authority and matching configuration fingerprint; missing authority, schema or inconsistent policy fails closed. Enabled services must point to the same database. Independent standalone SQLite databases are not a supported enabled deployment; SQLite remains useful for single-authority unit fixtures.
 
-The gate reads filtering state and exceptions on each request. Do not cache mutable admission decisions in `_JWT_CACHE`, profile-write throttles or process-local state. A disabled persisted filter still needs a successful authority read in enabled mode. Use one bounded store read, then a higher-consistency membership check only for relevant authorized teams if claim/individual sources do not already admit the person. Membership checks must use effective `team_member`, not public `can_read`; reuse existing bounded batch-check facilities.
+The gate reads filtering state and exceptions on each request. Do not cache mutable admission decisions in `_JWT_CACHE`, profile-write throttles or process-local state. A disabled persisted filter still needs a successful authority read in enabled mode. Read shared state and short-circuit claim/individual sources, then a higher-consistency membership check only for relevant authorized teams if claim/individual sources do not already admit the person. Membership checks must use effective `team_member`, not public `can_read`; reuse existing bounded batch-check facilities (50 targets per batch). Do not derive denial from ListObjects enumeration, which can be truncated by server limits.
 
-Manual and T0 are individually managed exceptions. Team/Free sources are derived from current flags and actual membership and projected in the whitelist view with team ID/name. Do not copy Free membership into permanent manual entries: deriving it avoids synchronization races and makes flag removal, departure and team deletion revoke the source immediately. Paginate users and batch the membership projection; do not load every roster on each request.
+Manual and T0 are individually managed exceptions. Team/Free sources are derived from current flags and actual membership and projected in the whitelist view with team ID/name. Do not copy Free membership into permanent manual entries: deriving it avoids synchronization races and makes flag removal, departure and team deletion revoke the source immediately. Paginate users and bound projection concurrency to eight; release ordinary SQL sessions before membership I/O. Do not load every roster on each request.
 
 ### Verified attributes and delegated people
 
@@ -70,7 +70,7 @@ After caller/subject resolution, enforce existing suspension, then platform admi
 
 Expose the access page at `/admin/platform-access` under the existing platform-admin navigation and permission hooks. All new administrative operations use `OrganizationPermission.CAN_MANAGE_PLATFORM`, independently of directory/team picker permissions.
 
-Proposed control-plane surface under `/admin/platform/access`:
+Control-plane surface under `/admin/platform/access`:
 
 | Operation                                               | Purpose                                                                             |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -104,7 +104,7 @@ Do not use `/coming-soon` for the new policy; it remains the legacy-file landing
 
 ## Risks / Trade-offs
 
-- Extra admission reads add request latency - reuse async engines and request memoization, short-circuit eligibility sources and review bounded batches; never trade revocation freshness for a long decision cache.
+- Extra admission reads add request latency - reuse async engines, short-circuit eligibility sources and review bounded batches; never trade revocation freshness for a long decision cache.
 - The selected attribute is personal data - retain only that field, redact serialization/logging and keep identity administration permission-gated. No collection of unrelated personal attributes.
 - A delegated run whose only claim observation expires needs fresh human evidence - refuse new delegated requests until a new verified observation or exception exists. Work already authorized is not retroactively cancelled.
 - A denied person can appear in the local directory after authentication - identity discovery is not admission, and only explicit T0 completion defines grandfathering.

@@ -434,3 +434,7 @@ sequenceDiagram
     AG->>ADM: Admin REST call with Bearer access_token
     ADM-->>AG: Data for user directory sync
 ```
+
+## Optional platform admission
+
+The identity provider may expose the selected attribute through ordinary verified access-token claims. Fred reads `security.platform_access.jwt_claim`, a list of nested keys, and applies `accepted_regex` to the complete value. This policy is generic and configured by the operator; do not encode deployment-specific identity values in this repository. User/team exceptions live in Fred, independently of provider roles. Enablement, migration and activation follow [the platform-access migration note](../ops/migrations/2965-platform-access-planning.md).

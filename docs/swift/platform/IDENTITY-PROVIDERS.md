@@ -408,3 +408,7 @@ section 11; automated checks pass, browser verification remains pending:
 without accepting terms. The old `keycloak-js` browser lifecycle and dependency
 have been removed. An existing browser session may need a fresh login after
 this change because the old adapter used a different token store.
+
+## Platform admission policy
+
+The same optional `security.platform_access` policy applies to supported OIDC providers. Provider identity mapping produces the stable Fred user UUID before admission. The selected verified attribute is internal evidence, excluded from user serialization and logs; delegated admission cannot use the workload's attribute. Operators supply actual rules through private `global.platformAccess` Helm overlays. The canonical activation and first-party SDK instructions are in [the migration note](../ops/migrations/2965-platform-access-planning.md).

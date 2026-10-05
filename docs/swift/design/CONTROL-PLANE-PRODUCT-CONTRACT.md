@@ -4407,3 +4407,11 @@ filled the browser's six per HTTP/1.1 origin during an import. A task absent fro
 the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
 remains for its other consumers. Current behaviour:
 `openspec/specs/task-progress-tracking/spec.md`.
+
+### Platform admission control (2026-10-05)
+
+Public `/frontend/config` now includes `platform_access_enabled` and `supportLink`; the latter also drives the existing support menu. Platform admission remains independent of resource permissions and is disabled by default.
+
+`/admin/platform/access` exposes persisted filtering under `CAN_MANAGE_PLATFORM`. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Only the dedicated enrollment-link mutation returns a plaintext token; database and ordinary projections contain no reusable link.
+
+The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [migration note](../ops/migrations/2965-platform-access-planning.md).
