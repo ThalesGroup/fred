@@ -47,10 +47,10 @@ Owns: `analysis.py`, `lexicon.py`, `models.py`, `overrides.py`, tests `test_buil
 
 Owns: `labelling.py` (new), `preview.py`, test `test_labelling.py` (new), package `pyproject.toml` (`pypdfium2`).
 
-- [ ] 3.1 Render example slides to PNG (patterns deck → PDF → pages) with numbered slot overlays
-- [ ] 3.2 Prompt + typed response (`kind`, `label`, slot `purpose`, `max_items`, `reusable`); bounded concurrency
-- [ ] 3.3 Merge into the inventory; invalid/missing answer → heuristic label, `labelled_by="heuristic"`
-- [ ] 3.4 Tests with a fake `CapabilityModelPort`: merge, malformed answer, port absent, vision refused
+- [x] 3.1 Render example slides to PNG (patterns deck → PDF → pages) with numbered slot overlays
+- [x] 3.2 Prompt + typed response (`kind`, `label`, slot `purpose`, `max_items`, `reusable`); bounded concurrency
+- [x] 3.3 Merge into the inventory; invalid/missing answer → heuristic label, `labelled_by="heuristic"`
+- [x] 3.4 Tests with a fake `CapabilityModelPort`: merge, malformed answer, port absent, vision refused
 
 ## WP4. Background analysis
 

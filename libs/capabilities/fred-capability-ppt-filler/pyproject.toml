@@ -17,6 +17,8 @@ dependencies = [
   "fastapi>=0.110",
   # The analyze route takes a multipart file upload (fastapi Form/File).
   "python-multipart>=0.0.9",
+  # Rasterises the patterns PDF for vision labelling (Apache-2.0/BSD-3).
+  "pypdfium2>=4.30",
 ]
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
