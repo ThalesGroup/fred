@@ -17,6 +17,8 @@ with open(os.environ["CALLS"], "a") as f:
     f.write(json.dumps([name, *args]) + "\\n")
 if name == "curl": print('{"root_bootstrap_required": true}')
 if name == "kubectl":
+    if "deployments" in args and not os.environ.get("FRESH"):
+        print("deployment/fred-agents\\ndeployment/knowledge-flow-backend\\ndeployment/knowledge-flow-worker")
     if "secret" in args and "get" in args: print(os.environ.get("CURRENT_KEY", ""))
     if "secret" in args and "patch" in args:
         p = Path(args[args.index("--patch-file") + 1])
@@ -33,7 +35,7 @@ if name == "kubectl":
 
 
 class ConfigureTests(unittest.TestCase):
-    def exercise(self, changed: bool) -> tuple[str, list]:
+    def exercise(self, changed: bool, fresh: bool = False) -> tuple[str, list]:
         with tempfile.TemporaryDirectory(prefix="fred configure ") as directory:
             root = Path(directory)
             (root / "deploy/k3d").mkdir(parents=True)
@@ -59,15 +61,21 @@ class ConfigureTests(unittest.TestCase):
                 OPENAI_API_KEY=key,
                 CURRENT_KEY="" if changed else base64.b64encode(key.encode()).decode(),
                 DASHBOARD_CHANGED="1" if changed else "",
+                FRESH="1" if fresh else "",
             )
-            result = subprocess.run(
-                ["bash", str(script)], env=env, capture_output=True, text=True
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
+            output = ""
+            for phase in ("key", "finish"):
+                result = subprocess.run(
+                    ["bash", str(script), phase],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                output += result.stdout + result.stderr
             calls = [
                 json.loads(line) for line in (root / "calls").read_text().splitlines()
             ]
-            output = result.stdout + result.stderr
             self.assertNotIn(key, output + json.dumps(calls))
             self.assertNotIn(
                 base64.b64encode(key.encode()).decode(), output + json.dumps(calls)
@@ -87,21 +95,19 @@ class ConfigureTests(unittest.TestCase):
         _, calls = self.exercise(True)
         self.assertTrue(any("patch" in c and "secret" in c for c in calls))
         restarts = [c for c in calls if "restart" in c]
-        self.assertEqual(len(restarts), 2)
-        self.assertTrue(
-            any(
-                all(
-                    app in c
-                    for app in (
-                        "fred-agents",
-                        "knowledge-flow-backend",
-                        "knowledge-flow-worker",
-                    )
-                )
-                for c in restarts
-            )
-        )
+        self.assertEqual(len(restarts), 4)
+        for app in ("fred-agents", "knowledge-flow-backend", "knowledge-flow-worker"):
+            self.assertTrue(any(f"deployment/{app}" in c for c in restarts))
         self.assertTrue(any("deployment/grafana" in c for c in restarts))
+
+    def test_fresh_install_prepares_key_without_restarting_absent_consumers(
+        self,
+    ) -> None:
+        _, calls = self.exercise(True, fresh=True)
+        self.assertTrue(any("patch" in c and "secret" in c for c in calls))
+        self.assertFalse(
+            any("restart" in c and "deployment/grafana" not in c for c in calls)
+        )
 
     def test_unchanged_key_and_dashboards_do_not_restart(self) -> None:
         _, calls = self.exercise(False)

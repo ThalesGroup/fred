@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Fred's local model key, dashboards and first-login guidance, after Helm sync.
+# Fred local setup: key before Helm sync; dashboards and guidance after it.
 fred_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 : "${KUBE_CONTEXT:?factory must provide the explicit k3d context}"
 ns="${K3D_NAMESPACE:-fred}"
@@ -15,30 +15,35 @@ umask 077
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-env_file="$fred_dir/apps/fred-agents/config/.env"
-key="${OPENAI_API_KEY:-}"
-if [[ -z "$key" && -f "$env_file" ]]; then
-  key="$(sed -n 's/^OPENAI_API_KEY=//p' "$env_file" | tail -n1 | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
-fi
-current="$(kubectl get secret fred-secrets -n "$ns" -o jsonpath='{.data.OPENAI_API_KEY}')"
-key_changed=false
-if [[ -z "$key" ]]; then
-  [[ -n "$current" ]] || warn "No model API key (OPENAI_API_KEY in $env_file, see 'make setup-env' in fred): Fred starts, every chat fails"
-elif [[ "$(printf '%s' "$key" | base64 -w0)" != "$current" ]]; then
-  patch="$tmp/key-patch.json"
-  printf '{"data":{"OPENAI_API_KEY":"%s"}}' "$(printf '%s' "$key" | base64 -w0)" >"$patch"
-  kubectl patch secret fred-secrets -n "$ns" --type merge --patch-file "$patch" >/dev/null
-  rm -f "$patch"
-  key_changed=true
-  ok "Model API key written to fred-secrets"
-fi
+mode="${1:?usage: configure.sh key|finish}"
+[[ "$mode" == key || "$mode" == finish ]] || { echo "Unknown setup phase: $mode" >&2; exit 1; }
+if [[ "$mode" == key ]]; then
+  env_file="$fred_dir/apps/fred-agents/config/.env"
+  key="${OPENAI_API_KEY:-}"
+  if [[ -z "$key" && -f "$env_file" ]]; then
+    key="$(sed -n 's/^OPENAI_API_KEY=//p' "$env_file" | tail -n1 | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+  fi
+  current="$(kubectl get secret fred-secrets -n "$ns" -o jsonpath='{.data.OPENAI_API_KEY}')"
+  key_changed=false
+  if [[ -z "$key" ]]; then
+    [[ -n "$current" ]] || warn "No model API key (OPENAI_API_KEY in $env_file, see 'make setup-env' in fred): Fred starts, every chat fails"
+  elif [[ "$(printf '%s' "$key" | base64 -w0)" != "$current" ]]; then
+    patch="$tmp/key-patch.json"
+    printf '{"data":{"OPENAI_API_KEY":"%s"}}' "$(printf '%s' "$key" | base64 -w0)" >"$patch"
+    kubectl patch secret fred-secrets -n "$ns" --type merge --patch-file "$patch" >/dev/null
+    rm -f "$patch"
+    key_changed=true
+    ok "Model API key written to fred-secrets"
+  fi
 
-# A new key is read at start: pods already running keep the old one.
-if $key_changed; then
-  step "Restart the applications that read the model API key"
-  kubectl rollout restart deployment -n "$ns" fred-agents knowledge-flow-backend knowledge-flow-worker >/dev/null
-  kubectl rollout status deployment -n "$ns" fred-agents knowledge-flow-backend knowledge-flow-worker --timeout "$timeout" >/dev/null
-  ok "Restart the applications that read the model API key"
+  # Existing consumers need a restart; a fresh installation has none yet.
+  if $key_changed; then
+    deployments="$(kubectl get deployments -n "$ns" -l 'app in (fred-agents,knowledge-flow-backend,knowledge-flow-worker)' -o name)"
+    while IFS= read -r deployment; do
+      [[ -z "$deployment" ]] || kubectl rollout restart "$deployment" -n "$ns" >/dev/null
+    done <<< "$deployments"
+  fi
+  exit 0
 fi
 
 # Fred's own Grafana dashboards, from this checkout. They are made for the
