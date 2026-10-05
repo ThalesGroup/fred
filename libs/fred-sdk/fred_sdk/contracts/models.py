@@ -114,8 +114,9 @@ class UIHints(BaseModel):
             "owning capability plugin's `configWidgets` (custom widgets, "
             "AGENT-CAPABILITY-RFC §9 item 4, #1903), then against stock "
             "widgets — known stock ids: 'document_libraries' "
-            "(library/document tree picker for an array of library tag ids). "
-            "Unknown ids fall back to the default input, so older frontends "
+            "(library/document tree picker for an array of library tag ids), "
+            "'model_profile' (chat-model profile picker for an optional "
+            "profile id, fed by the team's available models). Unknown ids fall back to the default input, so older frontends "
             "degrade gracefully."
         ),
     )

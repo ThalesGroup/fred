@@ -111,6 +111,12 @@ calling agent's filesystem rules. Use `origin="system"` only for trusted interna
 writing an artifact under `/.deep/`. The runtime binds the conversation and routes mounts; the
 capability cannot select a bucket or another conversation. Fail loudly when the optional port is
 absent.
+For a model call outside a turn (in `validate_config`, or a background job it starts), use
+`SaveContext.services.capability_model` (`CapabilityModelPort.ainvoke(messages, *, profile_id,
+require_vision)`). It routes to the agent's default model and fails closed with
+`CapabilityModelUnavailableError`, so keep a fallback without the model. A capability route that
+reads team-scoped rows takes `Depends(capability_team_authorizer)` and calls
+`require_agent_editor(row.team_id)` (contract §8.102).
 
 ---
 
@@ -221,6 +227,7 @@ use LangChain middleware on ReAct/Deep.
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
+| Save starts background work the agent must wait for | `readiness(stored, identity)` returning `CapabilityReadiness.pending()` / `.failed(detail)`; control-plane keeps the agent suspended (`capability_pending`) until it returns ready (`RUNTIME-EXECUTION-CONTRACT.md` §8.103) |
 
 All three runtimes build `CapabilityContext` through the same assembly path:
 identity, typed stored config, turn options, team settings and `RuntimeServices`

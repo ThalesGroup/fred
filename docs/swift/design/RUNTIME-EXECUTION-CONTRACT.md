@@ -7155,3 +7155,53 @@ The outer request authenticates before MCP dispatch; the inner FastAPI request
 gets only the verified grant and admitted log context. The upgrade preserves
 tool names, descriptions and callable input schemas, allowing existing agents
 and legacy HTTP peers to use the same catalog entries.
+
+### 8.118 Turn-free capability model port and route team authorizer (2026-10-05)
+
+`RuntimeServices.capability_model` (`CapabilityModelPort`, optional, appended last)
+gives capability code outside a turn one chat call:
+`await ainvoke(messages, *, profile_id=None, require_vision=False) -> AIMessage`.
+The pod injects it on the validate-config save path. It resolves the model the saved
+agent routes to by default (agent override, team default, catalogue default), keyed by
+the template agent id as on its turns. A known chat profile named by `profile_id`
+replaces it only when the team may use it. The port fails closed with
+`CapabilityModelUnavailableError` when no model is usable, or when `require_vision` is
+set and the resolved profile lacks `supports_vision`. The port holds no user token, so
+a background job started from the save may keep it.
+
+Routing on the save path: validate-config reads optional query parameters
+`template_agent_id`, `chat_default_profile_id` and `agent_profile_overrides` (JSON),
+the team snapshot control-plane builds for prepare-execution. Like that snapshot they
+are client-tier. The pod computes the team's usable models itself through ReBAC, once
+per port. A platform binding is never accepted on this user-reachable request, so the
+save path routes to catalogue profiles only.
+
+`ModelProfile.supports_vision` (default false) declares image input in
+`models_catalog.yaml`. `UIHints.widget` documents the stock id `model_profile`.
+
+Capability routers can depend on `fred_sdk.contracts.runtime.capability_team_authorizer`.
+The pod binds it before every capability route. `require_agent_editor(team_id)` returns
+403 unless the caller holds `TeamPermission.CAN_UPDATE_AGENTS` on the team (same check
+as control-plane agent edits). A personal space is open to its owner only. Without
+ReBAC the check is identity-only. An unbound pod returns 503.
+
+Acceptance scenarios: `openspec/changes/ppt-builder-capability/`.
+
+### 8.119 Capability readiness hook and pod endpoint (2026-10-05)
+
+`AgentCapability.readiness(stored, identity) -> CapabilityReadiness` is an optional
+async hook (default `ready`) for a capability whose save starts background work.
+`CapabilityReadiness` is `state: "ready" | "pending" | "failed"` plus `detail` (the
+failure message). The hook must be a cheap read.
+
+`POST /agents/capabilities/readiness` (authenticated like chat-controls) takes
+`{agent_instance_id, team_id, items: [{capability_id, stored: {schema_version,
+config}}]}` and returns `{results: [{capability_id, state, detail}]}`. A stored slice
+whose `schema_version` lags is read through `upgrade_config`. An unknown capability,
+a slice that no longer parses or a raising hook is omitted: config health owns that
+verdict. Control-plane maps the answers to the `capability_pending` suspension
+(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §68).
+
+`GET /agents/models-catalog` entries gain `vision_profile_ids`, the subset of
+`profile_ids` declaring `supports_vision`, mirrored on
+`CapabilityCatalogEntry.model_vision_profile_ids`.

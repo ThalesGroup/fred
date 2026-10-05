@@ -210,6 +210,7 @@ def _fake_pod_validate(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         agent_instance_id,
         authorization,
         asset_files=(),
+        routing_params=None,
     ) -> dict[str, Any]:
         # `asset_files` (#1903) is accepted so this fake's signature stays
         # compatible with the production call in `_apply_capability_selection`;
@@ -222,6 +223,7 @@ def _fake_pod_validate(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
                 "team_id": str(team_id),
                 "agent_instance_id": agent_instance_id,
                 "authorization": authorization,
+                "routing_params": routing_params,
             }
         )
         # A pod may ENRICH the stored config (RFC §3.2) — the envelope must be
@@ -447,6 +449,8 @@ async def test_enroll_persists_pod_validated_envelopes_verbatim(
             "team_id": "personal",
             "agent_instance_id": store._records[0].agent_instance_id,
             "authorization": "Bearer user-token",
+            # No team routing policy: only the agent id travels.
+            "routing_params": {"template_agent_id": "rags.sample.echo"},
         }
     ]
 

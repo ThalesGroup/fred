@@ -78,10 +78,13 @@ from control_plane_backend.agent_instances.store import (
     AgentNameAlreadyExistsError,
 )
 from control_plane_backend.agent_instances.suspension import (
+    ReadinessVerdict,
     SliceInvalid,
     SuspensionReason,
+    aggregate_readiness,
     clear_suspension,
     reconcile_instance_config_health,
+    reconcile_instance_readiness,
     reconcile_instance_suspension,
 )
 from control_plane_backend.capabilities.authz import (
@@ -1041,6 +1044,8 @@ async def _model_capabilities_for_source_uncached(
             # Selectable levels per thinking profile; absent on an older pod,
             # which then reads as on/off only.
             model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
+            # Absent on an older pod: no profile reads as vision-capable.
+            model_vision_profile_ids=tuple(entry.get("vision_profile_ids") or ()),
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -1348,6 +1353,7 @@ async def _validate_capability_config_via_pod(
     agent_instance_id: str | None,
     authorization: str | None,
     asset_files: Sequence[CapabilityAssetFile] = (),
+    routing_params: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Round-trip one capability's config to its pod for validation (#1974,
@@ -1363,6 +1369,9 @@ async def _validate_capability_config_via_pod(
     - `asset_files` are the save's uploaded asset binaries for THIS capability
       (#1903): forwarded as multipart file fields keyed by slot key, exactly
       the shape the pod endpoint reads into `validate_config`'s uploads
+    - `routing_params` (query string, so an older pod simply ignores them) let
+      the pod resolve the agent's model at save time; see
+      `_capability_save_routing_params`
     """
     url = f"{base_url.rstrip('/')}/agents/capabilities/{capability_id}/validate-config"
     data: dict[str, str] = {
@@ -1387,7 +1396,11 @@ async def _validate_capability_config_via_pod(
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                url, data=data, files=files or None, headers=headers
+                url,
+                data=data,
+                files=files or None,
+                headers=headers,
+                params=dict(routing_params) if routing_params else None,
             )
     except httpx.RequestError as exc:
         if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
@@ -1472,6 +1485,27 @@ async def template_default_capability_ids(
     return [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
 
 
+async def _capability_save_routing_params(
+    deps: ProductServiceDependencies, team_id: TeamId, template_agent_id: str
+) -> dict[str, str]:
+    """
+    The team routing snapshot prepare-execution sends, narrowed to this agent,
+    so a capability can call the agent's model during its save. Client-tier
+    values like at prepare-execution: the pod still enforces `can_use`. The
+    platform binding is not sent — the pod must never trust it from a request.
+    """
+
+    chat_default, overrides = await resolve_execution_routing_snapshot(team_id, deps)
+    params = {"template_agent_id": template_agent_id}
+    if chat_default is not None:
+        params["chat_default_profile_id"] = chat_default
+    if template_agent_id in overrides:
+        params["agent_profile_overrides"] = json.dumps(
+            {template_agent_id: overrides[template_agent_id]}
+        )
+    return params
+
+
 async def _apply_capability_selection(
     tuning: ManagedAgentTuning,
     *,
@@ -1488,6 +1522,7 @@ async def _apply_capability_selection(
     deps: ProductServiceDependencies | None = None,
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
     supports_capabilities: bool = True,
+    template_agent_id: str | None = None,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1574,6 +1609,12 @@ async def _apply_capability_selection(
                 http_status=422,
             )
 
+    routing_params = (
+        await _capability_save_routing_params(deps, team_id, template_agent_id)
+        if deps is not None and template_agent_id is not None and effective_ids
+        else None
+    )
+
     async def _build_envelope(cap_id: str) -> tuple[str, dict[str, Any]]:
         if submitted_values is not None and cap_id in submitted_values:
             values = submitted_values[cap_id]
@@ -1592,6 +1633,7 @@ async def _apply_capability_selection(
             agent_instance_id=agent_instance_id,
             authorization=authorization,
             asset_files=(asset_uploads or {}).get(cap_id, ()),
+            routing_params=routing_params,
         )
         return cap_id, envelope
 
@@ -1698,9 +1740,56 @@ async def list_agent_templates(
     return templates
 
 
+_LISTING_READINESS_MAX = 10
+_LISTING_READINESS_TIMEOUT_S = 2.0
+
+
+async def _refresh_pending_readiness(
+    deps: ProductServiceDependencies,
+    records: list[AgentInstanceRecord],
+    *,
+    authorization: str | None,
+) -> list[AgentInstanceRecord]:
+    """Re-check `capability_pending` instances while listing, so an agent
+    whose preparation finished becomes available without anyone polling.
+    Concurrent, capped and time-bounded: listing never waits on a slow pod."""
+
+    pending = [
+        r
+        for r in records
+        if r.suspension_reason == SuspensionReason.CAPABILITY_PENDING.value
+    ][:_LISTING_READINESS_MAX]
+    if not pending:
+        return records
+    results = await asyncio.gather(
+        *(
+            apply_capability_readiness(
+                deps,
+                record,
+                authorization=authorization,
+                timeout=_LISTING_READINESS_TIMEOUT_S,
+            )
+            for record in pending
+        ),
+        return_exceptions=True,
+    )
+    refreshed: dict[str, AgentInstanceRecord] = {}
+    for record, result in zip(pending, results):
+        if isinstance(result, AgentInstanceRecord):
+            refreshed[record.agent_instance_id] = result
+        else:
+            logger.warning(
+                "[capability-readiness] listing re-check failed for %s: %s",
+                record.agent_instance_id,
+                result,
+            )
+    return [refreshed.get(r.agent_instance_id, r) for r in records]
+
+
 async def list_managed_agent_instances(
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    authorization: str | None = None,
 ) -> list[ManagedAgentInstanceSummary]:
     """
     Return the enrolled managed agent instances for one team, with drift detection.
@@ -1719,7 +1808,9 @@ async def list_managed_agent_instances(
     - `instances = await list_managed_agent_instances(team_id, deps)`
     """
     store = deps.get_agent_instance_store()
-    records = await store.list_by_team(team_id)
+    records = await _refresh_pending_readiness(
+        deps, await store.list_by_team(team_id), authorization=authorization
+    )
 
     # Build a catalog-per-source map for drift detection; failures → "unavailable".
     catalog_by_source: dict[str, dict[str, bool] | None] = {}
@@ -1854,6 +1945,9 @@ async def run_capability_reconciliation_sweep(
     2. config health — an active stored slice that no longer validates through
        the pod (incl. a failing `upgrade_config`) → suspend
        `capability_config_invalid`, via `reconcile_instance_config_health`.
+    3. readiness — a capability still preparing (or failed to prepare) its
+       saved slice → `capability_pending`, cleared once every one is ready,
+       via `reconcile_instance_readiness`.
 
     `dry_run=True` computes the outcome without writing (reporting only).
     """
@@ -1925,6 +2019,16 @@ async def run_capability_reconciliation_sweep(
                     skip_ids=all_mcp,
                     kpi_writer=kpi_writer,
                 )
+                if reason is None:
+                    # Config health wrote nothing on this path; `fresh` holds.
+                    reason = await reconcile_instance_readiness(
+                        instance=fresh,
+                        store=store,
+                        verdict=await _fetch_capability_readiness(
+                            base_url=base_url, instance=fresh, authorization=None
+                        ),
+                        kpi_writer=kpi_writer,
+                    )
 
         if reason is not None and not was_suspended:
             summary.newly_suspended += 1
@@ -2340,6 +2444,111 @@ async def rename_agent_capability_ids_to_namespaced_form(
     return summary
 
 
+async def _fetch_capability_readiness(
+    *,
+    base_url: str,
+    instance: AgentInstanceRecord,
+    authorization: str | None,
+    timeout: float = 5.0,
+) -> ReadinessVerdict | None:
+    """
+    Ask the instance's pod whether its saved capability slices are ready.
+    None means no verdict (pod unreachable, or an older pod without the
+    route): the caller leaves the suspension state as it is.
+    """
+
+    items = [
+        {"capability_id": cap_id, "stored": stored}
+        for cap_id in instance.tuning.selected_capability_ids or []
+        if isinstance(stored := instance.tuning.capability_config.get(cap_id), dict)
+        and "schema_version" in stored
+        and "config" in stored
+    ]
+    if not items:
+        return ReadinessVerdict(ready=True)
+    url = f"{base_url.rstrip('/')}/agents/capabilities/readiness"
+    body = {
+        "agent_instance_id": instance.agent_instance_id,
+        "team_id": str(instance.team_id),
+        "items": items,
+    }
+    headers = {"Authorization": authorization} if authorization else None
+    try:
+        # Total bound, not per phase: the listing path relies on it.
+        async with asyncio.timeout(timeout):
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(url, json=body, headers=headers)
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.HTTPError, ValueError, TimeoutError) as exc:
+        logger.warning(
+            "[capability-readiness] no verdict for instance %s from %s: %s",
+            instance.agent_instance_id,
+            base_url,
+            exc,
+        )
+        return None
+    results = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(results, list):
+        return None
+    return aggregate_readiness([r for r in results if isinstance(r, dict)])
+
+
+async def apply_capability_readiness(
+    deps: ProductServiceDependencies,
+    record: AgentInstanceRecord,
+    *,
+    authorization: str | None,
+    timeout: float = 5.0,
+) -> AgentInstanceRecord:
+    """Set or clear `capability_pending` on one instance from its pod's
+    readiness verdict and return the current record."""
+
+    source = next(
+        (
+            s
+            for s in deps.configuration.platform.runtime_catalog_sources
+            if s.runtime_id == record.source_runtime_id and s.enabled
+        ),
+        None,
+    )
+    if source is None:
+        return record
+    verdict = await _fetch_capability_readiness(
+        base_url=source.base_url,
+        instance=record,
+        authorization=authorization,
+        timeout=timeout,
+    )
+    if verdict is None:
+        return record
+    store = deps.get_agent_instance_store()
+    await reconcile_instance_readiness(
+        instance=record, store=store, verdict=verdict, kpi_writer=deps.get_kpi_writer()
+    )
+    return await store.get(record.agent_instance_id) or record
+
+
+async def recheck_agent_instance_readiness(
+    *,
+    team_id: TeamId,
+    agent_instance_id: str,
+    deps: ProductServiceDependencies,
+    authorization: str | None,
+) -> ManagedAgentInstanceSummary | None:
+    """On-demand readiness re-check, polled by the agent form while a
+    capability prepares, so the agent becomes available without a save."""
+
+    store = deps.get_agent_instance_store()
+    record = await store.get_for_team(agent_instance_id, team_id)
+    if record is None:
+        return None
+    updated = await apply_capability_readiness(
+        deps, record, authorization=authorization
+    )
+    return _record_to_summary(updated)
+
+
 def _make_slice_validator(*, base_url: str, team_id: TeamId):
     """
     Build the `validate_slice` callable the config-health reconcile uses: it
@@ -2413,6 +2622,7 @@ def _record_to_summary(
             if record.suspension_reason is not None
             else None
         ),
+        suspension_detail=record.suspension_detail,
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
@@ -2895,6 +3105,7 @@ async def enroll_agent_instance(
         deps=deps,
         asset_uploads=asset_uploads,
         supports_capabilities=template.supports_capabilities,
+        template_agent_id=template.template_agent_id,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -2916,6 +3127,9 @@ async def enroll_agent_instance(
         )
     except AgentNameAlreadyExistsError as exc:
         raise agent_name_conflict(team_id, request.display_name) from exc
+    created = await apply_capability_readiness(
+        deps, created, authorization=authorization
+    )
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -3108,6 +3322,7 @@ async def update_agent_instance(
                 deps=deps,
                 asset_uploads=asset_uploads,
                 supports_capabilities=template.supports_capabilities,
+                template_agent_id=record.source_agent_id,
             )
         new_tuning = base
 
@@ -3174,6 +3389,18 @@ async def update_agent_instance(
             store, updated, kpi_writer=deps.get_kpi_writer()
         )
         updated = cleared if cleared is not None else updated
+    # The clear above must not make a still-preparing capability available.
+    if (
+        updated is not None
+        and {
+            "capability_ids",
+            "capability_config_values",
+        }
+        & tuning_fields_set
+    ):
+        updated = await apply_capability_readiness(
+            deps, updated, authorization=authorization
+        )
     if updated is not None:
         try:
             effective_tuning = new_tuning if new_tuning is not None else record.tuning

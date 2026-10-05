@@ -491,13 +491,16 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         *,
         definition: AgentDefinition,
         binding: BoundRuntimeContext,
+        profile_id: str | None = None,
     ) -> tuple[BaseChatModel, ModelSelection]:
         """
         Why this function exists:
         - return both the concrete model and the routing decision metadata
 
         Who calls it:
-        - `build(...)` — the only caller
+        - `build(...)` (per turn) and the turn-free capability model port,
+          which may pass `profile_id`: a known, usable chat profile then
+          replaces the routed default; otherwise routing applies unchanged
 
         Return / side effects:
         - returns `(BaseChatModel, ModelSelection)`
@@ -524,7 +527,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         construction, because the YAML already put `reasoning_effort` in
         `settings`: declining to add it would never reach the model.
         """
-        selection = self.select(
+        selection = (
+            self._usable_profile_selection(profile_id, binding)
+            if profile_id is not None
+            else None
+        ) or self.select(
             definition=definition,
             binding=binding,
             capability=ModelCapability.CHAT,
@@ -593,6 +600,31 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                 selection.model.name,
             )
         return model, selection
+
+    def supports_vision(self, selection: ModelSelection) -> bool:
+        """Whether the selected profile declares image input. A platform binding
+        has no profile, so it never does."""
+        profile = self._resolver.profile_or_none(selection.profile_id)
+        return profile is not None and profile.supports_vision
+
+    def _usable_profile_selection(
+        self, profile_id: str, binding: BoundRuntimeContext
+    ) -> ModelSelection | None:
+        """An explicitly requested chat profile, or None when it is unknown,
+        not a chat profile, or outside the team's usable models."""
+        profile = self._resolver.profile_or_none(profile_id)
+        if profile is None or profile.capability != ModelCapability.CHAT:
+            return None
+        usable = binding.usable_model_ids
+        if usable is not None and profile.capability_id not in usable:
+            return None
+        return ModelSelection(
+            source=ModelSelectionSource.AGENT_OVERRIDE,
+            capability=ModelCapability.CHAT,
+            profile_id=profile.profile_id,
+            model=profile.model.model_copy(deep=True),
+            capability_id=profile.capability_id,
+        )
 
     def select(
         self,

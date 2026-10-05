@@ -2304,3 +2304,62 @@ async def test_effective_model_is_empty_for_an_instance_of_another_team(
     )
     assert result.name is None
     assert result.capability_id is None
+
+
+@pytest.mark.asyncio
+async def test_available_models_report_supports_vision_per_profile(
+    monkeypatch, _stub_catalog
+) -> None:
+    async def _fake_usable(rebac, team_id):
+        return None
+
+    monkeypatch.setattr(routing_policy_service, "usable_capability_ids", _fake_usable)
+    _stub_catalog["model__openai__gpt-5"] = _stub_catalog[
+        "model__openai__gpt-5"
+    ].model_copy(update={"model_vision_profile_ids": ("chat.openai.gpt5",)})
+    deps = _deps(store=_FakeStore(), rebac=_elevated_rebac())
+
+    result = await routing_policy_service.list_available_model_profiles(
+        _user(), TeamId("team-1"), deps
+    )
+
+    assert {p.profile_id: p.supports_vision for p in result.profiles} == {
+        "chat.openai.gpt4o": False,
+        "chat.openai.gpt5": True,
+        "chat.openai.gpt5.creative": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_effective_model_reports_supports_vision_of_the_resolved_profile(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    entry = _chat_entry("model__openai__gpt-4o", "chat.vision").model_copy(
+        update={"model_vision_profile_ids": ("chat.vision",)}
+    )
+    _stub_pod_catalog(
+        monkeypatch, entries=[entry], default_chat_profile_id="chat.vision"
+    )
+
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+
+    assert result.supports_vision is True
+
+
+@pytest.mark.asyncio
+async def test_effective_model_without_vision_declaration_reports_false(
+    monkeypatch: pytest.MonkeyPatch, _stub_team_lookup
+) -> None:
+    _stub_pod_catalog(
+        monkeypatch,
+        entries=[_chat_entry("model__openai__mistral-small", "chat.small")],
+        default_chat_profile_id="chat.small",
+    )
+
+    result = await resolve_effective_chat_model(
+        _user(), TeamId("team-1"), "inst-1", _resolution_deps()
+    )
+
+    assert result.supports_vision is False

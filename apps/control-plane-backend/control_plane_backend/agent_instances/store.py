@@ -97,6 +97,7 @@ class AgentInstanceRecord:
         created_by: str | None,
         tuning: ManagedAgentTuning,
         suspension_reason: str | None = None,
+        suspension_detail: str | None = None,
         created_at=None,
         updated_at=None,
         updated_by: str | None = None,
@@ -115,6 +116,8 @@ class AgentInstanceRecord:
         # is not suspended; a non-None value is a `SuspensionReason`. Distinct
         # from `enabled` (the editor's disable toggle).
         self.suspension_reason = suspension_reason
+        # Failure message carried with `capability_pending`; None otherwise.
+        self.suspension_detail = suspension_detail
         self.created_at = created_at
         self.updated_at = updated_at
         # Last editing user's uid (#1952); None = never user-edited.
@@ -156,6 +159,7 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
         created_by=row.created_by,
         tuning=tuning,
         suspension_reason=row.suspension_reason,
+        suspension_detail=row.suspension_detail,
         created_at=row.created_at,
         updated_at=row.updated_at,
         updated_by=row.updated_by,
@@ -241,6 +245,7 @@ class AgentInstanceStore:
             description=record.description,
             enabled=record.enabled,
             suspension_reason=record.suspension_reason,
+            suspension_detail=record.suspension_detail,
             created_by=record.created_by,
             updated_by=record.updated_by,
             tuning_json=tuning_json,
@@ -443,11 +448,13 @@ class AgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
         session: AsyncSession | None = None,
     ) -> AgentInstanceRecord | None:
         """
         Set or clear the platform-forced suspension reason for one instance
-        (#1975, RFC §3.9). ``reason=None`` clears the suspension.
+        (#1975, RFC §3.9). ``reason=None`` clears the suspension. ``detail``
+        is written with every call, so a reason change drops a stale message.
 
         Why this is a dedicated method (not part of ``update``):
         - suspension is a platform-forced lifecycle state, separate from the
@@ -476,6 +483,7 @@ class AgentInstanceStore:
             if not rows:
                 return None
             rows[0].suspension_reason = reason
+            rows[0].suspension_detail = detail
             removed = (
                 await remove_published_entries(
                     s,

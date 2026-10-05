@@ -112,6 +112,7 @@ from fred_sdk.contracts.capability import (
     CapabilityConfigExportRequest,
     CapabilityConfigExportResult,
     CapabilityIdentity,
+    CapabilityReadiness,
     ChatControlsRequest,
     ChatControlsResponse,
     SaveContext,
@@ -197,6 +198,12 @@ from fred_runtime.capabilities.errors import (
     CapabilityError,
     TurnOptionsInvalidError,
     UnknownCapabilityError,
+)
+from fred_runtime.capabilities.platform_ports import (
+    CapabilitySaveRouting,
+    RoutedCapabilityModelPort,
+    parse_save_routing,
+    team_authorizer_binder,
 )
 from fred_runtime.common.background_tasks import spawn
 from fred_runtime.common.kf_markdown_media_client import KfMarkdownMediaClient
@@ -1359,6 +1366,30 @@ class _AgentTemplateSummary(BaseModel):
     max_chat_input_chars: int
 
 
+class _ReadinessRequestItem(BaseModel):
+    capability_id: str
+    stored: StoredCapabilityConfig
+
+
+class _ReadinessRequest(BaseModel):
+    """One instance's stored slices, as control-plane persisted them."""
+
+    agent_instance_id: str
+    team_id: str | None = None
+    items: list[_ReadinessRequestItem] = Field(default_factory=list)
+
+
+class _ReadinessResult(CapabilityReadiness):
+    capability_id: str
+
+
+class _ReadinessResponse(BaseModel):
+    """One result per known capability; an unknown id or a slice that no
+    longer parses is omitted — config health owns that verdict."""
+
+    results: list[_ReadinessResult] = Field(default_factory=list)
+
+
 class _McpCatalogEntry(BaseModel):
     id: str
     name: str
@@ -1409,6 +1440,9 @@ class _ModelCatalogEntry(BaseModel):
     for profiles declaring two or more (`ModelProfile.reasoning_levels`).
     Absent: that thinking profile is on/off only. Empty: no level a platform
     helper can send (`ModelProfile.reasoning_on_effort` is None)."""
+    vision_profile_ids: list[str] = Field(default_factory=list)
+    """The subset of `profile_ids` declaring `supports_vision` — what lets a
+    capability form offer image reading only when a vision model exists."""
     display_name: str | None = None
     """The ops-authored `model_display_name` of this model's first profile that
     declares one — the label the composer shows instead of splitting the
@@ -1614,6 +1648,8 @@ def _project_model_catalog_entries(catalog: Any) -> list[_ModelCatalogEntry]:
             elif profile.reasoning_on_effort is None:
                 # Nothing a platform helper could send: reported as no levels.
                 existing.reasoning_efforts[profile.profile_id] = []
+        if profile.supports_vision:
+            existing.vision_profile_ids.append(profile.profile_id)
     return list(seen.values())
 
 
@@ -4041,6 +4077,7 @@ def _build_capability_save_services(
     team_id: str | None,
     access_token: str | None,
     agent_instance_id: str | None = None,
+    routing: CapabilitySaveRouting | None = None,
 ) -> RuntimeServices:
     """
     Minimal `RuntimeServices` for one capability save-time validation (#1974).
@@ -4053,6 +4090,8 @@ def _build_capability_save_services(
       identity/team, but none of the execution-only services
     - `document_folders` lets an asset-parsing capability resolve author folder
       strings against the agent's space at save time (#1903 image support)
+    - `capability_model` gives save-time and background work the model the
+      saved agent routes to by default, from the team `routing` snapshot
     """
 
     request_id = str(current_context().get("request_id") or uuid4())
@@ -4063,6 +4102,12 @@ def _build_capability_save_services(
             team_id=team_id,
             access_token=access_token,
             agent_instance_id=agent_instance_id,
+            chat_default_profile_id=(
+                routing.chat_default_profile_id if routing else None
+            ),
+            agent_profile_overrides=(
+                routing.agent_profile_overrides if routing else None
+            ),
         ),
         portable_context=PortableContext(
             request_id=request_id,
@@ -4077,12 +4122,28 @@ def _build_capability_save_services(
         ),
     )
     settings = _PodAgentSettings(id=actor, name=actor, team_id=team_id, tuning=None)
-    web_factory = get_runtime_context().config.web_research_factory
+    runtime_config = get_runtime_context().config
+    web_factory = runtime_config.web_research_factory
+    # The model port may outlive the request in a background job: no token.
+    model_binding = binding.model_copy(
+        update={
+            "runtime_context": binding.runtime_context.model_copy(
+                update={"access_token": None}
+            )
+        }
+    )
     return RuntimeServices(
         workspace_fs=FredWorkspaceFs(binding=binding, settings=settings),
         agent_assets=AgentConfigAssetsAdapter(binding=binding, settings=settings),
         document_folders=DocumentFolderAdapter(binding=binding, settings=settings),
         web_research=(web_factory(binding) if web_factory else None),
+        capability_model=RoutedCapabilityModelPort(
+            binding=model_binding,
+            # Team overrides are keyed by template agent id, as on its turns.
+            routing_agent_id=(routing.template_agent_id if routing else None) or actor,
+            factory=runtime_config.chat_model_factory,
+            rebac=runtime_config.rebac_engine,
+        ),
     )
 
 
@@ -5205,6 +5266,8 @@ def _mount_capability_routers(
     from fred_core.security.oidc import get_current_user
 
     auth_deps = [Depends(get_current_user)] if security_enabled else []
+    # Binds the caller's team authorizer read by `capability_team_authorizer`.
+    auth_deps.append(Depends(team_authorizer_binder(security_enabled=security_enabled)))
     for cap_id, router in capability_registry.routers():
         api_router.include_router(
             router,
@@ -5869,6 +5932,7 @@ def _build_agent_router(
                     form_instance_id if isinstance(form_instance_id, str) else None
                 )
                 or None,
+                routing=parse_save_routing(http_request.query_params),
             ),
         )
         try:
@@ -6039,6 +6103,57 @@ def _build_agent_router(
         if capability_registry is None:
             return ChatControlsResponse(results=[])
         return evaluate_chat_controls_batch(capability_registry, body)
+
+    @router.post("/capabilities/readiness")
+    async def evaluate_capability_readiness(
+        body: _ReadinessRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> _ReadinessResponse:
+        """
+        Ask each capability whether one instance's saved slice can serve turns
+        yet. Control-plane maps pending/failed to the `capability_pending`
+        suspension after a save, in its sweep and on an editor's re-check.
+        """
+
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None:
+            return _ReadinessResponse()
+        identity = CapabilityIdentity(
+            user_id=(caller.uid if caller is not None else None) or "anonymous",
+            team_id=body.team_id,
+            agent_instance_id=body.agent_instance_id,
+        )
+        results: list[_ReadinessResult] = []
+        for item in body.items:
+            if item.capability_id not in capability_registry:
+                continue
+            capability = capability_registry.capability(item.capability_id)
+            try:
+                stored = (
+                    capability.StoredConfigModel.model_validate(item.stored.config)
+                    if item.stored.schema_version == capability.manifest.version
+                    else capability.upgrade_config(
+                        item.stored.config, item.stored.schema_version
+                    )
+                )
+                verdict = await capability.readiness(stored, identity)
+            except Exception:
+                logger.warning(
+                    "[capability-readiness] no verdict for '%s' on instance %s",
+                    item.capability_id,
+                    body.agent_instance_id,
+                    exc_info=True,
+                )
+                continue
+            results.append(
+                _ReadinessResult(
+                    capability_id=item.capability_id,
+                    state=verdict.state,
+                    detail=verdict.detail,
+                )
+            )
+        return _ReadinessResponse(results=results)
 
     @router.get("/sessions")
     async def list_sessions(

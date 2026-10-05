@@ -266,6 +266,7 @@ class _FakeAgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -278,6 +279,7 @@ class _FakeAgentInstanceStore:
         if record is None:
             return None
         record.suspension_reason = reason
+        record.suspension_detail = detail
         return record
 
     async def delete(
@@ -2880,6 +2882,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     description VARCHAR(500),
                     enabled BOOLEAN NOT NULL,
                     suspension_reason VARCHAR(64),
+                    suspension_detail TEXT,
                     created_by VARCHAR,
                     updated_by VARCHAR,
                     tuning_json TEXT,
@@ -7201,6 +7204,7 @@ def _fake_pod_validate_config_echo(monkeypatch: pytest.MonkeyPatch) -> None:
         agent_instance_id,
         authorization,
         asset_files=(),
+        routing_params=None,
     ) -> dict[str, Any]:
         # `asset_files` (#1903) accepted for signature parity with the
         # production call in `_apply_capability_selection`; these MCP-config

@@ -1571,6 +1571,8 @@
       "noDescription": "No description yet.",
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "Suspended",
+      "preparing": "Preparing — a capability this agent uses is still preparing its configuration. The agent becomes available automatically.",
+      "pendingToggleLocked": "Preparing",
       "duplicate": "Duplicate",
       "copyTo": "Copy to…",
       "copyDialog": {
@@ -3555,7 +3557,10 @@
           "title": "This agent is suspended.",
           "unavailable": "A capability it uses is no longer available ({{capabilities}}). Untick it and re-save the agent to fix it, or contact a platform administrator.",
           "accessRevoked": "Your team's access to a capability it uses was revoked ({{capabilities}}). Untick it and re-save the agent, or contact a platform administrator.",
-          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator."
+          "configInvalid": "The parameters of a capability it uses are no longer valid. Reset them and re-save the agent to fix it, or contact a platform administrator.",
+          "pendingTitle": "This agent is not available yet.",
+          "pending": "A capability it uses is still preparing its configuration. The agent becomes available automatically when this finishes.",
+          "pendingFailed": "A capability it uses could not prepare its configuration: {{detail}} Fix its parameters and re-save the agent."
         },
         "subtitle": "Team: {{team}}",
         "subtitleWithTemplate": "Team: {{team}} · Template: {{template}}",

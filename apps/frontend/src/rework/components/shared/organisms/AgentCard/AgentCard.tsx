@@ -97,11 +97,14 @@ export default function AgentCard({
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
-  const toggleLabel = isSuspended
-    ? t("rework.agentCard.suspendedToggleLocked")
-    : isEnabled
-      ? t("rework.agentCard.deactivate")
-      : t("rework.agentCard.activate");
+  const isPreparing = instance.suspension_reason === "capability_pending" && !instance.suspension_detail;
+  const toggleLabel = isPreparing
+    ? t("rework.agentCard.pendingToggleLocked")
+    : isSuspended
+      ? t("rework.agentCard.suspendedToggleLocked")
+      : isEnabled
+        ? t("rework.agentCard.deactivate")
+        : t("rework.agentCard.activate");
   // Best-effort keyword guess from the agent's own identity, falling back to
   // the site's configured default icon when nothing matches (#2076 follow-up).
   const iconName = resolveAgentIcon(instance, agentIconName);
@@ -273,7 +276,11 @@ export default function AgentCard({
       )}
 
       <div className={styles.footer}>
-        {isSuspended && <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>}
+        {isSuspended && (
+          <div className={styles.suspensionWarning}>
+            {isPreparing ? t("rework.agentCard.preparing") : t("rework.agentCard.suspended")}
+          </div>
+        )}
         <div className={styles.actions}>
           <Tooltip content={infoTooltipContent}>
             <span className={styles.infoIcon} tabIndex={0}>

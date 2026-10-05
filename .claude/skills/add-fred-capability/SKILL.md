@@ -139,6 +139,7 @@ do not fold tools into the `middleware()` override, or they vanish for Graph age
 | System-prompt fragment | `middleware()` override, `wrap_model_call` / `modify_model_request` — ReAct only |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free (ReAct only) |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
+| Save starts background work the agent must wait for | `readiness(stored, identity)` → `CapabilityReadiness`; pending/failed keeps the agent suspended (`capability_pending`) — no control-plane code |
 
 Tools keep their original LangChain objects across runtimes. Use native `ainvoke`
 semantics and `content_and_artifact` for structured Fred results; no Graph wrapper

@@ -393,6 +393,7 @@ async def list_available_model_profiles(
             name=entry.name,
             display_name=entry.model_display_name,
             reasoning_available=entry.id in reasoning_enabled_ids,
+            supports_vision=profile_id in entry.model_vision_profile_ids,
         )
         for entry in catalog.values()
         if entry.kind == "model" and (usable is None or entry.id in usable)
@@ -677,6 +678,7 @@ async def resolve_effective_chat_model(
         reasoning_enabled=entry.id in reasoning_enabled_ids,
         selectable_models=list(selectable.values()),
         choice_locked=choice_locked,
+        supports_vision=resolution.profile_id in entry.model_vision_profile_ids,
     )
 
 

@@ -4891,6 +4891,36 @@ admin Teams dialog maps them to its own localized messages.
 the ids in `admins` that still hold `pending_team_admin` only. Filled by the
 team listings that resolve membership (their `admins` include nominees);
 empty on the single-team projection, whose `admins` are accepted admins only.
+## 68. Contract Notes — capability readiness and vision flags (2026-10-05)
+
+**Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
+capability reports, through its pod's `POST /agents/capabilities/readiness`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.119), that its saved configuration is still
+being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
+`suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
+with `capability_pending` to carry the failure message. The existing suspension
+guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
+pickers, recents and search).
+
+Control-plane asks the pod after an enrol, after a save touching capabilities (so
+the save's own suspension clear never makes a preparing agent available), in
+`run_capability_reconciliation_sweep` after availability and config health, and on
+`POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
+(`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
+`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances,
+concurrently, with the caller's token and a 2 s bound (the sweep has no production
+host). Every other
+reason outranks `capability_pending`; the readiness check alone sets and clears it.
+No answer (pod unreachable, or an older pod without the route) changes nothing.
+
+**Save-time routing.** The pod `validate-config` call carries query parameters
+`template_agent_id`, `chat_default_profile_id` and `agent_profile_overrides` (JSON,
+this agent's entry only): the team snapshot prepare-execution sends, so a capability
+can call the agent's model during its save. No platform binding is sent.
+
+**Vision flags.** `AvailableModelProfile.supports_vision` and
+`EffectiveChatModel.supports_vision` (default false) report whether the profile
+declares `supports_vision` in the pod catalog. A platform binding reports false.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

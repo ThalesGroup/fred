@@ -275,3 +275,22 @@ describe("AgentCard marketplace bar", () => {
     expect(popover?.textContent).not.toContain("removed.hide");
   });
 });
+
+// A capability still preparing its configuration reads "preparing", not
+// "broken"; a failed preparation falls back to the generic suspended warning.
+describe("AgentCard capability readiness", () => {
+  it("shows the preparing warning while a capability is pending", () => {
+    render({ ...instance(), suspension_reason: "capability_pending" }, false);
+    expect(container.textContent).toContain("rework.agentCard.preparing");
+    expect(container.textContent).not.toContain("rework.agentCard.suspended");
+  });
+
+  it("shows the suspended warning once the preparation failed", () => {
+    render(
+      { ...instance(), suspension_reason: "capability_pending", suspension_detail: "Template unreadable." },
+      false,
+    );
+    expect(container.textContent).toContain("rework.agentCard.suspended");
+    expect(container.textContent).not.toContain("rework.agentCard.preparing");
+  });
+});

@@ -38,11 +38,13 @@ from typing import (
     Generic,
     List,
     Literal,
+    TYPE_CHECKING,
     Protocol,
     TypeAlias,
     TypeVar,
 )
 
+from fastapi import HTTPException, Request
 from fred_core.history.history_schema import FinishReason, coerce_finish_reason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
@@ -63,6 +65,9 @@ from .context import (
 from .models import AgentDefinition
 from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
+
+if TYPE_CHECKING:
+    from langchain_core.messages import AIMessage, BaseMessage
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -568,6 +573,60 @@ class ChatModelFactoryPort(ABC):
         agent definitions remain pure declarations, while model selection stays
         an injected capability that Fred can later align with a broader SDK.
         """
+
+
+class CapabilityModelUnavailableError(RuntimeError):
+    """No model this capability call may use: unknown, not usable by the team,
+    or not vision-capable when vision was required."""
+
+
+class CapabilityModelPort(ABC):
+    """
+    Turn-free chat-model access for capability code that runs outside a turn
+    (save-time validation, background jobs started from it).
+
+    Resolves the model the saved agent uses by default (agent override, team
+    default, catalogue default), within the team's usable models. A known, usable `profile_id` replaces that default. Fails closed with
+    `CapabilityModelUnavailableError`, including when `require_vision` is set and
+    the resolved profile does not declare `supports_vision`. Images go as
+    LangChain `image_url` content parts.
+    """
+
+    @abstractmethod
+    async def ainvoke(
+        self,
+        messages: Sequence[BaseMessage],
+        *,
+        profile_id: str | None = None,
+        require_vision: bool = False,
+    ) -> AIMessage:
+        """Run one chat completion and return the model's message."""
+
+
+# Request-state key under which the pod binds the caller's authorizer before a
+# capability route runs.
+CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
+
+
+class CapabilityTeamAuthorizer(ABC):
+    """Team-scoped authorization for capability routes, bound to the caller."""
+
+    @abstractmethod
+    async def require_agent_editor(self, team_id: str) -> None:
+        """Raise HTTP 403 unless the caller may edit the agents of `team_id`."""
+
+
+async def capability_team_authorizer(request: Request) -> CapabilityTeamAuthorizer:
+    """FastAPI dependency for capability routers: the caller's team authorizer.
+
+    Fails closed (503) on a pod that did not bind one.
+    """
+    authorizer = getattr(request.state, CAPABILITY_TEAM_AUTHORIZER_STATE, None)
+    if not isinstance(authorizer, CapabilityTeamAuthorizer):
+        raise HTTPException(
+            status_code=503, detail="Team authorization is not available."
+        )
+    return authorizer
 
 
 class ToolInvokerPort(ABC):
@@ -1626,6 +1685,9 @@ class RuntimeServices:
     conversation_filesystem: ConversationFilesystemPort | None = None
     web_research: WebResearchPort | None = None
     skills: SkillsPort | None = None
+    # Turn-free model access for save-time and background capability work.
+    # Appended last to preserve positional compatibility.
+    capability_model: CapabilityModelPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

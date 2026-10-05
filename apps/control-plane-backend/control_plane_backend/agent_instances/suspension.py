@@ -26,12 +26,14 @@ Why this module exists:
   control-plane product decision made here — not a checkpointer concern
 
 What lives here:
-- `SuspensionReason` — the three typed reasons
+- `SuspensionReason` — the typed reasons
 - `reconcile_instance_suspension(...)` — the availability reconciliation entry
   point (the proactive sweep's per-instance unit AND the documented trigger
   point #1980's ReBAC revocation calls, see below)
 - `reconcile_instance_config_health(...)` — the config-invalid detection unit
   (a stored slice that no longer validates, incl. a failing `upgrade_config`)
+- `reconcile_instance_readiness(...)` — the `capability_pending` unit, fed by
+  the pod's capability `readiness` verdicts
 - `suspend_instance` / `clear_suspension` — the store writes + observability
 
 #1980 TRIGGER-POINT CONTRACT (ReBAC team scoping, sequenced AFTER #1975):
@@ -48,7 +50,8 @@ What lives here:
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
+from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
 
@@ -78,6 +81,7 @@ class SuspensionStore(Protocol):
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
     ) -> AgentInstanceRecord | None: ...
 
 
@@ -92,11 +96,16 @@ class SuspensionReason(str, Enum):
     - `capability_config_invalid`: a persisted `capability_config` slice no
       longer validates against the current `StoredConfigModel` and its lazy
       `upgrade_config` hook could not migrate it.
+    - `capability_pending`: a capability's `readiness` hook reports its saved
+      slice is still being prepared, or that preparing it failed (then
+      `suspension_detail` carries the message). Set and cleared only by
+      `reconcile_instance_readiness`; the lowest-precedence reason.
     """
 
     CAPABILITY_UNAVAILABLE = "capability_unavailable"
     CAPABILITY_ACCESS_REVOKED = "capability_access_revoked"
     CAPABILITY_CONFIG_INVALID = "capability_config_invalid"
+    CAPABILITY_PENDING = "capability_pending"
 
 
 # Reasons that an availability reconcile OWNS: it may both set and CLEAR them,
@@ -225,6 +234,7 @@ async def suspend_instance(
     reason: SuspensionReason,
     *,
     capabilities: Collection[str] = (),
+    detail: str | None = None,
     kpi_writer: BaseKPIWriter | None = None,
 ) -> AgentInstanceRecord | None:
     """
@@ -236,7 +246,7 @@ async def suspend_instance(
     """
 
     updated = await store.set_suspension(
-        instance.agent_instance_id, instance.team_id, reason=reason.value
+        instance.agent_instance_id, instance.team_id, reason=reason.value, detail=detail
     )
     _emit_suspended(instance, reason, capabilities, kpi_writer)
     return updated
@@ -378,4 +388,67 @@ async def reconcile_instance_config_health(
     # as "cleared"); otherwise it is healthy.
     if instance.suspension_reason == SuspensionReason.CAPABILITY_CONFIG_INVALID.value:
         return SuspensionReason.CAPABILITY_CONFIG_INVALID
+    return None
+
+
+@dataclass(frozen=True)
+class ReadinessVerdict:
+    """The pod's aggregated `readiness` answer for one instance: `ready`, or
+    not ready with the failure message when a capability reported one."""
+
+    ready: bool
+    capability_ids: tuple[str, ...] = ()
+    detail: str | None = None
+
+
+def aggregate_readiness(results: Collection[Mapping[str, object]]) -> ReadinessVerdict:
+    """Fold per-capability pod results into one verdict; a failure outranks a
+    pending capability so its message reaches the editor."""
+
+    not_ready = [r for r in results if r.get("state") in ("pending", "failed")]
+    if not not_ready:
+        return ReadinessVerdict(ready=True)
+    failed = next((r for r in not_ready if r.get("state") == "failed"), None)
+    detail = failed.get("detail") if failed is not None else None
+    return ReadinessVerdict(
+        ready=False,
+        capability_ids=tuple(str(r.get("capability_id")) for r in not_ready),
+        detail=str(detail) if detail else None,
+    )
+
+
+async def reconcile_instance_readiness(
+    *,
+    instance: AgentInstanceRecord,
+    store: SuspensionStore,
+    verdict: ReadinessVerdict | None,
+    kpi_writer: BaseKPIWriter | None = None,
+) -> SuspensionReason | None:
+    """
+    Set, refresh or clear `capability_pending` from one readiness verdict.
+
+    Any other reason outranks it and is left untouched. `verdict=None` (pod
+    unreachable, no answer) changes nothing. Returns the instance's pending
+    reason after the call, or None.
+    """
+
+    current = instance.suspension_reason
+    pending = SuspensionReason.CAPABILITY_PENDING
+    if current is not None and current != pending.value:
+        return None
+    if verdict is None:
+        return pending if current == pending.value else None
+    if not verdict.ready:
+        if current != pending.value or instance.suspension_detail != verdict.detail:
+            await suspend_instance(
+                store,
+                instance,
+                pending,
+                capabilities=verdict.capability_ids,
+                detail=verdict.detail,
+                kpi_writer=kpi_writer,
+            )
+        return pending
+    if current == pending.value:
+        await clear_suspension(store, instance, kpi_writer=kpi_writer)
     return None

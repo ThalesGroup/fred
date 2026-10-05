@@ -106,6 +106,11 @@ The system SHALL complete the agent save without waiting for the template analys
 - **WHEN** the analysis succeeds
 - **THEN** the agent becomes available without another save
 
+#### Scenario: Agent becomes available on next listing after analysis completes
+
+- **WHEN** the analysis succeeds while nobody has the agent form open
+- **THEN** the next listing of the team's agents re-checks the agent and shows it available, and a pod that does not answer in time leaves it unavailable without delaying the listing
+
 #### Scenario: Failed or interrupted analysis
 
 - **WHEN** the analysis fails or is interrupted

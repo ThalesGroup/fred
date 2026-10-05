@@ -1571,6 +1571,8 @@
       "noDescription": "Pas encore de description.",
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
       "suspendedToggleLocked": "Suspendu",
+      "preparing": "En préparation — une capacité utilisée par cet agent prépare encore sa configuration. L'agent devient disponible automatiquement.",
+      "pendingToggleLocked": "En préparation",
       "duplicate": "Dupliquer",
       "copyTo": "Copier dans…",
       "copyDialog": {
@@ -3555,7 +3557,10 @@
           "title": "Cet agent est suspendu.",
           "unavailable": "Une capacité qu'il utilise n'est plus disponible ({{capabilities}}). Décochez-la et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme.",
           "accessRevoked": "L'accès de votre équipe à une capacité qu'il utilise a été révoqué ({{capabilities}}). Décochez-la et réenregistrez l'agent, ou contactez un administrateur de la plateforme.",
-          "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme."
+          "configInvalid": "Les paramètres d'une capacité qu'il utilise ne sont plus valides. Réinitialisez-les et réenregistrez l'agent pour corriger le problème, ou contactez un administrateur de la plateforme.",
+          "pendingTitle": "Cet agent n'est pas encore disponible.",
+          "pending": "Une capacité qu'il utilise prépare encore sa configuration. L'agent devient disponible automatiquement une fois terminé.",
+          "pendingFailed": "Une capacité qu'il utilise n'a pas pu préparer sa configuration : {{detail}} Corrigez ses paramètres et réenregistrez l'agent."
         },
         "subtitle": "Équipe : {{team}}",
         "subtitleWithTemplate": "Équipe : {{team}} · Template : {{template}}",

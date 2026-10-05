@@ -226,12 +226,23 @@ export function AgentFormBody({
   const suspensionReason = mode === "edit" ? editInstance?.suspension_reason : undefined;
   const availableCapabilityIds = new Set(capabilities.map((c) => c.id));
   const missingCapabilityIds =
-    suspensionReason && suspensionReason !== "capability_config_invalid"
+    suspensionReason === "capability_unavailable" || suspensionReason === "capability_access_revoked"
       ? (editInstance?.selected_capability_ids ?? []).filter((id) => !availableCapabilityIds.has(id))
       : [];
+  const suspensionTitle =
+    suspensionReason === "capability_pending"
+      ? t("rework.teams.formAgent.suspended.pendingTitle")
+      : t("rework.teams.formAgent.suspended.title");
   const suspensionMessage = (() => {
     if (!suspensionReason) return undefined;
     const capabilityList = missingCapabilityIds.join(", ") || "—";
+    // Pending clears on its own once the capability reports ready.
+    if (suspensionReason === "capability_pending") {
+      const detail = editInstance?.suspension_detail;
+      return detail
+        ? t("rework.teams.formAgent.suspended.pendingFailed", { detail })
+        : t("rework.teams.formAgent.suspended.pending");
+    }
     if (suspensionReason === "capability_config_invalid") {
       return t("rework.teams.formAgent.suspended.configInvalid");
     }
@@ -417,7 +428,7 @@ export function AgentFormBody({
 
       {suspensionMessage && (
         <div className={styles.suspensionBanner} role="alert">
-          <strong>{t("rework.teams.formAgent.suspended.title")}</strong> {suspensionMessage}
+          <strong>{suspensionTitle}</strong> {suspensionMessage}
         </div>
       )}
 

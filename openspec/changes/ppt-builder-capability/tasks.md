@@ -27,12 +27,12 @@ Owns: `components.py`, `compose.py`, `composed_render.py`, `layout.py`, `design_
 
 Owns: `libs/fred-sdk/fred_sdk/contracts/runtime.py`, `libs/fred-runtime/fred_runtime/model_routing/{contracts,provider}.py`, `libs/fred-runtime/fred_runtime/app/agent_app.py` (`_build_capability_save_services` only), a new runtime adapter module, `apps/fred-agents/config/models_catalog.yaml`, `docs/swift/design/RUNTIME-EXECUTION-CONTRACT.md` §8, `docs/swift/capabilities/AUTHORING.md`.
 
-- [ ] 1.1 `CapabilityModelPort` (`ainvoke(messages, *, profile_id, require_vision)`) appended to `RuntimeServices` as optional; resolves the saved agent's default routed model, `profile_id` overrides when usable
-- [ ] 1.1b Save binding carries the routing fields control-plane sends with validate-config (WP10.0); stock `model_profile` widget id in `UIHints`
-- [ ] 1.2 Optional `ModelProfile.supports_vision`; flag the multimodal profiles in the catalogue
-- [ ] 1.3 Runtime adapter over `chat_model_factory.build_for_chat` with a synthetic `capability:<id>` definition and the save binding; fails closed without vision; injected in `_build_capability_save_services`
-- [ ] 1.4 Capability-router dependency checking `TeamPermission.CAN_UPDATE_AGENTS` on a team via the pod's `rebac_engine`
-- [ ] 1.5 Tests in fred-sdk and fred-runtime (port present on save services, ReBAC denial, vision refusal); contract §8 dated entry; AUTHORING.md line
+- [x] 1.1 `CapabilityModelPort` (`ainvoke(messages, *, profile_id, require_vision)`) appended to `RuntimeServices` as optional; resolves the saved agent's default routed model, `profile_id` overrides when usable
+- [x] 1.1b Save binding carries the routing fields control-plane sends with validate-config (WP10.0); stock `model_profile` widget id in `UIHints`
+- [x] 1.2 Optional `ModelProfile.supports_vision`; flag the multimodal profiles in the catalogue
+- [x] 1.3 Runtime adapter over `chat_model_factory.build_for_chat` with a synthetic `capability:<id>` definition and the save binding; fails closed without vision; injected in `_build_capability_save_services`
+- [x] 1.4 Capability-router dependency checking `TeamPermission.CAN_UPDATE_AGENTS` on a team via the pod's `rebac_engine`
+- [x] 1.5 Tests in fred-sdk and fred-runtime (port present on save services, ReBAC denial, vision refusal); contract §8 dated entry; AUTHORING.md line
 
 ## WP2. Analysis: slots by default, `SlideKind`
 
@@ -105,11 +105,11 @@ Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/**`, `apps/fro
 
 Owns: `libs/fred-sdk/fred_sdk/contracts/capability/base.py` (`readiness` hook), pod readiness endpoint in `libs/fred-runtime/fred_runtime/app/agent_app.py`, `apps/control-plane-backend/control_plane_backend/agent_instances/suspension.py`, `product/{service,schemas}.py` (sweep + post-save check, `suspension_detail`), its Alembic migration, regenerated `controlPlaneOpenApi.ts`, `AgentFormBody.tsx` / `AgentCard.tsx` reason strings, `CONTROL-PLANE-PRODUCT-CONTRACT.md` entry.
 
-- [ ] 10.0 validate-config request carries the team routing fields already built for prepare-execution (profile overrides, chat default, usable model ids, platform binding)
-- [ ] 10.0b `supports_vision` exposed on `available-models` and `effective-chat-model` responses (regenerated client)
-- [ ] 10.1 `SuspensionReason.CAPABILITY_PENDING` + nullable `suspension_detail`; pending is not cleared by a save
-- [ ] 10.2 Optional `readiness(stored)` SDK hook and pod endpoint; control-plane applies it after save and in the reconciliation sweep, plus an on-demand re-check the form's poll can trigger
-- [ ] 10.3 Form/card strings for pending and failed-with-detail; tests in control-plane, fred-sdk, frontend
+- [x] 10.0 validate-config request carries the team routing fields already built for prepare-execution (profile overrides, chat default, usable model ids, platform binding)
+- [x] 10.0b `supports_vision` exposed on `available-models` and `effective-chat-model` responses (regenerated client)
+- [x] 10.1 `SuspensionReason.CAPABILITY_PENDING` + nullable `suspension_detail`; pending is not cleared by a save
+- [x] 10.2 Optional `readiness(stored)` SDK hook and pod endpoint; control-plane applies it after save and in the reconciliation sweep, plus an on-demand re-check the form's poll can trigger
+- [x] 10.3 Form/card strings for pending and failed-with-detail; tests in control-plane, fred-sdk, frontend
 
 ## WP9. Evaluation and verification (last)
 
