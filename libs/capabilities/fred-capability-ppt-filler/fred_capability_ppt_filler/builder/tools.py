@@ -33,7 +33,8 @@ import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
@@ -151,6 +152,24 @@ def catalogue(inventory: TemplateInventory) -> str:
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
     """The deck plan, with the kinds this template offers as the `kind` enum
     of the JSON schema only: validation accepts anything and coerces it."""
+    return _schema_for(tuple(offered_kinds(inventory)))
+
+
+def _kind_enum(kinds: Tuple[SlideKind, ...]) -> Any:
+    """Replace the full `SlideKind` enum the type generates: models read the
+    nested `anyOf` and asked for kinds this template does not offer."""
+
+    def extra(schema: Dict[str, Any]) -> None:
+        schema.pop("enum", None)
+        schema["anyOf"] = [{"type": "string", "enum": list(kinds)}, {"type": "null"}]
+
+    return extra
+
+
+# Built per turn otherwise: pydantic model creation costs milliseconds of CPU
+# on the event loop, and templates share a handful of kind sets.
+@lru_cache(maxsize=64)
+def _schema_for(kinds: Tuple[SlideKind, ...]) -> type[BaseModel]:
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
@@ -162,7 +181,7 @@ def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
                     "Optional, after the content: the kind of slide. Left out, the tool "
                     "infers it from the content."
                 ),
-                json_schema_extra={"enum": cast(Any, offered_kinds(inventory))},
+                json_schema_extra=_kind_enum(kinds),
             ),
         ),
     )

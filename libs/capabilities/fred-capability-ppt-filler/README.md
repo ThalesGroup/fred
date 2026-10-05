@@ -29,18 +29,37 @@ table cells remain invalid image locations. Chart text and SmartArt are unsuppor
 ## `ppt_builder` (same package)
 
 A second capability, `ppt_builder` (`fred_capability_ppt_filler/builder/`),
-generates a deck from a chat plan on an _unannotated_ corporate template — or
-on a built-in theme when the agent has none. The template is analysed at save
-time into a pattern inventory (master layouts by placeholder type, example
-slides by placeholders, sample-text lexicon, geometry and repeated groups);
-the author can correct it in the agent form; the agent's `build_presentation`
-tool renders a typed plan by instantiating layouts or duplicating example
-slides and filling their zones by role. Delivery reuses the filler's preview
-part and pane. Design: `openspec/changes/ppt-builder-capability/`, issue #2679.
+generates a deck from a chat plan on an _unannotated_ corporate template, or
+on a built-in theme when the agent has none.
 
-Optional annotation channels the analysis honours: a shape name from the
-Selection pane (`title`, `body`, `number`, `keep`, `heading_2`…), and
-`intent:` / `label:` lines in a slide's speaker notes.
+- **Save** stores the template and returns at once; a background job
+  (`analysis_job.py`) analyses it (layouts, example slides, slots, capacities)
+  and, unless "Use a vision model" is off, labels each example slide with a
+  vision model (`labelling.py`). The result lives in the owned table
+  `cap_ppt_builder_analysis`; the agent stays unavailable until it succeeds.
+- **Chat**: the model sends content per slide, `assign.py` picks the template
+  slide under deck rules (cover once first, closing last, no three identical
+  in a row), and a slide that fits nothing returns `needs_revision` instead of
+  a wrong deck. `render.py` duplicates and fills; `checks.py` removes leftover
+  example text. Delivery reuses the filler's preview part and pane.
+
+Optional annotation channels: a shape name from the Selection pane (`title`,
+`body`, `number`, `keep`…), and `kind:` / `label:` lines in a slide's notes.
+Design: `openspec/changes/ppt-builder-capability/`.
+
+### Evaluation (opt-in)
+
+`make eval` runs prompts x templates through the real analysis, the real
+`build_presentation` tool and a real LLM acting as the agent, and writes one
+JSON per run, `summary.md` and, with `--contact-sheets`, PNG sheets. It reads
+only the API keys from `apps/fred-agents/config/.env` and the profile from
+`models_catalog.yaml` (default `chat.mistral.small`). Templates are never
+committed: pass them by path. LibreOffice is required.
+
+```bash
+make eval EVAL_ARGS="--template corporate=/path/to/template.pptx --out target/eval"
+# or PPT_EVAL_TEMPLATES=a.pptx,b.pptx; --modes vision,rules; --prompts pitch_4,kickoff
+```
 
 ## Spec
 

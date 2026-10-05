@@ -10,3 +10,9 @@ include ../../../scripts/makefiles/python-clean.mk
 include ../../../scripts/makefiles/python-publish.mk
 include ../../../scripts/makefiles/alembic.mk
 include ../../../scripts/makefiles/help.mk
+
+##@ Evaluation
+
+.PHONY: eval
+eval: dev ## Opt-in ppt_builder deck-quality evaluation against the real LLM (never part of make test); EVAL_ARGS passes options
+	$(UV) run python eval/run_eval.py $(EVAL_ARGS)

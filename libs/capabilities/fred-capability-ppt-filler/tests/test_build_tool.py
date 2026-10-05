@@ -142,7 +142,10 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     assert "pattern" not in properties
     # Content first, `kind` last, listing only what this template offers.
     assert list(properties)[0] == "title" and list(properties)[-1] == "kind"
-    kinds = properties["kind"]["enum"]
+    # The only enum anywhere in the field: the type's full list stays out.
+    kind_schema = properties["kind"]
+    assert "enum" not in kind_schema
+    (kinds,) = [b["enum"] for b in kind_schema["anyOf"] if "enum" in b]
     assert "process" in kinds and "cover" not in kinds and "cards" not in kinds
 
 

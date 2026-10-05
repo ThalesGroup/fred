@@ -70,6 +70,9 @@ HEARTBEAT_SECONDS = 30
 # job then fails instead of looping. A manual re-run starts the count again.
 MAX_ATTEMPTS = 3
 JOB_TIMEOUT_SECONDS = 20 * 60
+# Nobody waits on the job, and a large template's patterns deck exceeds the
+# 60 s turn default: without a PDF there are no thumbnails and no vision labels.
+PATTERNS_PDF_TIMEOUT_SECONDS = 300.0
 _SLOT_POLL_SECONDS = 1.0
 
 RULES_KEY = "rules"
@@ -518,7 +521,9 @@ async def _analyse(
     if result.inventory is None:
         raise AnalysisFailed(" | ".join(e.message for e in result.errors))
     deck = await _cpu(build_patterns_deck, template, result.inventory)
-    pdf = await convert_office_bytes_to_pdf(deck, suffix=".pptx")
+    pdf = await convert_office_bytes_to_pdf(
+        deck, suffix=".pptx", timeout_seconds=PATTERNS_PDF_TIMEOUT_SECONDS
+    )
     use_vision, profile_id = parse_labelling_key(key)
     inventory = await label_inventory(
         result.inventory,

@@ -34,16 +34,20 @@ def apply_overrides(
     inventory: TemplateInventory, overrides: Sequence[PatternOverride]
 ) -> Tuple[TemplateInventory, List[str]]:
     """Return ``(effective inventory, dropped override pattern ids)``; the
-    input is not mutated."""
-    effective = inventory.model_copy(deep=True)
+    input is not mutated. Runs every turn: only overridden patterns are copied,
+    the others are shared with the (read-only) cached inventory."""
     dropped: List[str] = []
-    by_id = {pattern.id: pattern for pattern in effective.patterns}
+    by_id = {pattern.id: pattern for pattern in inventory.patterns}
+    copies = {}
 
     for override in overrides:
-        pattern = by_id.get(override.pattern_id)
-        if pattern is None:
+        if override.pattern_id not in by_id:
             dropped.append(override.pattern_id)
             continue
+        pattern = copies.get(override.pattern_id)
+        if pattern is None:
+            pattern = by_id[override.pattern_id].model_copy()
+            copies[override.pattern_id] = pattern
         if override.label is not None and override.label.strip():
             pattern.label = override.label.strip()[:60]
         if override.kind is not None:
@@ -51,7 +55,10 @@ def apply_overrides(
         if override.included is not None:
             pattern.included = override.included
             pattern.exclusion_reason = None if override.included else "author"
-    return effective, dropped
+    if not copies:
+        return inventory, dropped
+    patterns = [copies.get(p.id, p) for p in inventory.patterns]
+    return inventory.model_copy(update={"patterns": patterns}), dropped
 
 
 def prune_overrides(

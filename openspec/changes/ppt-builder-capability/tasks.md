@@ -115,7 +115,7 @@ Owns: `libs/fred-sdk/fred_sdk/contracts/capability/base.py` (`readiness` hook), 
 
 Owns: `libs/capabilities/fred-capability-ppt-filler/eval/` (new), package `Makefile` (`eval` target), `verification.md` (new, this change), package `README.md`, migration note.
 
-- [ ] 9.1 Harness: prompts × templates (local "PPT Corporate" template by env var, built-in), real analysis + tool + configured LLM, metrics per D11, JSON + table output
-- [ ] 9.2 Run it; record results and targets met/missed in `verification.md`
-- [ ] 9.3 `make code-quality` + `make test` in the package, fred-sdk, fred-runtime, frontend; `fred-performance-reviewer` on the tool path and the per-turn row read
+- [x] 9.1 Harness: prompts × templates (local "PPT Corporate" template by env var, built-in), real analysis + tool + configured LLM, metrics per D11, JSON + table output
+- [x] 9.2 Run it; record results and targets met/missed in `verification.md`
+- [x] 9.3 `make code-quality` + `make test` in the package, fred-sdk, fred-runtime, frontend; `fred-performance-reviewer` on the tool path and the per-turn row read
 - [ ] 9.4 End-to-end on the local stack (upload → status → build → preview/download; no template); README, migration note, issue #2679 status comment
