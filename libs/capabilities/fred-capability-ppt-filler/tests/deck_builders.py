@@ -23,13 +23,11 @@ Keeping them here avoids duplicating the same builders across ``test_fill.py``,
 from __future__ import annotations
 
 import io
-from typing import List, Optional, Tuple, TypeVar, cast
+from typing import List, Optional, Tuple, TypeVar
 
 from fred_capability_ppt_filler.parser import SlideSchema, parse
 from PIL import Image
 from pptx import Presentation
-from pptx.shapes.autoshape import Shape
-from pptx.shapes.base import BaseShape
 from pptx.util import Inches
 
 T = TypeVar("T")
@@ -39,11 +37,6 @@ def required(value: Optional[T]) -> T:
     """Narrow a value the fixture guarantees: fail loudly rather than on None.attr."""
     assert value is not None
     return value
-
-
-def autoshape(shape: BaseShape) -> Shape:
-    """python-pptx types placeholders as BaseShape; ours always carry text."""
-    return cast(Shape, shape)
 
 
 # (text-box body, notes text) per slide.
@@ -158,151 +151,3 @@ def picture_shapes(slide) -> list:
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
     return [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE]
-
-
-def add_fixture(presentation, container, left, top, width, height) -> None:
-    """Put a non-placeholder shape on a slide layout or master.
-
-    That is how a template carries its logo, its band or its footer: the shape
-    is INHERITED by every slide using the layout. python-pptx cannot draw on a
-    layout or a master directly, so the shape is built on a scratch slide and
-    its element moved over.
-    """
-    from pptx.enum.shapes import MSO_SHAPE
-
-    scratch = presentation.slides.add_slide(presentation.slide_layouts[6])
-    element = scratch.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE, left, top, width, height
-    )._element
-    element.getparent().remove(element)
-    container.shapes._spTree.append(element)
-    slide_ids = presentation.slides._sldIdLst
-    scratch_id = list(slide_ids)[-1]
-    presentation.part.drop_rel(scratch_id.rId)
-    slide_ids.remove(scratch_id)
-
-
-#: The house style of `build_house_style_template`, so tests assert against one
-#: source rather than repeating magic numbers.
-HOUSE_CORNER = 0.2
-HOUSE_GAP_IN = 0.3
-HOUSE_INSET_IN = 0.2
-
-
-def build_house_style_template():
-    """A template with opinions: outlined cards, round corners, wide insets,
-    a measurable gap between columns, and figures written UNDER their label.
-
-    None of that is what the capability would choose on its own, which is the
-    point: composing in this template's language means reading it back.
-    """
-    from pptx import Presentation
-    from pptx.dml.color import RGBColor
-    from pptx.enum.shapes import MSO_SHAPE
-    from pptx.util import Inches, Pt
-
-    presentation = Presentation()
-    slide = presentation.slides.add_slide(presentation.slide_layouts[5])
-    required(slide.shapes.title).text = "How this house draws"
-
-    width, height, top = Inches(2.6), Inches(2.0), Inches(2.0)
-    for index in range(3):
-        left = Inches(0.5 + index * (2.6 + HOUSE_GAP_IN))
-        card = slide.shapes.add_shape(
-            MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height
-        )
-        card.adjustments[0] = HOUSE_CORNER
-        card.fill.background()
-        card.line.color.rgb = RGBColor(0x33, 0x33, 0x33)
-        card.text_frame.margin_left = Inches(HOUSE_INSET_IN)
-        card.text_frame.text = f"Pillar {index}"
-        card.text_frame.paragraphs[0].runs[0].font.size = Pt(16)
-
-    # The figure goes UNDER the words that name it.
-    label = slide.shapes.add_textbox(Inches(0.5), Inches(4.6), Inches(2.6), Inches(0.4))
-    label.text_frame.text = "Conversion"
-    figure = slide.shapes.add_textbox(
-        Inches(0.5), Inches(5.1), Inches(2.6), Inches(0.7)
-    )
-    figure.text_frame.text = "62%"
-    return presentation
-
-
-def build_cover_only_template():
-    """A template shaped like a real corporate one that went wrong: its only
-    placeholders sit on a COVER and a CONTACT slide, both a narrow column on
-    the right. Nothing in it says where content goes.
-
-    This is the shape that produced a deck of title slides: the content band
-    was read off the cover, and no card fitted in it.
-    """
-    from pptx import Presentation
-    from pptx.util import Inches
-
-    presentation = Presentation()
-    presentation.slide_width, presentation.slide_height = Inches(13.333), Inches(7.5)
-    # Only a cover layout and a blank one, like the template that failed: no
-    # layout in it says where content goes.
-    master = presentation.slide_masters[0]
-    keep = {presentation.slide_layouts[0].name, presentation.slide_layouts[6].name}
-    id_list = master._element.get_or_add_sldLayoutIdLst()
-    for entry, layout in zip(list(id_list), list(master.slide_layouts)):
-        if layout.name not in keep:
-            id_list.remove(entry)
-    for text in ("Cover", "Contact"):
-        slide = presentation.slides.add_slide(presentation.slide_layouts[0])
-        title, subtitle = required(slide.shapes.title), slide.placeholders[1]
-        for shape in (title, subtitle):
-            shape.left, shape.width = Inches(8.0), Inches(4.5)
-        title.top, title.height = Inches(2.2), Inches(1.2)
-        subtitle.top, subtitle.height = Inches(3.6), Inches(2.0)
-        title.text = text
-        autoshape(subtitle).text_frame.text = "one line"
-    return presentation
-
-
-ICON_NAMES = [
-    "Inclusion",
-    "Autonomie",
-    "Communautes",
-    "Observabilite",
-    "Empreintes",
-]
-
-
-def build_icon_bank_template():
-    """A template carrying a bank of NAMED icons, the way a real charter does.
-
-    The bank is a slide of pictures and nothing else — the shape the analysis
-    already recognises and excludes from rendering. Naming them is what makes
-    them usable: an icon called "Picture 12" cannot be asked for.
-    """
-    import io as _io
-
-    from PIL import Image
-    from pptx import Presentation
-    from pptx.util import Inches
-
-    presentation = Presentation()
-    presentation.slide_width, presentation.slide_height = Inches(13.333), Inches(7.5)
-    content = presentation.slides.add_slide(presentation.slide_layouts[1])
-    required(content.shapes.title).text = "Content"
-    autoshape(content.placeholders[1]).text_frame.text = "A line of body text"
-
-    bank = presentation.slides.add_slide(presentation.slide_layouts[6])
-    buffer = _io.BytesIO()
-    Image.new("RGB", (64, 64), (20, 90, 160)).save(buffer, format="PNG")
-    for index in range(24):
-        buffer.seek(0)
-        picture = bank.shapes.add_picture(
-            buffer,
-            Inches(0.3 + (index % 8) * 1.6),
-            Inches(0.6 + (index // 8) * 1.6),
-            Inches(0.9),
-            Inches(0.9),
-        )
-        if index < len(ICON_NAMES):
-            picture._element.find(
-                ".//{http://schemas.openxmlformats.org/presentationml/2006/main}cNvPr"
-            ).set("descr", ICON_NAMES[index])
-    return presentation

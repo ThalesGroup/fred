@@ -18,10 +18,10 @@ Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capabil
 
 Owns: `components.py`, `compose.py`, `composed_render.py`, `layout.py`, `design_system.py`, `theme.py` (import sites only), `analysis.py`, `models.py`, `render.py`, `tools.py`, `capability.py`, tests `test_components.py`, `test_composed_render.py`, `test_layout.py`, `test_design_system.py`, `test_anchors.py`, `test_content_shape.py` (+ compose references in `test_builder_capability.py`, `test_builder_render.py`, `test_fill.py`), `openspec/changes/ppt-builder-composition/`.
 
-- [ ] 0.1 Push the current branch tip to `parked/ppt-builder-composition` (keeps the layer and its change intact)
-- [ ] 0.2 Delete the composition modules, their tests and `openspec/changes/ppt-builder-composition/`; move `Box`, `ZoneRole`, `TEXT_ROLES` into `models.py`
-- [ ] 0.3 Strip design-system/canvas/icon extraction from `analysis.py`, `PatternSource="composed"` and `ExclusionReason="canvas"` from `models.py`, compose calls from `render.py`, `icon_catalogue` from `tools.py`, `_composable` from `capability.py`
-- [ ] 0.4 `make code-quality` + `make test` green in the package; one commit (`refactor:`)
+- [x] 0.1 Push the current branch tip to `parked/ppt-builder-composition` (keeps the layer and its change intact)
+- [x] 0.2 Delete the composition modules, their tests and `openspec/changes/ppt-builder-composition/`; move `Box`, `ZoneRole`, `TEXT_ROLES` into `models.py`
+- [x] 0.3 Strip design-system/canvas/icon extraction from `analysis.py`, `PatternSource="composed"` and `ExclusionReason="canvas"` from `models.py`, compose calls from `render.py`, `icon_catalogue` from `tools.py`, `_composable` from `capability.py`
+- [x] 0.4 `make code-quality` + `make test` green in the package; one commit (`refactor:`)
 
 ## WP1. Turn-free model port (own PR)
 

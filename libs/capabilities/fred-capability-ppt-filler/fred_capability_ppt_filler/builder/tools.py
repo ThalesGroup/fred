@@ -197,23 +197,6 @@ def catalogue(inventory: TemplateInventory) -> str:
     return "\n".join(lines)
 
 
-def icon_catalogue(inventory: TemplateInventory) -> str:
-    """The template's own icons, by name, when it has any (D22).
-
-    Listed only when the template names them: an icon nobody can name is not
-    an icon anyone can choose.
-    """
-    system = inventory.design_system
-    icons = list(system.icons) if system is not None else []
-    if not icons:
-        return ""
-    names = ", ".join(sorted(icon.name for icon in icons))
-    return (
-        "\nIcons of this template, for an item's 'icon' on an icon_cards "
-        f"pattern (copy a name exactly, or omit it): {names}"
-    )
-
-
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
     """The deck plan, with the usable pattern ids and intents listed as an enum
     in the JSON schema only: validation accepts any string and resolves it."""
@@ -527,14 +510,12 @@ def build_builder_tools(
         "tool picks the template's best slide for it. To use a specific slide of the catalogue, copy its id "
         "exactly (ids like 'slide:259' are internal ids, not slide numbers). Content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
-        "heading, text, icon, label, image}] for patterns with items, image/images (document_ids from "
+        "heading, text, label, image}] for patterns with items, image/images (document_ids from "
         "list_images_in_folder), notes. Respect the character limits: a slide is not a document. Start with a "
         "'title' slide and end with a 'fixed' closing slide when one exists. The result is shown to the user "
         "automatically; never write a download link. To correct a deck, call again once with the whole "
         "amended plan; the new deck replaces the previous one.\n"
-        "Patterns of this template:\n"
-        + catalogue(inventory)
-        + icon_catalogue(inventory)
+        "Patterns of this template:\n" + catalogue(inventory)
     )
     build_tool = StructuredTool.from_function(
         coroutine=_build,

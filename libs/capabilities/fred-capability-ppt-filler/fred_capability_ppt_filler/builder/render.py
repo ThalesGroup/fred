@@ -21,13 +21,6 @@ picture/media relationships re-created on the new slide), every zone is
 filled by role, unused zones are emptied or removed, and the template's own
 slides are dropped at the end so the output holds the plan's slides only, in
 plan order.
-
-A slide the template cannot carry is composed instead: its boxes are drawn on
-the template's blank canvas from the design system the analysis read. So the
-guarantee is no longer procedural but material — nothing is drawn OUTSIDE the
-template's own tokens, and what is drawn cannot leave the charter. Colours and
-typefaces are written as theme references rather than copied values, so a deck
-follows a later theme change instead of quietly falling out of charter.
 """
 
 from __future__ import annotations
@@ -50,14 +43,7 @@ from fred_capability_ppt_filler.builder.analysis import (
     estimate_capacity,
     theme_fonts,
 )
-from fred_capability_ppt_filler.builder.compose import choose
-from fred_capability_ppt_filler.builder.compose import resolve as compose_resolve
-from fred_capability_ppt_filler.builder.composed_render import (
-    ComposedDrawer,
-    rekey_pattern,
-)
 from fred_capability_ppt_filler.builder.models import (
-    Box,
     Pattern,
     RepeatGroup,
     TemplateInventory,
@@ -188,47 +174,6 @@ class _Line:
     heading: bool = False
 
 
-def _within(outer, inner) -> bool:
-    """Is `inner` drawn on top of `outer`? Geometry, because that is the only
-    thing that ties a composed text to the Card it sits on once both are
-    ordinary shapes."""
-    for value in (outer.left, outer.top, inner.left, inner.top):
-        if value is None:
-            return False
-    return (
-        inner.left >= outer.left
-        and inner.top >= outer.top
-        and inner.left + inner.width <= outer.left + outer.width
-        and inner.top <= outer.top + outer.height
-    )
-
-
-def _used_height(shape) -> int:
-    """The room the text in `shape` actually takes, in EMU."""
-    frame = shape.text_frame
-    size = None
-    bold = False
-    family = None
-    for paragraph in frame.paragraphs:
-        for run in paragraph.runs:
-            if run.font.size is not None:
-                size = run.font.size.pt
-                bold = bool(run.font.bold)
-                family = run.font.name
-                break
-        if size is not None:
-            break
-    if not size:
-        return shape.height or 0
-    width_pt = ((shape.width or 0) - 2 * frame.margin_left) / 12700
-    per_line = text_metrics.chars_per_line(width_pt, size, family, bold)
-    lines = 0
-    for paragraph in frame.paragraphs:
-        text = paragraph.text.strip()
-        lines += max(1, math.ceil(len(text) / per_line)) if text else 1
-    return int(lines * size * 12700 * text_metrics.LINE_HEIGHT) + 2 * frame.margin_top
-
-
 class RenderError(ValueError):
     """The plan cannot be rendered on this template (the agent's correctable mistake)."""
 
@@ -305,16 +250,6 @@ def _shape_index(slide) -> Dict[str, PlacedShape]:
         if shape.is_placeholder:
             index.setdefault(f"ph:{shape.placeholder_format.idx}", placed)
     return index
-
-
-def _overlap_ratio(a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]) -> float:
-    """Intersection area over the smaller box's area (0 when apart)."""
-    width = min(a[2], b[2]) - max(a[0], b[0])
-    height = min(a[3], b[3]) - max(a[1], b[1])
-    if width <= 0 or height <= 0:
-        return 0.0
-    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
-    return (width * height) / smaller if smaller else 0.0
 
 
 def _box_of(placed: PlacedShape) -> Tuple[int, int, int, int]:
@@ -847,7 +782,6 @@ class _Renderer:
     def render(self, plan: DeckPlan) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
-        composed_positions: List[int] = []
         # (position, topics) of each agenda: a deck that announces more topics
         # than it has slides left is one the agent meant to write and did not.
         announced: List[Tuple[int, int]] = []
@@ -867,27 +801,12 @@ class _Renderer:
             pattern = resolution.pattern
             if resolution.substitution:
                 self.warnings.append(f"Slide {position}: {resolution.substitution}.")
-            # Structured content is composed from the template's design
-            # language rather than fitted into the nearest slide it already
-            # draws (D5). Naming a pattern asks for that pattern as it stands,
-            # and is honoured; the classification only decides what the agent
-            # left unsaid (D9).
-            choice = choose(self.inventory, slide_plan, pattern)
-            pattern, slide_plan = choice.pattern, choice.slide
-            if choice.composed:
-                composed_positions.append(position)
             rendered += 1
             if pattern.intent == "agenda" and slide_plan.items:
                 announced.append((rendered, len(slide_plan.items)))
             slide, pattern = self._create(pattern)
-            composed_slide = pattern.source == "composed"
-            if composed_slide:
-                self._check_fixtures(slide, position)
             if pattern.intent != "fixed":
                 self._fill(slide, pattern, slide_plan, position)
-                if composed_slide:
-                    self._place_icons(slide, slide_plan, position)
-                    self._shrink_cards(slide)
             elif has_content(slide_plan) and not _only_names_the_slide(
                 slide_plan, pattern
             ):
@@ -934,13 +853,7 @@ class _Renderer:
         )
 
     def _create(self, pattern: Pattern) -> Tuple[Any, Pattern]:
-        """The slide, and the pattern whose zones address its actual shapes.
-
-        A composed pattern only learns its zone keys here, because the shapes
-        it addresses do not exist until they are drawn.
-        """
-        if pattern.source == "composed":
-            return self._create_composed(pattern)
+        """The slide, and the pattern whose zones address its actual shapes."""
         if pattern.source == "layout":
             if pattern.source_index >= len(self.layouts):
                 raise RenderError(
@@ -954,159 +867,6 @@ class _Renderer:
         if source is None:
             raise RenderError(f"Slide {slide_id} no longer exists in the template.")
         return _duplicate_slide(self.prs, source), pattern
-
-    def _canvas_layout(self):
-        """The layout composed slides are drawn on: the one with nothing to fill."""
-        index = self.inventory.canvas_layout
-        if index is not None and index < len(self.layouts):
-            return self.layouts[index]
-        # No canvas recorded: the emptiest layout is still the right answer.
-        return min(self.layouts, key=lambda layout: len(layout.shapes))
-
-    def _place_icons(self, slide, plan: SlidePlan, position: int) -> None:
-        """Replace each icon frame with the template's own icon (D22).
-
-        Not a zone: an icon is not content the plan writes, it is an asset the
-        template already holds, chosen by name. A frame nobody named is
-        removed — an empty box reads as a missing image.
-        """
-        system = self.inventory.design_system
-        frames = [s for s in slide.shapes if s.name.startswith("composed-icon-")]
-        for frame in frames:
-            try:
-                index = int(frame.name.rsplit("-", 1)[1])
-            except (IndexError, ValueError):
-                index = -1
-            item = plan.items[index] if 0 <= index < len(plan.items) else None
-            wanted = (item.icon or "").strip() if item is not None else ""
-            icon = system.icon(wanted) if (system is not None and wanted) else None
-            if icon is None:
-                if wanted:
-                    self.warnings.append(
-                        f"Slide {position}: this template has no icon called "
-                        f"'{wanted}'; the card was drawn without one."
-                    )
-                frame._element.getparent().remove(frame._element)
-                continue
-            if not self._copy_icon(slide, frame, icon):
-                frame._element.getparent().remove(frame._element)
-
-    def _copy_icon(self, slide, frame, icon) -> bool:
-        """Clone the icon's picture onto `slide`, fitted inside `frame`."""
-        source = self.slides_by_id.get(icon.slide_id)
-        if source is None:
-            return False
-        placed = _shape_index(source).get(icon.key)
-        if placed is None:
-            return False
-        element = copy.deepcopy(cast(Any, placed.shape)._element)
-        rid_map: Dict[str, str] = {}
-        for rId, rel in source.part.rels.items():
-            if rel.reltype.endswith(_SKIPPED_RELS):
-                continue
-            rid_map[rId] = (
-                slide.part.rels.get_or_add_ext_rel(rel.reltype, rel.target_ref)
-                if rel.is_external
-                else slide.part.relate_to(rel.target_part, rel.reltype)
-            )
-        for node in element.iter():
-            for attr, old in list(node.attrib.items()):
-                if attr.startswith(_R_NS) and old in rid_map:
-                    node.set(attr, rid_map[old])
-        slide.shapes._spTree.append(element)
-        copied = slide.shapes[-1]
-        copied.name = frame.name
-        # The aspect is the icon's own: a square frame must not stretch a wide
-        # glyph, which is the classic failure of a composed deck (D6).
-        left, top, width, height = fit_inside_box(
-            round((icon.aspect or 1.0) * 1000),
-            1000,
-            frame.left or 0,
-            frame.top or 0,
-            frame.width or 1,
-            frame.height or 1,
-        )
-        copied.left, copied.top = Emu(int(left)), Emu(int(top))
-        copied.width, copied.height = Emu(int(width)), Emu(int(height))
-        frame._element.getparent().remove(frame._element)
-        return True
-
-    def _shrink_cards(self, slide) -> None:
-        """Resize each Card to what it actually holds.
-
-        A variant declares what it CAN carry so the agent is free to write a
-        full card; once the text is in, a card two-thirds empty is the mark of
-        a deck nobody designed. Every card of one row takes the tallest, so the
-        row stays a row (D6).
-        """
-        cards = [s for s in slide.shapes if s.name.startswith("composed-card-")]
-        if not cards:
-            return
-        rim = None
-        bottom = None
-        for card in cards:
-            inside = [
-                shape
-                for shape in slide.shapes
-                if shape.has_text_frame
-                and shape.name.startswith("composed-")
-                and not shape.name.startswith("composed-card-")
-                and _within(card, shape)
-            ]
-            if not inside:
-                return
-            top = min(shape.top for shape in inside)
-            rim = top - card.top if rim is None else min(rim, top - card.top)
-            used = max(shape.top + _used_height(shape) for shape in inside)
-            bottom = used if bottom is None else max(bottom, used)
-        if rim is None or bottom is None:
-            return
-        for card in cards:
-            height = bottom - card.top + max(0, rim)
-            if 0 < height < card.height:
-                card.height = Emu(int(height))
-
-    def _check_fixtures(self, slide, position: int) -> None:
-        """A composed slide must not cover what its layout draws underneath.
-
-        The grid already excludes those fixtures, so this only fires for a
-        piece placed off the grid — an anchor read from a slide whose layout
-        was barer than the canvas, typically.
-        """
-        system = self.inventory.design_system
-        reserved = list(system.reserved) if system is not None else []
-        if not reserved:
-            return
-        for shape in slide.shapes:
-            if None in (shape.left, shape.top, shape.width, shape.height):
-                continue
-            box = Box(
-                x=round(shape.left * 1000 / self.width),
-                y=round(shape.top * 1000 / self.height),
-                w=round(shape.width * 1000 / self.width),
-                h=round(shape.height * 1000 / self.height),
-            )
-            if any(box.overlaps(fixture) for fixture in reserved):
-                self.warnings.append(
-                    f"Slide {position}: composed content sits over something the "
-                    "template's layout draws there (a logo, a band or a footer)."
-                )
-                return
-
-    def _create_composed(self, pattern: Pattern) -> Tuple[Any, Pattern]:
-        system = self.inventory.design_system
-        if system is None or not system.complete:
-            raise RenderError(
-                "This template has no design system, so nothing can be composed on it."
-            )
-        resolved = compose_resolve(system, pattern.id)
-        if resolved is None:
-            raise RenderError(f"Composition {pattern.id} is not available.")
-        _, _, composed = resolved
-        slide = self.prs.slides.add_slide(self._canvas_layout())
-        drawer = ComposedDrawer(system, self.width, self.height)
-        keys, shapes = drawer.draw(slide, composed)
-        return slide, rekey_pattern(pattern, keys, shapes, composed)
 
     def _fill(self, slide, pattern: Pattern, plan: SlidePlan, position: int) -> None:
         index = _shape_index(slide)

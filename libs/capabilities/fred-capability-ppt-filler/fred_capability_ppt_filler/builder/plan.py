@@ -158,10 +158,6 @@ class PlanItem(BaseModel):
     text: Optional[str] = Field(
         default=None, description="Body of the item, one to three short lines."
     )
-    icon: Optional[str] = Field(
-        default=None,
-        description="Name of one of the template's own icons, exactly as listed.",
-    )
     label: Optional[str] = Field(
         default=None, description="Small caption under a figure."
     )
@@ -316,14 +312,10 @@ _FIELD_WEIGHT: Dict[str, float] = {
 }
 
 
-def shown_fields(pattern: Pattern, slide: SlidePlan) -> Tuple[float, float]:
+def _shown_fields(pattern: Pattern, slide: SlidePlan) -> Tuple[float, float]:
     """What share of the slide's content this pattern can show, weighted by how
     costly each field is to lose. A field with nowhere to go never reaches the
     reader.
-
-    Public because this, and NOT `score_pattern`, is what decides whether to
-    compose (design.md D5): the score is a ranking that folds in a preference
-    bonus and an overflow penalty, so it cannot answer "would content be lost".
     """
     available, item_fields = _pattern_fields(pattern)
     bodies = sum(1 for z in pattern.zones if SLIDE_FIELDS.get(z.role) == "bullets")
@@ -394,7 +386,7 @@ def _overflow_penalty(pattern: Pattern, slide: SlidePlan) -> float:
 
 def score_pattern(pattern: Pattern, slide: SlidePlan) -> float:
     """How well a pattern serves one slide's content. Higher is better."""
-    shown, given = shown_fields(pattern, slide)
+    shown, given = _shown_fields(pattern, slide)
     value = 100.0 * (shown / given if given else 1.0)
     unfilled = sum(1 for z in pattern.zones if z.role == "image")
     if unfilled and not (slide.image or slide.images):
