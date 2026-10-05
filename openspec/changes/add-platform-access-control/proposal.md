@@ -1,12 +1,12 @@
 ## Why
 
-Prism needs to restrict new registrations using an IdP attribute while preserving explicitly approved users and demonstration teams. Fred must own these editable admission exceptions so operators do not have to rebuild images or edit Keycloak roles.
+Fred deployments need to restrict new registrations using an IdP attribute while preserving explicitly approved users and demonstration teams. Fred must own these editable admission exceptions so operators do not have to rebuild images or edit Keycloak roles.
 
-Tracking: [issue #2965](https://github.com/ThalesGroup/fred/issues/2965). This change is stacked on [PR #2863](https://github.com/ThalesGroup/fred/pull/2863), using its local user directory; it does not extend that PR's provider-portability scope.
+Tracking: GitHub issue #2965. This change is stacked on PR #2863, using its local user directory; it does not extend that PR's provider-portability scope.
 
 ## What Changes
 
-- Add opt-in platform admission configuration: a verified JWT claim path, acceptance regex and `supportLink`, in developer YAML and Helm values. Matching is provider-independent; TSN is a configured value, never a hardcoded identity or role.
+- Add opt-in platform admission configuration: a verified JWT claim path, acceptance regex and `supportLink`, in developer YAML and Helm values. Matching is provider-independent. Deployment-specific attribute paths, accepted values and support destinations belong in privately maintained Helm overlays; repository defaults and examples remain generic.
 - Add a platform-admin access page with a live filtering switch, individual exceptions selected from Fred users, authorized teams, and the Free-team flag. Enabling the configuration makes administration available; filtering is initially inactive until explicitly activated by an administrator.
 - Provide an explicit, atomic T0 import of existing Fred users. Entries remain individually removable, and later registrations are not grandfathered automatically.
 - Admit a person through a matching claim, an individual exception, or current membership of an authorized team. Preserve independent admission sources and existing account suspension, CGU and resource permissions.
@@ -35,4 +35,4 @@ None. Existing provider configuration, local identity snapshots and account susp
 
 ## Non-Goals
 
-Collecting TP-S3NS customer data, querying a production IdP, creating an external inventory system, provisioning IdP accounts, hardcoding TSN, and granting new team/resource roles are outside this change. Name/TGI/GBU/organisation inventory is contextual; the gate retains only its configured attribute, not arbitrary JWT personal data.
+Collecting deployment-specific user inventories, querying a production IdP, creating an external inventory system, provisioning IdP accounts, hardcoding organization identities, and granting new team/resource roles are outside this change. The gate retains only its configured attribute, not arbitrary JWT personal data.
