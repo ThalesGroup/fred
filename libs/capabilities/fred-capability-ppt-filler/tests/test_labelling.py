@@ -24,13 +24,6 @@ from typing import Callable, List, Optional, Sequence
 
 import pytest
 from builder_decks import build_showcase_template
-from fred_sdk.contracts.runtime import (
-    CapabilityModelPort,
-    CapabilityModelUnavailableError,
-)
-from langchain_core.messages import AIMessage, BaseMessage
-from PIL import Image
-
 from fred_capability_ppt_filler.builder import labelling
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.labelling import label_inventory, parse_label
@@ -39,6 +32,12 @@ from fred_capability_ppt_filler.builder.preview import (
     marked_pattern_images,
     numbered_slots,
 )
+from fred_sdk.contracts.runtime import (
+    CapabilityModelPort,
+    CapabilityModelUnavailableError,
+)
+from langchain_core.messages import AIMessage, BaseMessage
+from PIL import Image
 
 Responder = Callable[[Sequence[BaseMessage]], AIMessage]
 

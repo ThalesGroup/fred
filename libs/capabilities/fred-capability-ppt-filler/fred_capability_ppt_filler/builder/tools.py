@@ -20,11 +20,11 @@ bytes prefetched on the event loop, the CPU-bound render in one thread under
 the package's heavy-job slot, delivery through the workspace port with the
 shared PDF preview part.
 
-The tool never lets a malformed call fail validation: the schema the model
-sees lists the pattern ids as an enum, but the arguments are coerced and every
-slide resolves to a pattern (see ``plan.resolve``). What cannot be honoured is
-reported to the agent in the result, and every error result carries its text
-so the user sees it instead of an opaque failure.
+The model sends content only; :func:`assign.assign` picks the template slide
+for each entry. A malformed call never fails validation (the arguments are
+coerced), a slide that fits nothing builds nothing and returns a structured
+``needs_revision`` error, and every error result carries its text so the user
+sees it instead of an opaque failure.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
@@ -47,19 +47,22 @@ from fred_sdk.contracts.context import (
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
+from fred_capability_ppt_filler.builder.assign import (
+    Assignment,
+    assign,
+    assignable,
+)
+from fred_capability_ppt_filler.builder.checks import SlideReport
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
-    Pattern,
+    SlideKind,
     TemplateInventory,
-    Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
-    ITEM_FIELDS,
-    SLIDE_FIELDS,
     DeckPlan,
     SlidePlan,
     has_content,
-    included_patterns,
+    zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import RenderError, render_deck
 from fred_capability_ppt_filler.concurrency import (
@@ -112,70 +115,6 @@ _BUSY_MESSAGE = (
 # --- catalogue --------------------------------------------------------------------------
 
 
-# The catalogue names the plan field a zone is filled from, not the zone's role:
-# a model copies these names into the plan, and a role name it cannot map to a
-# field is content silently lost. Shared with the pattern scoring, so what the
-# agent is offered and what a pattern is picked for cannot diverge.
-_SLIDE_FIELDS = SLIDE_FIELDS
-_ITEM_FIELDS = ITEM_FIELDS
-
-
-def _limit(zones: Sequence[Zone]) -> str:
-    """The room the agent can count on across zones filled from one field: the
-    tightest one, since that is the zone that truncates.
-
-    A zone that grows with its text has no limit to quote — its box is sized to
-    the designer's sample, and a figure twice as long simply widens it.
-    """
-    bounded = [z for z in zones if not z.grows]
-    if not bounded:
-        return ""
-    chars = [z.max_chars for z in bounded if z.max_chars]
-    lines = [z.max_lines for z in bounded if z.max_lines]
-    text = f" ≤{min(chars)} chars" if chars else ""
-    if lines and min(lines) > 1:
-        text += f" ≤{min(lines)} lines"
-    return text
-
-
-def _zone_summary(pattern: Pattern) -> str:
-    if not (pattern.reusable and pattern.fillable):
-        return "used as is, no editable zone (content given for it is ignored)"
-    parts: List[str] = []
-    seen: set[str] = set()
-    for zone in pattern.zones:
-        field = _SLIDE_FIELDS.get(zone.role)
-        if field is None or field in seen:
-            continue
-        seen.add(field)
-        same = [z for z in pattern.zones if _SLIDE_FIELDS.get(z.role) == field]
-        # Several body zones are columns, and only `columns` reaches them: named
-        # `bullets×3`, the field the agent then sends fills the first and the
-        # other two stay empty.
-        if field == "bullets" and len(same) > 1:
-            field = "columns.bullets"
-        count = f"×{len(same)}" if len(same) > 1 else ""
-        parts.append(f"{field}{count}{_limit(same)}")
-    images = sum(1 for z in pattern.zones if z.role == "image")
-    if images:
-        parts.append(f"images×{images}")
-    for group in pattern.groups:
-        fields: Dict[str, List[Zone]] = {}
-        for item in group.items:
-            for zone in item:
-                field = _ITEM_FIELDS.get(zone.role)
-                if field:
-                    fields.setdefault(field, []).append(zone)
-        shown = ", ".join(
-            name + ("" if name == "image" else _limit(zones))
-            for name, zones in fields.items()
-        )
-        # "up to", not "×N": told `items×8`, an agent pads a five-point agenda
-        # to eight.
-        parts.append(f"items up to {group.count} [{shown}]")
-    return "; ".join(parts) or "no editable zone"
-
-
 def _error(message: str) -> tuple[str, ToolInvocationResult]:
     """An error result whose text is Fred-owned, so the runtime shows it."""
     return message, ToolInvocationResult(
@@ -185,34 +124,45 @@ def _error(message: str) -> tuple[str, ToolInvocationResult]:
     )
 
 
+# Variants quoted per kind: enough to show the range without a wall of text.
+_MAX_VARIANTS = 4
+
+
+def offered_kinds(inventory: TemplateInventory) -> List[SlideKind]:
+    kinds = {p.kind for p in assignable(inventory)}
+    return [k for k in SLIDE_KINDS if k in kinds]
+
+
 def catalogue(inventory: TemplateInventory) -> str:
-    """One line per usable pattern, for the tool description."""
+    """One line per kind the template offers, with what its slides hold."""
+    variants: Dict[str, List[str]] = {}
+    for pattern in assignable(inventory):
+        summaries = variants.setdefault(pattern.kind, [])
+        summary = zone_summary(pattern)
+        if summary not in summaries:
+            summaries.append(summary)
     lines = []
-    for pattern in included_patterns(inventory):
-        # Inventories analysed before fixed slides stopped being preferred still carry it.
-        star = " (preferred)" if pattern.preferred and pattern.reusable else ""
-        lines.append(
-            f'- {pattern.id} [{pattern.kind}]{star} "{pattern.label}": {_zone_summary(pattern)}'
-        )
+    for kind in offered_kinds(inventory):
+        shown = variants[kind][:_MAX_VARIANTS]
+        lines.append(f"- {kind}: " + " | ".join(shown))
     return "\n".join(lines)
 
 
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
-    """The deck plan, with the usable pattern ids and intents listed as an enum
-    in the JSON schema only: validation accepts any string and resolves it."""
-    choices = [p.id for p in included_patterns(inventory)] + list(SLIDE_KINDS)
+    """The deck plan, with the kinds this template offers as the `kind` enum
+    of the JSON schema only: validation accepts anything and coerces it."""
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
-        pattern=(
-            str,
+        kind=(
+            Optional[SlideKind],
             Field(
-                default="",
+                default=None,
                 description=(
-                    "A pattern id copied exactly from the catalogue, or an intent name "
-                    "(the tool picks the best pattern for it)."
+                    "Optional, after the content: the kind of slide. Left out, the tool "
+                    "infers it from the content."
                 ),
-                json_schema_extra={"enum": cast(Any, choices)},
+                json_schema_extra={"enum": cast(Any, offered_kinds(inventory))},
             ),
         ),
     )
@@ -254,11 +204,46 @@ def _image_ids(plan: DeckPlan) -> set[str]:
     return ids
 
 
-def _is_fixed(inventory: TemplateInventory, requested: str) -> bool:
-    if requested == "closing":
-        return True
-    pattern = inventory.pattern(requested)
-    return pattern is not None and not (pattern.reusable and pattern.fillable)
+def _needs_revision(assignment: Assignment) -> tuple[str, ToolInvocationResult]:
+    payload = {
+        "status": "needs_revision",
+        "slides": [p.as_dict() for p in assignment.problems],
+    }
+    return _error(
+        "No deck was built: some slides fit no slide of this template. Fix each slide listed "
+        "below with one of its options, then call build_presentation again with the WHOLE "
+        "deck.\n" + json.dumps(payload, ensure_ascii=False)
+    )
+
+
+def _issue_line(report: SlideReport) -> str:
+    parts = []
+    if report.truncated:
+        parts.append("text cut to fit in " + ", ".join(report.truncated))
+    if report.removed:
+        parts.append(
+            "template example text removed: "
+            + ", ".join(f"'{t}'" for t in report.removed)
+        )
+    if report.lost:
+        parts.append("not placed: " + ", ".join(report.lost))
+    return f"Slide {report.position}: " + "; ".join(parts) + "."
+
+
+def _build_notes(plan: DeckPlan, issues: List[SlideReport], notes: List[str]) -> str:
+    """What the agent should know about the deck it just built."""
+    lines = [
+        f"Entry {index} of 'slides' was not a slide object and was skipped."
+        for index, slide in enumerate(plan.slides, start=1)
+        if slide.invalid_entry is not None
+    ]
+    lines += [_issue_line(report) for report in issues] + notes
+    if not lines:
+        return ""
+    return (
+        "\nTo review (if it matters, call again with the whole corrected deck; the new build "
+        "replaces this one):\n" + "\n".join(lines)
+    )
 
 
 async def _no_images() -> Dict[str, object]:
@@ -269,6 +254,7 @@ def _prepare_and_render(
     template_bytes: bytes,
     inventory: TemplateInventory,
     plan: DeckPlan,
+    patterns: List[Any],
     prefetched: Dict[str, object],
 ):
     """Picture validation/transcoding and the render, together in one worker
@@ -282,7 +268,7 @@ def _prepare_and_render(
             images[document_id] = prepare_picture(raw)  # type: ignore[arg-type]
         except NotAnImageError:
             continue
-    return render_deck(template_bytes, inventory, plan, images)
+    return render_deck(template_bytes, inventory, plan, patterns, images)
 
 
 # --- tools ------------------------------------------------------------------------------------
@@ -325,6 +311,35 @@ def build_list_images_tool(
     )
 
 
+def _description(inventory: TemplateInventory) -> str:
+    kinds = offered_kinds(inventory)
+    rules = ""
+    if "cover" in kinds:
+        rules += " The first slide is always the template's cover."
+    if "closing" in kinds:
+        rules += " A closing slide can only be the last one."
+    return (
+        "Build a PowerPoint presentation from a plan of slides, on the agent's template. "
+        "ONE call builds the WHOLE deck: write out every slide of the presentation in `slides`, in order, in "
+        "a single call - an eight-slide deck means eight entries, and the deck holds exactly what you send, "
+        "not what you planned. Never split a deck across several calls and never call this tool twice at "
+        "once: each call produces a complete presentation of its own, so splitting delivers several truncated "
+        "decks instead of one. For each slide write its content: title, subtitle, bullets (telegraphic, "
+        "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
+        "heading, text, label, image}], image/images (document_ids from list_images_in_folder), notes; then, "
+        "optionally, its `kind` from the list below (left out, it is inferred from the content). The tool "
+        "picks the template slide for each entry."
+        + rules
+        + " Respect the limits below: a slide is not "
+        "a document. If a slide fits no slide of the template, nothing is built and the result lists, per "
+        "slide, what to change: apply it and call again with the whole deck. The result is shown to the "
+        "user automatically; never write a download link. To correct a deck, call again once with the "
+        "whole amended plan; the new deck replaces the previous one.\n"
+        "Slide kinds of this template, with what their slides hold (variants separated by |):\n"
+        + catalogue(inventory)
+    )
+
+
 def build_builder_tools(
     ctx: "CapabilityContext[PptBuilderConfig, EmptyModel]",
     template_bytes_loader,
@@ -346,17 +361,18 @@ def build_builder_tools(
             logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", exc)
             return _error(
                 "The slide plan could not be read. Call build_presentation again with 'slides' as a "
-                "list of objects, each with a 'pattern' and its content (title, bullets, items…)."
+                "list of objects, each with its content (title, bullets, items…)."
             )
 
-        usable = [s for s in plan.slides if s.invalid_entry is None]
-        if not usable or not any(
-            has_content(s) or _is_fixed(inventory, s.pattern) for s in usable
-        ):
+        if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
                 "The plan has no content, so nothing was generated. Write the slides (title, bullets, "
                 "items…) and call build_presentation again."
             )
+        # Before any I/O: a plan that needs revision costs no template fetch.
+        assignment = await asyncio.to_thread(assign, inventory, plan)
+        if assignment.problems:
+            return _needs_revision(assignment)
 
         workspace = services.workspace_fs
         if workspace is None:
@@ -389,7 +405,12 @@ def build_builder_tools(
             return _error(_BUSY_MESSAGE)
         try:
             result = await asyncio.to_thread(
-                _prepare_and_render, template_bytes, inventory, plan, prefetched
+                _prepare_and_render,
+                template_bytes,
+                inventory,
+                plan,
+                assignment.patterns,
+                prefetched,
             )
         except RenderError as exc:
             return _error(f"{exc} Check the plan and call build_presentation again.")
@@ -433,12 +454,7 @@ def build_builder_tools(
                 "user and suggest trying again in a moment."
             )
 
-        notes = ""
-        if result.warnings:
-            notes = (
-                "\nAdjustments made (fix the plan and call again if they matter): "
-                + " ".join(result.warnings)
-            )
+        notes = _build_notes(plan, result.report.issues(), assignment.notes)
 
         pdf_bytes = await convert_office_bytes_to_pdf(
             result.preview_pptx or result.pptx, suffix=".pptx"
@@ -474,11 +490,9 @@ def build_builder_tools(
             return (
                 f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "
                 "in this answer. A preview opens beside the chat and a download button is shown "
-                f"automatically; do not write a download link.\nCheck that count: if the deck you planned has "
-                f"more than {result.slide_count} slides, call once more with the COMPLETE list of slides - "
-                "every call rebuilds the whole deck, so sending only the missing ones would throw the rest "
-                f"away. If {result.slide_count} is the deck you meant, do not call again: describe it to the "
-                "user, and describe only the slides it actually holds." + notes,
+                "automatically; do not write a download link. Every call rebuilds the whole deck: to add "
+                "or fix slides, call again with the COMPLETE list, never only the missing ones. Describe "
+                "to the user only the slides the deck actually holds." + notes,
                 ToolInvocationResult(
                     tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(part),)
                 ),
@@ -498,26 +512,7 @@ def build_builder_tools(
             ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(link),)),
         )
 
-    description = (
-        "Build a PowerPoint presentation from a plan of slides, on the agent's template. "
-        "ONE call builds the WHOLE deck: write out every slide of the presentation in `slides`, in order, in "
-        "a single call - an eight-slide deck means eight entries, and the deck holds exactly what you send, "
-        "not what you planned. Never split a deck across several calls and never call this tool twice at "
-        "once: each call produces a complete presentation of its own, so splitting delivers several truncated "
-        "decks instead of one. Each slide names a "
-        "pattern and gives its content. The simplest reliable pattern value is a kind name ("
-        + ", ".join(SLIDE_KINDS)
-        + "): the "
-        "tool picks the template's best slide for it. To use a specific slide of the catalogue, copy its id "
-        "exactly (ids like 'slide:259' are internal ids, not slide numbers). Content: title, subtitle, bullets (telegraphic, "
-        "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
-        "heading, text, label, image}] for patterns with items, image/images (document_ids from "
-        "list_images_in_folder), notes. Respect the character limits: a slide is not a document. Start with a "
-        "'cover' slide and end with a 'closing' slide when one exists. The result is shown to the user "
-        "automatically; never write a download link. To correct a deck, call again once with the whole "
-        "amended plan; the new deck replaces the previous one.\n"
-        "Patterns of this template:\n" + catalogue(inventory)
-    )
+    description = _description(inventory)
     build_tool = StructuredTool.from_function(
         coroutine=_build,
         name=BUILD_TOOL_NAME,

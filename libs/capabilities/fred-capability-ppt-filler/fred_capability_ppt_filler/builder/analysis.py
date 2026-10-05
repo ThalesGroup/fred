@@ -51,9 +51,9 @@ from pptx.oxml.ns import qn
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
+    SLIDE_KINDS,
     AnalysisError,
     AnalyzeResult,
-    SLIDE_KINDS,
     Box,
     Pattern,
     RepeatGroup,

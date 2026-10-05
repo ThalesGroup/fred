@@ -34,22 +34,19 @@ from builder_decks import (
 from deck_builders import png_bytes
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder.analysis import analyze_template
+from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.lexicon import is_sample_text
 from fred_capability_ppt_filler.builder.models import (
     Box,
     Pattern,
-    PatternOverride,
-    RepeatGroup,
     TemplateInventory,
     Zone,
 )
-from fred_capability_ppt_filler.builder.overrides import apply_overrides
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
     PlanColumn,
     PlanItem,
     SlidePlan,
-    best_for_intent,
 )
 from fred_capability_ppt_filler.builder.render import (
     MIN_FONT_SCALE,
@@ -103,15 +100,32 @@ def _pictures(slide) -> int:
     )
 
 
-def _render(*slides: SlidePlan, images=None):
-    result = render_deck(TEMPLATE, INVENTORY, DeckPlan(slides=list(slides)), images)
+Placed = tuple[Pattern | None, SlidePlan]
+
+
+def _on(pattern: Pattern, **fields: Any) -> Placed:
+    """One plan slide rendered on a given pattern, as the assigner would hand it."""
+    return pattern, SlidePlan(**fields)
+
+
+def _deck(*slides: Placed | SlidePlan) -> tuple[DeckPlan, list[Pattern | None]]:
+    """A bare `SlidePlan` is an entry with no pattern (not a slide object)."""
+    pairs = [s if isinstance(s, tuple) else (None, s) for s in slides]
+    return DeckPlan(slides=[s for _, s in pairs]), [p for p, _ in pairs]
+
+
+def _render(
+    *slides: Placed | SlidePlan, images=None, template=TEMPLATE, inventory=INVENTORY
+):
+    plan, patterns = _deck(*slides)
+    result = render_deck(template, inventory, plan, patterns, images)
     return result, Presentation(io.BytesIO(result.pptx))
 
 
 def test_layout_pattern_fills_title_and_levelled_bullets():
     result, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Title and Content").id,
+        _on(
+            _pattern("Title and Content"),
             title="Quarterly results",
             bullets=[
                 "Revenue up **12 %**",
@@ -138,16 +152,16 @@ def test_layout_pattern_fills_title_and_levelled_bullets():
 
 def test_example_slides_are_duplicated_in_plan_order_and_originals_dropped():
     result, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Key figures").id,
+        _on(
+            _pattern("Key figures"),
             title="KPIs",
             items=[
                 PlanItem(number="42%", label="Margin"),
                 PlanItem(number="7", label="Sites"),
             ],
         ),
-        SlidePlan(
-            pattern=_pattern("Agenda").id,
+        _on(
+            _pattern("Agenda"),
             title="Agenda",
             items=[
                 PlanItem(heading="Context"),
@@ -155,8 +169,8 @@ def test_example_slides_are_duplicated_in_plan_order_and_originals_dropped():
                 PlanItem(heading="Next steps"),
             ],
         ),
-        SlidePlan(
-            pattern=_pattern("Title and Content").id,
+        _on(
+            _pattern("Title and Content"),
             title="Closing",
             bullets=["Thanks"],
         ),
@@ -184,14 +198,14 @@ def test_example_slides_are_duplicated_in_plan_order_and_originals_dropped():
 
 def test_no_sample_text_survives_rendering():
     _, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Process").id,
+        _on(
+            _pattern("Process"),
             title="How",
             items=[PlanItem(heading="Discover")],
         ),
-        SlidePlan(pattern=_pattern("Free text").id, title="Notes"),
-        SlidePlan(
-            pattern=_pattern("Team").id,
+        _on(_pattern("Free text"), title="Notes"),
+        _on(
+            _pattern("Team"),
             title="Who",
             items=[PlanItem(heading="CTO", label="Ada")],
         ),
@@ -202,17 +216,16 @@ def test_no_sample_text_survives_rendering():
 
 
 def test_shared_image_parts_keep_the_file_small():
-    plan = DeckPlan(
-        slides=[
-            SlidePlan(
-                pattern=_pattern("Key figures").id,
+    result, _ = _render(
+        *[
+            _on(
+                _pattern("Key figures"),
                 title=f"KPI {i}",
                 items=[PlanItem(number="1", label="x")] * 4,
             )
             for i in range(10)
         ]
     )
-    result = render_deck(TEMPLATE, INVENTORY, plan)
     assert len(result.pptx) < len(TEMPLATE) * 1.2
     deck = Presentation(io.BytesIO(result.pptx))
     assert len(deck.slides) == 10
@@ -222,8 +235,8 @@ def test_shared_image_parts_keep_the_file_small():
 def test_narrow_item_box_is_widened_in_group_units():
     scaled = _pattern("Scaled figures")
     _, deck = _render(
-        SlidePlan(
-            pattern=scaled.id,
+        _on(
+            scaled,
             title="Scaled",
             items=[PlanItem(number="1%", label="Wide label now")] * 3,
         )
@@ -242,17 +255,15 @@ def test_narrow_item_box_is_widened_in_group_units():
 
 def test_notes_are_skipped_when_the_notes_slide_has_no_body():
     silent = _pattern("Silent notes")
-    result, deck = _render(
-        SlidePlan(pattern=silent.id, title="Quiet", bullets=["a"], notes="ignored")
-    )
+    result, deck = _render(_on(silent, title="Quiet", bullets=["a"], notes="ignored"))
     assert len(deck.slides) == 1
     assert result.warnings == []
 
 
 def test_columns_without_enough_bodies_are_reported():
     result, _ = _render(
-        SlidePlan(
-            pattern=_pattern("Title and Content").id,
+        _on(
+            _pattern("Title and Content"),
             title="Three columns",
             columns=[
                 PlanColumn(bullets=["a"]),
@@ -266,16 +277,16 @@ def test_columns_without_enough_bodies_are_reported():
 
 def test_columns_fill_two_content_and_comparison_headings():
     result, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Comparison").id,
+        _on(
+            _pattern("Comparison"),
             title="Before / after",
             columns=[
                 PlanColumn(heading="Before", bullets=["slow"]),
                 PlanColumn(heading="After", bullets=["fast"]),
             ],
         ),
-        SlidePlan(
-            pattern=_pattern("Two Content").id,
+        _on(
+            _pattern("Two Content"),
             title="Options",
             bullets=["a", "b", "c", "d"],
         ),
@@ -294,9 +305,7 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
         "This is a deliberately verbose bullet that keeps going on and on " * 3
     ] * 8
     result, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Title and Content").id, title="Long", bullets=long_bullets
-        )
+        _on(_pattern("Title and Content"), title="Long", bullets=long_bullets)
     )
     body = cast(Any, deck.slides[0].placeholders[1])
     # The body inherits 32 pt; the shrink is written as explicit run sizes.
@@ -305,8 +314,8 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
 
     very_long = ["word " * 200] * 40
     result, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Title and Content").id,
+        _on(
+            _pattern("Title and Content"),
             title="Very long",
             bullets=very_long,
         )
@@ -319,80 +328,27 @@ def test_overflow_shrinks_then_truncates_with_a_warning():
 def test_image_zone_filled_from_prepared_bytes_or_removed_when_empty():
     photo = _pattern("Photo")
     prepared = {"doc-1": prepare_picture(png_bytes(30, 20, "blue"))}
-    result, deck = _render(
-        SlidePlan(pattern=photo.id, title="Site", image="doc-1"), images=prepared
-    )
+    result, deck = _render(_on(photo, title="Site", image="doc-1"), images=prepared)
     assert result.warnings == []
     assert _pictures(deck.slides[0]) == 1
 
     caption = _pattern("Picture with Caption")
-    _, deck = _render(
-        SlidePlan(pattern=caption.id, title="No picture", bullets=["text only"])
-    )
+    _, deck = _render(_on(caption, title="No picture", bullets=["text only"]))
     slide = deck.slides[0]
     assert all(p.placeholder_format.type.name != "PICTURE" for p in slide.placeholders)
 
     result, deck = _render(
-        SlidePlan(pattern=photo.id, title="Site", image="doc-missing"),
+        _on(photo, title="Site", image="doc-missing"),
         images=prepared,
     )
     assert any("'doc-missing' is not a usable image" in w for w in result.warnings)
     assert _pictures(deck.slides[0]) == 1  # the template's own picture stays
 
 
-def test_intent_names_resolve_and_degrade_with_a_warning():
-    excluded = [
-        PatternOverride(pattern_id=p.id, included=False)
-        for p in INVENTORY.patterns
-        if p.kind in ("two_columns", "comparison")
-    ]
-    effective, _ = apply_overrides(INVENTORY, excluded)
-    result = render_deck(
-        TEMPLATE,
-        effective,
-        DeckPlan(
-            slides=[SlidePlan(pattern="two_columns", title="T", bullets=["a", "b"])]
-        ),
-    )
-    # The fallback slide's leftover example text is swept, and said so.
-    assert "no 'two_columns' pattern" in result.warnings[0]
-    assert all("was removed" in w for w in result.warnings[1:])
-    deck = Presentation(io.BytesIO(result.pptx))
-    assert "T" in _texts(deck.slides[0])
-
-    result = render_deck(
-        TEMPLATE,
-        INVENTORY,
-        DeckPlan(slides=[SlidePlan(pattern="agenda", items=[PlanItem(heading="One")])]),
-    )
-    assert result.warnings == []
-
-
-def test_unknown_or_excluded_patterns_fall_back_on_the_slide_content():
-    result, deck = _render(
-        SlidePlan(pattern="slide:999", title="x", bullets=["a", "b"])
-    )
-    assert len(deck.slides) == 1
-    assert "'slide:999' is not a pattern of this template" in result.warnings[0]
-    assert "(content)" in result.warnings[0] or "content" in result.warnings[0]
-
-    chart = next(p for p in INVENTORY.patterns if p.exclusion_reason == "chart")
-    result, _ = _render(SlidePlan(pattern=chart.id, title="x", bullets=["a"]))
-    assert "is excluded from this template" in result.warnings[0]
-
-    # A slide number the model mistook for an id is honoured when it fits.
-    agenda = _pattern("Agenda")
-    result, _ = _render(
-        SlidePlan(
-            pattern=f"slide:{agenda.source_index}", items=[PlanItem(heading="One")]
-        )
-    )
-    assert f"used '{agenda.id}'" in result.warnings[0]
-
-
 def test_non_slide_entries_are_skipped_and_an_all_invalid_plan_is_an_error():
     result, deck = _render(
-        SlidePlan(pattern="content", title="Kept"), SlidePlan.model_validate("junk")
+        _on(_pattern("Title and Content"), title="Kept"),
+        SlidePlan.model_validate("junk"),
     )
     assert len(deck.slides) == 1
     assert any("not a slide object" in w for w in result.warnings)
@@ -403,8 +359,8 @@ def test_non_slide_entries_are_skipped_and_an_all_invalid_plan_is_an_error():
 def test_figures_never_break_and_long_words_shrink_instead_of_splitting():
     kpi = _pattern("Key figures")
     _, deck = _render(
-        SlidePlan(
-            pattern=kpi.id,
+        _on(
+            kpi,
             title="KPIs",
             items=[PlanItem(number="1 200", label="Collaborateurs")],
         )
@@ -420,7 +376,7 @@ def test_figures_never_break_and_long_words_shrink_instead_of_splitting():
 
 def test_fixed_pattern_is_copied_verbatim_and_notes_are_written():
     divider = _pattern("Motif")
-    _, deck = _render(SlidePlan(pattern=divider.id, title="ignored", notes="Say hello"))
+    _, deck = _render(_on(divider, title="ignored", notes="Say hello"))
     slide = deck.slides[0]
     assert _title(slide) == "Motif"
     assert cast(Any, slide.notes_slide.notes_text_frame).text == "Say hello"
@@ -429,18 +385,16 @@ def test_fixed_pattern_is_copied_verbatim_and_notes_are_written():
 def test_content_the_pattern_cannot_show_is_reported():
     # The agent only learns what the deck lost from these warnings.
     result, _ = _render(
-        SlidePlan(
-            pattern=_pattern("Title Only").id, title="Spain", bullets=["55 years"]
-        ),
-        SlidePlan(
-            pattern=_pattern("Key figures").id,
+        _on(_pattern("Title Only"), title="Spain", bullets=["55 years"]),
+        _on(
+            _pattern("Key figures"),
             title="Figures",
             items=[PlanItem(number="1 600", label="People", text="Across 5 sites")],
         ),
-        SlidePlan(pattern=_pattern("Motif").id, title="Merci"),
-        SlidePlan(pattern=_pattern("Motif").id, title="Motif"),
-        SlidePlan(
-            pattern=_pattern("Free text").id,
+        _on(_pattern("Motif"), title="Merci"),
+        _on(_pattern("Motif"), title="Motif"),
+        _on(
+            _pattern("Free text"),
             title="No list",
             items=[PlanItem(heading="x")],
         ),
@@ -458,19 +412,14 @@ def test_content_the_pattern_cannot_show_is_reported():
 def test_zone_role_names_used_as_plan_keys_still_fill_the_zones():
     steps = SlidePlan.model_validate(
         {
-            "pattern": _pattern("Process").id,
             "title": "Plan",
             "items": [{"number": "1", "heading": "Start", "body": "Kick-off meeting"}],
         }
     )
-    content = SlidePlan.model_validate(
-        {
-            "pattern": _pattern("Title and Content").id,
-            "title": "Plan",
-            "body": ["one", "two"],
-        }
+    content = SlidePlan.model_validate({"title": "Plan", "body": ["one", "two"]})
+    result, deck = _render(
+        (_pattern("Process"), steps), (_pattern("Title and Content"), content)
     )
-    result, deck = _render(steps, content)
     assert result.warnings == []
     assert "Kick-off meeting" in _texts(deck.slides[0])
     assert any("one" in text and "two" in text for text in _texts(deck.slides[1]))
@@ -480,8 +429,8 @@ def test_zone_role_names_used_as_plan_keys_still_fill_the_zones():
 def test_one_line_heading_shrinks_then_asks_to_be_shortened():
     process = _pattern("Process")
     result, deck = _render(
-        SlidePlan(
-            pattern=process.id,
+        _on(
+            process,
             title="Plan",
             items=[
                 PlanItem(heading="Kick-off", text="a"),
@@ -494,8 +443,8 @@ def test_one_line_heading_shrinks_then_asks_to_be_shortened():
 
     # A label with nothing under it may take a second line.
     figures, _ = _render(
-        SlidePlan(
-            pattern=_pattern("Key figures").id,
+        _on(
+            _pattern("Key figures"),
             title="Figures",
             items=[
                 PlanItem(number="12", label="A label far too long for its one line")
@@ -510,9 +459,7 @@ def test_truncation_drops_the_lines_the_measured_capacity_cannot_hold():
     # lines in characters shipped a slide with twice its text in it.
     shouting = ["MODERNISATION DES SYSTEMES DE COMMANDEMENT"] * 12
     result, deck = _render(
-        SlidePlan(
-            pattern=_pattern("Title and Content").id, title="Overflow", bullets=shouting
-        )
+        _on(_pattern("Title and Content"), title="Overflow", bullets=shouting)
     )
     assert any("truncated" in w for w in result.warnings)
     body = cast(Any, deck.slides[0].placeholders[1]).text_frame
@@ -544,23 +491,18 @@ def test_long_item_text_in_a_one_line_box_wraps_without_a_warning():
             ]
         }
     )
-    result = render_deck(
-        TEMPLATE,
-        inventory,
-        DeckPlan(
-            slides=[
-                SlidePlan(
-                    pattern=process.id,
-                    title="Plan",
-                    items=[
-                        PlanItem(
-                            heading="Start",
-                            text="A description written in full sentences, " * 2,
-                        )
-                    ],
+    result, _ = _render(
+        _on(
+            one_line,
+            title="Plan",
+            items=[
+                PlanItem(
+                    heading="Start",
+                    text="A description written in full sentences, " * 2,
                 )
-            ]
+            ],
         ),
+        inventory=inventory,
     )
     assert not [w for w in result.warnings if "one line" in w]
 
@@ -621,37 +563,6 @@ def test_items_shown_by_another_group_of_the_slide_are_not_reported():
     assert _unused_item_fields([figures], plan) == ["items' heading", "items' text"]
 
 
-def test_catalogue_names_plan_fields_and_offers_nothing_on_fixed_slides():
-    lines = {line.split(" ")[1]: line for line in catalogue(INVENTORY).splitlines()}
-    assert "items up to 3 [number, heading, text]" in lines[_pattern("Process").id]
-    assert "bullets" in lines[_pattern("Title and Content").id]
-    assert "no editable zone" in lines[_pattern("Motif").id]
-    assert "(preferred)" not in catalogue(
-        INVENTORY.model_copy(
-            update={
-                "patterns": [_pattern("Motif").model_copy(update={"preferred": True})]
-            }
-        )
-    )
-    assert "title" not in lines[_pattern("Motif").id].split(":", 1)[1]
-
-
-def test_fixed_intent_closes_on_a_closing_slide_before_a_preferred_decoration():
-    decoration = _pattern("Motif").model_copy(update={"preferred": True})
-    closing = decoration.model_copy(
-        update={
-            "id": "layout:99",
-            "label": "Merci",
-            "name": "Merci",
-            "kind": "closing",
-            "preferred": False,
-        }
-    )
-    inventory = INVENTORY.model_copy(update={"patterns": [decoration, closing]})
-    found = best_for_intent(inventory, "closing")
-    assert found is not None and found.label == "Merci"
-
-
 def test_preview_copy_widens_one_line_text_the_delivered_deck_keeps():
     # LibreOffice breaks a "do not wrap" box once its substitute font runs wide.
     template = Presentation(io.BytesIO(TEMPLATE))
@@ -667,10 +578,8 @@ def test_preview_copy_widens_one_line_text_the_delivered_deck_keeps():
     buffer = io.BytesIO()
     template.save(buffer)
 
-    result = render_deck(
-        buffer.getvalue(),
-        INVENTORY,
-        DeckPlan(slides=[SlidePlan(pattern=_pattern("Title Only").id, title="End")]),
+    result, _ = _render(
+        _on(_pattern("Title Only"), title="End"), template=buffer.getvalue()
     )
 
     def merci_box(pptx: bytes):
@@ -699,32 +608,22 @@ def test_reference_template_renders_a_full_deck():
     template = open(REFERENCE, "rb").read()  # type: ignore[arg-type]
     inventory = analyze_template(template).inventory
     assert inventory is not None
-    by_label: dict[str, Any] = {}
-    for pattern in inventory.patterns:
-        by_label.setdefault(pattern.label, pattern)
     plan = DeckPlan(
         slides=[
+            SlidePlan(title="Plan de transformation", subtitle="Comité de direction"),
             SlidePlan(
-                pattern="cover",
-                title="Plan de transformation",
-                subtitle="Comité de direction",
-            ),
-            SlidePlan(
-                pattern=by_label["SOMMAIRE"].id,
                 title="Sommaire",
                 items=[
                     PlanItem(heading=h)
                     for h in ("Contexte", "Ambition", "Feuille de route")
                 ],
             ),
-            SlidePlan(pattern="section", title="Contexte"),
+            SlidePlan(title="Contexte", kind="section"),
             SlidePlan(
-                pattern="bullets",
                 title="Constats",
                 bullets=["Coûts en hausse", "- +8 % sur un an", "Délais stables"],
             ),
             SlidePlan(
-                pattern=by_label["Indicateurs de performance / chiffres clés"].id,
                 title="Chiffres clés",
                 items=[
                     PlanItem(number="60%", label="Marge"),
@@ -732,8 +631,8 @@ def test_reference_template_renders_a_full_deck():
                 ],
             ),
             SlidePlan(
-                pattern=by_label["Planche de processus"].id,
                 title="Démarche",
+                kind="process",
                 items=[
                     PlanItem(heading="Cadrer", text="Deux semaines"),
                     PlanItem(heading="Construire", text="Un trimestre"),
@@ -741,7 +640,6 @@ def test_reference_template_renders_a_full_deck():
                 ],
             ),
             SlidePlan(
-                pattern="two_columns",
                 title="Options",
                 columns=[
                     PlanColumn(heading="A", bullets=["rapide"]),
@@ -749,8 +647,8 @@ def test_reference_template_renders_a_full_deck():
                 ],
             ),
             SlidePlan(
-                pattern="closing",
                 title="Nous contacter",
+                kind="closing",
                 bullets=[
                     "Jane Doe",
                     "Directrice",
@@ -758,12 +656,25 @@ def test_reference_template_renders_a_full_deck():
                     "jane@example.com",
                 ],
             ),
-            SlidePlan(pattern="closing"),
         ]
     )
-    result = render_deck(template, inventory, plan)
+    assignment = assign(inventory, plan)
+    assert not assignment.problems, assignment.problems
+    kinds = [p.kind for p in assignment.patterns if p is not None]
+    assert kinds == [
+        "cover",
+        "agenda",
+        "section",
+        "bullets",
+        "figures",
+        "process",
+        # The template's comparison layout has no title zone: the title would be lost.
+        "two_columns",
+        "closing",
+    ]
+    result = render_deck(template, inventory, plan, assignment.patterns)
     deck = Presentation(io.BytesIO(result.pptx))
-    assert len(deck.slides) == 9
+    assert len(deck.slides) == 8
     contact = deck.slides[7]
     assert {"Jane Doe", "Directrice", "+33 1 00 00 00 00", "jane@example.com"} <= set(
         _texts(contact)
@@ -810,13 +721,15 @@ def test_catalogue_quotes_the_tightest_zone_not_the_first():
 
 
 def test_catalogue_names_columns_when_a_pattern_has_several_bodies():
-    """`bullets` fills only the first: naming it that way loses the rest."""
+    """`bullets` fills only the first: naming it that way loses the rest. A
+    closing slide takes one bullet per zone instead."""
+    contact = _two_body_pattern(40, 40)
+    columns = contact.model_copy(update={"kind": "two_columns"})
     line = catalogue(
-        TemplateInventory(
-            slide_width=1, slide_height=1, patterns=[_two_body_pattern(40, 40)]
-        )
+        TemplateInventory(slide_width=1, slide_height=1, patterns=[columns, contact])
     )
-    assert "columns.bullets×2" in line
+    assert "two_columns: columns.bullets×2" in line
+    assert "closing: bullets, one per line,×2" in line
 
 
 def test_catalogue_quotes_no_limit_for_a_box_that_grows_with_its_text():
@@ -876,145 +789,13 @@ def test_a_placeholder_that_does_not_wrap_on_its_layout_is_not_truncated():
     assert inventory is not None
     pattern = next(p for p in inventory.patterns if any(z.grows for z in p.zones))
     long_title = "Plan de transformation numérique du groupe à l'horizon 2030"
-    result = render_deck(
-        build_spaced_template(space_before_pt=0),
-        inventory,
-        DeckPlan(slides=[SlidePlan(pattern=pattern.id, title=long_title)]),
+    result, deck = _render(
+        _on(pattern, title=long_title),
+        template=build_spaced_template(space_before_pt=0),
+        inventory=inventory,
     )
-    deck = Presentation(io.BytesIO(result.pptx))
     assert long_title in _texts(deck.slides[0])
     assert not [w for w in result.warnings if "truncated" in w]
-
-
-# --- a pattern is chosen for the content it is actually given ---
-
-
-def _cards_inventory() -> TemplateInventory:
-    """Two cards patterns: the first shows only a description, the second a
-    heading too — the shape of the real corporate template."""
-
-    def group(roles, key) -> RepeatGroup:
-        return RepeatGroup(
-            key=key,
-            count=3,
-            item_zones=roles,
-            item_keys=[f"{key}/{i}" for i in range(3)],
-            items=[
-                [
-                    Zone(
-                        key=f"{key}/{i}/{role}",
-                        role=role,
-                        box=Box(x=i * 300, y=300, w=280, h=200),
-                        font_pt=14.0,
-                        max_chars=80,
-                        max_lines=3,
-                    )
-                    for role in roles
-                ]
-                for i in range(3)
-            ],
-        )
-
-    title = Zone(
-        key="ph:0",
-        role="title",
-        box=Box(x=0, y=0, w=900, h=100),
-        font_pt=32.0,
-        max_chars=60,
-        max_lines=1,
-    )
-    return TemplateInventory(
-        slide_width=Inches(13.333).emu,
-        slide_height=Inches(7.5).emu,
-        patterns=[
-            Pattern(
-                id="slide:1",
-                source="slide",
-                source_index=1,
-                name="Text cards",
-                label="Text cards",
-                kind="cards",
-                zones=[title],
-                groups=[group(["body"], "g1")],
-            ),
-            Pattern(
-                id="slide:2",
-                source="slide",
-                source_index=2,
-                name="Titled cards",
-                label="Titled cards",
-                kind="cards",
-                zones=[title],
-                groups=[group(["heading", "body"], "g2")],
-            ),
-        ],
-    )
-
-
-def test_cards_with_headings_skip_the_pattern_that_cannot_show_them():
-    """Taking the first pattern of the intent rendered cards with no heading —
-    in the worst case, three empty boxes."""
-    slide = SlidePlan(
-        pattern="cards",
-        title="Three axes",
-        items=[PlanItem(heading="Near", text="Close to clients")] * 3,
-    )
-    chosen = best_for_intent(_cards_inventory(), "cards", slide)
-    assert chosen is not None and chosen.id == "slide:2"
-
-
-def test_a_pattern_without_headings_still_wins_when_the_plan_has_none():
-    slide = SlidePlan(
-        pattern="cards", title="Three axes", items=[PlanItem(text="Close")] * 3
-    )
-    chosen = best_for_intent(_cards_inventory(), "cards", slide)
-    assert chosen is not None and chosen.id == "slide:1"
-
-
-def test_an_image_pattern_is_not_chosen_for_a_plan_without_images():
-    """Every unfilled picture zone is a white hole on the finished slide."""
-    plain = _pattern("Title and Content")
-    imaged = Pattern(
-        id="slide:99",
-        source="slide",
-        source_index=99,
-        name="Photos",
-        label="Photos",
-        kind=plain.kind,
-        zones=plain.zones
-        + [
-            Zone(key=f"sp:{i}", role="image", box=Box(x=i * 300, y=400, w=280, h=300))
-            for i in range(4)
-        ],
-        preferred=True,
-    )
-    inventory = TemplateInventory(
-        slide_width=INVENTORY.slide_width,
-        slide_height=INVENTORY.slide_height,
-        patterns=[imaged, plain],
-    )
-    slide = SlidePlan(title="Method", bullets=["Frame", "Build", "Measure"])
-    assert best_for_intent(inventory, plain.kind, slide) is plain
-    with_image = slide.model_copy(update={"image": "doc-1"})
-    assert best_for_intent(inventory, plain.kind, with_image) is imaged
-
-
-def test_a_pattern_that_would_truncate_loses_to_one_that_holds_the_text():
-    plain = _pattern("Title and Content")
-    narrow = plain.model_copy(
-        deep=True,
-        update={"id": "slide:98", "label": "Narrow", "preferred": True},
-    )
-    for zone in narrow.zones:
-        if zone.role == "body":
-            zone.max_chars = 20
-    inventory = TemplateInventory(
-        slide_width=INVENTORY.slide_width,
-        slide_height=INVENTORY.slide_height,
-        patterns=[narrow, plain],
-    )
-    slide = SlidePlan(title="Detail", bullets=["A sentence far longer than twenty"] * 4)
-    assert best_for_intent(inventory, plain.kind, slide) is plain
 
 
 # --- unused item slots leave the slide clean ---
@@ -1024,7 +805,7 @@ def test_a_group_pattern_given_no_items_keeps_the_slide_design():
     """Sweeping decoration by overlap with nothing kept took the slide's own
     background with it, silently."""
     kpi = _pattern("Key figures")
-    result, deck = _render(SlidePlan(pattern=kpi.id, title="KPIs", bullets=["Stray"]))
+    result, deck = _render(_on(kpi, title="KPIs", bullets=["Stray"]))
     assert _title(deck.slides[0]) == "KPIs"
     assert any("gave none" in w for w in result.warnings)
     # The icons drawn beside the cards are gone with them, the title stays.
@@ -1044,9 +825,7 @@ def test_a_connector_counts_as_inside_the_area_it_spans():
 def test_the_kept_items_are_recentred_on_the_room_the_group_had():
     kpi = _pattern("Key figures")
     _, deck = _render(
-        SlidePlan(
-            pattern=kpi.id, title="KPIs", items=[PlanItem(number="42%", label="Margin")]
-        )
+        _on(kpi, title="KPIs", items=[PlanItem(number="42%", label="Margin")])
     )
     groups = [
         p
@@ -1063,9 +842,7 @@ def test_an_unfilled_placeholder_is_removed_not_left_prompting():
     """An empty placeholder shows "Click to add text" as soon as the user opens
     the deck to edit it."""
     two = next(p for p in INVENTORY.patterns if p.label == "Two Content")
-    _, deck = _render(
-        SlidePlan(pattern=two.id, title="One side", bullets=["Only this"])
-    )
+    _, deck = _render(_on(two, title="One side", bullets=["Only this"]))
     empty = [
         shape
         for shape in deck.slides[0].placeholders
@@ -1084,13 +861,13 @@ def test_a_replaced_picture_keeps_its_place_in_the_drawing_order():
     inventory = analyze_template(template).inventory
     assert inventory is not None
     pattern = next(p for p in inventory.patterns if p.source == "slide")
-    plan = DeckPlan(
-        slides=[SlidePlan(pattern=pattern.id, title="Cover", image="doc-1")]
+    _, deck = _render(
+        _on(pattern, title="Cover", image="doc-1"),
+        images={"doc-1": prepare_picture(png_bytes(400, 300))},
+        template=template,
+        inventory=inventory,
     )
-    result = render_deck(
-        template, inventory, plan, {"doc-1": prepare_picture(png_bytes(400, 300))}
-    )
-    tree = list(Presentation(io.BytesIO(result.pptx)).slides[0].shapes._spTree)
+    tree = list(deck.slides[0].shapes._spTree)
     pictures = [i for i, el in enumerate(tree) if el.tag == qn("p:pic")]
     texts = [
         i
@@ -1105,7 +882,7 @@ def test_a_replaced_picture_keeps_its_place_in_the_drawing_order():
 def test_the_hero_image_is_not_dropped_when_images_is_also_given():
     pattern = _pattern("Photo")
     result, deck = _render(
-        SlidePlan(pattern=pattern.id, title="Cover", image="doc-1", images=["doc-2"]),
+        _on(pattern, title="Cover", image="doc-1", images=["doc-2"]),
         images={
             "doc-1": prepare_picture(png_bytes(400, 300)),
             "doc-2": prepare_picture(png_bytes(300, 400)),
@@ -1116,19 +893,10 @@ def test_the_hero_image_is_not_dropped_when_images_is_also_given():
 
 
 def test_a_field_the_model_invented_is_reported_not_swallowed():
-    plan = DeckPlan.model_validate(
-        {
-            "slides": [
-                {
-                    "pattern": _pattern("Title and Content").id,
-                    "title": "Results",
-                    "bullets": ["Up"],
-                    "footnote": "Source: internal",
-                }
-            ]
-        }
+    slide = SlidePlan.model_validate(
+        {"title": "Results", "bullets": ["Up"], "footnote": "Source: internal"}
     )
-    result = render_deck(TEMPLATE, INVENTORY, plan)
+    result, _ = _render((_pattern("Title and Content"), slide))
     assert any("footnote" in w for w in result.warnings)
 
 
@@ -1137,7 +905,6 @@ def test_a_bullet_wrapped_under_an_unknown_key_keeps_its_text():
         {
             "slides": [
                 {
-                    "pattern": _pattern("Title and Content").id,
                     "title": "Results",
                     "bullets": [{"point": "Revenue up"}, "Costs flat"],
                 }
@@ -1152,8 +919,8 @@ def test_sibling_zones_of_one_slide_share_a_font_size():
     when each was right on its own."""
     steps = _pattern("Process")
     _, deck = _render(
-        SlidePlan(
-            pattern=steps.id,
+        _on(
+            steps,
             title="How",
             items=[
                 PlanItem(heading="Go", text="Start"),
@@ -1184,8 +951,8 @@ def test_a_column_heading_written_into_the_body_drops_the_bullet():
     """Rendered as a bullet it is indistinguishable from the content below it."""
     content = _pattern("Title and Content")
     _, deck = _render(
-        SlidePlan(
-            pattern=content.id,
+        _on(
+            content,
             title="Compare",
             columns=[PlanColumn(heading="Left", bullets=["a", "b"])],
         )
@@ -1228,21 +995,16 @@ def test_a_title_that_auto_sizes_in_height_is_fitted_not_widened():
     zone = next(z for z in pattern.zones if z.role == "title")
     assert not zone.grows
     designed = zone.box.w
-    result = render_deck(
-        template,
-        inventory,
-        DeckPlan(
-            slides=[
-                SlidePlan(
-                    pattern=pattern.id,
-                    title="Un titre de couverture nettement plus long que la zone que "
-                    "le concepteur a dessinee pour lui, au point de sortir du cadre "
-                    "prevu et de courir sur la photo placee juste a cote de lui",
-                )
-            ]
+    result, deck = _render(
+        _on(
+            pattern,
+            title="Un titre de couverture nettement plus long que la zone que "
+            "le concepteur a dessinee pour lui, au point de sortir du cadre "
+            "prevu et de courir sur la photo placee juste a cote de lui",
         ),
+        template=template,
+        inventory=inventory,
     )
-    deck = Presentation(io.BytesIO(result.pptx))
     titles = [
         p
         for p in walk_shapes(deck.slides[0].shapes)
@@ -1261,9 +1023,9 @@ def test_an_agenda_announcing_more_than_the_deck_holds_is_reported():
     """A model can plan ten slides and write out two: the deck holds what was
     sent, and without this nothing says so."""
     result, _ = _render(
-        SlidePlan(pattern=_pattern("Title and Content").id, title="Cover"),
-        SlidePlan(
-            pattern=_pattern("Agenda").id,
+        _on(_pattern("Title and Content"), title="Cover"),
+        _on(
+            _pattern("Agenda"),
             title="Agenda",
             items=[PlanItem(heading=f"Topic {i}") for i in range(4)],
         ),
@@ -1273,67 +1035,17 @@ def test_an_agenda_announcing_more_than_the_deck_holds_is_reported():
 
 def test_an_agenda_matched_by_the_deck_is_not_reported():
     slides = [
-        SlidePlan(
-            pattern=_pattern("Agenda").id,
+        _on(
+            _pattern("Agenda"),
             title="Agenda",
             items=[PlanItem(heading="One"), PlanItem(heading="Two")],
         )
     ] + [
-        SlidePlan(pattern=_pattern("Title and Content").id, title=t, bullets=["x"])
+        _on(_pattern("Title and Content"), title=t, bullets=["x"])
         for t in ("One", "Two")
     ]
     result, _ = _render(*slides)
     assert not [w for w in result.warnings if "announces" in w]
-
-
-# --- advice an agent can act on when columns have nowhere to go ---
-
-
-def _columns(count: int) -> list:
-    return [
-        PlanColumn(heading=f"C{i}", bullets=[f"Some text for column {i}"])
-        for i in range(count)
-    ]
-
-
-def test_lost_columns_name_the_pattern_that_would_have_held_them():
-    """ "Put it on a pattern that shows it" leaves the agent guessing which."""
-    wide = _pattern("Title and Content").model_copy(deep=True)
-    wide.id, wide.label, wide.kind = "layout:99", "Four columns", "two_columns"
-    body = next(z for z in wide.zones if z.role == "body")
-    wide.zones = [z for z in wide.zones if z.role != "body"] + [
-        body.model_copy(update={"key": f"ph:{10 + i}"}) for i in range(4)
-    ]
-    inventory = TemplateInventory(
-        slide_width=INVENTORY.slide_width,
-        slide_height=INVENTORY.slide_height,
-        patterns=[p for p in INVENTORY.patterns if p.included] + [wide],
-    )
-    narrow = next(
-        p for p in inventory.patterns if p.kind == "two_columns" and p is not wide
-    )
-    result = render_deck(
-        TEMPLATE,
-        inventory,
-        DeckPlan(slides=[SlidePlan(pattern=narrow.id, title="T", columns=_columns(4))]),
-    )
-    lost = [w for w in result.warnings if "no place for column" in w]
-    assert lost and "layout:99" in lost[0], lost
-
-
-def test_columns_beyond_every_pattern_say_so_instead_of_advising_a_rewrite():
-    """The agent rewrites the same slide and loses the same columns again."""
-    result = render_deck(
-        TEMPLATE,
-        INVENTORY,
-        DeckPlan(
-            slides=[SlidePlan(pattern="two_columns", title="T", columns=_columns(9))]
-        ),
-    )
-    lost = [w for w in result.warnings if "no place for column" in w]
-    assert lost, result.warnings
-    assert "No pattern of this template shows more than" in lost[0]
-    assert "Put it on a pattern that shows it" not in lost[0]
 
 
 # --- duplication fidelity and after-render check ---------------------------------
@@ -1407,11 +1119,11 @@ def _linked_template() -> tuple[bytes, TemplateInventory]:
 
 def _render_linked(notes: str | None = None):
     template, inventory = _linked_template()
-    plan = DeckPlan(
-        slides=[SlidePlan(pattern=inventory.patterns[0].id, title="Plan", notes=notes)]
+    return _render(
+        _on(inventory.patterns[0], title="Plan", notes=notes),
+        template=template,
+        inventory=inventory,
     )
-    result = render_deck(template, inventory, plan)
-    return result, Presentation(io.BytesIO(result.pptx))
 
 
 def test_links_to_removed_slides_are_dropped_and_leave_no_orphan():

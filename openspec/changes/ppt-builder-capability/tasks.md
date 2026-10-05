@@ -67,11 +67,11 @@ Owns: `analysis_job.py` (new), `ppt_builder_migrations/` (new), `capability.py`,
 
 Owns: `assign.py` (new), `plan.py`, `tools.py`, tests `test_assign.py` (new), `test_build_tool.py` (new).
 
-- [ ] 5.1 Plan schema without `pattern`; `kind` last and optional; catalogue lists kinds with capacities, no ids
-- [ ] 5.2 Fit check + kind inference from content shape; Viterbi-style assignment with deck rules (cover once at 1, closing ≤ 1 and last, no three in a row when an alternative fits)
-- [ ] 5.3 Delete `resolve()`, `DEGRADATION`, loose id matching, `best_for_intent`
-- [ ] 5.4 `needs_revision` structured error per slide with template-specific options; success message reports removals/truncations and no longer forbids another call; prompt fragment updated
-- [ ] 5.5 Tests: each deck rule, unfit slide → error (no deck written), item over capacity, variety fallback on a one-archetype template
+- [x] 5.1 Plan schema without `pattern`; `kind` last and optional; catalogue lists kinds with capacities, no ids
+- [x] 5.2 Fit check + kind inference from content shape; Viterbi-style assignment with deck rules (cover once at 1, closing ≤ 1 and last, no three in a row when an alternative fits)
+- [x] 5.3 Delete `resolve()`, `DEGRADATION`, loose id matching, `best_for_intent`
+- [x] 5.4 `needs_revision` structured error per slide with template-specific options; success message reports removals/truncations and no longer forbids another call; prompt fragment updated (text lives in `capability.py`: applied by WP4)
+- [x] 5.5 Tests: each deck rule, unfit slide → error (no deck written), item over capacity, variety fallback on a one-archetype template
 
 ## WP6. Render fixes and after-render check
 

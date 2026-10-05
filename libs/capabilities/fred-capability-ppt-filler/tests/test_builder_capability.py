@@ -12,21 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""``ppt_builder`` save-time states, the build tool and the routes, fully
-offline on the in-memory port fakes."""
+"""``ppt_builder`` save-time states and the routes, fully offline on the
+in-memory port fakes (the tools: ``test_build_tool.py``)."""
 
 from __future__ import annotations
 
 import io
-from typing import Any, cast
 
 import pytest
 from builder_decks import build_showcase_template
-from deck_builders import png_bytes
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_ppt_filler.builder import capability as capability_mod
-from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.capability import (
     PPT_BUILDER_PATTERNS_KEY,
@@ -36,21 +33,15 @@ from fred_capability_ppt_filler.builder.capability import (
 )
 from fred_capability_ppt_filler.builder.models import PatternOverride
 from fred_capability_ppt_filler.builder.theme import default_theme
-from fred_capability_ppt_filler.builder.tools import (
-    BUILD_TOOL_NAME,
-    LIST_IMAGES_TOOL_NAME,
-)
 from fred_capability_ppt_filler.capability import TEMPLATE_SLOT
 from fred_capability_ppt_filler.fill import PptPreviewPart
 from fred_sdk.contracts.capability import (
-    CapabilityContext,
     CapabilityIdentity,
-    EmptyModel,
     SaveContext,
     UploadedFile,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
-from port_fakes import FakeAssets, FakeDocs, FakeFolders, FakeWorkspace
+from port_fakes import FakeAssets
 from pptx import Presentation
 
 TEMPLATE = build_showcase_template()
@@ -211,198 +202,6 @@ async def test_a_current_analysis_is_not_recomputed_and_a_failure_keeps_it():
     assert kept.inventory == stale
 
 
-# --- tools --------------------------------------------------------------------------------
-
-
-def _ctx(
-    config: PptBuilderConfig, *, assets=None, docs=None, folders=None, workspace=None
-):
-    return CapabilityContext(
-        identity=CapabilityIdentity(user_id="u-1", session_id="sess-9"),
-        config=config,
-        turn_options=EmptyModel(),
-        services=RuntimeServices(
-            agent_assets=assets,
-            document_content=docs,
-            document_folders=folders,
-            workspace_fs=workspace if workspace is not None else FakeWorkspace(),
-        ),
-    )
-
-
-def _tools(ctx) -> dict[str, Any]:
-    (middleware,) = PptBuilderCapability().middleware(ctx)
-    return {tool.name: cast(Any, tool) for tool in cast(Any, middleware).tools}
-
-
-def _configured() -> tuple[PptBuilderConfig, FakeAssets]:
-    from fred_capability_ppt_filler.builder.analysis import analyze_template
-
-    inventory = analyze_template(TEMPLATE).inventory
-    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
-    return PptBuilderConfig(inventory=inventory), assets
-
-
-def test_tools_and_catalogue_follow_the_effective_inventory():
-    config, assets = _configured()
-    excluded = PatternOverride(
-        pattern_id="layout:0", included=False, label="Hidden cover"
-    )
-    config = config.model_copy(update={"overrides": [excluded]})
-    tools = _tools(_ctx(config, assets=assets))
-    assert set(tools) == {BUILD_TOOL_NAME, LIST_IMAGES_TOOL_NAME}
-    description = tools[BUILD_TOOL_NAME].description
-    assert "layout:1 [bullets]" in description
-    assert "Hidden cover" not in description
-    assert "items up to 4 [number, heading]" in description
-    schema = tools[BUILD_TOOL_NAME].args_schema.model_json_schema()
-    choices = schema["$defs"]["BuildSlide"]["properties"]["pattern"]["enum"]
-    assert "layout:1" in choices and "layout:0" not in choices and "bullets" in choices
-
-
-@pytest.mark.asyncio
-async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_union):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
-    config, assets = _configured()
-    workspace = FakeWorkspace()
-    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[
-            {"pattern": "title", "title": "Kick-off", "subtitle": "Team"},
-            {"pattern": "layout:1", "title": "Plan", "bullets": ["one", "- two"]},
-        ],
-        file_name="Kick off 2026",
-    )
-    assert not result.is_error
-    (part,) = result.ui_parts
-    assert isinstance(part, PptPreviewPart)
-    assert part.file_name == "Kick off 2026.pptx"
-    # The card opens this capability's pane: an agent may not have ppt_filler.
-    assert part.capability_id == "ppt_builder"
-    assert "2 slides" in text
-    # Keyed by the deck's name: a model that splits one deck across calls, or
-    # retries one, lands on the same key and the reader sees one presentation.
-    paths = [w["path"] for w in workspace.writes]
-    assert paths == [
-        "outputs/sess-9/Kick off 2026.pptx",
-        "outputs/sess-9/Kick off 2026.pdf",
-    ]
-    deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
-    assert [cast(Any, s.shapes.title).text for s in deck.slides] == ["Kick-off", "Plan"]
-
-
-@pytest.mark.asyncio
-async def test_build_without_template_uses_the_built_in_theme(monkeypatch):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    workspace = FakeWorkspace()
-    tools = _tools(_ctx(PptBuilderConfig(), workspace=workspace))
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[
-            {
-                "pattern": "cards",
-                "title": "KPIs",
-                "items": [{"number": "42%", "label": "Margin"}],
-            }
-        ]
-    )
-    assert not result.is_error
-    assert "only the download" in text
-    assert result.ui_parts[0].kind.value == "download"
-    deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
-    assert len(deck.slides) == 1
-
-
-@pytest.mark.asyncio
-async def test_empty_plan_is_an_error_the_user_can_read():
-    config, assets = _configured()
-    tools = _tools(_ctx(config, assets=assets))
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[{"pattern": "content"}]
-    )
-    assert result.is_error and "no content" in text
-    # The text travels in the result so the runtime shows it, not a generic failure.
-    assert result.blocks and result.blocks[0].text == text
-
-
-@pytest.mark.asyncio
-async def test_malformed_plan_from_a_small_model_still_builds(monkeypatch):
-    """The shape of a real failing call: invented `slide:<n>` ids, a column
-    pattern given as a slide number, stray strings in `slides`, bullets as one
-    string, numbers as integers, an unknown top-level key."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    config, assets = _configured()
-    workspace = FakeWorkspace()
-    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        notes="stray top-level key",
-        slides=[
-            {"pattern": "title", "title": "Kick-off", "subtitle": "Team"},
-            {
-                "pattern": "slide:999",
-                "title": "Options",
-                "columns": [
-                    {"heading": "A", "bullets": "fast\ncheap"},
-                    {"heading": "B", "bullets": ["robust"]},
-                ],
-            },
-            {
-                "pattern": "cards",
-                "title": "KPIs",
-                "items": [{"number": 3, "label": "Sites"}, "Loose item"],
-            },
-            {"title": "Plan", "bullets": "one\ntwo"},
-            "notes**: ",
-            "A long stray note that is not a slide",
-        ],
-    )
-    assert not result.is_error, text
-    deck = Presentation(io.BytesIO(workspace.writes[0]["content"]))
-    assert len(deck.slides) == 4
-    assert "4 slides" in text
-    assert "not a slide object" in text and "slide:999" in text
-
-
-@pytest.mark.asyncio
-async def test_build_places_images_from_documents_and_reports_bad_ones(monkeypatch):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    config, assets = _configured()
-    assert config.inventory is not None
-    photo = next(p for p in config.inventory.patterns if p.label == "Photo")
-    docs = FakeDocs(
-        {"img-1": (png_bytes(20, 10), "image/png"), "txt-1": (b"hello", "text/plain")}
-    )
-    workspace = FakeWorkspace()
-    tools = _tools(_ctx(config, assets=assets, docs=docs, workspace=workspace))
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[{"pattern": photo.id, "title": "Site", "image": "img-1"}]
-    )
-    assert not result.is_error
-    assert docs.fetch_uids == ["img-1"]
-    # A bad image reference costs the picture, never the deck.
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[{"pattern": photo.id, "title": "Site", "image": "txt-1"}]
-    )
-    assert not result.is_error and "'txt-1' is not a usable image" in text
-    text, result = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[{"pattern": photo.id, "title": "Site", "image": "missing"}]
-    )
-    assert not result.is_error and "'missing' is not a usable image" in text
-
-
-@pytest.mark.asyncio
-async def test_list_images_resolves_the_folder_at_call_time():
-    folders = FakeFolders(
-        {"Images/Sites": "tag-1"},
-        {"tag-1": [("d1", "bordeaux.png"), ("d2", "notes.docx")]},
-    )
-    config, assets = _configured()
-    tools = _tools(_ctx(config, assets=assets, folders=folders))
-    listed = await tools[LIST_IMAGES_TOOL_NAME].coroutine(folder="/Images/Sites/")
-    assert '"d1"' in listed and "d2" not in listed
-    missing = await tools[LIST_IMAGES_TOOL_NAME].coroutine(folder="Nope")
-    assert "No folder named 'Nope'" in missing
-
-
 # --- routes ---------------------------------------------------------------------------------
 
 
@@ -485,17 +284,6 @@ def test_patterns_preview_keeps_one_page_per_pattern_even_for_uncopyable_slides(
     assert len(deck.slides) == len(inventory.patterns)
 
 
-@pytest.mark.asyncio
-async def test_plan_made_of_fixed_slides_by_id_is_accepted(monkeypatch):
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    config, assets = _configured()
-    assert config.inventory is not None
-    fixed = next(p for p in config.inventory.patterns if not p.reusable and p.included)
-    tools = _tools(_ctx(config, assets=assets))
-    _, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"pattern": fixed.id}])
-    assert not result.is_error
-
-
 def test_theme_route_lists_every_kind():
     body = _client().get("/capabilities/ppt_builder/theme").json()
     kinds = {p["kind"] for p in body["inventory"]["patterns"] if p["included"]}
@@ -512,31 +300,3 @@ def test_theme_route_lists_every_kind():
         "quote",
         "closing",
     } <= kinds
-
-
-@pytest.mark.asyncio
-async def test_several_builds_of_one_answer_land_on_one_preview(
-    monkeypatch, preview_union
-):
-    """A model that splits a deck across calls used to deliver one preview card
-    per fragment, each holding a truncated presentation. They share a key, so
-    the reader is shown one deck."""
-    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _pdf)
-    config, assets = _configured()
-    workspace = FakeWorkspace()
-    tools = _tools(_ctx(config, assets=assets, workspace=workspace))
-    previews = []
-    for title in ("Part one", "Part two", "Part three"):
-        _, result = await tools[BUILD_TOOL_NAME].coroutine(
-            slides=[{"pattern": "title", "title": title}]
-        )
-        previews.append(cast(Any, result.ui_parts[0]).preview_id)
-    assert len(set(previews)) == 1, previews
-
-
-def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
-    """Splitting is what produced several truncated decks in one answer."""
-    config, assets = _configured()
-    description = _tools(_ctx(config, assets=assets))[BUILD_TOOL_NAME].description
-    assert "ONE call builds the WHOLE deck" in description
-    assert "Never split a deck across several calls" in description

@@ -51,12 +51,9 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
 )
 from fred_capability_ppt_filler.builder.plan import (
-    SLIDE_FIELDS,
     DeckPlan,
     SlidePlan,
     has_content,
-    resolve,
-    score_pattern,
 )
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
@@ -84,7 +81,7 @@ PreparedImage = Tuple[bytes, int, int]
 @dataclass
 class RenderResult:
     pptx: bytes
-    # Human-readable notes for the agent: truncations, substitutions, unfilled images.
+    # Human-readable notes for the agent: truncations, unfilled images.
     warnings: List[str] = field(default_factory=list)
     slide_count: int = 0
     # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`).
@@ -838,7 +835,9 @@ class _Renderer:
         self.report = checks.DeckReport()
         self._originals: Dict[int, Dict[str, str]] = {}
 
-    def render(self, plan: DeckPlan) -> RenderResult:
+    def render(
+        self, plan: DeckPlan, patterns: Sequence[Optional[Pattern]]
+    ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
         # (position, topics) of each agenda: a deck that announces more topics
@@ -859,10 +858,9 @@ class _Renderer:
                 self.report.slide(position).lost.extend(
                     sorted(slide_plan.ignored_fields)
                 )
-            resolution = resolve(self.inventory, slide_plan)
-            pattern = resolution.pattern
-            if resolution.substitution:
-                self.warnings.append(f"Slide {position}: {resolution.substitution}.")
+            pattern = patterns[position - 1]
+            if pattern is None:
+                raise RenderError(f"Slide {position} has no assigned pattern.")
             rendered += 1
             if pattern.kind == "agenda" and slide_plan.items:
                 announced.append((rendered, len(slide_plan.items)))
@@ -1008,12 +1006,9 @@ class _Renderer:
             self._even_out_item_widths(group, index)
         report.lost.extend(lost)
         if lost:
-            advice = "Put it on a pattern that shows it, or drop it."
-            if plan.columns and any(item.startswith("column ") for item in lost):
-                advice = self._column_advice(plan)
             self.warnings.append(
                 f"Slide {position}: '{pattern.label}' has no place for {', '.join(lost)}; "
-                f"that content is not in the deck. {advice}"
+                "that content is not in the deck."
             )
         if pattern.groups:
             # Widths and removals changed the slide: re-read absolute geometry.
@@ -1131,40 +1126,6 @@ class _Renderer:
                     _remove(placed)
                 continue
             self._place_image(slide, placed, prepared)
-
-    def _column_advice(self, plan: SlidePlan) -> str:
-        """What to answer an agent whose slide has more columns than it could
-        show: the pattern that would have held them, or, when the template has
-        none, how many it does hold.
-
-        "Put it on a pattern that shows it" is useless advice when no such
-        pattern exists - the agent rewrites the same slide and loses the same
-        columns again.
-        """
-        wanted = len(plan.columns)
-        candidates = [
-            (
-                sum(1 for z in p.zones if SLIDE_FIELDS.get(z.role) == "bullets"),
-                p,
-            )
-            for p in self.inventory.patterns
-            if p.included and p.reusable
-        ]
-        if not candidates:
-            return "Drop the extra columns."
-        widest = max(count for count, _ in candidates)
-        fitting = [p for count, p in candidates if count >= wanted]
-        if fitting:
-            best = max(fitting, key=lambda p: score_pattern(p, plan))
-            return (
-                f"'{best.id}' (\"{best.label}\") shows {wanted} columns: use it, "
-                "or merge the extra ones."
-            )
-        return (
-            f"No pattern of this template shows more than {widest} columns, so no "
-            f"rewrite of this slide can hold {wanted}: give {widest} or fewer, or "
-            "split the content over several slides."
-        )
 
     @staticmethod
     def _loose_decoration(
@@ -1420,15 +1381,17 @@ def render_deck(
     template_bytes: bytes,
     inventory: TemplateInventory,
     plan: DeckPlan,
+    patterns: Sequence[Optional[Pattern]],
     images: Optional[Mapping[str, PreparedImage]] = None,
 ) -> RenderResult:
-    """Render ``plan`` on the template (CPU-bound; call off the event loop).
+    """Render ``plan`` on the template, slide ``i`` on ``patterns[i]`` as
+    chosen by :func:`assign.assign` (CPU-bound; call off the event loop).
 
-    Raises :class:`RenderError` for a plan the template cannot honour
-    (unknown or excluded pattern, missing image); anything else propagates.
+    Raises :class:`RenderError` for a pattern the template no longer holds;
+    anything else propagates.
     """
     presentation = Presentation(io.BytesIO(template_bytes))
     try:
-        return _Renderer(presentation, inventory, images or {}).render(plan)
+        return _Renderer(presentation, inventory, images or {}).render(plan, patterns)
     except ValueError as exc:
         raise RenderError(str(exc)) from exc
