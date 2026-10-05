@@ -69,4 +69,4 @@ Use one OIDC browser implementation for all providers, including Keycloak.
 Record authenticated human profiles in the local directory on the first
 control-plane request, including `/user` before CGU acceptance. Recording a
 profile does not accept CGU, grant a role or reopen platform-admin bootstrap.
-The common browser lifecycle and pre-CGU snapshot are implemented; automated persistence/delegation checks pass and real browser verification remains pending.
+The common browser lifecycle and pre-CGU snapshot are implemented; automated persistence/delegation checks pass and real browser verification remains pending. The common session must clear its access/refresh tokens and stored user after a definitive renewal refusal; transient provider failures retain an unexpired bearer.

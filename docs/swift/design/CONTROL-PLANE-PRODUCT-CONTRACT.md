@@ -4292,6 +4292,18 @@ and presents no bearer to the agent pod
 Detailed cases are in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
+## Definitive browser renewal refusal clears the Fred session (2026-10-05)
+
+The common Keycloak/OIDC browser lifecycle classifies structured renewal error
+codes. `invalid_grant`, `login_required`, `interaction_required`,
+`consent_required` and `account_selection_required` immediately invalidate live
+credentials and clear the persisted OIDC user before coalesced refresh callers
+receive `false`. Failed storage cleanup cannot expose credentials in the current
+session. Network failures, timeouts and transient provider errors retain an
+otherwise unexpired bearer and allow retry. Late results cannot restore an
+invalidated generation or erase a newer accepted session. The boolean facade
+and existing provider sign-out flow remain compatible.
+
 ## Local username ambiguity aborts import preflight (2026-10-05)
 
 In local-directory mode, username resolution rejects distinct IDs sharing the

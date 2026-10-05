@@ -35,6 +35,36 @@ For either provider, the frontend SHALL restore a valid session on reload, renew
 - **WHEN** their access token approaches expiry
 - **THEN** a new token is obtained without a visible redirect
 
+Definitive renewal refusals (`invalid_grant`, `login_required`, `interaction_required`, `consent_required`, `account_selection_required`) SHALL invalidate in-memory access/refresh tokens and remove the stored OIDC user. Transient network/provider errors and timeouts SHALL preserve an otherwise unexpired bearer and permit retry. Error classification SHALL use the structured error code, not an error message or HTTP status alone. Existing boolean refresh results and provider sign-out behavior SHALL remain compatible.
+
+#### Scenario: Definitive refresh refusal
+
+- **GIVEN** a valid stored browser session for either provider
+- **WHEN** renewal returns a definitive refusal
+- **THEN** all coalesced callers receive `false`, getters expose no access/refresh token or claims, and the stored OIDC user is removed
+- **AND** reloading cannot restore the refused session
+- **AND** no late refresh or login callback can restore its invalidated generation
+
+#### Scenario: Transient provider failure
+
+- **GIVEN** an access token that has not expired
+- **WHEN** renewal fails because of a network error, timeout or transient provider error
+- **THEN** renewal returns `false`, the valid bearer remains available, and a subsequent renewal may succeed
+- **AND** an expired bearer is never exposed
+
+#### Scenario: Stored-user cleanup fails
+
+- **GIVEN** a definitive renewal refusal and unavailable browser storage cleanup
+- **WHEN** removal of the stored OIDC user fails
+- **THEN** refresh still resolves `false` and no old token or claims are exposed by the current browser session
+
+#### Scenario: Timed-out renewal and its retry succeed together
+
+- **GIVEN** a timed-out renewal and a newer retry whose successful responses arrive together
+- **WHEN** the SDK stores both results before Fred validates their generations
+- **THEN** the live token, stored user and proactive renewal timer follow the accepted generation
+- **AND** the accepted token is renewed before its own expiry
+
 #### Scenario: Sign-out
 
 - **GIVEN** a signed-in person

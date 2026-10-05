@@ -39,6 +39,13 @@ changing either changes the Fred user ID and personal space. Server-side
 refresh of a person's token depends on the provider. For Entra SPA tokens,
 enable workload delegation rather than relying on backend person-token refresh.
 
+For both browser providers, definitive renewal refusals (`invalid_grant`,
+`login_required`, `interaction_required`, `consent_required`,
+`account_selection_required`) clear Fred's access/refresh tokens and stored OIDC
+user. Network/provider outages and timeouts preserve an unexpired bearer and
+permit retry; an expired bearer is never returned. A delayed renewal cannot
+restore a refused session or replace a newer accepted generation.
+
 Local imports require unambiguous exact usernames. If distinct local IDs share a
 referenced username, preflight fails with `ambiguous_username` before writing
 bundle rows or roles. Collisions on names outside the bundle do not block it.

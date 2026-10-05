@@ -193,3 +193,36 @@ review. Resolution remains one awaited SQL query plus a linear scan. Real
 PostgreSQL/IdP/OpenFGA and concurrency were not exercised; collision detection
 does not establish current ownership of a stale but unique snapshot. Other
 portability findings and pending manual provider tasks remain outside this slice.
+
+## 14. Review correction: definitive browser renewal refusal
+
+- [x] 14.1 Distinguish structured definitive OAuth/OIDC renewal refusals from transient errors in the common browser session; invalidate tokens/claims and remove the stored user without changing the facade or provider sign-out flow.
+- [x] 14.2 Verify both providers, real ErrorResponse and OIDC session storage, reload after refusal, coalesced callers, late generation results, cleanup failure, transient retry and expired-token rejection with focused browser-session/consumer tests.
+- [x] 14.3 Update existing provider/migration guidance and the product contract, obtain independent read-only review, run focused tests and root quality once, then commit/push this block on the existing issue/PR.
+
+Correction verification (2026-10-05): six targeted frontend suites passed 170
+tests: real-SDK browser session/storage, both-provider facade, application
+requests, credential-expiry scenario, chat SSE and existing base-query query
+serialization. The final real-SDK suite has 18 passing tests. Before correction,
+the real session retained access/refresh tokens and the stored user after a real
+`ErrorResponse(invalid_grant)`; the same reproduction now exposes none. Tests
+cover terminal code classification, reload, concurrent cleanup, storage failure,
+transient retry/expiry, timeout, stale success/rejection and late login callback.
+Root `make code-quality` passed once across all 16 modules; migration-note,
+strict OpenSpec and diff whitespace checks passed. No API/schema changed.
+
+Independent read-only author/performance review covered the corrective worktree
+delta against `925a6eb888`, including real SDK storage/events, facade, base
+queries, application requests, chat and documentation. It confirmed one P2
+timer race when a timed-out renewal and its retry succeed together: the original
+user's expiring timer survived despite the accepted user's token being stored.
+Serialized session-local storage/timer reconciliation fixes it. The reviewer
+replayed the same real-SDK scenario and observed the correct 540-second timer
+instead of 240 seconds; the regression also verifies proactive renewal at that
+deadline. No actionable finding remained after review of that subsequent delta.
+The PR target remains `swift` (`22b597663`); this is a focused correction review,
+not a new full PR review. The repair adds local browser storage/event work only,
+with no extra provider, backend, LLM or tool request. Real IdP/browser walkthroughs
+and load remain unverified. Browser-storage failure cannot guarantee persistent
+removal, but current-session tokens remain revoked. Other portability findings,
+the excluded import P1 and pending manual tasks remain outside this slice.

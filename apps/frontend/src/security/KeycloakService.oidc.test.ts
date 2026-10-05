@@ -16,6 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import uidVector from "../../../../validation/fixtures/oidc_uid_vector.json";
 import { v5 } from "uuid";
+import { ErrorResponse } from "oidc-client-ts";
 
 const state = vi.hoisted(() => ({
   settings: null as Record<string, unknown> | null,
@@ -28,13 +29,17 @@ const state = vi.hoisted(() => ({
   removeUser: vi.fn(async () => {}),
 }));
 
-vi.mock("oidc-client-ts", () => ({
+vi.mock("oidc-client-ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("oidc-client-ts")>()),
   UserManager: class {
     events = { addAccessTokenExpiring: vi.fn(), addUserLoaded: vi.fn(), addUserUnloaded: vi.fn() };
     constructor(settings: Record<string, unknown>) {
       state.settings = settings;
     }
     getUser = async () => state.user;
+    storeUser = async (user: unknown) => {
+      state.user = user;
+    };
     signinRedirect = state.signinRedirect;
     signinRedirectCallback = state.signinRedirectCallback;
     signinSilent = state.signinSilent;
@@ -194,7 +199,7 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
     expect(window.location.search).toBe("");
   });
 
-  it("reports a failed silent renewal without replacing the bearer", async () => {
+  it("reports a transient silent renewal failure without replacing the bearer", async () => {
     const original = user({ sub: "person" }, 5);
     state.user = original;
     state.signinSilent.mockRejectedValue(new Error("provider unavailable"));
@@ -205,6 +210,29 @@ describe.each(["keycloak", "oidc"] as const)("%s browser authentication", (provi
     await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
     await expect(KeyCloakService.ensureFreshToken(30)).resolves.toBe(false);
     expect(KeyCloakService.GetToken()).toBe(original.access_token);
+  });
+
+  it.each([
+    "invalid_grant",
+    "login_required",
+    "interaction_required",
+    "consent_required",
+    "account_selection_required",
+  ])("clears facade credentials after a definitive %s renewal refusal", async (error) => {
+    state.user = user({ sub: "person", roles: ["reader"] }, 5);
+    state.signinSilent.mockRejectedValue(new ErrorResponse({ error }));
+    const { createKeycloakInstance, KeyCloakService } = await import("./KeycloakService");
+    createKeycloakInstance("https://identity.example/tenant", "ui", options);
+    const authenticated = vi.fn();
+    KeyCloakService.CallLogin(authenticated);
+    await vi.waitFor(() => expect(authenticated).toHaveBeenCalledOnce());
+
+    await expect(KeyCloakService.ensureFreshToken(30)).resolves.toBe(false);
+    expect(KeyCloakService.GetToken()).toBeNull();
+    expect(KeyCloakService.GetRefreshToken()).toBeNull();
+    expect(KeyCloakService.GetUserRoles()).toEqual([]);
+    expect(state.removeUser).toHaveBeenCalledOnce();
+    expect(state.signoutRedirect).not.toHaveBeenCalled();
   });
 
   it("refreshes the access token and never republishes a late refresh after logout", async () => {

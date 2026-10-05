@@ -12,9 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { UserManager, type User } from "oidc-client-ts";
+import { ErrorResponse, UserManager, type User } from "oidc-client-ts";
 
 const REFRESH_TIMEOUT_MS = 8_000;
+const TERMINAL_RENEWAL_ERRORS = new Set([
+  "invalid_grant",
+  "login_required",
+  "interaction_required",
+  "consent_required",
+  "account_selection_required",
+]);
 
 /** Browser OIDC lifecycle kept behind the existing KeyCloakService facade. */
 export class OidcBrowserSession {
@@ -22,6 +29,7 @@ export class OidcBrowserSession {
   private user: User | null = null;
   private generation = 0;
   private refreshInFlight: Promise<boolean> | null = null;
+  private renewalReconciliation: Promise<void> = Promise.resolve();
   private invalidated = false;
   private readonly redirectUri: string;
 
@@ -122,6 +130,20 @@ export class OidcBrowserSession {
     }
   }
 
+  private reconcileRenewalState(): Promise<void> {
+    // SDK responses write before our checks; serialize storage and timer repair.
+    const reconcile = this.renewalReconciliation.then(async () => {
+      if (this.invalidated || !this.user) {
+        await this.manager.removeUser();
+      } else {
+        await this.manager.storeUser(this.user);
+        await this.manager.getUser();
+      }
+    });
+    this.renewalReconciliation = reconcile.catch(() => undefined);
+    return reconcile;
+  }
+
   async ensureFreshToken(minValidity = 30): Promise<boolean> {
     if (this.invalidated || !this.user) return false;
     if (minValidity > 0 && (this.user.expires_in ?? 0) > minValidity) return true;
@@ -132,9 +154,9 @@ export class OidcBrowserSession {
     const generation = this.generation;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const refresh = Promise.race([
-      this.manager.signinSilent().then((user) => {
+      this.manager.signinSilent().then(async (user) => {
         if (this.invalidated || generation !== this.generation) {
-          void this.manager.removeUser();
+          await this.reconcileRenewalState();
           return null;
         }
         return user;
@@ -146,16 +168,35 @@ export class OidcBrowserSession {
         }, REFRESH_TIMEOUT_MS);
       }),
     ])
-      .then((user) => {
+      .then(async (user) => {
+        if (!user) return false;
         if (this.invalidated || generation !== this.generation) {
-          void this.manager.removeUser();
+          await this.reconcileRenewalState();
           return false;
         }
-        if (!user) return false;
         this.user = user;
+        await this.reconcileRenewalState();
+        if (this.invalidated || generation !== this.generation) {
+          await this.reconcileRenewalState();
+          return false;
+        }
         return true;
       })
-      .catch(() => false)
+      .catch(async (error: unknown) => {
+        if (
+          generation === this.generation &&
+          !this.invalidated &&
+          error instanceof ErrorResponse &&
+          TERMINAL_RENEWAL_ERRORS.has(error.error ?? "")
+        ) {
+          // Revoke immediately, even if removing the stored user fails.
+          this.generation += 1;
+          this.invalidated = true;
+          this.user = null;
+          await this.reconcileRenewalState().catch(() => undefined);
+        }
+        return false;
+      })
       .finally(() => {
         if (timeout) clearTimeout(timeout);
         if (this.refreshInFlight === refresh) this.refreshInFlight = null;
