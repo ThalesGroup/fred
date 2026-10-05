@@ -15,7 +15,7 @@
 import Button from "@shared/atoms/Button/Button.tsx";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { platformPath } from "../../../../common/platformAccess";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import {
   useGetUserDetailsControlPlaneV1UserGetQuery,
@@ -71,11 +71,14 @@ export default function GcuPage() {
       </div>
       <div className={styles.gcuActions}>
         {!gcuVersion || (userDetails?.cguValidated != null && userDetails.cguValidated.toString() === gcuVersion) ? (
-          <Link to={"/"}>
-            <Button color={"primary"} variant={"filled"} size={"medium"}>
-              {t("rework.gcu.backToApp")}
-            </Button>
-          </Link>
+          <Button
+            color={"primary"}
+            variant={"filled"}
+            size={"medium"}
+            onClick={() => window.location.replace(platformPath("/"))}
+          >
+            {t("rework.gcu.backToApp")}
+          </Button>
         ) : (
           <>
             <span className={styles.gcuLockInformation}>{t("rework.gcu.lockInformation")}</span>

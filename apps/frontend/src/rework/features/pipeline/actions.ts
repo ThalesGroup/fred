@@ -1,3 +1,4 @@
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -157,6 +158,7 @@ export async function streamAgentTurn(
     body: JSON.stringify(body),
     signal: args.signal,
   });
+  await handlePlatformAccessResponse(response);
   if (!response.ok) throw new AgentTurnRejectedError(response.status);
   if (!response.body) throw new AgentTurnExecutionError({});
 

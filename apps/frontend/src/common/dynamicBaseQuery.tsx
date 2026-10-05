@@ -15,6 +15,7 @@
 
 import { fetchBaseQuery, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
 import type { BaseQueryFn } from "@reduxjs/toolkit/query";
+import { handlePlatformAccessDenial } from "./platformAccess";
 import { KeyCloakService } from "../security/KeycloakService";
 
 /** Same as fetchBaseQuery's default, except that an array repeats its key
@@ -67,6 +68,7 @@ export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknow
       }
     }
 
+    if (result.error) handlePlatformAccessDenial(result.error.status, result.error.data);
     return result;
   };
 };

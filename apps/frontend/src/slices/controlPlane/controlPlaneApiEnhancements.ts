@@ -61,9 +61,28 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformRole",
     "ControlPlaneTeamWiki",
     "ControlPlaneKnowledgeBase",
+    "PlatformAccess",
     "ControlPlaneAnnouncement",
   ],
   endpoints: {
+    validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
+    getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
+    listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: { providesTags: ["PlatformAccess"] },
+    previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: { providesTags: ["PlatformAccess"] },
+    listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: { providesTags: ["PlatformAccess"] },
+    getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: { providesTags: ["PlatformAccess"] },
+    previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: { providesTags: ["PlatformAccess"] },
+    setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: { invalidatesTags: ["PlatformAccess"] },
+    grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
+    revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
+    importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: { invalidatesTags: ["PlatformAccess"] },
+    generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: {
+      invalidatesTags: ["PlatformAccess"],
+    },
+    acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: { invalidatesTags: ["PlatformAccess"] },
+
     // Platform announcements. Both reads share one LIST tag: an admin mutation
     // must refresh the admin table AND the banner stack behind it, since the
     // admin is looking at the same app the banner renders in.
@@ -802,3 +821,45 @@ export const {
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,
 } = enhancedControlPlaneApi;
+
+export const usePlatformAccessStateQuery =
+  enhancedControlPlaneApi.useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery;
+
+export const usePlatformAccessUsersQuery =
+  enhancedControlPlaneApi.useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery;
+
+export const usePlatformAccessT0Query =
+  enhancedControlPlaneApi.usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery;
+
+export const usePlatformAccessTeamsQuery =
+  enhancedControlPlaneApi.useListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery;
+
+export const usePlatformAccessStatusQuery =
+  enhancedControlPlaneApi.useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery;
+
+export const useFreeEnrollmentPreviewQuery =
+  enhancedControlPlaneApi.usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery;
+
+export const useSetPlatformFilteringMutation =
+  enhancedControlPlaneApi.useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation;
+
+export const useGrantPlatformUserMutation =
+  enhancedControlPlaneApi.useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation;
+
+export const useRevokePlatformUserMutation =
+  enhancedControlPlaneApi.useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation;
+
+export const useImportPlatformT0Mutation =
+  enhancedControlPlaneApi.useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation;
+
+export const useSetPlatformTeamMutation =
+  enhancedControlPlaneApi.useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation;
+
+export const useGeneratePlatformLinkMutation =
+  enhancedControlPlaneApi.useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation;
+
+export const useAcceptFreeCguMutation =
+  enhancedControlPlaneApi.useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation;
+
+export const useEnrollFreeTeamMutation =
+  enhancedControlPlaneApi.useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation;

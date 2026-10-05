@@ -38,6 +38,115 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.lifecycleManagerInput,
       }),
     }),
+    getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: build.query<
+      GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiResponse,
+      GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access` }),
+    }),
+    setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: build.mutation<
+      SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiResponse,
+      SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access`,
+        method: "PATCH",
+        body: queryArg.setPlatformFiltering,
+      }),
+    }),
+    listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: build.query<
+      ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse,
+      ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users`,
+        params: {
+          offset: queryArg.offset,
+          limit: queryArg.limit,
+          query: queryArg.query,
+        },
+      }),
+    }),
+    grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
+      GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse,
+      GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/admin/platform/access/users/${queryArg.userId}`, method: "PUT" }),
+    }),
+    revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: build.mutation<
+      RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiResponse,
+      RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users/${queryArg.userId}`,
+        method: "DELETE",
+      }),
+    }),
+    previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: build.query<
+      PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse,
+      PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/t0-preview` }),
+    }),
+    importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: build.mutation<
+      ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse,
+      ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/t0-import`, method: "POST" }),
+    }),
+    listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: build.query<
+      ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse,
+      ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/teams` }),
+    }),
+    setPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatch: build.mutation<
+      SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiResponse,
+      SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}`,
+        method: "PATCH",
+        body: queryArg.setPlatformAccessTeam,
+      }),
+    }),
+    generatePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPost: build.mutation<
+      GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiResponse,
+      GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/teams/${queryArg.teamId}/enrollment-link`,
+        method: "POST",
+      }),
+    }),
+    getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: build.query<
+      GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse,
+      GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/platform-access/status` }),
+    }),
+    previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: build.query<
+      PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse,
+      PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}` }),
+    }),
+    acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: build.mutation<
+      AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse,
+      AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform-access/free/${queryArg.token}/gcu`,
+        method: "POST",
+        body: queryArg.acceptFreeEnrollmentCgu,
+      }),
+    }),
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: build.mutation<
+      EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse,
+      EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/platform-access/free/${queryArg.token}/enroll`, method: "POST" }),
+    }),
     listUsersControlPlaneV1UsersGet: build.query<
       ListUsersControlPlaneV1UsersGetApiResponse,
       ListUsersControlPlaneV1UsersGetApiArg
@@ -1626,6 +1735,67 @@ export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiResponse
 export type TriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostApiArg = {
   lifecycleManagerInput: LifecycleManagerInput;
 };
+export type GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type GetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetApiArg = void;
+export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg = {
+  setPlatformFiltering: SetPlatformFiltering;
+};
+export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessUsersPage;
+export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg = {
+  offset?: number;
+  limit?: number;
+  query?: string;
+};
+export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
+export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
+  userId: string;
+};
+export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiResponse = unknown;
+export type RevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteApiArg = {
+  userId: string;
+};
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiResponse =
+  /** status 200 Successful Response */ PlatformT0Preview;
+export type PreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetApiArg = void;
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiResponse =
+  /** status 200 Successful Response */ PlatformT0Preview;
+export type ImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostApiArg = void;
+export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessTeam[];
+export type ListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetApiArg = void;
+export type SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiResponse =
+  /** status 200 Successful Response */ PlatformAccessTeam;
+export type SetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchApiArg = {
+  teamId: string;
+  setPlatformAccessTeam: SetPlatformAccessTeam;
+};
+export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiResponse =
+  /** status 200 Successful Response */ PlatformEnrollmentLink;
+export type GeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostApiArg = {
+  teamId: string;
+};
+export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessStatus;
+export type GetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetApiArg = void;
+export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiResponse =
+  /** status 200 Successful Response */ FreeEnrollmentPreview;
+export type PreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetApiArg = {
+  token: string;
+};
+export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiResponse = unknown;
+export type AcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostApiArg = {
+  token: string;
+  acceptFreeEnrollmentCgu: AcceptFreeEnrollmentCgu;
+};
+export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiResponse =
+  /** status 200 Successful Response */ PlatformAccessStatus;
+export type EnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostApiArg = {
+  token: string;
+};
 export type ListUsersControlPlaneV1UsersGetApiResponse = /** status 200 Successful Response */ UserSummary[];
 export type ListUsersControlPlaneV1UsersGetApiArg = void;
 export type CreateUserControlPlaneV1UsersPostApiResponse = /** status 201 Successful Response */ UserSummary;
@@ -2733,6 +2903,60 @@ export type LifecycleManagerInput = {
   dry_run?: boolean;
   batch_size?: number;
 };
+export type PlatformAccessState = {
+  filtering_enabled: boolean;
+  t0_completed_at: string | null;
+};
+export type SetPlatformFiltering = {
+  filtering_enabled: boolean;
+};
+export type AdmissionSource = {
+  kind: "attribute" | "manual" | "t0" | "team" | "free";
+  team_id?: string | null;
+  team_name?: string | null;
+  granted_by?: string | null;
+  granted_at?: string | null;
+};
+export type PlatformAccessUser = {
+  user_id: string;
+  username: string | null;
+  email: string | null;
+  sources: AdmissionSource[];
+};
+export type PlatformAccessUsersPage = {
+  items: PlatformAccessUser[];
+  total: number;
+};
+export type PlatformT0Preview = {
+  candidates: number;
+  matching: number;
+  completed_at: string | null;
+};
+export type PlatformAccessTeam = {
+  team_id: string;
+  name: string | null;
+  allowed: boolean;
+  free: boolean;
+  has_enrollment_link: boolean;
+};
+export type SetPlatformAccessTeam = {
+  allowed: boolean;
+  free: boolean;
+};
+export type PlatformEnrollmentLink = {
+  token: string;
+};
+export type PlatformAccessStatus = {
+  admitted: boolean;
+  cgu_required: boolean;
+};
+export type FreeEnrollmentPreview = {
+  team_name: string;
+  cgu_required: boolean;
+};
+export type AcceptFreeEnrollmentCgu = {
+  version: string;
+};
 export type UserSummary = {
   id: string;
   first_name?: string | null;
@@ -2951,6 +3175,8 @@ export type FrontendUiThemes = {
   hidden_themes?: string[];
 };
 export type FrontendConfig = {
+  platform_access_enabled?: boolean;
+  supportLink?: string | null;
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
   /** Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever succeeded on this deployment. True once the durable PlatformBootstrapStore marker is set, permanently — never re-derived from live OpenFGA state, so removing every platform_admin relation later does not flip this back to False (same rationale as BootstrapAlreadyCompletedError). Not sensitive: it reveals only 'has anyone ever bootstrapped this instance', never who, never the secret, never any identity — safe on this public/unauthenticated surface, same as gcu_version. */
@@ -4415,6 +4641,26 @@ export const {
   useLazyGetPurgePolicySummaryControlPlaneV1PoliciesPurgeGetQuery,
   useResolvePurgeControlPlaneV1PoliciesPurgeResolvePostMutation,
   useTriggerLifecycleRunOnceControlPlaneV1LifecycleRunOncePostMutation,
+  useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
+  useLazyGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
+  useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
+  useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
+  useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
+  usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
+  useLazyPreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,
+  useImportPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPostMutation,
+  useListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
+  useLazyListPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGetQuery,
+  useSetPlatformAccessTeamControlPlaneV1AdminPlatformAccessTeamsTeamIdPatchMutation,
+  useGeneratePlatformEnrollmentLinkControlPlaneV1AdminPlatformAccessTeamsTeamIdEnrollmentLinkPostMutation,
+  useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
+  useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery,
+  usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useLazyPreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery,
+  useAcceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPostMutation,
+  useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation,
   useListUsersControlPlaneV1UsersGetQuery,
   useLazyListUsersControlPlaneV1UsersGetQuery,
   useCreateUserControlPlaneV1UsersPostMutation,

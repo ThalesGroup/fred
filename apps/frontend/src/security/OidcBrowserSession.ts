@@ -99,7 +99,11 @@ export class OidcBrowserSession {
         return;
       }
       this.user = user;
-      window.history.replaceState({}, "", this.redirectUri);
+      const returnPath =
+        typeof user.state === "string" && user.state.startsWith("/") && !user.state.startsWith("//")
+          ? user.state
+          : this.redirectUri;
+      window.history.replaceState({}, "", returnPath);
     } else if (query.has("state")) {
       await this.manager.signoutRedirectCallback();
       window.history.replaceState({}, "", this.redirectUri);
@@ -115,7 +119,7 @@ export class OidcBrowserSession {
       onAuthenticated();
       return;
     }
-    await this.manager.signinRedirect();
+    await this.manager.signinRedirect({ state: `${window.location.pathname}${window.location.search}` });
   }
 
   async logout(): Promise<void> {

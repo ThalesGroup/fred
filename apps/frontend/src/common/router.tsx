@@ -1,3 +1,6 @@
+import PlatformAccessPage from "@components/pages/admin/PlatformAccessPage/PlatformAccessPage";
+import PlatformAccessDeniedPage from "@components/pages/PlatformAccessPage/PlatformAccessDeniedPage";
+import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollmentPage";
 // Copyright Thales 2025
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,6 +104,8 @@ const SuspenseWrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 export const routes: RouteObject[] = [
+  { path: "/platform-access-denied", element: <PlatformAccessDeniedPage /> },
+  { path: "/join-free/:token", element: <FreeEnrollmentPage /> },
   {
     path: "/",
     element: <MainLayout />,
@@ -228,6 +233,14 @@ export const routes: RouteObject[] = [
         // on the admin role like the backend's `can_administer_users`; the
         // stricter bootstrap-root-only rules on the platform_admin relation
         // are enforced server-side and only mirrored in the page's UI.
+        path: "admin/platform-access",
+        element: (
+          <Protected requires="admin">
+            <PlatformAccessPage />
+          </Protected>
+        ),
+      },
+      {
         path: "admin/platform-roles",
         element: (
           <Protected requires="admin">

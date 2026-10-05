@@ -311,3 +311,20 @@ describe("OIDC renewal with real user storage", () => {
     expect(logout).toHaveBeenCalledOnce();
   });
 });
+
+it("preserves a Free enrollment route through the OIDC round trip", async () => {
+  const target = "/fred/join-free/opaque-link";
+  window.history.replaceState({}, "", target);
+  const session = newSession();
+  const signin = vi.spyOn(session.manager, "signinRedirect").mockResolvedValue();
+  await session.login(vi.fn());
+  expect(signin).toHaveBeenCalledWith({ state: target });
+  window.history.replaceState({}, "", "/?code=callback&state=opaque-state");
+  const signedIn = person();
+  Object.defineProperty(signedIn, "state", { value: target });
+  vi.spyOn(session.manager, "signinRedirectCallback").mockResolvedValue(signedIn);
+  const authenticated = vi.fn();
+  await session.login(authenticated);
+  expect(window.location.pathname).toBe(target);
+  expect(authenticated).toHaveBeenCalledOnce();
+});

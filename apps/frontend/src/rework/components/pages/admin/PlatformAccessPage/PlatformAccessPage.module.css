@@ -1,0 +1,22 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding: var(--spacing-m);
+  overflow: auto;
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+}
