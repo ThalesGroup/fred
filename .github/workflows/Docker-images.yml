@@ -139,7 +139,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           build-args: ${{ matrix.build_args }}
           push: ${{ inputs.publish }}
-          load: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
+          outputs: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '' }}
           tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
           # The empty string is falsy in expressions, so it has to sit on the
@@ -151,26 +151,15 @@ jobs:
           # image that already compiled.
           cache-to: ${{ !inputs.publish && format('type=gha,mode=max,scope={0},ignore-error=true', matrix.name) || '' }}
 
-      - name: Scan built image for CVEs
-        if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ${{ format('fred-pr/{0}:scan', matrix.name) }}
-          scanners: vuln
-          vuln-type: os,library
-          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
-          list-all-pkgs: true
-          format: json
-          output: trivy-results.json
-          exit-code: '0'
-
-      - name: Upload Trivy report
+      - name: Upload built image for scanning
         if: ${{ github.event_name == 'pull_request' && !inputs.publish && matrix.scan }}
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-${{ matrix.name }}
-          path: trivy-results.json
-          retention-days: 14
+          name: scan-image-${{ matrix.name }}
+          path: /tmp/pr-image.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
 
   trivy:
     name: Scan Trivy / ${{ matrix.name }}
@@ -184,10 +173,34 @@ jobs:
         include: ${{ fromJSON(needs.resolve.outputs.scan_matrix) }}
 
     steps:
-      - name: Download Trivy report
+      - name: Check out the repo
+        uses: actions/checkout@v5
+
+      - name: Download built image
         uses: actions/download-artifact@v4
         with:
+          name: scan-image-${{ matrix.name }}
+          path: /tmp
+
+      - name: Scan built image for CVEs
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.75.0
+          input: /tmp/pr-image.tar
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          list-all-pkgs: true
+          format: json
+          output: trivy-results.json
+          exit-code: '0'
+
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
           name: trivy-${{ matrix.name }}
+          path: trivy-results.json
+          retention-days: 14
 
       - name: Report scan findings
         env:
@@ -236,6 +249,7 @@ jobs:
       - name: Scan frontend dependencies
         uses: aquasecurity/trivy-action@v0.36.0
         with:
+          version: v0.75.0
           scan-type: fs
           scan-ref: apps/frontend
           trivy-config: .github/trivy-frontend.yaml
