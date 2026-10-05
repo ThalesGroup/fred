@@ -1798,10 +1798,13 @@ async def _bulk_team_membership(
     my_relations_map: dict[TeamId, set[UserTeamRelation]] = {}
     for team_id, relations in zip(team_ids, per_team_relations):
         roles_by_user = _fold_team_role_relations(relations)
+        # Listing avatars identify contacts, including nominees awaiting the charter.
+        # The per-team projection keeps accepted admins only for the charter gate.
         admin_ids_map[team_id] = {
             uid
             for uid, roles in roles_by_user.items()
-            if UserTeamRelation.TEAM_ADMIN in roles
+            if roles
+            & {UserTeamRelation.TEAM_ADMIN, UserTeamRelation.PENDING_TEAM_ADMIN}
         }
         member_ids_map[team_id] = set(roles_by_user.keys())
         my_relations_map[team_id] = roles_by_user.get(user_id, set())
