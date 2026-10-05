@@ -18,10 +18,11 @@ Deterministic and offline. One pass over each layout and slide collects a flat
 list of shape records (kind, geometry, text, font size, placeholder type);
 every rule below works on those records, never on the XML again.
 
-Rule order, most to least reliable (design.md D3): typed placeholders, shared
-decoration, sample-text lexicon, repeated groups, free boxes by geometry and
-font rank, then intent and exclusion. Optional annotations (shape names,
-``intent:`` notes) override the corresponding heuristic.
+On an example slide every text-bearing shape is a slot, except text repeated
+on several slides and date/footer/slide-number fields; roles come from
+placeholder types, repeated groups, geometry and font rank. The slide kind is
+a heuristic the vision pass refines (design.md D2). Optional annotations
+(shape names, ``kind:`` notes) override the corresponding heuristic.
 """
 
 from __future__ import annotations
@@ -52,10 +53,11 @@ from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
+    SLIDE_KINDS,
     Box,
-    Intent,
     Pattern,
     RepeatGroup,
+    SlideKind,
     TemplateInventory,
     Zone,
     ZoneRole,
@@ -67,9 +69,11 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 CODE_INVALID_UPLOAD = "invalid_upload"
 
-# A relationship of these kinds can be re-created on a duplicated slide; any
-# other part (chart, SmartArt, OLE) makes the slide uncopyable.
+# A relationship of these kinds does not block duplicating a slide (slide-to-
+# slide links are dropped, not copied); any other part (chart, SmartArt, OLE)
+# makes the slide uncopyable.
 COPYABLE_REL_SUFFIXES = (
+    "/slide",
     "/image",
     "/audio",
     "/video",
@@ -94,7 +98,7 @@ _DEFAULT_PT: Dict[str, float] = {
 }
 
 # Text repeated on this many slides is decoration (footer, confidentiality).
-_SHARED_TEXT_MIN_SLIDES = 3
+_SHARED_TEXT_MIN_SLIDES = 2
 # A free picture covering this share of the slide is content, not decoration.
 _REPLACEABLE_PICTURE_AREA = 0.25
 # A chart/table covering this share of the slide is the slide's content.
@@ -119,6 +123,8 @@ class _Rec:
     name: str
     shape: "BaseShape" = field(repr=False)
     frame: "FrameMetrics" = field(default_factory=lambda: FrameMetrics(), repr=False)
+    # Holds a slide-number or date field: chrome, never a slot.
+    is_field: bool = False
 
     @property
     def words(self) -> int:
@@ -148,7 +154,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 5
+ANALYSIS_VERSION = 6
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -378,6 +384,16 @@ def _frame_metrics(shape, layout, master, font_pt: Optional[float]) -> FrameMetr
     )
 
 
+_CHROME_FIELDS = ("slidenum", "datetime")
+
+
+def _has_chrome_field(shape) -> bool:
+    return any(
+        (node.get("type") or "").lower().startswith(_CHROME_FIELDS)
+        for node in shape._element.iter(qn("a:fld"))
+    )
+
+
 def _placeholder_key(shape) -> str:
     return f"ph:{shape.placeholder_format.idx}"
 
@@ -422,6 +438,7 @@ def _records(
         bold = False
         lines = 0
         frame = FrameMetrics()
+        is_field = False
         if shape_type == MSO_SHAPE_TYPE.GROUP:
             kind = "group"
         elif getattr(shape, "has_chart", False):
@@ -441,6 +458,7 @@ def _records(
             )
             frame = _frame_metrics(shape, layout, master, font_pt)
             lines = text.count("\n") + 1 if text else 0
+            is_field = _has_chrome_field(shape)
         else:
             kind = "other"
         key = _placeholder_key(shape) if ph_idx is not None else _shape_key(placed.path)
@@ -461,6 +479,7 @@ def _records(
                 name=shape.name or "",
                 shape=shape,
                 frame=frame,
+                is_field=is_field,
             )
         )
     return records
@@ -642,17 +661,13 @@ class _Analyzer:
                 continue
             patterns.append(pattern)
 
-        layout_intents = {
-            p.intent for p in patterns if p.source == "layout" and p.included
-        }
+        layout_kinds = {p.kind for p in patterns if p.source == "layout" and p.included}
         for pattern in patterns:
-            # A fixed slide is used verbatim, so "the designer's version" means
-            # nothing there: a decorative example must not outrank a closing layout.
             if (
                 pattern.source == "slide"
                 and pattern.included
-                and pattern.intent != "fixed"
-                and pattern.intent in layout_intents
+                and pattern.reusable
+                and pattern.kind in layout_kinds
             ):
                 pattern.preferred = True
 
@@ -705,17 +720,14 @@ class _Analyzer:
             source_index=index,
             name=name,
             label=name,
-            intent="fixed",
+            kind="other",
             zones=zones,
         )
-        if not zones:
-            if lexicon.name_matches(name, lexicon.CLOSING_NAMES):
-                pattern.intent = "fixed"
-            else:
-                pattern.included = False
-                pattern.exclusion_reason = "no_placeholder"
-            return pattern
-        pattern.intent = self._intent(pattern, records, name)
+        pattern.kind = _kind(pattern, records, name, layout._element.get("type"))
+        if not zones and pattern.kind != "closing":
+            pattern.included = False
+            pattern.exclusion_reason = "no_placeholder"
+        pattern.reusable = pattern.kind != "other"
         return pattern
 
     # -- slides --------------------------------------------------------------------
@@ -756,13 +768,15 @@ class _Analyzer:
         # 2. Repeated sibling groups.
         groups, grouped_paths = self._repeat_groups(records)
 
-        # 3. Free text boxes outside the groups.
+        # 3. Every other text box is a slot, but chrome: text repeated across
+        # slides (a repeated sample box still counts) and date/number fields.
         free_text = [
             rec
             for rec in records
             if rec.kind == "text"
             and rec.ph_idx is None
             and rec.text
+            and not rec.is_field
             and (rec.text not in self.shared_texts or lexicon.is_sample_text(rec.text))
             and rec.path[0] not in grouped_paths
         ]
@@ -790,7 +804,7 @@ class _Analyzer:
             source_index=number,
             name=layout_name,
             label=self._slide_label(title_text, layout_name, number),
-            intent="fixed",
+            kind="other",
             zones=zones,
             groups=groups,
             warnings=warnings,
@@ -799,19 +813,28 @@ class _Analyzer:
         # 5. Exclusions.
         self._apply_exclusions(pattern, slide, records)
 
-        # 6. Intent, with the notes directive on top.
-        pattern.intent = self._intent(
-            pattern, records, layout_name, slide_number=number
-        )
+        # 6. Label then kind, with the notes directives on top.
+        notes = ""
         if slide.has_notes_slide:
             frame = slide.notes_slide.notes_text_frame
             notes = frame.text if frame is not None else ""
-            match = lexicon.INTENT_NOTE.search(notes)
-            if match and match.group(1) in Intent.__args__:  # type: ignore[attr-defined]
-                pattern.intent = match.group(1)  # type: ignore[assignment]
-            label = lexicon.LABEL_NOTE.search(notes)
-            if label:
-                pattern.label = label.group(1)[:60]
+        label = lexicon.LABEL_NOTE.search(notes)
+        if label:
+            pattern.label = label.group(1)[:60]
+        pattern.kind = _kind(
+            pattern,
+            records,
+            layout_name,
+            slide.slide_layout._element.get("type"),
+            slide_number=number,
+        )
+        match = lexicon.KIND_NOTE.search(notes)
+        if match:
+            declared = match.group(1).lower()
+            declared = lexicon.LEGACY_KINDS.get(declared, declared)
+            if declared in SLIDE_KINDS:
+                pattern.kind = cast(SlideKind, declared)
+        pattern.reusable = pattern.kind != "other"
         return pattern
 
     def _slide_label(self, title_text: str, layout_name: str, number: int) -> str:
@@ -930,13 +953,6 @@ class _Analyzer:
             if declared == "keep":
                 continue
             marker = KEY_PATTERN.search(rec.text)
-            if not (
-                declared
-                or marker
-                or lexicon.is_sample_text(rec.text)
-                or (not has_title and rank == 0)
-            ):
-                continue
             if declared:
                 role = cast(ZoneRole, declared)
             elif marker:
@@ -979,93 +995,139 @@ class _Analyzer:
                 )
                 return
 
-    # -- intent ------------------------------------------------------------------------
 
-    def _intent(
-        self, pattern: Pattern, records: List[_Rec], name: str, slide_number: int = 0
-    ) -> Intent:
-        zones = [z for z in pattern.zones if z.role != "keep"]
-        if not zones and not pattern.groups:
-            return "fixed"
-        titles = [z for z in zones if z.role == "title"]
-        subtitles = [z for z in zones if z.role == "subtitle"]
-        headings = [z for z in zones if z.role == "heading"]
-        bodies = [z for z in zones if z.role == "body"]
-        images = [z for z in zones if z.role == "image"]
-        labels = [z for z in zones if z.role in ("label", "caption", "number")]
+# -- slide kind (heuristic; the vision pass refines it) ---------------------------
 
-        if pattern.groups:
-            group = pattern.groups[0]
-            roles = set(group.item_zones)
-            numbers = [
-                z.sample for item in group.items for z in item if z.role == "number"
-            ]
-            if "number" in roles and "body" not in roles and "label" not in roles:
-                return (
-                    "steps"
-                    if numbers and all(lexicon.is_year(n) for n in numbers)
-                    else "agenda"
-                )
-            if "number" in roles and _sequential(numbers):
-                return "steps"
-            return "cards"
+# `<p:sldLayout type=…>` values that state a kind; `obj`, `tx` and the custom
+# ones say nothing the zones do not.
+_LAYOUT_TYPE_KINDS: Dict[str, SlideKind] = {
+    "title": "cover",
+    "secHead": "section",
+    "twoObj": "two_columns",
+    "twoColTx": "two_columns",
+    "twoTxTwoObj": "comparison",
+    "picTx": "image_text",
+}
+# Kinds that never hold body content, whatever a name says ("3 images +
+# message clé" is no quote).
+_SPARSE_KINDS = ("cover", "section", "quote")
+# A title this short names the slide ("Equipe", "Planche de processus"); a
+# longer one is content and says nothing about the kind.
+_NAMING_TITLE_WORDS = 4
 
-        samples = [z.sample for z in zones] + [name]
-        if len(zones) >= 3 and lexicon.has_contact_words(samples):
-            return "contact"
-        if lexicon.name_matches(name, lexicon.CONTACT_NAMES):
-            return "contact"
 
-        if titles and not bodies and not headings and not images:
-            if subtitles or (labels and len(labels) == 1):
-                return "title"
-            if lexicon.name_matches(name, lexicon.COVER_NAMES) or slide_number == 1:
-                return "title"
-            if (
-                lexicon.name_matches(name, lexicon.SECTION_NAMES)
-                or pattern.source == "layout"
-            ):
-                return "section"
-            # An example slide that dropped its layout's body to show only
-            # a title over graphics is a decorative divider, used verbatim.
-            has_pictures = any(rec.kind == "picture" for rec in records)
-            return "fixed" if has_pictures and len(zones) == 1 else "section"
-        if titles and len(bodies) == 1 and not headings and not images:
-            body = bodies[0]
-            title = titles[0]
-            under_title = body.box.y >= title.box.y and body.box.h < 120
-            if under_title and (
-                lexicon.name_matches(name, lexicon.COVER_NAMES) or slide_number == 1
-            ):
-                return "title"
-            if lexicon.name_matches(name, lexicon.SECTION_NAMES):
-                return "section"
-            if lexicon.name_matches(name, lexicon.STATEMENT_NAMES):
-                return "statement"
-            return "content"
-        if titles and not bodies and images and not headings:
-            return (
-                "section"
-                if lexicon.name_matches(name, lexicon.SECTION_NAMES)
-                else "image_text"
-            )
-        if len(bodies) >= 2 and not images:
-            same_band = (
-                max(b.box.y for b in bodies) - min(b.box.y for b in bodies) < 100
-            )
-            if same_band and len(headings) >= 2:
-                return "comparison"
-            if same_band:
-                return "two_columns"
-        if images and (bodies or headings):
-            return "image_text"
-        if len(bodies) == 1 and not titles and not headings:
-            return "statement"
-        if bodies or headings:
-            return "content"
-        if images:
-            return "image_text"
-        return "content"
+def _has_body_content(pattern: Pattern) -> bool:
+    """Content a cover or a divider never holds: a list, three or more text
+    slots beside the title, or a body box sized for paragraphs."""
+    if pattern.groups:
+        return True
+    text = [
+        z for z in pattern.zones if z.role not in ("title", "subtitle", "image", "keep")
+    ]
+    if len(text) >= 3:
+        return True
+    return any(
+        z.role in ("body", "heading")
+        and (z.box.h >= 300 or len(z.sample.split()) >= 25)
+        for z in text
+    )
+
+
+def _hinted_kind(
+    pattern: Pattern, records: List[_Rec], name: str, layout_type: Optional[str]
+) -> Optional[SlideKind]:
+    """A kind the template states: its layout type, then its layout name, a
+    naming title or label, then a declared shape name."""
+    # The layout type describes the placeholders, not what was drawn over them.
+    if layout_type in _LAYOUT_TYPE_KINDS and not pattern.groups:
+        return _LAYOUT_TYPE_KINDS[layout_type]
+    names = [name]
+    title = next((z.sample for z in pattern.zones if z.role == "title"), "")
+    if pattern.source == "slide":
+        # The label is the title, or what a `label:` note says.
+        for text in (title, pattern.label):
+            if len(text.split()) <= _NAMING_TITLE_WORDS or lexicon.is_sample_text(text):
+                names.append(text)
+    names.extend(rec.name for rec in records if not lexicon.is_auto_name(rec.name))
+    for candidate in names:
+        kind = lexicon.kind_from_name(candidate)
+        if kind is not None:
+            return cast(SlideKind, kind)
+    return None
+
+
+def _group_kind(group: RepeatGroup, samples: List[str]) -> SlideKind:
+    roles = set(group.item_zones)
+    numbers = [z.sample for item in group.items for z in item if z.role == "number"]
+    if numbers and all(lexicon.is_year(n) for n in numbers):
+        return "timeline"
+    if "number" in roles:
+        if not _sequential(numbers):
+            return "figures"
+        return "process" if roles & {"body", "label"} else "agenda"
+    if lexicon.has_contact_words(samples):
+        return "team"
+    return "cards"
+
+
+def _kind(
+    pattern: Pattern,
+    records: List[_Rec],
+    name: str,
+    layout_type: Optional[str],
+    slide_number: int = 0,
+) -> SlideKind:
+    """The slide kind from the template's own hints, else from the slot roles.
+    A slide holding real body content is never a cover, a section or a quote."""
+    zones = [z for z in pattern.zones if z.role != "keep"]
+    hinted = _hinted_kind(pattern, records, name, layout_type)
+    if not zones and not pattern.groups:
+        return "closing" if hinted == "closing" else "other"
+    body = _has_body_content(pattern)
+    if hinted is not None and not (hinted in _SPARSE_KINDS and body):
+        return hinted
+
+    samples = [z.sample for z in zones] + [
+        z.sample for g in pattern.groups for item in g.items for z in item
+    ]
+    if pattern.groups:
+        return _group_kind(pattern.groups[0], samples)
+    if len(zones) >= 3 and lexicon.has_contact_words(samples + [name]):
+        return "closing"
+
+    titles = [z for z in zones if z.role == "title"]
+    subtitles = [z for z in zones if z.role == "subtitle"]
+    headings = [z for z in zones if z.role == "heading"]
+    bodies = [z for z in zones if z.role == "body"]
+    images = [z for z in zones if z.role == "image"]
+    labels = [z for z in zones if z.role in ("label", "caption", "number")]
+
+    if titles and not bodies and not headings and not images and not body:
+        if subtitles or len(labels) == 1 or slide_number == 1:
+            return "cover"
+        # A lone title over graphics on an example slide is decoration.
+        if pattern.source == "slide" and len(zones) == 1:
+            if any(rec.kind == "picture" for rec in records):
+                return "other"
+        return "section"
+    if titles and len(bodies) == 1 and not headings and not images:
+        under_title = bodies[0].box.y >= titles[0].box.y and bodies[0].box.h < 120
+        if under_title and slide_number == 1 and not body:
+            return "cover"
+        return "bullets"
+    if titles and not bodies and images and not headings:
+        return "image_text"
+    if len(bodies) >= 2 and not images:
+        same_band = max(b.box.y for b in bodies) - min(b.box.y for b in bodies) < 100
+        if same_band:
+            return "comparison" if len(headings) >= 2 else "two_columns"
+    if images and (bodies or headings):
+        return "image_text"
+    if len(bodies) == 1 and not titles and not headings:
+        return "quote"
+    if images and not bodies and not headings:
+        return "image_text"
+    return "bullets"
 
 
 def _sequential(numbers: List[str]) -> bool:

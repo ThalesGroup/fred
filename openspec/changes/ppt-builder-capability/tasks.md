@@ -38,10 +38,10 @@ Owns: `libs/fred-sdk/fred_sdk/contracts/runtime.py`, `libs/fred-runtime/fred_run
 
 Owns: `analysis.py`, `lexicon.py`, `models.py`, `overrides.py`, tests `test_builder_analysis.py`, `test_builder_overrides.py`.
 
-- [ ] 2.1 `SlideKind` replaces `Intent`; `Pattern.kind`, `reusable`, `labelled_by`, slot `purpose`; `PatternOverride` = `label`, `kind`, `included` (zone roles deleted); bump `ANALYSIS_VERSION`
-- [ ] 2.2 Every text-bearing shape on an example slide is a slot, except text repeated on ≥ 2 slides and footer/date/slide-number fields; the lexicon no longer gates fillability
-- [ ] 2.3 Slide-to-slide hyperlinks no longer make a slide uncopyable (`COPYABLE_REL_SUFFIXES`)
-- [ ] 2.4 Heuristic `kind` per slide as the vision fallback; tests on the reference template (env var, skipped when absent): no real-text example slide comes out title-only
+- [x] 2.1 `SlideKind` replaces `Intent`; `Pattern.kind`, `reusable`, `labelled_by`, slot `purpose`; `PatternOverride` = `label`, `kind`, `included` (zone roles deleted); bump `ANALYSIS_VERSION`
+- [x] 2.2 Every text-bearing shape on an example slide is a slot, except text repeated on ≥ 2 slides and footer/date/slide-number fields; the lexicon no longer gates fillability
+- [x] 2.3 Slide-to-slide hyperlinks no longer make a slide uncopyable (`COPYABLE_REL_SUFFIXES`)
+- [x] 2.4 Heuristic `kind` per slide as the vision fallback; tests on the reference template (env var, skipped when absent): no real-text example slide comes out title-only
 
 ## WP3. Vision labelling
 
@@ -77,10 +77,10 @@ Owns: `assign.py` (new), `plan.py`, `tools.py`, tests `test_assign.py` (new), `t
 
 Owns: `render.py`, `checks.py` (new), test `test_builder_render.py`.
 
-- [ ] 6.1 `_duplicate_slide`: copy only image/media/external-hyperlink rels, drop slide-to-slide `a:hlinkClick`; copy `p:clrMapOvr` and the notes slide (remove the dead notes branch)
-- [ ] 6.2 `_write_lines` keeps each level's template `a:pPr`
-- [ ] 6.3 `checks.py`: original non-shared text left on a duplicated slide removed and reported; overflow and lost content collected
-- [ ] 6.4 Tests: no orphan slide after removing a linked agenda target, dark slide keeps colours, notes copied, two-level body formatting, leftover text removed
+- [x] 6.1 `_duplicate_slide`: copy only image/media/external-hyperlink rels, drop slide-to-slide `a:hlinkClick`; copy `p:clrMapOvr` and the notes slide (remove the dead notes branch)
+- [x] 6.2 `_write_lines` keeps each level's template `a:pPr`
+- [x] 6.3 `checks.py`: original non-shared text left on a duplicated slide removed and reported; overflow and lost content collected
+- [x] 6.4 Tests: no orphan slide after removing a linked agenda target, dark slide keeps colours, notes copied, two-level body formatting, leftover text removed
 
 ## WP7. Built-in Fred template
 

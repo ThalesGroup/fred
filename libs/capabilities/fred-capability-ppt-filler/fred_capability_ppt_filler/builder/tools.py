@@ -48,7 +48,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from fred_capability_ppt_filler.builder.models import (
-    INTENTS,
+    SLIDE_KINDS,
     Pattern,
     TemplateInventory,
     Zone,
@@ -139,7 +139,7 @@ def _limit(zones: Sequence[Zone]) -> str:
 
 
 def _zone_summary(pattern: Pattern) -> str:
-    if pattern.intent == "fixed":
+    if not (pattern.reusable and pattern.fillable):
         return "used as is, no editable zone (content given for it is ignored)"
     parts: List[str] = []
     seen: set[str] = set()
@@ -190,9 +190,9 @@ def catalogue(inventory: TemplateInventory) -> str:
     lines = []
     for pattern in included_patterns(inventory):
         # Inventories analysed before fixed slides stopped being preferred still carry it.
-        star = " (preferred)" if pattern.preferred and pattern.intent != "fixed" else ""
+        star = " (preferred)" if pattern.preferred and pattern.reusable else ""
         lines.append(
-            f'- {pattern.id} [{pattern.intent}]{star} "{pattern.label}": {_zone_summary(pattern)}'
+            f'- {pattern.id} [{pattern.kind}]{star} "{pattern.label}": {_zone_summary(pattern)}'
         )
     return "\n".join(lines)
 
@@ -200,7 +200,7 @@ def catalogue(inventory: TemplateInventory) -> str:
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
     """The deck plan, with the usable pattern ids and intents listed as an enum
     in the JSON schema only: validation accepts any string and resolves it."""
-    choices = [p.id for p in included_patterns(inventory)] + list(INTENTS)
+    choices = [p.id for p in included_patterns(inventory)] + list(SLIDE_KINDS)
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
@@ -255,10 +255,10 @@ def _image_ids(plan: DeckPlan) -> set[str]:
 
 
 def _is_fixed(inventory: TemplateInventory, requested: str) -> bool:
-    if requested == "fixed":
+    if requested == "closing":
         return True
     pattern = inventory.pattern(requested)
-    return pattern is not None and pattern.intent == "fixed"
+    return pattern is not None and not (pattern.reusable and pattern.fillable)
 
 
 async def _no_images() -> Dict[str, object]:
@@ -505,14 +505,15 @@ def build_builder_tools(
         "not what you planned. Never split a deck across several calls and never call this tool twice at "
         "once: each call produces a complete presentation of its own, so splitting delivers several truncated "
         "decks instead of one. Each slide names a "
-        "pattern and gives its content. The simplest reliable pattern value is an intent name (title, section, "
-        "agenda, content, two_columns, comparison, image_text, cards, steps, statement, contact, fixed): the "
+        "pattern and gives its content. The simplest reliable pattern value is a kind name ("
+        + ", ".join(SLIDE_KINDS)
+        + "): the "
         "tool picks the template's best slide for it. To use a specific slide of the catalogue, copy its id "
         "exactly (ids like 'slide:259' are internal ids, not slide numbers). Content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}] for patterns with items, image/images (document_ids from "
         "list_images_in_folder), notes. Respect the character limits: a slide is not a document. Start with a "
-        "'title' slide and end with a 'fixed' closing slide when one exists. The result is shown to the user "
+        "'cover' slide and end with a 'closing' slide when one exists. The result is shown to the user "
         "automatically; never write a download link. To correct a deck, call again once with the whole "
         "amended plan; the new deck replaces the previous one.\n"
         "Patterns of this template:\n" + catalogue(inventory)

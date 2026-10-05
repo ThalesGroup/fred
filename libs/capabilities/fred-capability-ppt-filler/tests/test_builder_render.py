@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import math
 import os
+import re
 from typing import Any, cast
 
 import pytest
@@ -58,6 +59,7 @@ from fred_capability_ppt_filler.builder.render import (
     _fit,
     _Line,
     _unused_item_fields,
+    _write_lines,
     render_deck,
 )
 from fred_capability_ppt_filler.builder.tools import catalogue
@@ -342,7 +344,7 @@ def test_intent_names_resolve_and_degrade_with_a_warning():
     excluded = [
         PatternOverride(pattern_id=p.id, included=False)
         for p in INVENTORY.patterns
-        if p.intent in ("two_columns", "comparison")
+        if p.kind in ("two_columns", "comparison")
     ]
     effective, _ = apply_overrides(INVENTORY, excluded)
     result = render_deck(
@@ -352,9 +354,9 @@ def test_intent_names_resolve_and_degrade_with_a_warning():
             slides=[SlidePlan(pattern="two_columns", title="T", bullets=["a", "b"])]
         ),
     )
-    assert (
-        len(result.warnings) == 1 and "no 'two_columns' pattern" in result.warnings[0]
-    )
+    # The fallback slide's leftover example text is swept, and said so.
+    assert "no 'two_columns' pattern" in result.warnings[0]
+    assert all("was removed" in w for w in result.warnings[1:])
     deck = Presentation(io.BytesIO(result.pptx))
     assert "T" in _texts(deck.slides[0])
 
@@ -393,7 +395,7 @@ def test_non_slide_entries_are_skipped_and_an_all_invalid_plan_is_an_error():
         SlidePlan(pattern="content", title="Kept"), SlidePlan.model_validate("junk")
     )
     assert len(deck.slides) == 1
-    assert "not a slide object" in result.warnings[0]
+    assert any("not a slide object" in w for w in result.warnings)
     with pytest.raises(RenderError, match="no usable slide"):
         _render(SlidePlan.model_validate("junk"))
 
@@ -574,7 +576,7 @@ def test_contact_bullets_skip_zones_already_filled():
         source_index=0,
         name="Contact",
         label="Contact",
-        intent="contact",
+        kind="closing",
         zones=[
             _zone("ph:0", "title", 50),
             _zone("ph:1", "subtitle", 150),
@@ -641,11 +643,12 @@ def test_fixed_intent_closes_on_a_closing_slide_before_a_preferred_decoration():
             "id": "layout:99",
             "label": "Merci",
             "name": "Merci",
+            "kind": "closing",
             "preferred": False,
         }
     )
     inventory = INVENTORY.model_copy(update={"patterns": [decoration, closing]})
-    found = best_for_intent(inventory, "fixed")
+    found = best_for_intent(inventory, "closing")
     assert found is not None and found.label == "Merci"
 
 
@@ -702,7 +705,7 @@ def test_reference_template_renders_a_full_deck():
     plan = DeckPlan(
         slides=[
             SlidePlan(
-                pattern="title",
+                pattern="cover",
                 title="Plan de transformation",
                 subtitle="Comité de direction",
             ),
@@ -716,7 +719,7 @@ def test_reference_template_renders_a_full_deck():
             ),
             SlidePlan(pattern="section", title="Contexte"),
             SlidePlan(
-                pattern="content",
+                pattern="bullets",
                 title="Constats",
                 bullets=["Coûts en hausse", "- +8 % sur un an", "Délais stables"],
             ),
@@ -746,7 +749,7 @@ def test_reference_template_renders_a_full_deck():
                 ],
             ),
             SlidePlan(
-                pattern="contact",
+                pattern="closing",
                 title="Nous contacter",
                 bullets=[
                     "Jane Doe",
@@ -755,7 +758,7 @@ def test_reference_template_renders_a_full_deck():
                     "jane@example.com",
                 ],
             ),
-            SlidePlan(pattern="fixed"),
+            SlidePlan(pattern="closing"),
         ]
     )
     result = render_deck(template, inventory, plan)
@@ -781,7 +784,7 @@ def _two_body_pattern(first: int, second: int) -> Pattern:
         source_index=9,
         name="Contact",
         label="Contact",
-        intent="contact",
+        kind="closing",
         zones=[
             Zone(
                 key=f"ph:{index}",
@@ -930,7 +933,7 @@ def _cards_inventory() -> TemplateInventory:
                 source_index=1,
                 name="Text cards",
                 label="Text cards",
-                intent="cards",
+                kind="cards",
                 zones=[title],
                 groups=[group(["body"], "g1")],
             ),
@@ -940,7 +943,7 @@ def _cards_inventory() -> TemplateInventory:
                 source_index=2,
                 name="Titled cards",
                 label="Titled cards",
-                intent="cards",
+                kind="cards",
                 zones=[title],
                 groups=[group(["heading", "body"], "g2")],
             ),
@@ -977,7 +980,7 @@ def test_an_image_pattern_is_not_chosen_for_a_plan_without_images():
         source_index=99,
         name="Photos",
         label="Photos",
-        intent=plain.intent,
+        kind=plain.kind,
         zones=plain.zones
         + [
             Zone(key=f"sp:{i}", role="image", box=Box(x=i * 300, y=400, w=280, h=300))
@@ -991,9 +994,9 @@ def test_an_image_pattern_is_not_chosen_for_a_plan_without_images():
         patterns=[imaged, plain],
     )
     slide = SlidePlan(title="Method", bullets=["Frame", "Build", "Measure"])
-    assert best_for_intent(inventory, plain.intent, slide) is plain
+    assert best_for_intent(inventory, plain.kind, slide) is plain
     with_image = slide.model_copy(update={"image": "doc-1"})
-    assert best_for_intent(inventory, plain.intent, with_image) is imaged
+    assert best_for_intent(inventory, plain.kind, with_image) is imaged
 
 
 def test_a_pattern_that_would_truncate_loses_to_one_that_holds_the_text():
@@ -1011,7 +1014,7 @@ def test_a_pattern_that_would_truncate_loses_to_one_that_holds_the_text():
         patterns=[narrow, plain],
     )
     slide = SlidePlan(title="Detail", bullets=["A sentence far longer than twenty"] * 4)
-    assert best_for_intent(inventory, plain.intent, slide) is plain
+    assert best_for_intent(inventory, plain.kind, slide) is plain
 
 
 # --- unused item slots leave the slide clean ---
@@ -1296,7 +1299,7 @@ def _columns(count: int) -> list:
 def test_lost_columns_name_the_pattern_that_would_have_held_them():
     """ "Put it on a pattern that shows it" leaves the agent guessing which."""
     wide = _pattern("Title and Content").model_copy(deep=True)
-    wide.id, wide.label, wide.intent = "layout:99", "Four columns", "two_columns"
+    wide.id, wide.label, wide.kind = "layout:99", "Four columns", "two_columns"
     body = next(z for z in wide.zones if z.role == "body")
     wide.zones = [z for z in wide.zones if z.role != "body"] + [
         body.model_copy(update={"key": f"ph:{10 + i}"}) for i in range(4)
@@ -1307,7 +1310,7 @@ def test_lost_columns_name_the_pattern_that_would_have_held_them():
         patterns=[p for p in INVENTORY.patterns if p.included] + [wide],
     )
     narrow = next(
-        p for p in inventory.patterns if p.intent == "two_columns" and p is not wide
+        p for p in inventory.patterns if p.kind == "two_columns" and p is not wide
     )
     result = render_deck(
         TEMPLATE,
@@ -1331,3 +1334,155 @@ def test_columns_beyond_every_pattern_say_so_instead_of_advising_a_rewrite():
     assert lost, result.warnings
     assert "No pattern of this template shows more than" in lost[0]
     assert "Put it on a pattern that shows it" not in lost[0]
+
+
+# --- duplication fidelity and after-render check ---------------------------------
+
+_DARK_MAP = (
+    '<p:clrMapOvr xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
+    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+    '<a:overrideClrMapping bg1="dk1" tx1="lt1" bg2="dk2" tx2="lt2" accent1="accent1"'
+    ' accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5"'
+    ' accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>'
+)
+_SHARED = "Confidential"
+
+
+def _linked_template() -> tuple[bytes, TemplateInventory]:
+    """A dark agenda slide linking to another slide, with notes and a footer."""
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.oxml import parse_xml
+
+    prs = Presentation()
+    agenda = prs.slides.add_slide(prs.slide_layouts[5])
+    target = prs.slides.add_slide(prs.slide_layouts[5])
+    cast(Any, agenda.shapes.title).text = "Agenda overview"
+    cast(Any, target.shapes.title).text = "Target slide"
+    jump = agenda.shapes.add_textbox(Inches(1), Inches(2), Inches(5), Inches(1))
+    jump.text_frame.text = "Go to target"
+    jump.click_action.target_slide = target
+    cast(
+        Any, jump.text_frame.paragraphs[0].runs[0]
+    ).hyperlink.address = "https://example.com/run"
+    button = agenda.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, Inches(1), Inches(4), Inches(1), Inches(1)
+    )
+    button.click_action.hyperlink.address = "https://example.com"
+    agenda.shapes.add_textbox(
+        Inches(1), Inches(6), Inches(3), Inches(0.5)
+    ).text_frame.text = _SHARED
+    element = agenda._element
+    element.remove(element.find(qn("p:clrMapOvr")))
+    element.cSld.addnext(parse_xml(_DARK_MAP))
+    notes = agenda.notes_slide
+    cast(Any, notes.notes_text_frame).text = "intent: agenda"
+    # A name only the copied notes slide carries (not the notes master).
+    cast(Any, notes.notes_placeholder).name = "Brand note"
+    buffer = io.BytesIO()
+    prs.save(buffer)
+    title = Zone(
+        key="ph:0",
+        role="title",
+        box=Box(x=0, y=0, w=1000, h=150),
+        max_chars=60,
+        max_lines=1,
+    )
+    pattern = Pattern(
+        id=f"slide:{agenda.slide_id}",
+        source="slide",
+        source_index=1,
+        name="Agenda",
+        label="Agenda",
+        kind="agenda",
+        zones=[title],
+    )
+    inventory = TemplateInventory(
+        slide_width=int(prs.slide_width or 0),
+        slide_height=int(prs.slide_height or 0),
+        patterns=[pattern],
+        shared_texts=[_SHARED],
+    )
+    return buffer.getvalue(), inventory
+
+
+def _render_linked(notes: str | None = None):
+    template, inventory = _linked_template()
+    plan = DeckPlan(
+        slides=[SlidePlan(pattern=inventory.patterns[0].id, title="Plan", notes=notes)]
+    )
+    result = render_deck(template, inventory, plan)
+    return result, Presentation(io.BytesIO(result.pptx))
+
+
+def test_links_to_removed_slides_are_dropped_and_leave_no_orphan():
+    import zipfile
+
+    result, deck = _render_linked()
+    names = zipfile.ZipFile(io.BytesIO(result.pptx)).namelist()
+    assert len([n for n in names if re.fullmatch(r"ppt/slides/slide\d+\.xml", n)]) == 1
+    assert len(deck.slides) == 1
+    slide = deck.slides[0]
+    rels = slide.part.rels
+    assert not any(rel.reltype.endswith("/slide") for rel in rels.values())
+    external = {rel.target_ref for rel in rels.values() if rel.is_external}
+    assert "https://example.com" in external
+    # Every relationship reference left in the XML resolves.
+    r_ns = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+    for node in slide._element.iter():
+        for attr, value in node.attrib.items():
+            if attr.startswith(r_ns) and value:
+                assert value in rels, (node.tag, value)
+    assert "hlinksldjump" not in slide._element.xml
+
+
+def test_a_dark_example_slide_keeps_its_colour_map():
+    _, deck = _render_linked()
+    mapping = deck.slides[0]._element.find(
+        f"{qn('p:clrMapOvr')}/{qn('a:overrideClrMapping')}"
+    )
+    assert mapping is not None
+    assert (mapping.get("bg1"), mapping.get("tx1")) == ("dk1", "lt1")
+
+
+def test_notes_slide_is_copied_and_holds_only_the_plan_notes():
+    _, deck = _render_linked(notes="Say hello")
+    notes = deck.slides[0].notes_slide
+    assert "Brand note" in [shape.name for shape in notes.shapes]
+    assert cast(Any, notes.notes_text_frame).text == "Say hello"
+    _, deck = _render_linked()
+    # The template's own notes (an `intent:` annotation) never reach the deck.
+    assert cast(Any, deck.slides[0].notes_slide.notes_text_frame).text == ""
+
+
+def test_example_text_left_on_a_duplicated_slide_is_removed_and_reported():
+    result, deck = _render_linked()
+    texts = [
+        cast(Any, p.shape).text_frame.text
+        for p in walk_shapes(deck.slides[0].shapes)
+        if cast(Any, p.shape).has_text_frame
+    ]
+    assert "Go to target" not in texts
+    assert "Plan" in texts and _SHARED in texts
+    assert result.report.slide(1).removed == ["Go to target"]
+    assert any("'Go to target'" in w for w in result.warnings)
+
+
+def test_each_level_of_a_body_keeps_its_template_formatting():
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    box = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(6), Inches(3))
+    frame = box.text_frame
+    frame.text = "Top level"
+    first = frame.paragraphs[0]
+    cast(Any, first.runs[0]).font.size = Pt(20)
+    second = frame.add_paragraph()
+    second.text = "Sub level"
+    second.level = 1
+    cast(Any, second.runs[0]).font.size = Pt(14)
+    cast(Any, second._p.get_or_add_pPr()).set("marL", "457200")
+    _write_lines(box, [_Line("A"), _Line("a1", 1), _Line("a2", 1), _Line("B")])
+    paragraphs = frame.paragraphs
+    assert [p.level for p in paragraphs] == [0, 1, 1, 0]
+    assert [cast(Any, p.runs[0]).font.size.pt for p in paragraphs] == [20, 14, 14, 20]
+    margins = [p._p.find(qn("a:pPr")).get("marL") for p in paragraphs]
+    assert margins == [None, "457200", "457200", None]

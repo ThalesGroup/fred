@@ -252,12 +252,12 @@ def test_tools_and_catalogue_follow_the_effective_inventory():
     tools = _tools(_ctx(config, assets=assets))
     assert set(tools) == {BUILD_TOOL_NAME, LIST_IMAGES_TOOL_NAME}
     description = tools[BUILD_TOOL_NAME].description
-    assert "layout:1 [content]" in description
+    assert "layout:1 [bullets]" in description
     assert "Hidden cover" not in description
     assert "items up to 4 [number, heading]" in description
     schema = tools[BUILD_TOOL_NAME].args_schema.model_json_schema()
     choices = schema["$defs"]["BuildSlide"]["properties"]["pattern"]["enum"]
-    assert "layout:1" in choices and "layout:0" not in choices and "content" in choices
+    assert "layout:1" in choices and "layout:0" not in choices and "bullets" in choices
 
 
 @pytest.mark.asyncio
@@ -422,7 +422,7 @@ def test_analyze_route_returns_inventory_and_summary():
     body = response.json()
     assert body["errors"] == []
     assert body["summary"]["layouts"] == 11
-    assert any(p["intent"] == "agenda" for p in body["inventory"]["patterns"])
+    assert any(p["kind"] == "agenda" for p in body["inventory"]["patterns"])
 
 
 def test_analyze_route_reports_unreadable_upload():
@@ -490,31 +490,28 @@ async def test_plan_made_of_fixed_slides_by_id_is_accepted(monkeypatch):
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     config, assets = _configured()
     assert config.inventory is not None
-    fixed = next(
-        p for p in config.inventory.patterns if p.intent == "fixed" and p.included
-    )
+    fixed = next(p for p in config.inventory.patterns if not p.reusable and p.included)
     tools = _tools(_ctx(config, assets=assets))
     _, result = await tools[BUILD_TOOL_NAME].coroutine(slides=[{"pattern": fixed.id}])
     assert not result.is_error
 
 
-def test_theme_route_lists_every_intent():
+def test_theme_route_lists_every_kind():
     body = _client().get("/capabilities/ppt_builder/theme").json()
-    intents = {p["intent"] for p in body["inventory"]["patterns"] if p["included"]}
+    kinds = {p["kind"] for p in body["inventory"]["patterns"] if p["included"]}
     assert {
-        "title",
+        "cover",
         "section",
         "agenda",
-        "content",
+        "bullets",
         "two_columns",
         "comparison",
         "image_text",
-        "cards",
-        "steps",
-        "statement",
-        "contact",
-        "fixed",
-    } <= intents
+        "figures",
+        "process",
+        "quote",
+        "closing",
+    } <= kinds
 
 
 @pytest.mark.asyncio

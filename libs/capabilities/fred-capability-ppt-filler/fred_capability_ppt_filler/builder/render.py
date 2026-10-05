@@ -18,7 +18,8 @@ Synchronous, CPU-bound: the caller runs it off the event loop under the
 package's heavy-job slot. Works on a copy of the template: layout patterns
 are instantiated, example-slide patterns are duplicated (shapes deep-copied,
 picture/media relationships re-created on the new slide), every zone is
-filled by role, unused zones are emptied or removed, and the template's own
+filled by role, unused zones are emptied or removed, example text left on a
+duplicated slide is swept (`checks`), and the template's own
 slides are dropped at the end so the output holds the plan's slides only, in
 plan order.
 """
@@ -37,7 +38,7 @@ from pptx.oxml.ns import qn
 from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
-from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder import checks, lexicon
 from fred_capability_ppt_filler.builder.analysis import (
     _font_name_of,
     estimate_capacity,
@@ -70,7 +71,12 @@ _LEVEL_WIDTH_FACTOR = 0.85
 _NO_WRAP_MARGIN = 1.06
 
 _R_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-_SKIPPED_RELS = ("/slideLayout", "/notesSlide")
+_MEDIA_RELS = ("/image", "/media", "/video", "/audio", "/hdphoto")
+_HYPERLINK_REL = "/hyperlink"
+# Elements meaningless without their uncopied target (a link to another slide).
+_DROPPED_LINKS = frozenset(
+    qn(tag) for tag in ("a:hlinkClick", "a:hlinkHover", "p:tags")
+)
 
 PreparedImage = Tuple[bytes, int, int]
 
@@ -83,6 +89,8 @@ class RenderResult:
     slide_count: int = 0
     # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`).
     preview_pptx: bytes = b""
+    # The same findings per slide, for a structured result message.
+    report: checks.DeckReport = field(default_factory=checks.DeckReport)
 
 
 _FILLS = ("a:solidFill", "a:gradFill", "a:pattFill", "a:blipFill")
@@ -189,43 +197,83 @@ def _all_layouts(presentation) -> list:
     ]
 
 
+def _copy_relationships(source_part, dest_part) -> Dict[str, str]:
+    """Re-create the media and external-link relationships on ``dest_part``.
+
+    Targets are shared, so an image copied ten times stays one part. Links to
+    other slides are not copied: they would keep removed template slides alive.
+    """
+    rid_map: Dict[str, str] = {}
+    for rId, rel in source_part.rels.items():
+        if rel.is_external:
+            if rel.reltype.endswith(_HYPERLINK_REL):
+                rid_map[rId] = dest_part.rels.get_or_add_ext_rel(
+                    rel.reltype, rel.target_ref
+                )
+        elif rel.reltype.endswith(_MEDIA_RELS):
+            rid_map[rId] = dest_part.relate_to(rel.target_part, rel.reltype)
+    return rid_map
+
+
+def _copy_shapes(source_tree, dest_tree, rid_map: Mapping[str, str]) -> None:
+    for element in source_tree:
+        if element.tag in (qn("p:nvGrpSpPr"), qn("p:grpSpPr")):
+            continue
+        clone = copy.deepcopy(element)
+        for node in list(clone.iter()):
+            # Every relationship-namespace attribute, not a fixed list.
+            for attr, old in list(node.attrib.items()):
+                if not attr.startswith(_R_NS) or not old:
+                    continue
+                if old in rid_map:
+                    node.set(attr, rid_map[old])
+                elif node.tag in _DROPPED_LINKS:
+                    parent = node.getparent()
+                    if parent is not None:
+                        parent.remove(node)
+                    break
+                else:
+                    del node.attrib[attr]
+        dest_tree.append(clone)
+
+
+def _copy_notes(source, dest) -> None:
+    if not source.has_notes_slide:
+        return
+    src = source.notes_slide
+    tree = dest.notes_slide.shapes._spTree
+    for element in list(tree):
+        if element.tag not in (qn("p:nvGrpSpPr"), qn("p:grpSpPr")):
+            tree.remove(element)
+    _copy_shapes(
+        src.shapes._spTree, tree, _copy_relationships(src.part, dest.notes_slide.part)
+    )
+
+
 def _duplicate_slide(presentation, source):
-    """Append a copy of ``source``: same layout, background, shapes and media."""
+    """Append a copy of ``source``: layout, background, colour map, shapes,
+    media and notes."""
     dest = presentation.slides.add_slide(source.slide_layout)
     for shape in list(dest.shapes):
         shape._element.getparent().remove(shape._element)
 
-    source_cSld = source._element.cSld
-    background = source_cSld.find(qn("p:bg"))
+    background = source._element.cSld.find(qn("p:bg"))
     if background is not None:
         dest._element.cSld.insert(0, copy.deepcopy(background))
+    # A dark example slide maps its text and background colours here.
+    override = source._element.find(qn("p:clrMapOvr"))
+    if override is not None:
+        current = dest._element.find(qn("p:clrMapOvr"))
+        if current is not None:
+            dest._element.remove(current)
+        dest._element.cSld.addnext(copy.deepcopy(override))
 
-    # Re-create the relationships the copied XML points at, sharing the same
-    # target parts (an image copied ten times stays one part in the package).
-    rid_map: Dict[str, str] = {}
-    for rId, rel in source.part.rels.items():
-        if rel.reltype.endswith(_SKIPPED_RELS):
-            continue
-        if rel.is_external:
-            rid_map[rId] = dest.part.rels.get_or_add_ext_rel(
-                rel.reltype, rel.target_ref
-            )
-        else:
-            rid_map[rId] = dest.part.relate_to(rel.target_part, rel.reltype)
-
-    dest_tree = dest.shapes._spTree
-    for element in source.shapes._spTree:
-        if element.tag in (qn("p:nvGrpSpPr"), qn("p:grpSpPr")):
-            continue
-        clone = copy.deepcopy(element)
-        if rid_map:
-            for node in clone.iter():
-                # Every relationship-namespace attribute (r:embed, r:link,
-                # r:id, SmartArt's r:dm/r:lo/…), not a fixed list.
-                for attr, old in list(node.attrib.items()):
-                    if attr.startswith(_R_NS) and old in rid_map:
-                        node.set(attr, rid_map[old])
-        dest_tree.append(clone)
+    _copy_shapes(
+        source.shapes._spTree,
+        dest.shapes._spTree,
+        _copy_relationships(source.part, dest.part),
+    )
+    _copy_notes(source, dest)
     return dest
 
 
@@ -309,38 +357,47 @@ def _lines_from_bullets(bullets: Sequence[str]) -> List[_Line]:
     return lines
 
 
-def _write_lines(shape, lines: Sequence[_Line]) -> None:
-    """Replace a text frame's content, inheriting the first paragraph's style.
+def _paragraph_style(paragraph) -> Tuple[int, Any, Any]:
+    """``(level, pPr, rPr)`` of a template paragraph; ``rPr`` falls back on
+    the end-run properties of an empty paragraph."""
+    pPr = paragraph.find(qn("a:pPr"))
+    level = int(pPr.get("lvl", "0")) if pPr is not None else 0
+    run = paragraph.find(qn("a:r"))
+    rPr = run.find(qn("a:rPr")) if run is not None else None
+    if rPr is None:
+        rPr = paragraph.find(qn("a:endParaRPr"))
+    if rPr is not None:
+        rPr = copy.deepcopy(rPr)
+        rPr.tag = qn("a:rPr")
+    return level, copy.deepcopy(pPr) if pPr is not None else None, rPr
 
-    The first paragraph's ``pPr`` and its first run's ``rPr`` (or the paragraph's
-    end-run properties) are the style templates; every new paragraph/run clones
-    them, so the designer's font, size and colour carry over. Inline
-    ``**bold**``/``*italic*`` is honoured per span.
+
+def _write_lines(shape, lines: Sequence[_Line]) -> None:
+    """Replace a text frame's content, inheriting the template's style per level.
+
+    The first paragraph of each level gives the ``pPr``/``rPr`` every new line
+    of that level clones; a level the template lacks takes the first
+    paragraph's. Inline ``**bold**``/``*italic*`` is honoured per span.
     """
     text_frame = shape.text_frame
     txBody = text_frame._txBody
     paragraphs = txBody.findall(qn("a:p"))
-    base_pPr = base_rPr = None
-    if paragraphs:
-        first = paragraphs[0]
-        pPr = first.find(qn("a:pPr"))
-        base_pPr = copy.deepcopy(pPr) if pPr is not None else None
-        run = first.find(qn("a:r"))
-        rPr = run.find(qn("a:rPr")) if run is not None else None
-        if rPr is None:
-            end = first.find(qn("a:endParaRPr"))
-            if end is not None:
-                rPr = copy.deepcopy(end)
-                rPr.tag = qn("a:rPr")
-        base_rPr = copy.deepcopy(rPr) if rPr is not None else None
+    styles: Dict[int, Tuple[Any, Any]] = {}
+    base: Tuple[Any, Any] = (None, None)
+    for index, paragraph in enumerate(paragraphs):
+        level, pPr, rPr = _paragraph_style(paragraph)
+        if index == 0:
+            base = (pPr, rPr)
+        styles.setdefault(level, (pPr, rPr))
     for paragraph in paragraphs:
         txBody.remove(paragraph)
 
     for line in lines or [_Line("")]:
+        base_pPr, base_rPr = styles.get(line.level, base)
         p = txBody.add_p()
         if base_pPr is not None:
             p.insert(0, copy.deepcopy(base_pPr))
-        if line.level:
+        if line.level or (base_pPr is not None and base_pPr.get("lvl")):
             p.get_or_add_pPr().set("lvl", str(line.level))
         if line.heading:
             pPr = p.get_or_add_pPr()
@@ -619,7 +676,7 @@ def _assign_text(
     else:
         put(None, title, "title")
 
-    if pattern.intent in ("title", "section", "statement"):
+    if pattern.kind in ("cover", "section", "quote"):
         # Covers put their subtitle in whatever sits under the title.
         target = zmap.subtitles or zmap.body_like()
         put(
@@ -656,7 +713,7 @@ def _assign_text(
             lost.append("bullets")
         return out
 
-    if pattern.intent == "contact" and bullets:
+    if pattern.kind == "closing" and bullets:
         zones = [z for z in zmap.stacked() if z.key not in out]
         for zone, line in zip(zones, bullets):
             put(zone, [line], "bullets")
@@ -669,7 +726,7 @@ def _assign_text(
     if not bodies:
         lost.append("bullets")
         return out
-    if len(bodies) > 1 and pattern.intent in ("two_columns", "comparison"):
+    if len(bodies) > 1 and pattern.kind in ("two_columns", "comparison"):
         half = math.ceil(len(bullets) / 2)
         put(bodies[0], bullets[:half], "bullets")
         put(bodies[1], bullets[half:], "bullets")
@@ -778,6 +835,8 @@ class _Renderer:
         self.layouts = _all_layouts(presentation)
         self.theme = theme_fonts(presentation)
         self.slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
+        self.report = checks.DeckReport()
+        self._originals: Dict[int, Dict[str, str]] = {}
 
     def render(self, plan: DeckPlan) -> RenderResult:
         original_ids = list(self.slides_by_id)
@@ -797,16 +856,22 @@ class _Renderer:
                     f"Slide {position}: {', '.join(sorted(slide_plan.ignored_fields))} "
                     "is not a field of a slide, and its content is not in the deck."
                 )
+                self.report.slide(position).lost.extend(
+                    sorted(slide_plan.ignored_fields)
+                )
             resolution = resolve(self.inventory, slide_plan)
             pattern = resolution.pattern
             if resolution.substitution:
                 self.warnings.append(f"Slide {position}: {resolution.substitution}.")
             rendered += 1
-            if pattern.intent == "agenda" and slide_plan.items:
+            if pattern.kind == "agenda" and slide_plan.items:
                 announced.append((rendered, len(slide_plan.items)))
             slide, pattern = self._create(pattern)
-            if pattern.intent != "fixed":
+            # Nothing to say on it (a "Thank you" slide): keep the template's text.
+            if pattern.reusable and pattern.fillable and has_content(slide_plan):
                 self._fill(slide, pattern, slide_plan, position)
+                if pattern.source == "slide":
+                    self._sweep(slide, pattern, position)
             elif has_content(slide_plan) and not _only_names_the_slide(
                 slide_plan, pattern
             ):
@@ -814,14 +879,12 @@ class _Renderer:
                     f"Slide {position}: '{pattern.label}' is a fixed slide used as is; the content "
                     "given for it was ignored (nothing to do unless that content matters)."
                 )
-            frame = (
-                slide.notes_slide.notes_text_frame
-                if slide_plan.notes
-                or (slide.has_notes_slide and pattern.source == "slide")
-                else None
-            )
-            if frame is not None:
-                frame.text = slide_plan.notes or ""
+            # A copied notes slide keeps its formatting, never the template's
+            # own notes (author guidance, `intent:` annotations).
+            if slide_plan.notes or slide.has_notes_slide:
+                frame = slide.notes_slide.notes_text_frame
+                if frame is not None:
+                    frame.text = slide_plan.notes or ""
         if rendered == 0:
             raise RenderError("The plan holds no usable slide.")
         for position, topics in announced:
@@ -850,6 +913,7 @@ class _Renderer:
             warnings=self.warnings,
             slide_count=rendered,
             preview_pptx=preview.getvalue(),
+            report=self.report,
         )
 
     def _create(self, pattern: Pattern) -> Tuple[Any, Pattern]:
@@ -868,8 +932,37 @@ class _Renderer:
             raise RenderError(f"Slide {slide_id} no longer exists in the template.")
         return _duplicate_slide(self.prs, source), pattern
 
+    def _sweep(self, slide, pattern: Pattern, position: int) -> None:
+        """Remove the example text the fill left on a duplicated slide."""
+        slide_id = int(pattern.id.split(":", 1)[1])
+        if slide_id not in self._originals:
+            self._originals[slide_id] = checks.original_texts(
+                self.slides_by_id[slide_id]
+            )
+        index = _shape_index(slide)
+        zone_keys = [z.key for z in pattern.zones] + [
+            z.key for g in pattern.groups for item in g.items for z in item
+        ]
+        handled = [
+            cast(Any, index[key].shape)._element for key in zone_keys if key in index
+        ]
+        removed = checks.remove_leftovers(
+            slide,
+            self._originals[slide_id],
+            handled,
+            set(self.inventory.shared_texts),
+        )
+        if removed:
+            self.report.slide(position).removed.extend(removed)
+            quoted = ", ".join(f"'{text}'" for text in removed)
+            self.warnings.append(
+                f"Slide {position}: example text of '{pattern.label}' that no zone "
+                f"replaced was removed: {quoted}."
+            )
+
     def _fill(self, slide, pattern: Pattern, plan: SlidePlan, position: int) -> None:
         index = _shape_index(slide)
+        report = self.report.slide(position)
         lost: List[str] = []
         text = _assign_text(pattern, plan, lost)
         image_ids: Dict[str, Optional[str]] = {}
@@ -896,6 +989,7 @@ class _Renderer:
                     f"Slide {position}: '{pattern.label}' holds {group.count} items, "
                     f"{len(plan.items) - group.count} were dropped."
                 )
+                report.lost.append(f"{len(plan.items) - group.count} item(s)")
             kept = [p for p in (index.get(k) for k in group.item_keys[:used]) if p]
             dropped = [p for p in (index.get(k) for k in group.item_keys[used:]) if p]
             if dropped and kept:
@@ -912,6 +1006,7 @@ class _Renderer:
             if kept and dropped:
                 self._recentre_items(kept, dropped, index, pattern)
             self._even_out_item_widths(group, index)
+        report.lost.extend(lost)
         if lost:
             advice = "Put it on a pattern that shows it, or drop it."
             if plan.columns and any(item.startswith("column ") for item in lost):
@@ -994,6 +1089,7 @@ class _Renderer:
                     f"on one line and runs into the text below; keep it under {one_line_room} characters."
                 )
             if truncated:
+                report.truncated.append(zone.role)
                 self.warnings.append(
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
                     f"and got truncated (about {zone.max_chars} characters fit)."
@@ -1030,6 +1126,7 @@ class _Renderer:
                 self.warnings.append(
                     f"Slide {position}: image '{image_id}' is not a usable image document and was left out."
                 )
+                report.lost.append(f"image '{image_id}'")
                 if cast(Any, placed.shape).is_placeholder:
                     _remove(placed)
                 continue
@@ -1051,7 +1148,7 @@ class _Renderer:
                 p,
             )
             for p in self.inventory.patterns
-            if p.included and p.intent != "fixed"
+            if p.included and p.reusable
         ]
         if not candidates:
             return "Drop the extra columns."

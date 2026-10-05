@@ -14,8 +14,9 @@
 
 """Sample-text and annotation vocabularies of the template analysis.
 
-Everything here is a plain word list: the analysis is deterministic and the
-lists are the only "knowledge" it carries, so they stay in one place.
+Everything here is a plain word list, kept in one place. Sample text never
+decides what is fillable: it serves the after-render check and keeps a
+repeated sample box from passing for a footer.
 """
 
 from __future__ import annotations
@@ -134,13 +135,36 @@ CONTACT_WORDS = frozenset(
     }
 )
 
-# Layout names that are covers / closings, in the languages the reference
-# templates use. Prefix match on the normalized layout name.
-COVER_NAMES = ("couverture", "cover", "titre", "title slide", "page de garde")
-SECTION_NAMES = ("chapitre", "section", "partie", "divider", "intercalaire")
+# Closing words render.py and plan.py still match on. Prefix match on the
+# normalized name.
 CLOSING_NAMES = ("merci", "thank", "fin", "end", "closing", "questions")
-STATEMENT_NAMES = ("message cle", "key message", "citation", "quote")
-CONTACT_NAMES = ("contact",)
+
+# Names that state a slide kind, first match wins: a layout name, a declared
+# shape name or an example slide's title ("Planche de processus"). Each is a
+# prefix of the normalized name or of one of its words.
+KIND_NAMES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "cover",
+        ("couverture", "cover", "title slide", "diapositive de titre", "page de garde"),
+    ),
+    ("section", ("chapitre", "section", "partie", "divider", "intercalaire")),
+    (
+        "agenda",
+        (
+            "sommaire",
+            "agenda",
+            "ordre du jour",
+            "table des matieres",
+            "table of contents",
+        ),
+    ),
+    ("closing", ("merci", "thank", "closing", "questions", "contact")),
+    ("quote", ("message cle", "key message", "citation", "quote", "verbatim")),
+    ("team", ("equipe", "team", "organigramme", "org chart", "trombinoscope")),
+    ("timeline", ("timeline", "chronologie", "frise", "roadmap", "jalons")),
+    ("process", ("processus", "process", "etapes", "steps")),
+    ("figures", ("chiffres", "key figures", "kpi", "indicateurs", "figures")),
+)
 
 # Shape names an author may set in PowerPoint's Selection pane. The name is
 # normalized (lower-case, accents stripped, `_`/`-`/space folded).
@@ -173,10 +197,18 @@ SHAPE_NAME_ROLES = {
     "decoration": "keep",
 }
 
-# Speaker-notes directives, each on its own line: `intent: cards`, `label: KPI`.
-INTENT_NOTE = re.compile(
-    r"^\s*intent\s*:\s*([a-z_]+)\s*$", re.IGNORECASE | re.MULTILINE
+# Speaker-notes directives, each on its own line: `kind: cards`, `label: KPI`.
+# `intent:` and the old intent names are still read so older decks keep working.
+KIND_NOTE = re.compile(
+    r"^\s*(?:kind|intent)\s*:\s*([a-z_]+)\s*$", re.IGNORECASE | re.MULTILINE
 )
+LEGACY_KINDS = {
+    "title": "cover",
+    "content": "bullets",
+    "steps": "process",
+    "statement": "quote",
+    "contact": "closing",
+}
 LABEL_NOTE = re.compile(r"^\s*label\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
 # PowerPoint's own naming: any words followed by a space and a counter.
@@ -224,13 +256,26 @@ def role_from_shape_name(name: str) -> str | None:
     declared name is a vocabulary word, optionally followed by a `_`/`-`
     suffix (`heading_2`, `image-main`).
     """
-    if _AUTO_NAME.match(name.strip()):
+    if is_auto_name(name):
         return None
     norm = normalize(name)
     base = norm.split(" ", 1)[0] if " " in norm else norm
     if base not in SHAPE_NAME_ROLES and norm in SHAPE_NAME_ROLES:
         base = norm
     return SHAPE_NAME_ROLES.get(base)
+
+
+def is_auto_name(name: str) -> bool:
+    """PowerPoint's automatic shape names (`TextBox 12`) declare nothing."""
+    return bool(_AUTO_NAME.match(name.strip()))
+
+
+def kind_from_name(name: str) -> str | None:
+    """The slide kind a name states (see :data:`KIND_NAMES`), else None."""
+    for kind, prefixes in KIND_NAMES:
+        if name_matches(name, prefixes):
+            return kind
+    return None
 
 
 def name_matches(name: str, prefixes: tuple[str, ...]) -> bool:

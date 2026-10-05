@@ -33,11 +33,8 @@ from fred_capability_ppt_filler.builder.models import (
 def apply_overrides(
     inventory: TemplateInventory, overrides: Sequence[PatternOverride]
 ) -> Tuple[TemplateInventory, List[str]]:
-    """Return ``(effective inventory, dropped override descriptions)``.
-
-    The input is not mutated. A zone override whose key is gone drops only that
-    zone entry; a pattern override whose pattern is gone drops entirely.
-    """
+    """Return ``(effective inventory, dropped override pattern ids)``; the
+    input is not mutated."""
     effective = inventory.model_copy(deep=True)
     dropped: List[str] = []
     by_id = {pattern.id: pattern for pattern in effective.patterns}
@@ -49,28 +46,11 @@ def apply_overrides(
             continue
         if override.label is not None and override.label.strip():
             pattern.label = override.label.strip()[:60]
-        if override.intent is not None:
-            pattern.intent = override.intent
+        if override.kind is not None:
+            pattern.kind = override.kind
         if override.included is not None:
             pattern.included = override.included
             pattern.exclusion_reason = None if override.included else "author"
-        if override.zone_roles:
-            zones = {zone.key: zone for zone in pattern.zones}
-            for group in pattern.groups:
-                for item in group.items:
-                    for zone in item:
-                        zones[zone.key] = zone
-            for key, role in override.zone_roles.items():
-                zone = zones.get(key)
-                if zone is None:
-                    dropped.append(f"{override.pattern_id}/{key}")
-                    continue
-                zone.role = role
-            for group in pattern.groups:
-                # Item roles are per item position: refresh from the first
-                # item so the tool description and the renderer agree.
-                if group.items:
-                    group.item_zones = [zone.role for zone in group.items[0]]
     return effective, dropped
 
 
@@ -81,22 +61,8 @@ def prune_overrides(
     kept: List[PatternOverride] = []
     dropped: List[str] = []
     for override in overrides:
-        pattern = inventory.pattern(override.pattern_id)
-        if pattern is None:
+        if inventory.pattern(override.pattern_id) is None:
             dropped.append(override.pattern_id)
-            continue
-        keys = {zone.key for zone in pattern.zones}
-        keys.update(
-            zone.key
-            for group in pattern.groups
-            for item in group.items
-            for zone in item
-        )
-        zone_roles = {}
-        for key, role in override.zone_roles.items():
-            if key in keys:
-                zone_roles[key] = role
-            else:
-                dropped.append(f"{override.pattern_id}/{key}")
-        kept.append(override.model_copy(update={"zone_roles": zone_roles}))
+        else:
+            kept.append(override)
     return kept, dropped

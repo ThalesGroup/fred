@@ -31,7 +31,7 @@ from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
-    INTENTS,
+    SLIDE_KINDS,
     Pattern,
     TemplateInventory,
 )
@@ -60,18 +60,21 @@ ITEM_FIELDS: Dict[str, str] = {
 
 # Closest available intent when the requested one has no pattern, in order.
 DEGRADATION: Dict[str, Tuple[str, ...]] = {
-    "title": ("section", "statement", "content"),
-    "section": ("title", "statement", "content"),
-    "agenda": ("steps", "cards", "content"),
-    "content": ("two_columns", "image_text", "statement"),
-    "two_columns": ("comparison", "content"),
-    "comparison": ("two_columns", "content"),
-    "image_text": ("content", "cards"),
-    "cards": ("steps", "two_columns", "content"),
-    "steps": ("cards", "agenda", "content"),
-    "statement": ("section", "content"),
-    "contact": ("content",),
-    "fixed": (),
+    "cover": ("section", "quote", "bullets"),
+    "section": ("cover", "quote", "bullets"),
+    "agenda": ("process", "cards", "bullets"),
+    "bullets": ("two_columns", "image_text", "quote"),
+    "two_columns": ("comparison", "bullets"),
+    "comparison": ("two_columns", "bullets"),
+    "image_text": ("bullets", "cards"),
+    "cards": ("figures", "process", "two_columns", "bullets"),
+    "figures": ("cards", "bullets"),
+    "process": ("timeline", "cards", "agenda", "bullets"),
+    "timeline": ("process", "cards", "bullets"),
+    "team": ("cards", "bullets"),
+    "quote": ("section", "bullets"),
+    "closing": (),
+    "other": (),
 }
 
 
@@ -408,10 +411,10 @@ def best_for_intent(
     carrying no image. A fixed slide asked by intent closes the deck, so one
     named as a closing slide ("Merci", "Thank you") comes first.
     """
-    candidates = [p for p in included_patterns(inventory) if p.intent == intent]
+    candidates = [p for p in included_patterns(inventory) if p.kind == intent]
     if not candidates:
         return None
-    if intent == "fixed":
+    if intent == "closing" and (slide is None or not has_content(slide)):
         closing = [
             p
             for p in candidates
@@ -433,19 +436,19 @@ def infer_intent(slide: SlidePlan) -> str:
     if slide.items:
         numbers = [i.number for i in slide.items if i.number]
         if numbers and all(lexicon.is_year(n) for n in numbers):
-            return "steps"
+            return "timeline"
         if all(not (i.text or i.label) for i in slide.items):
             return "agenda"
         return "cards"
     if slide.image or slide.images:
         return "image_text"
     if slide.bullets:
-        return "content" if slide.title else "statement"
+        return "bullets" if slide.title else "quote"
     if slide.subtitle:
-        return "title"
+        return "cover"
     if slide.title:
         return "section"
-    return "fixed"
+    return "closing"
 
 
 # Keeps the intent the slide asked for unless a fallback serves it markedly
@@ -528,11 +531,11 @@ def resolve(inventory: TemplateInventory, slide: SlidePlan) -> Resolution:
     if pattern is not None and pattern.included:
         return Resolution(pattern=pattern)
 
-    if requested in INTENTS:
+    if requested in SLIDE_KINDS:
         found, degraded_from = _for_intent(inventory, requested, slide)
         if found is not None:
             reason = (
-                f"no '{degraded_from}' pattern in this template, used '{found.label}' ({found.intent})"
+                f"no '{degraded_from}' pattern in this template, used '{found.label}' ({found.kind})"
                 if degraded_from
                 else None
             )
@@ -546,10 +549,10 @@ def resolve(inventory: TemplateInventory, slide: SlidePlan) -> Resolution:
                 substitution=f"'{requested}' is not a pattern id, used '{loose.id}' (\"{loose.label}\")",
             )
 
-    intent = pattern.intent if pattern is not None else infer_intent(slide)
+    intent = pattern.kind if pattern is not None else infer_intent(slide)
     found, _ = _for_intent(inventory, intent, slide)
     if found is None:
-        found, _ = _for_intent(inventory, "content", slide)
+        found, _ = _for_intent(inventory, "bullets", slide)
     if found is None:
         included = included_patterns(inventory)
         if not included:
@@ -563,7 +566,7 @@ def resolve(inventory: TemplateInventory, slide: SlidePlan) -> Resolution:
         why = "no pattern given"
     return Resolution(
         pattern=found,
-        substitution=f"{why}, used '{found.id}' (\"{found.label}\", {found.intent}) from the slide's content",
+        substitution=f"{why}, used '{found.id}' (\"{found.label}\", {found.kind}) from the slide's content",
     )
 
 

@@ -21,12 +21,11 @@ zone outlines over a rendered thumbnail without knowing the slide size.
 
 from __future__ import annotations
 
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, get_args
 
 from pydantic import BaseModel, Field
 
-# `keep` is the author's "do not touch": the zone stays in the inventory (so it
-# can be re-enabled) but the renderer never writes it.
+# `keep` is a shape-name annotation's "do not touch": the renderer never writes it.
 ZoneRole = Literal[
     "title",
     "subtitle",
@@ -53,35 +52,29 @@ class Box(BaseModel):
     h: int
 
 
-Intent = Literal[
-    "title",
-    "section",
+# One closed vocabulary for the inventory, the overrides and the plan.
+SlideKind = Literal[
+    "cover",
     "agenda",
-    "content",
+    "section",
+    "bullets",
     "two_columns",
     "comparison",
-    "image_text",
     "cards",
-    "steps",
-    "statement",
-    "contact",
-    "fixed",
+    "figures",
+    "process",
+    "timeline",
+    "team",
+    "quote",
+    "image_text",
+    "closing",
+    "other",
 ]
 
-INTENTS: tuple[Intent, ...] = (
-    "title",
-    "section",
-    "agenda",
-    "content",
-    "two_columns",
-    "comparison",
-    "image_text",
-    "cards",
-    "steps",
-    "statement",
-    "contact",
-    "fixed",
-)
+SLIDE_KINDS: tuple[SlideKind, ...] = get_args(SlideKind)
+
+# Who set a pattern's kind, label and slot purposes; vision falls back to rules.
+LabelSource = Literal["heuristic", "vision"]
 
 PatternSource = Literal["layout", "slide"]
 
@@ -113,6 +106,8 @@ class Zone(BaseModel):
     # The box grows with its text instead of wrapping inside its outline (a KPI
     # figure sized to "62"): its capacity is what the designer typed, not a limit.
     grows: bool = False
+    # What the slot says on this slide ("subtitle", "KPI value"), from vision.
+    purpose: Optional[str] = None
 
 
 class RepeatGroup(BaseModel):
@@ -137,14 +132,18 @@ class Pattern(BaseModel):
     source_index: int
     name: str
     label: str
-    intent: Intent
+    kind: SlideKind
     zones: List[Zone] = []
     groups: List[RepeatGroup] = []
     included: bool = True
     exclusion_reason: Optional[ExclusionReason] = None
     # An example slide the designer put in the deck outranks a bare layout of
-    # the same intent.
+    # the same kind.
     preferred: bool = False
+    # False for a one-off slide (decoration, a specific org chart): kept in the
+    # inventory but never chosen as an archetype.
+    reusable: bool = True
+    labelled_by: LabelSource = "heuristic"
     # Analysis notes surfaced in the form (e.g. why a slide cannot be copied).
     warnings: List[str] = []
 
@@ -155,6 +154,7 @@ class Pattern(BaseModel):
 
 class AnalysisSummary(BaseModel):
     patterns: int
+    # Included but not reusable: shown in the form, never chosen.
     fixed: int
     excluded: int
     layouts: int
@@ -184,8 +184,8 @@ class TemplateInventory(BaseModel):
     def summary(self) -> AnalysisSummary:
         included = [p for p in self.patterns if p.included]
         return AnalysisSummary(
-            patterns=len([p for p in included if p.intent != "fixed"]),
-            fixed=len([p for p in included if p.intent == "fixed"]),
+            patterns=len([p for p in included if p.reusable]),
+            fixed=len([p for p in included if not p.reusable]),
             excluded=len(self.patterns) - len(included),
             layouts=len([p for p in self.patterns if p.source == "layout"]),
             slides=len([p for p in self.patterns if p.source == "slide"]),
@@ -197,10 +197,8 @@ class PatternOverride(BaseModel):
 
     pattern_id: str
     label: Optional[str] = None
-    intent: Optional[Intent] = None
+    kind: Optional[SlideKind] = None
     included: Optional[bool] = None
-    # zone key -> role; `keep` means "do not touch".
-    zone_roles: dict[str, ZoneRole] = {}
 
 
 class AnalysisError(BaseModel):
