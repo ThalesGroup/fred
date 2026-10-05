@@ -242,6 +242,12 @@ def apply_security_profile(config: SecurityConfiguration) -> None:
     """
     global STRICT_ISSUER, STRICT_AUDIENCE, _REALM_ISSUERS
 
+    from fred_core.security.platform_access.access_control import (
+        configure_platform_access,
+    )
+
+    configure_platform_access(config)
+    _JWT_CACHE.clear()
     validate_provider_configuration(config)
 
     from fred_pod.security.backend_to_backend_auth import set_token_observer
@@ -585,6 +591,12 @@ def decode_jwt(token: str) -> KeycloakUser:
 
     logger.debug("[AUTH] JWT token decoded")
 
+    from fred_core.security.platform_access.access_control import (
+        normalize_attribute,
+        platform_access_configuration,
+        token_time,
+    )
+
     # Build user
     identity = _claim_path(payload, (claims.uid,))
     if not isinstance(identity, str) or (
@@ -624,6 +636,15 @@ def decode_jwt(token: str) -> KeycloakUser:
         token_type=payload.get("typ"),
         caller_roles=caller_roles,
         service_account=service_account,
+        admission_attribute=normalize_attribute(
+            _claim_path(payload, platform_access_configuration().jwt_claim)
+        ),
+        admission_issued_at=token_time(payload.get("iat"))
+        if platform_access_configuration().enabled
+        else None,
+        admission_expires_at=token_time(payload.get("exp"))
+        if platform_access_configuration().enabled
+        else None,
     )
     logger.debug("[AUTH] Authenticated principal built")
     _cache_user(token, payload, user)
@@ -795,7 +816,12 @@ async def get_current_user_without_gcu(
     logger.debug("[AUTH] Received bearer credential")
     caller = decode_jwt(token)
     subject = await resolve_request_principal(request, caller)
-    await require_active_subject(subject)
+    from fred_core.security.platform_access.access_control import (
+        platform_access_configuration,
+    )
+
+    if not platform_access_configuration().enabled:
+        await require_active_subject(subject)
     return subject
 
 
@@ -807,6 +833,14 @@ async def resolve_request_principal(
 ) -> KeycloakUser | AssertedUser:
     asserted = await resolve_delegated_principal(request, caller, query_only=query_only)
     subject = asserted or caller
+    from fred_core.security.platform_access.access_control import (
+        enforce_platform_access,
+        platform_access_configuration,
+    )
+
+    if platform_access_configuration().enabled:
+        await require_active_subject(subject)
+        await enforce_platform_access(subject)
     if is_whitelist_active() and not is_principal_whitelisted(subject):
         logger.warning("[AUTH] Request subject is not in the whitelist")
         raise HTTPException(status_code=403, detail="user_not_whitelisted")
@@ -842,3 +876,17 @@ async def require_own_credential(
         )
         raise HTTPException(status_code=403, detail="requires_own_credential")
     return user
+
+
+async def get_own_user_for_platform_access(
+    request: Request, token: str = Security(oauth2_scheme)
+) -> KeycloakUser:
+    if not token or not KEYCLOAK_ENABLED:
+        raise HTTPException(401, "requires_own_credential")
+    caller = decode_jwt(token)
+    asserted = await resolve_delegated_principal(request, caller)
+    if asserted is not None or caller.service_account or is_service_agent(caller):
+        raise HTTPException(403, "requires_own_credential")
+    await require_active_subject(caller)
+    request.state.principal_context = PrincipalContext(caller=caller, subject=caller)
+    return caller

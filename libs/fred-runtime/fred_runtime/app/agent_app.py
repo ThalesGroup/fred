@@ -6314,6 +6314,19 @@ def create_agent_app(
                 chat_factory = chat_factory.with_provider(model_provider)
             await container.initialize_filesystem()
             await container.initialize_sql()
+            if security is not None and security.platform_access.enabled:
+                from fred_core.security.platform_access.access_control import (
+                    initialize_platform_access,
+                )
+
+                platform_engine = container.get_sql_engine()
+                if platform_engine is None or rebac_engine is None:
+                    raise ValueError(
+                        "Platform access requires shared PostgreSQL and ReBAC"
+                    )
+                await initialize_platform_access(
+                    security, platform_engine, rebac_engine
+                )
             container.initialize_platform_sql()
             container.start_metrics_exporter()
             await container.start_kpi_tasks()

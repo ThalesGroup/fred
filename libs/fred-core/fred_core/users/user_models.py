@@ -15,7 +15,18 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, Index, String, Uuid, text
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    Index,
+    String,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -39,6 +50,15 @@ class UserRow(Base):
     last_name: Mapped[str | None] = mapped_column(String, nullable=True)
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    admission_attribute: Mapped[str | list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    admission_claim_path: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    admission_issued_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    admission_expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    admission_conflicted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
     )
     gcuVersionAccepted: Mapped[GcuVersionsType | None] = mapped_column(
         Enum(GcuVersionsType, name="gcu_version_type"), nullable=True

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
 from dataclasses import dataclass
 from typing import Annotated, List, Literal, Protocol, Union, runtime_checkable
 
@@ -67,6 +68,11 @@ class KeycloakUser(BaseModel):
     )
     # Whether the verified token bears Keycloak's service-account markers.
     service_account: bool = Field(default=False, exclude=True, repr=False)
+    admission_attribute: str | list[str] | None = Field(
+        default=None, exclude=True, repr=False
+    )
+    admission_issued_at: float | None = Field(default=None, exclude=True, repr=False)
+    admission_expires_at: float | None = Field(default=None, exclude=True, repr=False)
 
     def __repr_args__(self):
         # Directly identifying data must never reach a log line, and an
@@ -214,10 +220,50 @@ class OpenFgaRebacConfig(RebacBaseConfig):
 RebacConfiguration = Annotated[Union[OpenFgaRebacConfig], Field(discriminator="type")]
 
 
+class PlatformAccessConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    jwt_claim: list[Annotated[str, Field(min_length=1, max_length=256)]] = Field(
+        default_factory=list, max_length=16
+    )
+    accepted_regex: str | None = Field(default=None, max_length=2048)
+    supportLink: AnyHttpUrl | None = None
+
+    @model_validator(mode="after")
+    def validate_policy(self):
+        if self.accepted_regex is not None:
+            try:
+                re.compile(self.accepted_regex)
+            except re.error:
+                raise ValueError(
+                    "accepted_regex must be a valid regular expression"
+                ) from None
+        if self.supportLink is not None and (
+            self.supportLink.scheme != "https"
+            or self.supportLink.username is not None
+            or self.supportLink.password is not None
+        ):
+            raise ValueError("supportLink must be an HTTPS URL")
+        if self.enabled and (
+            not self.jwt_claim
+            or not all(key.strip() for key in self.jwt_claim)
+            or not self.accepted_regex
+            or self.supportLink is None
+        ):
+            raise ValueError(
+                "Enabled platform access requires jwt_claim, accepted_regex and supportLink"
+            )
+        return self
+
+
 class SecurityConfiguration(BaseModel):
     m2m: M2MSecurity
     user: UserSecurity
     user_directory: Literal["keycloak", "local"] = "keycloak"
+    platform_access: PlatformAccessConfiguration = Field(
+        default_factory=PlatformAccessConfiguration
+    )
     delegation: DelegationConfig = Field(default_factory=DelegationConfig)
     authorized_origins: List[AnyHttpUrl] = []
     rebac: RebacConfiguration | None = None

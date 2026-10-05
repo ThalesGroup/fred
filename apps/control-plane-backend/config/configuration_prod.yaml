@@ -37,6 +37,11 @@ observability:
       port: 9222
 
 security:
+  platform_access:
+    enabled: false
+    jwt_claim: []
+    accepted_regex: null
+    supportLink: null
   profile: c3
   m2m:
     enabled: true

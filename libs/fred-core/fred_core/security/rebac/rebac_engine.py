@@ -1126,6 +1126,27 @@ class RebacEngine(ABC):
             # A reply without an answer is not a "no".
             raise AccountStatusError(unavailable=True)
 
+    async def has_team_memberships(
+        self, user_id: str, team_ids: Sequence[str]
+    ) -> list[bool]:
+        results: list[bool] = []
+        for offset in range(0, len(team_ids), 50):
+            batch = await asyncio.gather(
+                *(
+                    self._has_permission_raw(
+                        RebacReference(Resource.USER, user_id),
+                        RelationType.TEAM_MEMBER,
+                        RebacReference(Resource.TEAM, team_id),
+                        consistency_token=self.HIGHER_CONSISTENCY,
+                    )
+                    for team_id in team_ids[offset : offset + 50]
+                )
+            )
+            if any(type(value) is not bool for value in batch):
+                raise RuntimeError("Invalid membership response")
+            results.extend(batch)
+        return results
+
     async def has_permission(
         self,
         subject: RebacReference,

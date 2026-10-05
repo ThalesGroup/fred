@@ -597,6 +597,42 @@ class OpenFgaRebacEngine(RebacEngine):
                 for index in range(len(permissions))
             ]
 
+    async def has_team_memberships(
+        self, user_id: str, team_ids: Sequence[str]
+    ) -> list[bool]:
+        results: list[bool] = []
+        for offset in range(0, len(team_ids), 50):
+            checks = [
+                ClientBatchCheckItem(
+                    user=f"user:{user_id}",
+                    relation=RelationType.TEAM_MEMBER.value,
+                    object=f"team:{team_id}",
+                    correlation_id=str(index),
+                )
+                for index, team_id in enumerate(team_ids[offset : offset + 50])
+            ]
+            async with _rebac_timer(self._kpi, "check"):
+                client = await self.get_client()
+                response = await client.batch_check(
+                    ClientBatchCheckRequest(checks=checks),
+                    self._build_options(consistency=self.HIGHER_CONSISTENCY),
+                )
+                answers: dict[str, bool] = {}
+                expected = {str(index) for index in range(len(checks))}
+                for item in response.result:
+                    if (
+                        item.error is not None
+                        or item.correlation_id not in expected
+                        or item.correlation_id in answers
+                        or type(item.allowed) is not bool
+                    ):
+                        raise RuntimeError("Invalid membership batch response")
+                    answers[item.correlation_id] = item.allowed
+                if answers.keys() != expected:
+                    raise RuntimeError("Incomplete membership batch response")
+                results.extend(answers[str(index)] for index in range(len(checks)))
+        return results
+
     async def list_direct_relations(
         self,
         resource: RebacReference,

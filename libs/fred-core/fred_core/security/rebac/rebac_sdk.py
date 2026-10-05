@@ -49,6 +49,7 @@ from fred_core.security.rebac.rebac_factory import rebac_factory as _rebac_facto
 from fred_core.security.structure import KeycloakUser as _KeycloakUser
 from fred_core.security.structure import OpenFgaRebacConfig as _OpenFgaRebacConfig
 from fred_core.security.structure import SecurityConfiguration as _SecurityConfiguration
+from sqlalchemy.ext.asyncio import AsyncEngine as _AsyncEngine
 
 __all__ = ["RebacSdk", "rebac_sdk_factory"]
 
@@ -240,6 +241,7 @@ async def rebac_sdk_factory(
     security_config: _SecurityConfiguration,
     *,
     kpi_writer: _BaseKPIWriter,
+    platform_engine: _AsyncEngine | None = None,
 ) -> RebacSdk:
     """Build and initialize the process-scoped, fail-closed ReBAC SDK.
 
@@ -281,6 +283,16 @@ async def rebac_sdk_factory(
     sdk = _RebacSdk(engine)
     await _cast(_InitializableRebacEngine, engine).get_client()
     await _enforce_account_status(engine)
+    if security_config.platform_access.enabled:
+        if platform_engine is None:
+            raise ValueError(
+                "Platform access requires the shared PostgreSQL platform_engine"
+            )
+        from fred_core.security.platform_access.access_control import (
+            initialize_platform_access,
+        )
+
+        await initialize_platform_access(security_config, platform_engine, engine)
     return sdk
 
 

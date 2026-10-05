@@ -94,7 +94,13 @@ def security_configuration_from_env(
     # The secret is read by the token provider, not here; requiring it now turns
     # a missing credential into a startup failure rather than a first refused call.
     _ = _required(m2m_secret_env)
+    from fred_pod.security.structure import PlatformAccessConfiguration
+
+    platform_access = PlatformAccessConfiguration.model_validate_json(
+        os.environ.get("FRED_PLATFORM_ACCESS", "{}")
+    )
     return SecurityConfiguration(
+        platform_access=platform_access,
         profile="c3",
         user_directory=user_directory,
         user=UserSecurity(

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, DateTime, String
+from sqlalchemy import BigInteger, Boolean, DateTime, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -33,6 +33,15 @@ class TeamMetadataRow(Base):
     __tablename__ = "teammetadata"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    platform_access_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    platform_access_free: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    enrollment_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     # AUTHZ-05 review item 9 (RFC Part 6 §29-32): a team's identity lives here
     # now — no Keycloak group backs it. No backfill on this column: it lands
     # on a fresh deployment with zero pre-existing teams.

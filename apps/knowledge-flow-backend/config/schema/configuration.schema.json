@@ -1598,6 +1598,55 @@
       "type": "object",
       "additionalProperties": false
     },
+    "PlatformAccessConfiguration": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "jwt_claim": {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "title": "Jwt Claim",
+          "type": "array"
+        },
+        "accepted_regex": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Accepted Regex"
+        },
+        "supportLink": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supportlink"
+        }
+      },
+      "title": "PlatformAccessConfiguration",
+      "type": "object"
+    },
     "PostgresStoreConfig": {
       "properties": {
         "type": {
@@ -2165,6 +2214,9 @@
           ],
           "title": "User Directory",
           "type": "string"
+        },
+        "platform_access": {
+          "$ref": "#/$defs/PlatformAccessConfiguration"
         },
         "delegation": {
           "$ref": "#/$defs/DelegationConfig"

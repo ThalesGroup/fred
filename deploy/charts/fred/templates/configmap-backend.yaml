@@ -11,7 +11,15 @@ metadata:
   namespace: {{ .root.Release.Namespace }}
 data:
   {{ $configFileName }}: |
-{{ .app.configuration | toYaml | indent 4 }}
+{{- $configuration := deepCopy .app.configuration }}
+{{- $platformAccess := .root.Values.global.platformAccess }}
+{{- if and $platformAccess.enabled .root.Values.global.whitelist.enabled }}
+{{- fail "global.platformAccess and global.whitelist cannot both be enabled" }}
+{{- end }}
+{{- if $configuration.security }}
+{{- $_ := set $configuration.security "platform_access" (deepCopy $platformAccess) }}
+{{- end }}
+{{ $configuration | toYaml | indent 4 }}
 
 {{- end }}
 

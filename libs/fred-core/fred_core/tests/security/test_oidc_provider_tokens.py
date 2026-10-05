@@ -27,7 +27,7 @@ from fastapi import HTTPException
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from jwt import PyJWKClient
 from jwt.algorithms import RSAAlgorithm
-from pydantic import AnyUrl
+from pydantic import AnyHttpUrl, AnyUrl
 
 from fred_core.security import oidc
 from fred_core.security.structure import (
@@ -172,3 +172,36 @@ def test_entra_shaped_token_uses_api_audience_oid_and_flat_app_roles(
     with pytest.raises(HTTPException) as exc:
         oidc.decode_jwt(sign(ISSUER, "fred-ui", **claims))
     assert exc.value.status_code == 401
+
+
+def test_selected_admission_attribute_is_signature_verified_and_hidden(
+    signed_tokens, monkeypatch
+):
+    from fred_pod.security.structure import PlatformAccessConfiguration
+
+    from fred_core.security.platform_access import access_control
+
+    sign, _ = signed_tokens
+    monkeypatch.setattr(
+        access_control,
+        "_configured",
+        PlatformAccessConfiguration(
+            enabled=True,
+            jwt_claim=["profile", "unit"],
+            accepted_regex="accepted",
+            supportLink=AnyHttpUrl("https://support.example.org"),
+        ),
+    )
+    oidc.initialize_user_security(
+        UserSecurity(realm_url=AnyUrl(REALM), client_id="app")
+    )
+    oidc._REALM_ISSUERS = frozenset({REALM})
+    user = oidc.decode_jwt(
+        sign(REALM, "app", sub=PERSON_ID, profile={"unit": ["other", "accepted"]})
+    )
+    assert user.admission_attribute == ["other", "accepted"]
+    assert user.admission_issued_at is not None
+    assert user.admission_expires_at is not None
+    assert user.admission_expires_at > user.admission_issued_at
+    assert "admission_attribute" not in user.model_dump()
+    assert "accepted" not in repr(user)

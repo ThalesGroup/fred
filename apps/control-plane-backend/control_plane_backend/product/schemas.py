@@ -126,6 +126,8 @@ class FrontendConfig(BaseModel):
     (that stays on `FrontendBootstrap`).
     """
 
+    platform_access_enabled: bool = False
+    supportLink: str | None = None
     user_auth: FrontendUserAuthConfig
     gcu_version: str | None = None
     """Active Terms-of-Use / CGU version the deployment requires, or `None` when

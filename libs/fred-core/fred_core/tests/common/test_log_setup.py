@@ -485,3 +485,20 @@ def test_store_emit_handler_categorizes_reserved_kpi_logger_as_kpi() -> None:
 
     assert len(store.indexed) == 1
     assert store.indexed[0].category == "kpi"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/control-plane/v1/platform-access/free/opaque-token/enroll",
+        "/ui/join-free/opaque-token",
+    ],
+)
+def test_free_enrollment_capability_is_redacted_without_delegation(path, monkeypatch):
+    monkeypatch.setattr("fred_core.logs.log_setup._delegation_in_use", lambda: False)
+    record = logging.LogRecord(
+        "uvicorn.access", logging.INFO, __file__, 0, "%s", (path,), None
+    )
+    UvicornSensitiveQueryFilter().filter(record)
+    assert "opaque-token" not in record.getMessage()
+    assert "<redacted>" in record.getMessage()

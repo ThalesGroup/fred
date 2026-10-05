@@ -486,6 +486,10 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         else None
     )
     return FrontendConfig(
+        platform_access_enabled=deps.configuration.security.platform_access.enabled,
+        supportLink=str(deps.configuration.security.platform_access.supportLink)
+        if deps.configuration.security.platform_access.supportLink
+        else None,
         user_auth=user_auth,
         gcu_version=gcu_version,
         root_bootstrap_completed=root_bootstrap_completed,

@@ -286,6 +286,17 @@ def create_app() -> FastAPI:
         gc_diagnostics = install_gc_diagnostics()
         container.start_kpi_tasks()
         await enforce_account_status(container.get_rebac_engine())
+        from fred_core.security.platform_access.access_control import (
+            initialize_platform_access,
+        )
+
+        if configuration.security.platform_access.enabled:
+            await initialize_platform_access(
+                configuration.security,
+                container.get_pg_async_engine(),
+                container.get_rebac_engine(),
+                authority=True,
+            )
         await _reconcile_team_organization_relations(container)
         await _reconcile_team_admin_charter_roles(container)
         await _seed_capability_registration_defaults(container)
@@ -423,6 +434,11 @@ def create_app() -> FastAPI:
             run_id=handle.run_id,
         )
 
+    from control_plane_backend.platform_access.api import (
+        router as platform_access_router,
+    )
+
+    router.include_router(platform_access_router)
     router.include_router(users_router)
     router.include_router(teams_router)
     router.include_router(applications_router)
