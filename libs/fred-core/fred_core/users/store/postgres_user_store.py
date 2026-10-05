@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from fred_core.sql import make_session_factory, use_session
 from fred_core.users.user_models import GcuVersionsType, UserRow
 
-from .base_user_store import BaseUserStore
+from .base_user_store import AmbiguousUsernameError, BaseUserStore
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,25 @@ class PostgresUserStore(BaseUserStore):
             )
         async with use_session(self._sessions) as session:
             rows = (await session.scalars(stmt)).all()
-        return {row.username: str(row.id) for row in rows if row.username is not None}
+        resolved: dict[str, str] = {}
+        ambiguous: set[str] = set()
+        for row in rows:
+            if row.username is None:
+                continue
+            user_id = str(row.id)
+            if row.username in resolved and resolved[row.username] != user_id:
+                ambiguous.add(row.username)
+            resolved[row.username] = user_id
+        if ambiguous:
+            # SQL matches case-insensitively; consumers resolve exact names.
+            requested = (
+                ambiguous if usernames is None else ambiguous.intersection(usernames)
+            )
+            if requested:
+                raise AmbiguousUsernameError(list(requested))
+            for username in ambiguous:
+                resolved.pop(username, None)
+        return resolved
 
     async def identity_exists(self, user_id: UUID) -> bool:
         async with use_session(self._sessions) as session:

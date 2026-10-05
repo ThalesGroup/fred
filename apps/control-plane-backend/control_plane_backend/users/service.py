@@ -441,41 +441,17 @@ async def _fetch_all_users(
     return users
 
 
-async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
-    """
-    Resolve every Keycloak username in the realm to its `sub`, in one pass.
+async def find_user_subs_bulk(
+    deps: UserServiceDependencies, *, usernames: list[str] | None = None
+) -> dict[str, str]:
+    """Resolve usernames from one bulk directory snapshot.
 
-    Why this function exists:
-    - the users.json declarative provisioning phase
-      (`import_export/importer.py::UserSubResolver`) can resolve many distinct
-      usernames per bundle; one Admin API call per username does not scale.
-      This reuses the same paginated sweep `list_users` already relies on
-      (`_fetch_all_users`) so the whole realm is listed once, then every
-      username resolves against an in-memory dict instead of a network call.
-
-    How to use it:
-    - call once per import run; the caller (`UserSubResolver`) treats the
-      result as the authoritative snapshot of the target realm for the whole
-      run — a username missing from it is unresolved, never looked up
-      individually
-    - raises `KeycloakM2MUserOperationDisabledError` when Keycloak M2M is
-      disabled — a disabled admin client used to come back as `{}`, the exact
-      same shape as a real bulk sweep that genuinely found zero users, which
-      would silently resolve every identity as unresolved with nothing
-      pointing at the real cause. Raising here instead reuses the same domain
-      error and HTTP 503 mapping `create_user` already raises for the
-      identical disabled-M2M case (`users/api.py`'s
-      `register_exception_handlers`), and — same as any other bulk-sweep
-      failure below — `UserSubResolver.create()` is called before the
-      Postgres transaction opens, so this aborts the import before any write
-    - a real Keycloak/network failure raises and is left to propagate — never
-      swallowed into an empty snapshot
-
-    Example:
-    - `subs_by_username = await find_user_subs_bulk(user_deps)`
+    Local lookups can target bundle names and reject duplicate exact usernames.
+    Keycloak keeps its complete paginated sweep and raises if admin is disabled.
     """
     if _uses_local_directory(deps):
-        return await get_user_store().find_ids_by_usernames()
+        # A bundle needs only its own names; unrelated collisions must not block it.
+        return await get_user_store().find_ids_by_usernames(usernames)
 
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
@@ -583,6 +559,7 @@ async def find_user_sub_by_username(
     Example:
     - `sub = await find_user_sub_by_username("alice", user_deps)`
     """
+    # Local ambiguity must propagate instead of looking like a missing identity.
     if _uses_local_directory(deps):
         matches = await get_user_store().find_ids_by_usernames([username])
         return next(

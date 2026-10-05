@@ -502,16 +502,21 @@ class UserSubResolver:
 
     @classmethod
     async def create(
-        cls, user_deps: UserServiceDependencies | None
+        cls,
+        user_deps: UserServiceDependencies | None,
+        *,
+        usernames: list[str] | None = None,
     ) -> "UserSubResolver":
-        """Build a resolver with the target realm's users prefetched in bulk.
+        """Build a resolver with the target directory's users prefetched in bulk.
 
         A real bulk-sweep failure (Keycloak down, network error, or Keycloak
         M2M disabled — `find_user_subs_bulk` raises rather than returning
         `{}`) propagates from here, aborting the import before any write.
         """
         prefetched = (
-            await find_user_subs_bulk(user_deps) if user_deps is not None else {}
+            await find_user_subs_bulk(user_deps, usernames=usernames)
+            if user_deps is not None
+            else {}
         )
         return cls(prefetched)
 
@@ -997,10 +1002,7 @@ async def _run_import_body(
     raw_team_metadata = list(bundle.iter_table("team_metadata"))
     raw_team_routing_policy = list(bundle.iter_table("team_routing_policy"))
 
-    # users.json's Keycloak bulk-resolve sweep runs before the Postgres
-    # transaction opens below — a broken Keycloak Admin M2M client must abort
-    # the import before any row is written, matching this module's "no partial
-    # state" guarantee, not after Phases 2-4 already committed.
+    # Directory failures and ambiguous names must abort before business writes.
     demo_users = bundle.demo_users()
     user_resolver: UserSubResolver | None = None
     if demo_users:
@@ -1009,7 +1011,9 @@ async def _run_import_body(
                 "bundle contains users.json but run_import was not given "
                 "platform_admin/user_deps/team_deps"
             )
-        user_resolver = await UserSubResolver.create(user_deps)
+        user_resolver = await UserSubResolver.create(
+            user_deps, usernames=[entry.username for entry in demo_users]
+        )
 
     # ── Phases 2–4: all writes in a single atomic transaction ─────────────────
     session_factory = make_session_factory(engine)

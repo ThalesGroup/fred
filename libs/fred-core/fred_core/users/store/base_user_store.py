@@ -21,6 +21,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..user_models import GcuVersionsType, UserRow
 
 
+class AmbiguousUsernameError(ValueError):
+    """Distinct local identities share a username needed for resolution."""
+
+    def __init__(self, usernames: list[str]) -> None:
+        self.usernames = tuple(sorted(set(usernames)))
+        super().__init__(
+            "Local usernames resolve to multiple identities (ambiguous_username): "
+            + ", ".join(self.usernames)
+        )
+
+
 class BaseUserStore(ABC):
     @abstractmethod
     async def update_gcu_version(
@@ -88,7 +99,7 @@ class BaseUserStore(ABC):
     async def find_ids_by_usernames(
         self, usernames: list[str] | None = None
     ) -> dict[str, str]:
-        """Resolve usernames to IDs for declarative imports."""
+        """Resolve usernames; raise AmbiguousUsernameError for distinct matching IDs."""
 
     @abstractmethod
     async def identity_exists(self, user_id: UUID) -> bool:

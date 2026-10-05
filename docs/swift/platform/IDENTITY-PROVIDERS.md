@@ -39,6 +39,14 @@ changing either changes the Fred user ID and personal space. Server-side
 refresh of a person's token depends on the provider. For Entra SPA tokens,
 enable workload delegation rather than relying on backend person-token refresh.
 
+Local imports require unambiguous exact usernames. If distinct local IDs share a
+referenced username, preflight fails with `ambiguous_username` before writing
+bundle rows or roles. Collisions on names outside the bundle do not block it.
+Refresh the old owner's profile or reconcile snapshots against the provider;
+Fred never chooses an owner by row order or deletes a conflicting identity.
+A unique snapshot can still be stale; uniqueness does not verify current IdP
+ownership. Existing case-sensitive resolution is preserved.
+
 ## Microsoft Entra ID recipe
 
 1. Create a **Fred API** app registration. Set its Application ID URI to

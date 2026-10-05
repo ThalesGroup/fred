@@ -4292,6 +4292,17 @@ and presents no bearer to the agent pod
 Detailed cases are in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
+## Local username ambiguity aborts import preflight (2026-10-05)
+
+In local-directory mode, username resolution rejects distinct IDs sharing the
+same exact username with `ambiguous_username`; it never picks an ID by row order.
+The importer prefetches its referenced names before opening the business-data
+transaction, so an ambiguity prevents all bundle SQL and OpenFGA writes. Names
+outside the bundle do not block it. Unique/missing-name behavior, case-sensitive
+resolution, identity snapshots and the Keycloak path remain unchanged. Failure
+is reported through the existing migration task error. No database uniqueness
+constraint or current IdP ownership lookup is introduced.
+
 ## Local-directory suspension is independent of delegation (2026-10-05)
 
 With `security.user_directory: local`, an enforced OpenFGA engine validates

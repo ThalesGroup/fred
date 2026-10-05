@@ -54,7 +54,7 @@ With `local`, user listing, search, id-to-summary lookup, single-user details an
 
 ### Requirement: Username resolution for declarative import uses Postgres
 
-With `local`, bulk and single username resolution used by the `users.json` import SHALL be served from the `users` table. A username absent from the table SHALL be reported as unresolved exactly as the Keycloak path reports a missing username.
+With `local`, bulk and single username resolution used by the `users.json` import SHALL be served from the `users` table. A username absent from the table SHALL be reported as unresolved exactly as the Keycloak path reports a missing username. Distinct IDs sharing an exact username SHALL cause an explicit `ambiguous_username` failure naming the colliding usernames; resolution SHALL NOT choose an arbitrary ID. Existing exact-name/case behavior SHALL remain unchanged. Import preflight SHALL validate the names referenced by its bundle before any SQL or authorization write; collisions unrelated to those names SHALL NOT block that import.
 
 #### Scenario: Import after first sign-in
 
@@ -67,6 +67,32 @@ With `local`, bulk and single username resolution used by the `users.json` impor
 - **GIVEN** `bob` never signed in
 - **WHEN** an import bundle names `bob`
 - **THEN** `bob` is reported as unresolved and no grant is written for him
+
+#### Scenario: Reused username with a stale snapshot
+
+- **GIVEN** a previous owner renamed at the IdP without refreshing their local snapshot, and a new owner signed in using the released username
+- **WHEN** an import names that username
+- **THEN** it fails with `ambiguous_username` before any SQL or OpenFGA write
+- **AND** the error names the ambiguous username without selecting either ID
+
+#### Scenario: Mixed unique and ambiguous names
+
+- **GIVEN** an import containing unique names and a username shared by distinct local IDs
+- **WHEN** preflight resolves the bundle's usernames
+- **THEN** the entire import is refused before any identity, team or role write
+
+#### Scenario: Unrelated directory collision
+
+- **GIVEN** an ambiguous local username absent from an import bundle
+- **WHEN** the bundle resolves only unique referenced usernames
+- **THEN** that unrelated collision does not prevent the import
+
+#### Scenario: Authoritative refresh removes the collision
+
+- **GIVEN** the old owner's snapshot is refreshed with their current username
+- **WHEN** the reused username is resolved again
+- **THEN** it resolves to the only remaining matching ID
+- **AND** both identity records and their local state remain stored
 
 ### Requirement: Import never creates identities in local mode
 

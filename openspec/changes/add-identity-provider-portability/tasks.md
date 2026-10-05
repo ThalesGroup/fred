@@ -166,3 +166,30 @@ manual provider walkthroughs remain pending; this change is not ready to archive
 
 Root `make code-quality` passed once across all 16 modules after this slice.
 The correction is delivered as a dedicated commit on the existing issue/PR branch.
+
+## 13. Review correction: ambiguous local usernames
+
+- [x] 13.1 Reject exact username collisions between distinct IDs in local store resolution with an explicit bounded error; preserve unique/missing results, casing semantics and non-fatal identity upserts.
+- [x] 13.2 Restrict import prefetch to referenced usernames in local mode and propagate ambiguity before SQL/OpenFGA writes; retain Keycloak resolution and full-directory lookup compatibility.
+- [x] 13.3 Verify real-store same-name collisions, row-order independence, single/bulk services, stale rename/reuse and recovery; exercise full imports with mixed names and business rows, no persisted SQL/FGA writes on ambiguity and unrelated-collision success.
+- [x] 13.4 Update the existing provider/migration guides, obtain independent read-only review, run targeted tests and root quality once, and commit/push this block on the existing issue/PR. No schema migration or provider lookup is added.
+
+Correction verification (2026-10-05): targeted offline suites passed: local
+identity store 11, control-plane directory/import 32. Commands used the existing
+module environments and `pytest -q -o addopts='' --disable-socket
+--allow-unix-socket`. Full `run_import` cases verify mixed unique/ambiguous names,
+no bundle SQL/FGA writes on refusal, unrelated-collision success and exact-case
+boundaries (`alice` unique alongside ambiguous `Alice`). Root `make code-quality`
+passed once across all 16 modules; `make migration-check`, strict OpenSpec
+validation and diff whitespace checks passed. No controller or schema changed,
+so API generation and a database migration are unnecessary for this slice.
+
+Independent read-only review covered the corrective worktree delta against
+`c78a1a564`, including store, single/bulk services, importer, existing task-error
+propagation and documentation; no actionable finding remained. It also reviewed
+the subsequent case-variant tests with updated passing logs. The PR target stays
+`swift` (`22b597663`); this is a focused correction review, not a new full PR
+review. Resolution remains one awaited SQL query plus a linear scan. Real
+PostgreSQL/IdP/OpenFGA and concurrency were not exercised; collision detection
+does not establish current ownership of a stale but unique snapshot. Other
+portability findings and pending manual provider tasks remain outside this slice.

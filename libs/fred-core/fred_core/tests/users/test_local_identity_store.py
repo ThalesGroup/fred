@@ -12,14 +12,115 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import AsyncIterator
 from typing import cast
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
+from fred_core.users.store.base_user_store import AmbiguousUsernameError
 from fred_core.users.store.postgres_user_store import PostgresUserStore
 from fred_core.users.user_models import GcuVersionsType, UserRow
 from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import create_async_engine
+
+
+@pytest_asyncio.fixture
+async def identity_store(tmp_path) -> AsyncIterator[PostgresUserStore]:
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'identities.db'}")
+    async with engine.begin() as connection:
+        await connection.run_sync(cast(Table, UserRow.__table__).create)
+    try:
+        yield PostgresUserStore(engine)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse_order", [False, True])
+@pytest.mark.parametrize("names", [None, ["alice"], ["unique", "alice"]])
+async def test_duplicate_usernames_are_refused_before_a_mapping_is_returned(
+    identity_store: PostgresUserStore, reverse_order: bool, names: list[str] | None
+) -> None:
+    ids = [uuid4(), uuid4()]
+    for user_id in reversed(ids) if reverse_order else ids:
+        await identity_store.upsert_identity(user_id, "alice", None, None, None)
+    await identity_store.upsert_identity(uuid4(), "unique", None, None, None)
+
+    with pytest.raises(AmbiguousUsernameError) as refused:
+        await identity_store.find_ids_by_usernames(names)
+
+    assert refused.value.usernames == ("alice",)
+    assert "ambiguous_username" in str(refused.value)
+    assert all(str(user_id) not in str(refused.value) for user_id in ids)
+    assert await identity_store.count_identities() == 3
+
+
+@pytest.mark.asyncio
+async def test_unrelated_collisions_and_empty_lookups_do_not_block_resolution(
+    identity_store: PostgresUserStore,
+) -> None:
+    for _ in range(2):
+        await identity_store.upsert_identity(uuid4(), "alice", None, None, None)
+    unique_id = uuid4()
+    await identity_store.upsert_identity(unique_id, "unique", None, None, None)
+
+    assert await identity_store.find_ids_by_usernames(["unique"]) == {
+        "unique": str(unique_id)
+    }
+    assert await identity_store.find_ids_by_usernames([]) == {}
+    assert await identity_store.find_ids_by_usernames(["missing"]) == {}
+
+
+@pytest.mark.asyncio
+async def test_distinctly_cased_usernames_keep_their_exact_mapping(
+    identity_store: PostgresUserStore,
+) -> None:
+    upper_id, lower_id = uuid4(), uuid4()
+    await identity_store.upsert_identity(upper_id, "Alice", None, None, None)
+    await identity_store.upsert_identity(lower_id, "alice", None, None, None)
+
+    assert await identity_store.find_ids_by_usernames(["alice"]) == {
+        "Alice": str(upper_id),
+        "alice": str(lower_id),
+    }
+
+
+@pytest.mark.asyncio
+async def test_unrequested_case_variant_collision_does_not_select_an_id(
+    identity_store: PostgresUserStore,
+) -> None:
+    for _ in range(2):
+        await identity_store.upsert_identity(uuid4(), "Alice", None, None, None)
+    unique_id = uuid4()
+    await identity_store.upsert_identity(unique_id, "alice", None, None, None)
+
+    assert await identity_store.find_ids_by_usernames(["alice"]) == {
+        "alice": str(unique_id)
+    }
+    with pytest.raises(AmbiguousUsernameError) as refused:
+        await identity_store.find_ids_by_usernames(["Alice"])
+    assert refused.value.usernames == ("Alice",)
+
+
+@pytest.mark.asyncio
+async def test_reused_username_recovers_after_the_old_snapshot_is_refreshed(
+    identity_store: PostgresUserStore,
+) -> None:
+    old_owner, new_owner = uuid4(), uuid4()
+    await identity_store.upsert_identity(old_owner, "alice", None, None, None)
+    await identity_store.upsert_identity(new_owner, "bob", None, None, None)
+    await identity_store.upsert_identity(new_owner, "alice", None, None, None)
+
+    with pytest.raises(AmbiguousUsernameError):
+        await identity_store.find_ids_by_usernames(["alice"])
+
+    await identity_store.upsert_identity(old_owner, "charlie", None, None, None)
+
+    assert await identity_store.find_ids_by_usernames(["alice"]) == {
+        "alice": str(new_owner)
+    }
+    assert await identity_store.count_identities() == 2
 
 
 @pytest.mark.asyncio
