@@ -27,12 +27,14 @@ import pytest
 from builder_decks import (
     FOOTER,
     add_cover_photo_slide,
+    add_loose_figures_slide,
     build_showcase_template,
     build_slides,
     build_spaced_template,
 )
 from deck_builders import png_bytes
 from fred_capability_ppt_filler import text_metrics
+from fred_capability_ppt_filler.builder import builtin
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import assign
 from fred_capability_ppt_filler.builder.lexicon import is_sample_text
@@ -74,7 +76,12 @@ INVENTORY: TemplateInventory = _analysed
 
 
 def _pattern(label: str):
-    return next(p for p in INVENTORY.patterns if p.label == label)
+    # A sample-text copy of a layout stands for it, labelled "<layout> (<n>)".
+    return next(
+        p
+        for p in INVENTORY.patterns
+        if p.label == label or p.label.startswith(f"{label} (")
+    )
 
 
 def _title(slide) -> str:
@@ -836,6 +843,62 @@ def test_the_kept_items_are_recentred_on_the_room_the_group_had():
     centre = groups[0].left + groups[0].width // 2
     slide_centre = INVENTORY.slide_width // 2
     assert abs(centre - slide_centre) < Inches(0.6).emu
+
+
+def test_unused_loose_items_are_removed_and_the_rest_recentred():
+    template = build_slides([add_loose_figures_slide])
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.groups)
+    _, deck = _render(
+        _on(
+            pattern,
+            title="KPIs",
+            items=[
+                PlanItem(number="42%", label="Marge"),
+                PlanItem(number="7", label="Sites"),
+            ],
+        ),
+        template=template,
+        inventory=inventory,
+    )
+    slide = deck.slides[0]
+    assert sorted(_texts(slide)) == ["42%", "7", "KPIs", "Marge", "Sites"]
+    figures = [
+        p
+        for p in walk_shapes(slide.shapes)
+        if cast(Any, p.shape).text_frame.text in ("42%", "7")
+    ]
+    left = min(p.left for p in figures)
+    right = max(p.left + p.width for p in figures)
+    # Three columns spanned 0.5" to 6.7": the two kept ones sit around its middle.
+    assert abs((left + right) // 2 - Inches(3.6).emu) < Inches(0.2).emu
+
+
+def test_builtin_process_with_three_steps_drops_the_fourth():
+    content, inventory = builtin.builtin_template()
+    process = next(p for p in inventory.patterns if p.kind == "process")
+    _, deck = _render(
+        _on(
+            process,
+            title="Trois étapes",
+            items=[
+                PlanItem(heading=h, text="Une phrase") for h in ("Un", "Deux", "Trois")
+            ],
+        ),
+        template=content,
+        inventory=inventory,
+    )
+    texts = _texts(deck.slides[0])
+    assert sorted(texts) == ["Deux", "Trois", "Trois étapes", "Un"] + ["Une phrase"] * 3
+    assert "Check and deliver" not in texts
+    # Recentred placeholders keep the height their layout gave them.
+    tops = {
+        cast(Any, p.shape).text_frame.text: p.top
+        for p in walk_shapes(deck.slides[0].shapes)
+        if p.shape.has_text_frame
+    }
+    assert tops["Un"] == tops["Deux"] > Inches(2).emu
 
 
 def test_an_unfilled_placeholder_is_removed_not_left_prompting():

@@ -104,6 +104,17 @@ _REPLACEABLE_PICTURE_AREA = 0.25
 # A chart/table covering this share of the slide is the slide's content.
 _MAIN_CONTENT_AREA = 0.15
 _ICON_BANK_PICTURES = 20
+# Loose text shapes read as one row of items (design.md D2.1): per-mille limits
+# past which a shape is a column body, and the tolerances of "same size, aligned".
+_ITEM_MAX_W = 350
+_ITEM_MAX_H = 400
+_SAME_HEIGHT = 0.10
+# Designers size a loose box to its sample text: widths vary more than heights.
+_SAME_WIDTH = 0.25
+_SAME_BAND = 20
+_SAME_COLUMN = 30
+_FIELD_GAP = 120
+_MAX_FIELDS = 4
 
 
 @dataclass
@@ -154,7 +165,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 7
+ANALYSIS_VERSION = 8
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -215,6 +226,20 @@ def _lst_style_pt(element) -> Optional[float]:
     return int(size) / 100 if size else None
 
 
+def _inherited_from(fmt, holder):
+    """The placeholder of ``holder`` a placeholder inherits from: same idx,
+    else the first of the same type (a master has one per type)."""
+    if holder is None:
+        return None
+    candidates = list(holder.placeholders)
+    for candidate in candidates:
+        if candidate.placeholder_format.idx == fmt.idx:
+            return candidate
+    if fmt.type is None:
+        return None
+    return next((c for c in candidates if c.placeholder_format.type == fmt.type), None)
+
+
 def _placeholder_pt(shape, layout, master) -> Optional[float]:
     """Font size a placeholder inherits when its runs carry none: its own list
     style, then the layout's and master's matching placeholder, then the
@@ -224,18 +249,12 @@ def _placeholder_pt(shape, layout, master) -> Optional[float]:
         return own
     fmt = shape.placeholder_format
     for holder in (layout, master):
-        if holder is None:
-            continue
-        for candidate in holder.placeholders:
-            cfmt = candidate.placeholder_format
-            if cfmt.idx == fmt.idx or (cfmt.type == fmt.type and fmt.type is not None):
-                pt = _font_pt_of(candidate) if candidate.has_text_frame else None
-                pt = pt or _lst_style_pt(
-                    candidate._element.find(f".//{qn('a:lstStyle')}")
-                )
-                if pt:
-                    return pt
-                break
+        candidate = _inherited_from(fmt, holder)
+        if candidate is not None:
+            pt = _font_pt_of(candidate) if candidate.has_text_frame else None
+            pt = pt or _lst_style_pt(candidate._element.find(f".//{qn('a:lstStyle')}"))
+            if pt:
+                return pt
     if master is None:
         return None
     styles = master._element.find(qn("p:txStyles"))
@@ -280,19 +299,13 @@ def _pPr_chain(shape, layout, master) -> List[Any]:
     fmt = shape.placeholder_format if shape.is_placeholder else None
     if fmt is not None:
         for holder in (layout, master):
-            if holder is None:
-                continue
-            for candidate in holder.placeholders:
-                cfmt = candidate.placeholder_format
-                if cfmt.idx == fmt.idx or (
-                    cfmt.type == fmt.type and fmt.type is not None
-                ):
-                    node = candidate._element.find(
-                        f".//{qn('a:lstStyle')}/{qn('a:lvl1pPr')}"
-                    )
-                    if node is not None:
-                        chain.append(node)
-                    break
+            candidate = _inherited_from(fmt, holder)
+            if candidate is not None:
+                node = candidate._element.find(
+                    f".//{qn('a:lstStyle')}/{qn('a:lvl1pPr')}"
+                )
+                if node is not None:
+                    chain.append(node)
     if master is not None:
         styles = master._element.find(qn("p:txStyles"))
         if styles is not None:
@@ -349,19 +362,28 @@ def _line_ratio(pPr, font_pt: Optional[float]) -> Optional[float]:
 
 def _frame_metrics(shape, layout, master, font_pt: Optional[float]) -> FrameMetrics:
     """Padding and paragraph spacing a text box applies, inherited included."""
-    body = shape.text_frame._txBody.find(qn("a:bodyPr"))
-    if body is None:
-        lr = 2 * text_metrics.DEFAULT_INSET_EMU
-        tb = 2 * text_metrics.DEFAULT_V_INSET_EMU
-    else:
-        lr = sum(
-            int(body.get(side, text_metrics.DEFAULT_INSET_EMU))
-            for side in ("lIns", "rIns")
+    # A placeholder's empty `bodyPr` inherits its layout's and master's.
+    bodies = [shape.text_frame._txBody.find(qn("a:bodyPr"))]
+    if shape.is_placeholder:
+        for holder in (layout, master):
+            source = _inherited_from(shape.placeholder_format, holder)
+            if source is not None and source.has_text_frame:
+                bodies.append(source.text_frame._txBody.find(qn("a:bodyPr")))
+
+    def attribute(name: str) -> Optional[str]:
+        return next(
+            (b.get(name) for b in bodies if b is not None and b.get(name) is not None),
+            None,
         )
-        tb = sum(
-            int(body.get(side, text_metrics.DEFAULT_V_INSET_EMU))
-            for side in ("tIns", "bIns")
-        )
+
+    lr = sum(
+        int(attribute(side) or text_metrics.DEFAULT_INSET_EMU)
+        for side in ("lIns", "rIns")
+    )
+    tb = sum(
+        int(attribute(side) or text_metrics.DEFAULT_V_INSET_EMU)
+        for side in ("tIns", "bIns")
+    )
     spacing: Optional[float] = None
     before: Optional[float] = None
     after: Optional[float] = None
@@ -380,7 +402,7 @@ def _frame_metrics(shape, layout, master, font_pt: Optional[float]) -> FrameMetr
         line_spacing=spacing or 1.0,
         space_before_pt=max(0.0, before or 0.0),
         space_after_pt=max(0.0, after or 0.0),
-        grows=body is not None and body.get("wrap") == "none",
+        grows=attribute("wrap") == "none",
     )
 
 
@@ -630,7 +652,8 @@ class _Analyzer:
         self.shared_texts = self._shared_texts(slide_records)
 
         patterns: List[Pattern] = []
-        layout_zone_sets: Dict[str, frozenset] = {}
+        # Layout part → (its pattern, the placeholder idx holding a slot).
+        layout_slots: Dict[Any, Tuple[Pattern, frozenset]] = {}
         # One running index over every master, matching the renderer's view.
         layouts = [
             layout
@@ -638,31 +661,23 @@ class _Analyzer:
             for layout in master.slide_layouts
         ]
         for index, layout in enumerate(layouts):
-            pattern = self._layout_pattern(layout, index)
+            pattern, slots = self._layout_pattern(layout, index)
             patterns.append(pattern)
             if pattern.included:
-                layout_zone_sets[layout.name] = frozenset(z.key for z in pattern.zones)
+                layout_slots[layout.part] = (pattern, slots)
 
+        copied: set[Any] = set()
         for number, (slide, records) in enumerate(zip(slides, slide_records), start=1):
             pattern = self._slide_pattern(slide, number, records)
-            if pattern is None:
+            layout = layout_slots.get(slide.slide_layout.part)
+            if layout is None or not _copies_layout(records, layout[1]):
+                patterns.append(pattern)
                 continue
-            # A pure instance of a layout (same placeholders, nothing else on
-            # the slide) renders identically: keep the layout, drop the copy.
-            zone_keys = frozenset(z.key for z in pattern.zones)
-            extra_content = any(
-                rec.kind in ("chart", "table", "picture")
-                or (rec.kind == "text" and rec.ph_idx is None and rec.text)
-                for rec in records
-            )
-            if (
-                not pattern.groups
-                and not extra_content
-                and zone_keys == layout_zone_sets.get(slide.slide_layout.name, None)
-                and all(z.key.startswith("ph:") for z in pattern.zones)
-            ):
-                continue
-            patterns.append(pattern)
+            # A copy of its layout is the same design: the slide stands for it
+            # (sample text, notes, position), once; an excluded copy leaves it.
+            if pattern.included and slide.slide_layout.part not in copied:
+                patterns[patterns.index(layout[0])] = pattern
+            copied.add(slide.slide_layout.part)
 
         layout_kinds = {p.kind for p in patterns if p.source == "layout" and p.included}
         for pattern in patterns:
@@ -700,7 +715,7 @@ class _Analyzer:
 
     # -- layouts -----------------------------------------------------------------
 
-    def _layout_pattern(self, layout, index: int) -> Pattern:
+    def _layout_pattern(self, layout, index: int) -> Tuple[Pattern, frozenset]:
         records = _records(
             layout.placeholders,
             self.width,
@@ -709,12 +724,23 @@ class _Analyzer:
             layout.slide_master,
             self.theme,
         )
+        slotted = [rec for rec in records if _placeholder_role(rec) is not None]
+        groups, in_rows = self._row_group(
+            [
+                rec
+                for rec in slotted
+                if _placeholder_role(rec) in ("body", "heading", "image")
+            ]
+        )
         zones: List[Zone] = []
-        for rec in records:
-            role = _placeholder_role(rec)
-            if role is None:
+        for rec in slotted:
+            if rec.key in in_rows:
                 continue
-            zones.append(_zone(rec, role, self.width, self.height))
+            zones.append(
+                _zone(
+                    rec, cast(ZoneRole, _placeholder_role(rec)), self.width, self.height
+                )
+            )
         _promote_headings(zones)
         name = layout.name or f"Layout {index + 1}"
         pattern = Pattern(
@@ -725,54 +751,25 @@ class _Analyzer:
             label=name,
             kind="other",
             zones=zones,
+            groups=groups,
         )
         pattern.kind = _kind(pattern, records, name, layout._element.get("type"))
-        if not zones and pattern.kind != "closing":
+        if not zones and not groups and pattern.kind != "closing":
             pattern.included = False
             pattern.exclusion_reason = "no_placeholder"
+        _quote_roles(pattern)
         pattern.reusable = pattern.kind != "other"
-        return pattern
+        return pattern, frozenset(rec.ph_idx for rec in slotted)
 
     # -- slides --------------------------------------------------------------------
 
-    def _slide_pattern(
-        self, slide, number: int, records: List[_Rec]
-    ) -> Optional[Pattern]:
+    def _slide_pattern(self, slide, number: int, records: List[_Rec]) -> Pattern:
         layout_name = slide.slide_layout.name or ""
         zones: List[Zone] = []
-        groups: List[RepeatGroup] = []
         warnings: List[str] = []
 
-        # 1. Typed placeholders keep their meaning. A designer who duplicated
-        # a placeholder left two shapes with one idx: the second is addressed
-        # by its shape path so both stay fillable.
-        title_text = ""
-        used_keys: set[str] = set()
-        for rec in records:
-            if rec.ph_idx is None:
-                continue
-            role = _placeholder_role(rec)
-            if role is None:
-                continue
-            declared = _declared_role(rec)
-            if declared == "keep":
-                continue
-            if declared and declared != "image":
-                role = cast(ZoneRole, declared)
-            if role == "title" and not title_text:
-                title_text = rec.text
-            zone = _zone(rec, role, self.width, self.height)
-            if zone.key in used_keys:
-                zone.key = _shape_key(rec.path)
-            used_keys.add(zone.key)
-            zones.append(zone)
-        _promote_headings(zones)
-
-        # 2. Repeated sibling groups.
+        # 1. Repeated sibling groups, else rows of loose same-size shapes.
         groups, grouped_paths = self._repeat_groups(records)
-
-        # 3. Every other text box is a slot, but chrome: text repeated across
-        # slides (a repeated sample box still counts) and date/number fields.
         free_text = [
             rec
             for rec in records
@@ -783,8 +780,49 @@ class _Analyzer:
             and (rec.text not in self.shared_texts or lexicon.is_sample_text(rec.text))
             and rec.path[0] not in grouped_paths
         ]
+        in_rows: set[str] = set()
+        if not groups:
+            groups, in_rows = self._row_group(
+                [
+                    rec
+                    for rec in records
+                    if rec.ph_idx is not None
+                    and _slot_role(rec)
+                    in ("body", "heading", "label", "caption", "image")
+                ]
+                + [rec for rec in free_text if _declared_role(rec) != "keep"]
+            )
+
+        # 2. Typed placeholders keep their meaning. A designer who duplicated
+        # a placeholder left two shapes with one idx: the second is addressed
+        # by its shape path so both stay fillable.
+        title_text = ""
+        used_keys: set[str] = set()
+        for rec in records:
+            if rec.ph_idx is None or rec.key in in_rows:
+                continue
+            if _declared_role(rec) == "keep":
+                continue
+            role = _slot_role(rec)
+            if role is None:
+                continue
+            if role == "title" and not title_text:
+                title_text = rec.text
+            zone = _zone(rec, role, self.width, self.height)
+            if zone.key in used_keys:
+                zone.key = _shape_key(rec.path)
+            used_keys.add(zone.key)
+            zones.append(zone)
+        _promote_headings(zones)
+
+        # 3. Every other text box is a slot, but chrome: text repeated across
+        # slides (a repeated sample box still counts) and date/number fields.
         has_title = any(z.role == "title" for z in zones)
-        zones.extend(self._free_text_zones(free_text, has_title))
+        zones.extend(
+            self._free_text_zones(
+                [rec for rec in free_text if rec.key not in in_rows], has_title
+            )
+        )
         if not title_text:
             title_text = next((z.sample for z in zones if z.role == "title"), "")
 
@@ -837,6 +875,7 @@ class _Analyzer:
             declared = lexicon.LEGACY_KINDS.get(declared, declared)
             if declared in SLIDE_KINDS:
                 pattern.kind = cast(SlideKind, declared)
+        _quote_roles(pattern)
         pattern.reusable = pattern.kind != "other"
         return pattern
 
@@ -914,6 +953,41 @@ class _Analyzer:
             )
         groups.sort(key=lambda g: -g.count)
         return groups, grouped
+
+    def _row_group(self, recs: List[_Rec]) -> Tuple[List[RepeatGroup], set[str]]:
+        """The largest row of loose same-size shapes as a repeat group (one at
+        most: every group of a slide is fed the same items), and its keys."""
+        best = max(
+            _rows_of_items(recs),
+            key=lambda items: len(items) * len(items[0]),
+            default=[],
+        )
+        # Contact cards stay stacked lines: a closing slide takes one per line.
+        if not best or lexicon.has_contact_words(
+            [rec.text for item in best for rec in item]
+        ):
+            return [], set()
+        texts = [rec for rec in best[0] if rec.kind == "text"]
+        text_roles = iter(self._item_roles(texts))
+        roles: List[ZoneRole] = [
+            "image" if rec.kind != "text" else next(text_roles) for rec in best[0]
+        ]
+        items_zones = [
+            [
+                _zone(rec, role, self.width, self.height)
+                for rec, role in zip(item, roles)
+                if role != "keep"
+            ]
+            for item in best
+        ]
+        group = RepeatGroup(
+            key=best[0][0].key,
+            count=len(best),
+            item_zones=[r for r in roles if r != "keep"],
+            items=items_zones,
+            item_keys=[item[0].key for item in best],
+        )
+        return [group], {rec.key for item in best for rec in item}
 
     @staticmethod
     def _item_roles(children: List[_Rec]) -> List[ZoneRole]:
@@ -997,6 +1071,140 @@ class _Analyzer:
                     f"Slide holds a part that cannot be copied: {rel.reltype.rsplit('/', 1)[-1]}."
                 )
                 return
+
+
+def _slot_role(rec: _Rec) -> Optional[ZoneRole]:
+    """A placeholder's role, its Selection-pane name refining it. Only a
+    content (`OBJECT`) placeholder may be declared an image."""
+    role = _placeholder_role(rec)
+    if role is None:
+        return None
+    declared = _declared_role(rec)
+    if declared == "image" and rec.ph_type != "OBJECT":
+        return role
+    return cast(ZoneRole, declared) if declared else role
+
+
+def _copies_layout(records: List[_Rec], layout_slots: frozenset) -> bool:
+    """The slide holds its layout's slots and nothing else drawn over them."""
+    slots = frozenset(
+        rec.ph_idx
+        for rec in records
+        if rec.ph_idx is not None and _placeholder_role(rec) is not None
+    )
+    extra = any(
+        rec.kind in ("chart", "table", "picture", "group")
+        or (rec.kind == "text" and rec.ph_idx is None and rec.text)
+        for rec in records
+    )
+    return slots == layout_slots and not extra
+
+
+def _same_class(a: _Rec, b: _Rec) -> bool:
+    def near(x: int, y: int, share: float) -> bool:
+        return abs(x - y) <= max(8, share * max(x, y))
+
+    return (
+        near(a.box.w, b.box.w, _SAME_WIDTH)
+        and near(a.box.h, b.box.h, _SAME_HEIGHT)
+        and abs((a.font_pt or 0) - (b.font_pt or 0)) < 1
+        and a.bold == b.bold
+    )
+
+
+def _apart(a: _Rec, b: _Rec) -> bool:
+    return a.box.x >= b.box.x + b.box.w or b.box.x >= a.box.x + a.box.w
+
+
+def _aligned(upper: List[_Rec], lower: List[_Rec], max_gap: int) -> bool:
+    """``lower`` is a row of as many shapes under ``upper``, column by column."""
+    if len(upper) != len(lower):
+        return False
+    gap = lower[0].box.y - max(r.box.y + r.box.h for r in upper)
+    return -_SAME_BAND <= gap <= max_gap and all(
+        abs((a.box.x + a.box.w / 2) - (b.box.x + b.box.w / 2)) <= _SAME_COLUMN
+        for a, b in zip(upper, lower)
+    )
+
+
+def _rows_of_items(recs: List[_Rec]) -> List[List[List[_Rec]]]:
+    """Candidate repeat groups among loose text shapes, each a list of items
+    (an item lists its shapes top to bottom). See design.md D2.1."""
+    rows: List[List[_Rec]] = []
+    cells = [r for r in recs if r.box.w <= _ITEM_MAX_W and r.box.h <= _ITEM_MAX_H]
+    for rec in sorted(cells, key=lambda r: (r.box.y, r.box.x)):
+        for row in rows:
+            if (
+                abs(rec.box.y - row[0].box.y) <= _SAME_BAND
+                and _same_class(rec, row[0])
+                and all(_apart(rec, other) for other in row)
+            ):
+                row.append(rec)
+                break
+        else:
+            rows.append([rec])
+    rows = [sorted(row, key=lambda r: r.box.x) for row in rows if len(row) >= 2]
+    rows.sort(key=lambda row: row[0].box.y)
+
+    # Rows of other classes right under a row are the fields of its items.
+    chains: List[List[List[_Rec]]] = []
+    used: set[int] = set()
+    for i, row in enumerate(rows):
+        if i in used:
+            continue
+        chain = [row]
+        used.add(i)
+        for j in range(i + 1, len(rows)):
+            if len(chain) == _MAX_FIELDS or _same_class(rows[j][0], row[0]):
+                break  # the next item row of a grid starts here
+            if j not in used and _aligned(chain[-1], rows[j], _FIELD_GAP):
+                chain.append(rows[j])
+                used.add(j)
+        chains.append(chain)
+
+    # Chains of the same classes stacked column by column are one grid.
+    grids: List[List[List[List[_Rec]]]] = []
+    for chain in chains:
+        grid = next(
+            (
+                grid
+                for grid in grids
+                if len(grid[-1]) == len(chain)
+                and all(_same_class(a[0], b[0]) for a, b in zip(grid[-1], chain))
+                and _aligned(grid[-1][-1], chain[0], _ITEM_MAX_H)
+            ),
+            None,
+        )
+        if grid is None:
+            grids.append([chain])
+        else:
+            grid.append(chain)
+
+    found: List[List[List[_Rec]]] = []
+    for grid in grids:
+        width, fields = len(grid[0][0]), len(grid[0])
+        has_text = any(row[0].kind == "text" for row in grid[0])
+        if not has_text or (width < 3 and fields < 2):
+            continue
+        found.append(
+            [[row[i] for row in chain] for chain in grid for i in range(width)]
+        )
+    return found
+
+
+def _quote_roles(pattern: Pattern) -> None:
+    """A quote slide without a title says its quote in the top body and its
+    author in the next: the plan's title and subtitle."""
+    if pattern.kind != "quote" or any(
+        z.role in ("title", "heading") for z in pattern.zones
+    ):
+        return
+    bodies = sorted(
+        (z for z in pattern.zones if z.role in ("body", "caption")),
+        key=lambda z: z.box.y,
+    )
+    for zone, role in zip(bodies, ("title", "subtitle")):
+        zone.role = role  # type: ignore[assignment]
 
 
 # -- slide kind (heuristic; the vision pass refines it) ---------------------------
@@ -1087,8 +1295,14 @@ def _kind(
     if not zones and not pattern.groups:
         return "closing" if hinted == "closing" else "other"
     body = _has_body_content(pattern)
+    titled = any(z.role in ("title", "heading") for z in zones)
+    if hinted == "quote" and not titled and not pattern.groups and len(zones) <= 3:
+        # A quote box is big; without a title it holds nothing else.
+        return hinted
     if hinted is not None and not (hinted in _SPARSE_KINDS and body):
         return hinted
+    if slide_number == 1 and not body and titled:
+        return "cover"
 
     samples = [z.sample for z in zones] + [
         z.sample for g in pattern.groups for item in g.items for z in item

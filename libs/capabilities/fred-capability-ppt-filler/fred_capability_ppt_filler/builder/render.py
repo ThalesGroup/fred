@@ -325,6 +325,40 @@ def _covered(box: Tuple[int, int, int, int], other: Tuple[int, int, int, int]) -
     )
 
 
+def _own_geometry(shape) -> None:
+    """Give a placeholder that inherits its position its own: python-pptx
+    creates the `xfrm` on the first write and zeroes what was not written."""
+    if shape.is_placeholder and shape._element.spPr.find(qn("a:xfrm")) is None:
+        left, top, width, height = shape.left, shape.top, shape.width, shape.height
+        shape.left, shape.top, shape.width, shape.height = left, top, width, height
+
+
+def _union_box(shapes: Sequence[PlacedShape]) -> Tuple[int, int, int, int]:
+    boxes = [_box_of(p) for p in shapes]
+    return (
+        min(b[0] for b in boxes),
+        min(b[1] for b in boxes),
+        max(b[2] for b in boxes),
+        max(b[3] for b in boxes),
+    )
+
+
+def _is_container(key: str, item: Sequence[Zone]) -> bool:
+    """A grouped item is addressed by its group; a row item by its own zones."""
+    return all(zone.key != key for zone in item)
+
+
+def _item_shapes(
+    group: RepeatGroup, index: Dict[str, PlacedShape]
+) -> List[List[PlacedShape]]:
+    """The shapes making up each item of ``group``, in item order."""
+    out: List[List[PlacedShape]] = []
+    for key, item in zip(group.item_keys, group.items):
+        keys = [key] if _is_container(key, item) else [z.key for z in item]
+        out.append([p for p in (index.get(k) for k in keys) if p])
+    return out
+
+
 # Below this the shift is not worth the risk of nudging a deliberate alignment.
 _RECENTRE_MIN_EMU = 91440
 
@@ -1029,8 +1063,8 @@ class _Renderer:
                     f"{len(plan.items) - group.count} were dropped."
                 )
                 report.lost.append(f"{len(plan.items) - group.count} item(s)")
-            kept = [p for p in (index.get(k) for k in group.item_keys[:used]) if p]
-            dropped = [p for p in (index.get(k) for k in group.item_keys[used:]) if p]
+            items = _item_shapes(group, index)
+            kept, dropped = items[:used], [i for i in items[used:] if i]
             if dropped and kept:
                 self._remove_decoration(dropped, kept, index, pattern)
             elif dropped:
@@ -1040,7 +1074,7 @@ class _Renderer:
                     f"Slide {position}: '{pattern.label}' shows its content as items, "
                     f"and the plan gave none; use `items` (up to {group.count}) for it."
                 )
-            for placed in dropped:
+            for placed in (p for item in dropped for p in item):
                 _remove(placed)
             if kept and dropped:
                 self._recentre_items(kept, dropped, index, pattern)
@@ -1055,8 +1089,9 @@ class _Renderer:
             # Widths and removals changed the slide: re-read absolute geometry.
             index = _shape_index(slide)
 
+        # A row of loose shapes has no container: its zones reach the slide edge.
         containers = {
-            z.key: index.get(key)
+            z.key: index.get(key) if _is_container(key, item) else None
             for g in pattern.groups
             for key, item in zip(g.item_keys, g.items)
             for z in item
@@ -1195,8 +1230,8 @@ class _Renderer:
 
     def _remove_decoration(
         self,
-        dropped: List[PlacedShape],
-        kept: List[PlacedShape],
+        dropped: List[List[PlacedShape]],
+        kept: List[List[PlacedShape]],
         index: Dict[str, PlacedShape],
         pattern: Pattern,
     ) -> None:
@@ -1208,8 +1243,9 @@ class _Renderer:
         that also serves a kept item stays, and so does a full-slide background:
         it reaches beyond the dropped area and touches what was kept.
         """
-        dropped_boxes = [_box_of(p) for p in dropped]
-        kept_boxes = [_box_of(p) for p in kept]
+        dropped_boxes = [_union_box(item) for item in dropped]
+        kept_boxes = [_union_box(item) for item in kept if item]
+        removed = [p for item in dropped for p in item]
         area = (
             min(b[0] for b in dropped_boxes),
             min(b[1] for b in dropped_boxes),
@@ -1217,7 +1253,7 @@ class _Renderer:
             max(b[3] for b in dropped_boxes),
         )
         for other in self._loose_decoration(index, pattern):
-            if other in dropped:
+            if other in removed:
                 continue
             box = _box_of(other)
             on_dropped = any(_covered(box, b) >= 0.5 for b in dropped_boxes)
@@ -1229,8 +1265,8 @@ class _Renderer:
 
     def _recentre_items(
         self,
-        kept: List[PlacedShape],
-        dropped: List[PlacedShape],
+        kept: List[List[PlacedShape]],
+        dropped: List[List[PlacedShape]],
         index: Dict[str, PlacedShape],
         pattern: Pattern,
     ) -> None:
@@ -1240,8 +1276,8 @@ class _Renderer:
         left edge with a third of the slide empty beside them. A translation
         only: the corporate spacing and sizing are untouched.
         """
-        used = [_box_of(p) for p in kept]
-        whole = used + [_box_of(p) for p in dropped]
+        used = [_union_box(item) for item in kept if item]
+        whole = used + [_union_box(item) for item in dropped]
         shift_x = ((min(b[0] for b in whole) + max(b[2] for b in whole)) // 2) - (
             (min(b[0] for b in used) + max(b[2] for b in used)) // 2
         )
@@ -1252,7 +1288,7 @@ class _Renderer:
             return
         # The icons and frames drawn over a kept item belong to it and move with
         # it; anything else on the slide stays where the designer put it.
-        movers = list(kept)
+        movers = [p for item in kept for p in item]
         for other in self._loose_decoration(index, pattern):
             box = _box_of(other)
             if any(_covered(box, b) >= 0.5 for b in used):
@@ -1260,6 +1296,7 @@ class _Renderer:
         for placed in movers:
             shape = cast(Any, placed.shape)
             try:
+                _own_geometry(shape)
                 shape.left = Emu(shape.left + shift_x)
                 shape.top = Emu(shape.top + shift_y)
             except (TypeError, ValueError):
@@ -1283,6 +1320,7 @@ class _Renderer:
                         # own units: scale the target through that ratio.
                         target = widest / 1000 * self.width
                         shape = cast(Any, placed.shape)
+                        _own_geometry(shape)
                         shape.width = Emu(round(target * shape.width / placed.width))
 
     def _no_wrap_scale(
@@ -1347,6 +1385,7 @@ class _Renderer:
         # designer drew wider than that cap used to be cut back — the opposite
         # of what a text too wide for its box needs.
         if target > placed.width and shape.width:
+            _own_geometry(shape)
             shape.width = Emu(round(target * shape.width / placed.width))
         fitted = needed * _NO_WRAP_MARGIN
         if zone.role == "number":

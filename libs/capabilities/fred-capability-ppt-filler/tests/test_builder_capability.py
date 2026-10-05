@@ -222,7 +222,7 @@ async def test_an_editor_sees_status_thumbnails_and_inventory(analysis_db):
         body = (await client.get(_BASE)).json()
         assert body["status"] == "succeeded" and body["current"] is True
         assert body["template_sha256"] == SHA and body["labelling_key"] == "rules"
-        assert body["has_thumbnails"] is True and body["summary"]["layouts"] == 11
+        assert body["has_thumbnails"] is True and body["summary"]["layouts"] == 10
         assert any(p["kind"] == "agenda" for p in body["inventory"]["patterns"])
         pdf = await client.get(f"{_BASE}/patterns.pdf")
         assert pdf.status_code == 200 and pdf.content == b"%PDF-fake"

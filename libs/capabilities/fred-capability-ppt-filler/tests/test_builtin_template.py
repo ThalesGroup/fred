@@ -40,3 +40,18 @@ def test_builtin_template_loads_both_halves():
     content, inventory = builtin.builtin_template()
     assert content == builtin.TEMPLATE_PATH.read_bytes()
     assert any(p.included and p.reusable for p in inventory.patterns)
+
+
+def test_builtin_deck_reads_its_example_slides():
+    """Each example slide stands for its layout, with its own signals."""
+    _, inventory = builtin.builtin_template()
+    by_name = {p.name: p for p in inventory.patterns if p.included}
+    cover = by_name["Fred Title"]
+    assert (cover.source, cover.source_index, cover.kind) == ("slide", 1, "cover")
+    figures, process = by_name["Fred Key Figures"], by_name["Fred Process"]
+    assert figures.kind == "figures" and figures.groups[0].count == 3
+    assert process.kind == "process" and process.groups[0].count == 4
+    assert by_name["Fred Quote"].kind == "quote"
+    assert by_name["Fred Content with Image"].kind == "image_text"
+    assert by_name["Fred Two Content"].kind == "two_columns"
+    assert not by_name["Fred Comparison"].groups

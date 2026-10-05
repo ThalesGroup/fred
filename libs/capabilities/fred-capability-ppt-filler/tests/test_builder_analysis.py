@@ -24,10 +24,14 @@ from typing import Any, cast
 import pytest
 from builder_decks import (
     FOOTER,
+    L_BLANK,
+    L_CONTENT,
     L_TITLE,
     L_TITLE_ONLY,
     add_agenda_slide,
     add_divider_slide,
+    add_loose_figures_slide,
+    add_three_column_bodies_slide,
     build_layouts_only_template,
     build_showcase_template,
     build_slides,
@@ -186,9 +190,132 @@ def test_title_only_over_graphics_is_decoration(showcase):
     assert divider.kind == "other" and not divider.reusable
 
 
-def test_pure_layout_instance_is_folded_into_its_layout(showcase):
-    labels = [p.label for p in showcase.patterns if p.source == "slide"]
-    assert not any(label.startswith("Title and Content (") for label in labels)
+def test_a_slide_copying_its_layout_stands_for_it(showcase):
+    named = [p for p in showcase.patterns if p.name == "Title and Content"]
+    assert all(p.source == "slide" for p in named)
+    copy = _slide(showcase, "Title and Content (11)")
+    assert copy.kind == "bullets"
+    assert any("Cliquez ici" in z.sample for z in copy.zones)
+
+
+def test_a_second_copy_of_one_layout_is_dropped():
+    def copy(presentation, title: str):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[L_CONTENT])
+        cast(Any, slide.shapes.title).text = title
+        cast(Any, slide.placeholders[1]).text_frame.text = "Premier point"
+
+    inventory = analyze_template(
+        build_slides([lambda p: copy(p, "Un"), lambda p: copy(p, "Deux")])
+    ).inventory
+    assert inventory is not None
+    assert [p.label for p in inventory.patterns if p.name == "Title and Content"] == [
+        "Un"
+    ]
+
+
+def test_the_first_slide_without_body_content_is_the_cover():
+    def opening(presentation):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
+        cast(Any, slide.shapes.title).text = "Revue annuelle du programme"
+        for y, text in (
+            (2.6, "Comité de direction du groupe"),
+            (6.4, "Octobre 2026 édition interne"),
+        ):
+            box = slide.shapes.add_textbox(
+                Inches(0.5), Inches(y), Inches(6), Inches(0.5)
+            )
+            box.text_frame.text = text
+
+    inventory = analyze_template(build_slides([opening, opening])).inventory
+    assert inventory is not None
+    kinds = [p.kind for p in inventory.patterns if p.source == "slide"]
+    assert kinds[0] == "cover" and kinds[1] != "cover"
+
+
+def test_a_title_less_quote_takes_its_quote_as_title():
+    def quote(presentation):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[L_BLANK])
+        for y, h, text in (
+            (1.5, 3.5, "Une citation inspirante"),
+            (5.3, 0.6, "Une autrice"),
+        ):
+            box = slide.shapes.add_textbox(Inches(1), Inches(y), Inches(8), Inches(h))
+            box.text_frame.text = text
+        slide.notes_slide.notes_text_frame.text = "kind: quote"
+
+    inventory = analyze_template(build_slides([quote])).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
+    assert pattern.kind == "quote"
+    assert sorted(z.role for z in pattern.zones) == ["subtitle", "title"]
+
+
+def test_a_content_placeholder_named_image_is_an_image_slot():
+    def visual(presentation):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[L_CONTENT])
+        cast(Any, slide.shapes.title).text = "Un visuel"
+        slide.placeholders[1].name = "image"
+
+    inventory = analyze_template(build_slides([visual])).inventory
+    assert inventory is not None
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
+    assert [z.role for z in pattern.zones] == ["title", "image"]
+
+
+# --- rows of loose same-size shapes -----------------------------------------------
+
+
+def test_a_row_of_loose_figures_with_labels_is_a_repeat_group():
+    inventory = analyze_template(build_slides([add_loose_figures_slide])).inventory
+    assert inventory is not None
+    pattern = _slide(inventory, "Loose figures")
+    assert [z.role for z in pattern.zones] == ["title"]
+    group = pattern.groups[0]
+    assert group.count == 3 and group.item_zones == ["number", "label"]
+    assert pattern.kind == "figures"
+
+
+def test_two_loose_items_need_a_second_row():
+    paired = analyze_template(
+        build_slides([lambda p: add_loose_figures_slide(p, count=2)])
+    ).inventory
+    single = analyze_template(
+        build_slides([lambda p: add_loose_figures_slide(p, count=2, labels=False)])
+    ).inventory
+    assert paired is not None and single is not None
+    assert _slide(paired, "Loose figures").groups[0].count == 2
+    assert not _slide(single, "Loose figures").groups
+
+
+def test_aligned_rows_of_cards_are_one_grid():
+    def grid(presentation):
+        slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
+        cast(Any, slide.shapes.title).text = "Grid"
+        for row in range(2):
+            for col in range(3):
+                x, y = 0.5 + col * 3.1, 1.8 + row * 2.6
+                for dy, h, text in ((0, 0.4, "Titre"), (0.5, 1.2, "Un texte de carte")):
+                    box = slide.shapes.add_textbox(
+                        Inches(x), Inches(y + dy), Inches(2.6), Inches(h)
+                    )
+                    box.text_frame.text = text
+
+    inventory = analyze_template(build_slides([grid])).inventory
+    assert inventory is not None
+    group = _slide(inventory, "Grid").groups[0]
+    assert group.count == 6 and len(group.item_zones) == 2
+
+
+def test_column_bodies_stay_columns(showcase):
+    inventory = analyze_template(
+        build_slides([add_three_column_bodies_slide])
+    ).inventory
+    assert inventory is not None
+    columns = _slide(inventory, "Three columns")
+    assert not columns.groups
+    assert [z.role for z in columns.zones].count("body") == 3
+    for name in ("Two Content", "Comparison"):
+        assert not next(p for p in showcase.patterns if p.name == name).groups
 
 
 def test_large_free_picture_is_a_replaceable_image(showcase):
@@ -248,7 +375,7 @@ def test_two_sibling_groups_are_columns_not_a_list(showcase):
 
 def test_summary_counts(showcase):
     summary = showcase.summary()
-    assert summary.layouts == 11
+    assert summary.layouts == 10  # Title and Content stands as its copy
     assert summary.excluded == 4  # Blank layout + icon bank + chart + table
     assert summary.fixed == 1
     assert (
@@ -333,7 +460,11 @@ def test_reference_template_free_form_slides():
         assert pattern.kind == kind, label
         assert pattern.groups[0].count == count, label
         assert pattern.groups[0].item_zones == roles, label
-    layouts = {p.name: p.kind for p in inventory.patterns if p.source == "layout"}
+    # A layout or the example slide copying it, whichever stands for the design.
+    layouts: dict = {}
+    for pattern in inventory.patterns:
+        if pattern.included:
+            layouts.setdefault(pattern.name, pattern.kind)
     assert layouts["Couverture"] == "cover"
     assert layouts["Slide chapitre"] == "section"
     assert layouts["2 colonnes de texte"] == "two_columns"
@@ -417,7 +548,9 @@ def test_real_text_slide_is_all_slots_and_never_a_cover():
     inventory = analyze_template(build_slides([_real_text_slide])).inventory
     assert inventory is not None
     pattern = _slide(inventory, "Revenue grew in every region")
-    samples = {z.sample for z in pattern.zones}
+    samples = {z.sample for z in pattern.zones} | {
+        z.sample for g in pattern.groups for item in g.items for z in item
+    }
     assert "Fiscal year 2025" in samples
     assert "Asia up 8 % with two new plants opened in the spring" in samples
     assert pattern.kind not in ("cover", "section")

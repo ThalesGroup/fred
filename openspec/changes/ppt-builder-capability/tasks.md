@@ -1,6 +1,6 @@
 Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/` unless rooted; tests under `libs/capabilities/fred-capability-ppt-filler/tests/`. Each work package (WP) names the files it owns; a WP edits only its own files.
 
-**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11. WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
+**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12. WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
 
 ## Kept from the first iteration (done, still valid)
 
@@ -86,7 +86,7 @@ Owns: `render.py`, `checks.py` (new), test `test_builder_render.py`.
 
 Blocked on the developer's deck. Owns: `assets/fred_template.pptx`, `assets/fred_template.inventory.json`, `builtin.py` (new), package `Makefile` target, package-data entry in `pyproject.toml`, `theme.py` (deletion), test `test_builtin_template.py` (new). Touches `capability.py` only to swap the import (after WP4).
 
-- [ ] 7.1 Author the deck (Q5) with example slides for every kind but `team`/`other` (deck shipped; the rules analysis finds no `cover`, `quote`, `image_text`, and the deck has no `timeline`/`cards` slide: developer fixes pending, then `make builtin-inventory`)
+- [ ] 7.1 Author the deck (Q5) with example slides for every kind but `team`/`other` (deck shipped; since WP12 the rules analysis finds `cover`, `quote`, `image_text`, `cards`; the deck still has no `timeline` slide: developer fix pending, then `make builtin-inventory`)
 - [x] 7.2 `make builtin-inventory` regenerates the JSON through the full pipeline; test fails when it lags `ANALYSIS_VERSION`
 - [x] 7.0 Interim (not blocked, done in WP4): `builtin.py` backed by `theme.py` (superseded: `builtin.py` reads the shipped asset)
 - [x] 7.3 `/builtin` routes replace `/theme`; delete `theme.py` once the real deck lands
@@ -131,3 +131,13 @@ Owns: `analysis.py`, `models.py`, `labelling.py`, `assign.py`, `plan.py`, `tools
 - [x] 11.4b Found by the eval (D6): a subtitle without its zone leads the body; sequential step numbers need no number zone
 - [x] 11.5 Tests for each; eval re-run on the WP9 matrix with first-call success; `verification.md` before/after
 - [x] 11.6 Package `make code-quality` + `make test`; frontend slice regenerated and `tsc` clean
+
+## WP12. Example slides that copy a layout; rows of same-size shapes
+
+Owns: `analysis.py`, `render.py` (item removal), their tests, `assets/fred_template.inventory.json`, package `.baseline/detect-secret-baseline.json` (the deck hash), `verification.md`.
+
+- [x] 12.1 A slide copying its layout replaces the layout pattern (later copies dropped, excluded copy keeps the layout); slide 1 → `cover` hint; `OBJECT` placeholder named as an image is an image slot; title-less quote → title + subtitle; placeholder padding/wrap/font inherited by idx
+- [x] 12.2 Rows of same-size non-grouped text shapes → repeat group (≥ 3, or ≥ 2 with an aligned second row; grid; column-body limits 35 % wide / 40 % tall)
+- [x] 12.3 Renderer removes and recentres non-grouped items shape by shape
+- [x] 12.4 Tests: synthetic decks (figures row, process pairs, two/three-column bodies untouched, layout copy replaced, cover hint), built-in asset, reference template; bump `ANALYSIS_VERSION`, `make builtin-inventory`
+- [x] 12.5 Eval re-run (builtin rules, corporate and prism rules + vision); `verification.md` updated; package `make code-quality` + `make test`

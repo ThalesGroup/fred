@@ -308,6 +308,34 @@ def add_two_group_columns_slide(presentation):
     return slide
 
 
+def add_loose_figures_slide(presentation, count: int = 3, labels: bool = True):
+    """N loose (ungrouped) figure boxes in a row, each with a label box under
+    it: the shape of a placeholder-based "key figures" layout."""
+    slide = _titled(presentation, "Loose figures")
+    for index in range(count):
+        x = 0.5 + index * 2.3
+        _textbox(slide.shapes, x, 2.0, 1.6, 1.0, f"{20 + index}%", FONT_NUMBER)
+        if labels:
+            _textbox(slide.shapes, x, 3.1, 1.6, 0.4, f"Indicateur {index}", FONT_BODY)
+    return slide
+
+
+def add_three_column_bodies_slide(presentation):
+    """Three tall body boxes side by side: columns, not a list of items."""
+    slide = _titled(presentation, "Three columns")
+    for index in range(3):
+        _textbox(
+            slide.shapes,
+            0.5 + index * 3.1,
+            1.6,
+            2.9,
+            4.8,
+            "Une colonne de texte assez longue pour un paragraphe entier",
+            FONT_BODY,
+        )
+    return slide
+
+
 def build_showcase_template() -> bytes:
     presentation = Presentation()
     add_agenda_slide(presentation)

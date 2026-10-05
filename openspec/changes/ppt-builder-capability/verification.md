@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9 and WP11 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11 and WP12 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -48,12 +48,26 @@ between runs: read single-cell differences as noise.
 | prism | vision | 16 → 20 | 3 → 11 | 1.6 → 0.6 | 100% → 100% | 76 → 18 | 0.31 → 0.45 | 0 → 0 | 0 → 0 |
 | **total** | | **92 → 96** | **9 → 45** | 1.6 → 0.8 | 100% | 84 → 36 | | 0 | 0 |
 
-**WP7, built-in Fred template** (`make eval EVAL_ARGS="--modes rules"`, one run of 10
-prompts, stored rules inventory): success 10/10 (old theme 18/20), first call 4/10
-(7/20), avg repairs 0.6 (1.2), cover once@1 n/a (the analysis finds no cover in the
-deck; 100% before), 3-in-a-row 5 (1), distinct/slides 0.53 (0.70), leftovers 0,
-truncated 1, lost 0. Vision not run: it would label only the 2 example slides that are
-not pure layout instances.
+**WP12** (example slides that copy a layout stand for it; rows of same-size shapes are
+repeat groups; one matrix run, `make eval` with the same 10 prompts):
+
+| template | mode | success | first call | avg repairs | cover once@1 | 3-in-a-row | distinct/slides | leftovers / truncated / lost |
+|---|---|---|---|---|---|---|---|---|
+| builtin | rules | 10 → 9 | 4 → 2 | 0.6 → 1.4 | n/a (no cover) → 100% | 5 → 1 | 0.53 → 0.62 | 0 / 1→0 / 0 |
+| corporate | rules | 20/20 → 10/10 | 8/20 → 4/10 | 0.8 → 0.8 | 100% | 2/20 → 2 | 0.67 → 0.66 | 0 |
+| corporate | vision | 19/20 → 10/10 | 7/20 → 4/10 | 0.7 → 0.8 | 100% | 3/20 → 0 | 0.69 → 0.63 | 0 |
+| prism | rules | 19/20 → 10/10 | 12/20 → 6/10 | 0.8 → 0.5 | n/a → 100% (slide 1 is now the cover) | 12/20 → 3 | 0.38 → 0.44 | 0 |
+| prism | vision | 20/20 → 9/10 | 11/20 → 3/10 | 0.6 → 1.2 | 100% | 18/20 → 8 | 0.45 → 0.51 | 0 |
+
+Before = WP7 (builtin, one run) and WP11 runs 6+7 (corporate, prism). No success
+regression on corporate; prism vision first call lower, 4 of its 7 first-call problems
+being the known one-heading prism cover given a subtitle. Built-in deck after WP12: a
+cover (slide 1), `figures` 3 items, `process` 4 items, `cards` 3 items (Title Only
+slide), `quote`, `image_text`; its remaining repairs are agenda items (the agenda slide
+is a plain list: "holds 4") and figure values over ≈7 chars. Corporate: the two
+"Images + 3 colonnes" designs are now `cards` [image, text]; prism slide 781 is a
+6-card grid. A render fix (recentred placeholders lost their inherited `y`) landed
+after this run; it changes geometry only, not these metrics.
 
 \* Run 1 counted the step numbers the renderer writes ("1", "2"…) as leftovers; the metric now excludes them.
 
@@ -134,6 +148,10 @@ says overflow) and 0/96 corporate zones.
 - Statistical confidence: one run per cell, 10 prompts.
 
 ## Checks
+
+- WP12: package `make code-quality` passed (the deck hash in the stored inventory is
+  now in the detect-secrets baseline); `make test` 349 passed, 3 skipped; with
+  `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 352 passed. No schema change.
 
 - WP7: package `make code-quality` passed; `make test` 338 passed, 3 skipped; the
   wheel carries `builder/assets/*`. ppt_builder slice regenerated (`/builtin`,

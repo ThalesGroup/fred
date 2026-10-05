@@ -3,15 +3,15 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 7,
+  "analysis_version": 8,
   "patterns": [
    {
-    "id": "layout:0",
-    "source": "layout",
-    "source_index": 0,
+    "id": "slide:256",
+    "source": "slide",
+    "source_index": 1,
     "name": "Fred Title",
-    "label": "Fred Title",
-    "kind": "bullets",
+    "label": "Fred default presentation template",
+    "kind": "cover",
     "zones": [
      {
       "key": "ph:103",
@@ -22,26 +22,26 @@
        "w": 615,
        "h": 267
       },
-      "sample": "Presentation title",
+      "sample": "Fred default presentation template",
       "font_pt": 44.0,
-      "chars_per_line": 23,
+      "chars_per_line": 26,
       "max_lines": 2,
       "grows": false,
       "purpose": null
      },
      {
       "key": "ph:104",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 560,
        "w": 615,
        "h": 133
       },
-      "sample": "Subtitle",
+      "sample": "The fallback design the slide-generator agent uses when no custom template is pr",
       "font_pt": 20.0,
-      "chars_per_line": 60,
-      "max_lines": 1,
+      "chars_per_line": 59,
+      "max_lines": 2,
       "grows": false,
       "purpose": null
      },
@@ -54,7 +54,7 @@
        "w": 615,
        "h": 67
       },
-      "sample": "Author · Date",
+      "sample": "Fred open source project · Apache-2.0",
       "font_pt": 14.0,
       "chars_per_line": 86,
       "max_lines": 1,
@@ -71,11 +71,11 @@
     "warnings": []
    },
    {
-    "id": "layout:1",
-    "source": "layout",
-    "source_index": 1,
+    "id": "slide:257",
+    "source": "slide",
+    "source_index": 2,
     "name": "Fred Agenda",
-    "label": "Fred Agenda",
+    "label": "Agenda",
     "kind": "agenda",
     "zones": [
      {
@@ -87,9 +87,9 @@
        "w": 262,
        "h": 200
       },
-      "sample": "Slide title",
+      "sample": "Agenda",
       "font_pt": 36.0,
-      "chars_per_line": 10,
+      "chars_per_line": 11,
       "max_lines": 2,
       "grows": false,
       "purpose": null
@@ -103,7 +103,7 @@
        "w": 555,
        "h": 760
       },
-      "sample": "Agenda item",
+      "sample": "Why a default template\nThe 15 layouts at a glance\nHow the agent fills them\nUsing",
       "font_pt": 20.0,
       "chars_per_line": 51,
       "max_lines": 9,
@@ -120,11 +120,11 @@
     "warnings": []
    },
    {
-    "id": "layout:2",
-    "source": "layout",
-    "source_index": 2,
+    "id": "slide:258",
+    "source": "slide",
+    "source_index": 3,
     "name": "Fred Section",
-    "label": "Fred Section",
+    "label": "Layouts at a glance",
     "kind": "section",
     "zones": [
      {
@@ -138,7 +138,7 @@
       },
       "sample": "01",
       "font_pt": 54.0,
-      "chars_per_line": 6,
+      "chars_per_line": 7,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -152,26 +152,26 @@
        "w": 615,
        "h": 213
       },
-      "sample": "Section title",
+      "sample": "Layouts at a glance",
       "font_pt": 40.0,
-      "chars_per_line": 26,
+      "chars_per_line": 28,
       "max_lines": 2,
       "grows": false,
       "purpose": null
      },
      {
       "key": "ph:105",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 45,
        "y": 600,
        "w": 615,
        "h": 133
       },
-      "sample": "Section introduction",
+      "sample": "Every slide frame is a named layout with named placeholders",
       "font_pt": 18.0,
-      "chars_per_line": 67,
-      "max_lines": 1,
+      "chars_per_line": 66,
+      "max_lines": 2,
       "grows": false,
       "purpose": null
      }
@@ -179,17 +179,17 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
+    "preferred": true,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
    },
    {
-    "id": "layout:3",
-    "source": "layout",
-    "source_index": 3,
+    "id": "slide:259",
+    "source": "slide",
+    "source_index": 4,
     "name": "Fred Title and Content",
-    "label": "Fred Title and Content",
+    "label": "Why a default template",
     "kind": "bullets",
     "zones": [
      {
@@ -201,9 +201,9 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "Why a default template",
       "font_pt": 32.0,
-      "chars_per_line": 52,
+      "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -217,7 +217,7 @@
        "w": 910,
        "h": 660
       },
-      "sample": "Bullet point",
+      "sample": "Users without a corporate template still get a consistent, readable deck\nNamed l",
       "font_pt": 18.0,
       "chars_per_line": 98,
       "max_lines": 10,
@@ -228,17 +228,17 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
+    "preferred": true,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
    },
    {
-    "id": "layout:4",
-    "source": "layout",
-    "source_index": 4,
+    "id": "slide:260",
+    "source": "slide",
+    "source_index": 5,
     "name": "Fred Two Content",
-    "label": "Fred Two Content",
+    "label": "What the agent controls, and what it does not",
     "kind": "two_columns",
     "zones": [
      {
@@ -250,9 +250,9 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "What the agent controls, and what it does not",
       "font_pt": 32.0,
-      "chars_per_line": 52,
+      "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -266,7 +266,7 @@
        "w": 440,
        "h": 660
       },
-      "sample": "Left column",
+      "sample": "Which layout each slide uses\nText in every placeholder\nCharts, tables and images",
       "font_pt": 16.0,
       "chars_per_line": 50,
       "max_lines": 11,
@@ -282,7 +282,7 @@
        "w": 440,
        "h": 660
       },
-      "sample": "Right column",
+      "sample": "Colours, fonts and sizes\nPositions and margins\nSlide numbers and backgrounds",
       "font_pt": 16.0,
       "chars_per_line": 50,
       "max_lines": 11,
@@ -299,11 +299,11 @@
     "warnings": []
    },
    {
-    "id": "layout:5",
-    "source": "layout",
-    "source_index": 5,
+    "id": "slide:261",
+    "source": "slide",
+    "source_index": 6,
     "name": "Fred Comparison",
-    "label": "Fred Comparison",
+    "label": "Default template or custom template",
     "kind": "comparison",
     "zones": [
      {
@@ -315,9 +315,9 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "Default template or custom template",
       "font_pt": 32.0,
-      "chars_per_line": 52,
+      "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -331,9 +331,9 @@
        "w": 387,
        "h": 80
       },
-      "sample": "Option A",
+      "sample": "Default",
       "font_pt": 22.0,
-      "chars_per_line": 31,
+      "chars_per_line": 34,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -347,7 +347,7 @@
        "w": 387,
        "h": 480
       },
-      "sample": "Detail",
+      "sample": "Used when the user uploads nothing\nKnown layouts, predictable output\nShips with ",
       "font_pt": 16.0,
       "chars_per_line": 44,
       "max_lines": 8,
@@ -363,9 +363,9 @@
        "w": 387,
        "h": 80
       },
-      "sample": "Option B",
+      "sample": "Custom",
       "font_pt": 22.0,
-      "chars_per_line": 31,
+      "chars_per_line": 34,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -379,7 +379,7 @@
        "w": 387,
        "h": 480
       },
-      "sample": "Detail",
+      "sample": "Uploaded by the user or the team\nLayouts discovered at upload time\nBrand stays u",
       "font_pt": 16.0,
       "chars_per_line": 44,
       "max_lines": 8,
@@ -396,12 +396,12 @@
     "warnings": []
    },
    {
-    "id": "layout:6",
-    "source": "layout",
-    "source_index": 6,
+    "id": "slide:262",
+    "source": "slide",
+    "source_index": 7,
     "name": "Fred Content with Image",
-    "label": "Fred Content with Image",
-    "kind": "bullets",
+    "label": "Pairing text with a visual",
+    "kind": "image_text",
     "zones": [
      {
       "key": "ph:100",
@@ -412,9 +412,9 @@
        "w": 465,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "Pairing text with a visual",
       "font_pt": 32.0,
-      "chars_per_line": 25,
+      "chars_per_line": 28,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -428,7 +428,7 @@
        "w": 465,
        "h": 660
       },
-      "sample": "Bullet point",
+      "sample": "The image placeholder fills the right panel\nScreenshots, diagrams or photos all ",
       "font_pt": 16.0,
       "chars_per_line": 54,
       "max_lines": 11,
@@ -437,17 +437,17 @@
      },
      {
       "key": "ph:103",
-      "role": "body",
+      "role": "image",
       "box": {
        "x": 544,
        "y": 60,
        "w": 411,
        "h": 820
       },
-      "sample": "Image",
+      "sample": "",
       "font_pt": 32.0,
-      "chars_per_line": 22,
-      "max_lines": 9,
+      "chars_per_line": null,
+      "max_lines": null,
       "grows": false,
       "purpose": null
      }
@@ -461,11 +461,11 @@
     "warnings": []
    },
    {
-    "id": "layout:7",
-    "source": "layout",
-    "source_index": 7,
+    "id": "slide:263",
+    "source": "slide",
+    "source_index": 8,
     "name": "Fred Key Figures",
-    "label": "Fred Key Figures",
+    "label": "Three numbers worth remembering",
     "kind": "figures",
     "zones": [
      {
@@ -477,119 +477,23 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "Three numbers worth remembering",
       "font_pt": 32.0,
-      "chars_per_line": 52,
+      "chars_per_line": 56,
       "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:102",
-      "role": "body",
-      "box": {
-       "x": 71,
-       "y": 313,
-       "w": 231,
-       "h": 173
-      },
-      "sample": "00%",
-      "font_pt": 54.0,
-      "chars_per_line": 6,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:103",
-      "role": "body",
-      "box": {
-       "x": 71,
-       "y": 513,
-       "w": 231,
-       "h": 200
-      },
-      "sample": "What this figure measures",
-      "font_pt": 16.0,
-      "chars_per_line": 24,
-      "max_lines": 3,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:105",
-      "role": "body",
-      "box": {
-       "x": 385,
-       "y": 313,
-       "w": 231,
-       "h": 173
-      },
-      "sample": "00%",
-      "font_pt": 54.0,
-      "chars_per_line": 6,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:106",
-      "role": "body",
-      "box": {
-       "x": 385,
-       "y": 513,
-       "w": 231,
-       "h": 200
-      },
-      "sample": "What this figure measures",
-      "font_pt": 16.0,
-      "chars_per_line": 24,
-      "max_lines": 3,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:108",
-      "role": "body",
-      "box": {
-       "x": 698,
-       "y": 313,
-       "w": 231,
-       "h": 173
-      },
-      "sample": "00%",
-      "font_pt": 54.0,
-      "chars_per_line": 6,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:109",
-      "role": "body",
-      "box": {
-       "x": 698,
-       "y": 513,
-       "w": 231,
-       "h": 200
-      },
-      "sample": "What this figure measures",
-      "font_pt": 16.0,
-      "chars_per_line": 24,
-      "max_lines": 3,
       "grows": false,
       "purpose": null
      },
      {
       "key": "ph:110",
-      "role": "body",
+      "role": "caption",
       "box": {
        "x": 45,
        "y": 787,
        "w": 910,
        "h": 80
       },
-      "sample": "Source",
+      "sample": "Figures describe this template.",
       "font_pt": 12.0,
       "chars_per_line": 151,
       "max_lines": 1,
@@ -597,7 +501,125 @@
       "purpose": null
      }
     ],
-    "groups": [],
+    "groups": [
+     {
+      "key": "ph:102",
+      "count": 3,
+      "item_zones": [
+       "number",
+       "heading"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:102",
+         "role": "number",
+         "box": {
+          "x": 71,
+          "y": 313,
+          "w": 231,
+          "h": 173
+         },
+         "sample": "15",
+         "font_pt": 54.0,
+         "chars_per_line": 7,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:103",
+         "role": "heading",
+         "box": {
+          "x": 71,
+          "y": 513,
+          "w": 231,
+          "h": 200
+         },
+         "sample": "layouts cover most business presentations",
+         "font_pt": 16.0,
+         "chars_per_line": 24,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "ph:105",
+         "role": "number",
+         "box": {
+          "x": 385,
+          "y": 313,
+          "w": 231,
+          "h": 173
+         },
+         "sample": "2",
+         "font_pt": 54.0,
+         "chars_per_line": 7,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:106",
+         "role": "heading",
+         "box": {
+          "x": 385,
+          "y": 513,
+          "w": 231,
+          "h": 200
+         },
+         "sample": "font roles, both set to Arial for faithful rendering",
+         "font_pt": 16.0,
+         "chars_per_line": 24,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "ph:108",
+         "role": "number",
+         "box": {
+          "x": 698,
+          "y": 313,
+          "w": 231,
+          "h": 173
+         },
+         "sample": "0",
+         "font_pt": 54.0,
+         "chars_per_line": 7,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:109",
+         "role": "heading",
+         "box": {
+          "x": 698,
+          "y": 513,
+          "w": 231,
+          "h": 200
+         },
+         "sample": "proprietary assets: no logo, image or embedded font",
+         "font_pt": 16.0,
+         "chars_per_line": 24,
+         "max_lines": 4,
+         "grows": false,
+         "purpose": null
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:102",
+       "ph:105",
+       "ph:108"
+      ]
+     }
+    ],
     "included": true,
     "exclusion_reason": null,
     "preferred": false,
@@ -606,11 +628,11 @@
     "warnings": []
    },
    {
-    "id": "layout:8",
-    "source": "layout",
-    "source_index": 8,
+    "id": "slide:264",
+    "source": "slide",
+    "source_index": 9,
     "name": "Fred Process",
-    "label": "Fred Process",
+    "label": "How the agent builds a deck",
     "kind": "process",
     "zones": [
      {
@@ -622,143 +644,168 @@
        "w": 910,
        "h": 127
       },
-      "sample": "Slide title",
+      "sample": "How the agent builds a deck",
       "font_pt": 32.0,
-      "chars_per_line": 52,
+      "chars_per_line": 56,
       "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:104",
-      "role": "body",
-      "box": {
-       "x": 68,
-       "y": 373,
-       "w": 166,
-       "h": 120
-      },
-      "sample": "Step",
-      "font_pt": 18.0,
-      "chars_per_line": 15,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:105",
-      "role": "body",
-      "box": {
-       "x": 68,
-       "y": 507,
-       "w": 166,
-       "h": 333
-      },
-      "sample": "Describe this step",
-      "font_pt": 14.0,
-      "chars_per_line": 19,
-      "max_lines": 6,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:109",
-      "role": "body",
-      "box": {
-       "x": 301,
-       "y": 373,
-       "w": 166,
-       "h": 120
-      },
-      "sample": "Step",
-      "font_pt": 18.0,
-      "chars_per_line": 15,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:110",
-      "role": "body",
-      "box": {
-       "x": 301,
-       "y": 507,
-       "w": 166,
-       "h": 333
-      },
-      "sample": "Describe this step",
-      "font_pt": 14.0,
-      "chars_per_line": 19,
-      "max_lines": 6,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:114",
-      "role": "body",
-      "box": {
-       "x": 534,
-       "y": 373,
-       "w": 166,
-       "h": 120
-      },
-      "sample": "Step",
-      "font_pt": 18.0,
-      "chars_per_line": 15,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:115",
-      "role": "body",
-      "box": {
-       "x": 534,
-       "y": 507,
-       "w": 166,
-       "h": 333
-      },
-      "sample": "Describe this step",
-      "font_pt": 14.0,
-      "chars_per_line": 19,
-      "max_lines": 6,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:119",
-      "role": "body",
-      "box": {
-       "x": 767,
-       "y": 373,
-       "w": 166,
-       "h": 120
-      },
-      "sample": "Step",
-      "font_pt": 18.0,
-      "chars_per_line": 15,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "ph:120",
-      "role": "body",
-      "box": {
-       "x": 767,
-       "y": 507,
-       "w": 166,
-       "h": 333
-      },
-      "sample": "Describe this step",
-      "font_pt": 14.0,
-      "chars_per_line": 19,
-      "max_lines": 6,
       "grows": false,
       "purpose": null
      }
     ],
-    "groups": [],
+    "groups": [
+     {
+      "key": "ph:104",
+      "count": 4,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "ph:104",
+         "role": "heading",
+         "box": {
+          "x": 68,
+          "y": 373,
+          "w": 166,
+          "h": 120
+         },
+         "sample": "Pick the template",
+         "font_pt": 18.0,
+         "chars_per_line": 14,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:105",
+         "role": "body",
+         "box": {
+          "x": 68,
+          "y": 507,
+          "w": 166,
+          "h": 333
+         },
+         "sample": "Custom template if the user provided one, otherwise this default",
+         "font_pt": 14.0,
+         "chars_per_line": 19,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "ph:109",
+         "role": "heading",
+         "box": {
+          "x": 301,
+          "y": 373,
+          "w": 166,
+          "h": 120
+         },
+         "sample": "Plan the story",
+         "font_pt": 18.0,
+         "chars_per_line": 14,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:110",
+         "role": "body",
+         "box": {
+          "x": 301,
+          "y": 507,
+          "w": 166,
+          "h": 333
+         },
+         "sample": "One message per slide, mapped to a layout name",
+         "font_pt": 14.0,
+         "chars_per_line": 19,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "ph:114",
+         "role": "heading",
+         "box": {
+          "x": 534,
+          "y": 373,
+          "w": 166,
+          "h": 120
+         },
+         "sample": "Fill placeholders",
+         "font_pt": 18.0,
+         "chars_per_line": 14,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:115",
+         "role": "body",
+         "box": {
+          "x": 534,
+          "y": 507,
+          "w": 166,
+          "h": 333
+         },
+         "sample": "Text, charts and images go into named placeholders",
+         "font_pt": 14.0,
+         "chars_per_line": 19,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "ph:119",
+         "role": "heading",
+         "box": {
+          "x": 767,
+          "y": 373,
+          "w": 166,
+          "h": 120
+         },
+         "sample": "Check and deliver",
+         "font_pt": 18.0,
+         "chars_per_line": 14,
+         "max_lines": 2,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "ph:120",
+         "role": "body",
+         "box": {
+          "x": 767,
+          "y": 507,
+          "w": 166,
+          "h": 333
+         },
+         "sample": "Validate the file and render a preview",
+         "font_pt": 14.0,
+         "chars_per_line": 19,
+         "max_lines": 6,
+         "grows": false,
+         "purpose": null
+        }
+       ]
+      ],
+      "item_keys": [
+       "ph:104",
+       "ph:109",
+       "ph:114",
+       "ph:119"
+      ]
+     }
+    ],
     "included": true,
     "exclusion_reason": null,
     "preferred": false,
@@ -865,23 +912,23 @@
     "warnings": []
    },
    {
-    "id": "layout:11",
-    "source": "layout",
-    "source_index": 11,
+    "id": "slide:267",
+    "source": "slide",
+    "source_index": 12,
     "name": "Fred Quote",
-    "label": "Fred Quote",
-    "kind": "bullets",
+    "label": "Fred Quote (12)",
+    "kind": "quote",
     "zones": [
      {
       "key": "ph:101",
-      "role": "body",
+      "role": "title",
       "box": {
        "x": 120,
        "y": 267,
        "w": 765,
        "h": 387
       },
-      "sample": "Quote",
+      "sample": "A template is a promise: whatever the user asks for, the deck will look like it ",
       "font_pt": 30.0,
       "chars_per_line": 48,
       "max_lines": 4,
@@ -890,16 +937,16 @@
      },
      {
       "key": "ph:102",
-      "role": "body",
+      "role": "subtitle",
       "box": {
        "x": 120,
        "y": 680,
        "w": 765,
        "h": 107
       },
-      "sample": "Name, role",
+      "sample": "Design principle of the default template",
       "font_pt": 16.0,
-      "chars_per_line": 87,
+      "chars_per_line": 95,
       "max_lines": 1,
       "grows": false,
       "purpose": null
@@ -947,11 +994,11 @@
     "warnings": []
    },
    {
-    "id": "layout:13",
-    "source": "layout",
-    "source_index": 13,
+    "id": "slide:269",
+    "source": "slide",
+    "source_index": 14,
     "name": "Fred Closing",
-    "label": "Fred Closing",
+    "label": "Bring your own template, or use this one",
     "kind": "closing",
     "zones": [
      {
@@ -963,9 +1010,9 @@
        "w": 615,
        "h": 213
       },
-      "sample": "Thank you",
+      "sample": "Bring your own template, or use this one",
       "font_pt": 44.0,
-      "chars_per_line": 23,
+      "chars_per_line": 26,
       "max_lines": 2,
       "grows": false,
       "purpose": null
@@ -979,7 +1026,7 @@
        "w": 615,
        "h": 293
       },
-      "sample": "Contact or next steps",
+      "sample": "github.com/ThalesGroup/fred",
       "font_pt": 18.0,
       "chars_per_line": 65,
       "max_lines": 4,
@@ -1099,7 +1146,7 @@
     "source_index": 13,
     "name": "Fred Title Only",
     "label": "Title Only leaves the canvas free",
-    "kind": "comparison",
+    "kind": "cards",
     "zones": [
      {
       "key": "ph:100",
@@ -1116,108 +1163,130 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null
-     },
-     {
-      "key": "sp:4",
-      "role": "heading",
-      "box": {
-       "x": 71,
-       "y": 313,
-       "w": 231,
-       "h": 80
-      },
-      "sample": "Diagrams",
-      "font_pt": 22.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "sp:7",
-      "role": "heading",
-      "box": {
-       "x": 385,
-       "y": 313,
-       "w": 231,
-       "h": 80
-      },
-      "sample": "Screenshots",
-      "font_pt": 22.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "sp:10",
-      "role": "heading",
-      "box": {
-       "x": 698,
-       "y": 313,
-       "w": 231,
-       "h": 80
-      },
-      "sample": "Custom visuals",
-      "font_pt": 22.0,
-      "chars_per_line": 19,
-      "max_lines": 1,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "sp:5",
-      "role": "body",
-      "box": {
-       "x": 71,
-       "y": 413,
-       "w": 231,
-       "h": 240
-      },
-      "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
-      "font_pt": 16.0,
-      "chars_per_line": 26,
-      "max_lines": 5,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "sp:8",
-      "role": "body",
-      "box": {
-       "x": 385,
-       "y": 413,
-       "w": 231,
-       "h": 240
-      },
-      "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
-      "font_pt": 16.0,
-      "chars_per_line": 26,
-      "max_lines": 5,
-      "grows": false,
-      "purpose": null
-     },
-     {
-      "key": "sp:11",
-      "role": "body",
-      "box": {
-       "x": 698,
-       "y": 413,
-       "w": 231,
-       "h": 240
-      },
-      "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
-      "font_pt": 16.0,
-      "chars_per_line": 26,
-      "max_lines": 5,
-      "grows": false,
-      "purpose": null
      }
     ],
-    "groups": [],
+    "groups": [
+     {
+      "key": "sp:4",
+      "count": 3,
+      "item_zones": [
+       "heading",
+       "body"
+      ],
+      "items": [
+       [
+        {
+         "key": "sp:4",
+         "role": "heading",
+         "box": {
+          "x": 71,
+          "y": 313,
+          "w": 231,
+          "h": 80
+         },
+         "sample": "Diagrams",
+         "font_pt": 22.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "sp:5",
+         "role": "body",
+         "box": {
+          "x": 71,
+          "y": 413,
+          "w": 231,
+          "h": 240
+         },
+         "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
+         "font_pt": 16.0,
+         "chars_per_line": 26,
+         "max_lines": 5,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "sp:7",
+         "role": "heading",
+         "box": {
+          "x": 385,
+          "y": 313,
+          "w": 231,
+          "h": 80
+         },
+         "sample": "Screenshots",
+         "font_pt": 22.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "sp:8",
+         "role": "body",
+         "box": {
+          "x": 385,
+          "y": 413,
+          "w": 231,
+          "h": 240
+         },
+         "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
+         "font_pt": 16.0,
+         "chars_per_line": 26,
+         "max_lines": 5,
+         "grows": false,
+         "purpose": null
+        }
+       ],
+       [
+        {
+         "key": "sp:10",
+         "role": "heading",
+         "box": {
+          "x": 698,
+          "y": 313,
+          "w": 231,
+          "h": 80
+         },
+         "sample": "Custom visuals",
+         "font_pt": 22.0,
+         "chars_per_line": 19,
+         "max_lines": 1,
+         "grows": false,
+         "purpose": null
+        },
+        {
+         "key": "sp:11",
+         "role": "body",
+         "box": {
+          "x": 698,
+          "y": 413,
+          "w": 231,
+          "h": 240
+         },
+         "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
+         "font_pt": 16.0,
+         "chars_per_line": 26,
+         "max_lines": 5,
+         "grows": false,
+         "purpose": null
+        }
+       ]
+      ],
+      "item_keys": [
+       "sp:4",
+       "sp:7",
+       "sp:10"
+      ]
+     }
+    ],
     "included": true,
     "exclusion_reason": null,
-    "preferred": true,
+    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []

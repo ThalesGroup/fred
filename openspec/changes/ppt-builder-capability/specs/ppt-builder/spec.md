@@ -23,6 +23,30 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 - **WHEN** an example slide holds three or more sibling groups of identical structure
 - **THEN** the inventory exposes one repeated group with its item count and per-item slots, so a plan may fill fewer items
 
+#### Scenario: Rows of same-size shapes become a list
+
+- **GIVEN** a slide or layout with three or more non-grouped text shapes of near-equal size and the same text style side by side, or two such shapes with an aligned second row under them
+- **WHEN** it is analysed
+- **THEN** they form one repeated group (the rows giving each item its fields), the tool description says `items max N`, and unused items are removed and the rest recentred
+
+#### Scenario: Column bodies stay columns
+
+- **GIVEN** a two- or three-column layout whose bodies are wider than 35 % or taller than 40 % of the slide
+- **WHEN** it is analysed
+- **THEN** its bodies stay separate slots and no repeated group is made
+
+#### Scenario: Example slide that copies its layout
+
+- **GIVEN** an example slide holding only its layout's placeholders, filled with sample text
+- **WHEN** it is analysed
+- **THEN** the inventory holds one pattern for that design, the slide (copied and filled), with its sample text, notes, shape names and position taken into account, and no separate pattern for the layout
+
+#### Scenario: First slide is the cover
+
+- **GIVEN** a first example slide with a title slot and no body content
+- **WHEN** no template hint states another kind
+- **THEN** its kind is `cover`
+
 #### Scenario: Resource slides are excluded by default
 
 - **WHEN** an example slide is an icon bank, or a chart or table is its main content
