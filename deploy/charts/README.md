@@ -20,8 +20,16 @@ chart's `appVersion`; set `applications.<app>.image.tag` to run another one.
 `make docker-build` at the repository root builds all four from this checkout.
 
 On a local cluster, the image must be inside the cluster's nodes. For a k3d cluster, don't
-import them by hand: fred-deployment-factory's `make k3d-fred` builds them, copies them into
-every node and deploys this chart (root `README.md` → "k3d Local Deployment").
+import them by hand: fred-deployment-factory's `make k3d-app` builds them, copies them into
+every node and deploys this chart through Helmfile (root `README.md` → "k3d Local Deployment").
+The factory owns `helmfile.yaml.gotmpl` and installation values. This checkout owns
+`deploy/k3d/build-images.py` (the four images and worker mapping) and
+`deploy/k3d/configure.sh` (model key, dashboards and first-login guidance).
+Generated `.cache/k3d/images.json` is ordinary Helm values, not a deployment blueprint.
+From the factory, `make k3d-app-validate FRED_DIR=/path/to/fred` checks the chart and
+installation values without building or changing the cluster. Set `FRED_IMAGE_VALUES`
+to the generated file to include a prepared build in this validation.
+This workflow currently targets local k3d only, using the checkout's chart.
 
 ## Your values file
 
