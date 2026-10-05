@@ -42,7 +42,7 @@ export function usePatternsPreview(source: PreviewSource): PatternsPreview {
     ? null
     : source.kind === "analysis"
       ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf`
-      : "/theme/preview.pdf";
+      : "/builtin/patterns.pdf";
 
   useEffect(() => {
     if (!path || !baseUrl) {

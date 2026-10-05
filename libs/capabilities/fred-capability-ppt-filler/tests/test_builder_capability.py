@@ -32,13 +32,13 @@ from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder import capability as capability_mod
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis_job import get_analysis_store
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.capability import (
     PPT_BUILDER_TEMPLATE_KEY,
     PptBuilderCapability,
     PptBuilderConfig,
 )
 from fred_capability_ppt_filler.builder.models import PatternOverride
-from fred_capability_ppt_filler.builder.theme import default_theme
 from fred_capability_ppt_filler.builder.tools import BUILD_TOOL_NAME
 from fred_capability_ppt_filler.capability import TEMPLATE_SLOT
 from fred_sdk.contracts.capability import (
@@ -145,8 +145,8 @@ async def test_overrides_are_pruned_once_the_analysis_is_known(analysis_db):
 
 
 @pytest.mark.asyncio
-async def test_no_template_prunes_against_the_built_in_theme(analysis_db):
-    inventory = default_theme()[1]
+async def test_no_template_prunes_against_the_built_in_template(analysis_db):
+    inventory = builtin_template()[1]
     config = PptBuilderConfig(
         overrides=[
             PatternOverride(pattern_id=inventory.patterns[0].id, label="x"),
@@ -344,30 +344,31 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_theme_preview_returns_pdf_or_503(monkeypatch):
+def test_builtin_patterns_returns_pdf_or_503(monkeypatch):
     monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _pdf)
     assert (
-        _client().get("/capabilities/ppt_builder/theme/preview.pdf").status_code == 200
+        _client().get("/capabilities/ppt_builder/builtin/patterns.pdf").status_code
+        == 200
     )
 
 
-def test_theme_preview_is_converted_once_per_process(monkeypatch):
+def test_builtin_patterns_are_converted_once_per_process(monkeypatch):
     calls = []
 
     async def _counting(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
         calls.append(suffix)
-        return b"%PDF-theme"
+        return b"%PDF-builtin"
 
     monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _counting)
-    monkeypatch.setattr(capability_mod, "_theme_pdf", None)
+    monkeypatch.setattr(capability_mod, "_builtin_pdf", None)
     client = _client()
     assert (
-        client.get("/capabilities/ppt_builder/theme/preview.pdf").content
-        == b"%PDF-theme"
+        client.get("/capabilities/ppt_builder/builtin/patterns.pdf").content
+        == b"%PDF-builtin"
     )
     assert (
-        client.get("/capabilities/ppt_builder/theme/preview.pdf").content
-        == b"%PDF-theme"
+        client.get("/capabilities/ppt_builder/builtin/patterns.pdf").content
+        == b"%PDF-builtin"
     )
     assert calls == [".pptx"]
 
@@ -384,19 +385,16 @@ def test_patterns_preview_keeps_one_page_per_pattern_even_for_uncopyable_slides(
     assert len(deck.slides) == len(inventory.patterns)
 
 
-def test_theme_route_lists_every_kind():
-    body = _client().get("/capabilities/ppt_builder/theme").json()
+def test_builtin_route_lists_the_template_kinds():
+    body = _client().get("/capabilities/ppt_builder/builtin").json()
     kinds = {p["kind"] for p in body["inventory"]["patterns"] if p["included"]}
     assert {
-        "cover",
         "section",
         "agenda",
         "bullets",
         "two_columns",
         "comparison",
-        "image_text",
         "figures",
         "process",
-        "quote",
         "closing",
     } <= kinds

@@ -391,7 +391,7 @@ def build_builder_tools(
     """The build tool bound to one turn's context and effective inventory.
 
     ``template_bytes_loader`` is an async callable returning the template
-    bytes (the stored asset, or the built-in theme).
+    bytes (the stored asset, or the built-in template).
     """
     services = ctx.services
     identity = ctx.identity

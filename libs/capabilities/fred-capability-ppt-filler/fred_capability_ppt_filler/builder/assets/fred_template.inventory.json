@@ -1,0 +1,1244 @@
+{
+ "template_sha256": "4ccba7af8573b718173dbf41df5a1e0e157aca2a236436b1f5c4f4d985a5cc94",
+ "inventory": {
+  "slide_width": 12192000,
+  "slide_height": 6858000,
+  "analysis_version": 7,
+  "patterns": [
+   {
+    "id": "layout:0",
+    "source": "layout",
+    "source_index": 0,
+    "name": "Fred Title",
+    "label": "Fred Title",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 267,
+       "w": 615,
+       "h": 267
+      },
+      "sample": "Presentation title",
+      "font_pt": 44.0,
+      "chars_per_line": 23,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 560,
+       "w": 615,
+       "h": 133
+      },
+      "sample": "Subtitle",
+      "font_pt": 20.0,
+      "chars_per_line": 60,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 840,
+       "w": 615,
+       "h": 67
+      },
+      "sample": "Author · Date",
+      "font_pt": 14.0,
+      "chars_per_line": 86,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:1",
+    "source": "layout",
+    "source_index": 1,
+    "name": "Fred Agenda",
+    "label": "Fred Agenda",
+    "kind": "agenda",
+    "zones": [
+     {
+      "key": "ph:101",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 80,
+       "w": 262,
+       "h": 200
+      },
+      "sample": "Slide title",
+      "font_pt": 36.0,
+      "chars_per_line": 10,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 398,
+       "y": 120,
+       "w": 555,
+       "h": 760
+      },
+      "sample": "Agenda item",
+      "font_pt": 20.0,
+      "chars_per_line": 51,
+      "max_lines": 9,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:2",
+    "source": "layout",
+    "source_index": 2,
+    "name": "Fred Section",
+    "label": "Fred Section",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 213,
+       "w": 225,
+       "h": 133
+      },
+      "sample": "01",
+      "font_pt": 54.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:104",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 373,
+       "w": 615,
+       "h": 213
+      },
+      "sample": "Section title",
+      "font_pt": 40.0,
+      "chars_per_line": 26,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 600,
+       "w": 615,
+       "h": 133
+      },
+      "sample": "Section introduction",
+      "font_pt": 18.0,
+      "chars_per_line": 67,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:3",
+    "source": "layout",
+    "source_index": 3,
+    "name": "Fred Title and Content",
+    "label": "Fred Title and Content",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 910,
+       "h": 660
+      },
+      "sample": "Bullet point",
+      "font_pt": 18.0,
+      "chars_per_line": 98,
+      "max_lines": 10,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:4",
+    "source": "layout",
+    "source_index": 4,
+    "name": "Fred Two Content",
+    "label": "Fred Two Content",
+    "kind": "two_columns",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 440,
+       "h": 660
+      },
+      "sample": "Left column",
+      "font_pt": 16.0,
+      "chars_per_line": 50,
+      "max_lines": 11,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 515,
+       "y": 220,
+       "w": 440,
+       "h": 660
+      },
+      "sample": "Right column",
+      "font_pt": 16.0,
+      "chars_per_line": 50,
+      "max_lines": 11,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:5",
+    "source": "layout",
+    "source_index": 5,
+    "name": "Fred Comparison",
+    "label": "Fred Comparison",
+    "kind": "comparison",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:103",
+      "role": "heading",
+      "box": {
+       "x": 71,
+       "y": 260,
+       "w": 387,
+       "h": 80
+      },
+      "sample": "Option A",
+      "font_pt": 22.0,
+      "chars_per_line": 31,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 71,
+       "y": 360,
+       "w": 387,
+       "h": 480
+      },
+      "sample": "Detail",
+      "font_pt": 16.0,
+      "chars_per_line": 44,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:105",
+      "role": "heading",
+      "box": {
+       "x": 541,
+       "y": 260,
+       "w": 387,
+       "h": 80
+      },
+      "sample": "Option B",
+      "font_pt": 22.0,
+      "chars_per_line": 31,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 541,
+       "y": 360,
+       "w": 387,
+       "h": 480
+      },
+      "sample": "Detail",
+      "font_pt": 16.0,
+      "chars_per_line": 44,
+      "max_lines": 8,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:6",
+    "source": "layout",
+    "source_index": 6,
+    "name": "Fred Content with Image",
+    "label": "Fred Content with Image",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 465,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 25,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 465,
+       "h": 660
+      },
+      "sample": "Bullet point",
+      "font_pt": 16.0,
+      "chars_per_line": 54,
+      "max_lines": 11,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 544,
+       "y": 60,
+       "w": 411,
+       "h": 820
+      },
+      "sample": "Image",
+      "font_pt": 32.0,
+      "chars_per_line": 22,
+      "max_lines": 9,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:7",
+    "source": "layout",
+    "source_index": 7,
+    "name": "Fred Key Figures",
+    "label": "Fred Key Figures",
+    "kind": "figures",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 71,
+       "y": 313,
+       "w": 231,
+       "h": 173
+      },
+      "sample": "00%",
+      "font_pt": 54.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 71,
+       "y": 513,
+       "w": 231,
+       "h": 200
+      },
+      "sample": "What this figure measures",
+      "font_pt": 16.0,
+      "chars_per_line": 24,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 385,
+       "y": 313,
+       "w": 231,
+       "h": 173
+      },
+      "sample": "00%",
+      "font_pt": 54.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:106",
+      "role": "body",
+      "box": {
+       "x": 385,
+       "y": 513,
+       "w": 231,
+       "h": 200
+      },
+      "sample": "What this figure measures",
+      "font_pt": 16.0,
+      "chars_per_line": 24,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:108",
+      "role": "body",
+      "box": {
+       "x": 698,
+       "y": 313,
+       "w": 231,
+       "h": 173
+      },
+      "sample": "00%",
+      "font_pt": 54.0,
+      "chars_per_line": 6,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:109",
+      "role": "body",
+      "box": {
+       "x": 698,
+       "y": 513,
+       "w": 231,
+       "h": 200
+      },
+      "sample": "What this figure measures",
+      "font_pt": 16.0,
+      "chars_per_line": 24,
+      "max_lines": 3,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:110",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 787,
+       "w": 910,
+       "h": 80
+      },
+      "sample": "Source",
+      "font_pt": 12.0,
+      "chars_per_line": 151,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:8",
+    "source": "layout",
+    "source_index": 8,
+    "name": "Fred Process",
+    "label": "Fred Process",
+    "kind": "process",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 68,
+       "y": 373,
+       "w": 166,
+       "h": 120
+      },
+      "sample": "Step",
+      "font_pt": 18.0,
+      "chars_per_line": 15,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:105",
+      "role": "body",
+      "box": {
+       "x": 68,
+       "y": 507,
+       "w": 166,
+       "h": 333
+      },
+      "sample": "Describe this step",
+      "font_pt": 14.0,
+      "chars_per_line": 19,
+      "max_lines": 6,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:109",
+      "role": "body",
+      "box": {
+       "x": 301,
+       "y": 373,
+       "w": 166,
+       "h": 120
+      },
+      "sample": "Step",
+      "font_pt": 18.0,
+      "chars_per_line": 15,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:110",
+      "role": "body",
+      "box": {
+       "x": 301,
+       "y": 507,
+       "w": 166,
+       "h": 333
+      },
+      "sample": "Describe this step",
+      "font_pt": 14.0,
+      "chars_per_line": 19,
+      "max_lines": 6,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:114",
+      "role": "body",
+      "box": {
+       "x": 534,
+       "y": 373,
+       "w": 166,
+       "h": 120
+      },
+      "sample": "Step",
+      "font_pt": 18.0,
+      "chars_per_line": 15,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:115",
+      "role": "body",
+      "box": {
+       "x": 534,
+       "y": 507,
+       "w": 166,
+       "h": 333
+      },
+      "sample": "Describe this step",
+      "font_pt": 14.0,
+      "chars_per_line": 19,
+      "max_lines": 6,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:119",
+      "role": "body",
+      "box": {
+       "x": 767,
+       "y": 373,
+       "w": 166,
+       "h": 120
+      },
+      "sample": "Step",
+      "font_pt": 18.0,
+      "chars_per_line": 15,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:120",
+      "role": "body",
+      "box": {
+       "x": 767,
+       "y": 507,
+       "w": 166,
+       "h": 333
+      },
+      "sample": "Describe this step",
+      "font_pt": 14.0,
+      "chars_per_line": 19,
+      "max_lines": 6,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:9",
+    "source": "layout",
+    "source_index": 9,
+    "name": "Fred Chart",
+    "label": "Fred Chart",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 709,
+       "y": 267,
+       "w": 220,
+       "h": 567
+      },
+      "sample": "Key takeaway",
+      "font_pt": 16.0,
+      "chars_per_line": 23,
+      "max_lines": 9,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:10",
+    "source": "layout",
+    "source_index": 10,
+    "name": "Fred Table",
+    "label": "Fred Table",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 220,
+       "w": 910,
+       "h": 660
+      },
+      "sample": "Table",
+      "font_pt": 32.0,
+      "chars_per_line": 53,
+      "max_lines": 7,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:11",
+    "source": "layout",
+    "source_index": 11,
+    "name": "Fred Quote",
+    "label": "Fred Quote",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:101",
+      "role": "body",
+      "box": {
+       "x": 120,
+       "y": 267,
+       "w": 765,
+       "h": 387
+      },
+      "sample": "Quote",
+      "font_pt": 30.0,
+      "chars_per_line": 48,
+      "max_lines": 4,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:102",
+      "role": "body",
+      "box": {
+       "x": 120,
+       "y": 680,
+       "w": 765,
+       "h": 107
+      },
+      "sample": "Name, role",
+      "font_pt": 16.0,
+      "chars_per_line": 87,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:12",
+    "source": "layout",
+    "source_index": 12,
+    "name": "Fred Title Only",
+    "label": "Fred Title Only",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Slide title",
+      "font_pt": 32.0,
+      "chars_per_line": 52,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:13",
+    "source": "layout",
+    "source_index": 13,
+    "name": "Fred Closing",
+    "label": "Fred Closing",
+    "kind": "closing",
+    "zones": [
+     {
+      "key": "ph:103",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 267,
+       "w": 615,
+       "h": 213
+      },
+      "sample": "Thank you",
+      "font_pt": 44.0,
+      "chars_per_line": 23,
+      "max_lines": 2,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:104",
+      "role": "body",
+      "box": {
+       "x": 45,
+       "y": 520,
+       "w": 615,
+       "h": 293
+      },
+      "sample": "Contact or next steps",
+      "font_pt": 18.0,
+      "chars_per_line": 65,
+      "max_lines": 4,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "layout:14",
+    "source": "layout",
+    "source_index": 14,
+    "name": "Fred Blank",
+    "label": "Fred Blank",
+    "kind": "other",
+    "zones": [],
+    "groups": [],
+    "included": false,
+    "exclusion_reason": "no_placeholder",
+    "preferred": false,
+    "reusable": false,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:265",
+    "source": "slide",
+    "source_index": 10,
+    "name": "Fred Chart",
+    "label": "Charts stay native and editable",
+    "kind": "bullets",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Charts stay native and editable",
+      "font_pt": 32.0,
+      "chars_per_line": 56,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "ph:103",
+      "role": "body",
+      "box": {
+       "x": 709,
+       "y": 267,
+       "w": 220,
+       "h": 567
+      },
+      "sample": "Charts use theme colours, so a custom template restyles them automatically.\n\nPut",
+      "font_pt": 16.0,
+      "chars_per_line": 23,
+      "max_lines": 9,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": false,
+    "exclusion_reason": "chart",
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:266",
+    "source": "slide",
+    "source_index": 11,
+    "name": "Fred Table",
+    "label": "Layout catalogue",
+    "kind": "section",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Layout catalogue",
+      "font_pt": 32.0,
+      "chars_per_line": 56,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": false,
+    "exclusion_reason": "table",
+    "preferred": false,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:268",
+    "source": "slide",
+    "source_index": 13,
+    "name": "Fred Title Only",
+    "label": "Title Only leaves the canvas free",
+    "kind": "comparison",
+    "zones": [
+     {
+      "key": "ph:100",
+      "role": "title",
+      "box": {
+       "x": 45,
+       "y": 60,
+       "w": 910,
+       "h": 127
+      },
+      "sample": "Title Only leaves the canvas free",
+      "font_pt": 32.0,
+      "chars_per_line": 56,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "sp:4",
+      "role": "heading",
+      "box": {
+       "x": 71,
+       "y": 313,
+       "w": 231,
+       "h": 80
+      },
+      "sample": "Diagrams",
+      "font_pt": 22.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "sp:7",
+      "role": "heading",
+      "box": {
+       "x": 385,
+       "y": 313,
+       "w": 231,
+       "h": 80
+      },
+      "sample": "Screenshots",
+      "font_pt": 22.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "sp:10",
+      "role": "heading",
+      "box": {
+       "x": 698,
+       "y": 313,
+       "w": 231,
+       "h": 80
+      },
+      "sample": "Custom visuals",
+      "font_pt": 22.0,
+      "chars_per_line": 19,
+      "max_lines": 1,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "sp:5",
+      "role": "body",
+      "box": {
+       "x": 71,
+       "y": 413,
+       "w": 231,
+       "h": 240
+      },
+      "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
+      "font_pt": 16.0,
+      "chars_per_line": 26,
+      "max_lines": 5,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "sp:8",
+      "role": "body",
+      "box": {
+       "x": 385,
+       "y": 413,
+       "w": 231,
+       "h": 240
+      },
+      "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
+      "font_pt": 16.0,
+      "chars_per_line": 26,
+      "max_lines": 5,
+      "grows": false,
+      "purpose": null
+     },
+     {
+      "key": "sp:11",
+      "role": "body",
+      "box": {
+       "x": 698,
+       "y": 413,
+       "w": 231,
+       "h": 240
+      },
+      "sample": "Shapes placed by the agent in scheme colours, so they follow the theme.",
+      "font_pt": 16.0,
+      "chars_per_line": 26,
+      "max_lines": 5,
+      "grows": false,
+      "purpose": null
+     }
+    ],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": true,
+    "reusable": true,
+    "labelled_by": "heuristic",
+    "warnings": []
+   },
+   {
+    "id": "slide:270",
+    "source": "slide",
+    "source_index": 15,
+    "name": "Fred Blank",
+    "label": "Fred Blank (15)",
+    "kind": "other",
+    "zones": [],
+    "groups": [],
+    "included": true,
+    "exclusion_reason": null,
+    "preferred": false,
+    "reusable": false,
+    "labelled_by": "heuristic",
+    "warnings": []
+   }
+  ],
+  "shared_texts": []
+ }
+}

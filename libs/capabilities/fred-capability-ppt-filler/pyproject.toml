@@ -58,6 +58,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["fred_capability_ppt_filler*"]
 
+[tool.setuptools.package-data]
+# The built-in template and its stored analysis ship in the wheel.
+"fred_capability_ppt_filler.builder" = ["assets/*.pptx", "assets/*.json"]
+
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra"

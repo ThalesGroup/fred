@@ -86,10 +86,10 @@ Owns: `render.py`, `checks.py` (new), test `test_builder_render.py`.
 
 Blocked on the developer's deck. Owns: `assets/fred_template.pptx`, `assets/fred_template.inventory.json`, `builtin.py` (new), package `Makefile` target, package-data entry in `pyproject.toml`, `theme.py` (deletion), test `test_builtin_template.py` (new). Touches `capability.py` only to swap the import (after WP4).
 
-- [ ] 7.1 Author the deck (Q5) with example slides for every kind but `team`/`other`
-- [ ] 7.2 `make builtin-inventory` regenerates the JSON through the full pipeline; test fails when it lags `ANALYSIS_VERSION`
-- [ ] 7.0 Interim (not blocked, done in WP4): `builtin.py` backed by `theme.py`
-- [ ] 7.3 `/builtin` routes replace `/theme`; delete `theme.py` once the real deck lands
+- [ ] 7.1 Author the deck (Q5) with example slides for every kind but `team`/`other` (deck shipped; the rules analysis finds no `cover`, `quote`, `image_text`, and the deck has no `timeline`/`cards` slide: developer fixes pending, then `make builtin-inventory`)
+- [x] 7.2 `make builtin-inventory` regenerates the JSON through the full pipeline; test fails when it lags `ANALYSIS_VERSION`
+- [x] 7.0 Interim (not blocked, done in WP4): `builtin.py` backed by `theme.py` (superseded: `builtin.py` reads the shipped asset)
+- [x] 7.3 `/builtin` routes replace `/theme`; delete `theme.py` once the real deck lands
 
 ## WP8. Frontend
 

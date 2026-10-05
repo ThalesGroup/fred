@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """``PptBuilderCapability`` — generate a deck from a chat plan on an analysed
-template, or on the built-in theme when the agent has none.
+template, or on the built-in template when the agent has none.
 
 The save never waits on the analysis: it stores the template, records a pending
 analysis row and returns; ``analysis_job`` runs it in the background (design.md
@@ -74,6 +74,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     spawn_analysis,
     status_response,
 )
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
@@ -84,7 +85,6 @@ from fred_capability_ppt_filler.builder.overrides import (
     prune_overrides,
 )
 from fred_capability_ppt_filler.builder.preview import build_patterns_deck
-from fred_capability_ppt_filler.builder.theme import default_theme
 from fred_capability_ppt_filler.builder.tools import (
     BUILD_TOOL_NAME,
     PPT_BUILDER_CAPABILITY_ID,
@@ -123,7 +123,7 @@ _NOT_READY_MESSAGE = (
 
 class PptBuilderConfig(BaseModel):
     """Stored config (ConfigModel == StoredConfigModel). ``template_sha256``
-    names the analysed template; ``None`` means the built-in theme. The
+    names the analysed template; ``None`` means the built-in template. The
     analysis itself lives in ``cap_ppt_builder_analysis``."""
 
     template_key: str = PPT_BUILDER_TEMPLATE_KEY
@@ -174,16 +174,16 @@ def _build_router() -> APIRouter:
     router = APIRouter(tags=["ppt_builder"])
 
     @router.get(
-        "/theme", response_model=AnalyzeResult, operation_id="getPptBuilderTheme"
+        "/builtin", response_model=AnalyzeResult, operation_id="getPptBuilderBuiltin"
     )
-    async def theme() -> AnalyzeResult:
-        """The built-in theme's inventory, shown when the agent has no template."""
-        _, inventory = default_theme()
+    async def builtin() -> AnalyzeResult:
+        """The built-in template's inventory, shown when the agent has no template."""
+        _, inventory = builtin_template()
         return AnalyzeResult(inventory=inventory, summary=inventory.summary())
 
-    @router.get("/theme/preview.pdf", operation_id="previewPptBuilderTheme")
-    async def theme_preview() -> Response:
-        pdf = await theme_preview_pdf()
+    @router.get("/builtin/patterns.pdf", operation_id="getPptBuilderBuiltinPatterns")
+    async def builtin_patterns() -> Response:
+        pdf = await builtin_patterns_pdf()
         if pdf is None:
             raise HTTPException(
                 status_code=503,
@@ -244,20 +244,20 @@ def _build_router() -> APIRouter:
     return router
 
 
-# The built-in theme is a process constant, so its thumbnails PDF is rendered
+# The built-in template is a process constant, so its patterns PDF is rendered
 # once per pod (pod-local by nature) instead of one LibreOffice run per request.
-_theme_pdf: Optional[bytes] = None
-_theme_pdf_lock = asyncio.Lock()
+_builtin_pdf: Optional[bytes] = None
+_builtin_pdf_lock = asyncio.Lock()
 
 
-async def theme_preview_pdf() -> Optional[bytes]:
-    global _theme_pdf
-    if _theme_pdf is not None:
-        return _theme_pdf
-    async with _theme_pdf_lock:
-        if _theme_pdf is not None:
-            return _theme_pdf
-        template, inventory = default_theme()
+async def builtin_patterns_pdf() -> Optional[bytes]:
+    global _builtin_pdf
+    if _builtin_pdf is not None:
+        return _builtin_pdf
+    async with _builtin_pdf_lock:
+        if _builtin_pdf is not None:
+            return _builtin_pdf
+        template, inventory = builtin_template()
         if not acquire_heavy_job_slot():
             raise HTTPException(status_code=503, detail=_BUSY_MESSAGE)
         try:
@@ -266,7 +266,7 @@ async def theme_preview_pdf() -> Optional[bytes]:
             release_heavy_job_slot()
         pdf = await convert_office_bytes_to_pdf(deck, suffix=".pptx")
         if pdf is not None:
-            _theme_pdf = pdf
+            _builtin_pdf = pdf
         return pdf
 
 
@@ -315,13 +315,13 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._key = config.labelling_key()
 
         if self._sha is None:
-            theme_bytes, theme_inventory = default_theme()
+            builtin_bytes, builtin_inventory = builtin_template()
 
-            async def load_theme() -> bytes:
-                return theme_bytes
+            async def load_builtin() -> bytes:
+                return builtin_bytes
 
-            effective, _ = apply_overrides(theme_inventory, config.overrides)
-            self.tools = build_builder_tools(ctx, load_theme, effective)
+            effective, _ = apply_overrides(builtin_inventory, config.overrides)
+            self.tools = build_builder_tools(ctx, load_builtin, effective)
             self._resolved = self.tools
             return
         cached = (
@@ -336,7 +336,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
             return
 
         # Same schema as the template's tool (validation accepts any kind).
-        generic = build_builder_tools(ctx, self._load_template, default_theme()[1])[0]
+        generic = build_builder_tools(ctx, self._load_template, builtin_template()[1])[
+            0
+        ]
         deferred = StructuredTool.from_function(
             coroutine=self._deferred_build,
             name=BUILD_TOOL_NAME,
@@ -468,9 +470,9 @@ class PptBuilderCapability(
 
     def __init__(self) -> None:
         super().__init__()
-        # Warm the built-in theme at registration so its one-time build (tens
-        # of milliseconds of python-pptx work) never lands inside a turn.
-        default_theme()
+        # Load the built-in template at registration so its one-time read never
+        # lands inside a turn.
+        builtin_template()
 
     @classmethod
     def migrations_location(cls) -> str:
@@ -489,7 +491,7 @@ class PptBuilderCapability(
         if template_uploads:
             return await self._accept_upload(config, template_uploads[0].content, ctx)
         if config.template_sha256 is None:
-            kept, _ = prune_overrides(config.overrides, default_theme()[1])
+            kept, _ = prune_overrides(config.overrides, builtin_template()[1])
             return config.model_copy(update={"overrides": kept})
         instance = ctx.identity.agent_instance_id
         if not instance or not ctx.identity.team_id:
@@ -594,7 +596,7 @@ class PptBuilderCapability(
     async def readiness(
         self, stored: PptBuilderConfig, identity: CapabilityIdentity
     ) -> CapabilityReadiness:
-        """Ready on the built-in theme or once the template analysis succeeded."""
+        """Ready on the built-in template or once the template analysis succeeded."""
         instance = identity.agent_instance_id
         if stored.template_sha256 is None or not instance:
             return CapabilityReadiness.ready()

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Base RTK Query slice for the ppt_builder capability's OWN router: the
-// stateless template analysis and the built-in theme inventory. The generated
+// stateless template analysis and the built-in template inventory. The generated
 // `pptBuilderCapabilityOpenApi.ts` injects the endpoints; the base query
 // resolves the capability's base URL from `capabilityRoutingSlice`. Registered
 // once in `common/store.tsx`.

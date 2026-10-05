@@ -11,6 +11,12 @@ include ../../../scripts/makefiles/python-publish.mk
 include ../../../scripts/makefiles/alembic.mk
 include ../../../scripts/makefiles/help.mk
 
+##@ Built-in template
+
+.PHONY: builtin-inventory
+builtin-inventory: dev ## Regenerate the built-in template's stored analysis after changing the deck or ANALYSIS_VERSION
+	$(UV) run python -m $(PY_PACKAGE).builder.builtin
+
 ##@ Evaluation
 
 .PHONY: eval

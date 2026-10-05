@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useGetPptBuilderAnalysisQuery,
-  useGetPptBuilderThemeQuery,
+  useGetPptBuilderBuiltinQuery,
   useRerunPptBuilderAnalysisMutation,
   type AnalysisStatusResponse,
   type TemplateInventory,
@@ -127,7 +127,7 @@ export function usePptBuilderAnalysis({
   const status = statusQuery.isError ? undefined : statusQuery.data;
   const phase = analysisPhase({ stagedFile, templateSha, status });
   const usesBuiltin = phase === "builtin";
-  const { data: builtin } = useGetPptBuilderThemeQuery(undefined, { skip: !usesBuiltin || !routed });
+  const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, { skip: !usesBuiltin || !routed });
 
   useEffect(() => {
     setPollingInterval(isInProgress(phase) ? POLL_MS : 0);

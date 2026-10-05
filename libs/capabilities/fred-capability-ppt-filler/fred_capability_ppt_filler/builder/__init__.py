@@ -13,5 +13,5 @@
 # limitations under the License.
 
 """The ``ppt_builder`` capability: generate a deck from a chat plan on an
-analysed, unannotated template (or the built-in theme). Shares the preview,
+analysed, unannotated template (or the built-in Fred template). Shares the preview,
 conversion and concurrency machinery of ``ppt_filler`` in this package."""

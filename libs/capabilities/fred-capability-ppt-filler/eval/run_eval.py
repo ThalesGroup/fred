@@ -43,6 +43,7 @@ from fred_capability_ppt_filler.builder import analysis_job, checks
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import assign
+from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.capability import (
     _BUILD_INSTRUCTIONS,
     PptBuilderConfig,
@@ -50,7 +51,6 @@ from fred_capability_ppt_filler.builder.capability import (
 from fred_capability_ppt_filler.builder.models import Pattern, TemplateInventory
 from fred_capability_ppt_filler.builder.plan import DeckPlan, SlidePlan, has_content
 from fred_capability_ppt_filler.builder.render import RenderResult
-from fred_capability_ppt_filler.builder.theme import default_theme
 from fred_capability_ppt_filler.fill import PptPreviewPart
 from fred_core.common import ModelConfiguration
 from fred_core.model.factory import get_model
@@ -565,7 +565,7 @@ async def main() -> None:
         action="append",
         default=[t for t in os.environ.get("PPT_EVAL_TEMPLATES", "").split(",") if t],
         help="[name=]path.pptx, repeatable (env PPT_EVAL_TEMPLATES, comma-separated). "
-        "The built-in theme always runs.",
+        "The built-in template always runs (its stored rules analysis).",
     )
     parser.add_argument("--modes", default="vision,rules")
     parser.add_argument("--prompts", default=",".join(PROMPTS))
@@ -594,7 +594,7 @@ async def main() -> None:
     variants: List[Variant] = []
     for name, path in _templates(args.template):
         if path is None:
-            content, inventory = default_theme()
+            content, inventory = builtin_template()
             variants.append(Variant(name, "rules", content, inventory, 0.0, {}))
             continue
         found = await analyse(name, path.read_bytes(), modes, port)

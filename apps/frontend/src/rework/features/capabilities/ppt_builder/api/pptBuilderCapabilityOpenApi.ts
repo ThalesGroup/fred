@@ -1,11 +1,14 @@
 import { pptBuilderCapabilityApi as api } from "./pptBuilderCapabilityApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
-    getPptBuilderTheme: build.query<GetPptBuilderThemeApiResponse, GetPptBuilderThemeApiArg>({
-      query: () => ({ url: `/theme` }),
+    getPptBuilderBuiltin: build.query<GetPptBuilderBuiltinApiResponse, GetPptBuilderBuiltinApiArg>({
+      query: () => ({ url: `/builtin` }),
     }),
-    previewPptBuilderTheme: build.query<PreviewPptBuilderThemeApiResponse, PreviewPptBuilderThemeApiArg>({
-      query: () => ({ url: `/theme/preview.pdf` }),
+    getPptBuilderBuiltinPatterns: build.query<
+      GetPptBuilderBuiltinPatternsApiResponse,
+      GetPptBuilderBuiltinPatternsApiArg
+    >({
+      query: () => ({ url: `/builtin/patterns.pdf` }),
     }),
     getPptBuilderAnalysis: build.query<GetPptBuilderAnalysisApiResponse, GetPptBuilderAnalysisApiArg>({
       query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}` }),
@@ -23,10 +26,10 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as pptBuilderCapabilityApi };
-export type GetPptBuilderThemeApiResponse = /** status 200 Successful Response */ AnalyzeResult;
-export type GetPptBuilderThemeApiArg = void;
-export type PreviewPptBuilderThemeApiResponse = /** status 200 Successful Response */ any;
-export type PreviewPptBuilderThemeApiArg = void;
+export type GetPptBuilderBuiltinApiResponse = /** status 200 Successful Response */ AnalyzeResult;
+export type GetPptBuilderBuiltinApiArg = void;
+export type GetPptBuilderBuiltinPatternsApiResponse = /** status 200 Successful Response */ any;
+export type GetPptBuilderBuiltinPatternsApiArg = void;
 export type GetPptBuilderAnalysisApiResponse = /** status 200 Successful Response */ AnalysisStatusResponse;
 export type GetPptBuilderAnalysisApiArg = {
   instanceId: string;
@@ -141,10 +144,10 @@ export type HttpValidationError = {
   detail?: ValidationError[];
 };
 export const {
-  useGetPptBuilderThemeQuery,
-  useLazyGetPptBuilderThemeQuery,
-  usePreviewPptBuilderThemeQuery,
-  useLazyPreviewPptBuilderThemeQuery,
+  useGetPptBuilderBuiltinQuery,
+  useLazyGetPptBuilderBuiltinQuery,
+  useGetPptBuilderBuiltinPatternsQuery,
+  useLazyGetPptBuilderBuiltinPatternsQuery,
   useGetPptBuilderAnalysisQuery,
   useLazyGetPptBuilderAnalysisQuery,
   useGetPptBuilderAnalysisPatternsQuery,

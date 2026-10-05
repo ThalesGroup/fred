@@ -30,7 +30,7 @@ opt-in, not part of `make test`):
     corporate deck. 20 layouts, 20 example slides.
   - `prism`: the "PPT Prism" agent's template (4.3 MB): 3 layouts without
     placeholders, 10 example slides, 7 reusable.
-  - `builtin`: the interim built-in theme (`theme.py`), rules only.
+  - `builtin`: the interim built-in theme (`theme.py`, deleted in WP7), rules only.
 
 Two full matrices per state (100 runs each): **before** = WP9 runs 1 and 2,
 **after** = WP11 runs 6 and 7 (same templates, prompts, models and harness; the
@@ -47,6 +47,13 @@ between runs: read single-cell differences as noise.
 | prism | rules | 20 → 19 | 0 → 12 | 1.8 → 0.8 | n/a (no cover) | 3 → 12 | 0.35 → 0.38 | 0 → 0 | 0 → 0 |
 | prism | vision | 16 → 20 | 3 → 11 | 1.6 → 0.6 | 100% → 100% | 76 → 18 | 0.31 → 0.45 | 0 → 0 | 0 → 0 |
 | **total** | | **92 → 96** | **9 → 45** | 1.6 → 0.8 | 100% | 84 → 36 | | 0 | 0 |
+
+**WP7, built-in Fred template** (`make eval EVAL_ARGS="--modes rules"`, one run of 10
+prompts, stored rules inventory): success 10/10 (old theme 18/20), first call 4/10
+(7/20), avg repairs 0.6 (1.2), cover once@1 n/a (the analysis finds no cover in the
+deck; 100% before), 3-in-a-row 5 (1), distinct/slides 0.53 (0.70), leftovers 0,
+truncated 1, lost 0. Vision not run: it would label only the 2 example slides that are
+not pure layout instances.
 
 \* Run 1 counted the step numbers the renderer writes ("1", "2"…) as leftovers; the metric now excludes them.
 
@@ -128,6 +135,9 @@ says overflow) and 0/96 corporate zones.
 
 ## Checks
 
+- WP7: package `make code-quality` passed; `make test` 338 passed, 3 skipped; the
+  wheel carries `builder/assets/*`. ppt_builder slice regenerated (`/builtin`,
+  `/builtin/patterns.pdf`), `tsc --noEmit`, prettier and the slice's vitest (21) clean.
 - WP11: `make code-quality` in the package passed (ruff, format, bandit,
   detect-secrets, basedpyright 0 errors); `make test` 335 passed, 3 skipped.
   ppt_builder frontend slice regenerated (`Zone.max_chars` → `chars_per_line`),

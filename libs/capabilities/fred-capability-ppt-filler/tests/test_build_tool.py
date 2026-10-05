@@ -192,14 +192,14 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
 
 
 @pytest.mark.asyncio
-async def test_build_without_template_uses_the_built_in_theme(monkeypatch):
+async def test_build_without_template_uses_the_built_in_template(monkeypatch):
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
     workspace = FakeWorkspace()
     tools = _tools(_ctx(PptBuilderConfig(), workspace=workspace))
     text, result = await tools[BUILD_TOOL_NAME].coroutine(
         slides=[
             COVER,
-            {"title": "KPIs", "items": [{"number": "42%", "label": "Margin"}]},
+            {"title": "KPIs", "bullets": ["Margin up to 42%", "Churn down"]},
             {"title": "Merci"},
         ]
     )
