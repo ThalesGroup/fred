@@ -32,10 +32,11 @@ average per character stands in.
 from __future__ import annotations
 
 import logging
+import math
 import subprocess  # nosec: fixed argv, shell=False
 import threading
 from functools import lru_cache
-from typing import Dict, Optional
+from typing import Dict, Optional, Sequence
 
 from PIL import ImageFont
 
@@ -141,3 +142,41 @@ def chars_per_line(
     if font_pt <= 0:
         return 1
     return max(1, int(width_pt / (font_pt * char_em(family, bold))))
+
+
+# Calibration never widens a line by more than this: a sample far over its box
+# is overflowing or auto-shrunk text, not evidence about the font.
+CALIBRATION_FLOOR = 0.75
+
+
+def lines_needed(
+    paragraphs: Sequence[str], per_line: int, family: Optional[str], bold: bool
+) -> int:
+    """Lines ``paragraphs`` wrap to when a line holds ``per_line`` average characters."""
+    room = per_line * char_em(family, bold)
+    return sum(
+        max(1, math.ceil(width_em(text, family, bold) / room)) for text in paragraphs
+    )
+
+
+def calibrate(
+    sample: str, per_line: int, lines: int, family: Optional[str], bold: bool
+) -> int:
+    """``per_line`` raised until the designer's sample fits its ``lines``.
+
+    The sample fits its box in PowerPoint; when it does not by this ruler, the
+    substitute font is wider than the designer's. Bounded by ``CALIBRATION_FLOOR``.
+    """
+    paragraphs = [p for p in sample.splitlines() if p.strip()]
+    if not paragraphs or lines_needed(paragraphs, per_line, family, bold) <= lines:
+        return per_line
+    low, high = per_line, int(per_line / CALIBRATION_FLOOR)
+    if lines_needed(paragraphs, high, family, bold) > lines:
+        return per_line
+    while low < high:
+        middle = (low + high) // 2
+        if lines_needed(paragraphs, middle, family, bold) <= lines:
+            high = middle
+        else:
+            low = middle + 1
+    return high

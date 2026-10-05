@@ -51,7 +51,7 @@ export type Zone = {
   box: Box;
   sample?: string;
   font_pt?: number | null;
-  max_chars?: number | null;
+  chars_per_line?: number | null;
   max_lines?: number | null;
   grows?: boolean;
   purpose?: string | null;

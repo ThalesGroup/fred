@@ -1,6 +1,6 @@
 Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/` unless rooted; tests under `libs/capabilities/fred-capability-ppt-filler/tests/`. Each work package (WP) names the files it owns; a WP edits only its own files.
 
-**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9. WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
+**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11. WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
 
 ## Kept from the first iteration (done, still valid)
 
@@ -119,3 +119,15 @@ Owns: `libs/capabilities/fred-capability-ppt-filler/eval/` (new), package `Makef
 - [x] 9.2 Run it; record results and targets met/missed in `verification.md`
 - [x] 9.3 `make code-quality` + `make test` in the package, fred-sdk, fred-runtime, frontend; `fred-performance-reviewer` on the tool path and the per-turn row read
 - [ ] 9.4 End-to-end on the local stack (upload → status → build → preview/download; no template); README, migration note, issue #2679 status comment
+
+## WP11. First-call success: capacities, coherent labels, soft fallback
+
+Owns: `analysis.py`, `models.py`, `labelling.py`, `assign.py`, `plan.py`, `tools.py`, `render.py` (`_fit` reads the stored capacity, line sources), `fred_capability_ppt_filler/text_metrics.py`, their tests, regenerated ppt_builder frontend slice, `verification.md`.
+
+- [x] 11.1 Per-slot capacity `chars_per_line × max_lines` stored at analysis, calibrated on the slot's sample text (binary search, bounded); fit check, renderer and description read it; bump `ANALYSIS_VERSION`
+- [x] 11.2 Vision kind accepted only when compatible with the slide's slots (D2.3 table); rejections logged, counted, shown as pattern warnings
+- [x] 11.3 Soft fallback (D7): unavailable, unfitting or misplaced requested kind → best fitting other kind; substitutions named in the success message
+- [x] 11.4 Actionable `needs_revision` (D8): field + element + measured limit + concrete options; resent-unchanged / changed-but-same flagged; description shows per-zone capacity
+- [x] 11.4b Found by the eval (D6): a subtitle without its zone leads the body; sequential step numbers need no number zone
+- [x] 11.5 Tests for each; eval re-run on the WP9 matrix with first-call success; `verification.md` before/after
+- [x] 11.6 Package `make code-quality` + `make test`; frontend slice regenerated and `tsc` clean

@@ -480,9 +480,10 @@ def _leftovers(
 
 def _summary(results: List[RunResult], variants: List[Variant]) -> str:
     lines = [
-        "| template | mode | runs | success | avg repairs | cover once@1 | 3-in-a-row "
-        "| distinct/slides | leftovers | removed by check | truncated | lost | avg wall s |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| template | mode | runs | success | first call | avg repairs | cover once@1 "
+        "| 3-in-a-row | distinct/slides | leftovers | removed by check | truncated | lost "
+        "| avg wall s |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -498,6 +499,7 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
 
         lines.append(
             f"| {variant.template} | {variant.mode} | {len(runs)} | {len(ok)} "
+            f"| {sum(1 for r in ok if r.repairs == 0)} "
             f"| {mean([float(r.repairs) for r in runs])} "
             f"| {f'{100 * sum(covers) / len(covers):.0f}%' if covers else 'n/a'} "
             f"| {sum(r.triples for r in ok)} "

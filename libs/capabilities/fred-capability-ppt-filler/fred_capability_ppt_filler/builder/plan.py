@@ -276,19 +276,20 @@ def has_content(slide: SlidePlan) -> bool:
 # --- what a pattern holds, in plan fields ------------------------------------------------
 
 
+def capacity_text(chars_per_line: int, lines: int) -> str:
+    """How a zone's room is quoted to the agent, in the tool description and errors."""
+    return f"≈{chars_per_line} chars" + (f" × {lines} lines" if lines > 1 else "")
+
+
 def _limit(zones: Sequence[Zone]) -> str:
     """The room the agent can count on across zones filled from one field: the
     tightest one, since that is the zone that truncates. A zone that grows with
     its text has no limit to quote."""
-    bounded = [z for z in zones if not z.grows]
+    bounded = [z for z in zones if not z.grows and z.chars_per_line and z.max_lines]
     if not bounded:
         return ""
-    chars = [z.max_chars for z in bounded if z.max_chars]
-    lines = [z.max_lines for z in bounded if z.max_lines]
-    text = f" ≤{min(chars)} chars" if chars else ""
-    if lines and min(lines) > 1:
-        text += f" ≤{min(lines)} lines"
-    return text
+    tightest = min(bounded, key=lambda z: (z.chars_per_line or 0) * (z.max_lines or 0))
+    return " " + capacity_text(tightest.chars_per_line or 1, tightest.max_lines or 1)
 
 
 def zone_summary(pattern: Pattern) -> str:
@@ -297,13 +298,19 @@ def zone_summary(pattern: Pattern) -> str:
         return "shown as is: no content, or only its own title"
     parts: List[str] = []
     seen: set[str] = set()
-    fields_of = {SLIDE_FIELDS.get(z.role) for z in pattern.zones}
+    field_of = {z.key: SLIDE_FIELDS.get(z.role) for z in pattern.zones}
+    headings = [z for z in pattern.zones if z.role == "heading"]
+    if headings and "title" not in field_of.values():
+        # The renderer writes the title into the leftmost heading (`_assign_text`).
+        first = min(headings, key=lambda z: (z.box.x // 150, z.box.y))
+        field_of[first.key] = "title"
+    fields_of = set(field_of.values())
     for zone in pattern.zones:
-        field = SLIDE_FIELDS.get(zone.role)
+        field = field_of[zone.key]
         if field is None or field in seen:
             continue
         seen.add(field)
-        same = [z for z in pattern.zones if SLIDE_FIELDS.get(z.role) == field]
+        same = [z for z in pattern.zones if field_of[z.key] == field]
         if field == "bullets" and pattern.kind in ("cover", "section"):
             # Under a cover title the body holds the subtitle (see `_assign_text`).
             if "subtitle" in fields_of:
@@ -333,6 +340,6 @@ def zone_summary(pattern: Pattern) -> str:
             name + ("" if name == "image" else _limit(zones))
             for name, zones in fields.items()
         )
-        # "up to", not "×N": told `items×8`, an agent pads a five-point agenda.
-        parts.append(f"items up to {group.count} [{shown}]")
+        # "max", not "×N": told `items×8`, an agent pads a five-point agenda.
+        parts.append(f"items max {group.count} [{shown}]")
     return "; ".join(parts) or "no editable zone"

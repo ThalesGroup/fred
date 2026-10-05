@@ -131,7 +131,8 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     assert "slide:" not in description and "layout:" not in description
     assert "Hidden cover" not in description
     assert "- process: title" in description
-    assert "items up to 3 [number, heading, text" in description
+    assert "items max 3 [number, heading, text" in description
+    assert "≈chars per line × lines" in description
     # The only cover was excluded: no cover kind, and no cover rule announced.
     assert "- cover:" not in description and "always the template's cover" not in (
         description
@@ -296,9 +297,22 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
     assert payload["status"] == "needs_revision"
     (problem,) = payload["slides"]
     assert problem["slide"] == 2 and problem["kind"] == "process"
-    assert "7 items; the largest 'process' slide holds 3" in problem["problem"]
-    assert "trim to 3 items" in problem["options"]
+    assert "items: 7 given; the largest slide" in problem["problem"]
+    assert any(o.startswith("trim to ") for o in problem["options"])
     assert "split the items over two slides" in problem["options"]
+    assert "repeated" not in problem
+
+    # The same plan again is flagged as resent, not answered word for word.
+    text, _ = await tools[BUILD_TOOL_NAME].coroutine(
+        slides=[COVER, {"title": "Method", "kind": "process", "items": steps}]
+    )
+    (again,) = json.loads(text[text.index("{") :])["slides"]
+    assert again["repeated"].startswith("you resent this slide unchanged")
+    text, _ = await tools[BUILD_TOOL_NAME].coroutine(
+        slides=[COVER, {"title": "Method v2", "kind": "process", "items": steps}]
+    )
+    (changed,) = json.loads(text[text.index("{") :])["slides"]
+    assert changed["repeated"] == "the slide changed but this problem is still there"
 
 
 @pytest.mark.asyncio

@@ -279,3 +279,47 @@ def test_marked_images_are_pngs_at_the_requested_width(
     assert set(images) == set(_targets(inventory))
     image = Image.open(io.BytesIO(next(iter(images.values()))))
     assert (image.format, image.width) == ("PNG", 320)
+
+
+def _answer_kind(kind: str) -> Responder:
+    def respond(messages: Sequence[BaseMessage]) -> AIMessage:
+        slots = {str(n): f"slot {n}" for n in range(1, _slot_count(messages) + 1)}
+        body = {"kind": kind, "label": "Vision label", "slots": slots}
+        body |= {"max_items": None, "reusable": True}
+        return AIMessage(content=json.dumps(body))
+
+    return respond
+
+
+@pytest.mark.asyncio
+async def test_a_vision_kind_the_slots_cannot_carry_keeps_the_heuristic_kind(
+    template: bytes, inventory: TemplateInventory, patterns_pdf: bytes
+) -> None:
+    """`cards` needs a repeated group: on a slide without one it is rejected,
+    while the label and slot purposes are still taken."""
+    labelled = await label_inventory(
+        inventory, template, patterns_pdf, FakeModelPort(_answer_kind("cards"))
+    )
+    declared = labelling._annotated(template)
+    checked = 0
+    for before, after in zip(inventory.patterns, labelled.patterns):
+        if after.labelled_by != "vision" or declared.get(after.id, (False,))[0]:
+            continue
+        assert after.label == "Vision label"
+        if any(g.count >= 2 for g in before.groups):
+            assert after.kind == "cards"
+        else:
+            checked += 1
+            assert after.kind == before.kind
+            assert any("cannot carry" in w for w in after.warnings)
+    assert checked, "the showcase deck has slides without a repeated group"
+
+
+def test_the_compatibility_table_reads_the_slots(inventory: TemplateInventory) -> None:
+    by_kind = {p.kind: p for p in inventory.patterns if p.included}
+    bullets = by_kind["bullets"]
+    assert labelling.kind_fits_slots("bullets", bullets)
+    assert not labelling.kind_fits_slots("two_columns", bullets)
+    assert labelling.kind_fits_slots("closing", bullets)
+    assert not bullets.groups and not labelling.kind_fits_slots("cards", bullets)
+    assert labelling.kind_fits_slots("process", by_kind["process"])

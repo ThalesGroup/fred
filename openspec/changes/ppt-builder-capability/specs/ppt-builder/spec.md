@@ -33,6 +33,11 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 - **WHEN** a shape name or a speaker-note line states a role, kind or label
 - **THEN** it takes precedence over the heuristics and the vision label for that shape or slide
 
+#### Scenario: Slot capacity measured and calibrated
+
+- **WHEN** the analysis measures a text slot
+- **THEN** it stores the slot's capacity as characters per line × lines, from its geometry and font, raised (within a bound) until the designer's own sample text in that slot fits, and the fit check and the tool description use that stored capacity
+
 #### Scenario: Unreadable or oversized upload
 
 - **WHEN** the upload is not a readable `.pptx` or exceeds 50 MB
@@ -46,6 +51,11 @@ The system SHALL render each example slide to an image with its slots numbered a
 
 - **WHEN** the model returns a valid label for an example slide
 - **THEN** the pattern takes that kind, label, slot purposes and reusable flag
+
+#### Scenario: Vision label incompatible with the slots
+
+- **WHEN** the model's kind needs slots the slide does not have (for example `bullets` without a body slot, `cover` without a title slot, `cards` without a repeated group)
+- **THEN** the slide keeps its heuristic kind, takes the model's label and slot purposes, and the rejection is logged and shown as a pattern warning
 
 #### Scenario: Vision toggle off
 
@@ -152,7 +162,7 @@ The system SHALL let the author review the analysis — a thumbnail, label and k
 
 ### Requirement: Slides are chosen by the code
 
-The system SHALL accept from the model a plan of slides carrying content only — title, subtitle, bullets, columns, items, images, notes and an optional `kind`, last in the schema — and SHALL assign each slide to a pattern deterministically. The tool schema and description SHALL NOT expose pattern ids; the description SHALL list the kinds the template offers with their capacities.
+The system SHALL accept from the model a plan of slides carrying content only — title, subtitle, bullets, columns, items, images, notes and an optional `kind`, last in the schema — and SHALL assign each slide to a pattern deterministically. The tool schema and description SHALL NOT expose pattern ids; the description SHALL list the kinds the template offers with the measured capacity of each zone (characters per line × lines, maximum items).
 
 #### Scenario: Example slide preferred over a layout
 
@@ -163,6 +173,11 @@ The system SHALL accept from the model a plan of slides carrying content only �
 
 - **WHEN** a slide gives no `kind`
 - **THEN** its kind is inferred from the shape of its content (items with figures → `figures`, two columns → `two_columns`, ordered items → `process`, …)
+
+#### Scenario: Requested kind unavailable
+
+- **WHEN** a slide asks for a kind the template does not offer, cannot fill with this content, or forbids at that position
+- **THEN** the slide is assigned from its content shape to a fitting pattern of another kind, and the success message names the substitution
 
 #### Scenario: Fit check
 
@@ -190,8 +205,13 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 
 #### Scenario: Slide fits nothing
 
-- **WHEN** one slide of the plan fits no included pattern (for example seven items where the largest list holds six)
-- **THEN** no deck is written and the result lists, per failing slide, its index, the problem and options available in this template (split, trim to N items, another kind)
+- **WHEN** one slide of the plan fits no included pattern of any kind (for example seven items where the largest list holds six)
+- **THEN** no deck is written and the result lists, per failing slide, its index, the exact field and element that does not fit with the measured limit (`bullets[2] is 214 chars; this zone holds ≈40 chars × 3 lines`, `items: 7 given, max 6`) and concrete options available in this template (shorten an element to N chars, split, trim to N items, another kind)
+
+#### Scenario: Same problem twice
+
+- **WHEN** the model calls again and a slide has the same problem as in the previous result
+- **THEN** the result says whether that slide was resent unchanged or changed without fixing the problem, instead of repeating the same message
 
 #### Scenario: Repair loop
 
@@ -200,7 +220,7 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 
 #### Scenario: Success message invites correction
 
-- **WHEN** a deck is built with truncations, removed leftovers or lost content
+- **WHEN** a deck is built with kind substitutions, truncations, removed leftovers or lost content
 - **THEN** the result names them per slide and allows another call with the whole corrected deck
 
 ### Requirement: Rendering only fills the template
@@ -226,6 +246,11 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 
 - **WHEN** a slide has been filled and some original non-shared text is still present on it
 - **THEN** that text is removed and reported, so the deck never shows the template's example content
+
+#### Scenario: Subtitle or step numbers without their zone
+
+- **WHEN** a slide gives a subtitle and the chosen slide has a body but no subtitle zone, or gives items numbered 1, 2, 3… and the chosen slide has no number zone
+- **THEN** the subtitle leads the body as an unbulleted line and the step numbers are left to the item order, and neither counts as lost content
 
 #### Scenario: Fewer items than the template shows
 

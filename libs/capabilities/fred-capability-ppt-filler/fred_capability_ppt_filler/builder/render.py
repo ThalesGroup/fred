@@ -177,6 +177,9 @@ class _Line:
     # A column heading written into the body for want of a heading zone. It
     # drops the bullet glyph, so the reader can still tell it from the content.
     heading: bool = False
+    # The plan element it comes from ("bullets[2]", "items[0].text"), so a
+    # misfit can name what to shorten.
+    source: str = ""
 
 
 class RenderError(ValueError):
@@ -336,9 +339,10 @@ def _remove(placed: PlacedShape) -> None:
 # --- text -----------------------------------------------------------------------------
 
 
-def _lines_from_bullets(bullets: Sequence[str]) -> List[_Line]:
+def _lines_from_bullets(bullets: Sequence[str], source: str = "") -> List[_Line]:
+    """``source`` names the element; a ``{}`` in it takes the bullet's index."""
     lines: List[_Line] = []
-    for raw in bullets:
+    for index, raw in enumerate(bullets):
         text = raw.rstrip()
         if not text.strip():
             continue
@@ -350,7 +354,9 @@ def _lines_from_bullets(bullets: Sequence[str]) -> List[_Line]:
             stripped = stripped[2:].lstrip()
         if level == 0 and indent >= 2:
             level = 1
-        lines.append(_Line(stripped, min(level, 2)))
+        lines.append(
+            _Line(stripped, min(level, 2), source=source.replace("{}", str(index)))
+        )
     return lines
 
 
@@ -508,6 +514,23 @@ def _layout_body_props(slide) -> Dict[str, Any]:
     return props
 
 
+def zone_capacity(
+    zone: Zone,
+    width: int,
+    height: int,
+    font_name: Optional[str] = None,
+    bold: bool = False,
+) -> Tuple[int, int]:
+    """(chars_per_line, max_lines) the analysis stored; only an inventory saved
+    without one is measured here, so the agent, the fit check and the renderer
+    read the same numbers."""
+    if zone.chars_per_line and zone.max_lines:
+        return zone.chars_per_line, zone.max_lines
+    return estimate_capacity(
+        zone.box, zone.font_pt, zone.role, width, height, font_name, bold
+    )
+
+
 def _fit(
     zone: Zone,
     lines: List[_Line],
@@ -517,16 +540,7 @@ def _fit(
     bold: bool = False,
 ) -> Tuple[List[_Line], Optional[float], bool]:
     """Fit ``lines`` into ``zone``: returns ``(lines, font scale or None, truncated)``."""
-    # The analysis already measured this zone through its box formatting, and
-    # that is the number the agent was given: re-deriving it here is how the
-    # two ended up disagreeing. Only an inventory saved without one is computed.
-    if zone.max_chars and zone.max_lines:
-        max_chars, max_lines = zone.max_chars, zone.max_lines
-    else:
-        max_chars, max_lines = estimate_capacity(
-            zone.box, zone.font_pt, zone.role, width, height, font_name, bold
-        )
-    chars_per_line = max(1, max_chars // max(1, max_lines))
+    chars_per_line, max_lines = zone_capacity(zone, width, height, font_name, bold)
     # How many em of text one line holds: each line is measured in the real
     # font, so a line of capitals counts for what it draws.
     line_em = chars_per_line * text_metrics.char_em(font_name, bold)
@@ -662,9 +676,9 @@ def _assign_text(
             return
         out[zone.key] = lines
 
-    title = _lines_from_bullets([plan.title]) if plan.title else []
-    subtitle = _lines_from_bullets([plan.subtitle]) if plan.subtitle else []
-    bullets = _lines_from_bullets(plan.bullets)
+    title = _lines_from_bullets([plan.title], "title") if plan.title else []
+    subtitle = _lines_from_bullets([plan.subtitle], "subtitle") if plan.subtitle else []
+    bullets = _lines_from_bullets(plan.bullets, "bullets[{}]")
 
     if zmap.titles:
         put(zmap.titles[0], title, "title")
@@ -683,12 +697,18 @@ def _assign_text(
         )
         if subtitle and bullets:
             lost.append("bullets")
+        if plan.columns:
+            lost.append("columns")
         return out
 
     if zmap.subtitles:
         put(zmap.subtitles[0], subtitle, "subtitle")
     elif subtitle and not bullets and zmap.bodies and not plan.columns:
         bullets = subtitle
+    elif subtitle and zmap.bodies and not plan.columns:
+        # No subtitle zone: it leads the body, unbulleted, like a column heading.
+        lead = subtitle[0]
+        bullets = [_Line(lead.text, heading=True, source=lead.source)] + bullets
     elif subtitle:
         lost.append("subtitle")
 
@@ -696,15 +716,23 @@ def _assign_text(
         for index, column in enumerate(plan.columns):
             body = zmap.bodies[index] if index < len(zmap.bodies) else None
             heading = zmap.headings[index] if index < len(zmap.headings) else None
-            lines = _lines_from_bullets(column.bullets)
+            lines = _lines_from_bullets(
+                column.bullets, f"columns[{index}].bullets[{{}}]"
+            )
             if column.heading and heading is not None:
                 put(
                     heading,
-                    _lines_from_bullets([column.heading]),
+                    _lines_from_bullets([column.heading], f"columns[{index}].heading"),
                     f"column {index + 1}",
                 )
             elif column.heading:
-                lines = [_Line(f"**{column.heading}**", heading=True)] + lines
+                lines = [
+                    _Line(
+                        f"**{column.heading}**",
+                        heading=True,
+                        source=f"columns[{index}].heading",
+                    )
+                ] + lines
             put(body, lines, f"column {index + 1}")
         if bullets:
             lost.append("bullets")
@@ -737,12 +765,17 @@ def _unused_item_fields(groups: Sequence[RepeatGroup], plan: SlidePlan) -> List[
     (every group is fed the same items)."""
     roles = {role for group in groups for role in group.item_zones}
     lost: Dict[str, None] = {}
+    numbers = [i.number.strip().rstrip(".") for i in plan.items if i.number]
+    # Step numbers 1, 2, 3… say what the item order already shows.
+    counting = len(numbers) == len(plan.items) and numbers == [
+        f"{n:0{len(numbers[0])}d}" for n in range(1, len(numbers) + 1)
+    ]
     for item in plan.items[: max((g.count for g in groups), default=0)]:
         heading_shown = bool(roles & {"heading", "title", "subtitle"}) or (
             "label" in roles and not item.label
         )
         checks = (
-            ("number", item.number, "number" in roles),
+            ("number", item.number, "number" in roles or counting),
             ("heading", item.heading, heading_shown),
             ("text", item.text, bool(roles & {"body", "caption"})),
             ("label", item.label, "label" in roles),
@@ -765,21 +798,29 @@ def _assign_group(
         item = plan.items[index]
         zones = group.items[index]
         has_heading = any(z.role == "heading" for z in zones)
+        at = f"items[{index}]."
         for zone in zones:
             if zone.role == "number":
                 value = item.number or _auto_number(zone.sample, index)
-                text[zone.key] = _lines_from_bullets([value]) if value else []
+                text[zone.key] = (
+                    _lines_from_bullets([value], at + "number") if value else []
+                )
             elif zone.role == "heading":
-                text[zone.key] = _lines_from_bullets([item.heading or ""])
+                text[zone.key] = _lines_from_bullets(
+                    [item.heading or ""], at + "heading"
+                )
             elif zone.role in ("body", "caption"):
-                text[zone.key] = _lines_from_bullets([item.text or ""])
+                text[zone.key] = _lines_from_bullets([item.text or ""], at + "text")
             elif zone.role == "label":
                 value = item.label or (item.heading if not has_heading else None) or ""
-                text[zone.key] = _lines_from_bullets([value])
+                field = "label" if item.label else "heading"
+                text[zone.key] = _lines_from_bullets([value], at + field)
             elif zone.role == "image":
                 images[zone.key] = item.image
             elif zone.role in ("title", "subtitle"):
-                text[zone.key] = _lines_from_bullets([item.heading or ""])
+                text[zone.key] = _lines_from_bullets(
+                    [item.heading or ""], at + "heading"
+                )
     return text, images, used
 
 
@@ -1087,7 +1128,7 @@ class _Renderer:
                 report.truncated.append(zone.role)
                 self.warnings.append(
                     f"Slide {position}: text for the {zone.role} zone of '{pattern.label}' was too long "
-                    f"and got truncated (about {zone.max_chars} characters fit)."
+                    f"and got truncated (about {zone.chars_per_line} characters × {zone.max_lines} lines fit)."
                 )
 
         # Zones that play the same part on one slide are read as a set: two

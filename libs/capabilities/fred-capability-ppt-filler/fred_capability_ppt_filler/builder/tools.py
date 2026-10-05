@@ -223,11 +223,32 @@ def _image_ids(plan: DeckPlan) -> set[str]:
     return ids
 
 
-def _needs_revision(assignment: Assignment) -> tuple[str, ToolInvocationResult]:
-    payload = {
-        "status": "needs_revision",
-        "slides": [p.as_dict() for p in assignment.problems],
-    }
+# Per slide index: (problem, the slide as sent) of the previous needs_revision.
+_Previous = Dict[int, Tuple[str, str]]
+
+
+def _needs_revision(
+    assignment: Assignment, plan: DeckPlan, previous: _Previous
+) -> tuple[str, ToolInvocationResult]:
+    """The problems, each flagged when the previous call already had it, so the
+    model never reads the same message twice without learning what changed."""
+    current: _Previous = {}
+    slides = []
+    for problem in assignment.problems:
+        sent = plan.slides[problem.index - 1].model_dump_json()
+        entry = problem.as_dict()
+        before = previous.get(problem.index)
+        if before is not None and before[0] == problem.problem:
+            entry["repeated"] = (
+                "you resent this slide unchanged: apply one of the options"
+                if before[1] == sent
+                else "the slide changed but this problem is still there"
+            )
+        current[problem.index] = (problem.problem, sent)
+        slides.append(entry)
+    previous.clear()
+    previous.update(current)
+    payload = {"status": "needs_revision", "slides": slides}
     return _error(
         "No deck was built: some slides fit no slide of this template. Fix each slide listed "
         "below with one of its options, then call build_presentation again with the WHOLE "
@@ -346,15 +367,18 @@ def _description(inventory: TemplateInventory) -> str:
         "decks instead of one. For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), notes; then, "
-        "optionally, its `kind` from the list below (left out, it is inferred from the content). The tool "
-        "picks the template slide for each entry."
+        "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
+        "the template cannot use there is replaced by one that holds the content). The tool picks the "
+        "template slide for each entry."
         + rules
-        + " Respect the limits below: a slide is not "
+        + " A slide holds only the fields its kind lists below (no subtitle on a kind that lists "
+        "none, item numbers only where listed). Respect the limits below: a slide is not "
         "a document. If a slide fits no slide of the template, nothing is built and the result lists, per "
         "slide, what to change: apply it and call again with the whole deck. The result is shown to the "
         "user automatically; never write a download link. To correct a deck, call again once with the "
         "whole amended plan; the new deck replaces the previous one.\n"
-        "Slide kinds of this template, with what their slides hold (variants separated by |):\n"
+        "Slide kinds of this template, with what each zone holds at full size (≈chars per line × "
+        "lines; items max N; variants separated by |). Write to these sizes:\n"
         + catalogue(inventory)
     )
 
@@ -372,6 +396,7 @@ def build_builder_tools(
     services = ctx.services
     identity = ctx.identity
     args_schema = _args_schema(inventory)
+    previous_problems: _Previous = {}
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         try:
@@ -391,7 +416,8 @@ def build_builder_tools(
         # Before any I/O: a plan that needs revision costs no template fetch.
         assignment = await asyncio.to_thread(assign, inventory, plan)
         if assignment.problems:
-            return _needs_revision(assignment)
+            return _needs_revision(assignment, plan, previous_problems)
+        previous_problems.clear()
 
         workspace = services.workspace_fs
         if workspace is None:

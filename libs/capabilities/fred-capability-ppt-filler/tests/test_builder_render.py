@@ -702,7 +702,7 @@ def _two_body_pattern(first: int, second: int) -> Pattern:
                 role="body",
                 box=Box(x=index * 300, y=400, w=280, h=100),
                 font_pt=14.0,
-                max_chars=chars,
+                chars_per_line=chars // 2,
                 max_lines=2,
             )
             for index, chars in enumerate((first, second))
@@ -716,8 +716,8 @@ def test_catalogue_quotes_the_tightest_zone_not_the_first():
     line = catalogue(
         TemplateInventory(slide_width=1, slide_height=1, patterns=[pattern])
     )
-    assert "≤22 chars" in line
-    assert "≤36 chars" not in line
+    assert "≈11 chars × 2 lines" in line
+    assert "≈18 chars" not in line
 
 
 def test_catalogue_names_columns_when_a_pattern_has_several_bodies():
@@ -750,7 +750,7 @@ def test_shrinking_text_to_the_floor_is_not_reported_as_truncated():
         role="body",
         box=Box(x=0, y=0, w=400, h=300),
         font_pt=18.0,
-        max_chars=180,
+        chars_per_line=20,
         max_lines=9,
     )
     lines = [
@@ -772,7 +772,7 @@ def test_a_truncated_zone_is_never_left_empty():
         role="body",
         box=Box(x=0, y=0, w=30, h=20),
         font_pt=18.0,
-        max_chars=4,
+        chars_per_line=4,
         max_lines=1,
     )
     kept, _, truncated = _fit(
@@ -971,7 +971,7 @@ def test_one_unbreakable_token_does_not_shrink_its_whole_zone_below_the_floor():
         role="body",
         box=Box(x=0, y=0, w=200, h=300),
         font_pt=18.0,
-        max_chars=60,
+        chars_per_line=15,
         max_lines=4,
     )
     _, scale, _ = _fit(
@@ -1096,7 +1096,7 @@ def _linked_template() -> tuple[bytes, TemplateInventory]:
         key="ph:0",
         role="title",
         box=Box(x=0, y=0, w=1000, h=150),
-        max_chars=60,
+        chars_per_line=60,
         max_lines=1,
     )
     pattern = Pattern(

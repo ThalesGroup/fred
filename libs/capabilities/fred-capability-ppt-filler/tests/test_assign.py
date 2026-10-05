@@ -21,7 +21,7 @@ from typing import Any, List
 
 from builder_decks import build_showcase_template
 from fred_capability_ppt_filler.builder.analysis import analyze_template
-from fred_capability_ppt_filler.builder.assign import assign, infer_kinds
+from fred_capability_ppt_filler.builder.assign import assign, infer_kinds, misfit
 from fred_capability_ppt_filler.builder.models import (
     Box,
     Pattern,
@@ -36,7 +36,9 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanColumn,
     PlanItem,
     SlidePlan,
+    zone_summary,
 )
+from fred_capability_ppt_filler.builder.render import _assign_text
 from pptx.util import Inches
 
 _analysed = analyze_template(build_showcase_template()).inventory
@@ -70,7 +72,7 @@ def _title_zone() -> Zone:
         role="title",
         box=Box(x=0, y=0, w=900, h=100),
         font_pt=32.0,
-        max_chars=60,
+        chars_per_line=60,
         max_lines=1,
     )
 
@@ -81,7 +83,7 @@ def _body_zone(key: str = "ph:1", chars: int = 300) -> Zone:
         role="body",
         box=Box(x=0, y=200, w=900, h=600),
         font_pt=18.0,
-        max_chars=chars,
+        chars_per_line=chars // 8,
         max_lines=8,
     )
 
@@ -165,7 +167,7 @@ def _cards_inventory() -> TemplateInventory:
                         role=role,
                         box=Box(x=i * 300, y=300, w=280, h=200),
                         font_pt=14.0,
-                        max_chars=80,
+                        chars_per_line=26,
                         max_lines=3,
                     )
                     for role in roles
@@ -236,7 +238,7 @@ def test_an_image_pattern_is_not_chosen_for_a_plan_without_images():
 def test_a_pattern_that_would_truncate_is_not_a_candidate():
     plain = _bullets("layout:1", "Plain")
     narrow = _bullets("slide:98", "Narrow", source="slide")
-    narrow.zones[1].max_chars = 20
+    narrow.zones[1].chars_per_line = 3
     slide = SlidePlan(title="Detail", bullets=["A sentence far longer than twenty"] * 4)
     # The example slide would win on preference, but it would cut the text.
     assert _labels(_inventory(narrow, plain), slide) == ["Plain"]
@@ -276,11 +278,14 @@ def test_the_first_slide_must_fit_the_cover():
     assert any("add a cover slide" in o for o in problem.options)
 
 
-def test_a_later_cover_is_refused_with_the_section_option():
+def test_a_later_cover_is_built_from_its_content_and_the_swap_is_named():
     assignment = assign(INVENTORY, _plan(COVER, {"title": "Again", "kind": "cover"}))
-    (problem,) = assignment.problems
-    assert problem.index == 2 and "only the first slide" in problem.problem
-    assert any("section" in o for o in problem.options)
+    assert not assignment.problems
+    assert [p.kind for p in assignment.patterns if p] == ["cover", "section"]
+    assert (
+        "instead of 'cover' (only the first slide can be the cover)"
+        in (assignment.notes[0])
+    )
 
 
 def _with_closing() -> TemplateInventory:
@@ -309,21 +314,27 @@ def test_closing_is_used_at_most_once_and_only_last():
 
     assignment = assign(
         inventory,
-        _plan(COVER, {"kind": "closing"}, {"title": "Points", "bullets": ["a"]}),
+        _plan(
+            COVER,
+            {"kind": "closing", "title": "Merci"},
+            {"title": "Points", "bullets": ["a"]},
+        ),
     )
-    (problem,) = assignment.problems
-    assert problem.index == 2 and "can only end the deck" in problem.problem
+    assert not assignment.problems
+    assert assignment.patterns[1] and assignment.patterns[1].label != "Merci"
+    assert "a closing slide can only end the deck" in assignment.notes[0]
 
 
-def test_a_fixed_closing_slide_takes_no_content():
+def test_a_fixed_closing_slide_takes_no_content_so_the_content_decides():
     assignment = assign(
         _with_closing(),
         _plan(
             COVER, {"kind": "closing", "title": "Contact", "bullets": ["jane@x.com"]}
         ),
     )
-    (problem,) = assignment.problems
-    assert "takes no content" in problem.problem
+    assert not assignment.problems
+    assert assignment.patterns[1] and assignment.patterns[1].kind == "bullets"
+    assert "no 'closing' slide holds this content" in assignment.notes[0]
 
 
 def test_no_three_identical_slides_in_a_row_when_an_alternative_fits():
@@ -369,15 +380,47 @@ def test_items_over_capacity_are_a_problem_with_trim_and_split_options():
     )
     (problem,) = assignment.problems
     assert problem.as_dict()["slide"] == 2
-    assert problem.problem == "7 items; the largest 'process' slide holds 3"
-    assert problem.options[:2] == ["trim to 3 items", "split the items over two slides"]
+    assert (
+        problem.problem == "items: 7 given; the largest slide of this template holds 6"
+    )
+    assert problem.options[:2] == ["trim to 6 items", "split the items over two slides"]
 
 
-def test_a_kind_the_template_lacks_names_the_kinds_that_would_fit():
+def test_a_kind_the_template_lacks_is_replaced_by_the_content_shape():
     slide = SlidePlan(title="Points", bullets=["a", "b"], kind="timeline")
-    (problem,) = assign(INVENTORY, _plan(COVER, slide)).problems
-    assert problem.problem == "this template has no 'timeline' slide"
-    assert "kind 'bullets' holds this content as written" in problem.options
+    assignment = assign(INVENTORY, _plan(COVER, slide))
+    assert not assignment.problems
+    assert assignment.patterns[1] and assignment.patterns[1].kind == "bullets"
+    assert assignment.notes == [
+        "Slide 2: built as 'bullets' instead of 'timeline' "
+        "(this template has no 'timeline' slide)."
+    ]
+
+
+def test_a_requested_kind_that_fits_is_kept():
+    slide = SlidePlan(title="Points", bullets=["a", "b"], kind="two_columns")
+    assignment = assign(INVENTORY, _plan(COVER, slide))
+    assert assignment.patterns[1] and assignment.patterns[1].kind == "two_columns"
+    assert not assignment.notes
+
+
+def test_a_text_too_long_everywhere_names_the_element_and_its_measured_limit():
+    slide = SlidePlan(title="Detail", bullets=["short", "word " * 199 + "word"])
+    (problem,) = assign(
+        _inventory(_bullets("layout:1", "Plain")), _plan(slide)
+    ).problems
+    assert problem.problem == (
+        "closest fit, a 'bullets' slide: bullets: 2 entries, 1004 chars; this zone "
+        "holds ≈37 chars × 8 lines (longest: bullets[1], 999 chars)"
+    )
+    assert any(o.startswith("keep bullets within") for o in problem.options)
+
+
+def test_one_title_too_long_is_named_with_the_room_it_has():
+    slide = SlidePlan(title="T" * 400, subtitle="Team")
+    (problem,) = assign(INVENTORY, _plan(slide)).problems
+    assert "title is 400 chars; this zone holds ≈" in problem.problem
+    assert any(o.startswith("shorten title to ≈") for o in problem.options)
 
 
 def test_columns_beyond_every_pattern_are_a_problem_not_a_lost_column():
@@ -385,7 +428,7 @@ def test_columns_beyond_every_pattern_are_a_problem_not_a_lost_column():
     (problem,) = assign(
         INVENTORY, _plan(COVER, SlidePlan(title="T", columns=columns))
     ).problems
-    assert "no place for column 3" in problem.problem
+    assert "columns: 9 given, max 2" in problem.problem
     assert any("columns.bullets×2" in o for o in problem.options)
 
 
@@ -410,3 +453,55 @@ def test_an_empty_slide_in_the_middle_is_a_problem():
         INVENTORY, _plan(COVER, {}, {"title": "P", "bullets": ["x"]})
     ).problems
     assert problem.index == 2 and problem.problem == "the slide is empty"
+
+
+def test_a_subtitle_without_its_zone_leads_the_body_instead_of_failing():
+    inventory = _inventory(_bullets("layout:1", "Plain"))
+    slide = SlidePlan(title="Why", subtitle="Three reasons", bullets=["a", "b"])
+    assert _labels(inventory, slide) == ["Plain"]
+    lines = _assign_text(inventory.patterns[0], slide)["ph:1"]
+    assert lines[0].text == "Three reasons" and lines[0].heading
+    assert [line.source for line in lines] == ["subtitle", "bullets[0]", "bullets[1]"]
+
+
+def test_step_numbers_need_no_number_zone_but_figures_do():
+    process = _pattern("Process")
+    process = process.model_copy(
+        update={
+            "groups": [
+                g.model_copy(
+                    update={
+                        "item_zones": [r for r in g.item_zones if r != "number"],
+                        "items": [
+                            [z for z in item if z.role != "number"] for item in g.items
+                        ],
+                    }
+                )
+                for g in process.groups
+            ]
+        }
+    )
+    steps = [PlanItem(number=f"0{i}", heading=f"S{i}") for i in range(1, 4)]
+    assert not misfit(process, SlidePlan(title="How", items=steps), (1, 1))[0]
+    figures = [PlanItem(number="42%", heading="Margin")] * 3
+    reasons, _ = misfit(process, SlidePlan(title="KPIs", items=figures), (1, 1))
+    assert [r.text for r in reasons] == [
+        "items' number: this slide has no place for it"
+    ]
+
+
+def test_a_cover_with_only_a_heading_is_described_as_taking_the_title():
+    """The renderer writes the title there: calling it `columns.heading` sent
+    models sending columns to the cover."""
+    heading = _title_zone().model_copy(update={"role": "heading"})
+    cover = Pattern(
+        id="slide:1",
+        source="slide",
+        source_index=1,
+        name="Cover",
+        label="Cover",
+        kind="cover",
+        zones=[heading],
+    )
+    assert zone_summary(cover) == "title ≈60 chars"
+    assert _labels(_inventory(cover), SlidePlan(title="Kick-off")) == ["Cover"]

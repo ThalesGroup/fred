@@ -102,7 +102,8 @@ def test_layout_zones_carry_roles_and_capacity():
     body = next(z for z in content.zones if z.role == "body")
     # Inherited from the master body style (32 pt in the default template).
     assert body.font_pt == 32
-    assert body.max_chars and body.max_chars > 200
+    assert body.chars_per_line and body.max_lines
+    assert body.chars_per_line * body.max_lines > 200
     assert body.max_lines and body.max_lines >= 5
 
 
@@ -224,7 +225,7 @@ def test_example_slide_placeholders_inherit_their_font_size(showcase):
     # Inherited from the master title style (44 pt in the default template),
     # so the capacity the catalogue quotes is the real one.
     assert title.font_pt == 44
-    assert title.max_chars and title.max_chars < 40
+    assert title.chars_per_line and title.chars_per_line * (title.max_lines or 1) < 40
 
 
 def test_notes_without_body_placeholder_do_not_abort_the_analysis(showcase):
@@ -475,7 +476,7 @@ def test_capacity_pays_the_paragraph_spacing_the_template_declares():
     bare = _capacity(line_spacing=1.0, space_before_pt=0.0)
     spaced = _capacity(line_spacing=1.14, space_before_pt=16.0)
     assert spaced[1] * 2 <= bare[1]
-    assert spaced[0] < bare[0]
+    assert spaced[0] * spaced[1] < bare[0] * bare[1]
 
 
 def test_capacity_takes_the_padding_off_the_box():
@@ -487,7 +488,6 @@ def test_capacity_takes_the_padding_off_the_box():
 
 def test_capacity_does_not_hand_out_the_room_wrapping_wastes():
     """Characters × lines is not reachable: every line break loses part of a word."""
-    per_line, _ = _capacity(lr_inset=0, tb_inset=0, line_spacing=1.0)
     one_line = estimate_capacity(
         Box(x=0, y=0, w=400, h=40),
         18.0,
@@ -496,9 +496,31 @@ def test_capacity_does_not_hand_out_the_room_wrapping_wastes():
         Inches(7.5).emu,
         frame=FrameMetrics(lr_inset=0, tb_inset=0),
     )
-    chars, lines = _capacity(lr_inset=0, tb_inset=0)
+    per_line, lines = _capacity(lr_inset=0, tb_inset=0)
     assert lines > 1
-    assert chars < one_line[0] * lines
+    assert per_line < one_line[0]
+
+
+def test_the_designers_sample_text_calibrates_a_slot_it_overflows_by_our_ruler():
+    """The sample fits its box in PowerPoint: a ruler that says otherwise is
+    measuring a wider substitute font, so the line is credited more room."""
+    box = Box(x=0, y=0, w=400, h=40)
+    size = (Inches(13.333).emu, Inches(7.5).emu)
+    flat = FrameMetrics(lr_inset=0, tb_inset=0)
+    measured, lines = estimate_capacity(box, 18.0, "title", *size, frame=flat)
+    prose = "Les présentations montrent des phrases ordinaires, the usual mix. " * 9
+    sample = prose[: int(measured * 1.2)]
+    calibrated, _ = estimate_capacity(
+        box, 18.0, "title", *size, frame=flat, sample=sample
+    )
+    short, _ = estimate_capacity(box, 18.0, "title", *size, frame=flat, sample="Hi")
+    absurd, _ = estimate_capacity(
+        box, 18.0, "title", *size, frame=flat, sample=prose[: measured * 3]
+    )
+    assert lines == 1
+    assert measured < calibrated <= measured / 0.75 + 1
+    assert short == measured  # a short sample says nothing about the font
+    assert absurd == measured  # far over its box: overflowing text, not evidence
 
 
 def test_analysis_reads_the_line_spacing_a_layout_declares():
@@ -526,4 +548,4 @@ def test_a_box_that_does_not_wrap_is_marked_as_growing():
     assert inventory is not None
     zones = [z for p in inventory.patterns for z in p.zones]
     assert [z for z in zones if z.grows], "the no-wrap heading should be marked"
-    assert all(z.max_chars for z in zones if not z.grows and z.role != "image")
+    assert all(z.chars_per_line for z in zones if not z.grows and z.role != "image")

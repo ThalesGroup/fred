@@ -154,7 +154,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 6
+ANALYSIS_VERSION = 7
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -499,14 +499,16 @@ def estimate_capacity(
     font_name: Optional[str] = None,
     bold: bool = False,
     frame: Optional[FrameMetrics] = None,
+    sample: str = "",
 ) -> Tuple[int, int]:
-    """(max_chars, max_lines) of a box, as the renderer will really fill it.
+    """(chars_per_line, max_lines) of a box, as the renderer will really fill it.
 
     Both dimensions go through the box's own formatting: the padding comes off
     the usable width and height, and a line advances by the paragraph's line
     spacing plus the space declared around it. Widths are measured with the
     real font (see ``text_metrics``); greedy wrapping wastes about half a word
-    at every line break, so the product of characters and lines is not free.
+    at every line break, so each line is credited a little less than it holds.
+    The designer's ``sample`` calibrates the width (``text_metrics.calibrate``).
     """
     pt = font_pt or _DEFAULT_PT.get(role, 16.0)
     metrics = frame or FrameMetrics()
@@ -525,14 +527,14 @@ def estimate_capacity(
 
     per_line = text_metrics.chars_per_line(width_pt, pt, font_name, bold)
     waste = text_metrics.WRAP_WASTE_CHARS * (lines - 1)
-    chars = (per_line * lines - waste) * text_metrics.SAFETY
-    return max(1, int(chars)), lines
+    chars = max(1, int((per_line * lines - waste) * text_metrics.SAFETY / lines))
+    return text_metrics.calibrate(sample, chars, lines, font_name, bold), lines
 
 
 def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
-    max_chars = max_lines = None
+    chars_per_line = max_lines = None
     if role != "image" and role != "keep":
-        max_chars, max_lines = estimate_capacity(
+        chars_per_line, max_lines = estimate_capacity(
             rec.box,
             rec.font_pt,
             role,
@@ -541,6 +543,7 @@ def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
             rec.font_name,
             rec.bold,
             rec.frame,
+            rec.text,
         )
     return Zone(
         key=rec.key,
@@ -548,7 +551,7 @@ def _zone(rec: _Rec, role: ZoneRole, width: int, height: int) -> Zone:
         box=rec.box,
         sample=rec.text[:80],
         font_pt=rec.font_pt,
-        max_chars=max_chars,
+        chars_per_line=chars_per_line,
         max_lines=max_lines,
         grows=rec.frame.grows,
     )

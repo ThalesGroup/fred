@@ -92,8 +92,9 @@ class Zone(BaseModel):
     """One fillable area of a pattern.
 
     ``key`` addresses the shape: ``ph:<idx>`` for a placeholder, ``sp:<id/..>``
-    for a free shape (its shape-id path through groups). ``max_chars`` is the
-    analysis' capacity estimate the tool description passes to the agent.
+    for a free shape (its shape-id path through groups). ``chars_per_line`` ×
+    ``max_lines`` is the capacity measured once at analysis: the fit check, the
+    renderer and the tool description all read it.
     """
 
     key: str
@@ -101,7 +102,7 @@ class Zone(BaseModel):
     box: Box
     sample: str = ""
     font_pt: Optional[float] = None
-    max_chars: Optional[int] = None
+    chars_per_line: Optional[int] = None
     max_lines: Optional[int] = None
     # The box grows with its text instead of wrapping inside its outline (a KPI
     # figure sized to "62"): its capacity is what the designer typed, not a limit.

@@ -171,12 +171,42 @@ def _prepare(
     )
 
 
+_TITLE_SLOTS = frozenset({"title", "heading"})
+_BODY_SLOTS = frozenset({"body", "caption"})
+
+
+def kind_fits_slots(kind: SlideKind, pattern: Pattern) -> bool:
+    """Whether the slide's detected slots can carry ``kind`` (design.md D2.3)."""
+    roles = [z.role for z in pattern.zones]
+    titles = sum(r in _TITLE_SLOTS for r in roles)
+    bodies = sum(r in _BODY_SLOTS for r in roles)
+    groups = [g for g in pattern.groups if g.count >= 2]
+    if kind in ("cover", "section", "quote"):
+        return titles > 0
+    if kind == "bullets":
+        return bodies > 0
+    if kind == "image_text":
+        return "image" in roles and (bodies > 0 or titles > 1 or "subtitle" in roles)
+    if kind in ("two_columns", "comparison"):
+        return bodies >= 2
+    if kind == "figures":
+        return any("number" in g.item_zones for g in groups)
+    if kind in ("cards", "process", "timeline", "agenda", "team"):
+        return bool(groups)
+    return True  # closing, other
+
+
 def _merge(
     pattern: Pattern, answer: SlideLabel, declared: Tuple[bool, bool]
 ) -> Pattern:
     merged = pattern.model_copy(deep=True)
-    if not declared[0]:
+    if not declared[0] and kind_fits_slots(answer.kind, pattern):
         merged.kind = answer.kind
+    elif not declared[0] and answer.kind != pattern.kind:
+        merged.warnings.append(
+            f"Vision read this slide as '{answer.kind}', which its slots cannot carry; "
+            f"kept '{pattern.kind}'."
+        )
     if not declared[1]:
         merged.label = answer.label[:60]
     merged.reusable = answer.reusable
@@ -247,11 +277,19 @@ async def label_inventory(
     }
     if refused:
         logger.info("Vision labelling skipped: %s", refused[0])
+    rejected = sum(
+        1
+        for pattern, answer in zip(labelled, answers)
+        if answer is not None
+        and not declared.get(pattern.id, (False, False))[0]
+        and not kind_fits_slots(answer.kind, pattern)
+    )
     logger.info(
-        "Vision labelled %d/%d example slides in %.1fs",
+        "Vision labelled %d/%d example slides in %.1fs (%d kinds rejected by the slots)",
         len(merged),
         len(targets),
         time.monotonic() - started,
+        rejected,
     )
     if not merged:
         return inventory
