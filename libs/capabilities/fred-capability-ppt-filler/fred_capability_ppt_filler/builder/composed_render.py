@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR
 from pptx.oxml.ns import qn
@@ -48,7 +49,6 @@ _MAPPED = {"dk1": "tx1", "lt1": "bg1", "dk2": "tx2", "lt2": "bg2"}
 
 def _scheme_or_literal(token: ColorToken):
     """The XML for one colour: a reference when we have a slot, else a literal."""
-    from lxml import etree  # local: only the writing side needs it
 
     if token.ref:
         node = etree.SubElement(etree.Element("wrap"), qn("a:schemeClr"))
@@ -66,7 +66,6 @@ def _scheme_or_literal(token: ColorToken):
 
 def _set_solid_fill(shape, token: ColorToken) -> None:
     """Paint a shape by pointing at the theme rather than copying its value."""
-    from lxml import etree
 
     sp_pr = shape._element.spPr
     for tag in ("a:solidFill", "a:noFill", "a:gradFill", "a:blipFill", "a:pattFill"):
@@ -83,7 +82,6 @@ def _set_solid_fill(shape, token: ColorToken) -> None:
 
 
 def _no_fill(shape) -> None:
-    from lxml import etree
 
     sp_pr = shape._element.spPr
     for tag in ("a:solidFill", "a:gradFill", "a:blipFill", "a:pattFill"):
@@ -99,7 +97,6 @@ def _no_fill(shape) -> None:
 
 def _set_line(shape, token: ColorToken) -> None:
     """Outline a shape in a template colour, pointing at the theme (D11)."""
-    from lxml import etree
 
     sp_pr = shape._element.spPr
     line = sp_pr.find(qn("a:ln"))
@@ -112,7 +109,6 @@ def _set_line(shape, token: ColorToken) -> None:
 
 
 def _no_line(shape) -> None:
-    from lxml import etree
 
     sp_pr = shape._element.spPr
     line = sp_pr.find(qn("a:ln"))
@@ -125,7 +121,6 @@ def _no_line(shape) -> None:
 
 def _style_run(run, token, pair: Optional[ColorPair]) -> None:
     """Size, weight, typeface reference and ink — all from the design system."""
-    from lxml import etree
 
     run.font.size = Pt(token.size_pt)
     run.font.bold = token.bold

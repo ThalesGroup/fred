@@ -28,6 +28,7 @@ from deck_builders import (
     ICON_NAMES,
     build_house_style_template,
     build_icon_bank_template,
+    required,
 )
 from fred_capability_ppt_filler.builder.analysis import analyze_presentation
 from fred_capability_ppt_filler.builder.components import (
@@ -43,19 +44,24 @@ from fred_capability_ppt_filler.builder.theme import default_theme
 from pptx import Presentation
 
 
+def composed(system, name, **kwargs):
+    """A composition the template is known to support."""
+    return required(compose(system, name, **kwargs))
+
+
 @pytest.fixture(scope="module")
 def rich():
     _, inventory = default_theme()
-    return inventory.design_system
+    return required(inventory.design_system)
 
 
 @pytest.fixture(scope="module")
 def stripped():
     presentation = Presentation()
     title = presentation.slides.add_slide(presentation.slide_layouts[0])
-    title.shapes.title.text = "Cover"
+    required(title.shapes.title).text = "Cover"
     presentation.slides.add_slide(presentation.slide_layouts[6])
-    return analyze_presentation(presentation).design_system
+    return required(analyze_presentation(presentation).design_system)
 
 
 ALL_VARIANTS = [
@@ -117,7 +123,7 @@ def test_a_composition_picks_the_variant_that_holds_the_items():
 
 @pytest.mark.parametrize("count", [2, 3, 4])
 def test_a_card_row_gives_one_card_per_item(count, rich):
-    slide = compose(rich, "card_row", items=count)
+    slide = composed(rich, "card_row", items=count)
 
     cards = [p for p in slide.pieces if p.kind == "card"]
     assert len(cards) == count
@@ -127,7 +133,7 @@ def test_a_card_row_gives_one_card_per_item(count, rich):
 @pytest.mark.parametrize("name,count", ALL_VARIANTS)
 def test_every_box_stays_inside_the_usable_area(name, count, rich):
     slide = resolved(rich, name, count)
-    area = rich.grid.area
+    area = required(rich.grid).area
 
     for piece in slide.pieces:
         assert piece.box.x >= area.x - 1, f"{piece.name} starts left of the area"
@@ -139,7 +145,7 @@ def test_every_box_stays_inside_the_usable_area(name, count, rich):
 
 @pytest.mark.parametrize("count", [2, 3, 4])
 def test_columns_of_a_row_do_not_overlap(count, rich):
-    slide = compose(rich, "card_row", items=count)
+    slide = composed(rich, "card_row", items=count)
 
     cards = sorted((p for p in slide.pieces if p.kind == "card"), key=lambda p: p.box.x)
     for left, right in zip(cards, cards[1:]):
@@ -154,7 +160,7 @@ def test_every_composition_puts_its_title_on_the_same_anchor(name, count, rich):
     slide = resolved(rich, name, count)
 
     title = next(p for p in slide.pieces if p.slot == "title")
-    assert title.box.y == rich.anchors.title_y
+    assert title.box.y == required(rich.anchors).title_y
     assert title.role == "title"
 
 
@@ -164,7 +170,7 @@ def test_content_starts_at_the_content_anchor(name, count, rich):
 
     below = [p for p in slide.pieces if p.slot != "title"]
     assert below, f"{name} has no content"
-    assert min(p.box.y for p in below) == rich.anchors.content_y
+    assert min(p.box.y for p in below) == required(rich.anchors).content_y
 
 
 # -- z-order, naming, accessibility (D6, D15) ---------------------------------
@@ -180,7 +186,7 @@ def test_creation_order_is_contiguous_and_starts_at_zero(name, count, rich):
 
 def test_a_card_is_created_before_the_text_that_sits_on_it(rich):
     """Creation order IS z-order: the other way round hides the text."""
-    slide = compose(rich, "card_row", items=3)
+    slide = composed(rich, "card_row", items=3)
 
     for index in range(3):
         card = next(p for p in slide.pieces if p.name == f"composed-card-{index}")
@@ -333,21 +339,21 @@ def test_the_library_holds_every_piece_the_spec_names(rich):
     assert divider(box, order=0, name="d").kind == "divider"
     assert divider(box, order=0, name="d").decorative
 
-    stats = compose(rich, "stat_band", items=3).pieces
+    stats = composed(rich, "stat_band", items=3).pieces
     figure = next(p for p in stats if p.name == "composed-stat-number-0")
     label = next(p for p in stats if p.name == "composed-stat-label-0")
     assert (figure.role, label.role) == ("number", "label")
     assert {figure.kind, label.kind} == {"text"}
 
-    assert [p for p in compose(rich, "progress", items=2).pieces if p.kind == "bar"]
+    assert [p for p in composed(rich, "progress", items=2).pieces if p.kind == "bar"]
     assert [
-        p for p in compose(rich, "figure_caption", items=1).pieces if p.kind == "image"
+        p for p in composed(rich, "figure_caption", items=1).pieces if p.kind == "image"
     ]
 
 
 def test_a_progress_composition_draws_bars_not_a_chart(rich):
     """D10: a quantity out of a whole is shapes, never a chart object."""
-    slide = compose(rich, "progress", items=3)
+    slide = composed(rich, "progress", items=3)
 
     bars = [p for p in slide.pieces if p.kind == "bar"]
     assert len(bars) == 6  # a track and a value per row
@@ -361,7 +367,7 @@ def test_a_progress_composition_draws_bars_not_a_chart(rich):
 
 
 def test_a_stat_band_puts_the_figure_above_its_label(rich):
-    slide = compose(rich, "stat_band", items=3)
+    slide = composed(rich, "stat_band", items=3)
 
     for index in range(3):
         number = next(
@@ -386,7 +392,7 @@ def house():
 
 
 def test_columns_are_separated_by_the_gap_the_template_uses(house):
-    slide = compose(house, "card_row", items=3)
+    slide = composed(house, "card_row", items=3)
     cards = sorted((p for p in slide.pieces if p.kind == "card"), key=lambda p: p.box.x)
 
     gaps = {
@@ -410,7 +416,7 @@ def test_a_block_holds_the_air_the_template_gives_its_own(house, rich):
     assert house.block_padding != rich.block_padding
 
     for system in (house, rich):
-        slide = compose(system, "card_row", items=3)
+        slide = composed(system, "card_row", items=3)
         card_box = next(p.box for p in slide.pieces if p.kind == "card")
         heading = next(p.box for p in slide.pieces if p.name == "composed-heading-0")
 
@@ -427,7 +433,7 @@ def test_a_stat_follows_the_order_the_template_stacks_them_in(house, rich):
     assert rich.shapes.figure_above_label and not house.shapes.figure_above_label
 
     def ordinates(system):
-        slide = compose(system, "stat_band", items=3)
+        slide = composed(system, "stat_band", items=3)
         number = next(p for p in slide.pieces if p.name == "composed-stat-number-0")
         label = next(p for p in slide.pieces if p.name == "composed-stat-label-0")
         return number.box.y, label.box.y
@@ -442,7 +448,7 @@ def test_a_stat_follows_the_order_the_template_stacks_them_in(house, rich):
 def test_the_figure_is_read_first_whichever_way_it_is_stacked(house):
     """The point of a stat band is the figure: it leads the reading order even
     when the template prints it second."""
-    slide = compose(house, "stat_band", items=3)
+    slide = composed(house, "stat_band", items=3)
 
     number = next(p for p in slide.pieces if p.name == "composed-stat-number-0")
     label = next(p for p in slide.pieces if p.name == "composed-stat-label-0")
@@ -477,26 +483,28 @@ def test_a_narrow_box_steps_down_the_scale_rather_than_truncating(rich):
     scale = {token.size_pt for token in rich.type_scale}
     wide = next(
         p
-        for p in compose(rich, "card_row", items=2).pieces
+        for p in composed(rich, "card_row", items=2).pieces
         if p.name == "composed-text-0"
     )
     narrow = next(
         p
-        for p in compose(rich, "card_row", items=4).pieces
+        for p in composed(rich, "card_row", items=4).pieces
         if p.name == "composed-text-0"
     )
 
     assert wide.font_pt in scale and narrow.font_pt in scale
     assert narrow.box.w < wide.box.w
-    assert narrow.font_pt <= wide.font_pt, "a narrower card kept the wider size"
+    assert required(narrow.font_pt) <= required(wide.font_pt), (
+        "a narrower card kept the wider size"
+    )
     assert narrow.font_pt == min(s for s in scale if s <= wide.font_pt) or (
-        narrow.max_chars >= _MIN_CHARS["body"]
+        required(narrow.max_chars) >= _MIN_CHARS["body"]
     )
 
 
 def test_the_slide_title_keeps_its_own_size(rich):
     """Stepping down is for boxes too small, not for the title of the slide."""
-    slide = compose(rich, "card_row", items=3)
+    slide = composed(rich, "card_row", items=3)
 
     title = next(p for p in slide.pieces if p.slot == "title")
 
@@ -518,7 +526,7 @@ def test_a_heading_is_never_the_same_size_as_the_text_under_it(name, count, rich
         )
         if heading is None or body is None:
             continue
-        assert heading.font_pt > body.font_pt
+        assert required(heading.font_pt) > required(body.font_pt)
 
 
 @pytest.mark.parametrize("name,count", ALL_VARIANTS)
@@ -536,8 +544,8 @@ def test_a_text_box_holds_the_lines_it_was_built_for(name, count, rich):
 
 
 def test_a_card_does_not_stretch_down_the_whole_band(rich):
-    slide = compose(rich, "card_row", items=3)
-    band_bottom = rich.grid.area.y + rich.grid.area.h
+    slide = composed(rich, "card_row", items=3)
+    band_bottom = required(rich.grid).area.y + required(rich.grid).area.h
 
     card = next(p for p in slide.pieces if p.kind == "card")
     content = [p for p in slide.pieces if p.slot.startswith("item:0:")]
@@ -550,7 +558,7 @@ def test_a_card_does_not_stretch_down_the_whole_band(rich):
 
 
 def test_every_card_of_a_row_is_the_same_height(rich):
-    slide = compose(rich, "card_row", items=4)
+    slide = composed(rich, "card_row", items=4)
 
     heights = {p.box.h for p in slide.pieces if p.kind == "card"}
 
@@ -564,7 +572,7 @@ def test_every_card_of_a_row_is_the_same_height(rich):
 def test_a_framed_panel_holds_a_row_of_cards(count, rich):
     """The commonest shape of a real corporate slide, and the one nothing flat
     could express: a panel, and inside it a row of cards."""
-    slide = compose(rich, "framed_cards", items=count)
+    slide = composed(rich, "framed_cards", items=count)
 
     panel = next(p for p in slide.pieces if p.name == "composed-panel")
     cards = [p for p in slide.pieces if p.name.startswith("composed-card-")]
@@ -579,8 +587,8 @@ def test_a_framed_panel_holds_a_row_of_cards(count, rich):
 
 
 def test_a_framed_panel_hugs_its_cards_instead_of_running_to_the_footer(rich):
-    slide = compose(rich, "framed_cards", items=3)
-    band_bottom = rich.grid.area.y + rich.grid.area.h
+    slide = composed(rich, "framed_cards", items=3)
+    band_bottom = required(rich.grid).area.y + required(rich.grid).area.h
 
     panel = next(p for p in slide.pieces if p.name == "composed-panel")
 
@@ -590,7 +598,7 @@ def test_a_framed_panel_hugs_its_cards_instead_of_running_to_the_footer(rich):
 
 @pytest.mark.parametrize("count", [2, 3, 4])
 def test_a_lead_block_sits_beside_its_cards_not_above_them(count, rich):
-    slide = compose(rich, "lead_and_cards", items=count)
+    slide = composed(rich, "lead_and_cards", items=count)
 
     lead = next(p for p in slide.pieces if p.name == "composed-lead")
     cards = [p for p in slide.pieces if p.name.startswith("composed-card-")]
@@ -625,7 +633,7 @@ def test_an_icon_keeps_its_own_aspect(banked):
 
 
 def test_a_card_can_lead_with_one_of_the_template_icons(banked):
-    slide = compose(banked, "icon_cards", items=3)
+    slide = composed(banked, "icon_cards", items=3)
 
     icons = [p for p in slide.pieces if p.kind == "icon"]
     assert len(icons) == 3
@@ -644,10 +652,12 @@ def test_a_template_without_named_icons_offers_no_icon_composition(rich):
 def test_a_card_of_three_rows_keeps_a_hierarchy_between_all_three(rich):
     """Settling the pairs top-down puts the middle row level with the one above
     it again: the cascade has to come up from the bottom."""
-    slide = compose(rich, "rich_cards", items=3)
+    slide = composed(rich, "rich_cards", items=3)
 
     sizes = [
-        next(p.font_pt for p in slide.pieces if p.name == f"composed-{part}-0")
+        required(
+            next(p.font_pt for p in slide.pieces if p.name == f"composed-{part}-0")
+        )
         for part in ("heading", "text", "label")
     ]
 
@@ -656,7 +666,7 @@ def test_a_card_of_three_rows_keeps_a_hierarchy_between_all_three(rich):
 
 
 def test_a_rich_card_carries_every_row_a_real_one_has(banked):
-    slide = compose(banked, "rich_cards", items=2)
+    slide = composed(banked, "rich_cards", items=2)
 
     slots = {p.slot for p in slide.pieces}
     assert {

@@ -25,12 +25,15 @@ from __future__ import annotations
 
 import io
 import re
+from typing import Iterable, cast
 
 import pytest
 from deck_builders import (
     add_fixture,
+    autoshape,
     build_house_style_template,
     build_icon_bank_template,
+    required,
 )
 from fred_capability_ppt_filler.builder.analysis import analyze_presentation
 from fred_capability_ppt_filler.builder.compose import composed_patterns
@@ -38,9 +41,11 @@ from fred_capability_ppt_filler.builder.design_system import Box
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanItem, SlidePlan
 from fred_capability_ppt_filler.builder.render import _Renderer
 from fred_capability_ppt_filler.builder.theme import default_theme
-from lxml import etree
+from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 from pptx import Presentation
 from pptx.oxml.ns import qn
+from pptx.presentation import Presentation as PptxDeck
+from pptx.shapes.base import BaseShape
 from pptx.util import Inches
 
 
@@ -61,7 +66,12 @@ def _deck(pattern_id: str, _followers: int = 0, **plan_fields):
     ]
     result = _Renderer(presentation, enriched, {}).render(DeckPlan(slides=slides))
     # The renderer drops the template's own slides, so the deck is what it built.
-    return presentation, presentation.slides[-1], result, inventory.design_system
+    return (
+        presentation,
+        presentation.slides[-1],
+        result,
+        required(inventory.design_system),
+    )
 
 
 def _items(count: int, *, number=False, text=True):
@@ -95,7 +105,7 @@ def test_a_composed_slide_carries_its_content():
 
     assert result.warnings == []
     texts = {
-        shape.name: shape.text_frame.text
+        shape.name: autoshape(shape).text_frame.text
         for shape in slide.shapes
         if shape.has_text_frame
     }
@@ -155,7 +165,7 @@ def test_no_value_absent_from_the_design_system_reaches_a_shape():
     xml = _xml(slide)
 
     sizes = {int(value) / 100 for value in re.findall(r'\bsz="(\d+)"', xml)}
-    allowed = [token.size_pt for token in system.type_scale]
+    allowed = [token.size_pt for token in required(system.type_scale)]
     # Centipoint rounding on the way in, so compare within half a point.
     for size in sizes:
         assert any(abs(size - candidate) < 0.5 for candidate in allowed), (
@@ -172,7 +182,10 @@ def test_a_composed_slide_is_made_of_editable_shapes_not_a_picture():
     kinds = {shape.shape_type for shape in slide.shapes}
     assert kinds, "nothing was drawn"
     # A picture of a slide would be one PICTURE; text must be readable back.
-    assert any(shape.has_text_frame and shape.text_frame.text for shape in slide.shapes)
+    assert any(
+        shape.has_text_frame and autoshape(shape).text_frame.text
+        for shape in slide.shapes
+    )
     assert "Three" not in _xml(slide) or True
     assert all(str(kind) != "PICTURE (13)" for kind in kinds)
 
@@ -202,7 +215,9 @@ def test_text_frames_carry_their_own_insets_rather_than_the_default():
     ]
     assert padded
     default_inset = 91440  # 0.1in in EMU
-    assert all(shape.text_frame.margin_left != default_inset for shape in padded)
+    assert all(
+        autoshape(shape).text_frame.margin_left != default_inset for shape in padded
+    )
 
 
 def test_every_composed_shape_is_named():
@@ -339,7 +354,7 @@ def test_content_blocks_hold_one_ordinate_too():
 # -- the fixtures the canvas inherits (D13) -----------------------------------
 
 
-def _branded(band_inches: float = 0.0) -> Presentation:
+def _branded(band_inches: float = 0.0) -> PptxDeck:
     """A template shaped like a corporate one: a logo on the master, and —
     when asked — a band on the placeholder-free layout composing lands on."""
     presentation = Presentation()
@@ -353,12 +368,14 @@ def _branded(band_inches: float = 0.0) -> Presentation:
     )
     if band_inches:
         dressed = presentation.slide_layouts[5]
-        for placeholder in list(dressed.placeholders):
+        for placeholder in list(cast(Iterable[BaseShape], dressed.placeholders)):
             placeholder._element.getparent().remove(placeholder._element)
         add_fixture(
             presentation, dressed, 0, 0, presentation.slide_width, Inches(band_inches)
         )
-    presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title.text = "T"
+    required(
+        presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title
+    ).text = "T"
     return presentation
 
 
@@ -370,7 +387,7 @@ def _render_on(presentation, plan_slide):
         }
     )
     result = _Renderer(presentation, enriched, {}).render(DeckPlan(slides=[plan_slide]))
-    return presentation.slides[-1], result, inventory.design_system
+    return presentation.slides[-1], result, required(inventory.design_system)
 
 
 @pytest.mark.parametrize("band", [0.0, 1.2])
@@ -405,11 +422,13 @@ def test_a_band_on_the_canvas_pushes_the_composed_title_below_it():
         SlidePlan(pattern="composed:statement:1", title="T", bullets=["One."]),
     )
 
-    assert banded.anchors.title_y > plain.anchors.title_y
-    assert banded.anchors.title_y >= max(f.h for f in banded.reserved if f.y == 0)
+    assert required(banded.anchors).title_y > required(plain.anchors).title_y
+    assert required(banded.anchors).title_y >= max(
+        f.h for f in banded.reserved if f.y == 0
+    )
     # The gap between title and content is the template's, not a new one.
-    assert banded.anchors.content_y - banded.anchors.title_y == (
-        plain.anchors.content_y - plain.anchors.title_y
+    assert required(banded.anchors).content_y - required(banded.anchors).title_y == (
+        required(plain.anchors).content_y - required(plain.anchors).title_y
     )
 
 
@@ -431,7 +450,9 @@ def test_a_composed_shape_over_a_fixture_is_reported():
     assert result.warnings == [], "the grid already keeps clear of the fixtures"
 
     # A fixture where the slide has already drawn: every piece now sits on it.
-    renderer.inventory.design_system.reserved.append(Box(x=0, y=0, w=1000, h=1000))
+    required(renderer.inventory.design_system).reserved.append(
+        Box(x=0, y=0, w=1000, h=1000)
+    )
     renderer._check_fixtures(presentation.slides[-1], 1)
 
     assert len(renderer.warnings) == 1
@@ -452,7 +473,7 @@ def _house_deck(pattern_id: str, **plan_fields):
     result = _Renderer(presentation, enriched, {}).render(
         DeckPlan(slides=[SlidePlan(pattern=pattern_id, **plan_fields)])
     )
-    return presentation.slides[-1], result, inventory.design_system
+    return presentation.slides[-1], result, required(inventory.design_system)
 
 
 def test_a_card_is_outlined_where_the_template_outlines_its_own():
@@ -491,7 +512,7 @@ def test_a_composed_card_takes_the_corner_the_template_draws():
     cards = [s for s in slide.shapes if s.name.startswith("composed-card-")]
     assert cards
     for card in cards:
-        assert card.adjustments[0] == pytest.approx(
+        assert autoshape(card).adjustments[0] == pytest.approx(
             system.shapes.corner_radius, abs=0.01
         )
 

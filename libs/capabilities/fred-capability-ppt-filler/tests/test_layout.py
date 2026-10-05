@@ -23,21 +23,22 @@ on it, and that every gap still comes from the template's own scale.
 from __future__ import annotations
 
 import pytest
+from deck_builders import required
 from fred_capability_ppt_filler.builder import layout as L
-from fred_capability_ppt_filler.builder.design_system import Box
+from fred_capability_ppt_filler.builder.design_system import Box, ZoneRole
 from fred_capability_ppt_filler.builder.theme import default_theme
 
 
 @pytest.fixture(scope="module")
 def system():
     _, inventory = default_theme()
-    return inventory.design_system
+    return required(inventory.design_system)
 
 
 BAND = Box(x=100, y=200, w=800, h=600)
 
 
-def _text(name: str, role: str = "body", lines: int = 1, **fields) -> L.Node:
+def _text(name: str, role: ZoneRole = "body", lines: int = 1, **fields) -> L.Node:
     return L.Node(
         kind="text",
         role=role,

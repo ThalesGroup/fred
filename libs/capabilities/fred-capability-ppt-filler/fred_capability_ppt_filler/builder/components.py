@@ -129,6 +129,12 @@ class ComposedSlide(BaseModel):
 # value of its own: that is the whole point of the layer.
 
 
+def _gutter(system: DesignSystem) -> int:
+    """The grid's gutter; a design system that reached composition has a grid."""
+    assert system.grid is not None
+    return system.grid.gutter
+
+
 def _title_band(system: DesignSystem) -> Box:
     """The title's box, anchored where the template puts its titles (D13)."""
     grid = system.grid
@@ -634,7 +640,7 @@ def _framed_cards(system: DesignSystem, count: int) -> L.Node:
         L.stack(
             *[_card_node(system, index, lines=4) for index in range(count)],
             direction="row",
-            gap_pm=system.grid.gutter,
+            gap_pm=_gutter(system),
             height="hug",
         ),
         padding_pm=system.block_padding,
@@ -667,7 +673,7 @@ def _lead_and_cards(system: DesignSystem, count: int) -> L.Node:
             height="hug",
         ),
         direction="row",
-        gap_pm=system.grid.gutter,
+        gap_pm=_gutter(system),
     )
 
 
@@ -677,7 +683,7 @@ def _body_tree(system: DesignSystem, composition: str, count: int) -> Optional[L
         return L.stack(
             *[_rich_card(system, index) for index in range(count)],
             direction="row",
-            gap_pm=system.grid.gutter,
+            gap_pm=_gutter(system),
             height="hug",
         )
     if composition == "icon_cards":
@@ -686,7 +692,7 @@ def _body_tree(system: DesignSystem, composition: str, count: int) -> Optional[L
         return L.stack(
             *[_icon_card(system, index, lines=4) for index in range(count)],
             direction="row",
-            gap_pm=system.grid.gutter,
+            gap_pm=_gutter(system),
             height="hug",
         )
     if composition == "framed_cards":
@@ -698,14 +704,14 @@ def _body_tree(system: DesignSystem, composition: str, count: int) -> Optional[L
         return L.stack(
             *[_card_node(system, index, lines=lines) for index in range(count)],
             direction="row",
-            gap_pm=system.grid.gutter,
+            gap_pm=_gutter(system),
             height="hug",
         )
     if composition == "stat_band":
         return L.stack(
             *[_stat_node(system, index) for index in range(count)],
             direction="row",
-            gap_pm=system.grid.gutter,
+            gap_pm=_gutter(system),
             height="hug",
         )
     if composition in ("steps", "agenda"):

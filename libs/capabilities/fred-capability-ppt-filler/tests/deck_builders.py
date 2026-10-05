@@ -23,12 +23,28 @@ Keeping them here avoids duplicating the same builders across ``test_fill.py``,
 from __future__ import annotations
 
 import io
-from typing import List, Tuple
+from typing import List, Optional, Tuple, TypeVar, cast
 
 from fred_capability_ppt_filler.parser import SlideSchema, parse
 from PIL import Image
 from pptx import Presentation
+from pptx.shapes.autoshape import Shape
+from pptx.shapes.base import BaseShape
 from pptx.util import Inches
+
+T = TypeVar("T")
+
+
+def required(value: Optional[T]) -> T:
+    """Narrow a value the fixture guarantees: fail loudly rather than on None.attr."""
+    assert value is not None
+    return value
+
+
+def autoshape(shape: BaseShape) -> Shape:
+    """python-pptx types placeholders as BaseShape; ours always carry text."""
+    return cast(Shape, shape)
+
 
 # (text-box body, notes text) per slide.
 SlideSpec = Tuple[str, str]
@@ -187,7 +203,7 @@ def build_house_style_template():
 
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[5])
-    slide.shapes.title.text = "How this house draws"
+    required(slide.shapes.title).text = "How this house draws"
 
     width, height, top = Inches(2.6), Inches(2.0), Inches(2.0)
     for index in range(3):
@@ -235,13 +251,13 @@ def build_cover_only_template():
             id_list.remove(entry)
     for text in ("Cover", "Contact"):
         slide = presentation.slides.add_slide(presentation.slide_layouts[0])
-        title, subtitle = slide.shapes.title, slide.placeholders[1]
+        title, subtitle = required(slide.shapes.title), slide.placeholders[1]
         for shape in (title, subtitle):
             shape.left, shape.width = Inches(8.0), Inches(4.5)
         title.top, title.height = Inches(2.2), Inches(1.2)
         subtitle.top, subtitle.height = Inches(3.6), Inches(2.0)
         title.text = text
-        subtitle.text_frame.text = "one line"
+        autoshape(subtitle).text_frame.text = "one line"
     return presentation
 
 
@@ -270,8 +286,8 @@ def build_icon_bank_template():
     presentation = Presentation()
     presentation.slide_width, presentation.slide_height = Inches(13.333), Inches(7.5)
     content = presentation.slides.add_slide(presentation.slide_layouts[1])
-    content.shapes.title.text = "Content"
-    content.placeholders[1].text_frame.text = "A line of body text"
+    required(content.shapes.title).text = "Content"
+    autoshape(content.placeholders[1]).text_frame.text = "A line of body text"
 
     bank = presentation.slides.add_slide(presentation.slide_layouts[6])
     buffer = _io.BytesIO()

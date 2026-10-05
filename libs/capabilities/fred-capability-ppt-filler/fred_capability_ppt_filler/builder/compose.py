@@ -41,6 +41,7 @@ from fred_capability_ppt_filler.builder.design_system import FIGURE_TEXT, Design
 if TYPE_CHECKING:  # avoids the plan -> compose -> plan import cycle
     from fred_capability_ppt_filler.builder.plan import SlidePlan
 
+from fred_capability_ppt_filler.builder.design_system import ZoneRole
 from fred_capability_ppt_filler.builder.models import (
     Intent,
     Pattern,
@@ -129,7 +130,9 @@ def _project(slide: ComposedSlide) -> Tuple[List[Zone], List[RepeatGroup]]:
         return singles, []
 
     order = sorted(per_item)
-    roles = [piece.role for piece in per_item[order[0]] if piece.role is not None]
+    roles: List[ZoneRole] = [
+        piece.role for piece in per_item[order[0]] if piece.role is not None
+    ]
     items = [[_zone_of(piece) for piece in per_item[index]] for index in order]
     # The container to remove when an item goes unused: its Card when it has
     # one, else the item's own first shape.

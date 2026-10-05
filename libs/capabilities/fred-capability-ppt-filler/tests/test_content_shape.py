@@ -25,6 +25,7 @@ from __future__ import annotations
 import io
 
 import pytest
+from deck_builders import autoshape, required
 from fred_capability_ppt_filler.builder.analysis import analyze_presentation
 from fred_capability_ppt_filler.builder.compose import (
     STRUCTURED_SHAPES,
@@ -66,7 +67,7 @@ def rich():
 def stripped():
     source = Presentation()
     cover = source.slides.add_slide(source.slide_layouts[0])
-    cover.shapes.title.text = "Cover"
+    required(cover.shapes.title).text = "Cover"
     source.slides.add_slide(source.slide_layouts[6])
     buffer = io.BytesIO()
     source.save(buffer)
@@ -197,7 +198,9 @@ def test_a_bullet_list_of_parallel_items_becomes_cards(stripped):
     assert result.warnings == []
     assert _composed(presentation.slides[0])
     texts = {
-        s.text_frame.text for s in presentation.slides[0].shapes if s.has_text_frame
+        autoshape(s).text_frame.text
+        for s in presentation.slides[0].shapes
+        if s.has_text_frame
     }
     assert {"Fast", "Safe", "Plain", "Open"} <= texts
 

@@ -21,14 +21,18 @@ and a closing slide — the shape that produced nine cover slides.
 
 from __future__ import annotations
 
+from typing import Iterable, cast
+
 import pytest
 from deck_builders import (
     HOUSE_CORNER,
     HOUSE_GAP_IN,
     HOUSE_INSET_IN,
     add_fixture,
+    autoshape,
     build_cover_only_template,
     build_house_style_template,
+    required,
 )
 from fred_capability_ppt_filler.builder.analysis import (
     analyze_presentation,
@@ -45,13 +49,15 @@ from fred_capability_ppt_filler.builder.design_system import (
 )
 from fred_capability_ppt_filler.builder.theme import default_theme
 from pptx import Presentation
+from pptx.presentation import Presentation as PptxDeck
+from pptx.shapes.base import BaseShape
 from pptx.util import Inches
 
 
 @pytest.fixture(scope="module")
 def rich():
     _, inventory = default_theme()
-    return inventory.design_system
+    return required(inventory.design_system)
 
 
 @pytest.fixture(scope="module")
@@ -59,11 +65,11 @@ def stripped():
     """A template with nothing to fill: one title slide, one blank, one closing."""
     presentation = Presentation()
     title = presentation.slides.add_slide(presentation.slide_layouts[0])
-    title.shapes.title.text = "Cover"
+    required(title.shapes.title).text = "Cover"
     presentation.slides.add_slide(presentation.slide_layouts[6])
     closing = presentation.slides.add_slide(presentation.slide_layouts[5])
-    closing.shapes.title.text = "Thank you"
-    return analyze_presentation(presentation).design_system
+    required(closing.shapes.title).text = "Thank you"
+    return required(analyze_presentation(presentation).design_system)
 
 
 # -- what every template must yield -------------------------------------------
@@ -107,7 +113,7 @@ def test_the_type_scale_covers_every_text_role(name, request):
 @pytest.mark.parametrize("name", ["rich", "stripped"])
 def test_the_usable_area_keeps_a_margin(name, request):
     system = request.getfixturevalue(name)
-    area = system.grid.area
+    area = required(system.grid).area
 
     # One full-bleed decorative band must not erase the margins every other
     # slide respects, so the area is never the whole slide.
@@ -176,9 +182,9 @@ def test_a_template_misusing_its_theme_slots_still_yields_a_readable_pair():
     """Slot names lie; what the master actually paints with does not."""
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[5])
-    slide.shapes.title.text = "Dark on light"
+    required(slide.shapes.title).text = "Dark on light"
 
-    system = analyze_presentation(presentation).design_system
+    system = required(analyze_presentation(presentation).design_system)
 
     surface = system.usable_pair("surface")
     assert surface is not None
@@ -211,7 +217,7 @@ def test_a_pair_that_would_write_a_literal_is_recorded():
     """D11: a literal is allowed, but never silently — the author is told."""
     presentation = Presentation()
 
-    system = analyze_presentation(presentation).design_system
+    system = required(analyze_presentation(presentation).design_system)
 
     # Whatever the template gave us, the two statements below must agree: a
     # pair writes a literal if and only if it is named in `unreferenced`.
@@ -226,7 +232,7 @@ def test_a_pair_that_would_write_a_literal_is_recorded():
 def test_a_fully_themed_template_reports_nothing_unreferenced():
     _, inventory = default_theme()
 
-    system = inventory.design_system
+    system = required(inventory.design_system)
 
     assert system.unreferenced == []
     assert all(pair.surface.referenced for pair in system.pairs)
@@ -249,19 +255,19 @@ def test_a_template_with_its_own_slides_takes_their_convention():
     """The slides win over the master: that is what the reader recognises."""
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[1])
-    slide.shapes.title.text = "Title"
+    required(slide.shapes.title).text = "Title"
 
-    system = analyze_presentation(presentation).design_system
+    system = required(analyze_presentation(presentation).design_system)
 
-    assert system.anchors.source == "slides"
+    assert required(system.anchors).source == "slides"
 
 
 def test_a_template_with_no_slide_falls_back_to_its_master():
     presentation = Presentation()
 
-    system = analyze_presentation(presentation).design_system
+    system = required(analyze_presentation(presentation).design_system)
 
-    assert system.anchors.source == "master"
+    assert required(system.anchors).source == "master"
 
 
 # -- the grid follows the real slide ------------------------------------------
@@ -272,9 +278,9 @@ def test_the_grid_follows_a_non_16_9_template():
     presentation.slide_width = Inches(10)
     presentation.slide_height = Inches(7.5)
     slide = presentation.slides.add_slide(presentation.slide_layouts[1])
-    slide.shapes.title.text = "Four by three"
+    required(slide.shapes.title).text = "Four by three"
 
-    system = analyze_presentation(presentation).design_system
+    system = required(analyze_presentation(presentation).design_system)
 
     assert system.slide_width == Inches(10)
     assert system.slide_height == Inches(7.5)
@@ -285,8 +291,8 @@ def test_the_grid_follows_a_non_16_9_template():
 
 def test_a_column_span_stays_inside_the_usable_area():
     _, inventory = default_theme()
-    system = inventory.design_system
-    grid = system.grid
+    system = required(inventory.design_system)
+    grid = required(system.grid)
 
     x, w = grid.span(0, grid.columns, shorter_to_x=system.shorter_to_x)
 
@@ -296,8 +302,8 @@ def test_a_column_span_stays_inside_the_usable_area():
 
 def test_column_spans_do_not_overlap():
     _, inventory = default_theme()
-    system = inventory.design_system
-    grid = system.grid
+    system = required(inventory.design_system)
+    grid = required(system.grid)
 
     left = grid.span(0, 4, shorter_to_x=system.shorter_to_x)
     right = grid.span(4, 4, shorter_to_x=system.shorter_to_x)
@@ -311,7 +317,7 @@ def test_column_spans_do_not_overlap():
 # INHERITS it. So a composed slide already shows it — and must keep off it.
 
 
-def _with_logo(*, suppress: bool = False) -> Presentation:
+def _with_logo(*, suppress: bool = False) -> PptxDeck:
     """The common corporate shape: a logo on the master, bottom right."""
     presentation = Presentation()
     add_fixture(
@@ -324,16 +330,18 @@ def _with_logo(*, suppress: bool = False) -> Presentation:
     )
     if suppress:
         presentation.slide_layouts[6]._element.set("showMasterSp", "0")
-    presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title.text = "T"
+    required(
+        presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title
+    ).text = "T"
     return presentation
 
 
 def test_a_logo_on_the_master_is_reserved_and_kept_clear():
-    system = analyze_presentation(_with_logo()).design_system
+    system = required(analyze_presentation(_with_logo()).design_system)
 
     assert system.reserved, "the master's logo was not seen"
     logo = system.reserved[0]
-    area = system.grid.area
+    area = required(system.grid).area
     assert not area.overlaps(logo), "the grid would put content over the logo"
     # Bottom right: stopping above it costs less room than giving up the width.
     assert area.y + area.h <= logo.y
@@ -344,8 +352,8 @@ def test_a_layout_that_switches_the_master_off_inherits_no_logo():
     """Then there is nothing to keep clear, and the whole area is usable."""
     system = analyze_presentation(_with_logo(suppress=True)).design_system
 
-    assert system.reserved == []
-    assert system.grid.area.h > 900
+    assert required(system).reserved == []
+    assert required(required(system).grid).area.h > 900
 
 
 def test_the_background_is_not_a_fixture():
@@ -359,11 +367,13 @@ def test_the_background_is_not_a_fixture():
         presentation.slide_width,
         presentation.slide_height,
     )
-    presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title.text = "T"
+    required(
+        presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title
+    ).text = "T"
 
-    system = analyze_presentation(presentation).design_system
+    system = required(analyze_presentation(presentation).design_system)
 
-    assert system.reserved == []
+    assert required(system).reserved == []
     assert system.complete
 
 
@@ -375,7 +385,7 @@ def test_the_canvas_is_the_layout_that_carries_the_template_furniture():
     """
     presentation = _with_logo()
     dressed = presentation.slide_layouts[5]
-    for placeholder in list(dressed.placeholders):
+    for placeholder in list(cast(Iterable[BaseShape], dressed.placeholders)):
         placeholder._element.getparent().remove(placeholder._element)
     add_fixture(presentation, dressed, 0, 0, presentation.slide_width, Inches(0.4))
 
@@ -384,7 +394,7 @@ def test_the_canvas_is_the_layout_that_carries_the_template_furniture():
     assert inventory.canvas_layout == 5, (
         "the bare layout was preferred to the dressed one"
     )
-    assert len(inventory.design_system.reserved) == 2  # the band and the logo
+    assert len(required(inventory.design_system).reserved) == 2  # the band and the logo
     canvas = next(
         p for p in inventory.patterns if p.source == "layout" and p.source_index == 5
     )
@@ -399,7 +409,7 @@ def test_a_layout_whose_furniture_crowds_the_slide_is_not_the_canvas():
     """
     presentation = _with_logo()
     crowded = presentation.slide_layouts[5]
-    for placeholder in list(crowded.placeholders):
+    for placeholder in list(cast(Iterable[BaseShape], crowded.placeholders)):
         placeholder._element.getparent().remove(placeholder._element)
     add_fixture(
         presentation, crowded, 0, Inches(2.5), presentation.slide_width, Inches(2.5)
@@ -408,7 +418,7 @@ def test_a_layout_whose_furniture_crowds_the_slide_is_not_the_canvas():
     inventory = analyze_presentation(presentation)
 
     assert inventory.canvas_layout == 6
-    assert inventory.design_system.complete
+    assert required(inventory.design_system).complete
 
 
 # -- trimming the area (pure arithmetic) --------------------------------------
@@ -448,7 +458,7 @@ def test_free_area_trims_a_side_column_off_the_width():
 
 
 def test_the_house_style_is_read_off_the_blocks_the_template_draws():
-    system = analyze_presentation(build_house_style_template()).design_system
+    system = required(analyze_presentation(build_house_style_template()).design_system)
     style = system.shapes
 
     assert style.corner_radius == pytest.approx(HOUSE_CORNER, abs=0.01)
@@ -466,19 +476,21 @@ def test_the_house_style_is_read_off_the_blocks_the_template_draws():
 
 
 def test_the_grid_takes_its_gutter_from_the_gap_the_template_uses():
-    system = analyze_presentation(build_house_style_template()).design_system
+    system = required(analyze_presentation(build_house_style_template()).design_system)
 
-    assert system.grid.gutter == system.shapes.column_gap
+    assert required(system.grid).gutter == system.shapes.column_gap
     # And it is the template's, not a step of the scale that happens to be near.
-    assert system.grid.gutter not in system.spacing.steps
+    assert required(system.grid).gutter not in system.spacing.steps
 
 
 def test_a_template_that_shows_none_of_it_keeps_the_defaults():
     """Every field has to have a defensible answer for a bare template."""
     presentation = Presentation()
-    presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title.text = "T"
+    required(
+        presentation.slides.add_slide(presentation.slide_layouts[1]).shapes.title
+    ).text = "T"
 
-    style = analyze_presentation(presentation).design_system.shapes
+    style = required(analyze_presentation(presentation).design_system).shapes
 
     assert style.filled is True
     assert style.figure_above_label is True
@@ -490,14 +502,14 @@ def test_a_bare_text_box_does_not_vote_on_how_blocks_are_painted():
     that outlines rather than fills."""
     presentation = Presentation()
     slide = presentation.slides.add_slide(presentation.slide_layouts[5])
-    slide.shapes.title.text = "Words only"
+    required(slide.shapes.title).text = "Words only"
     for index in range(3):
         box = slide.shapes.add_textbox(
             Inches(0.5 + index * 3.0), Inches(3.0), Inches(2.6), Inches(1.0)
         )
         box.text_frame.text = f"Column {index}"
 
-    style = analyze_presentation(presentation).design_system.shapes
+    style = required(analyze_presentation(presentation).design_system).shapes
 
     assert style.filled is True
     # The gap between them is still a gap, and still worth reading.
@@ -510,13 +522,13 @@ def test_a_cover_only_template_does_not_read_its_content_band_off_its_cover():
     Reading the content band off it gave a band 41% of the slide wide, in
     which a card held eight characters — the deck of title slides.
     """
-    system = analyze_presentation(build_cover_only_template()).design_system
-    area = system.grid.area
+    system = required(analyze_presentation(build_cover_only_template()).design_system)
+    area = required(system.grid).area
 
     assert area.w >= 600, "the content band was read off a cover again"
     # Nothing in this template says where content goes, so nothing is invented:
     # the anchors fall back to the master rather than to the cover's ordinates.
-    assert system.anchors.source == "master"
+    assert required(system.anchors).source == "master"
     assert system.complete, "the template must still be composable"
 
 
@@ -533,11 +545,13 @@ def test_a_content_band_measured_too_narrow_is_refused_rather_than_used():
         if layout.name not in keep:
             id_list.remove(entry)
     slide = presentation.slides.add_slide(presentation.slide_layouts[0])
-    for shape in (slide.shapes.title, slide.placeholders[1]):
+    for shape in (required(slide.shapes.title), slide.placeholders[1]):
         shape.left, shape.width = Inches(9.0), Inches(3.5)
-    slide.shapes.title.text = "Narrow"
-    slide.placeholders[1].text_frame.text = "one line"
+    required(slide.shapes.title).text = "Narrow"
+    autoshape(slide.placeholders[1]).text_frame.text = "one line"
 
-    area = analyze_presentation(presentation).design_system.grid.area
+    area = required(
+        required(analyze_presentation(presentation).design_system).grid
+    ).area
 
     assert area.w >= 600, "a 26%-wide column was taken for the content band"
