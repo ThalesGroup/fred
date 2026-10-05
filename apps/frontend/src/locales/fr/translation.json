@@ -389,13 +389,23 @@
       "name": "Générer une présentation",
       "description": "Génère une présentation PowerPoint à partir d'une demande, sur le modèle de l'équipe ou un thème intégré.",
       "fields": {
-        "inventory": {
+        "template": {
           "title": "Modèle PowerPoint",
-          "description": "Patrons de slides détectés dans le modèle téléversé."
+          "description": "Le modèle sur lequel l'agent construit ses présentations."
         },
         "overrides": {
-          "title": "Corrections des patrons",
-          "description": "Vos corrections aux patrons détectés."
+          "title": "Corrections des slides",
+          "description": "Vos corrections aux slides trouvées dans le modèle."
+        },
+        "use_vision": {
+          "title": "Utiliser un modèle de vision",
+          "description": "Un modèle capable de lire les images regarde chaque slide du modèle pour la nommer et comprendre à quoi elle sert.",
+          "unavailable": "Aucun modèle capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
+        },
+        "labelling_model": {
+          "title": "Modèle qui lit les slides",
+          "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
+          "agentDefault": "Le modèle de l'agent"
         }
       },
       "form": {
@@ -404,28 +414,29 @@
         "uploadAria": "Fichier de modèle PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
         "currentTemplate": "Un modèle est configuré pour cet agent.",
-        "builtInTheme": "Thème intégré (sans modèle)",
-        "templateInvalid": "Ce fichier n'a pas pu être analysé. Choisissez un autre .pptx ou retirez-le.",
-        "analyzeFailed": "Le modèle n'a pas pu être analysé. Vérifiez le fichier et réessayez.",
-        "uploadSuccessToast": "Modèle PowerPoint analysé.",
-        "summary": "{{patterns}} patrons de slide détectés, {{fixed}} slides fixes, {{excluded}} exclus.",
-        "summaryTheme": "Thème intégré : {{patterns}} patrons de slide, {{fixed}} slide fixe.",
-        "review": "Vérifier les patrons",
-        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce modèle et seront abandonnées à l'enregistrement."
+        "builtInTemplate": "Modèle intégré (aucun modèle téléversé)",
+        "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
+        "summaryBuiltin": "Modèle intégré : {{patterns}} slides prêtes à l'emploi.",
+        "review": "Vérifier les slides",
+        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce modèle et seront abandonnées au prochain enregistrement."
+      },
+      "analysis": {
+        "staged": "Le modèle sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
+        "inProgress": "Lecture du modèle en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
+        "unknown": "L'état du modèle n'est pas disponible pour le moment.",
+        "failed": "Le modèle n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas.",
+        "interrupted": "La lecture du modèle a été interrompue. L'agent reste indisponible jusqu'à une nouvelle lecture.",
+        "outdated": "Ce modèle a été lu avec une version plus ancienne. Relancez la lecture pour profiter des dernières améliorations.",
+        "rerun": "Relancer l'analyse"
       },
       "review": {
-        "title": "Patrons de slides",
+        "title": "Slides du modèle",
         "done": "Terminé",
-        "back": "Retour aux patrons",
-        "labelField": "Nom du patron",
+        "labelFor": "Nom de {{label}}",
         "include": "Utiliser {{label}}",
-        "intentFor": "Intention de {{label}}",
-        "roleFor": "Rôle de la zone {{index}}",
-        "item": "Élément {{index}}",
-        "emptyZone": "(vide)",
-        "noZone": "Aucune zone modifiable",
-        "preferred": "Privilégié",
-        "excluded": "Patrons exclus ({{count}})",
+        "kindFor": "Type de {{label}}",
+        "labelledByRules": "Nommée par des règles",
+        "excluded": "Slides mises de côté ({{count}})",
         "loadingThumbnails": "Chargement des vignettes…",
         "thumbnailsUnavailable": "Les vignettes ne sont pas disponibles pour ce modèle.",
         "source": {
@@ -441,34 +452,22 @@
           "author": "Exclu par vous"
         }
       },
-      "intents": {
-        "title": "Titre",
-        "section": "Section",
+      "kinds": {
+        "cover": "Couverture",
         "agenda": "Sommaire",
-        "content": "Contenu",
+        "section": "Section",
+        "bullets": "Liste à puces",
         "two_columns": "Deux colonnes",
         "comparison": "Comparaison",
-        "image_text": "Image et texte",
         "cards": "Cartes",
-        "steps": "Étapes",
-        "statement": "Message clé",
-        "contact": "Contact",
-        "fixed": "Slide fixe"
-      },
-      "roles": {
-        "title": "Titre",
-        "subtitle": "Sous-titre",
-        "heading": "En-tête",
-        "body": "Corps",
-        "caption": "Légende",
-        "number": "Chiffre",
-        "label": "Libellé",
-        "image": "Image",
-        "keep": "Ne pas toucher"
-      },
-      "errors": {
-        "invalid_upload": "Le fichier n'a pas pu être lu comme un .pptx.",
-        "server_busy": "Le serveur est occupé. Réessayez dans un instant."
+        "figures": "Chiffres clés",
+        "process": "Processus",
+        "timeline": "Frise chronologique",
+        "team": "Équipe",
+        "quote": "Citation",
+        "image_text": "Image et texte",
+        "closing": "Conclusion",
+        "other": "Autre"
       },
       "panel": {
         "ppt_preview_pane": {
@@ -1572,6 +1571,7 @@
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
       "suspendedToggleLocked": "Suspendu",
       "preparing": "En préparation — une capacité utilisée par cet agent prépare encore sa configuration. L'agent devient disponible automatiquement.",
+      "preparationFailed": "Indisponible — une capacité utilisée par cet agent n'a pas pu préparer sa configuration : {{detail}} Modifiez l'agent pour corriger le problème.",
       "pendingToggleLocked": "En préparation",
       "duplicate": "Dupliquer",
       "copyTo": "Copier dans…",

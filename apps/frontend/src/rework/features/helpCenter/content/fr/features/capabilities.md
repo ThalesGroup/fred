@@ -121,6 +121,38 @@ dupliqué ou copié dans une autre équipe emporte son propre exemplaire du mod�
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
+### Générer une présentation
+
+**Ce qu'elle fait** — l'agent construit une présentation PowerPoint à partir de
+votre demande, sur le modèle de votre entreprise ou, à défaut, sur un modèle
+intégré. Pour chaque diapositive, il choisit la diapositive du modèle qui
+convient le mieux au contenu et la remplit. La présentation s'affiche dans un
+aperçu à côté de la conversation et se télécharge en `.pptx`.
+
+**Comment la configurer** — déposez un modèle `.pptx` sur l'agent et
+enregistrez. Le modèle est alors lu en arrière-plan : pendant ce temps,
+l'agent affiche **En préparation** et n'est pas encore disponible ; il le
+devient tout seul quand la lecture est terminée, et vous pouvez fermer la
+fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
+diapositive trouvée, avec son nom et son type : renommez une diapositive,
+changez son type ou mettez-la de côté. Rien n'est obligatoire.
+
+**Utiliser un modèle de vision** — quand un modèle capable de lire les images
+est disponible, il regarde chaque diapositive du modèle pour la nommer et
+comprendre à quoi elle sert. Vous pouvez choisir le modèle qui s'en charge, ou
+garder celui de l'agent. Sans un tel modèle, l'interrupteur est verrouillé et
+les diapositives sont nommées par des règles : cela fonctionne, mais les noms
+sont moins précis.
+
+**Ses limites** — l'agent n'utilise que les diapositives que le modèle
+contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans
+aucune diapositive (trop d'éléments, par exemple), il le découpe ou le
+raccourcit. Si la lecture du modèle échoue, l'agent reste indisponible : le
+formulaire en donne la raison, avec un bouton **Relancer l'analyse**.
+
+**Un exemple** — « Prépare une présentation de dix diapositives sur nos
+résultats trimestriels pour le comité de direction. »
+
 ### Générer une page web (HTML/CSS)
 
 **Ce qu'elle fait** — l'agent produit une page ou un composant web, affiché

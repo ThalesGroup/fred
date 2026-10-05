@@ -13,42 +13,21 @@
 // limitations under the License.
 
 // The patterns PDF (one page per inventory pattern) behind the review
-// thumbnails, as a blob URL. Three sources, one hook: the staged file goes
-// through the capability's stateless `/preview` route, a saved template is
-// read from the Knowledge Flow path stored in the config, and the built-in
-// theme from the capability's `/theme/preview.pdf`. Binary responses are the
-// sanctioned raw-fetch exception; the bearer travels the same way as for the
-// chat preview.
+// thumbnails, as a blob URL: the agent's analysed template or the built-in
+// one. Binary responses are the sanctioned raw-fetch exception.
 
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import { KeyCloakService } from "../../../../security/KeycloakService";
 import { fetchAuthedBlob } from "../../../../utils/downloadUtils";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 
-export type PreviewSource =
-  | { kind: "staged"; file: File }
-  | { kind: "persisted"; path: string }
-  | { kind: "theme" }
-  | null;
+export type PreviewSource = { kind: "analysis"; instanceId: string } | { kind: "builtin" } | null;
 
 export interface PatternsPreview {
   objectUrl: string | null;
   isLoading: boolean;
   error: string | null;
-}
-
-async function fetchStagedPreview(baseUrl: string, file: File): Promise<Blob> {
-  const formData = new FormData();
-  formData.append("file", file, file.name);
-  const response = await fetch(`${baseUrl}/preview`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` },
-    body: formData,
-  });
-  if (!response.ok) throw new Error(`Preview failed (${response.status})`);
-  return response.blob();
 }
 
 export function usePatternsPreview(source: PreviewSource): PatternsPreview {
@@ -59,20 +38,14 @@ export function usePatternsPreview(source: PreviewSource): PatternsPreview {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Identity of the request, so a re-pick of the same File object is a no-op
-  // and a source change always refetches.
-  const key = source
-    ? source.kind === "staged"
-      ? `staged:${source.file.name}:${source.file.size}:${source.file.lastModified}`
-      : source.kind === "persisted"
-        ? `persisted:${source.path}`
-        : "theme"
-    : "none";
-  // The capability routes need the pod's base URL; the KF path does not.
-  const needsRouting = source !== null && source.kind !== "persisted";
+  const path = !source
+    ? null
+    : source.kind === "analysis"
+      ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf`
+      : "/theme/preview.pdf";
 
   useEffect(() => {
-    if (!source || (needsRouting && !baseUrl)) {
+    if (!path || !baseUrl) {
       setObjectUrl(null);
       setError(null);
       setIsLoading(false);
@@ -85,14 +58,7 @@ export function usePatternsPreview(source: PreviewSource): PatternsPreview {
     setIsLoading(true);
     void (async () => {
       try {
-        let blob: Blob;
-        if (source.kind === "staged") {
-          blob = await fetchStagedPreview(baseUrl as string, source.file);
-        } else if (source.kind === "persisted") {
-          blob = await fetchAuthedBlob(`/knowledge-flow/v1/fs/download/${encodeURI(source.path)}`);
-        } else {
-          blob = await fetchAuthedBlob(`${baseUrl}/theme/preview.pdf`);
-        }
+        const blob = await fetchAuthedBlob(`${baseUrl}${path}`);
         if (cancelled) return;
         created = URL.createObjectURL(blob);
         setObjectUrl(created);
@@ -106,8 +72,7 @@ export function usePatternsPreview(source: PreviewSource): PatternsPreview {
       cancelled = true;
       if (created) URL.revokeObjectURL(created);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, baseUrl]);
+  }, [path, baseUrl]);
 
   return { objectUrl, isLoading, error };
 }

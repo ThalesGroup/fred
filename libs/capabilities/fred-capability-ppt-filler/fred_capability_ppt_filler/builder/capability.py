@@ -31,7 +31,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import (
@@ -61,7 +61,6 @@ from pydantic import BaseModel
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis import (
     ANALYSIS_VERSION,
-    analyze_template,
 )
 from fred_capability_ppt_filler.builder.analysis_job import (
     AnalysisRecord,
@@ -95,7 +94,6 @@ from fred_capability_ppt_filler.builder.tools import (
 )
 from fred_capability_ppt_filler.capability import (
     CODE_INVALID_UPLOAD,
-    CODE_SERVER_BUSY,
     MAX_TEMPLATE_UPLOAD_BYTES,
     TEMPLATE_SLOT,
 )
@@ -174,56 +172,6 @@ async def _authorised_record(
 
 def _build_router() -> APIRouter:
     router = APIRouter(tags=["ppt_builder"])
-
-    @router.post(
-        "/analyze",
-        response_model=AnalyzeResult,
-        operation_id="analyzePptBuilderTemplate",
-    )
-    async def analyze(file: UploadFile = File(...)) -> AnalyzeResult:
-        """Stateless analysis for the form's instant preview; stores nothing."""
-        content = await file.read(MAX_TEMPLATE_UPLOAD_BYTES + 1)
-        early = _bounded_analysis(content)
-        if early is not None:
-            return early
-        if not acquire_heavy_job_slot():
-            return AnalyzeResult(
-                errors=[AnalysisError(code=CODE_SERVER_BUSY, message=_BUSY_MESSAGE)]
-            )
-        try:
-            return await asyncio.to_thread(analyze_template, content)
-        finally:
-            release_heavy_job_slot()
-
-    @router.post("/preview", operation_id="previewPptBuilderPatterns")
-    async def preview(file: UploadFile = File(...)) -> Response:
-        """One PDF page per pattern of the uploaded template, for the review thumbnails."""
-        content = await file.read(MAX_TEMPLATE_UPLOAD_BYTES + 1)
-        if len(content) > MAX_TEMPLATE_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413, detail="The uploaded .pptx exceeds the size limit."
-            )
-        if not acquire_heavy_job_slot():
-            raise HTTPException(status_code=503, detail=_BUSY_MESSAGE)
-        try:
-            result = await asyncio.to_thread(analyze_template, content)
-            if result.inventory is None:
-                raise HTTPException(
-                    status_code=422,
-                    detail="The uploaded file could not be read as a .pptx.",
-                )
-            deck = await asyncio.to_thread(
-                build_patterns_deck, content, result.inventory
-            )
-        finally:
-            release_heavy_job_slot()
-        pdf = await convert_office_bytes_to_pdf(deck, suffix=".pptx")
-        if pdf is None:
-            raise HTTPException(
-                status_code=503,
-                detail="PDF conversion is not available on this server.",
-            )
-        return Response(content=pdf, media_type=_PDF_CONTENT_TYPE)
 
     @router.get(
         "/theme", response_model=AnalyzeResult, operation_id="getPptBuilderTheme"
@@ -471,7 +419,8 @@ class PptBuilderCapability(
         description="capability.ppt_builder.description",
         icon="co_present",
         config_fields=[
-            # Both fields belong to the plugin's review widget (rendered once).
+            # All four fields belong to the plugin's widget (rendered once): the
+            # vision toggle depends on the team's models, which a generic field cannot know.
             FieldSpec(
                 key="template_sha256",
                 type="string",
@@ -492,13 +441,14 @@ class PptBuilderCapability(
                 default=True,
                 title="capability.ppt_builder.fields.use_vision.title",
                 description="capability.ppt_builder.fields.use_vision.description",
+                ui=UIHints(widget="ppt_builder_template"),
             ),
             FieldSpec(
                 key="labelling_model",
                 type="string",
                 title="capability.ppt_builder.fields.labelling_model.title",
                 description="capability.ppt_builder.fields.labelling_model.description",
-                ui=UIHints(widget="model_profile", visible_when="use_vision"),
+                ui=UIHints(widget="ppt_builder_template"),
             ),
         ],
         assets=[

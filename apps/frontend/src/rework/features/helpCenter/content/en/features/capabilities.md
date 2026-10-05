@@ -114,6 +114,35 @@ copied to another team takes its own copy of the template.
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.
 
+### Generate a presentation
+
+**What it does** — the agent builds a PowerPoint presentation from your
+request, on your company template or, without one, on a built-in template. It
+picks, for each slide, the template slide that fits the content best and fills
+it. The deck appears in a preview beside the conversation and downloads as
+`.pptx`.
+
+**How to set it up** — upload a `.pptx` template on the agent and save. The
+template is then read in the background: meanwhile the agent shows
+**Preparing** and is not available yet; it becomes available on its own when
+the reading is done, and you can close the window in the meantime. Then
+**Review slides** shows each slide found, with its name and kind: rename a
+slide, change its kind, or set it aside. Nothing is mandatory.
+
+**Use a vision model** — when a model that can read images is available, it
+looks at each template slide to name it and understand what it is for. You
+can choose which model does this, or keep the agent's own. Without such a
+model, the switch is locked and slides are named by rules, which works but
+names them less precisely.
+
+**Its limits** — the agent only uses slides the template holds: it does not
+draw new ones. When the content does not fit any slide (too many items, for
+instance), it splits or shortens it. If reading the template fails, the agent
+stays unavailable: the form shows why, with a **Re-run analysis** button.
+
+**An example** — "Prepare a ten-slide presentation of our quarterly results for
+the executive committee."
+
 ### Generate a web page (HTML/CSS)
 
 **What it does** — the agent produces a web page or component, shown in a

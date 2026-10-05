@@ -14,8 +14,7 @@
 // limitations under the License.
 
 // The review dialog writes overrides, never edits the inventory itself: the
-// include switch, the intent select, and a zone role from the detail view all
-// go through `onOverride` with the pattern id and the patch.
+// include switch, the kind select and the label all go through `onOverride`.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -48,13 +47,15 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
     value,
     onChange,
     ariaLabel,
+    disabled,
   }: {
     options: { value: string; label: string }[];
     value: string;
     onChange: (v: string) => void;
     ariaLabel: string;
+    disabled?: boolean;
   }) => (
-    <select aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select aria-label={ariaLabel} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -89,8 +90,6 @@ afterEach(() => {
   container.remove();
 });
 
-const box = { x: 100, y: 100, w: 500, h: 200 };
-
 function pattern(overrides: Partial<Pattern>): Pattern {
   return {
     id: "layout:0",
@@ -98,12 +97,8 @@ function pattern(overrides: Partial<Pattern>): Pattern {
     source_index: 0,
     name: "Cover",
     label: "Cover",
-    intent: "title",
-    zones: [{ key: "ph:0", role: "title", box, sample: "Titre" }],
-    groups: [],
+    kind: "cover",
     included: true,
-    preferred: false,
-    warnings: [],
     ...overrides,
   };
 }
@@ -118,107 +113,76 @@ const INVENTORY: TemplateInventory = {
       source: "slide",
       source_index: 9,
       label: "Chart",
-      intent: "content",
+      kind: "other",
       included: false,
       exclusion_reason: "chart",
+      labelled_by: "heuristic",
     }),
   ],
-  shared_texts: [],
 };
 
-function select(label: string): HTMLSelectElement {
-  const element = container.querySelector(`select[aria-label="${label}"]`);
-  if (!element) throw new Error(`no select ${label}`);
-  return element as HTMLSelectElement;
+function renderDialog(onOverride = vi.fn(), readOnly = false) {
+  render(
+    <PatternReviewDialog
+      open
+      inventory={INVENTORY}
+      previewSource={{ kind: "builtin" }}
+      readOnly={readOnly}
+      onOverride={onOverride}
+      onClose={() => {}}
+    />,
+  );
+  return onOverride;
+}
+
+function input(label: string): HTMLInputElement {
+  const element = container.querySelector(`[aria-label="${label}"]`);
+  if (!element) throw new Error(`no control ${label}`);
+  return element as HTMLInputElement;
 }
 
 describe("PatternReviewDialog", () => {
   it("renders one thumbnail page per pattern and folds the excluded ones", () => {
-    render(
-      <PatternReviewDialog
-        open
-        inventory={INVENTORY}
-        previewSource={{ kind: "theme" }}
-        readOnly={false}
-        onOverride={() => {}}
-        onClose={() => {}}
-      />,
-    );
+    renderDialog();
     expect(container.querySelector('[data-testid="page-1"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="page-2"]')).not.toBeNull();
     expect(container.querySelector("details summary")?.textContent).toBe("capability.ppt_builder.review.excluded");
+    expect(container.textContent).toContain("capability.ppt_builder.review.labelledByRules");
   });
 
-  it("writes include and intent corrections as overrides", () => {
-    const onOverride = vi.fn();
-    render(
-      <PatternReviewDialog
-        open
-        inventory={INVENTORY}
-        previewSource={{ kind: "theme" }}
-        readOnly={false}
-        onOverride={onOverride}
-        onClose={() => {}}
-      />,
-    );
-    const toggle = container.querySelector(
-      'input[aria-label="capability.ppt_builder.review.include:Cover"]',
-    ) as HTMLInputElement;
+  it("writes include, kind and label corrections as overrides", () => {
+    const onOverride = renderDialog();
     act(() => {
-      toggle.click();
+      input("capability.ppt_builder.review.include:Cover").click();
     });
     expect(onOverride).toHaveBeenCalledWith("layout:0", { included: false });
 
-    const intent = select("capability.ppt_builder.review.intentFor:Cover");
+    const kind = input("capability.ppt_builder.review.kindFor:Cover") as unknown as HTMLSelectElement;
     act(() => {
-      intent.value = "section";
-      intent.dispatchEvent(new Event("change", { bubbles: true }));
+      kind.value = "section";
+      kind.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    expect(onOverride).toHaveBeenLastCalledWith("layout:0", { intent: "section" });
+    expect(onOverride).toHaveBeenLastCalledWith("layout:0", { kind: "section" });
+
+    const label = input("capability.ppt_builder.review.labelFor:Cover");
+    act(() => {
+      label.focus();
+      label.value = "Front page";
+      label.blur();
+    });
+    expect(onOverride).toHaveBeenLastCalledWith("layout:0", { label: "Front page" });
   });
 
-  it("opens the detail from the thumbnail and writes a zone role", () => {
-    const onOverride = vi.fn();
-    render(
-      <PatternReviewDialog
-        open
-        inventory={INVENTORY}
-        previewSource={{ kind: "theme" }}
-        readOnly={false}
-        onOverride={onOverride}
-        onClose={() => {}}
-      />,
-    );
-    const thumbnail = container.querySelector('button[aria-label="Cover"]') as HTMLButtonElement;
-    act(() => {
-      thumbnail.click();
-    });
-    // The detail draws the zone outline at the analysis geometry.
-    const outline = container.querySelector('[data-role="title"]') as HTMLElement;
-    expect(outline.style.left).toBe("10%");
-    expect(outline.style.width).toBe("50%");
-    const role = select("capability.ppt_builder.review.roleFor");
-    act(() => {
-      role.value = "keep";
-      role.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(onOverride).toHaveBeenCalledWith("layout:0", { zone_roles: { "ph:0": "keep" } });
+  it("has no zone-role editing any more", () => {
+    renderDialog();
+    expect(container.querySelector('[aria-label^="capability.ppt_builder.review.roleFor"]')).toBeNull();
+    expect(container.querySelector("[data-role]")).toBeNull();
   });
 
   it("disables every correction in read-only mode", () => {
-    render(
-      <PatternReviewDialog
-        open
-        inventory={INVENTORY}
-        previewSource={{ kind: "theme" }}
-        readOnly
-        onOverride={() => {}}
-        onClose={() => {}}
-      />,
-    );
-    const toggle = container.querySelector(
-      'input[aria-label="capability.ppt_builder.review.include:Cover"]',
-    ) as HTMLInputElement;
-    expect(toggle.disabled).toBe(true);
+    renderDialog(vi.fn(), true);
+    expect(input("capability.ppt_builder.review.include:Cover").disabled).toBe(true);
+    expect(input("capability.ppt_builder.review.labelFor:Cover").disabled).toBe(true);
+    expect((input("capability.ppt_builder.review.kindFor:Cover") as unknown as HTMLSelectElement).disabled).toBe(true);
   });
 });

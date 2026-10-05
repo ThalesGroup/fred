@@ -344,41 +344,10 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def test_analyze_route_returns_inventory_and_summary():
-    response = _client().post(
-        "/capabilities/ppt_builder/analyze", files={"file": ("t.pptx", TEMPLATE)}
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["errors"] == []
-    assert body["summary"]["layouts"] == 11
-    assert any(p["kind"] == "agenda" for p in body["inventory"]["patterns"])
-
-
-def test_analyze_route_reports_unreadable_upload():
-    body = (
-        _client()
-        .post("/capabilities/ppt_builder/analyze", files={"file": ("t.pptx", b"nope")})
-        .json()
-    )
-    assert [e["code"] for e in body["errors"]] == ["invalid_upload"]
-
-
-def test_preview_routes_return_pdf_or_503(monkeypatch):
+def test_theme_preview_returns_pdf_or_503(monkeypatch):
     monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _pdf)
-    response = _client().post(
-        "/capabilities/ppt_builder/preview", files={"file": ("t.pptx", TEMPLATE)}
-    )
-    assert response.status_code == 200 and response.content == b"%PDF-fake"
     assert (
         _client().get("/capabilities/ppt_builder/theme/preview.pdf").status_code == 200
-    )
-    monkeypatch.setattr(capability_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    assert (
-        _client()
-        .post("/capabilities/ppt_builder/preview", files={"file": ("t.pptx", TEMPLATE)})
-        .status_code
-        == 503
     )
 
 

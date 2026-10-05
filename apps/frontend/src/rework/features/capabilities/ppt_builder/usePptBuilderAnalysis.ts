@@ -12,196 +12,184 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Shared ppt_builder template orchestration, consumed by the Advanced-view
-// config widget and the Simple-view pack options. Owns the upload → stateless
-// `/analyze` round-trip, which inventory the review shows (staged analysis,
-// else the saved one, else the built-in theme), the author's overrides
-// (written back through `onConfigChange`), and the Save-gating error. A
-// template is optional: only an unreadable staged file blocks Save.
+// Shared ppt_builder template state for the Advanced widget and the Simple
+// pack options. The template is analysed in the background after a save: this
+// hook polls that analysis, asks control-plane to re-check the agent once it
+// ends (so the agent leaves "preparing"), and writes the author's overrides.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import {
-  useAnalyzePptBuilderTemplateMutation,
+  useGetPptBuilderAnalysisQuery,
   useGetPptBuilderThemeQuery,
-  type AnalyzeResult,
-  type BodyAnalyzePptBuilderTemplate,
+  useRerunPptBuilderAnalysisMutation,
+  type AnalysisStatusResponse,
   type TemplateInventory,
 } from "./api/pptBuilderCapabilityOpenApi";
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
+import { useAgentReadinessCheckMutation } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useCapabilityRouted } from "../useCapabilityRouted";
 import type { PreviewSource } from "./usePatternsPreview";
 import {
   OVERRIDES_KEY,
-  PATTERNS_PATH_KEY,
   effectiveInventory,
-  readInventory,
   readOverrides,
+  readTemplateSha,
   summarize,
+  unmatchedOverrides,
   upsertOverride,
   type InventorySummary,
+  type OverridePatch,
   type PatternOverride,
 } from "./types";
 
 /** The manifest's one upload slot key (AssetSlot.key on the backend). */
 export const TEMPLATE_SLOT = "template";
 
+const POLL_MS = 3000;
+
+/** What the panel shows about the template. */
+export type AnalysisPhase =
+  | "builtin" // no template: the built-in one is used
+  | "staged" // a file is picked; it is analysed after the save
+  | "unknown" // a template is saved but its analysis cannot be read (yet)
+  | AnalysisStatusResponse["status"];
+
+export function analysisPhase(args: {
+  stagedFile: File | undefined;
+  templateSha: string | null;
+  status: AnalysisStatusResponse | undefined;
+}): AnalysisPhase {
+  if (args.stagedFile) return "staged";
+  if (!args.templateSha) return "builtin";
+  if (!args.status || args.status.template_sha256 !== args.templateSha) return "unknown";
+  return args.status.status;
+}
+
+export function isInProgress(phase: AnalysisPhase): boolean {
+  return phase === "pending" || phase === "running";
+}
+
+/** Failed, interrupted, or produced by older analysis rules: worth a re-run. */
+export function canRerun(phase: AnalysisPhase, status: AnalysisStatusResponse | undefined): boolean {
+  return phase === "failed" || phase === "interrupted" || (phase === "succeeded" && status?.current === false);
+}
+
 interface Args {
+  teamId?: string;
+  agentInstanceId?: string;
   configValues: Record<string, unknown>;
   onConfigChange: (key: string, value: unknown) => void;
   assetFiles: Record<string, File | undefined>;
   onAssetFileChange: (slotKey: string, file: File | null) => void;
-  onBlockingErrorChange: (message: string | null) => void;
 }
 
 export interface PptBuilderAnalysis {
+  phase: AnalysisPhase;
+  /** The saved template's status is still being fetched for the first time. */
+  statusLoading: boolean;
   stagedFile: File | undefined;
   hasPersistedTemplate: boolean;
-  isAnalyzing: boolean;
-  analyzeFailed: boolean;
-  /** Analysis errors of the staged file (empty when clean or not staged). */
-  errors: AnalyzeResult["errors"];
-  /** What the review shows: staged analysis, saved inventory, or the theme. */
-  inventory: TemplateInventory | null;
+  /** The analysis error, or the interruption notice, as the backend words it. */
+  error: string | null;
+  canRerun: boolean;
+  isRerunning: boolean;
+  rerun: () => Promise<void>;
   /** The inventory with the overrides applied (what the agent will see). */
   effective: TemplateInventory | null;
-  /** Overrides a freshly analysed template no longer matches (dropped on save). */
-  droppedOverrides: string[];
   summary: InventorySummary | null;
-  usesTheme: boolean;
+  /** Overrides the analysed template no longer matches (dropped on save). */
+  droppedOverrides: string[];
   previewSource: PreviewSource;
   overrides: PatternOverride[];
-  updateOverride: (patternId: string, patch: Partial<Omit<PatternOverride, "pattern_id">>) => void;
-  blockingError: string | null;
-  handlePick: (file: File) => Promise<void>;
+  updateOverride: (patternId: string, patch: OverridePatch) => void;
+  handlePick: (file: File) => void;
   handleClear: () => void;
 }
 
-/** Override targets (pattern id, or `pattern id/zone key`) absent from an inventory. */
-export function unmatchedOverrides(overrides: PatternOverride[], inventory: TemplateInventory): string[] {
-  const dropped: string[] = [];
-  for (const override of overrides) {
-    const pattern = inventory.patterns.find((p) => p.id === override.pattern_id);
-    if (!pattern) {
-      dropped.push(override.pattern_id);
-      continue;
-    }
-    const keys = new Set(pattern.zones.map((z) => z.key));
-    pattern.groups.forEach((g) => g.items.forEach((item) => item.forEach((z) => keys.add(z.key))));
-    for (const key of Object.keys(override.zone_roles ?? {})) {
-      if (!keys.has(key)) dropped.push(`${override.pattern_id}/${key}`);
-    }
-  }
-  return dropped;
-}
-
 export function usePptBuilderAnalysis({
+  teamId,
+  agentInstanceId,
   configValues,
   onConfigChange,
   assetFiles,
   onAssetFileChange,
-  onBlockingErrorChange,
 }: Args): PptBuilderAnalysis {
-  const { t } = useTranslation();
   const routed = useCapabilityRouted(CAPABILITY_ID);
-  const [analyze, { isLoading: isAnalyzing }] = useAnalyzePptBuilderTemplateMutation();
-  const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null);
-  const [analyzeFailed, setAnalyzeFailed] = useState(false);
-  // A pick or clear invalidates any analysis still in flight: only the
-  // latest request may set state, so a slow first file never overwrites
-  // (or blocks Save for) a second one.
-  const requestSeq = useRef(0);
-
   const stagedFile = assetFiles[TEMPLATE_SLOT];
-  const persisted = readInventory(configValues);
-  const hasPersistedTemplate = persisted !== null;
-  const usesTheme = !stagedFile && !hasPersistedTemplate;
-  const { data: theme } = useGetPptBuilderThemeQuery(undefined, { skip: !usesTheme || !routed });
-
-  const inventory: TemplateInventory | null = stagedFile
-    ? (analysis?.inventory ?? null)
-    : (persisted ?? theme?.inventory ?? null);
-  const errors = stagedFile ? (analysis?.errors ?? []) : [];
+  const templateSha = readTemplateSha(configValues);
   const overrides = readOverrides(configValues);
+
+  const [pollingInterval, setPollingInterval] = useState(0);
+  const statusQuery = useGetPptBuilderAnalysisQuery(
+    { instanceId: agentInstanceId ?? "" },
+    { skip: !routed || !agentInstanceId || !templateSha, pollingInterval },
+  );
+  const status = statusQuery.isError ? undefined : statusQuery.data;
+  const phase = analysisPhase({ stagedFile, templateSha, status });
+  const usesBuiltin = phase === "builtin";
+  const { data: builtin } = useGetPptBuilderThemeQuery(undefined, { skip: !usesBuiltin || !routed });
+
+  useEffect(() => {
+    setPollingInterval(isInProgress(phase) ? POLL_MS : 0);
+  }, [phase]);
+
+  // Once the analysis has ended, one re-check lifts (or explains) the agent's
+  // "preparing" suspension without waiting for the next listing.
+  const [readinessCheck] = useAgentReadinessCheckMutation();
+  const checkedKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!teamId || !agentInstanceId || !status || isInProgress(phase) || phase === "unknown") return;
+    const key = `${status.template_sha256}:${status.status}:${status.updated_at}`;
+    if (checkedKey.current === key) return;
+    checkedKey.current = key;
+    readinessCheck({ teamId, agentInstanceId }).catch(() => {});
+  }, [teamId, agentInstanceId, status, phase, readinessCheck]);
+
+  const [rerunMutation, { isLoading: isRerunning }] = useRerunPptBuilderAnalysisMutation();
+  const rerun = async () => {
+    if (!agentInstanceId) return;
+    try {
+      await rerunMutation({ instanceId: agentInstanceId }).unwrap();
+    } catch {
+      // A 409 means another run is already going: the refetch shows it.
+    } finally {
+      statusQuery.refetch();
+    }
+  };
+
+  const inventory: TemplateInventory | null =
+    phase === "succeeded" ? (status?.inventory ?? null) : usesBuiltin ? (builtin?.inventory ?? null) : null;
   const effective = useMemo(
     () => (inventory ? effectiveInventory(inventory, overrides) : null),
     [inventory, overrides],
   );
-  const summary = effective ? summarize(effective) : null;
   const droppedOverrides = useMemo(
-    () => (stagedFile && analysis?.inventory ? unmatchedOverrides(overrides, analysis.inventory) : []),
-    [stagedFile, analysis, overrides],
+    () => (inventory && !usesBuiltin ? unmatchedOverrides(overrides, inventory) : []),
+    [inventory, usesBuiltin, overrides],
   );
 
-  const patternsPath = configValues[PATTERNS_PATH_KEY];
-  const previewSource: PreviewSource = stagedFile
-    ? analysis?.inventory
-      ? { kind: "staged", file: stagedFile }
-      : null
-    : hasPersistedTemplate
-      ? typeof patternsPath === "string" && patternsPath
-        ? { kind: "persisted", path: patternsPath }
-        : null
-      : { kind: "theme" };
-
-  const blockingError = useMemo(() => {
-    if (stagedFile && (analyzeFailed || errors.length > 0)) return t("capability.ppt_builder.form.templateInvalid");
-    return null;
-  }, [stagedFile, analyzeFailed, errors.length, t]);
-
-  useEffect(() => {
-    onBlockingErrorChange(blockingError);
-    // Clearing on unmount keeps a deselected capability from blocking Save.
-    return () => onBlockingErrorChange(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockingError]);
-
-  const handlePick = async (file: File) => {
-    const seq = ++requestSeq.current;
-    onAssetFileChange(TEMPLATE_SLOT, file);
-    setAnalysis(null);
-    setAnalyzeFailed(false);
-    try {
-      // The generated client cannot express multipart; the FormData body cast
-      // is the sanctioned narrow exception (types still come from the client).
-      const formData = new FormData();
-      formData.append("file", file, file.name);
-      const result = await analyze({
-        bodyAnalyzePptBuilderTemplate: formData as unknown as BodyAnalyzePptBuilderTemplate,
-      }).unwrap();
-      if (seq === requestSeq.current) setAnalysis(result);
-    } catch {
-      if (seq === requestSeq.current) setAnalyzeFailed(true);
-    }
-  };
-
-  const handleClear = () => {
-    requestSeq.current += 1;
-    onAssetFileChange(TEMPLATE_SLOT, null);
-    setAnalysis(null);
-    setAnalyzeFailed(false);
-  };
-
-  const updateOverride = (patternId: string, patch: Partial<Omit<PatternOverride, "pattern_id">>) => {
-    onConfigChange(OVERRIDES_KEY, upsertOverride(overrides, patternId, patch));
-  };
+  const previewSource: PreviewSource = usesBuiltin
+    ? { kind: "builtin" }
+    : phase === "succeeded" && status?.has_thumbnails && agentInstanceId
+      ? { kind: "analysis", instanceId: agentInstanceId }
+      : null;
 
   return {
+    phase,
+    statusLoading: statusQuery.isLoading,
     stagedFile,
-    hasPersistedTemplate,
-    isAnalyzing,
-    analyzeFailed,
-    errors,
-    inventory,
+    hasPersistedTemplate: templateSha !== null,
+    error: phase === "failed" || phase === "interrupted" ? (status?.error ?? null) : null,
+    canRerun: Boolean(agentInstanceId) && canRerun(phase, status),
+    isRerunning,
+    rerun,
     effective,
+    summary: effective ? summarize(effective) : null,
     droppedOverrides,
-    summary,
-    usesTheme,
     previewSource,
     overrides,
-    updateOverride,
-    blockingError,
-    handlePick,
-    handleClear,
+    updateOverride: (patternId, patch) => onConfigChange(OVERRIDES_KEY, upsertOverride(overrides, patternId, patch)),
+    handlePick: (file) => onAssetFileChange(TEMPLATE_SLOT, file),
+    handleClear: () => onAssetFileChange(TEMPLATE_SLOT, null),
   };
 }

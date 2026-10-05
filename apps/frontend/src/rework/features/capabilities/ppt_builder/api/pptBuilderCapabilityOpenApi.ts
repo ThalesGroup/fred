@@ -1,34 +1,44 @@
 import { pptBuilderCapabilityApi as api } from "./pptBuilderCapabilityApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
-    analyzePptBuilderTemplate: build.mutation<AnalyzePptBuilderTemplateApiResponse, AnalyzePptBuilderTemplateApiArg>({
-      query: (queryArg) => ({ url: `/analyze`, method: "POST", body: queryArg.bodyAnalyzePptBuilderTemplate }),
-    }),
-    previewPptBuilderPatterns: build.mutation<PreviewPptBuilderPatternsApiResponse, PreviewPptBuilderPatternsApiArg>({
-      query: (queryArg) => ({ url: `/preview`, method: "POST", body: queryArg.bodyPreviewPptBuilderPatterns }),
-    }),
     getPptBuilderTheme: build.query<GetPptBuilderThemeApiResponse, GetPptBuilderThemeApiArg>({
       query: () => ({ url: `/theme` }),
     }),
     previewPptBuilderTheme: build.query<PreviewPptBuilderThemeApiResponse, PreviewPptBuilderThemeApiArg>({
       query: () => ({ url: `/theme/preview.pdf` }),
     }),
+    getPptBuilderAnalysis: build.query<GetPptBuilderAnalysisApiResponse, GetPptBuilderAnalysisApiArg>({
+      query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}` }),
+    }),
+    getPptBuilderAnalysisPatterns: build.query<
+      GetPptBuilderAnalysisPatternsApiResponse,
+      GetPptBuilderAnalysisPatternsApiArg
+    >({
+      query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}/patterns.pdf` }),
+    }),
+    rerunPptBuilderAnalysis: build.mutation<RerunPptBuilderAnalysisApiResponse, RerunPptBuilderAnalysisApiArg>({
+      query: (queryArg) => ({ url: `/analysis/${queryArg.instanceId}/rerun`, method: "POST" }),
+    }),
   }),
   overrideExisting: false,
 });
 export { injectedRtkApi as pptBuilderCapabilityApi };
-export type AnalyzePptBuilderTemplateApiResponse = /** status 200 Successful Response */ AnalyzeResult;
-export type AnalyzePptBuilderTemplateApiArg = {
-  bodyAnalyzePptBuilderTemplate: BodyAnalyzePptBuilderTemplate;
-};
-export type PreviewPptBuilderPatternsApiResponse = /** status 200 Successful Response */ any;
-export type PreviewPptBuilderPatternsApiArg = {
-  bodyPreviewPptBuilderPatterns: BodyPreviewPptBuilderPatterns;
-};
 export type GetPptBuilderThemeApiResponse = /** status 200 Successful Response */ AnalyzeResult;
 export type GetPptBuilderThemeApiArg = void;
 export type PreviewPptBuilderThemeApiResponse = /** status 200 Successful Response */ any;
 export type PreviewPptBuilderThemeApiArg = void;
+export type GetPptBuilderAnalysisApiResponse = /** status 200 Successful Response */ AnalysisStatusResponse;
+export type GetPptBuilderAnalysisApiArg = {
+  instanceId: string;
+};
+export type GetPptBuilderAnalysisPatternsApiResponse = /** status 200 Successful Response */ any;
+export type GetPptBuilderAnalysisPatternsApiArg = {
+  instanceId: string;
+};
+export type RerunPptBuilderAnalysisApiResponse = /** status 200 Successful Response */ AnalysisStatusResponse;
+export type RerunPptBuilderAnalysisApiArg = {
+  instanceId: string;
+};
 export type Box = {
   x: number;
   y: number;
@@ -43,6 +53,8 @@ export type Zone = {
   font_pt?: number | null;
   max_chars?: number | null;
   max_lines?: number | null;
+  grows?: boolean;
+  purpose?: string | null;
 };
 export type RepeatGroup = {
   key: string;
@@ -57,29 +69,35 @@ export type Pattern = {
   source_index: number;
   name: string;
   label: string;
-  intent:
-    | "title"
-    | "section"
+  kind:
+    | "cover"
     | "agenda"
-    | "content"
+    | "section"
+    | "bullets"
     | "two_columns"
     | "comparison"
-    | "image_text"
     | "cards"
-    | "steps"
-    | "statement"
-    | "contact"
-    | "fixed";
+    | "figures"
+    | "process"
+    | "timeline"
+    | "team"
+    | "quote"
+    | "image_text"
+    | "closing"
+    | "other";
   zones?: Zone[];
   groups?: RepeatGroup[];
   included?: boolean;
   exclusion_reason?: ("chart" | "table" | "icon_bank" | "no_placeholder" | "unsupported_parts" | "author") | null;
   preferred?: boolean;
+  reusable?: boolean;
+  labelled_by?: "heuristic" | "vision";
   warnings?: string[];
 };
 export type TemplateInventory = {
   slide_width: number;
   slide_height: number;
+  analysis_version?: number;
   patterns?: Pattern[];
   shared_texts?: string[];
 };
@@ -100,6 +118,18 @@ export type AnalyzeResult = {
   errors?: AnalysisError[];
   dropped_overrides?: string[];
 };
+export type AnalysisStatusResponse = {
+  status: "pending" | "running" | "succeeded" | "failed" | "interrupted";
+  template_sha256: string;
+  labelling_key: string;
+  analysis_version: number;
+  current: boolean;
+  error?: string | null;
+  updated_at: string;
+  has_thumbnails?: boolean;
+  summary?: AnalysisSummary | null;
+  inventory?: TemplateInventory | null;
+};
 export type ValidationError = {
   loc: (string | number)[];
   msg: string;
@@ -110,17 +140,14 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type BodyAnalyzePptBuilderTemplate = {
-  file: string;
-};
-export type BodyPreviewPptBuilderPatterns = {
-  file: string;
-};
 export const {
-  useAnalyzePptBuilderTemplateMutation,
-  usePreviewPptBuilderPatternsMutation,
   useGetPptBuilderThemeQuery,
   useLazyGetPptBuilderThemeQuery,
   usePreviewPptBuilderThemeQuery,
   useLazyPreviewPptBuilderThemeQuery,
+  useGetPptBuilderAnalysisQuery,
+  useLazyGetPptBuilderAnalysisQuery,
+  useGetPptBuilderAnalysisPatternsQuery,
+  useLazyGetPptBuilderAnalysisPatternsQuery,
+  useRerunPptBuilderAnalysisMutation,
 } = injectedRtkApi;

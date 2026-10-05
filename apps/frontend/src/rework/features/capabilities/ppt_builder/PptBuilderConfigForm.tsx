@@ -12,27 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The ppt_builder agent-form widget (Advanced view): owns the `inventory` and
-// `overrides` config fields through the shared template panel.
+// The ppt_builder agent-form widget, used by the Advanced capability card and
+// the Simple "Generate a presentation" pack alike: it owns every config field.
 
 import type { CapabilityConfigWidgetProps } from "../types";
 import { PptBuilderTemplatePanel } from "./PptBuilderTemplatePanel";
 import { usePptBuilderAnalysis } from "./usePptBuilderAnalysis";
+import { useVisionAvailability } from "./useVisionAvailability";
+
+export type PptBuilderConfigFormProps = Pick<
+  CapabilityConfigWidgetProps,
+  "teamId" | "agentInstanceId" | "disabled" | "configValues" | "onConfigChange" | "assetFiles" | "onAssetFileChange"
+>;
 
 export function PptBuilderConfigForm({
+  teamId,
+  agentInstanceId,
   disabled,
   configValues,
   onConfigChange,
   assetFiles,
   onAssetFileChange,
-  onBlockingErrorChange,
-}: CapabilityConfigWidgetProps) {
+}: PptBuilderConfigFormProps) {
   const analysis = usePptBuilderAnalysis({
+    teamId,
+    agentInstanceId,
     configValues,
     onConfigChange,
     assetFiles,
     onAssetFileChange,
-    onBlockingErrorChange,
   });
-  return <PptBuilderTemplatePanel disabled={disabled} analysis={analysis} />;
+  const vision = useVisionAvailability(teamId, agentInstanceId);
+  return (
+    <PptBuilderTemplatePanel
+      disabled={disabled}
+      analysis={analysis}
+      vision={vision}
+      configValues={configValues}
+      onConfigChange={onConfigChange}
+    />
+  );
 }

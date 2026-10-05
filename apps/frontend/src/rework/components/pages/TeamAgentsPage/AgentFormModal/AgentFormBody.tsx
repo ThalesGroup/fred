@@ -44,7 +44,7 @@ import {
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
-import { PptBuilderPackOptions } from "../../../../features/capabilities/ppt_builder/PptBuilderPackOptions.tsx";
+import { PptBuilderConfigForm } from "../../../../features/capabilities/ppt_builder/PptBuilderConfigForm.tsx";
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentAccessPackOptions.tsx";
 import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField.tsx";
 import { helpPagePath } from "@rework/features/helpCenter/content";
@@ -387,16 +387,17 @@ export function AgentFormBody({
         />
       );
     }
-    // Presentation builder → the optional template upload and the pattern review.
+    // Presentation builder → the same widget as the Advanced card.
     if (pack.enablesCapabilityIds.includes(CAP_PPT_BUILDER) && availableCapabilityIds.has(CAP_PPT_BUILDER)) {
       return (
-        <PptBuilderPackOptions
+        <PptBuilderConfigForm
           disabled={isSubmitting}
+          teamId={teamId}
+          agentInstanceId={editInstance?.agent_instance_id}
           configValues={capabilityConfigValues[CAP_PPT_BUILDER] ?? {}}
           onConfigChange={(key, value) => onCapabilityConfigChange(CAP_PPT_BUILDER, key, value)}
           assetFiles={capabilityAssetFiles[CAP_PPT_BUILDER] ?? {}}
           onAssetFileChange={(slotKey, file) => onCapabilityAssetFileChange(CAP_PPT_BUILDER, slotKey, file)}
-          onBlockingErrorChange={(message) => onCapabilityBlockingErrorChange(CAP_PPT_BUILDER, message)}
         />
       );
     }

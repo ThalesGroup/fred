@@ -389,13 +389,23 @@
       "name": "Generate a presentation",
       "description": "Builds a PowerPoint deck from a chat request, on the team's template or a built-in theme.",
       "fields": {
-        "inventory": {
+        "template": {
           "title": "PowerPoint template",
-          "description": "Slide patterns detected in the uploaded template."
+          "description": "The template the agent builds its presentations on."
         },
         "overrides": {
-          "title": "Pattern corrections",
-          "description": "Your corrections to the detected patterns."
+          "title": "Slide corrections",
+          "description": "Your corrections to the slides found in the template."
+        },
+        "use_vision": {
+          "title": "Use a vision model",
+          "description": "A model that reads images looks at each slide of the template to name it and understand what it is for.",
+          "unavailable": "No vision-capable model is available for this agent; slides are labelled by rules."
+        },
+        "labelling_model": {
+          "title": "Model that reads the slides",
+          "description": "Leave the agent's model to use the one it answers with.",
+          "agentDefault": "The agent's model"
         }
       },
       "form": {
@@ -404,28 +414,29 @@
         "uploadAria": "PowerPoint template file",
         "clearAria": "Remove the selected file",
         "currentTemplate": "A template is configured for this agent.",
-        "builtInTheme": "Built-in theme (no template)",
-        "templateInvalid": "This file could not be analysed. Pick another .pptx or remove it.",
-        "analyzeFailed": "The template could not be analysed. Check the file and try again.",
-        "uploadSuccessToast": "PowerPoint template analysed.",
-        "summary": "{{patterns}} slide patterns detected, {{fixed}} fixed slides, {{excluded}} excluded.",
-        "summaryTheme": "Built-in theme: {{patterns}} slide patterns, {{fixed}} fixed slide.",
-        "review": "Review patterns",
-        "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on save."
+        "builtInTemplate": "Built-in template (no template uploaded)",
+        "summary": "{{patterns}} slides ready to use, {{excluded}} set aside.",
+        "summaryBuiltin": "Built-in template: {{patterns}} slides ready to use.",
+        "review": "Review slides",
+        "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on the next save."
+      },
+      "analysis": {
+        "staged": "The template will be read once you save the agent. The agent becomes available when that is done.",
+        "inProgress": "Reading the template… The agent becomes available when it is done; you can close this window.",
+        "unknown": "The template's status is not available right now.",
+        "failed": "The template could not be read. The agent stays unavailable until it is.",
+        "interrupted": "Reading the template was interrupted. The agent stays unavailable until it is read again.",
+        "outdated": "This template was read with an older version. Read it again to benefit from the latest improvements.",
+        "rerun": "Re-run analysis"
       },
       "review": {
-        "title": "Slide patterns",
+        "title": "Template slides",
         "done": "Done",
-        "back": "Back to the patterns",
-        "labelField": "Pattern name",
+        "labelFor": "Name of {{label}}",
         "include": "Use {{label}}",
-        "intentFor": "Intent of {{label}}",
-        "roleFor": "Role of zone {{index}}",
-        "item": "Item {{index}}",
-        "emptyZone": "(empty)",
-        "noZone": "No editable zone",
-        "preferred": "Preferred",
-        "excluded": "Excluded patterns ({{count}})",
+        "kindFor": "Kind of {{label}}",
+        "labelledByRules": "Named by rules",
+        "excluded": "Slides set aside ({{count}})",
         "loadingThumbnails": "Loading thumbnails…",
         "thumbnailsUnavailable": "Thumbnails are not available for this template.",
         "source": {
@@ -441,34 +452,22 @@
           "author": "Excluded by you"
         }
       },
-      "intents": {
-        "title": "Title",
-        "section": "Section",
+      "kinds": {
+        "cover": "Cover",
         "agenda": "Agenda",
-        "content": "Content",
+        "section": "Section",
+        "bullets": "Bullet points",
         "two_columns": "Two columns",
         "comparison": "Comparison",
-        "image_text": "Image and text",
         "cards": "Cards",
-        "steps": "Steps",
-        "statement": "Statement",
-        "contact": "Contact",
-        "fixed": "Fixed slide"
-      },
-      "roles": {
-        "title": "Title",
-        "subtitle": "Subtitle",
-        "heading": "Heading",
-        "body": "Body",
-        "caption": "Caption",
-        "number": "Number",
-        "label": "Label",
-        "image": "Image",
-        "keep": "Do not touch"
-      },
-      "errors": {
-        "invalid_upload": "The file could not be read as a .pptx.",
-        "server_busy": "The server is busy. Try again in a moment."
+        "figures": "Key figures",
+        "process": "Process",
+        "timeline": "Timeline",
+        "team": "Team",
+        "quote": "Quote",
+        "image_text": "Image and text",
+        "closing": "Closing",
+        "other": "Other"
       },
       "panel": {
         "ppt_preview_pane": {
@@ -1572,6 +1571,7 @@
       "suspended": "Suspended — a capability this agent uses is broken or unavailable. Edit the agent to fix it.",
       "suspendedToggleLocked": "Suspended",
       "preparing": "Preparing — a capability this agent uses is still preparing its configuration. The agent becomes available automatically.",
+      "preparationFailed": "Unavailable — a capability this agent uses could not prepare its configuration: {{detail}} Edit the agent to fix it.",
       "pendingToggleLocked": "Preparing",
       "duplicate": "Duplicate",
       "copyTo": "Copy to…",

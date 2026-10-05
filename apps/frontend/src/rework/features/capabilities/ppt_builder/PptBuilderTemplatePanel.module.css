@@ -3,6 +3,14 @@
 .root {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+/* The template block (upload row, status, summary) reads as one group,
+   tighter than the gap that separates it from the vision settings. */
+.template {
+  display: flex;
+  flex-direction: column;
   gap: var(--spacing-s);
 }
 
@@ -17,9 +25,26 @@
   display: none;
 }
 
-.buttonSpinner {
-  display: inline-flex;
+.status {
+  display: flex;
   align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
 }
 
 /* The summary and its action read as one line: the count on the left, the
@@ -32,23 +57,51 @@
   gap: var(--spacing-s);
 }
 
-.summary {
+.summary,
+.hint {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
 
-.blocking,
-.error {
-  margin: 0;
-  color: var(--error);
+.vision {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+.switchRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+  cursor: pointer;
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.switchLabel {
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.switchDescription {
+  color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
 
-.errorList {
+/* The selector only exists under its toggle: the same indent as the form's
+   other dependent fields. */
+.dependent {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3xs);
-  margin: 0;
+  gap: var(--spacing-2xs);
+  margin-left: var(--spacing-2xs);
+  border-left: 2px solid var(--outline-muted);
   padding-left: var(--spacing-m);
 }

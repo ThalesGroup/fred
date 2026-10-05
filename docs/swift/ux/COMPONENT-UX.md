@@ -1152,48 +1152,57 @@ The name `small` is scoped to this component. On the shared scale, 24px is
 
 ---
 
-### `PptBuilderTemplatePanel` + `PatternReviewDialog` (2026-09-14)
+### `PptBuilderTemplatePanel` + `PatternReviewDialog` (2026-10-05)
 
 **Location:** `src/rework/features/capabilities/ppt_builder/`
 
 **Status:** `Functional`
 
-The `ppt_builder` capability's configuration surface, rendered once in the
-agent form (Advanced view widget and Simple view "Generate a presentation"
-pack share it). It is a confirmation surface, not a form: the nominal path is
-upload, read the summary, save. Nothing in it is mandatory — an agent without
-a template builds on the built-in theme.
+The `ppt_builder` capability's configuration surface: one widget
+(`PptBuilderConfigForm`) owns all four config fields and is rendered by the
+Advanced capability card and the Simple "Generate a presentation" pack alike.
+Nothing in it is mandatory — an agent without a template builds on the
+built-in template.
 
-- **Panel.** The same upload row as `ppt_filler` (outlined primary button,
-  file `Chip` with remove), then one summary line in `on-surface-retreat`
-  Body Small ("12 slide patterns detected, 2 fixed slides, 7 excluded") next
-  to a text button "Review patterns" (`grid_view`). With no template the chip
-  reads "Built-in theme" (`palette`) and the review is read-only.
+- **Upload row.** The same row as `ppt_filler` (outlined primary button, file
+  `Chip` with remove). The chip reads the staged file name, "A template is
+  configured", or "Built-in template" (`palette`). A staged file is only
+  analysed after the save: the status line says so.
+- **Analysis status** (Body Small, `on-surface-retreat`), read from
+  `GET /analysis/{instance_id}` and polled every 3 s while pending/running:
+  spinner + "Reading the template…" while in progress; on failure or
+  interruption an `error`-coloured line, the backend's message, and an
+  outlined "Re-run analysis" button (`refresh`, `POST …/rerun`); an analysis
+  made by older rules offers the same button with a neutral line. When the
+  analysis ends, the widget calls control-plane `readiness-check` once, so the
+  agent leaves "preparing" without another save.
+- **Summary line** ("12 slides ready to use, 3 set aside") next to a text
+  button "Review slides" (`grid_view`); read-only for the built-in template.
+- **Vision settings.** A switch row "Use a vision model" (default on). With no
+  vision-capable model for the agent (`supports_vision` on neither the
+  effective chat model nor any available profile) it is shown off and
+  disabled, its description replaced by "No vision-capable model is available
+  for this agent; slides are labelled by rules". While on, an indented
+  (`outline-muted` left rule) `Select` lists "The agent's model" plus the
+  vision-capable profiles only.
 - **Review dialog** (central `Dialog`, `maxWidth` 1040, single "Done"
-  action). A grid of pattern cards (`surface-main`, `--radius-s`, 1px
-  `outline-muted`): thumbnail (react-pdf page of the patterns PDF, one page
-  per pattern), label, `Switch` to include, intent `Select`, zone chips, and a
-  meta line (source, "Preferred", exclusion reason). Excluded patterns fold
-  under a `<details>` with their count so they can be re-enabled.
-- **Detail view** replaces the grid inside the same dialog (back arrow): the
-  label `TextInput` and intent `Select`, the thumbnail at 640px with the
-  numbered zone outlines drawn from the analysis geometry (per mille of the
-  slide; `primary` for title/heading, `secondary` for body/caption/label,
-  `tertiary` for numbers, `success` for images, dashed `outline` for "do not
-  touch"), and one row per zone with its sample text and a role `Select`.
-- **Thumbnails** come from three sources through one hook: the staged file
-  (capability `/preview` route), the saved template (a patterns PDF stored as
-  a config asset, fetched from its Knowledge Flow path), or the built-in
-  theme (`/theme/preview.pdf`). They are best effort: without them the cards
-  show a `slideshow` placeholder and the review still works.
-- Every correction is an override written to the `overrides` config field
-  (label, intent, included, zone roles); the inventory itself is never edited
-  client-side. An override with nothing left is dropped.
+  action). A grid of cards (`surface-container`, `--radius-s`, 1px
+  `outline-muted`): thumbnail (react-pdf page of the patterns PDF), label
+  `TextInput` (committed on blur), include `Switch`, kind `Select` (the
+  closed `SlideKind` list), meta line (source, "Named by rules" for a
+  heuristic label, exclusion reason). Set-aside slides fold under a
+  `<details>` with their count.
+- **Thumbnails** come from `GET /analysis/{instance_id}/patterns.pdf` or the
+  built-in `/theme/preview.pdf`; best effort, a `slideshow` placeholder
+  otherwise.
+- Every correction is an override (`pattern_id`, `label`, `kind`,
+  `included`) written to the `overrides` field; an override with nothing left
+  is dropped. Overrides the analysed template no longer matches are counted
+  under the status line.
 
-Deliberate limits: the dialog does not paginate (a corporate template has
-tens of patterns, not hundreds), and thumbnails render at the preview host's
-fonts — a corporate font missing on the server shows its fallback there,
-never in the generated deck.
+Deliberate limits: no pagination (tens of slides, not hundreds); thumbnails
+render with the server's fonts; the vision switch is forced off for display
+only, the stored value is left as is.
 
 ---
 

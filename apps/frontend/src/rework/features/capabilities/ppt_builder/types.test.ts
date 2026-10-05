@@ -14,9 +14,14 @@
 
 import { describe, expect, it } from "vitest";
 import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
-import { allZones, effectiveInventory, readInventory, readOverrides, summarize, upsertOverride } from "./types";
-
-const box = { x: 0, y: 0, w: 100, h: 100 };
+import {
+  effectiveInventory,
+  readOverrides,
+  readTemplateSha,
+  summarize,
+  unmatchedOverrides,
+  upsertOverride,
+} from "./types";
 
 function pattern(overrides: Partial<Pattern>): Pattern {
   return {
@@ -25,12 +30,8 @@ function pattern(overrides: Partial<Pattern>): Pattern {
     source_index: 0,
     name: "Cover",
     label: "Cover",
-    intent: "title",
-    zones: [{ key: "ph:0", role: "title", box }],
-    groups: [],
+    kind: "cover",
     included: true,
-    preferred: false,
-    warnings: [],
     ...overrides,
   };
 }
@@ -40,101 +41,79 @@ const INVENTORY: TemplateInventory = {
   slide_height: 1,
   patterns: [
     pattern({}),
-    pattern({
-      id: "slide:7",
-      source: "slide",
-      source_index: 7,
-      label: "KPIs",
-      intent: "cards",
-      zones: [{ key: "ph:0", role: "title", box }],
-      groups: [
-        {
-          key: "sp:1",
-          count: 2,
-          item_zones: ["number", "label"],
-          item_keys: ["sp:1", "sp:2"],
-          items: [
-            [
-              { key: "sp:1/3", role: "number", box },
-              { key: "sp:1/4", role: "label", box },
-            ],
-            [
-              { key: "sp:2/5", role: "number", box },
-              { key: "sp:2/6", role: "label", box },
-            ],
-          ],
-        },
-      ],
-    }),
+    pattern({ id: "slide:7", source: "slide", source_index: 7, label: "KPIs", kind: "figures" }),
     pattern({
       id: "slide:9",
       source: "slide",
       source_index: 9,
       label: "Chart",
-      intent: "content",
+      kind: "other",
       included: false,
       exclusion_reason: "chart",
     }),
-    pattern({ id: "layout:3", label: "Thanks", intent: "fixed", zones: [] }),
   ],
-  shared_texts: [],
 };
 
-describe("upsertOverride", () => {
-  it("creates, merges and drops an override that has nothing left", () => {
-    let overrides = upsertOverride([], "layout:0", { intent: "section" });
-    expect(overrides).toEqual([{ pattern_id: "layout:0", intent: "section" }]);
-    overrides = upsertOverride(overrides, "layout:0", { zone_roles: { "ph:0": "keep" } });
-    expect(overrides).toEqual([{ pattern_id: "layout:0", intent: "section", zone_roles: { "ph:0": "keep" } }]);
-    overrides = upsertOverride(overrides, "layout:0", { intent: null, zone_roles: {} });
-    expect(overrides).toEqual([{ pattern_id: "layout:0", intent: null, zone_roles: { "ph:0": "keep" } }]);
-    overrides = upsertOverride([{ pattern_id: "layout:0", label: "x" }], "layout:0", { label: null });
+describe("upsertOverride (the stored overrides shape)", () => {
+  it("serialises only pattern_id, label, kind and included", () => {
+    let overrides = upsertOverride([], "layout:0", { kind: "section" });
+    expect(overrides).toEqual([{ pattern_id: "layout:0", kind: "section" }]);
+    overrides = upsertOverride(overrides, "layout:0", { included: false });
+    overrides = upsertOverride(overrides, "slide:7", { label: "Key figures" });
+    expect(JSON.parse(JSON.stringify(overrides))).toEqual([
+      { pattern_id: "layout:0", kind: "section", included: false },
+      { pattern_id: "slide:7", label: "Key figures" },
+    ]);
+  });
+
+  it("drops an override with no correction left", () => {
+    let overrides = upsertOverride([{ pattern_id: "layout:0", kind: "section" }], "layout:0", { kind: null });
+    expect(overrides).toEqual([]);
+    overrides = upsertOverride([{ pattern_id: "slide:7", label: "x" }], "slide:7", { label: "  " });
     expect(overrides).toEqual([]);
   });
 });
 
 describe("effectiveInventory", () => {
-  it("applies label, intent, inclusion and zone roles, group items included", () => {
+  it("applies label, kind and inclusion without touching the source", () => {
     const effective = effectiveInventory(INVENTORY, [
-      { pattern_id: "layout:0", label: "  Front page ", intent: "section", included: false },
-      { pattern_id: "slide:7", zone_roles: { "sp:1/4": "keep" } },
+      { pattern_id: "layout:0", label: "  Front page ", kind: "section", included: false },
       { pattern_id: "slide:9", included: true },
     ]);
-    const [cover, kpis, chart] = effective.patterns;
-    expect([cover.label, cover.intent, cover.included, cover.exclusion_reason]).toEqual([
+    const [cover, kpis, chart] = effective.patterns ?? [];
+    expect([cover.label, cover.kind, cover.included, cover.exclusion_reason]).toEqual([
       "Front page",
       "section",
       false,
       "author",
     ]);
-    expect(kpis.groups[0].items[0][1].role).toBe("keep");
-    expect(kpis.groups[0].item_zones).toEqual(["number", "keep"]);
+    expect(kpis).toBe(INVENTORY.patterns?.[1]);
     expect([chart.included, chart.exclusion_reason]).toEqual([true, null]);
-    // The source is untouched.
-    expect(INVENTORY.patterns[0].label).toBe("Cover");
+    expect(INVENTORY.patterns?.[0].label).toBe("Cover");
   });
 });
 
-describe("summarize and readers", () => {
-  it("counts usable, fixed and excluded patterns", () => {
-    expect(summarize(INVENTORY)).toEqual({ patterns: 2, fixed: 1, excluded: 1 });
+describe("readers and summary", () => {
+  it("counts usable and set-aside patterns", () => {
+    expect(summarize(INVENTORY)).toEqual({ patterns: 2, excluded: 1 });
+  });
+
+  it("names the overrides a re-analysed template no longer matches", () => {
+    expect(
+      unmatchedOverrides(
+        [
+          { pattern_id: "layout:0", label: "x" },
+          { pattern_id: "slide:404", included: false },
+        ],
+        INVENTORY,
+      ),
+    ).toEqual(["slide:404"]);
   });
 
   it("reads the stored config leniently", () => {
     expect(readOverrides({})).toEqual([]);
     expect(readOverrides({ overrides: "nope" })).toEqual([]);
-    expect(readInventory({ inventory: null })).toBeNull();
-    expect(readInventory({ inventory: INVENTORY })).toBe(INVENTORY);
-  });
-
-  it("lists group zones after the pattern's own, with their item index", () => {
-    const zones = allZones(INVENTORY.patterns[1]);
-    expect(zones.map((z) => [z.zone.key, z.item])).toEqual([
-      ["ph:0", null],
-      ["sp:1/3", 0],
-      ["sp:1/4", 0],
-      ["sp:2/5", 1],
-      ["sp:2/6", 1],
-    ]);
+    expect(readTemplateSha({ template_sha256: "" })).toBeNull();
+    expect(readTemplateSha({ template_sha256: "abc" })).toBe("abc");
   });
 });

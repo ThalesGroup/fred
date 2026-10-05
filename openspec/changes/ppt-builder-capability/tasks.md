@@ -95,11 +95,11 @@ Blocked on the developer's deck. Owns: `assets/fred_template.pptx`, `assets/fred
 
 Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/**`, `apps/frontend/src/locales/{en,fr}/translation.json` (ppt_builder keys), `docs/swift/ux/COMPONENT-UX.md` (ppt_builder section).
 
-- [ ] 8.1 Regenerate the API slice; analysis status hook polling `/analysis/{instance}` while pending/running; "analysis in progress / interrupted" states
-- [ ] 8.1b Failed/interrupted state with error text and "re-run analysis" action
-- [ ] 8.1c "Use a vision model" toggle (default on), disabled and forced off with the explanatory message when no vision-capable model is available; `model_profile` selector shown only while on, listing only vision-capable profiles
-- [ ] 8.2 Review dialog: thumbnail + label + kind `Select` + include `Switch`; delete zone-role editing and the outline detail; built-in template from `/builtin`
-- [ ] 8.3 vitest for status states and override serialisation; `make code-quality` + `make test` in `apps/frontend`
+- [x] 8.1 Regenerate the API slice; analysis status hook polling `/analysis/{instance}` while pending/running; "analysis in progress / interrupted" states
+- [x] 8.1b Failed/interrupted state with error text and "re-run analysis" action
+- [x] 8.1c "Use a vision model" toggle (default on), disabled and forced off with the explanatory message when no vision-capable model is available; `model_profile` selector shown only while on, listing only vision-capable profiles
+- [x] 8.2 Review dialog: thumbnail + label + kind `Select` + include `Switch`; delete zone-role editing and the outline detail; built-in template from `/builtin` (served by `/theme` until WP7 renames it)
+- [x] 8.3 vitest for status states and override serialisation; `make code-quality` + `make test` in `apps/frontend` (run as tsc/prettier/eslint/scoped vitest while a dev server used the worktree; the full make targets run in 9.3)
 
 ## WP10. Agent readiness (control-plane + SDK hook, own PR)
 

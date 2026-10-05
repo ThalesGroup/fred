@@ -1,0 +1,228 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// The analysis status line for each state, and the vision toggle: locked off
+// with its explanation when no vision-capable model exists, selector listing
+// only vision-capable profiles while on.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AnalysisStatusResponse } from "./api/pptBuilderCapabilityOpenApi";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
+vi.mock("@shared/molecules/Select/Select.tsx", () => ({
+  default: ({ options, label }: { options: { value: string; label: string }[]; label: string }) => (
+    <select aria-label={label}>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
+
+import { AnalysisStatus } from "./PptBuilderTemplatePanel";
+import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
+import { analysisPhase, canRerun, type AnalysisPhase, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
+import { visionAvailability, type VisionAvailability } from "./useVisionAvailability";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+let container: HTMLDivElement;
+let root: Root | null = null;
+
+function cleanup() {
+  if (!root) return;
+  const mounted = root;
+  act(() => mounted.unmount());
+  container.remove();
+  root = null;
+}
+
+function render(ui: React.ReactElement) {
+  cleanup();
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  const mounted = createRoot(container);
+  root = mounted;
+  act(() => {
+    mounted.render(ui);
+  });
+}
+
+afterEach(cleanup);
+
+function status(overrides: Partial<AnalysisStatusResponse>): AnalysisStatusResponse {
+  return {
+    status: "succeeded",
+    template_sha256: "sha",
+    labelling_key: "rules",
+    analysis_version: 3,
+    current: true,
+    updated_at: "2026-10-05T10:00:00Z",
+    ...overrides,
+  };
+}
+
+function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> = {}): PptBuilderAnalysis {
+  return {
+    phase,
+    statusLoading: false,
+    stagedFile: undefined,
+    hasPersistedTemplate: true,
+    error: null,
+    canRerun: false,
+    isRerunning: false,
+    rerun: vi.fn(async () => {}),
+    effective: null,
+    summary: null,
+    droppedOverrides: [],
+    previewSource: null,
+    overrides: [],
+    updateOverride: () => {},
+    handlePick: () => {},
+    handleClear: () => {},
+    ...overrides,
+  };
+}
+
+describe("analysisPhase", () => {
+  const file = new File(["x"], "deck.pptx");
+
+  it("derives the phase from the staged file, the saved hash and the row", () => {
+    expect(analysisPhase({ stagedFile: file, templateSha: "sha", status: status({}) })).toBe("staged");
+    expect(analysisPhase({ stagedFile: undefined, templateSha: null, status: undefined })).toBe("builtin");
+    expect(analysisPhase({ stagedFile: undefined, templateSha: "sha", status: undefined })).toBe("unknown");
+    expect(analysisPhase({ stagedFile: undefined, templateSha: "new", status: status({}) })).toBe("unknown");
+    expect(analysisPhase({ stagedFile: undefined, templateSha: "sha", status: status({ status: "running" }) })).toBe(
+      "running",
+    );
+  });
+
+  it("offers a re-run only for failed, interrupted or outdated analyses", () => {
+    expect(canRerun("failed", undefined)).toBe(true);
+    expect(canRerun("interrupted", undefined)).toBe(true);
+    expect(canRerun("succeeded", status({}))).toBe(false);
+    expect(canRerun("succeeded", status({ current: false }))).toBe(true);
+    expect(canRerun("running", status({ status: "running" }))).toBe(false);
+  });
+});
+
+describe("AnalysisStatus", () => {
+  it("says the analysis is in progress while pending or running", () => {
+    for (const phase of ["pending", "running"] as const) {
+      render(<AnalysisStatus analysis={analysis(phase)} disabled={false} />);
+      expect(container.textContent).toContain("capability.ppt_builder.analysis.inProgress");
+      expect(container.querySelector("button")).toBeNull();
+    }
+  });
+
+  it("shows the error and a re-run action when the analysis failed", () => {
+    const rerun = vi.fn(async () => {});
+    render(
+      <AnalysisStatus
+        analysis={analysis("failed", { error: "The file has no slide.", canRerun: true, rerun })}
+        disabled={false}
+      />,
+    );
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.failed");
+    expect(container.textContent).toContain("The file has no slide.");
+    const button = container.querySelector("button") as HTMLButtonElement;
+    expect(button.textContent).toContain("capability.ppt_builder.analysis.rerun");
+    act(() => button.click());
+    expect(rerun).toHaveBeenCalled();
+  });
+
+  it("names an interruption", () => {
+    render(<AnalysisStatus analysis={analysis("interrupted", { canRerun: true })} disabled={false} />);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.interrupted");
+  });
+
+  it("stays silent once succeeded, and explains a staged file", () => {
+    render(<AnalysisStatus analysis={analysis("succeeded")} disabled={false} />);
+    expect(container.textContent).toBe("");
+    render(<AnalysisStatus analysis={analysis("staged")} disabled={false} />);
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.staged");
+  });
+});
+
+describe("visionAvailability", () => {
+  const visionProfile = { profile_id: "chat.vision", capability_id: "c", name: "Vision", supports_vision: true };
+  const textProfile = { profile_id: "chat.text", capability_id: "c", name: "Text" };
+
+  it("is unknown until both answers arrive, then false without any vision model", () => {
+    expect(visionAvailability(undefined, undefined, false).available).toBeNull();
+    expect(visionAvailability([textProfile], undefined, false).available).toBeNull();
+    expect(visionAvailability([textProfile], { supports_vision: false }, true).available).toBe(false);
+  });
+
+  it("is true with a vision profile or a vision-capable agent model", () => {
+    expect(visionAvailability([textProfile, visionProfile], undefined, false)).toEqual({
+      available: true,
+      visionProfiles: [visionProfile],
+    });
+    expect(visionAvailability([textProfile], { supports_vision: true }, true).available).toBe(true);
+  });
+});
+
+describe("PptBuilderVisionSettings", () => {
+  function renderSettings(vision: VisionAvailability, configValues: Record<string, unknown> = {}) {
+    const onConfigChange = vi.fn();
+    render(
+      <PptBuilderVisionSettings
+        disabled={false}
+        configValues={configValues}
+        onConfigChange={onConfigChange}
+        vision={vision}
+      />,
+    );
+    return onConfigChange;
+  }
+
+  it("locks the toggle off with the explanation when no vision model is available", () => {
+    renderSettings({ available: false, visionProfiles: [] }, { use_vision: true });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(true);
+    expect(container.textContent).toContain("capability.ppt_builder.fields.use_vision.unavailable");
+    expect(container.querySelector("select")).toBeNull();
+  });
+
+  it("is on by default and lists only vision-capable profiles", () => {
+    const visionProfile = { profile_id: "chat.vision", capability_id: "c", name: "Vision", supports_vision: true };
+    renderSettings({ available: true, visionProfiles: [visionProfile] });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+    expect(toggle.disabled).toBe(false);
+    const options = [...container.querySelectorAll("option")].map((o) => o.value);
+    expect(options).toEqual(["", "chat.vision"]);
+  });
+
+  it("hides the selector and writes the toggle when turned off", () => {
+    const onConfigChange = renderSettings({ available: true, visionProfiles: [] }, { use_vision: false });
+    expect(container.querySelector("select")).toBeNull();
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    act(() => toggle.click());
+    expect(onConfigChange).toHaveBeenCalledWith("use_vision", true);
+  });
+});

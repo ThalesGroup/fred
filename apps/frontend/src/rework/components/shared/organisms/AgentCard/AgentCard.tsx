@@ -278,7 +278,11 @@ export default function AgentCard({
       <div className={styles.footer}>
         {isSuspended && (
           <div className={styles.suspensionWarning}>
-            {isPreparing ? t("rework.agentCard.preparing") : t("rework.agentCard.suspended")}
+            {isPreparing
+              ? t("rework.agentCard.preparing")
+              : instance.suspension_reason === "capability_pending"
+                ? t("rework.agentCard.preparationFailed", { detail: instance.suspension_detail })
+                : t("rework.agentCard.suspended")}
           </div>
         )}
         <div className={styles.actions}>
