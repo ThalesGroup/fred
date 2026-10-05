@@ -1808,16 +1808,16 @@
         "empty": "No prompt has been published to the marketplace yet.",
         "emptySearch": "No prompt matches this search.",
         "import": {
-          "title": "Copy this prompt to a team",
-          "subtitle": "Select the spaces to copy “{{name}}” into.",
-          "confirm": "Copy",
+          "title": "Import this prompt into a team",
+          "subtitle": "Select the spaces to import “{{name}}” into.",
+          "confirm": "Import",
           "personalSpace": "Personal space",
           "searchPlaceholder": "Search a team",
           "clearSearch": "Clear search",
           "noTeams": "No team matches.",
-          "noEditableTeams": "You are not an editor of any team. Only an editor can copy a prompt into one — ask a team administrator for that role.",
-          "successToast": "Prompt copied ({{count}})",
-          "errorToast": "Copy failed ({{count}})",
+          "noEditableTeams": "You are not an editor of any team. Only an editor can import a prompt into one — ask a team administrator for that role.",
+          "successToast": "Prompt imported ({{count}})",
+          "errorToast": "Import failed ({{count}})",
           "originTeam": "Origin team"
         },
         "unpublish": {
@@ -2869,7 +2869,7 @@
             "publish": "Publish to marketplace",
             "unpublish": "Remove from marketplace",
             "delete": "Delete",
-            "import": "Copy to...",
+            "import": "Import into...",
             "removeFromMarketplace": "Remove from marketplace"
           }
         },
