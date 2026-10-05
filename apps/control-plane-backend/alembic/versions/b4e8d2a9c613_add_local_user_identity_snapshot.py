@@ -15,7 +15,7 @@
 """Add local user identity snapshots.
 
 Revision ID: b4e8d2a9c613
-Revises: 21e235382895
+Revises: c4d7e2a91b30
 """
 
 from typing import Sequence, Union
@@ -25,7 +25,7 @@ from alembic import op
 
 revision: str = "b4e8d2a9c613"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "21e235382895"  # pragma: allowlist secret
+    "c4d7e2a91b30"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
