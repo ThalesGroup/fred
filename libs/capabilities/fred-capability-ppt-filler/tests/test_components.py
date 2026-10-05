@@ -24,12 +24,15 @@ text — plus the degenerate cases each component has to declare.
 from __future__ import annotations
 
 import pytest
-from pptx import Presentation
-
+from deck_builders import (
+    ICON_NAMES,
+    build_house_style_template,
+    build_icon_bank_template,
+)
 from fred_capability_ppt_filler.builder.analysis import analyze_presentation
 from fred_capability_ppt_filler.builder.components import (
-    BAR_MIN_RATIO,
     _MIN_CHARS,
+    BAR_MIN_RATIO,
     COMPOSITIONS,
     bar,
     compose,
@@ -37,11 +40,7 @@ from fred_capability_ppt_filler.builder.components import (
 )
 from fred_capability_ppt_filler.builder.design_system import Box
 from fred_capability_ppt_filler.builder.theme import default_theme
-from tests.deck_builders import (
-    ICON_NAMES,
-    build_house_style_template,
-    build_icon_bank_template,
-)
+from pptx import Presentation
 
 
 @pytest.fixture(scope="module")

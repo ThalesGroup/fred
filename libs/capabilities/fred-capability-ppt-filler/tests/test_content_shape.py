@@ -25,8 +25,6 @@ from __future__ import annotations
 import io
 
 import pytest
-from pptx import Presentation
-
 from fred_capability_ppt_filler.builder.analysis import analyze_presentation
 from fred_capability_ppt_filler.builder.compose import (
     STRUCTURED_SHAPES,
@@ -46,6 +44,7 @@ from fred_capability_ppt_filler.builder.plan import (
 )
 from fred_capability_ppt_filler.builder.render import _Renderer
 from fred_capability_ppt_filler.builder.theme import default_theme
+from pptx import Presentation
 
 LONG = (
     "Une phrase longue qui developpe un raisonnement suivi, avec ses nuances, "

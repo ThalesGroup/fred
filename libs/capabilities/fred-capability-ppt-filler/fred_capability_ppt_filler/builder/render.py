@@ -45,16 +45,16 @@ from pptx.util import Emu
 
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import lexicon
+from fred_capability_ppt_filler.builder.analysis import (
+    _font_name_of,
+    estimate_capacity,
+    theme_fonts,
+)
 from fred_capability_ppt_filler.builder.compose import choose
 from fred_capability_ppt_filler.builder.compose import resolve as compose_resolve
 from fred_capability_ppt_filler.builder.composed_render import (
     ComposedDrawer,
     rekey_pattern,
-)
-from fred_capability_ppt_filler.builder.analysis import (
-    _font_name_of,
-    estimate_capacity,
-    theme_fonts,
 )
 from fred_capability_ppt_filler.builder.models import (
     Box,

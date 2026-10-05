@@ -574,10 +574,10 @@ def test_the_catalogue_offers_what_the_template_can_compose_not_only_what_it_dre
     had no caller. The agent then saw only the designer's own slides — on a
     template holding just a cover, that meant every slide landed on the cover.
     """
+    from deck_builders import build_cover_only_template
     from fred_capability_ppt_filler.builder.analysis import analyze_presentation
     from fred_capability_ppt_filler.builder.capability import _composable
     from fred_capability_ppt_filler.builder.plan import included_patterns
-    from tests.deck_builders import build_cover_only_template
 
     inventory = analyze_presentation(build_cover_only_template())
     offered = included_patterns(inventory)
@@ -598,12 +598,12 @@ def test_the_catalogue_offers_what_the_template_can_compose_not_only_what_it_dre
 def test_an_author_can_still_exclude_a_composed_pattern():
     """Composed patterns join the catalogue BEFORE overrides are applied, so
     excluding one works exactly as excluding the template's own."""
+    from deck_builders import build_cover_only_template
     from fred_capability_ppt_filler.builder.analysis import analyze_presentation
     from fred_capability_ppt_filler.builder.capability import _composable
     from fred_capability_ppt_filler.builder.models import PatternOverride
     from fred_capability_ppt_filler.builder.overrides import apply_overrides
     from fred_capability_ppt_filler.builder.plan import included_patterns
-    from tests.deck_builders import build_cover_only_template
 
     enriched = _composable(analyze_presentation(build_cover_only_template()))
     target = next(p for p in enriched.patterns if p.id == "composed:card_row:3")

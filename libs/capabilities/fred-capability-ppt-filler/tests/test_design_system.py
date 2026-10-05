@@ -22,9 +22,14 @@ and a closing slide — the shape that produced nine cover slides.
 from __future__ import annotations
 
 import pytest
-from pptx import Presentation
-from pptx.util import Inches
-
+from deck_builders import (
+    HOUSE_CORNER,
+    HOUSE_GAP_IN,
+    HOUSE_INSET_IN,
+    add_fixture,
+    build_cover_only_template,
+    build_house_style_template,
+)
 from fred_capability_ppt_filler.builder.analysis import (
     analyze_presentation,
     theme_colors,
@@ -39,14 +44,8 @@ from fred_capability_ppt_filler.builder.design_system import (
     relative_luminance,
 )
 from fred_capability_ppt_filler.builder.theme import default_theme
-from tests.deck_builders import (
-    HOUSE_CORNER,
-    HOUSE_GAP_IN,
-    HOUSE_INSET_IN,
-    add_fixture,
-    build_cover_only_template,
-    build_house_style_template,
-)
+from pptx import Presentation
+from pptx.util import Inches
 
 
 @pytest.fixture(scope="module")

@@ -27,23 +27,21 @@ import io
 import re
 
 import pytest
-from lxml import etree
-from pptx import Presentation
-from pptx.util import Inches
-
+from deck_builders import (
+    add_fixture,
+    build_house_style_template,
+    build_icon_bank_template,
+)
 from fred_capability_ppt_filler.builder.analysis import analyze_presentation
 from fred_capability_ppt_filler.builder.compose import composed_patterns
 from fred_capability_ppt_filler.builder.design_system import Box
 from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanItem, SlidePlan
 from fred_capability_ppt_filler.builder.render import _Renderer
 from fred_capability_ppt_filler.builder.theme import default_theme
+from lxml import etree
+from pptx import Presentation
 from pptx.oxml.ns import qn
-
-from tests.deck_builders import (
-    add_fixture,
-    build_house_style_template,
-    build_icon_bank_template,
-)
+from pptx.util import Inches
 
 
 def _deck(pattern_id: str, _followers: int = 0, **plan_fields):

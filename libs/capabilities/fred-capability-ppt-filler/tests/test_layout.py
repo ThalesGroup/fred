@@ -23,7 +23,6 @@ on it, and that every gap still comes from the template's own scale.
 from __future__ import annotations
 
 import pytest
-
 from fred_capability_ppt_filler.builder import layout as L
 from fred_capability_ppt_filler.builder.design_system import Box
 from fred_capability_ppt_filler.builder.theme import default_theme

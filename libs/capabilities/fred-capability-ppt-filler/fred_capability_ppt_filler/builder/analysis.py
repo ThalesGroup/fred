@@ -50,18 +50,18 @@ from pptx.oxml.ns import qn
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.design_system import (
+    FIGURE_TEXT,
     MAJOR_LATIN,
+    MIN_FREE_SHARE,
     MINOR_LATIN,
     THEME_SLOTS,
     ColorPair,
     ColorToken,
-    IconRef,
     DesignSystem,
     Grid,
+    IconRef,
     OpticalAnchors,
     ShapeLanguage,
-    FIGURE_TEXT,
-    MIN_FREE_SHARE,
     SpacingScale,
     TypeToken,
     best_pair,

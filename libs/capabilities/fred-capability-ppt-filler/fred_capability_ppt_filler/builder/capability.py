@@ -60,11 +60,11 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from pydantic import BaseModel
 
-from fred_capability_ppt_filler.builder.compose import with_composed_patterns
 from fred_capability_ppt_filler.builder.analysis import (
     ANALYSIS_VERSION,
     analyze_template,
 )
+from fred_capability_ppt_filler.builder.compose import with_composed_patterns
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
