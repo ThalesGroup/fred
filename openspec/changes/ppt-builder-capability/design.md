@@ -1,86 +1,110 @@
 ## Context
 
-`libs/fred-capability-ppt-filler/` already owns everything around a deck except its creation: bounded python-pptx work (`concurrency.py`), text-run traversal that survives run splitting (`traversal.py`), image placement with folder resolution (`fill.py`, `folder_resolution.py`), LibreOffice PDF conversion, the `ppt_preview` chat part, the side pane and the download. Nothing in the repo adds a slide, instantiates a layout or duplicates an example slide.
+`ppt_builder` lives beside `ppt_filler` in `libs/capabilities/fred-capability-ppt-filler/` and reuses its bounded python-pptx work (`concurrency.py`), run-merging traversal (`traversal.py`), image placement (`fill.py`, `folder_resolution.py`), `text_metrics.py`, LibreOffice conversion (`fred_core.convert_office_bytes_to_pdf`), the `ppt_preview` chat part and side pane. The first iteration (pattern inventory + model-chosen pattern ids + composition layer) failed end to end; see proposal. This design replaces it; the acquired rendering pieces stay.
 
-Constraints that shape the approach:
+Facts that constrain the design (verified in code):
 
-- `validate_config` receives `SaveContext.services` (asset store, folder resolution); no model call is guaranteed on the save path, so analysis must be deterministic.
-- One chat-part kind per owner: `ppt_builder` cannot re-declare `ppt_preview`. It returns the part `ppt_filler` declares (same package, always installed together) stamped with `capability_id="ppt_builder"`, and declares the same `ppt_preview_pane` widget on the same pane component, so the card opens the pane of the capability the agent actually has.
-- The pod mounts a capability router with the caller's bearer available (`Security(oauth2_scheme)`), and Knowledge Flow serves agent config assets at `teams/{team}/agents/{instance}/config/{key}` to team members.
-- Real reference: the Thales FR template (20 typed layouts, 38 example slides). Its free-form slides (agenda with 8 numbered groups, 4 KPI cards, 3/6 icon cards, 3 process steps, 6-year timeline, team pairs, contacts) are the bar the heuristics must clear; its icon banks, chart and table slides are the cases to exclude by default.
+- `validate_config` receives `SaveContext(identity, services)` (`fred_sdk/contracts/capability/context.py:79`). The save path builds a full `BoundRuntimeContext` but only injects `workspace_fs`, `agent_assets`, `document_folders` (`fred_runtime/app/agent_app.py` `_build_capability_save_services`, ~3676). There is **no model port** on the save path or in capability routes; `ChatModelFactoryPort.build(definition, binding)` (`fred_sdk/contracts/runtime.py:556`) is turn-shaped. The process-wide factory is `get_runtime_context().config.chat_model_factory` (`RoutedChatModelFactory`, `fred_runtime/model_routing/provider.py:104`, enforcing `binding.usable_model_ids`). `ModelProfile` (`model_routing/contracts.py:145`) has no vision flag; `models_catalog.yaml` profiles are all `capability: chat`, default `chat.mistral.small`.
+- A capability can change its stored config **only** through `validate_config`'s return value; nothing writes it back later. `agent_assets` is bound to the saving user's token, which may expire after the request.
+- fred-agents runs several replicas. In-process helpers exist (`fred_runtime/common/background_tasks.spawn`, in-memory). Temporal workers run in knowledge-flow, control-plane and knowledge-base pods, not in fred-agents. `fred_core.tasks` (`cp_task_run`) has a closed task-kind union owned by control-plane. Capabilities may own tables (`cap_<id>_*`, own Alembic tree, `migrations_location()`); `fred-capability-writable-document/store.py` is the pattern (overridable module-level store provider, router authorises on the row).
+- The analysis takes ~50 s, beyond what a synchronous save should hold.
+- The feature is not on `swift`: stored configs exist only on local dev agents, so the config shape may change without `upgrade_config`.
 
 ## Goals / Non-Goals
 
-**Goals:**
+**Goals:** the template's own slides, chosen right, every time or an explicit error; analysis that understands real corporate slides; a save that never waits on analysis; one code path for customer and built-in templates; measurable deck quality.
 
-- Deterministic, testable analysis whose result the author can read and correct.
-- A generation path that only ever fills existing zones — the corporate design cannot be broken by the agent.
-- One shared package: no duplicated preview, conversion or concurrency code.
-
-**Non-Goals:**
-
-- Charts, SmartArt, tables as generated content (kept verbatim when part of a fixed slide, otherwise excluded).
-- Vision-based checking of the rendered slides.
-- Editing a generated deck in place; regeneration from an amended plan is the correction path.
-- Persisting chat corrections into the agent configuration.
+**Non-Goals:** drawing shapes the template does not hold (composition is parked, not abandoned); charts/SmartArt/tables as generated content; vision checks of the rendered output (text checks only); in-place editing of a generated deck.
 
 ## Decisions
 
-### D1. Second capability in the same package, sharing the preview part
+### D1. Park composition, delete the generated theme
 
-`PptBuilderCapability` lives in `fred_capability_ppt_filler/builder/` with its own `fred.capabilities` entry point. It reuses `PptPreviewPart`, `convert_office_bytes_to_pdf`, the heavy-job slots, `_place_images_on_slide`-style image embedding and the folder listing tool. Alternative — a separate package depending on ppt-filler — was rejected: it adds a release coupling for no isolation benefit, and the shared chat part would still have to be imported.
+The composition layer moves to branch `parked/ppt-builder-composition` with the `ppt-builder-composition` change. `Box`, `ZoneRole`, `TEXT_ROLES` move from `design_system.py` into `models.py`. `theme.py` is deleted (dependents: `capability.py` middleware, `validate_config`, the `/theme` routes and the registration warm-up; tests `test_builder_capability.py` and the parked composition tests; frontend `usePatternsPreview.ts` via `/theme/preview.pdf`). Alternative — keep composition behind a switch — rejected: it is the code path that replaced good template slides, and keeping it doubles every test surface.
 
-### D2. Inventory model persisted in the config; overrides separate
+### D2. Analysis: deterministic structure, vision meaning
 
-`PptBuilderConfig = { template_key, inventory: TemplateInventory | None, overrides: list[PatternOverride] }`. The inventory carries the `analysis_version` it was produced with, and an ordinary save recomputes an older one from the stored template (best effort, thumbnails untouched), so analysis improvements reach existing agents without a re-upload. The inventory is recomputed from the real bytes at every upload (same doctrine as `ppt_filler.schema_slides`) and is small (tens of patterns, tens of zones each). Overrides are keyed by pattern id + zone key. Pattern ids are stable across re-uploads of the same file: `layout:<index>` and `slide:<xml slide id>`; zone keys are `ph:<idx>` for placeholders and `sp:<shape id path>` for free shapes (group path joined by `/`). Alternative — persist only overrides and re-analyse per turn — rejected: analysis of a 4 MB deck is CPU work that should not run on every turn.
+1. **Deterministic pass (kept, amended).** Layouts are classified from typed placeholders as today. On example slides **every text-bearing shape is a slot by default**; excluded only when its text repeats on ≥ 2 slides, or it is a date/footer/slide-number field (`a:fld` type or footer/date/sldNum placeholder). Repeat groups, capacities (`text_metrics`), exclusion of chart/table/icon-bank slides and the annotation channels stay. Copyable relationships drop slide-to-slide hyperlinks from the blockers (they are not copied, D6). The sample-text lexicon no longer decides fillability.
+2. **Vision pass (new, `labelling.py`).** Example slides are rendered once (patterns deck → LibreOffice PDF → per-page PNG via `pypdfium2`), each slot's box is overlaid with its number (set-of-mark), and a vision model returns, per slide, a typed JSON: `kind`, `label`, per-slot `purpose`, `max_items`, `reusable`. Calls run with bounded concurrency. Layouts are not sent (placeholders already say what they are).
+3. **Merge.** Vision decides `kind`, `reusable` and slot purposes; geometry and capacity stay deterministic. A slide whose vision answer is missing or invalid keeps its heuristic label and `labelled_by="heuristic"`, shown in the review panel — analysis never fails because the model did.
 
-### D3. Analysis pipeline (deterministic, ordered by confidence)
+**One closed vocabulary**, `SlideKind`: `cover, agenda, section, bullets, two_columns, comparison, cards, figures, process, timeline, team, quote, image_text, closing, other`. It replaces `Intent` in the inventory, the overrides and the plan.
 
-1. **Placeholders first.** Layouts: signature from placeholder types and geometry. Slides: `is_placeholder` shapes keep their type. A `BODY` placeholder at the top band (top < 12 %, height < 8 %) is a _heading_, not a body (the reference template's "Bullet Points" layout types its headings as BODY).
-2. **Shared decoration.** Text identical on ≥ 3 slides, and pictures smaller than 6 % of the slide area sitting in a corner, are never zones.
-3. **Free text boxes.** Only boxes whose text matches the sample-text lexicon (`Cliquez ici`, `Changez ce texte`, `Titre du`, `Lorem ipsum`, `Nom`, `Poste`, `Texte`, `Insert`, `Type here`, …, multilingual, plus "single short generic label" heuristics) or are the largest text on a slide without a title placeholder. Role by font-size rank and geometry: largest and top → `heading`; ≥ 40 pt and ≤ 4 characters → `number`; ≤ 3 lines and under a picture → `caption`; small and directly above/below a sibling zone → `label`; otherwise `body`.
-4. **Repeated groups.** Sibling groups (or ungrouped clusters aligned on a grid) with identical structure signature (multiset of shape kinds + rounded font sizes + text-box count) and ≥ 3 occurrences → one `RepeatGroup` with `count` and per-item zones ordered reading-wise. The agenda, KPI, icons, steps, timeline and team slides of the reference template all resolve this way.
-5. **Pictures.** Picture placeholders are image zones. Free pictures are decoration unless they are the largest shape on the slide (≥ 25 % area) → replaceable image zone.
-6. **Intent** from the zone set: `title` (title + subtitle, no body, first slide or cover-named layout), `section` (single large title), `agenda` (repeat group of number+heading), `content` (title + body), `two_columns` (title + two bodies), `comparison` (two headings + two bodies), `image_text` (title + body + image), `cards` (repeat group of heading/body/(number|image)), `steps` (repeat group with ordered numbers), `statement` (one large centred body, no title), `contact` (name/role/phone/email labels), `fixed` (no zone).
-7. **Annotations** override: a shape name from a known vocabulary (`title`, `subtitle`, `heading`, `body`, `caption`, `number`, `label`, `image`, `keep`, optionally suffixed `heading_2`; PowerPoint's automatic `<words> <n>` names never count) sets the role; an `intent:` line in the speaker notes sets the intent and a `label:` line the label; `{{key}}` markers are honoured as body zones so a `ppt_filler` deck still analyses.
-8. **Exclusion by default**: a chart or table as the slide's main content, ≥ 20 pictures and no body zone (icon bank), or layouts with zero placeholders (decorative masters). Layouts and example slides with the same intent are both kept; the example slide is flagged `preferred` because the designer put it in the deck.
+### D3. Model access outside a turn
 
-Alternative considered: an LLM pass at save time to classify ambiguous slides. Rejected for V1: no model port is guaranteed on the save path, and a deterministic pass is what makes the review widget trustworthy and the tests meaningful. The tool description carries each pattern's derived description, so the agent's own judgement does the semantic matching at chat time.
+Add a turn-free port to the SDK: `CapabilityModelPort` (optional field appended to `RuntimeServices`), `async ainvoke(messages, *, profile_id: str | None, require_vision: bool) -> AIMessage`, implemented in fred-runtime over `RoutedChatModelFactory.select`/`build_for_chat` (`model_routing/provider.py`), which resolves **the model the agent uses by default**: platform binding, then `resolve_effective_chat_profile` (`fred_sdk/contracts/context.py` ~600: agent override → team `chat_default_profile_id` → catalogue default), checked against `usable_model_ids`.
 
-### D4. Plan model: semantic fields, patterns declare what they consume
+Gap found: the save binding (`_build_capability_save_services`) has no team routing policy, no `usable_model_ids` and no platform binding; control-plane sends those only at prepare-execution. So the validate-config call gains the same routing fields control-plane already computes for prepare-execution (WP10), the save binding carries them, and the background job keeps that binding. No agent-tuning model field exists; routing is keyed by `agent_id`, so the port uses the saved agent's id.
 
-One `SlidePlan` shape for every pattern: `pattern` (enum of inventory ids), `title`, `subtitle`, `body: list[str]` (bullets, `\n` and leading `-` for sub-levels), `columns: list[{heading, bullets}]`, `items: list[{number, heading, text, value, label, image}]`, `image`, `images`, `notes`. The renderer maps these onto a pattern's zones by role (`heading` ← title, `body` ← bullets, repeat group ← items, …). Alternative — one nested args model per pattern, as `ppt_filler` does — rejected: 25 patterns × 10 zones yields a schema the model handles worse than a short semantic vocabulary plus a catalogue in the tool description.
+Override: optional `PptBuilderConfig.labelling_model` (profile id), rendered by a new stock widget id `model_profile` fed by the existing `GET /teams/{team_id}/routing-policy/available-models`; save checks only that the profile is known; usability and vision are enforced by the port. Unset → agent default.
 
-### D5. Rendering
+**Vision toggle.** `PptBuilderConfig.use_vision: bool = True`. Off → the job makes no model call and labels by rules only. The selector shows only while the toggle is on and lists only vision-capable profiles. The form knows whether vision is possible from the existing `available-models` endpoint plus `effective-chat-model`, both extended with `supports_vision` (WP10). If neither the agent's resolved model nor any selectable profile has vision, the toggle is shown disabled and forced off, with "No vision-capable model is available for this agent; slides are labelled by rules". The job applies the same rule when the port is absent or refuses. `ModelProfile` gains optional `supports_vision`; capable profiles are flagged in `models_catalog.yaml`; the port fails closed when the resolved profile lacks it (→ heuristic labels, D2.3). Images go as LangChain `image_url` content parts. This touches the frozen runtime contract: dated entry in `RUNTIME-EXECUTION-CONTRACT.md` §8, and ships as its own PR (consolidation scope rule). Alternative — the capability reading the process-global runtime context directly — rejected: it bypasses the `RuntimeServices` boundary every capability is held to.
 
-- Work on a copy of the template: layouts are instantiated with `slides.add_slide(layout)`; example slides are duplicated by deep-copying the `spTree` and re-creating the slide's image and media relationships (the known python-pptx pattern, wrapped in one helper with a round-trip test); every original example slide is removed at the end, and the resulting slide order is the plan's.
-- Fill by zone role through the existing run-merging traversal so the first run's style is inherited; bullets become paragraphs with `level` from indentation. Unfilled fillable zones are emptied; unfilled image placeholders and unused repeat-group items are deleted.
-- Overflow: measure the text with the font the zone is drawn in (`text_metrics`, fontconfig + Pillow, cached per process and per thread; a conservative per-character estimate when no font can be read), shrink through `normAutofit fontScale` down to 70 %, then truncate at a word boundary and report the zone in the tool result. The same measurement backs the analysis' character limits and the widening of boxes that must not wrap, so one ruler judges the deck everywhere.
-- The built-in theme is a `.pptx` shipped in the package with one layout per intent, analysed through the same pipeline at import time (cached), so "no template" is not a special code path.
+### D4. Background analysis with an owned table
 
-### D6. Author review surface
+- **Save** (`validate_config`): read the upload with python-pptx (an unreadable or oversized file still fails the save), store the bytes via `agent_assets`, compute `template_sha256`, upsert a `pending` row, `spawn` the job with the bytes in memory and the save's `CapabilityModelPort`, return at once. The stored config holds `template_sha256`, `use_vision`, `labelling_model` and the overrides — the inventory and `patterns_path` leave the config.
+- **Store** `cap_ppt_builder_analysis` keyed by `(agent_instance_id, template_sha256, labelling_key)`, where `labelling_key` is `rules` or `vision:<profile id or agent-default>`, so toggling vision or changing the model re-runs the analysis: `status` (`pending|running|succeeded|failed`), `lease_until`, `inventory_json`, `patterns_pdf` (thumbnails), `error`, `team_id`, `saved_by`, timestamps. The job heartbeats the lease and writes the result in one transaction; it needs no Knowledge Flow token after the request.
+- **Reads:** the middleware loads the row by `(instance, sha)`; a `succeeded` row is immutable, so a per-process cache keyed by the hash is replica-safe and costs one DB read per template per pod. `GET /analysis/{instance_id}` (status + summary + inventory) and `GET /analysis/{instance_id}/patterns.pdf` serve the form; authorised for users who can **edit** the agent: there is no `agent_instance` FGA type; control-plane checks `TeamPermission.CAN_UPDATE_AGENTS` (`team.can_update_agents: team_editor`, `schema.fga`) on the instance's team (`product/api.py`). Capability routers are mounted with authentication only (`agent_app.py` ~4741), so the router checks the same permission on the row's `team_id` through the pod's `rebac_engine` (`runtime_context.py`, used as `check_user_permission_or_raise` in `agent_app.py`), exposed to capabilities as a small dependency (WP1).
+- **Recovery:** a row whose lease expired is `stale`; the next save or turn on any replica (both hold `agent_assets`) refetches the template and re-runs. The form shows "analysis interrupted" with the re-run action.
+- **Re-analysis on rule change:** a `succeeded` row older than `ANALYSIS_VERSION` triggers the same job at the next save.
 
-- Routes: `POST /analyze` (multipart → inventory + errors + summary) and `POST /preview` (multipart → PDF, one page per pattern in inventory order, produced from a deck that instantiates each layout with its zone names and copies each example slide). Both stateless and bounded like `ppt_filler`'s.
-- After save, the patterns PDF is stored beside the template as a second config asset and its Knowledge Flow path (`teams/{team}/agents/{instance}/config/…`) is kept in the config, so re-opening the form fetches the thumbnails with the user's bearer — no proxy route, no thumbnails in `tuning_json`.
-- Widget: upload row → summary line → "Review patterns" opens the grid (thumbnail via react-pdf, editable label, intent `Select`, zone chips, include `Switch` small) → a card opens the central `Dialog` with the large thumbnail, numbered zone outlines drawn from the inventory's normalized geometry, and a role `Select` per zone. Pack options in the Simple view show only the upload row, the summary and the review button.
+Alternatives: JSON result in the asset store (needs a valid user token when the job ends and a KF fetch per turn); Temporal worker in fred-agents (new worker deployment for a one-minute job); `fred_core.tasks` (closed union in a control-plane hotspot). The table is the smallest durable, replica-safe option that follows an existing capability pattern.
 
-### D7. Execution model and prompt fragment
+### D5. Agent unavailable until analysis succeeds
 
-ReAct-only, like `ppt_filler`: the tool's `pattern` enum is built from the persisted inventory in the middleware. The middleware also overlays a prompt fragment with the working rules (plan first, telegraphic bullets, limits per zone, never write download links, correct by regenerating).
+The agent itself is unavailable while its analysis is `pending`, `running`, `failed` or `stale`, reusing the existing suspension machinery: `AgentInstanceRow.suspension_reason` (`control_plane_backend/models/agent_instance_models.py`), closed enum `SuspensionReason` (`agent_instances/suspension.py`). Every guard already treats a non-null reason as unavailable: run → 409 (`product/service.py` ~3243), locked toggle (`AgentCard.tsx`), hidden from non-managers (`TeamAgentsPage.tsx`), chat picker / recents / search filter on `!suspension_reason`.
+
+- Add `SuspensionReason.CAPABILITY_PENDING` (same column, no schema change) and an optional `suspension_detail` text so a failure can carry its message (`config_invalid` carries none today).
+- Add one optional, generic SDK hook `AgentCapability.readiness(stored) -> Ready | Pending | Failed(message)` (`fred_sdk/contracts/capability/base.py`), served by the pod. Control-plane reads it after a save and in `run_capability_reconciliation_sweep` beside `reconcile_instance_config_health`, setting/clearing `capability_pending` / `capability_config_invalid`. No ppt-specific code in control-plane.
+- ppt_builder's `readiness` reads its analysis row: pending/running/stale → Pending, failed → Failed(error), succeeded → Ready. Becoming available therefore waits for the next sweep or for the form's status poll, which asks control-plane to re-check the instance (WP10 picks one; no extra save needed).
+- Failed or interrupted keeps the agent unavailable; the form shows the error and a **"re-run analysis"** action (`POST /analysis/{instance_id}/rerun`). `build_presentation` still refuses unless succeeded (defence in depth).
+
+Control-plane, SDK-hook and frontend-gating parts ship as their own work package (WP10).
+
+### D6. Rendering (kept, fixed)
+
+Duplicate + fill stays the only way an example slide reaches the deck; layouts are instantiated as today. Fixes: `_duplicate_slide` copies only image/media/external-hyperlink relationships (slide-to-slide links dropped, their `a:hlinkClick` removed), copies `p:clrMapOvr` and the notes slide; `_write_lines` reuses the template paragraph's `a:pPr` of the same level for every level. Fill by slot, overflow (`fontScale` floor then word-boundary cut, reported), repeat-group item removal and recentring, image zones, lost-content reporting — unchanged.
+
+**After-render check (`checks.py`):** any original non-shared slide text still present on a duplicated slide is removed and reported; overflow and lost content are reported. The tool fails closed: a slide that ends with no filled slot is an error (D8), never a silent sample slide.
+
+### D7. The code chooses the slide
+
+The plan per slide: `title`, `subtitle`, `bullets`, `columns`, `items`, `image(s)`, `notes`, then `kind` — last, optional. `pattern` and pattern ids leave the schema; the catalogue in the tool description lists the kinds the template offers with their capacities (items, chars), never ids. The plan coercion in `plan.py` stays.
+
+`assign.py` maps the whole deck at once: candidate archetypes per slide are those whose kind matches (`kind` given, else inferred from content shape) and that pass a **fit check** (every non-empty field has a slot, item count ≤ capacity, text within capacity after the shrink floor). Example slides outrank layouts of the same kind. A Viterbi-style pass over the slides minimises misfit cost plus a variety penalty under **deck rules**: cover exactly once, at position 1 (the first slide is assigned the cover archetype; no other slide may use it); closing at most once and only last; never three identical archetypes in a row when an alternative fits (otherwise allowed and reported). `DEGRADATION`, `resolve()`'s last-resort fallback and the id loose-matching are deleted.
+
+### D8. No silent fallback: structured repair
+
+If any slide has no fitting archetype, the tool builds nothing and returns `needs_revision` with, per slide: index, problem (e.g. "7 items; the largest cards slide holds 6"), and options from this template (split, trim to N, kind X). The success message no longer says "do not call again"; it lists what the after-render check removed or truncated. The prompt fragment tells the model to fix and call again with the whole deck.
+
+### D9. Built-in Fred template
+
+`assets/fred_template.pptx` — a real deck designed by the developer, with example slides for every `SlideKind` except `team`/`other` — ships as package data with `fred_template.inventory.json` produced by the same pipeline (vision included) through a `make` target; a test fails when the JSON's `analysis_version` lags. No template configured → this pair is used through the exact customer render path. The `/theme` routes are replaced by `/builtin` (inventory) and `/builtin/patterns.pdf`.
+
+**Interim until the file arrives:** `builtin.py` exposes the built-in `(bytes, inventory)` pair and is backed by the existing `theme.py`, which already runs through `analyze_presentation` (heuristic labels, no vision). The no-template path keeps working with no new code; WP7 swaps the source and deletes `theme.py`.
+
+### D10. Review panel and overrides
+
+Thumbnail + label + kind per pattern; the author may change label or kind and exclude/include. `PatternOverride` keeps `label`, `kind`, `included`; zone-role overrides and the zone-outline detail dialog are deleted. Nothing is mandatory. The form shows the D4 status while pending.
+
+### D11. Evaluation harness
+
+`eval/` in the package, run by an opt-in `make eval` (never in `make test`): N prompts × templates through the real analysis, the real `build_presentation` tool and the configured LLM in a minimal ReAct loop with in-memory ports. Metrics per deck: distinct archetypes / slides, cover exactly once at 1, closing at most once at the end, no three in a row, leftover sample text, overflow, lost content, repairs. Templates: the local "PPT Corporate" agent's `config/ppt_builder_template.pptx` (path given by env var, never committed) and the built-in one. Results go into `verification.md`.
 
 ## Risks / Trade-offs
 
-- [Heuristics misclassify a free-form slide] → the review grid makes every decision visible and correctable; a shape name fixes a stubborn case without touching the slide's content; excluded-by-default only applies to clear resource slides.
-- [Slide duplication breaks on exotic parts (charts, embedded OLE, media)] → such slides are excluded by default; duplication copies only picture/media relationships and refuses (with an analysis warning) slides holding parts it cannot copy.
-- [Generated deck size] → duplicated example slides share the template's image parts when the relationship target is the same part; measured on the reference template in tests.
-- [Overflow estimation without font metrics] → conservative average glyph width plus the fontScale floor; the tool reports truncations so the agent shortens content rather than shipping clipped text.
-- [Two capabilities on one agent] → both packs can be enabled; tools have distinct names; prompt fragments are distinct.
+- [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
+- [Vision cost/latency at upload, ~40 calls] → bounded concurrency, background, once per template hash.
+- [Job lost on pod restart] → lease + recovery on next save/turn; the form says so.
+- [Strict fit check yields repair loops on weak models] → options in the error are concrete; repairs are an eval metric with a target.
+- [New SDK port widens the contract] → optional field, appended; ships alone with a contract entry.
 
 ## Migration Plan
 
-- Additive: a new entry point in an already-installed package; no table, no migration, no config version bump. Pods pick it up at next boot (`uv sync` in fred-agents for local dev).
-- Rollback: remove the entry point; existing agents with the capability enabled are suspended with the standard "capability unavailable" reason.
+Unreleased feature: no `upgrade_config`; local agents re-upload or re-save. New owned table via the package's Alembic tree (`python -m fred_runtime migrate`). The SDK port and the `supports_vision` flag are additive. Migration note: operations impact (the table migration, flagging vision models in the catalogue, the readiness field if WP10 is needed) → minor. The control-plane validate-config timeout is out of scope.
 
 ## Open Questions
 
-- Whether the `/preview` PDF should also be persisted for the built-in theme (it can be rendered on demand from the bundled file; decide from the widget's perceived latency once measured).
+Resolved by the developer: Q1 status/thumbnails visible to agent editors (D4); Q2 agent unavailable until analysis succeeds (D5); Q3 `pypdfium2`; Q4 agent's default model with optional override (D3); Q5 developer designs the built-in deck, `theme.py` interim (D9); Q6 timeout out of scope.
+
+None remaining for design; implementation details are pinned in the tasks.
