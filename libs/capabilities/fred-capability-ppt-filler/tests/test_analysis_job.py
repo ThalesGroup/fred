@@ -1,0 +1,254 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Background template analysis: the save returns at once, the result lives in
+the shared table every replica reads, interrupted jobs are recovered, and a
+superseded job never writes."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+
+import pytest
+from analysis_db import age_row, drain
+from builder_decks import build_showcase_template
+from fred_capability_ppt_filler.builder import analysis_job
+from fred_capability_ppt_filler.builder.analysis import ANALYSIS_VERSION
+from fred_capability_ppt_filler.builder.analysis_job import (
+    MAX_ATTEMPTS,
+    SqlAnalysisStore,
+    analysis_readiness,
+    get_analysis_store,
+    labelling_key,
+    parse_labelling_key,
+    ready_inventory,
+    status_response,
+)
+from fred_capability_ppt_filler.builder.capability import (
+    PptBuilderCapability,
+    PptBuilderConfig,
+)
+from fred_capability_ppt_filler.builder.models import AnalysisError, AnalyzeResult
+from fred_capability_ppt_filler.capability import TEMPLATE_SLOT
+from fred_sdk.contracts.capability import (
+    CapabilityIdentity,
+    SaveContext,
+    UploadedFile,
+)
+from fred_sdk.contracts.runtime import RuntimeServices
+from port_fakes import FakeAssets
+
+TEMPLATE = build_showcase_template()
+SHA = hashlib.sha256(TEMPLATE).hexdigest()
+INSTANCE = "inst-7"
+IDENTITY = CapabilityIdentity(
+    user_id="u-1", team_id="team-42", agent_instance_id=INSTANCE
+)
+
+
+def _save_ctx(assets: FakeAssets | None = None) -> SaveContext:
+    return SaveContext(
+        identity=IDENTITY,
+        services=RuntimeServices(agent_assets=assets or FakeAssets()),
+    )
+
+
+def _uploads(content: bytes = TEMPLATE):
+    return {TEMPLATE_SLOT: [UploadedFile(filename="template.pptx", content=content)]}
+
+
+@pytest.fixture(autouse=True)
+def offline_conversion(monkeypatch):
+    async def _pdf(_bytes: bytes, *, suffix: str, timeout_seconds: float = 0):
+        return b"%PDF-thumbs"
+
+    monkeypatch.setattr(analysis_job, "convert_office_bytes_to_pdf", _pdf)
+
+
+async def _save(config: PptBuilderConfig, uploads=None, assets=None):
+    return await PptBuilderCapability().validate_config(
+        config, uploads or {}, _save_ctx(assets)
+    )
+
+
+def test_labelling_key_round_trips():
+    assert labelling_key(False, "gpt") == "rules"
+    assert labelling_key(True, None) == "vision:agent-default"
+    assert parse_labelling_key("vision:agent-default") == (True, None)
+    assert parse_labelling_key("vision:chat.gpt4o") == (True, "chat.gpt4o")
+    assert parse_labelling_key("rules") == (False, None)
+
+
+@pytest.mark.asyncio
+async def test_save_returns_before_the_job_ends(analysis_db, monkeypatch):
+    release = asyncio.Event()
+    seen: dict = {}
+
+    async def _slow_label(inventory, template, pdf, port, *, profile_id, use_vision):
+        seen.update(pdf=pdf, use_vision=use_vision, profile_id=profile_id)
+        await release.wait()
+        return inventory
+
+    monkeypatch.setattr(analysis_job, "label_inventory", _slow_label)
+    assets = FakeAssets()
+    stored = await _save(
+        PptBuilderConfig(labelling_model="chat.vision"), _uploads(), assets
+    )
+
+    assert stored.template_sha256 == SHA
+    assert assets.blobs == {stored.template_key: TEMPLATE}
+    store = get_analysis_store()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.status in ("pending", "running")
+    readiness = await PptBuilderCapability().readiness(stored, IDENTITY)
+    assert readiness.state == "pending"
+
+    release.set()
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.status == "succeeded"
+    assert record.analysis_version == ANALYSIS_VERSION and record.has_thumbnails
+    assert await store.patterns_pdf(INSTANCE) == b"%PDF-thumbs"
+    assert seen == {
+        "pdf": b"%PDF-thumbs",
+        "use_vision": True,
+        "profile_id": "chat.vision",
+    }
+    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
+    assert status_response(record).summary is not None
+
+
+@pytest.mark.asyncio
+async def test_any_replica_reads_the_stored_result(analysis_db):
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+    key = stored.labelling_key()
+    first = await ready_inventory(get_analysis_store(), INSTANCE, SHA, key)
+    assert first is not None
+
+    analysis_job.clear_caches()  # another pod: nothing in memory
+    other_replica = SqlAnalysisStore(analysis_db)
+    second = await ready_inventory(other_replica, INSTANCE, SHA, key)
+    assert second == first
+    assert await ready_inventory(other_replica, INSTANCE, SHA, "rules") is None
+
+
+@pytest.mark.asyncio
+async def test_interrupted_analysis_is_reported_and_recovered(analysis_db):
+    stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    await age_row(analysis_db, INSTANCE, status="running", inventory_json=None)
+    store = get_analysis_store()
+    record = await store.get(INSTANCE)
+    assert record is not None
+    response = status_response(record)
+    assert response.status == "interrupted" and "Re-run" in (response.error or "")
+
+    readiness = await analysis_readiness(store, INSTANCE, SHA, "rules")
+    assert readiness.state == "pending"
+    await drain()
+    record = await store.get(INSTANCE)
+    assert record is not None and record.status == "succeeded"
+    assert record.attempts == 2
+    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
+
+
+@pytest.mark.asyncio
+async def test_an_analysis_that_keeps_dying_fails_instead_of_looping(analysis_db):
+    await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    await age_row(analysis_db, INSTANCE, status="running", attempts=MAX_ATTEMPTS)
+    readiness = await analysis_readiness(get_analysis_store(), INSTANCE, SHA, "rules")
+    assert readiness.state == "failed" and "interrupted" in (readiness.detail or "")
+
+
+@pytest.mark.asyncio
+async def test_a_superseded_job_never_writes(analysis_db):
+    store = get_analysis_store()
+    common = dict(
+        instance_id=INSTANCE,
+        team_id="team-42",
+        saved_by="u-1",
+        template_sha256=SHA,
+        labelling_key="rules",
+    )
+    first = await store.start(template=TEMPLATE, **common)
+    second = await store.start(template=None, **common)
+    inventory = (
+        await asyncio.to_thread(analysis_job.analyze_template, TEMPLATE)
+    ).inventory
+    assert inventory is not None
+    assert not await store.finish(INSTANCE, first, inventory, None)
+    assert not await store.heartbeat(INSTANCE, first)
+    assert await store.finish(INSTANCE, second, inventory, None)
+
+
+@pytest.mark.asyncio
+async def test_a_failed_analysis_reports_its_error(analysis_db, monkeypatch):
+    def _broken(_content):
+        return AnalyzeResult(
+            errors=[AnalysisError(code="invalid_upload", message="No slide master.")]
+        )
+
+    monkeypatch.setattr(analysis_job, "analyze_template", _broken)
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+    readiness = await PptBuilderCapability().readiness(stored, IDENTITY)
+    assert readiness.state == "failed" and readiness.detail == "No slide master."
+
+
+@pytest.mark.asyncio
+async def test_changing_the_toggle_or_the_rules_re_runs_the_analysis(
+    analysis_db, monkeypatch
+):
+    keys: list = []
+    original = analysis_job.run_analysis
+
+    async def _recording(store, instance_id, job_id, template, port, key):
+        keys.append(key)
+        await original(store, instance_id, job_id, template, port, key)
+
+    monkeypatch.setattr(analysis_job, "run_analysis", _recording)
+    stored = await _save(PptBuilderConfig(), _uploads())
+    await drain()
+
+    # An ordinary save of a current analysis starts nothing.
+    await _save(stored)
+    await drain()
+    assert keys == ["vision:agent-default"]
+
+    rules = await _save(stored.model_copy(update={"use_vision": False}))
+    await drain()
+    assert keys[-1] == "rules"
+    record = await get_analysis_store().get(INSTANCE)
+    assert record is not None and record.matches(SHA, "rules")
+    assert record.status == "succeeded"
+
+    await age_row(analysis_db, INSTANCE, status="succeeded", analysis_version=0)
+    await _save(rules)
+    await drain()
+    record = await get_analysis_store().get(INSTANCE)
+    assert record is not None and record.analysis_version == ANALYSIS_VERSION
+    assert len(keys) == 3
+
+
+@pytest.mark.asyncio
+async def test_a_lost_row_is_rebuilt_from_the_stored_template(analysis_db):
+    stored = PptBuilderConfig(template_sha256=SHA, use_vision=False)
+    assets = FakeAssets({stored.template_key: TEMPLATE})
+    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "failed"
+    await _save(stored, assets=assets)
+    await drain()
+    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"

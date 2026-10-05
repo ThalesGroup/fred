@@ -19,6 +19,8 @@ dependencies = [
   "python-multipart>=0.0.9",
   # Rasterises the patterns PDF for vision labelling (Apache-2.0/BSD-3).
   "pypdfium2>=4.30",
+  # ppt_builder owns its analysis table (cap_ppt_builder_analysis).
+  "sqlalchemy>=2.0",
 ]
 classifiers = [
   "License :: OSI Approved :: Apache Software License",
@@ -44,6 +46,9 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  # The ppt_builder migration tree: type checks and the `alembic` CLI. At deploy
+  # time `python -m fred_runtime migrate` brings its own.
+  "alembic>=1.13",
 ]
 
 [build-system]
@@ -67,6 +72,12 @@ fred-pod = { path = "../../fred-pod", editable = true }
 fred-core = { path = "../../fred-core", editable = true }
 fred-sdk = { path = "../../fred-sdk", editable = true }
 
+[tool.alembic]
+# ppt_builder's own migration tree: `python -m fred_runtime migrate` finds it by
+# entry point; this block lets the `alembic` CLI reach the same tree.
+script_location = "%(here)s/fred_capability_ppt_filler/builder/ppt_builder_migrations"
+prepend_sys_path = ["."]
+
 [dependency-groups]
 dev = [
   "bandit>=1.8.6",
@@ -77,4 +88,7 @@ dev = [
   "pytest-cov>=6.2.1",
   "pytest-socket>=0.7.0",
   "ruff>=0.12.5",
+  # The ppt_builder migration tree: type checks and the `alembic` CLI. At deploy
+  # time `python -m fred_runtime migrate` brings its own.
+  "alembic>=1.13",
 ]

@@ -56,12 +56,12 @@ Owns: `labelling.py` (new), `preview.py`, test `test_labelling.py` (new), packag
 
 Owns: `analysis_job.py` (new), `ppt_builder_migrations/` (new), `capability.py`, tests `test_analysis_job.py` (new), `test_analyze_route.py`, `test_builder_capability.py`.
 
-- [ ] 4.1 `cap_ppt_builder_analysis` table + Alembic tree + `migrations_location()`; overridable store provider (writable-document pattern)
-- [ ] 4.2 Job: deterministic analysis → labelling → patterns PDF, lease heartbeat, single-transaction result; runs via `spawn` under the heavy-job slot
-- [ ] 4.3 `validate_config`: readability check, store bytes, `template_sha256`, pending row, spawn, immediate return; config = `template_sha256` + overrides; version-lag and stale-lease re-run
-- [ ] 4.4 Routes `GET /analysis/{instance_id}`, `/analysis/{instance_id}/patterns.pdf`, `POST /analysis/{instance_id}/rerun`, authorised for agent editors; `use_vision` + `labelling_model` config fields, row key includes `labelling_key` (toggle/model change re-runs); middleware reads the row with a per-process hash cache; tool refuses unless succeeded
-- [ ] 4.6 Implement `readiness()` from the analysis row (pending/running/stale → Pending, failed → Failed(error), succeeded → Ready)
-- [ ] 4.5 Tests: save returns before the job ends, two-replica read via the shared store fake, stale lease recovery, re-run, non-editor refused, pending refusal
+- [x] 4.1 `cap_ppt_builder_analysis` table + Alembic tree + `migrations_location()`; overridable store provider (writable-document pattern)
+- [x] 4.2 Job: deterministic analysis → labelling → patterns PDF, lease heartbeat, single-transaction result; runs via `spawn` under the heavy-job slot
+- [x] 4.3 `validate_config`: readability check, store bytes, `template_sha256`, pending row, spawn, immediate return; config = `template_sha256` + overrides; version-lag and stale-lease re-run
+- [x] 4.4 Routes `GET /analysis/{instance_id}`, `/analysis/{instance_id}/patterns.pdf`, `POST /analysis/{instance_id}/rerun`, authorised for agent editors; `use_vision` + `labelling_model` config fields, row key includes `labelling_key` (toggle/model change re-runs); middleware reads the row with a per-process hash cache; tool refuses unless succeeded
+- [x] 4.6 Implement `readiness()` from the analysis row (pending/running/stale → Pending, failed → Failed(error), succeeded → Ready)
+- [x] 4.5 Tests: save returns before the job ends, two-replica read via the shared store fake, stale lease recovery, re-run, non-editor refused, pending refusal
 
 ## WP5. Deck assigner and tool
 

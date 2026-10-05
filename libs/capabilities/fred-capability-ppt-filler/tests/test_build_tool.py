@@ -25,6 +25,7 @@ from typing import Any, cast
 import pytest
 from builder_decks import build_showcase_template
 from deck_builders import png_bytes
+from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.capability import (
@@ -77,7 +78,9 @@ def _ctx(
     config: PptBuilderConfig, *, assets=None, docs=None, folders=None, workspace=None
 ):
     return CapabilityContext(
-        identity=CapabilityIdentity(user_id="u-1", session_id="sess-9"),
+        identity=CapabilityIdentity(
+            user_id="u-1", session_id="sess-9", agent_instance_id="inst-7"
+        ),
         config=config,
         turn_options=EmptyModel(),
         services=RuntimeServices(
@@ -95,9 +98,15 @@ def _tools(ctx) -> dict[str, Any]:
 
 
 def _configured() -> tuple[PptBuilderConfig, FakeAssets]:
+    """A template whose analysis succeeded and is in this pod's cache."""
     inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    config = PptBuilderConfig(template_sha256="sha-test")
+    analysis_job.remember_inventory(
+        "inst-7", "sha-test", config.labelling_key(), inventory
+    )
     assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
-    return PptBuilderConfig(inventory=inventory), assets
+    return config, assets
 
 
 async def _build(monkeypatch, *, workspace=None, docs=None, **kwargs):
