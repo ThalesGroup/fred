@@ -554,6 +554,38 @@ async def test_pending_admin_revocation_requires_active_admin(
 
 
 @pytest.mark.asyncio
+async def test_revoke_pending_admin_keeps_editor_role() -> None:
+    rebac = _FakeRebac(
+        roles={
+            "bob": {
+                UserTeamRelation.PENDING_TEAM_ADMIN,
+                UserTeamRelation.TEAM_EDITOR,
+            },
+            "alice": {UserTeamRelation.TEAM_ADMIN},
+        }
+    )
+    deps = _deps(rebac, "fredlab")
+
+    await revoke_team_member_role(
+        _user(),
+        TeamId("fredlab"),
+        "bob",
+        UserTeamRelation.PENDING_TEAM_ADMIN,
+        deps,
+    )
+
+    assert rebac.roles["bob"] == {UserTeamRelation.TEAM_EDITOR}
+    assert rebac.added_relations == []
+    assert [relation.relation for relation in rebac.deleted_relations] == [
+        RelationType.PENDING_TEAM_ADMIN
+    ]
+    members = await list_team_members_unfiltered(_user(), TeamId("fredlab"), deps)
+    assert next(member.relations for member in members if member.user.id == "bob") == [
+        UserTeamRelation.TEAM_EDITOR
+    ]
+
+
+@pytest.mark.asyncio
 async def test_revoke_sole_elevated_role_checks_member_grant_permission_before_writing() -> (
     None
 ):
