@@ -21,6 +21,28 @@ export type AgentSortValue = "name" | "created_at:desc" | "updated_at:desc";
 
 export const DEFAULT_AGENT_SORT: AgentSortValue = "name";
 
+// Per-device preference, shared by every team's agents page. Storage is
+// best-effort: blocked or full storage falls back to the default sort.
+const SORT_KEY = "fred.agentSort";
+const SORT_VALUES: readonly AgentSortValue[] = ["name", "created_at:desc", "updated_at:desc"];
+
+export function getStoredAgentSort(): AgentSortValue {
+  try {
+    const stored = localStorage.getItem(SORT_KEY);
+    return SORT_VALUES.find((value) => value === stored) ?? DEFAULT_AGENT_SORT;
+  } catch {
+    return DEFAULT_AGENT_SORT;
+  }
+}
+
+export function storeAgentSort(sort: AgentSortValue): void {
+  try {
+    localStorage.setItem(SORT_KEY, sort);
+  } catch {
+    // Remembering the sort is a convenience; skip it when storage is unavailable.
+  }
+}
+
 /** Epoch millis, or null when the field is absent or unparseable. */
 function timestamp(value: string | null | undefined): number | null {
   if (!value) return null;
