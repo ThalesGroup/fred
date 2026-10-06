@@ -33,7 +33,8 @@ for mTLS, and `tls_client_ca` on the egress process. Never disable verification.
 The endpoint is deployment configuration and cannot be changed by an agent.
 
 Defaults: 30 days of activity retention, a 60-second purge/health interval,
-4 concurrent runtime requests, and a 60-second overall runtime deadline.
+4 concurrent runtime requests, and a 60-second deadline covering outbound queue wait and HTTPS.
+Each activity write has a separate 5-second storage deadline.
 Omitted configuration disables the transport. Activity retention continues
 after disablement while the current runtime remains deployed. Expired records
 are immediately hidden from reads and physically purged on the next sweep.

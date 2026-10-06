@@ -1,3 +1,7 @@
+## Purpose
+
+Provide native, governed web research for Fred agents through authenticated HTTPS egress, with restricted activity retention and content-free monitoring.
+
 ## ADDED Requirements
 
 ### Requirement: Governed web research tools
@@ -31,16 +35,22 @@ Every outbound web research request SHALL use the configured authenticated HTTPS
 
 ### Requirement: Attributed, retained search activity
 
-Fred SHALL create one restricted activity record per logical web research tool request, with opaque user and correlation identifiers, operation, request query or public URL, time, outcome, duration and result count where applicable. It SHALL NOT store fetched page content, snippets, credentials or headers in that record. The sink SHALL purge records after a configurable retention period defaulting to 30 days and SHALL participate in user erasure. Fred SHALL not enable web research without a configured compliant sink.
+Fred SHALL record each dispatched research request with opaque subject/correlation IDs, query or public URL, timing and outcome. Records SHALL exclude page bodies, snippets and credentials. Access SHALL be restricted to platform operators, expire after a configurable 30-day default, and support user erasure. A compliant activity sink SHALL be required for enablement.
 
 #### Scenario: Successful and failed research
 - **WHEN** a user triggers a search that succeeds or fails
 - **THEN** an authorized investigator can attribute the request and outcome to that user using the restricted activity store
+- **AND** team, session and agent identifiers, duration and result count are available where applicable
 - **AND** generic logs, metrics and standard tool audit contain no query text
 
 #### Scenario: Retention expiry and user erasure
 - **WHEN** a record exceeds the configured retention or its user is erased
 - **THEN** the activity store deletes it and no search activity view returns it
+
+
+#### Scenario: Late request after user erasure
+- **WHEN** an already authorized request tries to start recording after its user was erased on another replica
+- **THEN** a shared durable erasure fence refuses the insertion and no query record is recreated
 
 ### Requirement: Operational visibility
 

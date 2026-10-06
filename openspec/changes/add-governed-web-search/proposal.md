@@ -26,7 +26,7 @@ Tracked by [GitHub issue #2980](https://github.com/ThalesGroup/fred/issues/2980)
 
 - A Fred capability package, an egress adapter/service and deployment values/examples are required. The current V1 is a behavioral reference, not code or instructions to copy wholesale.
 - Existing agent execution, capability authorization and tool audit mechanisms remain the entry point. Operators must configure an HTTPS endpoint and its trust/authentication material before enabling the capability.
-- The proposed record of full search queries is a product/privacy contract change. Its 30-day default, access roles and deletion behavior require developer and privacy review before implementation.
+- The proposed record of full search queries is a product/privacy contract change. Its 30-day default, access roles and deletion behavior are documented as operator approval prerequisites before production activation.
 
 ## Out of Scope
 
