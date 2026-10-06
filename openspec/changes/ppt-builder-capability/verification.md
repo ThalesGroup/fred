@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15 and WP16 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16 and WP17 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -244,6 +244,69 @@ leftovers 0; tables 9/9 used and shape kept on Paintress.
 - Tool description (chars): builtin 3 385 → 3 404, Paintress 4 499 → 4 629, corporate
   4 349 → 4 406 (≈ +5 to +35 tokens per model call).
 
+## Results: WP17 (variety by kind, content-based alternatives)
+
+Run on 2026-10-06 after `a44965990`, same harness and model (`chat.mistral.small`) as
+WP16, 14 prompts: the WP16 thirteen plus `thales_spain_italy` (the real session's request,
+no comparison asked). Two `make eval` processes one after the other (Paintress, then
+corporate; each also runs the built-in template), nothing else running, no 429. New
+columns: **max kind repeat** (most slides of one non-structural kind in a deck: max, and
+mean over delivered decks; recomputed for WP16 from its saved runs) and **tool calls** (all
+build calls of the cell). Like-for-like against WP16 (its thirteen prompts); the built-in
+cell gives the Paintress process's run / the corporate process's run:
+
+| template | mode | success | first call | avg repairs | max kind repeat (mean) | decks with a kind ×3+ | distinct/slides | max reuse | variety asks | tool calls |
+|---|---|---|---|---|---|---|---|---|---|---|
+| builtin | rules | 12 / 12 → 9 / 9 | 2 / 2 → 1 / 0 | 1.62 / 1.23 → 1.92 / 2.08 | 7 / 6 (3.42 / 3.08) → 4 / 4 (2.56 / 2.33) | 8 / 7 → 3 / 3 | 0.85 / 0.84 → 0.89 / 0.86 | 3 / 3 → 2 / 4 | 2 / 2 → 9 / 9 | 34 / 30 → 40 / 41 |
+| corporate | rules | 11 → 12 | 3 → 1 | 1.15 → 1.85 | 10 (3.82) → 9 (3.17) | 7 → 7 | 0.90 → 0.87 | 2 → 3 | 1 → 9 | 27 → 37 |
+| corporate | vision | 13 → 9 | 5 → 1 | 1.00 → 2.00 | 10 (3.92) → 3 (1.78) | 9 → 2 | 0.90 → 0.87 | 3 → 3 | 2 → 10 | 26 → 43 |
+| paintress | rules | 12 → 12 | 3 → 3 | 1.00 → 1.46 | 11 (3.25) → 7 (2.75) | 5 → 6 | 0.92 → 0.91 | 3 → 4 | 2 → 9 | 26 → 34 |
+| paintress | vision | 13 → 12 | 6 → 1 | 0.85 → 1.85 | 9 (3.69) → 4 (2.00) | 7 → 3 | 0.95 → 0.91 | 2 → 4 | 0 → 9 | 24 → 37 |
+
+Cover once at 1: 100 %; leftovers and truncated 0; tables 14/14 used and shape kept on
+Paintress. `lost` is 0 except 9 on `corporate/vision/many_items`: the model split the deck
+into three parallel calls (three files) and the metric read the first one (harness
+artifact, not WP17). Four of the like-for-like failures are the known harness artifact (an
+invented image id, no `document_content` port).
+
+- **Kind repetition is down**: the mean worst kind per deck goes from 3.1-3.9 to 1.8-3.2,
+  and the delivered decks with one kind on 3+ slides from 43 to 24; distinct/slides stays
+  where WP16 left it. A deck with 7 bullets slides is still delivered when the model resends
+  as is (`paintress/rules/training_12`).
+- **Success is down: 73/78 → 63/78.** The ask now fires on most first decks (59 asks over 84
+  runs, against 9 over 78 in WP16), and each ask costs one of the harness's three repair
+  rounds. 13 of the 15 failures had an ask; in most, the recast deck brought new fit
+  problems the model did not fix in the rounds left (items sent to figures/process slides
+  without a label or number zone, four columns on a two-column slide). First-call success
+  drops (21 → 7 of 78) for the same reason: an asked deck is never a first-call success.
+  Tool calls +39 % (167 → 232). A live turn has no three-repair cap, so the harness
+  overstates the lost decks, but every ask is one more full model call.
+- **Advice from the content**: 12 of the 29 Paintress-process asks carry a `suggested` line
+  (the run logs keep 2 000 chars of each answer, so this is a lower bound), e.g.
+  `paintress/vision/country_comparison`: `slides 7, 11 → timeline (dated items)`. On the
+  evidence plan the unit tests give exactly slide 5 → cards, 7 → timeline, 9 → two_columns
+  or cards, 10 → cards.
+- `thales_spain_italy` (not in the table): Paintress rules `[cover, figures, figures, cards,
+  cards, bullets ×4, closing]` and vision `[cover, bullets, bullets, image_text, image_text,
+  two_columns, process, process, bullets]`, each after one ask; corporate vision delivered
+  with 2 bullets slides, corporate rules hit the harness artifact.
+- Tool description (chars): builtin 3 404 → 3 439, Paintress 4 629 → 4 664, corporate
+  4 406 → 4 441 (the bullets cap, ≈ +9 tokens per model call). The harness now also records
+  model tokens per run.
+
+**Agent model on Paintress rules: `chat.mistral.small` vs `chat.mistral.medium`** (reasoning
+off, as the eval loads every profile; 14 prompts each, one process after the other):
+
+| model | success | built when it called the tool | first call | variety asks | tool calls | tokens in / out per delivered deck | wall s per delivered deck | max kind repeat (mean) |
+|---|---|---|---|---|---|---|---|---|
+| small | 11/14 | 11/14 | 3 | 8 | 37 | 9.2k / 2.3k | 23.8 | 4 (2.09) |
+| medium | 12/14 | 12/12 | 1 | 6 | 31 | 9.0k / 2.2k | 24.6 | 3 (1.83) |
+
+Medium never ran out of repairs; its two failures (and four of 14 on the built-in template)
+are `no_tool_call`: it wrote a slide plan and asked the user to confirm before building,
+which a one-turn harness counts as a failure. Same tokens and wall time per delivered deck
+as small: the cost difference is the per-token price only (not measured here).
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -310,6 +373,22 @@ leftovers 0; tables 9/9 used and shape kept on Paintress.
 
 ## Checks
 
+- WP17: package `make code-quality` passed; `make test` 384 passed, 4 skipped (4 new in
+  `test_assign.py`, 2 in `test_build_tool.py`); with `PPT_BUILDER_REFERENCE_TEMPLATE` on the
+  corporate deck 388 passed; on the Paintress deck the reference-bearing files 149 passed. No
+  API model change (no frontend regeneration). `fred-performance-reviewer` on the tool path:
+  no new I/O; repeats and content shapes run inside `assign` (in `asyncio.to_thread`): assign
+  on a 29-slide deck against Paintress 233.8 → 233.5 ms (median of 7), `content_shape` over
+  29 slides 0.14 ms; description build 0.14 ms per turn, unchanged. The cost that matters is
+  on the LLM path: each ask is one more model call (tool calls +39 % in the eval above).
+- Closing slide "Merci" shown as "Merc" / "i" in the preview (`slide:287`, task 17.8): not
+  ours. The output slide is empty; the text lives in its layout ("Merci", layout 18), byte
+  for byte as in the template. LibreOffice converting the template alone shows the same
+  break on page 39. The text box is `wrap="none"` + `spAutoFit`, 2 107 949 EMU (166.0 pt)
+  wide, "Merci" 60 pt bold in the theme font Century Gothic, which this host lacks
+  (`fc-match` → Noto Sans): "Merci" in Noto Sans Bold 60 pt measures 167.2 pt, over the box,
+  and LibreOffice breaks it despite `wrap="none"`. PowerPoint never wraps a `wrap="none"`
+  box and sized it to the text in Century Gothic: one line there. No code change.
 - WP16: package `make code-quality` passed; `make test` 378 passed, 4 skipped; with
   `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 382 passed; on the Paintress deck
   the reference-bearing files 145 passed. No API model change (the dumped ppt_builder
