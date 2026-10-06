@@ -16,7 +16,7 @@
 // (thumbnail, label, kind, include switch); every change is an override written
 // to the config. One react-pdf <Document> feeds every card's <Page>.
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Document, Page, pdfjs } from "react-pdf";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -30,8 +30,6 @@ import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenA
 import { usePatternsPreview, type PreviewSource } from "./usePatternsPreview";
 import { SLIDE_KINDS, type OverridePatch, type SlideKind } from "./types";
 import styles from "./PatternReviewDialog.module.css";
-
-const CARD_WIDTH = 220;
 
 // A plain workerSrc (a fresh worker per load) is enough here: this dialog never
 // shares a page with the chat preview pane, which provisions its own port.
@@ -66,7 +64,9 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
     label: t(`capability.ppt_builder.kinds.${kind}`),
   }));
   const hasPdf = Boolean(objectUrl) && !parseFailed;
-  const included = patterns.filter((p) => p.included !== false);
+  // Layouts come after the deck's own slides: the builder uses them only when no slide fits.
+  const slides = patterns.filter((p) => p.included !== false && p.source === "slide");
+  const layouts = patterns.filter((p) => p.included !== false && p.source === "layout");
   const excluded = patterns.filter((p) => p.included === false);
   const card = (pattern: Pattern) => (
     <PatternCard
@@ -82,10 +82,24 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
 
   const body = (
     <div className={styles.body}>
-      <div className={styles.grid}>{included.map(card)}</div>
+      {slides.length > 0 && (
+        <section className={styles.section} data-section="slides">
+          <h3 className={styles.sectionTitle}>{t("capability.ppt_builder.review.slides", { count: slides.length })}</h3>
+          <div className={styles.grid}>{slides.map(card)}</div>
+        </section>
+      )}
+      {layouts.length > 0 && (
+        <details className={styles.section} data-section="layouts">
+          <summary className={styles.sectionTitle}>
+            {t("capability.ppt_builder.review.layouts", { count: layouts.length })}
+          </summary>
+          <p className={styles.sectionHint}>{t("capability.ppt_builder.review.layoutsHint")}</p>
+          <div className={styles.grid}>{layouts.map(card)}</div>
+        </details>
+      )}
       {excluded.length > 0 && (
-        <details className={styles.excluded}>
-          <summary className={styles.excludedSummary}>
+        <details className={styles.section} data-section="excluded">
+          <summary className={styles.sectionTitle}>
             {t("capability.ppt_builder.review.excluded", { count: excluded.length })}
           </summary>
           <div className={styles.grid}>{excluded.map(card)}</div>
@@ -135,13 +149,25 @@ interface CardProps {
 export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOverride }: CardProps) {
   const { t } = useTranslation();
   const isIncluded = pattern.included !== false;
+  // The page is rendered at the thumbnail box's own width, so it fills it at any grid size.
+  const thumbnailRef = useRef<HTMLDivElement>(null);
+  const [pageWidth, setPageWidth] = useState(0);
+  useLayoutEffect(() => {
+    const element = thumbnailRef.current;
+    if (!element) return;
+    const measure = () => setPageWidth(Math.floor(element.clientWidth));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   return (
     <article className={styles.card} data-excluded={!isIncluded || undefined}>
-      <div className={styles.thumbnail}>
-        {hasPdf ? (
+      <div className={styles.thumbnail} ref={thumbnailRef}>
+        {hasPdf && pageWidth > 0 ? (
           <Page
             pageNumber={page}
-            width={CARD_WIDTH}
+            width={pageWidth}
             renderTextLayer={false}
             renderAnnotationLayer={false}
             loading={null}
@@ -158,6 +184,7 @@ export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOv
           <TextInput
             key={pattern.label}
             size="xs"
+            compact
             defaultValue={pattern.label}
             disabled={readOnly}
             aria-label={t("capability.ppt_builder.review.labelFor", { label: pattern.label })}
@@ -167,6 +194,7 @@ export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOv
             }}
           />
           <Switch
+            size="small"
             checked={isIncluded}
             disabled={readOnly}
             aria-label={t("capability.ppt_builder.review.include", { label: pattern.label })}

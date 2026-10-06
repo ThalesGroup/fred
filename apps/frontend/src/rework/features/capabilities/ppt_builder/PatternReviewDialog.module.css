@@ -40,7 +40,8 @@
 
 .cardHeader {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* minmax(0, …): a bare 1fr keeps the input's min-content width and pushes the switch out of the card. */
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--spacing-xs);
 }
@@ -56,16 +57,31 @@
   font: var(--font-body-small);
 }
 
-.excluded {
+/* The deck's slides, then the layouts, then what is set aside. */
+.section + .section {
   border-top: 1px solid var(--outline-muted);
   padding-top: var(--spacing-s);
 }
 
-.excludedSummary {
-  cursor: pointer;
-  margin-bottom: var(--spacing-s);
+.sectionTitle {
+  margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-label-large);
+}
+
+section > .sectionTitle,
+details[open] > .sectionTitle {
+  margin-bottom: var(--spacing-s);
+}
+
+summary.sectionTitle {
+  cursor: pointer;
+}
+
+.sectionHint {
+  margin: 0 0 var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
 }
 
 .hint {

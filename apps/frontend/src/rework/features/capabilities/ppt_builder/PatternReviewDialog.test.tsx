@@ -73,6 +73,9 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+// happy-dom lays nothing out: give every thumbnail box a width so its page renders.
+Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 220 });
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -108,6 +111,7 @@ const INVENTORY: TemplateInventory = {
   slide_height: 1,
   patterns: [
     pattern({}),
+    pattern({ id: "slide:2", source: "slide", source_index: 2, label: "Agenda", kind: "bullets" }),
     pattern({
       id: "slide:9",
       source: "slide",
@@ -142,12 +146,46 @@ function input(label: string): HTMLInputElement {
 }
 
 describe("PatternReviewDialog", () => {
-  it("renders one thumbnail page per pattern and folds the excluded ones", () => {
+  it("renders one thumbnail page per pattern, keyed by its place in the inventory", () => {
     renderDialog();
-    expect(container.querySelector('[data-testid="page-1"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="page-2"]')).not.toBeNull();
-    expect(container.querySelector("details summary")?.textContent).toBe("capability.ppt_builder.review.excluded");
+    for (const page of [1, 2, 3]) expect(container.querySelector(`[data-testid="page-${page}"]`)).not.toBeNull();
+    const pageIn = (section: string) =>
+      [...container.querySelectorAll(`[data-section="${section}"] [data-testid^="page-"]`)].map((e) =>
+        e.getAttribute("data-testid"),
+      );
+    expect(pageIn("slides")).toEqual(["page-2"]);
+    expect(pageIn("layouts")).toEqual(["page-1"]);
+    expect(pageIn("excluded")).toEqual(["page-3"]);
     expect(container.textContent).toContain("capability.ppt_builder.review.labelledByRules");
+  });
+
+  it("shows the deck's slides first, then the layouts folded with their hint, then the excluded", () => {
+    renderDialog();
+    const sections = [...container.querySelectorAll("[data-section]")];
+    expect(sections.map((s) => s.getAttribute("data-section"))).toEqual(["slides", "layouts", "excluded"]);
+    expect(sections[0].tagName).toBe("SECTION");
+    const layouts = sections[1] as HTMLDetailsElement;
+    expect(layouts.tagName).toBe("DETAILS");
+    expect(layouts.open).toBe(false);
+    expect(layouts.querySelector("summary")?.textContent).toBe("capability.ppt_builder.review.layouts");
+    expect(layouts.textContent).toContain("capability.ppt_builder.review.layoutsHint");
+    expect((sections[2] as HTMLDetailsElement).open).toBe(false);
+    expect(sections[2].querySelector("summary")?.textContent).toBe("capability.ppt_builder.review.excluded");
+  });
+
+  it("puts an excluded layout with the excluded, and drops empty sections", () => {
+    render(
+      <PatternReviewDialog
+        open
+        inventory={{ ...INVENTORY, patterns: [pattern({ included: false, exclusion_reason: "author" })] }}
+        previewSource={{ kind: "builtin" }}
+        readOnly={false}
+        onOverride={vi.fn()}
+        onClose={() => {}}
+      />,
+    );
+    const sections = [...container.querySelectorAll("[data-section]")];
+    expect(sections.map((s) => s.getAttribute("data-section"))).toEqual(["excluded"]);
   });
 
   it("writes include, kind and label corrections as overrides", () => {
