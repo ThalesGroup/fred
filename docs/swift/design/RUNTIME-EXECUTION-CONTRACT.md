@@ -6530,7 +6530,9 @@ and `openspec/specs/mcp-capabilities/spec.md` for the current contract.
 The optional `RuntimeServices.web_research` SDK port is bound by the existing
 agent runtime to the authenticated subject for each invocation. Native tools
 share the standard authorization and tool audit paths across ReAct, Deep and
-Graph. A pod-owned shared HTTPS client contacts the separately deployable Fred
-egress executable; capability code owns neither HTTP routes nor the SQL sink.
+Graph. A pod-owned internal engine shares its outbound HTTP pool for direct
+public access or an explicitly configured forward proxy. No additional Fred
+service runs in the DMZ; the operator owns proxy/network enforcement. The runtime
+owns the restricted SQL activity sink.
 The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
 and [migration guide](../ops/migrations/2980-native-web-research.md).

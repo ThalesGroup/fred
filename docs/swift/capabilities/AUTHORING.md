@@ -426,7 +426,7 @@ if you touched the contract surface) — green before you claim done.
 
 `RuntimeServices.web_research` exposes the SDK `WebResearchPort` for bounded
 search/fetch requests. Runtime binds the authenticated subject and activity store;
-the native capability owns only its manifest and tools. Endpoint, credentials,
+the native capability provides its manifest, tools and internal research engine. Proxy configuration, credentials,
 identity and retention are deployment/runtime data and never tool arguments.
-The Fred egress executable can run locally or separately in a DMZ from the same
-Fred Agents image. See [web research operations](../ops/migrations/2980-native-web-research.md).
+The engine runs inside Fred Agents with direct public access or an optional
+operator-owned forward proxy in a DMZ. No extra Fred service is needed. See [web research operations](../ops/migrations/2980-native-web-research.md).

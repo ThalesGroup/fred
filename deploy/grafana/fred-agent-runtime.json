@@ -539,7 +539,7 @@
     },
     {
       "id": 13,
-      "title": "Web egress availability",
+      "title": "Web research saturation",
       "type": "timeseries",
       "description": "Content-free metrics; queries and user identities are never labels.",
       "gridPos": {
@@ -574,7 +574,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "fred_web_research_egress_up{service=~\"${service:regex}\"}",
+          "expr": "sum(rate(fred_web_research_requests_total{service=~\"${service:regex}\",outcome=\"busy\"}[5m]))",
           "instant": false,
           "range": true,
           "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",

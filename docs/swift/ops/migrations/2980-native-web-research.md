@@ -1,121 +1,116 @@
 ---
 schema: 1
-title: "Enable native web research through authenticated HTTPS egress"
+title: "Enable internal web research with direct or proxy access"
 impact: minor
 configuration: production
-configuration_reason: "Adds default-off Fred Agents web_research configuration, a restricted activity table, and a separately operated HTTPS egress process."
+configuration_reason: "Adds default-off internal web_research, optional forward-proxy configuration, and restricted retained activity."
 ---
 
 ## Applicability
 
-Fred deployments adding the native `web_research` capability. The change is
-default-off and does not register an external MCP server. The three tools are
-`web_search`, `fetch_url` and `search_and_fetch` on ReAct, Deep and Graph agents.
+Native `web_search`, `fetch_url` and `search_and_fetch` for ReAct, Deep and Graph.
+The engine runs inside Fred Agents. No additional Fred process, MCP server,
+listening port, local TLS certificate or egress service token is required.
 
 ## Prerequisites
 
-Agree the storage of raw search queries under the deployment's confidentiality
-policy before activation. Restrict access to activity records to platform
-operators (`CAN_MANAGE_PLATFORM`); user administrators can erase a user's
-records (`CAN_ADMINISTER_USERS`). Provision the normal Fred runtime PostgreSQL
-database, a TLS certificate/trust chain and a service token of at least 32
-characters in the operator secret store. Confirm the DuckDuckGo HTML provider
-is permitted and reliable enough for your workload; it has no availability SLA.
+Fred's usual local infrastructure and a configured model must be available.
+Allow public DNS/HTTP(S) for direct mode; for proxy mode configure the operator's
+proxy and final destination policy before activation.
 
 ## Configuration
 
-The Fred Helm configuration lives at
-`applications.fred-agents.configuration.web_research`. Set `enabled: true`,
-`egress_url: https://<dmz-host>:8120` and supply `WEB_RESEARCH_EGRESS_TOKEN` in
-the existing runtime secret/environment mechanism. For a private CA, mount it
-and set `ca_file`. Optionally configure `client_certificate` and `client_key`
-for mTLS, and `tls_client_ca` on the egress process. Never disable verification.
-The endpoint is deployment configuration and cannot be changed by an agent.
+### Local activation
 
-Defaults: 30 days of activity retention, a 60-second purge/health interval,
-4 concurrent runtime requests, and a 60-second deadline covering outbound queue wait and HTTPS.
-Each activity write has a separate 5-second storage deadline.
-Omitted configuration disables the transport. Activity retention continues
-after disablement while the current runtime remains deployed. Expired records
-are immediately hidden from reads and physically purged on the next sweep.
+In the Fred Agents YAML selected by `config/.env`'s `CONFIG_FILE`, add at root:
 
-The egress process uses `ENV_FILE` and `CONFIG_FILE` with the usual defaults.
-Its non-secret configuration is [deploy/web-research/configuration.yaml](../../../../deploy/web-research/configuration.yaml).
-It requires the same service token and TLS key/certificate. DuckDuckGo receives the documented `kp` SafeSearch parameter through the same
-DNS-pinned transport as page fetches; redirects from the provider fail closed.
-The service clamps SafeSearch
-to the configured floor, limits each page to 5 MiB and 50,000 returned characters,
-and accepts only HTTP(S) destinations on ports 80/443. HTML extraction uses
-trafilatura; focus selection is lexical, as in the V1.
+```yaml
+web_research:
+  enabled: true
+```
 
-## Upgrade
+Start the usual local infrastructure and run Fred normally (`make run` from the
+repository root). Fred Agents startup applies the existing runtime migration,
+including restricted activity and erasure-fence tables. Its process must have
+working DNS and public HTTP(S) access. Enable Web research for the team and select
+it on the agent through the existing capability controls. Ask the agent to search
+for a public topic and to read `https://www.python.org/`.
 
-1. Run the existing `python -m fred_runtime migrate`/Helm migration hook before
-   enabling the capability. It creates `runtime_web_research_activity` with
-   user and expiration indexes. Boot fails closed when enabled without its table
-   or service credentials.
-2. Deploy the egress process from the same reviewed Fred Agents image, with
-   command `python -m fred_capability_web_research.egress`. For local execution,
-   use the capability package's virtual environment and the supplied
-   `configuration.yaml`, with mounted TLS material and `CONFIG_FILE` set.
-   A VM can run that command under its existing service manager. Docker and
-   Podman can use [the Compose example](../../../../deploy/web-research/compose.yaml);
-   [the Kubernetes example](../../../../deploy/web-research/kubernetes.yaml)
-   supplies Deployment, Service and network policy for a separate DMZ namespace.
-3. Permit the Fred Agents host to reach the DMZ HTTPS port. Permit the DMZ only
-   public web destinations and its trusted DNS resolver; deny internal,
-   link-local, metadata and transition addresses. The Kubernetes policy requires
-   a CNI that enforces it. Adapt namespace labels, DNS selectors and routes to
-   the actual platform. Apply equivalent firewall rules to VM/container hosts.
-   Keep Fred's existing LLM/model routes; web research itself only uses the gateway.
-4. Enable the deployment configuration and restart Fred Agents. Enable the
-   capability for the selected team and select it on the agent through the
-   existing Fred capability controls. No knowledge-flow route is required.
+### Production configuration
 
-## Validation
+Helm fields live under `applications.fred-agents.configuration.web_research`:
 
-Enable the existing Fred Prometheus exporter and scrape authenticated egress
-`/metrics` with a bearer token stored in Prometheus secret configuration.
-Check authenticated `GET /health` on the egress service and
-`fred_web_research_egress_up == 1` on Fred's existing Prometheus endpoint.
-The Kubernetes TCP readiness probe checks listening only; Fred's health polling
-checks service authentication and TLS. Ask the selected agent to search and read
-a public page; inspect `GET /agents/web-research/activity?user_id=<opaque-id>`
-using an authorized operator credential. Each logical request has one record,
-with its request/session correlation, query or sanitized URL, outcome and count.
-Page text/snippets, tokens, headers and URL query/fragment are excluded.
+```yaml
+web_research:
+  enabled: true
+  proxy_url: https://proxy.dmz.example:3128
+  proxy_auth_env: WEB_RESEARCH_PROXY_AUTH # Optional Basic username:password secret
+  proxy_ca_file: /run/secrets/proxy-ca.crt # Optional private HTTPS proxy CA
+  activity_retention_days: 30
+```
 
-Verify an internal/metadata URL and a redirect to it are refused, DMZ outage
-returns a bounded tool error, and user deletion erases records on every enabled
-runtime before identity-provider deletion. A runtime erasure failure blocks
-account deletion for retry; suspension already prevents new authorized requests.
+Without `proxy_url`, research uses direct public access. With it, every provider,
+page and redirect uses the configured HTTP(S) forward proxy; failures never fall
+back to direct access. `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` environment
+variables do not select or bypass this route. Proxy secrets belong in the existing
+Fred secret/environment mechanism, not URLs or model arguments. For an HTTP proxy,
+omit `proxy_ca_file`; Basic credentials require a suitably protected network,
+preferably an HTTPS proxy. Public origin TLS is always verified independently.
+TLS interception and client certificates are not configured by this feature.
 
-Import the web panels in [the Fred runtime dashboard](../../../../deploy/grafana/fred-agent-runtime.json)
-and [the alert rules](../../../../deploy/web-research/alerts.yaml). Collect the
-existing runtime metrics and optionally authenticated egress `/metrics`.
-No monitoring label contains user identity or query text.
-
-## Rollback
-
-Disable `web_research.enabled` and remove it from selected agents before stopping
-the egress process. Keep the current runtime available for activity purge and
-user erasure until retained records expire, or erase those records using the
-authorized user-erasure endpoint first. Downgrading the SQL revision deletes
-the activity table permanently; export it only under an approved restricted
-storage policy if evidence must be retained. Queries also exist in conversation
-history under its own existing policy; this migration does not change it.
+The operator owns the proxy deployment, firewall, DNS and monitoring. In proxy
+mode, permit the Fred host only proxy connectivity for research egress. The proxy
+MUST reject private/non-global and metadata destinations at connection time,
+including mixed IPv4/IPv6 records, DNS rebinding and redirects. Fred preflights
+public destination DNS locally but cannot pin the remote proxy's connection;
+local checks are not a substitute for this proxy policy. Fred therefore also
+needs public DNS resolution in this mode. Test these controls on the actual DMZ.
+No Fred-specific API or service executable belongs on the proxy host.
 
 ## Limitations
 
-Operators own DMZ placement, certificates, secrets, firewall/CNI policy, metrics
-collection and data-access policy. This is a restricted product activity store,
-not an immutable security evidence store. No browser scripting, authenticated
-websites, binary downloads, crawling or search history UI are included. Search
-and extraction provider logs are suppressed to keep content out of diagnostic
-streams. The Python HTTPX pool seam used for the vetted network backend is
-covered by connection tests and must be checked when upgrading HTTPX/httpcore.
+Default off; retention 30 days (1–365), purge every 60 seconds, four concurrent
+operations and a 60-second operation deadline including queue/admission and
+outbound I/O. Saturation returns `busy`; each activity write has its own 5-second
+storage deadline. Defaults also bound pages to 5 MiB, 50,000 returned characters
+and ports 80/443. Configure `max_bytes`, `retries` and the `safesearch` floor at
+deployment level. Direct access pins vetted public DNS addresses to connections.
+All modes check redirects, refuse binary/compressed responses and isolate cookies.
+Extraction/focus runs in bounded worker threads.
 
-User erasure also persists a SHA-256 subject marker without the original identity
-or query. It prevents late writes from requests already running in other replicas;
-retain this fence while the deployment could accept requests for that subject.
-Provider SafeSearch values follow [DuckDuckGo's documented parameters](https://duckduckgo.com/duckduckgo-help-pages/settings/params).
+Before production enablement, approve raw-query storage and DuckDuckGo HTML
+provider usage under deployment policy; the provider has no availability SLA.
+The restricted SQL sink must exist and SQL statement logging must be disabled.
+Reads require `CAN_MANAGE_PLATFORM`, erasure `CAN_ADMINISTER_USERS`.
+
+## Validation
+
+Use Fred's existing Prometheus exporter and runtime dashboard: operation counts,
+latency, failure/busy outcomes and activity-sink failures. Load the rules in
+[deploy/web-research/alerts.yaml](../../../../deploy/web-research/alerts.yaml).
+No extra `/health` or `/metrics` research server is exposed, and no periodic
+public Internet probe runs; provider/proxy outages appear on attempted operations.
+
+Using an authorized operator credential, inspect
+`GET /agents/web-research/activity?user_id=<opaque-id>` after successful and failed
+research. Check attribution/outcome, expiry and user deletion; no page bodies,
+snippets, secrets or URL query/fragment are retained. Refuse private/metadata URLs
+and redirects in both modes. Verify unavailable proxy returns a bounded failure
+and there are no direct connections. Verify wrong HTTPS proxy trust is rejected.
+
+## Upgrade
+
+Remove `egress_url`, `token_env`, `ca_file`, `client_certificate`, `client_key` and
+`WEB_RESEARCH_EGRESS_TOKEN`. Old YAML fields fail validation. Stop the draft Fred
+egress process and retire its Compose/Kubernetes deployment; use direct access or
+an operator-owned forward proxy instead. This revision reuses the activity schema;
+no further SQL migration is required.
+
+## Rollback
+
+Disable `enabled` and deselect the capability before rollback. Keep the current
+runtime available for purge/erasure until records expire, or erase them first.
+Expiry is immediate for reads and physical deletion occurs on the next sweep.
+User erasure persists a SHA-256 subject fence against late writes across replicas.
+Account deletion is blocked for retry if an enabled runtime cannot erase its data.
+Conversation-history retention remains governed by its existing separate policy.
