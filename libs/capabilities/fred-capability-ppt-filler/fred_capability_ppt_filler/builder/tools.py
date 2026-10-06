@@ -315,7 +315,10 @@ async def _deck_delivered(
         entries = await workspace.ls(folder)
     except WorkspaceFileNotFound:
         return False
-    except Exception:  # noqa: BLE001 - the passive note still reports it
+    except Exception as exc:  # noqa: BLE001 - the passive note still reports it
+        # The HTTP adapter answers a folder never written as a 404.
+        if getattr(getattr(exc, "response", None), "status_code", None) == 404:
+            return False
         logger.warning("[PPTBUILD][TOOL] outputs listing failed", exc_info=True)
         return True
     return any(e.path.lower().endswith(".pptx") and not e.is_dir for e in entries)

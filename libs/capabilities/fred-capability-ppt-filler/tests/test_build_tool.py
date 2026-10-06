@@ -398,6 +398,24 @@ async def test_a_deck_after_the_first_one_only_gets_the_note(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_an_outputs_folder_never_written_means_a_first_deck():
+    class Missing(Exception):
+        response = type("R", (), {"status_code": 404})()
+
+    class Listing(FakeWorkspace):
+        def __init__(self, error: Exception) -> None:
+            super().__init__()
+            self.error = error
+
+        async def ls(self, path: str = "") -> list:
+            raise self.error
+
+    assert not await tools_mod._deck_delivered(Listing(Missing()), "s")
+    # Any other failure counts as delivered: never an extra revision.
+    assert await tools_mod._deck_delivered(Listing(RuntimeError("down")), "s")
+
+
+@pytest.mark.asyncio
 async def test_structural_repeats_are_never_a_revision(monkeypatch):
     sections = [COVER] + [{"title": f"Part {n}", "kind": "section"} for n in range(4)]
     text, result = await _build(monkeypatch, slides=sections)
