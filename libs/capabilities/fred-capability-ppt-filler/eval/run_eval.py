@@ -42,7 +42,7 @@ from dotenv import dotenv_values
 from fred_capability_ppt_filler.builder import analysis_job, checks
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
-from fred_capability_ppt_filler.builder.assign import assign
+from fred_capability_ppt_filler.builder.assign import assign, assignable, misfit
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.capability import (
     _BUILD_INSTRUCTIONS,
@@ -277,6 +277,11 @@ class RunResult:
     cover_once_first: Optional[bool] = None
     closing_ok: Optional[bool] = None
     triples: int = 0
+    # Deck-wide variety: the most uses of one pattern, A B A B returns, and
+    # reuses while an unused pattern of the same kind would have held the slide.
+    max_reuse: int = 0
+    alternations: int = 0
+    avoidable_reuses: int = 0
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
@@ -436,6 +441,7 @@ def _measure(
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     )
+    _variety(run, inventory, slides, chosen)
     if renders:
         report = renders[-1].report
         for slide_report in report.slides.values():
@@ -445,6 +451,32 @@ def _measure(
     deck = next((b for k, b in workspace.files.items() if k.endswith(".pptx")), None)
     if deck is not None:
         run.leftovers = _leftovers(variant, slides, chosen, deck)
+
+
+def _variety(
+    run: RunResult,
+    inventory: TemplateInventory,
+    slides: List[SlidePlan],
+    chosen: List[Pattern],
+) -> None:
+    ids = [p.id for p in chosen]
+    run.max_reuse = max((ids.count(i) for i in ids), default=0)
+    run.alternations = sum(
+        1 for i in range(2, len(ids)) if ids[i] == ids[i - 2] != ids[i - 1]
+    )
+    size = (inventory.slide_width, inventory.slide_height)
+    pool = assignable(inventory)
+    used = set(ids)
+    seen: set[str] = set()
+    for slide, pattern in zip(slides, chosen):
+        if pattern.id in seen and any(
+            p.kind == pattern.kind
+            and p.id not in used
+            and not misfit(p, slide, size)[0]
+            for p in pool
+        ):
+            run.avoidable_reuses += 1
+        seen.add(pattern.id)
 
 
 def _leftovers(
@@ -481,9 +513,9 @@ def _leftovers(
 def _summary(results: List[RunResult], variants: List[Variant]) -> str:
     lines = [
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
-        "| 3-in-a-row | distinct/slides | leftovers | removed by check | truncated | lost "
-        "| avg wall s |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| 3-in-a-row | distinct/slides | max reuse | A-B-A | avoidable reuses "
+        "| patterns used | leftovers | removed by check | truncated | lost | avg wall s |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -493,6 +525,7 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         ]
         ok = [r for r in runs if r.success]
         covers = [r.cover_once_first for r in ok if r.cover_once_first is not None]
+        across = {p for r in ok for p in r.patterns}
 
         def mean(values: List[float]) -> str:
             return f"{statistics.mean(values):.2f}" if values else "-"
@@ -504,6 +537,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {f'{100 * sum(covers) / len(covers):.0f}%' if covers else 'n/a'} "
             f"| {sum(r.triples for r in ok)} "
             f"| {mean([r.distinct_ratio for r in ok])} "
+            f"| {max((r.max_reuse for r in ok), default=0)} "
+            f"| {sum(r.alternations for r in ok)} | {sum(r.avoidable_reuses for r in ok)} "
+            f"| {len(across)}/{len(assignable(variant.inventory))} "
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "
