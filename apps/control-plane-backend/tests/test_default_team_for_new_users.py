@@ -38,7 +38,6 @@ from control_plane_backend.teams.service import (
 from control_plane_backend.users.api import validate_gcu
 from fred_core import (
     AuthorizationError,
-    GcuVersionsType,
     KeycloakUser,
     OrganizationPermission,
     RebacReference,
@@ -126,10 +125,10 @@ class _FakeTeamMetadataStore:
 
 
 class _FakeUserStore:
-    def __init__(self, *, row_exists: bool, accepted: GcuVersionsType | None) -> None:
+    def __init__(self, *, row_exists: bool, accepted: str | None) -> None:
         self._row_exists = row_exists
         self._accepted = accepted
-        self.recorded: list[GcuVersionsType] = []
+        self.recorded: list[str] = []
 
     async def find_user_by_id(self, user_id, session=None):
         if not self._row_exists:
@@ -343,18 +342,18 @@ async def test_first_gcu_acceptance_joins_the_default_teams(row_exists: bool) ->
     await _accept_gcu(rebac, user_store)
 
     assert len(rebac.added) == 2
-    assert user_store.recorded == [GcuVersionsType.V1]
+    assert user_store.recorded == ["v1"]
 
 
 @pytest.mark.asyncio
 async def test_accepting_a_newer_gcu_does_not_rejoin_the_default_teams() -> None:
     rebac = _FakeRebac()
-    user_store = _FakeUserStore(row_exists=True, accepted=GcuVersionsType.V1)
+    user_store = _FakeUserStore(row_exists=True, accepted="v1")
 
-    await _accept_gcu(rebac, user_store)
+    await _accept_gcu(rebac, user_store, gcu_version="v2")
 
     assert rebac.added == []
-    assert user_store.recorded == [GcuVersionsType.V1]
+    assert user_store.recorded == ["v2"]
 
 
 @pytest.mark.asyncio

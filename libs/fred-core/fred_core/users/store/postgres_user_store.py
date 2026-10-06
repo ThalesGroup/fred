@@ -18,6 +18,8 @@ from typing import Optional, cast
 from uuid import UUID
 
 from sqlalchemy import case, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -209,22 +211,36 @@ class PostgresUserStore(BaseUserStore):
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: GcuVersionsType,
+        gcu_version: str | GcuVersionsType,
         session: AsyncSession | None = None,
     ) -> None:
+        version = (
+            gcu_version.value
+            if isinstance(gcu_version, GcuVersionsType)
+            else gcu_version
+        )
+        accepted_at = datetime.now(timezone.utc)
         async with use_session(self._sessions, session) as s:
-            user = await s.get(UserRow, user_id)
-
-            if user is None:
-                user = UserRow(
+            insert = (
+                pg_insert
+                if s.get_bind().dialect.name == "postgresql"
+                else sqlite_insert
+            )
+            await s.execute(
+                insert(UserRow)
+                .values(
                     id=user_id,
-                    gcuVersionAccepted=gcu_version,
-                    gcuAcceptedAt=datetime.now(),
+                    gcuVersionAccepted=version,
+                    gcuAcceptedAt=accepted_at,
                 )
-                s.add(user)
-            else:
-                user.gcuVersionAccepted = gcu_version
-                user.gcuAcceptedAt = datetime.now()
+                .on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={
+                        "gcuVersionAccepted": version,
+                        "gcuAcceptedAt": accepted_at,
+                    },
+                )
+            )
 
     async def increment_current_storage_size(
         self,

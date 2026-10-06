@@ -20,7 +20,7 @@ import pytest
 import pytest_asyncio
 from fred_core.users.store.base_user_store import AmbiguousUsernameError
 from fred_core.users.store.postgres_user_store import PostgresUserStore
-from fred_core.users.user_models import GcuVersionsType, UserRow
+from fred_core.users.user_models import UserRow
 from sqlalchemy import Table, select
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -159,7 +159,7 @@ async def test_identity_store_preserves_local_state_and_searches_each_field(tmp_
                 .where(UserRow.id == user_id)
                 .values(
                     current_resources_storage_size=123,
-                    gcuVersionAccepted=GcuVersionsType.V1,
+                    gcuVersionAccepted="v1",
                 )
             )
         await store.upsert_identity(user_id, "Alice", "new@example.test", None, None)
@@ -173,7 +173,7 @@ async def test_identity_store_preserves_local_state_and_searches_each_field(tmp_
                 )
             ).one()
         assert row.current_resources_storage_size == 123
-        assert row.gcuVersionAccepted == GcuVersionsType.V1
+        assert row.gcuVersionAccepted == "v1"
         assert await store.count_identities() == 1
     finally:
         await engine.dispose()

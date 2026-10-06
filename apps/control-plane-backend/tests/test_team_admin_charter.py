@@ -508,6 +508,21 @@ async def test_a_new_version_promotes_pending_admins_who_already_accepted_it() -
 
 
 @pytest.mark.asyncio
+async def test_returning_to_an_accepted_version_keeps_admin_authority() -> None:
+    rebac = _FakeRebac({("admin", _ADMIN, "team-a")})
+    store = _FakeCharterStore({("admin", "v1")}, applied="v1")
+    newer = _deps(rebac, store, version="v2")
+    await reconcile_team_admin_charter_roles(newer)
+    assert rebac.tuples == {("admin", _PENDING, "team-a")}
+    await accept_team_admin_charter(_user("admin"), newer)
+    assert rebac.tuples == {("admin", _ADMIN, "team-a")}
+    older = _deps(rebac, store, version="v1")
+    assert await reconcile_team_admin_charter_roles(older) == 0
+    assert await get_team_admin_charter_acceptance(_user("admin"), older) is not None
+    assert rebac.tuples == {("admin", _ADMIN, "team-a")}
+
+
+@pytest.mark.asyncio
 async def test_reconciliation_does_not_promote_cancelled_nomination() -> None:
     snapshot_read = asyncio.Event()
     resume_reconciliation = asyncio.Event()

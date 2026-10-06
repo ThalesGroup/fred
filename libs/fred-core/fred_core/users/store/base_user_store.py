@@ -37,7 +37,7 @@ class BaseUserStore(ABC):
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: GcuVersionsType,
+        gcu_version: str | GcuVersionsType,
         session: AsyncSession | None = None,
     ) -> None:
         pass

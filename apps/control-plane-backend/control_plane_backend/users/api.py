@@ -22,7 +22,6 @@ from fastapi.responses import JSONResponse
 from fred_core import (
     ORGANIZATION_ID,
     BaseUserStore,
-    GcuVersionsType,
     KeycloakUser,
     OrganizationPermission,
     RebacEngine,
@@ -430,7 +429,7 @@ async def delete_user(
 
 
 class UserDetails(BaseModel):
-    cguValidated: GcuVersionsType | None
+    cguValidated: str | None
     personalTeam: TeamWithPermissions
     currentUser: UserSummary | None = None
 

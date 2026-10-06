@@ -42,9 +42,7 @@ _GCU_VERSION = "2026-01"
 def _user_store(accepted: str | None = None) -> BaseUserStore:
     store = create_autospec(BaseUserStore, instance=True, spec_set=True)
     store.find_user_by_id.return_value = (
-        SimpleNamespace(gcuVersionAccepted=SimpleNamespace(value=accepted))
-        if accepted is not None
-        else None
+        SimpleNamespace(gcuVersionAccepted=accepted) if accepted is not None else None
     )
     return store
 
@@ -206,4 +204,39 @@ async def test_an_asserted_person_is_admitted_without_a_record(
     )
 
     assert admitted is asserted
+    cast(AsyncMock, store.find_user_by_id).assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("accepted", ["v1", "2026-02", "2026-01 "])
+async def test_another_accepted_version_does_not_admit_a_human(
+    monkeypatch, configuration, bearer_token, accepted
+):
+    human = _human()
+    _bearer_resolves_to(monkeypatch, human)
+    with pytest.raises(HTTPException, match="user_not_accept_gcu"):
+        await oidc.get_current_user(
+            request=_request(),
+            token=bearer_token,
+            user_store=_user_store(accepted),
+            configuration=configuration,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "security_enabled, version", [(False, _GCU_VERSION), (True, None)]
+)
+async def test_disabled_gcu_skips_acceptance_lookup(
+    monkeypatch, security_enabled, version
+):
+    monkeypatch.setattr(oidc, "KEYCLOAK_ENABLED", security_enabled)
+    store = _user_store()
+    human = _human()
+    assert (
+        await oidc._enforce_gcu(
+            human, store, SimpleNamespace(app=SimpleNamespace(gcu_version=version))
+        )
+        is human
+    )
     cast(AsyncMock, store.find_user_by_id).assert_not_awaited()
