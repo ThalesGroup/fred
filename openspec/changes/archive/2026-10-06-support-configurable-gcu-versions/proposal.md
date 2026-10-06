@@ -24,7 +24,7 @@ None.
 ## Impact
 
 - `fred-core`: shared user model, store input types and OIDC admission checks; all backends consuming the shared model must upgrade together.
-- Control-plane: GCU acceptance service, user-details response and a linear Alembic correction after the locally applied revision.
+- Control-plane: GCU acceptance service, user-details response and an Alembic correction joining the locally applied revision and the target identity migration.
 - Frontend: generated control-plane schema and existing GCU guard consumers.
 - Tests: actual `v1` to `v2` reacceptance, admission, persistence and migration/rollback coverage.
 - Operations: migrate with old readers stopped; reject rollback if accepted versions cannot be represented by the legacy enum.

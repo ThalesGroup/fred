@@ -30,7 +30,8 @@ Configure the same active CGU version in all enforcing backends.
    `a7e9c2d41063` converts `users.gcuVersionAccepted` from enum `V1` to text `v1`,
    creates the earlier PR history table, then `e6b8d2a41074` removes that table.
    The final schema keeps only the existing user columns. If `a7e9c2d41063` has
-   already been applied, only the corrective revision runs. Both revisions are
+   already been applied, its enum conversion is skipped; Alembic runs the missing
+   identity revision and the corrective revision. Both PR revisions are
    kept because the earlier PR migration has already been executed locally;
    the applied revision and its parent are not rewritten. The chain is
    `c4d7e2a91b30 -> {a7e9c2d41063, b4e8d2a9c613} -> e6b8d2a41074`,
