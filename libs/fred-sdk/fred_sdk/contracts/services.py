@@ -21,4 +21,4 @@ class ServiceEndpointsPort(Protocol):
 
         Raise ValueError when the requested service is unconfigured or invalid.
         """
-        ...
+        raise NotImplementedError

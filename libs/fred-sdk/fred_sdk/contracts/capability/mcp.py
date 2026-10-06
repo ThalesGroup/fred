@@ -48,7 +48,9 @@ __all__ = [
 class _McpCapabilityRegistry(Protocol):
     """Structural registration port; SDK builders do not import the runtime."""
 
-    def register(self, capability: McpCapability) -> str: ...
+    def register(self, capability: McpCapability) -> str:
+        """Register a capability and return its ID, rejecting duplicates."""
+        raise NotImplementedError
 
 
 # Moving the authoring code does not change persisted MCP configuration.
