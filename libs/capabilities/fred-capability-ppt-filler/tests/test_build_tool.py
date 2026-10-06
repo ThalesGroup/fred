@@ -390,6 +390,47 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     assert "Slides 2, 3, 4, 5 all use the template slide 'Process'" in text
 
 
+_TOO_MANY = {
+    "title": "Method",
+    "kind": "process",
+    "items": [
+        {"number": str(i), "heading": f"Step {i}", "text": "x"} for i in range(7)
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_no_variety_ask_after_a_fit_repair(monkeypatch):
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    text, result = await build.coroutine(slides=[COVER, _TOO_MANY])
+    assert result.is_error and "variety" not in text
+    # The repaired deck repeats a kind: built, the repetition only noted.
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert not result.is_error, text
+    assert "Slides 2, 3, 4, 5 all use the template slide 'Process'" in text
+
+
+@pytest.mark.asyncio
+async def test_a_first_call_with_fit_problems_carries_the_variety_ask(monkeypatch):
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    text, result = await build.coroutine(slides=_REPEATED + [_TOO_MANY])
+    assert result.is_error and workspace.writes == []
+    payload = json.loads(text[text.index("{") :])
+    assert [p["slide"] for p in payload["slides"]] == [6]
+    (repeat,) = payload["variety"]
+    assert repeat["slides"] == [2, 3, 4, 5]
+    assert "the next deck that fits is built as is" in text
+    # Fixed, kinds unchanged: one round was enough, the deck is built.
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert not result.is_error, text
+
+
 @pytest.mark.asyncio
 async def test_a_deck_after_the_first_one_only_gets_the_note(monkeypatch):
     """A later turn (a new tool instance) sees the delivered deck in the

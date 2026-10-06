@@ -236,10 +236,14 @@ _Previous = Dict[int, Tuple[str, str]]
 
 
 def _needs_revision(
-    assignment: Assignment, plan: DeckPlan, previous: _Previous
+    assignment: Assignment,
+    plan: DeckPlan,
+    previous: _Previous,
+    repeats: List[Repeat],
 ) -> tuple[str, ToolInvocationResult]:
     """The problems, each flagged when the previous call already had it, so the
-    model never reads the same message twice without learning what changed."""
+    model never reads the same message twice without learning what changed;
+    a first call's variety ask joins them, so it never costs a round of its own."""
     current: _Previous = {}
     slides = []
     for problem in assignment.problems:
@@ -256,19 +260,51 @@ def _needs_revision(
         slides.append(entry)
     previous.clear()
     previous.update(current)
-    payload = {"status": "needs_revision", "slides": slides}
-    return _error(
+    payload: Dict[str, Any] = {"status": "needs_revision", "slides": slides}
+    text = (
         "No deck was built: some slides fit no slide of this template. Fix each slide listed "
-        "below with one of its options, then call build_presentation again with the WHOLE "
-        "deck.\n" + json.dumps(payload, ensure_ascii=False)
+        "under `slides` with one of its options."
     )
+    if repeats:
+        payload["variety"] = _variety(repeats)
+        text += (
+            " Also, several other slides would look the same: "
+            + _VARIETY_ASK.format(restated="")
+        )
+    text += " Then call build_presentation again with the WHOLE deck."
+    if repeats:
+        text += (
+            " If the slides under `variety` must stay alike, keep them: the next deck that "
+            "fits is built as is."
+        )
+    return _error(text + "\n" + json.dumps(payload, ensure_ascii=False))
+
+
+_VARIETY_ASK = (
+    "recast some of the slides under `variety` into one of their options (`suggested` names "
+    "the kind each slide's content already suits and what that slide holds), rewriting the "
+    "content in that shape and to those sizes{restated}."
+)
+
+
+def _variety(repeats: List[Repeat]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "slides": r.slides,
+            "kind": r.kind,
+            **({"suggested": r.suggested} if r.suggested else {}),
+            "options": [f"another '{r.kind}' variant: {u}" for u in r.unused]
+            + r.others,
+        }
+        for r in repeats
+    ]
 
 
 def _variety_revision(
     repeats: List[Repeat], assignment: Assignment
 ) -> tuple[str, ToolInvocationResult]:
-    """Asked once, on the first deck of a conversation: the repeated slides and
-    what each alternative suits; a resend is built as is."""
+    """Asked on the first call of a turn, on the first deck of a conversation:
+    the repeated slides and what each alternative suits; a resend is built."""
     kinds = [p.kind if p else None for p in assignment.patterns]
     restated = any(
         kinds[i] in ("two_columns", "comparison") and kinds[i + 1] == "table"
@@ -276,30 +312,16 @@ def _variety_revision(
         for i in (n - 1 for n in r.slides)
         if i + 1 < len(kinds)
     )
-    payload = {
-        "status": "needs_revision",
-        "variety": [
-            {
-                "slides": r.slides,
-                "kind": r.kind,
-                **({"suggested": r.suggested} if r.suggested else {}),
-                "options": [f"another '{r.kind}' variant: {u}" for u in r.unused]
-                + r.others,
-            }
-            for r in repeats
-        ],
-    }
+    payload = {"status": "needs_revision", "variety": _variety(repeats)}
     return _error(
-        "No deck was built yet: several slides would look the same. Recast some of the slides "
-        "listed below into one of their options (`suggested` names the kind each slide's "
-        "content already suits and what that slide holds), rewriting the content in that "
-        "shape and to those sizes"
-        + (
-            ", and do not restate a table's content as columns on the slide before it"
+        "No deck was built yet: several slides would look the same: "
+        + _VARIETY_ASK.format(
+            restated=", and do not restate a table's content as columns on the slide "
+            "before it"
             if restated
-            else ""
+            else "",
         )
-        + ". Then call build_presentation again with the WHOLE deck. If these slides must stay "
+        + " Then call build_presentation again with the WHOLE deck. If these slides must stay "
         "alike, send the same plan again: it will be built as is.\n"
         + json.dumps(payload, ensure_ascii=False)
     )
@@ -488,11 +510,12 @@ def build_builder_tools(
     identity = ctx.identity
     args_schema = _args_schema(inventory)
     previous_problems: _Previous = {}
-    # Variety is asked at most once per tool instance; the next call is built.
-    variety_asked = False
+    # Variety is asked on the first call of the turn (one tool instance) only.
+    called = False
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
-        nonlocal variety_asked
+        nonlocal called
+        first, called = not called, True
         try:
             plan = _to_plan(args_schema(**kwargs))
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
@@ -509,25 +532,24 @@ def build_builder_tools(
             )
         # Before any I/O: a plan that needs revision costs no template fetch.
         assignment = await asyncio.to_thread(assign, inventory, plan)
-        if assignment.problems:
-            return _needs_revision(assignment, plan, previous_problems)
-        previous_problems.clear()
-
         workspace = services.workspace_fs
+        session_id = identity.session_id
+        repeats = [r for r in assignment.repeats if r.revisable] if first else []
+        # Listed only when an ask would follow: the usual call adds no I/O.
+        if repeats and (
+            workspace is None or await _deck_delivered(workspace, session_id)
+        ):
+            repeats = []
+        if assignment.problems:
+            return _needs_revision(assignment, plan, previous_problems, repeats)
+        previous_problems.clear()
+        if repeats:
+            return _variety_revision(repeats, assignment)
+
         if workspace is None:
             raise RuntimeError(
                 "ppt_builder: RuntimeServices.workspace_fs is not available on this execution path."
             )
-        session_id = identity.session_id
-        # Listed only when a revision would follow: the usual call adds no I/O.
-        repeats = [r for r in assignment.repeats if r.revisable]
-        if (
-            repeats
-            and not variety_asked
-            and not await _deck_delivered(workspace, session_id)
-        ):
-            variety_asked = True
-            return _variety_revision(repeats, assignment)
         image_ids = _image_ids(plan)
         if image_ids and services.document_content is None:
             raise RuntimeError(

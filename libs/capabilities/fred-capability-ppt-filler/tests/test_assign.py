@@ -655,6 +655,17 @@ def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
     ]
 
 
+def test_repeats_are_found_beside_slides_that_fit_nothing():
+    too_long = {"title": "T", "bullets": ["x" * 2000], "kind": "bullets"}
+    slides = [_points(n) for n in range(3)] + [too_long]
+    inventory = _inventory(_bullets("slide:1", "A", source="slide"))
+    assignment = assign(inventory, _plan(*slides))
+    assert [p.index for p in assignment.problems] == [4]
+    assert assignment.patterns == []
+    (repeat,) = assignment.repeats
+    assert repeat.kind == "bullets" and repeat.slides == [1, 2, 3]
+
+
 def test_content_shapes_are_read_from_text_patterns():
     def shape(*bullets: str) -> Any:
         found = content_shape(SlidePlan(title="T", bullets=list(bullets)))

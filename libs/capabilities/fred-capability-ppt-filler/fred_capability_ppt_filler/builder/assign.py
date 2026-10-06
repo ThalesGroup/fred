@@ -877,8 +877,14 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
         slide.candidates = _candidates(slide, has_cover)
         if not slide.candidates:
             problems.append(_problem(slide, has_cover))
-    if problems or not slides:
+    if not slides:
         return Assignment(problems=problems)
+    if problems:
+        # Repeats among the slides that fit, so a variety ask can join the problems.
+        fitting = [s for s in slides if s.candidates]
+        return Assignment(
+            problems=problems, repeats=_repeats(fitting, _beam(fitting), pool)
+        )
 
     chosen = _beam(slides)
     patterns: List[Optional[Pattern]] = [None] * len(plan.slides)
