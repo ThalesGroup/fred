@@ -826,6 +826,18 @@ applications:
             port: 9000
 
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
+      web_research:
+        enabled: false
+        egress_url: null # e.g. https://web-egress.dmz.example:8120
+        token_env: WEB_RESEARCH_EGRESS_TOKEN
+        ca_file: null
+        client_certificate: null
+        client_key: null
+        timeout_seconds: 60
+        max_concurrency: 4
+        activity_retention_days: 30
+        purge_interval_seconds: 60
+
       storage:
         # Default is a local filesystem for one-replica development. Production
         # deployments should select minio or gcs with a private runtime bucket.

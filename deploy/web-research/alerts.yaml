@@ -1,0 +1,26 @@
+groups:
+  - name: fred-web-research
+    rules:
+      - alert: FredWebEgressUnavailable
+        expr: fred_web_research_egress_up == 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Fred cannot reach its authenticated HTTPS web egress service
+      - alert: FredWebActivitySinkFailure
+        expr: sum(rate(fred_web_research_activity_failures_total[5m])) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: Fred web research activity storage or purge is failing
+      - alert: FredWebResearchErrorRate
+        expr: sum(rate(fred_web_research_requests_total{outcome="failed"}[5m])) / clamp_min(sum(rate(fred_web_research_requests_total[5m])), 0.001) > 0.2
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: More than 20 percent of Fred web research calls fail
+      - alert: FredWebEgressSaturated
+        expr: sum(rate(fred_web_egress_requests_total{outcome="busy"}[5m])) > 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: Fred web egress has exhausted its request capacity

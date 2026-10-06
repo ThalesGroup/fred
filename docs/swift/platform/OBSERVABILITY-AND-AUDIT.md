@@ -389,3 +389,20 @@ coverage needs reliable deployment discovery and is optional follow-up scope.
 Browser renewal telemetry remains a separate gap. Before implementation, confirm
 the deployment's query endpoint, read credentials and component labels; test
 permissions, multi-replica aggregation, restarts and missing/stale data.
+
+## Restricted web research activity
+
+Native web research requires a separate runtime PostgreSQL product activity table.
+It stores the opaque user/team/agent/session/correlation identifiers, submitted
+query or public URL (without query parameters/fragments), outcome, duration and
+result count. It stores neither snippets nor downloaded page bodies. Ordinary
+logs, Prometheus labels and security audit remain content-free. Platform operators
+(`CAN_MANAGE_PLATFORM`) can read unexpired records; user administrators
+(`CAN_ADMINISTER_USERS`) can erase them. The default retention is 30 days,
+configurable from 1 to 365; reads exclude expired rows and a periodic worker
+physically purges them even after feature disablement. Erasure fences later writes
+across replicas, using a durable subject hash without raw identity or query.
+Account deletion propagates erasure to all configured enabled runtime sources
+before deleting the identity-provider account; unavailable sources block completion.
+Activation requires the activity store and operator approval of query collection.
+See [deployment and migration instructions](../ops/migrations/2980-native-web-research.md).

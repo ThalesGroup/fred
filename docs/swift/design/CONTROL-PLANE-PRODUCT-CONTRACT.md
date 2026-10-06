@@ -4448,3 +4448,11 @@ filled the browser's six per HTTP/1.1 origin during an import. A task absent fro
 the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
 remains for its other consumers. Current behaviour:
 `openspec/specs/task-progress-tracking/spec.md`.
+
+### 2026-10-06 — Account erasure and web research (#2980)
+
+Account deletion coordinates restricted web activity erasure with every enabled
+runtime catalog source before identity-provider deletion. A failed runtime call
+blocks completion so an administrator can retry. This remains product cleanup;
+web research execution and storage are owned by the runtime. See the
+[activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity).

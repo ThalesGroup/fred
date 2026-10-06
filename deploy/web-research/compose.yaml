@@ -1,0 +1,14 @@
+services:
+  web-egress:
+    image: ghcr.io/thalesgroup/fred-agent/fred-agents:${FRED_VERSION:?Set a release containing native web research}
+    entrypoint: [python, -m, fred_capability_web_research.egress]
+    environment:
+      CONFIG_FILE: /app/config/configuration.yaml
+      WEB_RESEARCH_EGRESS_TOKEN: ${WEB_RESEARCH_EGRESS_TOKEN:?Provide a service token from your secret store}
+    ports: ["127.0.0.1:8120:8120"]
+    volumes:
+      - ./configuration.yaml:/app/config/configuration.yaml:ro
+      - ${WEB_EGRESS_TLS_DIR:?Provide the TLS certificate directory}:/run/web-egress/tls:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]

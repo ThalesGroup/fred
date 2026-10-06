@@ -446,6 +446,186 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 11,
+      "title": "Web research calls",
+      "type": "timeseries",
+      "description": "Content-free metrics; queries and user identities are never labels.",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (operation, outcome) (rate(fred_web_research_requests_total{service=~\"${service:regex}\"}[5m]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Web research latency p95",
+      "type": "timeseries",
+      "description": "Content-free metrics; queries and user identities are never labels.",
+      "gridPos": {
+        "x": 12,
+        "y": 30,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, operation) (rate(fred_web_research_duration_seconds_bucket{service=~\"${service:regex}\"}[5m])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Web egress availability",
+      "type": "timeseries",
+      "description": "Content-free metrics; queries and user identities are never labels.",
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "fred_web_research_egress_up{service=~\"${service:regex}\"}",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Web activity storage failures",
+      "type": "timeseries",
+      "description": "Content-free metrics; queries and user identities are never labels.",
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 7
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (stage) (increase(fred_web_research_activity_failures_total{service=~\"${service:regex}\"}[1h]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{operation}} {{outcome}} {{service}} {{stage}}",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "refresh": "1m",

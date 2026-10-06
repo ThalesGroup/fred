@@ -421,3 +421,12 @@ if you touched the contract surface) — green before you claim done.
 - **Re-raise a run stop** — a tool that turns a failure into text first checks
   `unwrap_run_stop_error(exc)` from `fred_sdk.contracts.runtime` and re-raises what it
   finds, so a stopped run ends instead of reaching the model as tool text.
+
+### Native web research port
+
+`RuntimeServices.web_research` exposes the SDK `WebResearchPort` for bounded
+search/fetch requests. Runtime binds the authenticated subject and activity store;
+the native capability owns only its manifest and tools. Endpoint, credentials,
+identity and retention are deployment/runtime data and never tool arguments.
+The Fred egress executable can run locally or separately in a DMZ from the same
+Fred Agents image. See [web research operations](../ops/migrations/2980-native-web-research.md).

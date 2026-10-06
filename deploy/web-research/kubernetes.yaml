@@ -1,0 +1,79 @@
+# Example for a separate DMZ namespace. Mount the supplied configuration.yaml
+# as ConfigMap web-egress-config and provide Secrets web-egress-service and
+# web-egress-tls before applying. Replace RELEASE with the reviewed Fred release.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-egress
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: web-egress}
+  template:
+    metadata:
+      labels: {app: web-egress}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+      containers:
+        - name: web-egress
+          image: ghcr.io/thalesgroup/fred-agent/fred-agents:RELEASE
+          command: [python, -m, fred_capability_web_research.egress]
+          env:
+            - {name: CONFIG_FILE, value: /app/config/configuration.yaml}
+            - name: WEB_RESEARCH_EGRESS_TOKEN
+              valueFrom:
+                secretKeyRef: {name: web-egress-service, key: token}
+          ports: [{name: https, containerPort: 8120}]
+          readinessProbe: {tcpSocket: {port: https}}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: configuration, mountPath: /app/config/configuration.yaml, subPath: configuration.yaml, readOnly: true}
+            - {name: tls, mountPath: /run/web-egress/tls, readOnly: true}
+      volumes:
+        - name: configuration
+          configMap: {name: web-egress-config}
+        - name: tls
+          secret: {secretName: web-egress-tls}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web-egress}
+spec:
+  selector: {app: web-egress}
+  ports: [{name: https, port: 8120, targetPort: https}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: web-egress}
+spec:
+  podSelector:
+    matchLabels: {app: web-egress}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: fred-app}
+          podSelector:
+            matchLabels: {app: fred-agents}
+      ports: [{protocol: TCP, port: 8120}]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/4, 240.0.0.0/4]
+        - ipBlock:
+            cidr: ::/0
+            except: ["::/128", "::1/128", "::ffff:0:0/96", "64:ff9b::/96", "64:ff9b:1::/48", "2001::/32", "2002::/16", "fc00::/7", "fe80::/10", "ff00::/8"]
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 80}]

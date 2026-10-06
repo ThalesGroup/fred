@@ -2103,6 +2103,101 @@
                   "title": "PodPlatformConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "web_research": {
+                  "additionalProperties": false,
+                  "description": "Deployment policy; never editable by an agent or sent to the model.",
+                  "properties": {
+                    "enabled": {
+                      "default": false,
+                      "title": "Enabled",
+                      "type": "boolean"
+                    },
+                    "egress_url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Egress Url"
+                    },
+                    "token_env": {
+                      "default": "WEB_RESEARCH_EGRESS_TOKEN",
+                      "pattern": "^[A-Z][A-Z0-9_]+$",
+                      "title": "Token Env",
+                      "type": "string"
+                    },
+                    "ca_file": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Ca File"
+                    },
+                    "client_certificate": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Client Certificate"
+                    },
+                    "client_key": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Client Key"
+                    },
+                    "timeout_seconds": {
+                      "default": 60,
+                      "maximum": 120,
+                      "minimum": 5,
+                      "title": "Timeout Seconds",
+                      "type": "number"
+                    },
+                    "max_concurrency": {
+                      "default": 4,
+                      "maximum": 32,
+                      "minimum": 1,
+                      "title": "Max Concurrency",
+                      "type": "integer"
+                    },
+                    "activity_retention_days": {
+                      "default": 30,
+                      "maximum": 365,
+                      "minimum": 1,
+                      "title": "Activity Retention Days",
+                      "type": "integer"
+                    },
+                    "purge_interval_seconds": {
+                      "default": 60,
+                      "maximum": 3600,
+                      "minimum": 5,
+                      "title": "Purge Interval Seconds",
+                      "type": "integer"
+                    }
+                  },
+                  "title": "WebResearchDeploymentConfig",
+                  "type": "object"
                 }
               },
               "required": [
