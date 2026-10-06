@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18 and WP19 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19 and WP20 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -427,6 +427,50 @@ medium.
   a stronger model. Since `template_slide` is nearly inert, a follow-up could reasonably
   make `off` and `template_slide` one value; not done (developer's decision).
 
+## Results: WP20 (max uses setting)
+
+Run on 2026-10-08 after `b940f3e20` (the later commits are frontend and docs only), `make eval`
+with `--no-builtin --modes rules --variety … --max-uses …` on the Paintress template, six
+processes strictly one after the other, 14 prompts each, nothing else running, no 429 or quota
+sign in any log. One run per cell: read differences of one or two runs as noise. Success
+excludes the known harness artifacts, listed apart (an invented image id with no
+`document_content` port; medium's `no_tool_call`, WP17). Columns as in WP19.
+
+| cell | model | variety_check | max | success | apart | first call | tool calls | variety asks | decks ×3+ | max reuse (mean) | max kind repeat (mean) | distinct/slides | wall s/run | tokens in/out (k) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | small | template_slide | 2 | 13/14 | – | 6 | 27 | 0 | 10 | 3 (1.38) | 7 (3.77) | 0.94 | 22.2 | 102/30 |
+| 2 | small | template_slide | 1 | 10/11 | 3 image id | 3 | 27 | 3 | 5 | 4 (1.60) | 6 (2.70) | 0.93 | 20.5 | 114/31 |
+| 3 | small | kind | 2 | 11/11 | 3 image id | 1 | 30 | 9 | 8 | 2 (1.45) | 7 (3.82) | 0.92 | 22.5 | 122/36 |
+| 4 | small | kind | 1 | 13/13 | 1 image id | 1 | 32 | 10 | 4 | 2 (1.31) | 7 (2.38) | 0.95 | 23.7 | 129/36 |
+| 5 | medium | kind | 1 | 11/11 | 1 image id, 2 no_tool_call | 0 | 25 | 8 | 0 | 2 (1.55) | 2 (1.64) | 0.91 | 19.5 | 95/25 |
+| 6 | medium | template_slide | 1 | 13/13 | 1 no_tool_call | 3 | 27 | 6 | 6 | 2 (1.31) | 5 (2.54) | 0.95 | 20.1 | 96/24 |
+
+The other failures are `repairs_exhausted` on fit problems: `training_12` (cell 1), `kickoff`
+(cell 2). Contact sheets (not committed): `~/fred-tmp/wp20-sheets/<cell>.png` for
+`thales_spain_italy` (cells 1, 2, 4; that run is an artifact in cells 3, 5, 6) and
+`~/fred-tmp/wp20-sheets/cyber_2027/<cell>.png`, delivered in all six cells.
+
+- **Max 2 on the new assigner is the old behaviour.** Cell 1 against WP19's small Paintress
+  rules `template_slide` row: same success (13/14), no ask, decks ×3+ 10 vs 9, worst kind
+  repeat 3.77 vs 4.23. The over-max cost rarely changes a choice at 2, since D12 already
+  spreads template slides.
+- **Max 1 by template slide buys variety at almost no cost** (cell 2 vs 1): decks with a kind
+  on 3+ slides halve (10 → 5 of 13 and 10), the worst kind repeat falls 3.77 → 2.70, tool calls
+  are unchanged (27), 3 asks, input tokens +12 %; first call 6 → 3. Max reuse 4 once
+  (`options_comparison`: four `two_columns` slides asked, Paintress has one such variant; the
+  ask came, the model resent; the requested kind is kept, D7).
+- **By kind asks often**: 9–10 asks in 14 runs on small, first call falls to 1, +11–19 % calls,
+  +20–26 % input tokens. At max 2 its variety is no better than cell 1 here (one run; three
+  artifacts); at max 1 it gives the best small-model variety (4 decks ×3+, worst 2.38).
+- **Medium uses the max well**: `kind` max 1 gives the most varied decks measured so far (no
+  deck with a kind on 3+ slides, worst 1.64), at 25 calls; `template_slide` max 1, 27 calls and
+  6 decks ×3+.
+- **Recommendation for the V1 beta defaults: switch on, `template_slide`, max 1.** On
+  mistral-small, the admin default, it is the only setting that improves variety clearly
+  without more model calls; `kind` max 1 is more varied but asks on most first decks (first
+  call 1 of 14, +26 % tokens), a better fit for an author with a stronger model. Not applied:
+  the code default stays 2 (= the behaviour before the setting) until the developer decides.
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -493,6 +537,26 @@ medium.
 
 ## Checks
 
+- WP20: package `make code-quality` passed; `make test` 397 passed, 4 skipped (2 new in
+  `test_assign.py`: max 1 takes another variant of the same kind, kept requested kind with one
+  variant, `off` unchanged; caps raised to what the template allows, structural slides apart,
+  `at_most` on the repeat; 1 new in `test_build_tool.py`: guide sentence per mode and max, none
+  when off; the defaults test now covers `variety_max_uses` (2 when missing, 1..5, not in
+  `labelling_key`, both fields owned by the widget); one existing test gained a second kind,
+  since a one-slide template now raises the cap to the deck); with
+  `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 401 passed; on the Paintress deck the
+  reference-bearing files 181 passed. The dumped ppt_builder OpenAPI equals the committed slice:
+  no regeneration. Frontend: `npx tsc --noEmit` clean, prettier clean, eslint clean on
+  `ppt_builder/`; vitest on `ppt_builder/`, `src/locales` and `AgentFormModal/` 87 passed (4 new
+  in `PptBuilderVarietySettings.test.tsx`: the sentence's labels, off saves `"off"` and disables
+  the selects, on restores the last mode, on from a stored `off` gives `template_slide`, the max
+  saves a number), Help Center 17 passed. Not proven: the row in a browser at narrow widths
+  (CSS wraps the sentence; developer check). `fred-performance-reviewer` on the tool path: no
+  new I/O, no shared state (the max is read from the turn's config when the tool is built);
+  `assign` stays in `asyncio.to_thread`; the caps are one pass over the slides and the beam
+  state gains one frozenset of content uses (beam still 32): assign on a 29-slide Paintress plan
+  257 ms before, 257–262 ms after across modes and max values (median of 7, same host). The
+  LLM-path cost is the asks' (table above). No finding.
 - WP19: package `make code-quality` passed; `make test` 394 passed, 4 skipped (3 new in
   `test_assign.py`: structural slide apart on the small-model plan, figures capped by its
   variants, suggestions spread across kinds; 2 in `test_build_tool.py`: each mode's ask,
