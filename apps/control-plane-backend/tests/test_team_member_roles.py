@@ -980,8 +980,8 @@ async def test_role_revoke_cannot_restore_member_after_concurrent_removal(
     assert not removal.done()
 
     resume_revoke.set()
-    await revoke
-    await removal
+    assert (await revoke) is None
+    assert (await removal).sessions_enqueued == 0
     assert rebac.roles["bob"] == set()
 
 
@@ -1059,9 +1059,9 @@ async def test_revocation_after_removal_ignores_stale_openfga_roles(
     assert not revoke.done()
 
     resume_removal.set()
-    await removal
+    assert (await removal).sessions_enqueued == 0
     with pytest.raises(TeamMemberRoleNotHeldError):
-        await revoke
+        assert (await revoke) is None
     assert rebac.roles["bob"] == set()
     assert rebac.added_relations == []
 

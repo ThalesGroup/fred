@@ -393,7 +393,7 @@ async def test_cancelled_nomination_is_not_promoted_after_acceptance_lookup() ->
         deps,
     )
     resume_acceptance.set()
-    await acceptance
+    assert (await acceptance).accepted_at is not None
 
     assert ("nominee", _ADMIN, "team-a") not in rebac.tuples
     assert ("nominee", RelationType.TEAM_MEMBER.value, "team-a") in rebac.tuples
@@ -430,9 +430,9 @@ async def test_nomination_cancellation_waits_for_acceptance_promotion() -> None:
     assert not cancellation.done()
 
     resume_promotion.set()
-    await acceptance
+    assert (await acceptance).accepted_at is not None
     with pytest.raises(TeamMemberRoleNotHeldError):
-        await cancellation
+        assert (await cancellation) is None
     assert ("nominee", _ADMIN, "team-a") in rebac.tuples
     assert ("nominee", _PENDING, "team-a") not in rebac.tuples
 

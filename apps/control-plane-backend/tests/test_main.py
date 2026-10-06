@@ -6521,7 +6521,10 @@ async def test_revoke_team_member_role_blocks_last_admin_demotion(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
+        *,
+        consistency_token: str | None = None,
     ) -> set[str]:
+        assert consistency_token == "HIGHER_CONSISTENCY"
         if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
@@ -6567,7 +6570,10 @@ async def test_remove_team_member_blocks_removing_last_admin(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
+        *,
+        consistency_token: str | None = None,
     ) -> set[str]:
+        assert consistency_token == "HIGHER_CONSISTENCY"
         if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
