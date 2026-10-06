@@ -589,27 +589,70 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
     (repeat,) = assignment.repeats
     assert repeat.kind == "bullets" and repeat.slides == [3, 5, 7, 9, 10]
     assert len(repeat.labels) == 5 and repeat.revisable
+    # Each suggestion says what the template's slide of that kind holds.
+    items = "items max 6 [heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines]"
     assert repeat.suggested == [
-        "slide 5 → cards (parallel 'Label : text' points)",
-        "slide 7 → timeline (dated items)",
-        "slide 9 → two_columns or cards (2 groups of '- ' lines under 'Label :' lines)",
-        "slide 10 → cards (3 groups of '- ' lines under 'Label :' lines)",
+        f"slide 5 (parallel 'Label : text' points) → cards holds {items}",
+        f"slide 7 (dated items) → timeline holds {items}",
+        "slide 9 (2 groups of '- ' lines under 'Label :' lines) → two_columns holds "
+        f"exactly 2 columns [bullets ≈22 chars × 8 lines]; or cards holds {items}",
+        f"slide 10 (3 groups of '- ' lines under 'Label :' lines) → cards holds {items}",
     ]
     (note,) = [n for n in assignment.notes if "are all" in n]
     assert note.startswith("Slides 3, 5, 7, 9, 10 are all 'bullets' slides")
-    assert "slide 7 → timeline (dated items)" in note
+    assert f"slide 7 (dated items) → timeline holds {items}" in note
 
 
 def test_advice_names_only_kinds_the_template_can_hold():
     # No timeline nor cards slide in the showcase: only the two groups remain.
     (repeat,) = assign(INVENTORY, _plan(*EVIDENCE_SLIDES)).repeats
     assert repeat.suggested == [
-        "slide 9 → two_columns (2 groups of '- ' lines under 'Label :' lines)"
+        "slide 9 (2 groups of '- ' lines under 'Label :' lines) → two_columns holds "
+        "exactly 2 columns [bullets ≈22 chars × 8 lines]"
     ]
     # Three dated lines need a timeline of three items or more.
     small = with_item_slides(INVENTORY, kinds=("timeline",), count=2)
     (repeat,) = assign(small, _plan(*EVIDENCE_SLIDES)).repeats
     assert not any("timeline" in s for s in repeat.suggested)
+
+
+def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
+    inventory = with_item_slides(INVENTORY, kinds=("timeline",))
+    timeline = inventory.patterns[-1]
+    # A roomier layout of the same kind: quoted only when the example slide is too small.
+    roomy = timeline.model_copy(
+        deep=True, update={"id": "layout:950", "source": "layout"}
+    )
+    for item in roomy.groups[0].items:
+        for zone in item:
+            zone.chars_per_line = 40
+    inventory.patterns.append(roomy)
+
+    def advice(words: int) -> List[str]:
+        long = "Janvier 2025 : " + "accord national cyber " * words
+        dated = {
+            "title": "Jalons",
+            "kind": "bullets",
+            "bullets": [long, "Juin 2025 : radars", "Mars 2026 : pôle spatial"],
+        }
+        slides = [COVER, dated] + [_points(n) for n in range(3)]
+        (repeat,) = assign(inventory, _plan(*slides)).repeats
+        return repeat.suggested
+
+    lead = "slide 2 (dated items) → timeline holds items max 6 ["
+    # The example slide when the entries fit it.
+    assert advice(2) == [
+        f"{lead}heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines]"
+    ]
+    # Only the layout holds the long entry: it is quoted.
+    assert advice(10) == [
+        f"{lead}heading ≈40 chars × 4 lines, text ≈40 chars × 4 lines]"
+    ]
+    # Nothing holds it: the example slide, with the size to shorten to.
+    assert advice(20) == [
+        f"{lead}heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines], "
+        "shorten each entry to ≈160 chars"
+    ]
 
 
 def test_content_shapes_are_read_from_text_patterns():

@@ -433,11 +433,13 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
     assert result.is_error and workspace.writes == []
     (repeat,) = json.loads(text[text.index("{") :])["variety"]
     assert repeat["kind"] == "bullets" and repeat["slides"] == [3, 5, 7, 9, 10]
-    assert "slide 7 → timeline (dated items)" in repeat["suggested"]
+    suggested = repeat["suggested"]
     assert any(
-        s.startswith("slide 9 → two_columns or cards") for s in repeat["suggested"]
+        s.startswith("slide 7 (dated items) → timeline holds items max 6 [heading ≈20")
+        for s in suggested
     )
-    assert any(s.startswith("slide 10 → cards") for s in repeat["suggested"])
+    assert any("→ two_columns holds exactly 2 columns [" in s for s in suggested)
+    assert any(s.startswith("slide 10 (3 groups") for s in suggested)
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert not result.is_error, text
     assert "Slides 3, 5, 7, 9, 10 are all 'bullets' slides" in text
@@ -455,7 +457,7 @@ async def test_a_later_deck_repeating_a_kind_only_gets_the_note(monkeypatch):
     )
     assert not result.is_error, text
     assert "are all 'bullets' slides" in text
-    assert "slide 7 → timeline (dated items)" in text
+    assert "slide 7 (dated items) → timeline holds items max 6" in text
 
 
 @pytest.mark.asyncio

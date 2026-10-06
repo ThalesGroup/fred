@@ -28,6 +28,7 @@ from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
     Pattern,
+    RepeatGroup,
     SlideKind,
     Zone,
 )
@@ -409,6 +410,29 @@ def table_summary(zone: Zone) -> str:
     )
 
 
+def group_summary(group: RepeatGroup) -> str:
+    """What one repeat group's items hold: ``items max N [field ≈C chars, …]``."""
+    fields: Dict[str, List[Zone]] = {}
+    for item in group.items:
+        for zone in item:
+            field = ITEM_FIELDS.get(zone.role)
+            if field:
+                fields.setdefault(field, []).append(zone)
+    if (
+        "heading" not in fields
+        and "label" not in fields
+        and len(fields.get("text", [])) == group.count
+    ):
+        # The renderer writes the heading in bold atop the text (`_heading_lead`).
+        fields = {("heading+text" if k == "text" else k): v for k, v in fields.items()}
+    shown = ", ".join(
+        name + ("" if name == "image" else _limit(zones))
+        for name, zones in fields.items()
+    )
+    # "max", not "×N": told `items×8`, an agent pads a five-point agenda.
+    return f"items max {group.count} [{shown}]"
+
+
 def zone_summary(pattern: Pattern) -> str:
     """The plan fields one pattern holds, with their limits."""
     if not pattern.fillable:
@@ -447,26 +471,5 @@ def zone_summary(pattern: Pattern) -> str:
     if images:
         parts.append(f"images×{images}")
     parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
-    for group in pattern.groups:
-        fields: Dict[str, List[Zone]] = {}
-        for item in group.items:
-            for zone in item:
-                field = ITEM_FIELDS.get(zone.role)
-                if field:
-                    fields.setdefault(field, []).append(zone)
-        if (
-            "heading" not in fields
-            and "label" not in fields
-            and len(fields.get("text", [])) == group.count
-        ):
-            # The renderer writes the heading in bold atop the text (`_heading_lead`).
-            fields = {
-                ("heading+text" if k == "text" else k): v for k, v in fields.items()
-            }
-        shown = ", ".join(
-            name + ("" if name == "image" else _limit(zones))
-            for name, zones in fields.items()
-        )
-        # "max", not "×N": told `items×8`, an agent pads a five-point agenda.
-        parts.append(f"items max {group.count} [{shown}]")
+    parts.extend(group_summary(g) for g in pattern.groups)
     return "; ".join(parts) or "no editable zone"

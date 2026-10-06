@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
@@ -41,7 +41,9 @@ from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
     PlanItem,
     SlidePlan,
+    _limit,
     capacity_text,
+    group_summary,
     has_content,
     zone_summary,
 )
@@ -233,9 +235,14 @@ def _lines(slide: SlidePlan) -> List[str]:
     return [re.sub(r"[*_`]", "", line).strip() for line in lines if line.strip()]
 
 
-def content_shape(
-    slide: SlidePlan,
-) -> Optional[Tuple[Tuple[SlideKind, ...], int, str]]:
+class Shape(NamedTuple):
+    kinds: Tuple[SlideKind, ...]
+    entries: int
+    why: str
+    longest: int  # chars of the longest entry, its sub-lines included
+
+
+def content_shape(slide: SlidePlan) -> Optional[Shape]:
     """The kinds a slide's lines suit, how many entries they make and why,
     read from text patterns only: dates, steps, figures, labelled groups."""
     lines = _lines(slide)
@@ -243,31 +250,39 @@ def content_shape(
     texts = [line[2:].strip() if s else line for line, s in zip(lines, sub)]
     top = [t for t, s in zip(texts, sub) if not s]
     if len(top) >= 3 and all(_STEP.match(t) for t in top):
-        return ("process",), len(top), "numbered steps"
-    dated = sum(1 for t in texts if _DATED.match(t))
-    if dated >= 3 or (dated >= 2 and 2 * dated >= len(texts)):
-        return ("timeline",), dated, "dated items"
+        return Shape(("process",), len(top), "numbered steps", _longest(top))
+    dated = [t for t in texts if _DATED.match(t)]
+    if len(dated) >= 3 or (len(dated) >= 2 and 2 * len(dated) >= len(texts)):
+        return Shape(("timeline",), len(dated), "dated items", _longest(dated))
     if not any(sub) and 2 <= len(top) <= 6:
         if all(len(t) <= _FIGURE_CHARS and re.search(r"\d", t) for t in top):
-            return ("figures",), len(top), "short figures"
-    # Each top-level line with its sub-lines: [labelled, text after ':', sub-lines].
-    entries: List[List[bool]] = []
+            return Shape(("figures",), len(top), "short figures", _longest(top))
+    # Each top-level line with its sub-lines: [labelled, text after ':', sub-lines, chars].
+    entries: List[List[Any]] = []
     for text, is_sub in zip(texts, sub):
         if is_sub and entries:
             entries[-1][2] = True
+            entries[-1][3] += len(text)
         elif not is_sub:
             m = _LABELLED.match(text)
             short = m is not None and len(m.group(1).split()) <= 4
-            entries.append([short, bool(m and m.group(2)), False])
+            entries.append([short, bool(m and m.group(2)), False, len(text)])
     n = len(entries)
     if not (2 <= n <= 6 and all(e[0] and (e[1] or e[2]) for e in entries)):
         return None
+    longest = max(e[3] for e in entries)
     if all(e[2] and not e[1] for e in entries):
         kinds: Tuple[SlideKind, ...] = (
             ("two_columns", "cards") if n == 2 else ("cards",)
         )
-        return kinds, n, f"{n} groups of '- ' lines under 'Label :' lines"
-    return ("cards",), n, "parallel 'Label : text' points"
+        return Shape(
+            kinds, n, f"{n} groups of '- ' lines under 'Label :' lines", longest
+        )
+    return Shape(("cards",), n, "parallel 'Label : text' points", longest)
+
+
+def _longest(texts: List[str]) -> int:
+    return max(len(t) for t in texts)
 
 
 # --- fit check ----------------------------------------------------------------------------
@@ -681,33 +696,84 @@ def _beam(slides: List[_Slide]) -> List[Pattern]:
     return [slides[i].candidates[c][0] for i, c in enumerate(paths[0].chosen)]
 
 
-def _holds(pool: List[Pattern], kind: str, entries: int) -> bool:
-    """Whether a slide of ``kind`` has room for that many entries."""
-    return any(
-        max(g.count for g in p.groups) >= entries
-        if p.groups
-        else kind in ("two_columns", "comparison") and entries == 2
-        for p in pool
-        if p.kind == kind
-    )
+def _room(fields: List[List[Zone]]) -> Optional[int]:
+    """Chars one entry holds over its fields, each at its tightest zone; None
+    when a field grows with its text."""
+    total = 0
+    for zones in fields:
+        bounded = [z for z in zones if not z.grows and z.chars_per_line and z.max_lines]
+        if not bounded:
+            return None
+        total += min((z.chars_per_line or 0) * (z.max_lines or 0) for z in bounded)
+    return total
+
+
+@dataclass
+class _Variant:
+    holes: bool  # its items hold pictures the content does not have
+    layout: bool
+    hint: str  # what it holds, in the catalogue's words
+    room: Optional[int]  # chars per entry; None when it grows
+
+
+def _holding(pattern: Pattern, entries: int) -> Optional[_Variant]:
+    """How ``pattern`` would hold that many entries, or None when it cannot."""
+    if pattern.groups:
+        group = max(pattern.groups, key=lambda g: g.count)
+        if group.count < entries:
+            return None
+        by_field: Dict[str, List[Zone]] = {}
+        for item in group.items:
+            for zone in item:
+                field = ITEM_FIELDS.get(zone.role, zone.role)
+                by_field.setdefault(field, []).append(zone)
+        holes = by_field.pop("image", None) is not None
+        hint, room = group_summary(group), _room(list(by_field.values()))
+    elif pattern.kind in ("two_columns", "comparison") and entries == 2:
+        bodies = [z for z in pattern.zones if z.role in ("body", "caption")]
+        if len(bodies) != 2:
+            return None
+        headings = [z for z in pattern.zones if z.role == "heading"]
+        holes, room = False, _room([bodies] + ([headings] if headings else []))
+        heading = f"heading{_limit(headings)}, " if headings else ""
+        hint = f"exactly 2 columns [{heading}bullets{_limit(bodies)}]"
+    else:
+        return None
+    return _Variant(holes, pattern.source == "layout", hint, room)
+
+
+def _advice(pool: List[Pattern], kind: str, shape: Shape) -> Optional[str]:
+    """``kind`` and what its favoured slide holds for this content, with the
+    size to shorten to when the longest entry would not fit; None if none can.
+    Favoured as the assigner would: no empty picture, room, an example slide."""
+    found = [v for p in pool if p.kind == kind and (v := _holding(p, shape.entries))]
+    if not found:
+        return None
+
+    def short(v: _Variant) -> bool:
+        return v.room is not None and v.room < shape.longest
+
+    best = min(found, key=lambda v: (v.holes, short(v), v.layout, -(v.room or 10**6)))
+    shorten = f", shorten each entry to ≈{best.room} chars" if short(best) else ""
+    return f"{kind} holds {best.hint}{shorten}"
 
 
 def _suggested(slides: List[_Slide], kind: str, pool: List[Pattern]) -> List[str]:
-    """Per slide, the other kinds its content already suits and the template
-    can hold; slides with the same advice share one line."""
-    found: Dict[Tuple[Tuple[str, ...], str], List[int]] = {}
+    """Per slide, the other kinds its content already suits and what the
+    template's slide of that kind holds; slides with the same advice share one line."""
+    found: Dict[Tuple[str, str], List[int]] = {}
     for slide in slides:
         shape = content_shape(slide.plan)
         if shape is None:
             continue
-        kinds, entries, why = shape
-        fit = tuple(k for k in kinds if k != kind and _holds(pool, k, entries))
-        if fit:
-            found.setdefault((fit, why), []).append(slide.index)
+        advice = [
+            a for k in shape.kinds if k != kind and (a := _advice(pool, k, shape))
+        ]
+        if advice:
+            found.setdefault((shape.why, "; or ".join(advice)), []).append(slide.index)
     return [
-        f"slide{'s' if len(at) > 1 else ''} {', '.join(map(str, at))} → "
-        f"{' or '.join(kinds)} ({why})"
-        for (kinds, why), at in found.items()
+        f"slide{'s' if len(at) > 1 else ''} {', '.join(map(str, at))} ({why}) → {advice}"
+        for (why, advice), at in found.items()
     ]
 
 
