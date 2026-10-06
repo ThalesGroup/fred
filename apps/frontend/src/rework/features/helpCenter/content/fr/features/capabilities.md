@@ -144,14 +144,17 @@ garder celui de l'agent. Sans un tel modèle, l'interrupteur est verrouillé et
 les diapositives sont nommées par des règles : cela fonctionne, mais les noms
 sont moins précis.
 
-**Vérification de la variété** — avant la première présentation d'une
-conversation, l'agent peut être invité à varier ses diapositives quand elles
-se ressemblent trop. **Par slide du modèle** (par défaut) : quand la même
-diapositive du modèle revient trois fois ou plus. **Par type de slide** : quand
-le même type (des listes à puces, par exemple) revient trois fois ou plus, même
-sur des diapositives différentes. **Aucune** : l'agent ne fait pas cette
-vérification. Le changement vaut dès la présentation suivante, sans relire le
-modèle.
+**Forcer de la variété** — limite le nombre de fois qu'une même diapositive
+revient dans une présentation. **Par nom de slide** (par défaut) : chaque
+diapositive du modèle sert au plus le nombre de fois choisi. **Par type de slide
+identifié** : chaque type (des listes à puces, par exemple) revient au plus ce
+nombre de fois, même sur des diapositives différentes. Avec **1**, chaque
+diapositive est différente ; avec **2** (par défaut), une diapositive peut
+revenir une fois. Quand le modèle contient trop peu de diapositives pour la
+présentation demandée, l'agent fait au mieux. Sur la première présentation
+d'une conversation, l'agent est invité à revoir celles qui se répètent trop.
+Interrupteur coupé : aucune limite. Le changement vaut dès la présentation
+suivante, sans relire le modèle.
 
 **Ses limites** — l'agent n'utilise que les diapositives que le modèle
 contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans

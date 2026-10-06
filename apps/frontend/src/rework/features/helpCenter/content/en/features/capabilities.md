@@ -135,13 +135,16 @@ can choose which model does this, or keep the agent's own. Without such a
 model, the switch is locked and slides are named by rules, which works but
 names them less precisely.
 
-**Variety check** — before the first presentation of a conversation, the
-agent can be asked to vary its slides when they look too alike. **By template
-slide** (the default): when the same template slide comes back three times or
-more. **By slide type**: when the same type (bullet lists, for instance) comes
-back three times or more, even on different slides. **None**: the agent skips
-this check. A change applies from the next presentation, without reading the
-template again.
+**Enforce variety** — limits how many times the same slide comes back in a
+presentation. **By slide name** (the default): each template slide is used at
+most the chosen number of times. **By identified slide type**: each type
+(bullet lists, for instance) comes back at most that many times, even on
+different slides. With **1**, every slide is different; with **2** (the
+default), a slide may come back once. When the template holds too few slides
+for the presentation asked, the agent does its best. On the first presentation
+of a conversation, the agent is asked to revise the slides that repeat too
+much. Switch off: no limit. A change applies from the next presentation,
+without reading the template again.
 
 **Its limits** — the agent only uses slides the template holds: it does not
 draw new ones. When the content does not fit any slide (too many items, for
