@@ -2074,6 +2074,11 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 **Location:** `src/rework/components/shared/organisms/TeamCard/TeamCard.tsx`
 **Status:** `Functional`
 
+The footer's administrator avatars include accepted and pending administrators,
+so enabling the charter keeps nominated contacts visible before acceptance.
+These avatars do not indicate administrator authority; the charter gate uses
+the accepted administrator roster from the per-team detail response.
+
 Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by
 the team's `joining_mode`, gated on `!team.is_member`:

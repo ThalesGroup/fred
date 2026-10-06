@@ -39,7 +39,8 @@ export default function TeamAdminCharterGate({ children }: { children: ReactNode
     (selectedTeam.my_relations ?? []).includes("pending_team_admin");
 
   if (bootstrap?.team_admin_charter_enabled !== true || !pending) return <>{children}</>;
-  if ((selectedTeam?.admins ?? []).length === 0) return <TeamAdminCharterPage />;
+  // Bootstrap contacts include pending nominees; only the detail has an accepted-admin roster.
+  if (!selectedTeam?.permissions || (selectedTeam.admins ?? []).length === 0) return <TeamAdminCharterPage />;
   return (
     <>
       {!onResponsibilities && (

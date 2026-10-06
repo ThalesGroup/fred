@@ -4020,6 +4020,14 @@ directly (422). Revoking it cancels the nomination and needs
 `can_administer_admins`; removing the member deletes it with the other roles.
 `my_relations` and the member list expose it.
 
+**Display contacts (2026-10-05).** Membership-enriched team listings include
+both `team_admin` and `pending_team_admin` in `Team.admins`, so marketplace
+cards keep showing whom to contact before charter acceptance. The per-team
+`TeamWithPermissions.admins` projection keeps accepted `team_admin` users only,
+as required by the charter gate. While only bootstrap contacts are available,
+a pending administrator sees the charter until the detail confirms an accepted
+administrator exists. Contact avatars confer no permissions.
+
 **Endpoint.**
 
 | Method | Path                                   | Permission    |
