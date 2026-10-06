@@ -18,11 +18,18 @@ Change `gcuVersionAccepted` to nullable SQL text. Each acceptance replaces this 
 
 Keep exported `GcuVersionsType.V1` only as a legacy store-input compatibility shim. Internal callers pass strings, model reads return strings, and external `.value` consumers must adapt. A single conflict-safe upsert updates only acceptance fields, preserving storage accounting and handling concurrent first acceptance without an additional table.
 
-### Preserve the applied revision and correct its final schema
+### Convert the existing column in one revision
 
-The user already applied `a7e9c2d41063`; read-only local inspection confirmed that revision. Keep its enum conversion and parent unchanged. Add `e6b8d2a41074` after both it and the target's published `b4e8d2a9c613` identity revision to remove the intermediate history table without altering the current user version/timestamp. The final schema adds no tables or columns. This is the rare two-revision exception: collapsing the PR migration would change a revision already executed by the developer. Fresh and already-upgraded databases converge to the same single-version schema with one Alembic head. The corrective revision joins the two immutable parents; reparenting the locally applied revision would falsely imply that identity columns had already been added. This is the documented applied-revision exception to the usual linear-parent policy.
+The PR migration has not been deployed. Keep one revision, `a7e9c2d41063`,
+reparented to the target's `b4e8d2a9c613` head. It only converts legacy enum name
+`V1` to wire string `v1`, preserving nulls, timestamps, UUIDs, identity snapshots
+and storage counters. PostgreSQL casts to text and drops the unused enum;
+SQLite uses batch alteration. Create no tables or columns and no merge revision.
 
-Downgrading the correction rebuilds history from current user records only; older discarded history requires a backup. The original downgrade guard still refuses before altering the enum when current values cannot be represented by `V1`.
+Downgrade refuses before changing schema or data if the current accepted string
+cannot be represented by `V1`. An earlier local trial of the superseded PR
+migration is a development schema-repair concern, handled separately after a
+backup; it does not establish a deployed migration contract for the PR.
 
 ### Preserve consumer boundaries
 

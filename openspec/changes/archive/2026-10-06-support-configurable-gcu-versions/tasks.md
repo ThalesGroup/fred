@@ -6,7 +6,7 @@
 
 ## 2. Migration and frontend
 
-- [x] 2.1 Preserve the already-applied enum-conversion revision and link one corrective revision removing the intermediate history table without altering current user data; verify isolated SQLite/PostgreSQL round trips, arbitrary string writes, one Alembic head, actual upgrade/check and final linkage against the target and locally applied `a7e9c2d41063`, documenting the two-revision exception.
+- [x] 2.1 Keep one enum-to-text revision after the actual target head, with no history or corrective/merge migration; verify SQLite/PostgreSQL data-preserving round trips, arbitrary strings, guarded downgrade, one head and a real upgrade/check. Handle the superseded local trial separately from the PR migration contract.
 - [x] 2.2 Retain the regenerated `string | null` frontend client and update the guard regression test for stored latest-version semantics; verify the targeted frontend test and TypeScript checks.
 
 ## 3. Documentation and close-out
@@ -20,9 +20,10 @@ Verification evidence (2026-10-06, revised single-version scope):
 - Targeted control-plane acceptance/migration/default-team/charter and merged identity/ownership checks: 56 passed, 3 PostgreSQL cases deselected.
 - Core admission/store and merged identity store: 26 passed, 2 PostgreSQL cases deselected. Direct identity ORM test adapted to string values; GCU persistence regression verifies identity fields and storage counters remain intact.
 - Frontend guard: 2 passed; client regenerated after target integration with `make update-control-plane-api`.
-- Isolated PostgreSQL migration cases: 3 passed; store replacement/concurrency: 2 passed. Actual Alembic upgrades from both `a7e9c2d41063` (arbitrary current acceptance) and `b4e8d2a9c613` (legacy enum), downgrade/re-upgrade, data checks and `alembic check` passed with one `e6b8d2a41074` head. Historical base-downgrade enum residue was cleaned only between isolated test cases.
-- `make migration-check MIGRATION_BASE=origin/swift`: one valid declaration. Strict change and main-spec validation passed. Local database inspected read-only: already on `a7e9c2d41063`; no developer database migration applied by this work.
-- Root `make code-quality` passed all 16 modules before and after target integration; basedpyright returned 0 errors, 0 warnings and 0 notes, and frontend TypeScript/Prettier/ESLint passed. No deployment, live browser validation or load campaign; HTTP test uses controlled identity/team dependencies with real handlers and SQL persistence.
+- Earlier application verification is retained below; migration consolidation is reverified for the final single-revision implementation. No deployment, live browser validation or load campaign; HTTP test uses controlled identity/team dependencies with real handlers and SQL persistence.
 - Full core offline suite after target integration: 1094 passed, 42 integration cases deselected.
-- Independent full-branch audit and async/performance inspection: base `5bd9c7113b439294d29e15d88563b2e0fbdd3bd1`, reviewed implementation/merge HEAD `c879ecb585465448d92d6700f7648cde93c676bb`. The two-head finding is resolved by the correction joining both immutable parents; the subsequent operator-ordering sentence is corrected. Coverage includes new identity snapshot consumers and all PR files; personal configuration excluded. No functional findings remain in the reviewed scope.
 - Repository-wide strict specs: 13 passed, 1 pre-existing failure in `frontend-surface-scale` (placeholder Purpose), unchanged from the target.
+- Final single migration: SQLite/HTTP 4 passed, PostgreSQL 3 passed. Both preserve the parent's identity expression index; the round-trip test also executes the parent downgrade. Real PostgreSQL upgrade/check/downgrade/re-upgrade passed with one head `a7e9c2d41063` after `b4e8d2a9c613`.
+- The superseded developer-local trial was repaired separately after an isolated reproduction, with a private backup. All six existing user records were preserved; local `alembic check` detects no drift. No trial-cleanup revision is included in the PR.
+- Independent read-only consolidation review: target `287b5207f0f8477aeb5468f5d69b917b9302718a`, HEAD `604652e6b018dddb4c49d428fe2a4db73fbd1fc1` plus the final working-tree delta. Prior full application review at `c879ecb585465448d92d6700f7648cde93c676bb` remains applicable because application code is unchanged. The SQLite expression-index loss was fixed and independently rechecked; no remaining findings. Personal configuration is excluded.
+- Final root `make code-quality`: all 16 modules passed after the index correction. Strict main acceptance-spec validation passed.

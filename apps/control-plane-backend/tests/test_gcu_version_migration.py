@@ -51,7 +51,13 @@ def migrated_database(request):
         ),
         sa.Column("gcuAcceptedAt", sa.DateTime(timezone=True), nullable=True),
         sa.Column("current_resources_storage_size", sa.BigInteger(), nullable=False),
+        sa.Column("username", sa.String(), nullable=True),
+        sa.Column("email", sa.String(), nullable=True),
+        sa.Column("first_name", sa.String(), nullable=True),
+        sa.Column("last_name", sa.String(), nullable=True),
+        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=True),
     )
+    sa.Index("ix_users_lower_username", sa.func.lower(users.c.username))
     ids = [uuid4() for _ in range(3)]
     timestamp = datetime(2026, 9, 15, 14, 10, tzinfo=timezone.utc)
     with engine.begin() as connection:
@@ -64,18 +70,33 @@ def migrated_database(request):
                     gcuVersionAccepted="V1",
                     gcuAcceptedAt=timestamp,
                     current_resources_storage_size=42,
+                    username="alice",
+                    email="alice@example.test",
+                    first_name="Alice",
+                    last_name="Tester",
+                    last_seen_at=timestamp,
                 ),
                 dict(
                     id=ids[1],
                     gcuVersionAccepted=None,
                     gcuAcceptedAt=None,
                     current_resources_storage_size=0,
+                    username=None,
+                    email=None,
+                    first_name=None,
+                    last_name=None,
+                    last_seen_at=None,
                 ),
                 dict(
                     id=ids[2],
                     gcuVersionAccepted="V1",
                     gcuAcceptedAt=None,
                     current_resources_storage_size=7,
+                    username="missing-date",
+                    email=None,
+                    first_name=None,
+                    last_name=None,
+                    last_seen_at=None,
                 ),
             ],
         )
@@ -87,18 +108,10 @@ def migrated_database(request):
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    cleanup_path = path.with_name("e6b8d2a41074_keep_gcu_acceptance_in_users.py")
-    cleanup_spec = importlib.util.spec_from_file_location(
-        "gcu_cleanup_migration", cleanup_path
-    )
-    assert cleanup_spec is not None and cleanup_spec.loader is not None
-    cleanup = importlib.util.module_from_spec(cleanup_spec)
-    cleanup_spec.loader.exec_module(cleanup)
     try:
-        yield engine, migration, cleanup
+        yield engine, migration
     finally:
         with engine.begin() as connection:
-            connection.execute(sa.text("DROP TABLE IF EXISTS user_gcu_acceptances"))
             metadata.drop_all(connection)
         engine.dispose()
 
@@ -113,36 +126,54 @@ def _rows(engine):
     with engine.connect() as connection:
         return connection.execute(
             sa.text(
-                'SELECT id, "gcuVersionAccepted", "gcuAcceptedAt", current_resources_storage_size FROM users ORDER BY current_resources_storage_size'
+                'SELECT id, "gcuVersionAccepted", "gcuAcceptedAt", current_resources_storage_size, username, email, first_name, last_name, last_seen_at FROM users ORDER BY current_resources_storage_size'
             )
         ).all()
 
 
+def _identity_index(engine):
+    with engine.connect() as connection:
+        if connection.dialect.name == "sqlite":
+            return connection.scalar(
+                sa.text(
+                    "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'ix_users_lower_username'"
+                )
+            )
+        return connection.scalar(
+            sa.text(
+                "SELECT indexdef FROM pg_indexes WHERE tablename = 'users' AND indexname = 'ix_users_lower_username'"
+            )
+        )
+
+
 def test_upgrade_and_downgrade_preserve_legacy_acceptance(migrated_database):
-    engine, migration, cleanup = migrated_database
+    engine, migration = migrated_database
     before = _rows(engine)
+    before_index = _identity_index(engine)
+    assert before_index is not None
     _run(engine, migration, "upgrade")
-    _run(engine, cleanup, "upgrade")
     after = _rows(engine)
     assert [row[1] for row in after] == [None, "v1", "v1"]
-    assert [(r[0], r[2], r[3]) for r in after] == [(r[0], r[2], r[3]) for r in before]
+    assert [(r[0], *r[2:]) for r in after] == [(r[0], *r[2:]) for r in before]
     assert sa.inspect(engine).get_table_names() == ["users"]
-    _run(engine, cleanup, "downgrade")
-    with engine.connect() as connection:
-        history = connection.execute(
-            sa.text("SELECT version, accepted_at FROM user_gcu_acceptances")
-        ).all()
-        assert len(history) == 2
-        assert {r[0] for r in history} == {"v1"}
-        assert sum(r[1] is None for r in history) == 1
+    assert _identity_index(engine) == before_index
     _run(engine, migration, "downgrade")
     assert _rows(engine) == before
+    assert _identity_index(engine) == before_index
+    path = (
+        Path(__file__).parents[1]
+        / "alembic/versions/b4e8d2a9c613_add_local_user_identity_snapshot.py"
+    )
+    spec = importlib.util.spec_from_file_location("identity_migration", path)
+    assert spec is not None and spec.loader is not None
+    parent = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(parent)
+    _run(engine, parent, "downgrade")
+    assert _identity_index(engine) is None
 
 
-def test_applied_history_migration_is_removed_without_changing_current_acceptance(
-    migrated_database,
-):
-    engine, migration, cleanup = migrated_database
+def test_upgraded_column_accepts_deployment_owned_versions(migrated_database):
+    engine, migration = migrated_database
     _run(engine, migration, "upgrade")
     with engine.begin() as connection:
         connection.execute(
@@ -150,31 +181,26 @@ def test_applied_history_migration_is_removed_without_changing_current_acceptanc
                 "UPDATE users SET \"gcuVersionAccepted\" = '2026-10' WHERE current_resources_storage_size = 42"
             )
         )
-    before = _rows(engine)
-    _run(engine, cleanup, "upgrade")
-    assert _rows(engine) == before
+    assert _rows(engine)[2][1] == "2026-10"
     assert sa.inspect(engine).get_table_names() == ["users"]
-    _run(engine, cleanup, "downgrade")
-    with engine.connect() as connection:
-        versions = set(
-            connection.scalars(sa.text("SELECT version FROM user_gcu_acceptances"))
-        )
-    assert versions == {"v1", "2026-10"}
-    assert _rows(engine) == before
 
 
 def test_downgrade_refuses_to_lose_newer_acceptance(migrated_database):
-    engine, migration, cleanup = migrated_database
+    engine, migration = migrated_database
     _run(engine, migration, "upgrade")
-    _run(engine, cleanup, "upgrade")
     with engine.begin() as connection:
         connection.execute(
             sa.text(
                 "UPDATE users SET \"gcuVersionAccepted\" = 'v2' WHERE current_resources_storage_size = 42"
             )
         )
-    _run(engine, cleanup, "downgrade")
     before = _rows(engine)
+    before_columns = [
+        (c["name"], str(c["type"])) for c in sa.inspect(engine).get_columns("users")
+    ]
     with pytest.raises(RuntimeError, match="would be lost"):
         _run(engine, migration, "downgrade")
     assert _rows(engine) == before
+    assert [
+        (c["name"], str(c["type"])) for c in sa.inspect(engine).get_columns("users")
+    ] == before_columns

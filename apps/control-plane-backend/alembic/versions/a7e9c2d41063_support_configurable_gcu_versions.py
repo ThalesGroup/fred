@@ -11,17 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Persist GCU acceptance per configured version.
+"""Store the accepted GCU version as text in users.
 
 Revision ID: a7e9c2d41063
-Revises: c4d7e2a91b30
+Revises: b4e8d2a9c613
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "a7e9c2d41063"  # pragma: allowlist secret
-down_revision = "c4d7e2a91b30"  # pragma: allowlist secret
+down_revision = "b4e8d2a9c613"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 
@@ -53,40 +53,28 @@ def upgrade() -> None:
                 type_=sa.Text(),
                 existing_nullable=True,
             )
+        if bind.dialect.name == "sqlite":
+            # SQLite table reflection omits the parent's expression index.
+            op.create_index(
+                "ix_users_lower_username", "users", [sa.text("lower(username)")]
+            )
         op.execute(
             sa.text(
                 "UPDATE users SET \"gcuVersionAccepted\" = 'v1' WHERE \"gcuVersionAccepted\" = 'V1'"
             )
         )
-    op.create_table(
-        "user_gcu_acceptances",
-        sa.Column(
-            "user_id",
-            sa.Uuid(),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            primary_key=True,
-        ),
-        sa.Column("version", sa.Text(), primary_key=True),
-        sa.Column("accepted_at", sa.DateTime(timezone=True), nullable=True),
-    )
-    op.execute(
-        sa.text(
-            'INSERT INTO user_gcu_acceptances (user_id, version, accepted_at) SELECT id, "gcuVersionAccepted", "gcuAcceptedAt" FROM users WHERE "gcuVersionAccepted" IS NOT NULL'
-        )
-    )
 
 
 def downgrade() -> None:
     bind = op.get_bind()
     if bind.scalar(
         sa.text(
-            "SELECT EXISTS (SELECT 1 FROM user_gcu_acceptances WHERE version <> 'v1' UNION ALL SELECT 1 FROM users WHERE \"gcuVersionAccepted\" <> 'v1')"
+            "SELECT EXISTS (SELECT 1 FROM users WHERE \"gcuVersionAccepted\" <> 'v1')"
         )
     ):
         raise RuntimeError(
             "Cannot downgrade GCU storage: accepted versions other than v1 would be lost"
         )
-    op.drop_table("user_gcu_acceptances")
     legacy = sa.Enum("V1", name="gcu_version_type")
     if bind.dialect.name == "postgresql":
         legacy.create(bind)
@@ -108,4 +96,8 @@ def downgrade() -> None:
                 existing_type=sa.Text(),
                 type_=legacy,
                 existing_nullable=True,
+            )
+        if bind.dialect.name == "sqlite":
+            op.create_index(
+                "ix_users_lower_username", "users", [sa.text("lower(username)")]
             )
