@@ -262,6 +262,25 @@ The system SHALL accept from the model a plan of slides carrying content only �
 
 - **WHEN** the tool description is built
 - **THEN** it says, for the kinds the template offers, which content suits each (numbers → figures, dates → timeline, parallel items → cards, ordered steps → process, a comparison → table, not restated as columns) and that each slide should look different
+- **AND** when the template offers `bullets` and another kind of that guide, it says at most 2 bullets slides per deck
+
+#### Scenario: One kind on three slides is a repeat
+
+- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **WHEN** one non-structural kind (for example `bullets`) is used on three slides or more, even on three different template slides
+- **THEN** no deck is written and `needs_revision` names those slides and the kind, once per turn; a resend is built as sent; cover, section, agenda and closing slides never count as a kind repeat
+
+#### Scenario: Alternatives read from the content
+
+- **GIVEN** a kind repeat whose slides hold dated lines on one slide and `Label :` header lines followed by `- ` lines on two others
+- **WHEN** the variety ask is returned
+- **THEN** it names the first slide with `timeline` and the two others with `two_columns` or `cards`, only when the template offers that kind with a slide holding that many entries; the suggestions come from text patterns, without any model call
+
+#### Scenario: Later deck notes the kind repeat
+
+- **GIVEN** a conversation where a deck was already delivered
+- **WHEN** a new plan uses one non-structural kind on three slides or more
+- **THEN** the deck is built and the success message names the slides, the kind and the content-based alternatives
 
 #### Scenario: Empty item pictures are a cost
 

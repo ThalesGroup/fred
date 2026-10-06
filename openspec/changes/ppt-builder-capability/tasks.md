@@ -191,3 +191,16 @@ Owns: `plan.py` (coercion: ignored fields, merged aliases), `assign.py` (content
 - [x] 16.6 Eval: comparison prompt (two countries, figures, domains, dated initiatives, challenges); `lost` counts raw-argument text absent from the deck; variety revisions counted; `MemoryWorkspace.ls`
 - [x] 16.7 Tests: heading2-without-bullets plan → `needs_revision`; variety revision fires once on the first deck and accepts the resend; a later-turn deck gets only the note; coercion keeps every key
 - [x] 16.8 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (paintress rules + vision, corporate, builtin) vs WP15; `fred-performance-reviewer` on the tool path; `verification.md`
+
+## WP17. Variety by kind, content-based alternatives (D16)
+
+Owns: `assign.py` (repeats by kind, content shapes), `tools.py` (variety payload, guide), `eval/` (prompt, max kind repeat metric), tests `test_assign.py`, `test_build_tool.py`, `verification.md`.
+
+- [ ] 17.1 Repeats grouped by kind for non-structural kinds (by template slide for structural ones); revisable as in D15; the passive note names the kind repeat
+- [ ] 17.2 Content shapes per slide of a repeat: dated lines → timeline; `Label :` groups with `- ` lines → two_columns / cards; `Label : text` lines → cards; short numeric lines → figures; numbered/step lines → process; kept only when the template offers the kind with a slide holding that many entries
+- [ ] 17.3 Variety ask and note name the slides and the suggested kinds
+- [ ] 17.4 Choice guide: "at most 2 bullets slides per deck" when alternatives exist; description length measured
+- [ ] 17.5 Tests: the evidence plan (5 bullets slides on 5 template slides) → one ask naming slide 7 → timeline and 9/10 → two_columns/cards; resend built; later-turn deck gets the note only; structural kinds exempt
+- [ ] 17.6 Eval: `thales_spain_italy` prompt (no explicit comparison); "max kind repeat" metric (non-structural)
+- [ ] 17.7 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (paintress rules + vision, corporate, builtin) vs WP16; paintress rules with `chat.mistral.medium`; `fred-performance-reviewer` on the tool path; `verification.md`
+- [ ] 17.8 Closing slide "Merci" wrapped by the preview: diagnosed (template vs render vs font), fixed only if the render causes it
