@@ -183,11 +183,11 @@ Owns: `analysis.py` (table zone, exclusion rule), `models.py` (`table` kind, tab
 
 Owns: `plan.py` (coercion: ignored fields, merged aliases), `assign.py` (content problems, repeats), `render.py` (ignored-field warning removal), `tools.py` (variety revision, description guide), `eval/` (prompt, `lost` metric, `ls`), tests `test_build_tool.py`, `test_assign.py`, `port_fakes.py`, `verification.md`.
 
-- [ ] 16.1 Coercion keeps unmapped keys of slides, columns and items as ignored fields (`key 'text'`); a field given under its name and an alias is merged; a `{heading, text}` bullet keeps both
-- [ ] 16.2 Assigner: ignored fields and unbalanced columns/items (heading without body, body without heading beside a complete entry) → `needs_revision` naming slide and field; renderer's ignored-field warning deleted
-- [ ] 16.3 Repeats (pattern, slides, unused variants of its kind, unused slides of other non-structural kinds) feed both the passive note and the revision
-- [ ] 16.4 First deck only (no `.pptx` in `outputs/{session_id}`, listed only when needed): a non-structural slide used ≥ 3 times with an alternative → `needs_revision` once per tool instance, accepting the next call; later turns keep the note
-- [ ] 16.5 Description: choice guide from the offered kinds replaces the variety sentence; length measured before/after
-- [ ] 16.6 Eval: comparison prompt (two countries, figures, domains, dated initiatives, challenges); `lost` counts raw-argument text absent from the deck; variety revisions counted; `MemoryWorkspace.ls`
-- [ ] 16.7 Tests: heading2-without-bullets plan → `needs_revision`; variety revision fires once on the first deck and accepts the resend; a later-turn deck gets only the note; coercion keeps every key
-- [ ] 16.8 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (paintress rules + vision, corporate, builtin) vs WP15; `fred-performance-reviewer` on the tool path; `verification.md`
+- [x] 16.1 Coercion keeps unmapped keys of slides, columns and items as ignored fields (`key 'text'`); a field given under its name and an alias is merged; a `{heading, text}` bullet keeps both
+- [x] 16.2 Assigner: ignored fields and unbalanced columns/items (heading without body, body without heading beside a complete entry) → `needs_revision` naming slide and field; renderer's ignored-field warning deleted
+- [x] 16.3 Repeats (pattern, slides, unused variants of its kind, unused slides of other non-structural kinds) feed both the passive note and the revision
+- [x] 16.4 First deck only (no `.pptx` in `outputs/{session_id}`, listed only when needed): a non-structural slide used ≥ 3 times with an alternative → `needs_revision` once per tool instance, accepting the next call; later turns keep the note
+- [x] 16.5 Description: choice guide from the offered kinds replaces the variety sentence; length measured before/after
+- [x] 16.6 Eval: comparison prompt (two countries, figures, domains, dated initiatives, challenges); `lost` counts raw-argument text absent from the deck; variety revisions counted; `MemoryWorkspace.ls`
+- [x] 16.7 Tests: heading2-without-bullets plan → `needs_revision`; variety revision fires once on the first deck and accepts the resend; a later-turn deck gets only the note; coercion keeps every key
+- [x] 16.8 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (paintress rules + vision, corporate, builtin) vs WP15; `fred-performance-reviewer` on the tool path; `verification.md`

@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13 and WP15 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15 and WP16 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -190,6 +190,60 @@ The two tabular prompts (all 10 runs delivered):
   goes by 5 % steps down to the 0.7 floor, a row never shorter than the template's own row
   at that scale.
 
+## Results: WP16 (no dropped text, first-deck variety revision, choice guide)
+
+Run on 2026-10-06 after `3a3e7d314`/`b44524487`, same harness and model as WP15, 13 prompts:
+the WP15 twelve plus `country_comparison` (Spain and Italy: figures, domains, dated
+initiatives, challenges, then a comparison). Two `make eval`-equivalent processes run one
+after the other (Paintress, then corporate; each also runs the built-in template), nothing
+else running, no 429. Like-for-like against WP15 (its twelve prompts only); the built-in
+cell gives the Paintress process's run / the corporate process's run:
+
+| template | mode | success | first call | avg repairs | 3-in-a-row | distinct/slides | max reuse | lost | variety asks |
+|---|---|---|---|---|---|---|---|---|---|
+| builtin | rules | 11 → 11 / 11 | 6 → 2 / 2 | 0.67 → 1.58 / 1.17 | 0 → 0 / 0 | 0.85 → 0.86 / 0.86 | 2 → 3 / 2 | 0 → 1* / 0 | 2 / 1 |
+| corporate | rules | 11 → 11 | 4 → 3 | 1.25 → 1.25 | 7 → 0 | 0.85 → 0.90 | 8 → 2 | 0 → 0 | 1 |
+| corporate | vision | 12 → 12 | 6 → 4 | 0.83 → 1.08 | 3 → 1 | 0.89 → 0.90 | 4 → 3 | 0 → 0 | 2 |
+| paintress | rules | 12 → 11 | 6 → 3 | 0.58 → 1.00 | 1 → 0 | 0.90 → 0.93 | 3 → 3 | 0 → 0 | 2 |
+| paintress | vision | 12 → 12 | 7 → 5 | 0.58 → 0.92 | 1 → 0 | 0.91 → 0.96 | 3 → 2 | 0 → 0 | 0 |
+
+\* `lost` now counts raw-argument text missing from its slide (WP15 counted the
+renderer's report, which could not see a dropped key). The one hit is a bullet the
+renderer cut at a word boundary (`truncated` 1 on the same deck). The failures are the
+known harness artifact (an invented image id, no `document_content` port) and two
+`cyber_2027` runs out of repairs on figure/label sizes. Cover once at 1: 100 %;
+leftovers 0; tables 9/9 used and shape kept on Paintress.
+
+- **Variety**: 3-in-a-row 12 → 1 and the worst reuse 8 → 3 over these cells; distinct
+  per slide up everywhere. 9 variety asks over 78 runs (never two in one run), each answered by a recast deck or
+  a resend, never a loop (the next call was always built). An ask names the slides and
+  alternatives with what each suits, e.g. `paintress/rules/cyber_2027`: four
+  "6 zones de texte" cards slides → the recast deck used timeline, figures and cards
+  once each (max reuse 2).
+- **First call is lower** (29 → 17 of 60). Not the asks themselves (only 1 of the
+  final runs' first-call failures was a variety ask): repairs are mostly long cover
+  subtitles and items sent to figures/process slides that do not hold their fields. It is
+  noisy: three runs of the same Paintress rules cell gave 2, 5 and 3. Same-day built-in
+  A/B (12 prompts): pre-WP16 code 5/12, WP16 with the first guide 1-2/12, without the
+  guide (old sentence) 3/12, with the final guide 2/12; the first guide wording sent text
+  to figures slides (figures problems per run 0.30 → 0.50), hence `3a3e7d314` (figures
+  hold a value and a short label, within each variant's fields). Success stays at WP15's
+  level (58/60 → 57/60).
+- **No dropped text**: no run sent `heading2` again; the new problems caught real model
+  keys that the old coercion dropped silently: `""` (empty key holding a section title,
+  `builtin/country_comparison`), `"title: "`, `"{"` inside an item, `"figures"` on a slide
+  (`corporate/rules/pitch_4`). A first-run "incomplete entries" on a figures slide
+  (number + text beside number + label) led to `b44524487` and `fd860d377`: a number
+  leads an item, a number with its label is a whole entry (the last fix is after the final
+  runs; it only removes that false problem).
+- **`country_comparison`**: 5/6 delivered (the failure is the harness artifact), max
+  reuse 2 in every deck, no columns slide restating a table.
+- First-deck detection: `workspace_fs.ls("outputs/{session_id}")`, listed only when a
+  revision would follow; a 404 (folder never written) is "no deck yet", any other error
+  "delivered" (`02151b36a`, found by the performance review).
+- Tool description (chars): builtin 3 385 → 3 404, Paintress 4 499 → 4 629, corporate
+  4 349 → 4 406 (≈ +5 to +35 tokens per model call).
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -256,6 +310,15 @@ The two tabular prompts (all 10 runs delivered):
 
 ## Checks
 
+- WP16: package `make code-quality` passed; `make test` 378 passed, 4 skipped; with
+  `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 382 passed; on the Paintress deck
+  the reference-bearing files 145 passed. No API model change (the dumped ppt_builder
+  OpenAPI equals the committed slice; no regeneration). `fred-performance-reviewer` on the
+  tool path: coercion +0.2 ms per 30-slide plan on the event loop (0.35 → 0.55 ms), assign
+  150 → 154 ms median in `asyncio.to_thread` (within noise), description 0.14 ms per turn
+  unchanged; the outputs listing is one async KF call through the shared workspace client,
+  only on the revision path; the once-per-turn flag is tool-instance state, and "delivered"
+  is read from the shared workspace, so replicas agree. One finding fixed (404 = no deck).
 - WP15: package `make code-quality` passed; `make test` 369 passed, 4 skipped (12 new in
   `test_table_slides.py`); with `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 373
   passed; on the Paintress deck the reference-bearing files (analysis, render, assign)
