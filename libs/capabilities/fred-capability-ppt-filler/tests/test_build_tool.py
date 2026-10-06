@@ -179,10 +179,23 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
         and "ordered steps → process" in description
     )
     assert "→ timeline" not in description
-    assert (
-        "Each slide of a deck should look different, at most 2 bullets slides per deck."
-        in description
+    assert "Use any variant below at most 2 times per deck." in description
+
+
+def test_the_choice_guide_states_the_authors_max():
+    config, assets = _configured()
+
+    def guide(**update: Any) -> str:
+        ctx = _ctx(config.model_copy(update=update), assets=assets)
+        return _tools(ctx)[BUILD_TOOL_NAME].description
+
+    assert "Each slide of the deck must look different." in guide(variety_max_uses=1)
+    assert "Use any kind below on at most 3 slides per deck" in guide(
+        variety_check="kind", variety_max_uses=3
     )
+    off = guide(variety_check="off", variety_max_uses=1)
+    assert "at most" not in off.split("Slide kinds of this template")[0]
+    assert "look different" not in off
 
 
 # --- delivery -------------------------------------------------------------------------------
@@ -392,6 +405,7 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     assert payload["status"] == "needs_revision"
     (repeat,) = payload["variety"]
     assert repeat["slides"] == [2, 3, 4, 5] and repeat["kind"] == "process"
+    assert repeat["at_most"] == 2
     # Two figures variants: two slides suggested, none left to offer as an option.
     assert repeat["suggested"] == [
         "slides 2, 3 (short figures) → figures holds items max 4 [number, label]"
@@ -540,19 +554,24 @@ async def test_each_variety_check_mode_asks_for_its_own_repeat(monkeypatch):
 
 def test_the_variety_check_defaults_and_never_triggers_a_re_analysis():
     stored = PptBuilderConfig.model_validate({"template_sha256": "sha"})
-    assert stored.variety_check == "template_slide"
+    assert stored.variety_check == "template_slide" and stored.variety_max_uses == 2
     keys = {
-        PptBuilderConfig(template_sha256="sha", variety_check=v).labelling_key()
+        PptBuilderConfig(
+            template_sha256="sha", variety_check=v, variety_max_uses=m
+        ).labelling_key()
         for v in ("template_slide", "kind", "off")
+        for m in (1, 5)
     }
     assert keys == {stored.labelling_key()}
-    (field,) = [
-        f
-        for f in PptBuilderCapability.manifest.config_fields
-        if f.key == "variety_check"
-    ]
-    assert field.enum == ["template_slide", "kind", "off"]
-    assert field.default == "template_slide" and field.ui.widget is None
+    with pytest.raises(ValueError):
+        PptBuilderConfig(variety_max_uses=6)
+    fields = {f.key: f for f in PptBuilderCapability.manifest.config_fields}
+    check, most = fields["variety_check"], fields["variety_max_uses"]
+    assert check.enum == ["template_slide", "kind", "off"]
+    assert check.default == "template_slide" and most.default == 2
+    assert (most.min, most.max) == (1, 5)
+    # The plugin widget owns both: one sentence, not two generic fields.
+    assert check.ui.widget == most.ui.widget == "ppt_builder_template"
 
 
 @pytest.mark.asyncio

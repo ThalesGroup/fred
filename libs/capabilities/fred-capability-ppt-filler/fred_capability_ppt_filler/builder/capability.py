@@ -56,7 +56,7 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import SystemMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pptx import Presentation
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder.analysis import (
@@ -134,6 +134,7 @@ class PptBuilderConfig(BaseModel):
     overrides: List[PatternOverride] = []
     # Read by the build tool each turn, never by the analysis: no re-run.
     variety_check: VarietyCheck = "template_slide"
+    variety_max_uses: int = Field(default=2, ge=1, le=5)
 
     def labelling_key(self) -> str:
         return labelling_key(self.use_vision, self.labelling_model)
@@ -424,8 +425,8 @@ class PptBuilderCapability(
         description="capability.ppt_builder.description",
         icon="co_present",
         config_fields=[
-            # The first four belong to the plugin's widget (rendered once): the
-            # vision toggle depends on the team's models, which a generic field cannot know.
+            # All belong to the plugin's widget (rendered once): the vision toggle
+            # depends on the team's models, the variety row is one sentence of two selects.
             FieldSpec(
                 key="template_sha256",
                 type="string",
@@ -462,6 +463,16 @@ class PptBuilderCapability(
                 enum=list(get_args(VarietyCheck)),
                 title="capability.ppt_builder.fields.variety_check.title",
                 description="capability.ppt_builder.fields.variety_check.description",
+                ui=UIHints(widget="ppt_builder_template"),
+            ),
+            FieldSpec(
+                key="variety_max_uses",
+                type="integer",
+                default=2,
+                min=1,
+                max=5,
+                title="capability.ppt_builder.fields.variety_check.title",
+                ui=UIHints(widget="ppt_builder_template"),
             ),
         ],
         assets=[

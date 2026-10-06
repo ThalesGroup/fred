@@ -23,6 +23,7 @@ must fix, named down to the element (design.md D7, D8).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
@@ -72,8 +73,11 @@ _HEADING_LEAD = 1.0  # a heading in bold atop the text: a heading zone reads bet
 _REUSE = 8.0
 _REPEAT = 3.0  # the same slide twice in a row
 _TRIPLE = 1000.0  # three in a row: taken only when nothing else fits
+# Per content use of a template slide beyond the author's max (design.md D19):
+# another variant of the tier wins while one fits.
+_OVER_MAX = 100.0
 _BEAM = 32
-_VARIETY_NOTE_USES = 3
+_NOTE_USES = 3  # the passive note when the variety check is off
 # Slides a deck legitimately repeats: never a reason to ask for variety.
 _STRUCTURAL = ("cover", "section", "agenda", "closing")
 # What a variety ask counts (design.md D18): one template slide, one kind, or nothing.
@@ -140,6 +144,7 @@ class Repeat:
     others: List[str]  # one unused slide per other non-structural kind
     suggested: List[str]  # "slides 9, 10 → cards holds … (why)"
     structural: bool = False  # cover/section/agenda/closing slides: never asked
+    at_most: int = _NOTE_USES - 1  # the slides this group may hold
 
     @property
     def revisable(self) -> bool:
@@ -658,18 +663,43 @@ def _substitution(slide: _Slide, chosen: Pattern, offered: set[str]) -> Optional
     )
 
 
+class _Caps(NamedTuple):
+    """The author's max, raised where the deck forces more (D19)."""
+
+    slide: int  # uses of one template slide
+    kind: int  # slides of one content kind
+
+
+def _content(slide: _Slide, pattern: Optional[Pattern] = None) -> bool:
+    """Counts towards variety: not a cover, section, agenda or closing (D18)."""
+    return _wanted(slide) not in _STRUCTURAL and (
+        pattern is None or pattern.kind not in _STRUCTURAL
+    )
+
+
+def _caps(slides: List[_Slide], pool: List[Pattern], max_uses: int) -> _Caps:
+    content = sum(1 for s in slides if s.candidates and _content(s))
+    variants = [p.kind for p in pool if p.kind not in _STRUCTURAL]
+
+    def cap(distinct: int) -> int:
+        return max(max_uses, math.ceil(content / distinct)) if distinct else max_uses
+
+    return _Caps(cap(len(variants)), cap(len(set(variants))))
+
+
 @dataclass
 class _Path:
     cost: float
     chosen: Tuple[int, ...]  # candidate index per slide so far
     uses: Dict[str, int]
+    content: Dict[str, int]  # uses by content slides, priced against the caps
 
 
-def _beam(slides: List[_Slide]) -> List[Pattern]:
+def _beam(slides: List[_Slide], caps: Optional[_Caps] = None) -> List[Pattern]:
     """Cheapest pattern sequence under a deck-wide reuse cost. The use counts
     make the cost non-local, so a bounded beam replaces exact dynamic
     programming; paths with the same last two choices and uses are merged."""
-    paths = [_Path(0.0, (), {})]
+    paths = [_Path(0.0, (), {}, {})]
     for i, slide in enumerate(slides):
         steps: List[Tuple[float, int, int]] = []
         for n, path in enumerate(paths):
@@ -679,20 +709,34 @@ def _beam(slides: List[_Slide]) -> List[Pattern]:
                 step = path.cost + cost + _REUSE * path.uses.get(pattern.id, 0)
                 if pattern.id == last:
                     step += _REPEAT + (_TRIPLE if pattern.id == before else 0.0)
+                if (
+                    caps is not None
+                    and _content(slide, pattern)
+                    and path.content.get(pattern.id, 0) >= caps.slide
+                ):
+                    step += _OVER_MAX
                 steps.append((step, n, c))
         steps.sort()
         kept: List[_Path] = []
         seen: set = set()
         for step, n, c in steps:
             path = paths[n]
-            pattern_id = slide.candidates[c][0].id
+            pattern = slide.candidates[c][0]
             uses = dict(path.uses)
-            uses[pattern_id] = uses.get(pattern_id, 0) + 1
-            state = (path.chosen[-1:], c, frozenset(uses.items()))
+            uses[pattern.id] = uses.get(pattern.id, 0) + 1
+            content = dict(path.content)
+            if _content(slide, pattern):
+                content[pattern.id] = content.get(pattern.id, 0) + 1
+            state = (
+                path.chosen[-1:],
+                c,
+                frozenset(uses.items()),
+                frozenset(content.items()),
+            )
             if state in seen:
                 continue
             seen.add(state)
-            kept.append(_Path(step, path.chosen + (c,), uses))
+            kept.append(_Path(step, path.chosen + (c,), uses, content))
             if len(kept) == _BEAM:
                 break
         paths = kept
@@ -804,10 +848,12 @@ def _repeats(
     chosen: Dict[int, Pattern],
     pool: List[Pattern],
     by_kind: bool,
+    caps: Optional[_Caps],
 ) -> List[Repeat]:
-    """Template slides (or, ``by_kind``, content kinds) on three slides or more.
-    Structural slides count apart; a kind is offered only while the template
-    has more variants of it than the deck already uses (design.md D18)."""
+    """Template slides (or, ``by_kind``, content kinds) on more slides than
+    their cap, or on three slides or more without caps. Structural slides
+    count apart; a kind is offered only while the template has more variants
+    of it than the deck already uses (design.md D18, D19)."""
     used = {p.id for p in chosen.values()}
     unused = [p for p in pool if p.id not in used]
     variants: Dict[str, set[str]] = {}
@@ -824,17 +870,20 @@ def _repeats(
         pattern = chosen.get(slide.index)
         if pattern is None:
             continue
-        if pattern.kind in _STRUCTURAL or _wanted(slide) in _STRUCTURAL:
+        if not _content(slide, pattern):
             key = ("structural", pattern.id)
         else:
             key = ("kind", pattern.kind) if by_kind else ("slide", pattern.id)
         groups.setdefault(key, []).append((slide, pattern))
     repeats = []
     for (group_by, _), group in groups.items():
-        if len(group) < _VARIETY_NOTE_USES:
-            continue
         kind = group[0][1].kind
         structural = group_by == "structural"
+        at_most = _NOTE_USES - 1
+        if caps is not None and not structural:
+            at_most = caps.kind if by_kind else caps.slide
+        if len(group) <= at_most:
+            continue
         reused = len({p.id for _, p in group}) < len(group)
         same = [f"{p.label}: {zone_summary(p)}" for p in unused if p.kind == kind]
         suggested = (
@@ -861,6 +910,7 @@ def _repeats(
                 others[:_MAX_OTHER_KINDS],
                 suggested,
                 structural,
+                at_most,
             )
         )
     return repeats
@@ -893,9 +943,11 @@ def assign(
     inventory: TemplateInventory,
     plan: DeckPlan,
     variety: VarietyCheck = "template_slide",
+    max_uses: int = 2,
 ) -> Assignment:
     """One pattern per slide of ``plan``, or the problems that prevent it;
-    ``variety`` says how repeats are grouped (``off`` groups by kind, for the note)."""
+    ``variety`` says how repeats are grouped (``off`` groups by kind, for the
+    note) and, unless ``off``, ``max_uses`` caps each group (design.md D19)."""
     pool = assignable(inventory)
     has_cover = any(p.kind == "cover" for p in pool)
     offered = {p.kind for p in pool}
@@ -933,15 +985,16 @@ def assign(
     if not slides:
         return Assignment(problems=problems)
     by_kind = variety != "template_slide"
+    caps = None if variety == "off" else _caps(slides, pool, max_uses)
     if problems:
         # Repeats among the slides that fit, so a variety ask can join the problems.
         fitting = [s for s in slides if s.candidates]
-        found = {s.index: p for s, p in zip(fitting, _beam(fitting))}
+        found = {s.index: p for s, p in zip(fitting, _beam(fitting, caps))}
         return Assignment(
-            problems=problems, repeats=_repeats(slides, found, pool, by_kind)
+            problems=problems, repeats=_repeats(slides, found, pool, by_kind, caps)
         )
 
-    chosen = _beam(slides)
+    chosen = _beam(slides, caps)
     patterns: List[Optional[Pattern]] = [None] * len(plan.slides)
     for slide, pattern in zip(slides, chosen):
         patterns[slide.index - 1] = pattern
@@ -957,6 +1010,6 @@ def assign(
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     ]
     found = {s.index: p for s, p in zip(slides, chosen)}
-    repeats = _repeats(slides, found, pool, by_kind)
+    repeats = _repeats(slides, found, pool, by_kind, caps)
     notes += [_repeat_note(r) for r in repeats]
     return Assignment(patterns=patterns, notes=notes, repeats=repeats)

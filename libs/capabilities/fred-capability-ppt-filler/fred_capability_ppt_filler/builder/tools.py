@@ -54,6 +54,7 @@ from fred_capability_ppt_filler.builder.assign import (
     SHAPE_HINTS,
     Assignment,
     Repeat,
+    VarietyCheck,
     assign,
     assignable,
 )
@@ -292,6 +293,7 @@ def _variety(repeats: List[Repeat]) -> List[Dict[str, Any]]:
         {
             "slides": r.slides,
             "kind": r.kind,
+            "at_most": r.at_most,
             **({"suggested": r.suggested} if r.suggested else {}),
             "options": [f"another '{r.kind}' variant: {u}" for u in r.unused]
             + r.others,
@@ -445,8 +447,8 @@ def build_list_images_tool(
 _GUIDE_KINDS = ("figures", "timeline", "cards", "process", "table")
 
 
-def _guide(kinds: List[SlideKind]) -> str:
-    """Which content suits which offered kind, so slides differ by design."""
+def _guide(kinds: List[SlideKind], variety: VarietyCheck, max_uses: int) -> str:
+    """Which content suits which offered kind, and the author's max (D19)."""
     pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
     if "table" in kinds:
         pairs[-1] += ", not restated as columns before it"
@@ -456,11 +458,21 @@ def _guide(kinds: List[SlideKind]) -> str:
         if pairs
         else ""
     )
-    cap = ", at most 2 bullets slides per deck" if pairs and "bullets" in kinds else ""
-    return lead + f" Each slide of a deck should look different{cap}."
+    if variety == "off":
+        return lead
+    if max_uses == 1:
+        return lead + " Each slide of the deck must look different."
+    if variety == "kind":
+        return lead + (
+            f" Use any kind below on at most {max_uses} slides per deck, cover, agenda, "
+            "section and closing aside."
+        )
+    return lead + f" Use any variant below at most {max_uses} times per deck."
 
 
-def _description(inventory: TemplateInventory) -> str:
+def _description(
+    inventory: TemplateInventory, variety: VarietyCheck, max_uses: int
+) -> str:
     kinds = offered_kinds(inventory)
     rules = ""
     if "cover" in kinds:
@@ -488,7 +500,7 @@ def _description(inventory: TemplateInventory) -> str:
         "slide, what to change: apply it and call again with the whole deck. The result is shown to the "
         "user automatically; never write a download link. To correct a deck, call again once with the "
         "whole amended plan; the new deck replaces the previous one.\n"
-        + _guide(kinds)
+        + _guide(kinds, variety, max_uses)
         + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
         "size (≈chars per line × lines; items max N; variants separated by |). Write to these sizes:\n"
@@ -513,6 +525,7 @@ def build_builder_tools(
     # Variety is asked on the first call of the turn (one tool instance) only.
     called = False
     variety = ctx.config.variety_check
+    max_uses = ctx.config.variety_max_uses
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
@@ -532,7 +545,7 @@ def build_builder_tools(
                 "items…) and call build_presentation again."
             )
         # Before any I/O: a plan that needs revision costs no template fetch.
-        assignment = await asyncio.to_thread(assign, inventory, plan, variety)
+        assignment = await asyncio.to_thread(assign, inventory, plan, variety, max_uses)
         workspace = services.workspace_fs
         session_id = identity.session_id
         asking = first and variety != "off"
@@ -684,7 +697,7 @@ def build_builder_tools(
             ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(link),)),
         )
 
-    description = _description(inventory)
+    description = _description(inventory, variety, max_uses)
     build_tool = StructuredTool.from_function(
         coroutine=_build,
         name=BUILD_TOOL_NAME,
