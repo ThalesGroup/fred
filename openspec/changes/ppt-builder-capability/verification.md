@@ -149,6 +149,14 @@ says overflow) and 0/96 corporate zones.
 
 ## Checks
 
+- WP14 (review dialog, frontend only, no schema change): sections split on the
+  existing `Pattern.source` / `Pattern.included`. `npx tsc --noEmit` clean;
+  `npx prettier --check` and `npx eslint` clean on the touched files; `npx vitest run`
+  on `ppt_builder/` and `src/locales`: 4 files, 33 passed (PatternReviewDialog 6, of
+  which 2 new: section order slides → layouts (folded, with hint) → excluded, and an
+  excluded layout landing in "excluded" with empty sections dropped). Not proven: the
+  browser layout (14.4, developer check on the Paintress agent).
+
 - WP12: package `make code-quality` passed (the deck hash in the stored inventory is
   now in the detect-secrets baseline); `make test` 349 passed, 3 skipped; with
   `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 352 passed. No schema change.
