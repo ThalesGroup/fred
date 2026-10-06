@@ -162,15 +162,13 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
 
-  // The card hands back the cropped square as a bounded WebP blob.
-  const handleAvatarUpload = async (blob: Blob) => {
-    const croppedFile = new File([blob], "avatar.webp", { type: "image/webp" });
+  const handleAvatarUpload = async (file: File) => {
     await uploadAvatar({
       teamId: team.id,
       // The generated client types the multipart file field as `string`
       // (OpenAPI 3.1 contentMediaType binary → string); the enhanced endpoint
       // sends the real File via FormData at runtime.
-      bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: { file: croppedFile as never },
+      bodyUploadTeamAvatarControlPlaneV1TeamsTeamIdAvatarPost: { file: file as never },
     }).unwrap();
   };
 

@@ -14,16 +14,19 @@
 // limitations under the License.
 
 // Only JPEG/PNG/WebP up to 5 MB reach the crop editor; saving the crop hands
-// the blob to `onUpload`; Delete shows only with `onDelete` and an image.
+// `onUpload` a file typed after the crop output; Delete needs `onDelete` + image.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// The crop output type; Safari cannot encode WebP and yields PNG.
+const crop = { type: "image/webp" };
+
 vi.mock("@shared/organisms/AvatarCropEditor/AvatarCropEditor.tsx", () => ({
   default: ({ file, onSave }: { file: File; onSave: (blob: Blob) => Promise<void> }) => (
     <div data-testid="crop-editor" data-file={file.name}>
-      <button data-testid="crop-save" onClick={() => onSave(new Blob(["cropped"], { type: "image/webp" }))} />
+      <button data-testid="crop-save" onClick={() => onSave(new Blob(["cropped"], { type: crop.type }))} />
     </div>
   ),
 }));
@@ -40,6 +43,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  crop.type = "image/webp";
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -106,8 +110,22 @@ describe("AvatarUploadCard", () => {
     });
 
     expect(onUpload).toHaveBeenCalledTimes(1);
-    expect((onUpload as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeInstanceOf(Blob);
+    const sent = (onUpload as ReturnType<typeof vi.fn>).mock.calls[0][0] as File;
+    expect([sent.name, sent.type]).toEqual(["avatar.webp", "image/webp"]);
     expect(cropEditor()).toBeNull();
+  });
+
+  it("names and types the file PNG when the browser cannot encode WebP", async () => {
+    crop.type = "image/png";
+    const onUpload = render();
+    pick(new File(["png"], "me.png", { type: "image/png" }));
+
+    await act(async () => {
+      (container.querySelector('[data-testid="crop-save"]') as HTMLButtonElement).click();
+    });
+
+    const sent = (onUpload as ReturnType<typeof vi.fn>).mock.calls[0][0] as File;
+    expect([sent.name, sent.type]).toEqual(["avatar.png", "image/png"]);
   });
 
   it("shows Delete only with a delete handler and an image", () => {

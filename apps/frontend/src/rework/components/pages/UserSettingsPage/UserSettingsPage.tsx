@@ -50,11 +50,10 @@ export default function UserSettingsPage() {
   const [deletePicture, { isLoading: isDeletingPicture }] = useDeleteUserAvatarMutation();
   const { showConfirmationDialog } = useConfirmationDialog();
 
-  const handlePictureUpload = async (blob: Blob) => {
-    const croppedFile = new File([blob], "avatar.webp", { type: "image/webp" });
+  const handlePictureUpload = async (file: File) => {
     // The generated client types the multipart file as `string`; the enhanced
     // endpoint sends the real File via FormData.
-    await uploadPicture({ bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: { file: croppedFile as never } }).unwrap();
+    await uploadPicture({ bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: { file: file as never } }).unwrap();
   };
 
   const handlePictureDelete = () => {

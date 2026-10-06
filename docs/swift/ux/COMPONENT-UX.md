@@ -5136,7 +5136,9 @@ title, Import button, hint, 96px square preview, the client-side checks
 (JPEG/PNG/WebP, 5 MB) and the `AvatarCropEditor` mount. A text `error` Delete
 button sits under Import only when the caller passes `onDelete` and an image is
 set; team settings pass none, user settings pass one behind the critical
-`ConfirmationDialog`. Styles are unchanged from the team card.
+`ConfirmationDialog`. Styles are unchanged from the team card. The card hands
+`onUpload` a ready `File` named and typed after the crop output: WebP, or PNG
+where the browser cannot encode WebP (Safari).
 
 `UserAvatar` takes an optional `imageUrl`: a round `<img>` with intrinsic size
 and `decoding="async"`, initials when absent or when the image fails to load,

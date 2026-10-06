@@ -20,6 +20,14 @@ import React, { useRef, useState } from "react";
 // Mirrors the backend avatar validation (5 MB, JPEG/PNG/WebP).
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const EXTENSION_BY_TYPE: Record<string, string> = { "image/webp": "webp", "image/png": "png", "image/jpeg": "jpg" };
+
+// Browsers that cannot encode WebP (Safari) return PNG: name and type the file
+// after what the crop really produced, so it matches the bytes server-side.
+function toAvatarFile(blob: Blob): File {
+  const type = blob.type || "image/png";
+  return new File([blob], `avatar.${EXTENSION_BY_TYPE[type] ?? "png"}`, { type });
+}
 
 interface AvatarUploadCardProps {
   title: string;
@@ -27,8 +35,8 @@ interface AvatarUploadCardProps {
   importLabel: string;
   emptyLabel: string;
   imageUrl?: string;
-  /** Receives the square crop as a WebP blob. */
-  onUpload: (blob: Blob) => Promise<void>;
+  /** Receives the square crop as a ready-to-send file (WebP, or PNG on Safari). */
+  onUpload: (file: File) => Promise<void>;
   uploading?: boolean;
   /** Shows a Delete action, only while an image is set. */
   onDelete?: () => void;
@@ -71,7 +79,7 @@ export default function AvatarUploadCard({
 
   const handleCropSave = async (blob: Blob) => {
     try {
-      await onUpload(blob);
+      await onUpload(toAvatarFile(blob));
     } catch (error) {
       console.error("Avatar upload error:", error);
     } finally {

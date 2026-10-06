@@ -106,7 +106,7 @@ The field is additive and optional. Routes that use `response_model_exclude_none
 ### 8. Frontend: one `AvatarUploadCard` molecule, `UserAvatar` gains `imageUrl`
 
 - **`shared/molecules/AvatarUploadCard`** takes over from `TeamSettingsParameters.tsx`: the markup, the hidden file input, the client checks, the crop dialog state and the `AvatarCropEditor` mount.
-  - Props: `title`, `hint`, `importLabel`, `emptyLabel`, `imageUrl`, `onUpload(blob)` (a promise), `uploading`, optional `onDelete` and `deleting`. The Delete button renders only when `onDelete` is given and `imageUrl` is set.
+  - Props: `title`, `hint`, `importLabel`, `emptyLabel`, `imageUrl`, `onUpload(file)` (a promise; the card builds the `File` from the crop's real type, since Safari falls back to PNG), `uploading`, optional `onDelete` and `deleting`. The Delete button renders only when `onDelete` is given and `imageUrl` is set.
   - Team settings pass no `onDelete`, so their behaviour is unchanged.
   - The user settings page passes `onDelete`, which opens the existing `ConfirmationDialog`.
   - The team-specific SCSS for this block moves with the component, using `outline-*` borders and full `surface-` token names.

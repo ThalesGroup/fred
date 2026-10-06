@@ -85,12 +85,15 @@ vi.mock("@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx", () => ({
     onDelete,
     imageUrl,
   }: {
-    onUpload: (blob: Blob) => Promise<void>;
+    onUpload: (file: File) => Promise<void>;
     onDelete?: () => void;
     imageUrl?: string;
   }) => (
     <div data-testid="picture-card" data-image={imageUrl ?? ""}>
-      <button data-testid="picture-upload" onClick={() => onUpload(new Blob(["x"], { type: "image/webp" }))} />
+      <button
+        data-testid="picture-upload"
+        onClick={() => onUpload(new File(["x"], "avatar.webp", { type: "image/webp" }))}
+      />
       {onDelete && <button data-testid="picture-delete" onClick={onDelete} />}
     </div>
   ),
@@ -168,7 +171,7 @@ describe("UserSettingsPage profile picture", () => {
       (container.querySelector(`[data-testid="${testId}"]`) as HTMLButtonElement).click();
     });
 
-  it("shows the current picture and uploads the cropped image as a WebP file", async () => {
+  it("shows the current picture and sends the file the card hands over", async () => {
     picture.url = "https://objects.test/me.webp";
     render(["cobalt"]);
     expect(container.querySelector('[data-testid="picture-card"]')!.getAttribute("data-image")).toBe(

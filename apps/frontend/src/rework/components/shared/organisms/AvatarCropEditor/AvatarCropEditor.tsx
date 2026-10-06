@@ -31,7 +31,7 @@ interface AvatarCropEditorProps {
   file: File;
   open: boolean;
   onCancel: () => void;
-  /** Receives the cropped square as a bounded WebP blob. */
+  /** Receives the cropped square: WebP, or PNG where WebP encoding is unsupported. */
   onSave: (blob: Blob) => void | Promise<void>;
   /** Disables the confirm button while the upload is in flight. */
   saving?: boolean;
