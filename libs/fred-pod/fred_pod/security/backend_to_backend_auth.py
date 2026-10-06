@@ -69,17 +69,21 @@ class M2MAuthConfig(BaseModel):
                         (e.g., https://kc.example/realms/myrealm)
     client_id:          confidential client ID (e.g., "knowledge")
     secret_env:         env var name that stores the client secret (e.g., "KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET")
-    scope:              optional Keycloak scopes (rarely needed)
+    scope:              optional workload-token scope
+    token_url_override: resolved token endpoint, when the issuer is not Keycloak
     """
 
     keycloak_realm_url: str
     client_id: str
     secret_env: str
     scope: str | None = None
+    token_url_override: str | None = None
 
     @property
     def token_url(self) -> str:
-        # Mirrors how you compute JWKS: realm/protocol/openid-connect/token
+        """Use the resolved endpoint when set, or the legacy Keycloak path."""
+        if self.token_url_override is not None:
+            return self.token_url_override
         return f"{self.keycloak_realm_url}/protocol/openid-connect/token"
 
 

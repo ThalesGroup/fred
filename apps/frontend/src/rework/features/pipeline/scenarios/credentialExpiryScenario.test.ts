@@ -108,6 +108,12 @@ beforeEach(() => {
 });
 
 describe("SSO credential expiry", () => {
+  it("runs with an OIDC session without Keycloak realm settings", async () => {
+    auth.configured = false;
+    const test = setup();
+    await test.run();
+    expect(test.step("expiry-turn")?.status).toBe("passed");
+  });
   it("runs on the captured SSO token without document or permission mutations", async () => {
     const test = setup();
     await test.run();
@@ -264,6 +270,7 @@ describe("expiry test guards", () => {
   );
   it("skips without secure SSO", async () => {
     auth.configured = false;
+    auth.token = "";
     const test = setup();
     await test.run();
     expect(test.step("session-token")?.status).toBe("skipped");

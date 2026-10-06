@@ -55,7 +55,7 @@ from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.portable import LoggingTracer, MetricsProvider, Tracer, get_tracer
 from fred_core.security.backend_to_backend_auth import M2MBearerAuth
-from fred_core.security.oidc import get_keycloak_client_id, get_keycloak_url
+from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -2441,15 +2441,15 @@ async def _refresh_runtime_context_access_token(runtime_context: RuntimeContext)
             "Cannot refresh user access token: refresh_token missing from runtime context."
         )
 
-    keycloak_url = get_keycloak_url()
+    token_url = get_token_endpoint()
     client_id = get_keycloak_client_id()
-    if not keycloak_url:
-        raise RuntimeError("User security realm_url is not configured for Keycloak.")
+    if not token_url:
+        raise RuntimeError("User security token endpoint is not configured.")
     if not client_id:
         raise RuntimeError("User security client_id is not configured for Keycloak.")
 
     payload = await refresh_user_access_token_from_keycloak(
-        keycloak_url=keycloak_url,
+        token_url=token_url,
         client_id=client_id,
         refresh_token=refresh_token,
     )

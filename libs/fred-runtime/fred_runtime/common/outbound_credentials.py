@@ -36,6 +36,7 @@ from fred_core.security.delegation import (
     DelegationConfig,
 )
 from fred_core.security.structure import SecurityConfiguration
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 
 from fred_runtime.runtime_support.authority import DelegationUnavailableError
 from fred_runtime.runtime_support.run_scope import RunScope
@@ -322,10 +323,17 @@ def build_delegation_runtime(
     token_provider: M2MTokenProvider | None = None
     m2m = getattr(security, "m2m", None)
     if config.act_for_people and m2m is not None and m2m.enabled and m2m.client_id:
+        token_endpoint = resolve_endpoints(
+            provider=m2m.provider,
+            realm_url=str(m2m.realm_url).rstrip("/"),
+            token_url=str(m2m.token_url) if m2m.token_url else None,
+        ).token_endpoint
         token_provider = M2MTokenProvider(
             M2MAuthConfig(
                 keycloak_realm_url=str(m2m.realm_url).rstrip("/"),
                 client_id=m2m.client_id,
+                scope=m2m.scope,
+                token_url_override=token_endpoint,
                 secret_env=m2m.secret_env_var,
             )
         )

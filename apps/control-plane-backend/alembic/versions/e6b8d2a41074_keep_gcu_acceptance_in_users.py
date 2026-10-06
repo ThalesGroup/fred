@@ -14,14 +14,17 @@
 """Keep only the latest GCU acceptance in users.
 
 Revision ID: e6b8d2a41074
-Revises: a7e9c2d41063
+Revises: a7e9c2d41063, b4e8d2a9c613
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "e6b8d2a41074"  # pragma: allowlist secret
-down_revision = "a7e9c2d41063"  # pragma: allowlist secret
+down_revision = (
+    "a7e9c2d41063",  # pragma: allowlist secret
+    "b4e8d2a9c613",  # pragma: allowlist secret
+)
 branch_labels = None
 depends_on = None
 

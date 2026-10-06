@@ -29,12 +29,14 @@ from fred_core import (
 )
 from fred_core.common import ThreadSafeLRUCache
 from fred_core.users import UserRow
+from fred_core.users.store.postgres_user_store import get_user_store
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakGetError, KeycloakPostError
 
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
+    IdentityManagedByProviderError,
     KeycloakM2MUserOperationDisabledError,
     UserAlreadyExistsError,
     UserNotFoundError,
@@ -53,6 +55,11 @@ _USER_SUMMARY_CACHE_TTL_SECONDS = 300
 _USER_SUMMARY_CACHE: ThreadSafeLRUCache[str, tuple[float, UserSummary]] = (
     ThreadSafeLRUCache(max_size=5000)
 )
+
+
+def _uses_local_directory(deps: UserServiceDependencies) -> bool:
+    security = getattr(getattr(deps, "configuration", None), "security", None)
+    return getattr(security, "user_directory", "keycloak") == "local"
 
 
 def _get_keycloak_admin(
@@ -116,6 +123,17 @@ async def list_users(
     Example:
     - `users = await list_users(current_user, deps)`
     """
+    if _uses_local_directory(deps):
+        store = get_user_store()
+        users: list[UserSummary] = []
+        offset = 0
+        while True:
+            page = await store.list_identities(offset, _USER_PAGE_SIZE)
+            users.extend(UserSummary.from_raw_user(raw) for raw in page)
+            if len(page) < _USER_PAGE_SIZE:
+                return users
+            offset += _USER_PAGE_SIZE
+
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty user list.")
@@ -159,6 +177,14 @@ async def search_users(
     Example:
     - `matches = await search_users("cohen", deps)`
     """
+    if _uses_local_directory(deps):
+        return [
+            UserSummary.from_raw_user(raw)
+            for raw in await get_user_store().search_identities(
+                query, _SEARCH_RESULT_LIMIT
+            )
+        ]
+
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty search.")
@@ -195,6 +221,9 @@ async def create_user(
     Example:
     - `summary = await create_user(current_user, request, deps)`
     """
+    if _uses_local_directory(deps):
+        raise IdentityManagedByProviderError(request.username)
+
     admin = _get_keycloak_admin_for_user_operations(deps)
 
     try:
@@ -265,6 +294,24 @@ async def get_users_by_ids(
     unique_ids = {user_id for user_id in user_ids if user_id}
     if not unique_ids:
         return {}
+
+    if _uses_local_directory(deps):
+        uuids = []
+        for user_id in unique_ids:
+            try:
+                uuids.append(UUID(user_id))
+            except ValueError:
+                continue
+        found = await get_user_store().get_identities(uuids)
+        summaries = {
+            raw["id"]: UserSummary.from_raw_user(raw)
+            for raw in found
+            if isinstance(raw["id"], str)
+        }
+        return {
+            user_id: summaries.get(user_id, UserSummary(id=user_id))
+            for user_id in unique_ids
+        }
 
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
@@ -394,39 +441,18 @@ async def _fetch_all_users(
     return users
 
 
-async def find_user_subs_bulk(deps: UserServiceDependencies) -> dict[str, str]:
+async def find_user_subs_bulk(
+    deps: UserServiceDependencies, *, usernames: list[str] | None = None
+) -> dict[str, str]:
+    """Resolve usernames from one bulk directory snapshot.
+
+    Local lookups can target bundle names and reject duplicate exact usernames.
+    Keycloak keeps its complete paginated sweep and raises if admin is disabled.
     """
-    Resolve every Keycloak username in the realm to its `sub`, in one pass.
+    if _uses_local_directory(deps):
+        # A bundle needs only its own names; unrelated collisions must not block it.
+        return await get_user_store().find_ids_by_usernames(usernames)
 
-    Why this function exists:
-    - the users.json declarative provisioning phase
-      (`import_export/importer.py::UserSubResolver`) can resolve many distinct
-      usernames per bundle; one Admin API call per username does not scale.
-      This reuses the same paginated sweep `list_users` already relies on
-      (`_fetch_all_users`) so the whole realm is listed once, then every
-      username resolves against an in-memory dict instead of a network call.
-
-    How to use it:
-    - call once per import run; the caller (`UserSubResolver`) treats the
-      result as the authoritative snapshot of the target realm for the whole
-      run — a username missing from it is unresolved, never looked up
-      individually
-    - raises `KeycloakM2MUserOperationDisabledError` when Keycloak M2M is
-      disabled — a disabled admin client used to come back as `{}`, the exact
-      same shape as a real bulk sweep that genuinely found zero users, which
-      would silently resolve every identity as unresolved with nothing
-      pointing at the real cause. Raising here instead reuses the same domain
-      error and HTTP 503 mapping `create_user` already raises for the
-      identical disabled-M2M case (`users/api.py`'s
-      `register_exception_handlers`), and — same as any other bulk-sweep
-      failure below — `UserSubResolver.create()` is called before the
-      Postgres transaction opens, so this aborts the import before any write
-    - a real Keycloak/network failure raises and is left to propagate — never
-      swallowed into an empty snapshot
-
-    Example:
-    - `subs_by_username = await find_user_subs_bulk(user_deps)`
-    """
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
         raise KeycloakM2MUserOperationDisabledError()
@@ -467,6 +493,12 @@ async def user_exists_in_keycloak(
     Example:
     - `if await user_exists_in_keycloak(uid, deps) is False: raise ...`
     """
+    if _uses_local_directory(deps):
+        try:
+            return await get_user_store().identity_exists(UUID(user_id))
+        except ValueError:
+            return False
+
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
         return None
@@ -527,6 +559,13 @@ async def find_user_sub_by_username(
     Example:
     - `sub = await find_user_sub_by_username("alice", user_deps)`
     """
+    # Local ambiguity must propagate instead of looking like a missing identity.
+    if _uses_local_directory(deps):
+        matches = await get_user_store().find_ids_by_usernames([username])
+        return next(
+            (user_id for name, user_id in matches.items() if name == username), None
+        )
+
     admin = _get_keycloak_admin(deps)
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; cannot resolve username.")

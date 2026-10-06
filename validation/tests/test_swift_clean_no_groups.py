@@ -150,9 +150,10 @@ def test_realm_template_service_accounts_have_no_group_admin_roles(template_path
     assert not offenders, f"{template_path}: service accounts with group-admin roles baked in: {offenders!r}"
 
 
+# Fred publishes this model to OpenFGA; deployment-factory no longer copies it.
 SWIFT_MODEL_PATHS = [
-    REPO_ROOT / "docker/openfga/openfga-model.json",
-    REPO_ROOT / "k3d/files/openfga/openfga-model.json",
+    Path(__file__).resolve().parents[2]
+    / "libs/fred-core/fred_core/security/rebac/schema.fga.json",
 ]
 
 

@@ -33,7 +33,10 @@ Configure the same active CGU version in all enforcing backends.
    already been applied, only the corrective revision runs. Both revisions are
    kept because the earlier PR migration has already been executed locally;
    the applied revision and its parent are not rewritten. The chain is
-   `c4d7e2a91b30 -> a7e9c2d41063 -> e6b8d2a41074`, with one head.
+   `c4d7e2a91b30 -> {a7e9c2d41063, b4e8d2a9c613} -> e6b8d2a41074`,
+   with one head. The corrective revision also joins the immutable OIDC identity
+   migration newly merged into `swift`, so either already-applied branch can
+   upgrade without stamping or skipping the other branch's schema changes.
 3. Start updated backends and deploy the regenerated frontend. No changes to the
    other backend migration trees are needed.
 

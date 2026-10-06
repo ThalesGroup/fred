@@ -58,6 +58,7 @@ async def store(tmp_path, request):
 async def test_new_versions_replace_acceptance_without_changing_storage(store):
     uid = uuid4()
     await store.increment_current_storage_size(uid, 42)
+    await store.upsert_identity(uid, "alice", "alice@example.test", "Alice", "Tester")
     unaccepted = await store.find_user_by_id(uid)
     assert unaccepted.gcuVersionAccepted is None
     assert unaccepted.gcuAcceptedAt is None
@@ -70,6 +71,10 @@ async def test_new_versions_replace_acceptance_without_changing_storage(store):
         assert updated.gcuVersionAccepted == version
         assert updated.gcuAcceptedAt > first.gcuAcceptedAt
         assert updated.current_resources_storage_size == 42
+        assert updated.username == "alice"
+        assert updated.email == "alice@example.test"
+        assert updated.first_name == "Alice"
+        assert updated.last_name == "Tester"
         first = updated
     await store.update_gcu_version(uid, "v1")
     repeated = await store.find_user_by_id(uid)

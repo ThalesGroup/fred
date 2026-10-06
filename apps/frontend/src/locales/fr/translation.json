@@ -2336,6 +2336,8 @@
         "title": "Auto-test"
       },
       "report": {
+        "verified": "Vérifié",
+        "partial": "Partiel — aucun échec",
         "running": "En cours…",
         "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
@@ -2348,6 +2350,9 @@
         "run": "Lancer la campagne"
       },
       "authz": {
+        "identityTitle": "Auto-test d’authentification JWT",
+        "identityDescription": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication.",
+        "identityRun": "Lancer les contrôles",
         "title": "Auto-test d'autorisation",
         "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
         "runSelf": "Lancer pour moi-même",

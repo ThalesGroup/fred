@@ -183,6 +183,7 @@ value is served by a separate **public (unauthenticated)** surface:
     - `enabled`
     - `realm_url` — emitted only when `enabled`
     - `client_id` — emitted only when `enabled`
+    - `provider`, `scope`, `user_directory`, `uid_claim`, `roles_claim` — added 2026-09-30 for the common browser OIDC flow; public provider and identity mapping only, with Keycloak defaults when authentication is disabled.
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
@@ -4313,6 +4314,39 @@ and presents no bearer to the agent pod
 Detailed cases are in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
+## Definitive browser renewal refusal clears the Fred session (2026-10-05)
+
+The common Keycloak/OIDC browser lifecycle classifies structured renewal error
+codes. `invalid_grant`, `login_required`, `interaction_required`,
+`consent_required` and `account_selection_required` immediately invalidate live
+credentials and clear the persisted OIDC user before coalesced refresh callers
+receive `false`. Failed storage cleanup cannot expose credentials in the current
+session. Network failures, timeouts and transient provider errors retain an
+otherwise unexpired bearer and allow retry. Late results cannot restore an
+invalidated generation or erase a newer accepted session. The boolean facade
+and existing provider sign-out flow remain compatible.
+
+## Local username ambiguity aborts import preflight (2026-10-05)
+
+In local-directory mode, username resolution rejects distinct IDs sharing the
+same exact username with `ambiguous_username`; it never picks an ID by row order.
+The importer prefetches its referenced names before opening the business-data
+transaction, so an ambiguity prevents all bundle SQL and OpenFGA writes. Names
+outside the bundle do not block it. Unique/missing-name behavior, case-sensitive
+resolution, identity snapshots and the Keycloak path remain unchanged. Failure
+is reported through the existing migration task error. No database uniqueness
+constraint or current IdP ownership lookup is introduced.
+
+## Local-directory suspension is independent of delegation (2026-10-05)
+
+With `security.user_directory: local`, an enforced OpenFGA engine validates
+account-status support at startup and refuses suspended authenticated subjects
+regardless of the delegation switches. `DELETE /users/{user_id}` retains root
+and wildcard protection, writes the suspension and leaves memberships, local
+identity snapshots and provider accounts unchanged. Disabled enforcement returns
+403 with `reason: account_suspension_disabled` before any write; unavailable
+account-status checks retain 503 `account_status_unavailable`.
+
 ## Deleting a person suspends their account first (2026-09-23)
 
 User deletion retains administrator permission and protected-account checks,
@@ -4326,7 +4360,7 @@ already authorized. That includes personal-team routes such as the runtime-bindi
 lookup and execution preparation, which refuse a suspended subject with 403
 `account_suspended`, or 503 `account_status_unavailable` when account status cannot
 be read. Direct identity-provider changes do not update platform account status.
-With account status disabled, deletion writes no suspension. Exact refusal and retry
+With the Keycloak directory and account status disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 

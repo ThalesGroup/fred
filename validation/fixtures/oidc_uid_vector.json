@@ -1,0 +1,5 @@
+{
+  "issuer": "https://identity.example/tenant/v2.0",
+  "value": "00u1abc",
+  "expected_uuid": "8e3154c1-73e0-54b9-a236-98cf14754fbf"
+}
