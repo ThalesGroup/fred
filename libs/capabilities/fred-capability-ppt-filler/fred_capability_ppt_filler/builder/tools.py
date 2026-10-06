@@ -45,12 +45,14 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
+from fred_sdk.contracts.runtime import WorkspaceFileNotFound, WorkspaceFsPort
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder.assign import (
     Assignment,
+    Repeat,
     assign,
     assignable,
 )
@@ -261,6 +263,63 @@ def _needs_revision(
     )
 
 
+def _variety_revision(
+    repeats: List[Repeat], assignment: Assignment
+) -> tuple[str, ToolInvocationResult]:
+    """Asked once, on the first deck of a conversation: the repeated slides and
+    what each alternative suits; a resend is built as is."""
+    kinds = [p.kind if p else None for p in assignment.patterns]
+    restated = any(
+        kinds[i] in ("two_columns", "comparison") and kinds[i + 1] == "table"
+        for r in repeats
+        for i in (n - 1 for n in r.slides)
+        if i + 1 < len(kinds)
+    )
+    payload = {
+        "status": "needs_revision",
+        "variety": [
+            {
+                "slides": r.slides,
+                "template_slide": r.pattern.label,
+                "kind": r.pattern.kind,
+                "options": [
+                    f"another '{r.pattern.kind}' variant: {u}" for u in r.unused
+                ]
+                + r.others,
+            }
+            for r in repeats
+        ],
+    }
+    return _error(
+        "No deck was built yet: several slides would look the same. Recast some of the slides "
+        "listed below into one of their options, rewriting the content in that shape"
+        + (
+            ", and do not restate a table's content as columns on the slide before it"
+            if restated
+            else ""
+        )
+        + ". Then call build_presentation again with the WHOLE deck. If these slides must stay "
+        "alike, send the same plan again: it will be built as is.\n"
+        + json.dumps(payload, ensure_ascii=False)
+    )
+
+
+async def _deck_delivered(
+    workspace: WorkspaceFsPort, session_id: Optional[str]
+) -> bool:
+    """Whether this conversation already holds a deck: every build is written to
+    its outputs folder. Unknown counts as delivered, so it never adds a loop."""
+    folder = f"outputs/{session_id}" if session_id else "outputs"
+    try:
+        entries = await workspace.ls(folder)
+    except WorkspaceFileNotFound:
+        return False
+    except Exception:  # noqa: BLE001 - the passive note still reports it
+        logger.warning("[PPTBUILD][TOOL] outputs listing failed", exc_info=True)
+        return True
+    return any(e.path.lower().endswith(".pptx") and not e.is_dir for e in entries)
+
+
 def _issue_line(report: SlideReport) -> str:
     parts = []
     if report.truncated:
@@ -408,8 +467,11 @@ def build_builder_tools(
     identity = ctx.identity
     args_schema = _args_schema(inventory)
     previous_problems: _Previous = {}
+    # Variety is asked at most once per tool instance; the next call is built.
+    variety_asked = False
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
+        nonlocal variety_asked
         try:
             plan = _to_plan(args_schema(**kwargs))
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
@@ -435,6 +497,16 @@ def build_builder_tools(
             raise RuntimeError(
                 "ppt_builder: RuntimeServices.workspace_fs is not available on this execution path."
             )
+        session_id = identity.session_id
+        # Listed only when a revision would follow: the usual call adds no I/O.
+        repeats = [r for r in assignment.repeats if r.revisable]
+        if (
+            repeats
+            and not variety_asked
+            and not await _deck_delivered(workspace, session_id)
+        ):
+            variety_asked = True
+            return _variety_revision(repeats, assignment)
         image_ids = _image_ids(plan)
         if image_ids and services.document_content is None:
             raise RuntimeError(
@@ -485,7 +557,6 @@ def build_builder_tools(
             if plan.file_name
             else _DEFAULT_FILE_NAME
         )
-        session_id = identity.session_id
         # Keyed by the deck's name, deliberately. A model that splits one deck
         # across several calls, or retries after a busy answer, then lands on
         # one key and the reader sees one presentation instead of a card per

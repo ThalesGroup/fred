@@ -71,6 +71,23 @@ _REPEAT = 3.0  # the same slide twice in a row
 _TRIPLE = 1000.0  # three in a row: taken only when nothing else fits
 _BEAM = 32
 _VARIETY_NOTE_USES = 3
+# Slides a deck legitimately repeats: never a reason to ask for variety.
+_STRUCTURAL = ("cover", "section", "agenda", "closing")
+# What each kind suits, in the order alternatives are offered.
+SHAPE_HINTS: Dict[str, str] = {
+    "figures": "short numeric items (value + label)",
+    "timeline": "dated items or milestones",
+    "cards": "parallel items",
+    "process": "ordered steps",
+    "table": "a comparison across criteria",
+    "comparison": "two options side by side",
+    "two_columns": "two groups of points",
+    "image_text": "a point with a picture",
+    "quote": "one key statement",
+    "bullets": "a short list",
+    "team": "people",
+}
+_MAX_OTHER_KINDS = 5
 
 _MAX_KIND_OPTIONS = 3
 
@@ -107,12 +124,27 @@ class SlideProblem:
 
 
 @dataclass
+class Repeat:
+    """A template slide used three times or more, and what else could vary it."""
+
+    pattern: Pattern
+    slides: List[int]  # 1-based positions in the plan
+    unused: List[str]  # unused variants of its kind, "label: zones"
+    others: List[str]  # one unused slide per other non-structural kind
+
+    @property
+    def revisable(self) -> bool:
+        return self.pattern.kind not in _STRUCTURAL and bool(self.unused or self.others)
+
+
+@dataclass
 class Assignment:
     # Aligned with the plan's slides; None for an entry that is not a slide.
     patterns: List[Optional[Pattern]] = field(default_factory=list)
     problems: List[SlideProblem] = field(default_factory=list)
     # Substitutions and repetitions the agent should hear about.
     notes: List[str] = field(default_factory=list)
+    repeats: List[Repeat] = field(default_factory=list)
 
 
 def assignable(inventory: TemplateInventory) -> List[Pattern]:
@@ -577,33 +609,46 @@ def _beam(slides: List[_Slide]) -> List[Pattern]:
     return [slides[i].candidates[c][0] for i, c in enumerate(paths[0].chosen)]
 
 
-def _variety_notes(
+def _repeats(
     slides: List[_Slide], chosen: List[Pattern], pool: List[Pattern]
-) -> List[str]:
-    """A slide used three times or more, with the variants of its kind the deck
-    left unused, so a correction pass can recast one of those slides."""
+) -> List[Repeat]:
     used = {p.id for p in chosen}
-    notes = []
+    unused = [p for p in pool if p.id not in used]
+    repeats = []
     for pattern in {p.id: p for p in chosen}.values():
         at = [s.index for s, p in zip(slides, chosen) if p.id == pattern.id]
         if len(at) < _VARIETY_NOTE_USES:
             continue
-        unused = list(
-            dict.fromkeys(
-                f"{p.label}: {zone_summary(p)}"
-                for p in pool
-                if p.kind == pattern.kind and p.id not in used
-            )
+        same = [
+            f"{p.label}: {zone_summary(p)}" for p in unused if p.kind == pattern.kind
+        ]
+        others = [
+            f"'{kind}' for {hint}: {p.label}: {zone_summary(p)}"
+            for kind, hint in SHAPE_HINTS.items()
+            if kind not in _STRUCTURAL and kind != pattern.kind
+            for p in [next((q for q in unused if q.kind == kind), None)]
+            if p is not None
+        ]
+        repeats.append(
+            Repeat(pattern, at, list(dict.fromkeys(same)), others[:_MAX_OTHER_KINDS])
         )
-        note = f"Slides {', '.join(map(str, at))} all use the template slide '{pattern.label}'."
-        if unused:
-            note += (
-                f" Unused '{pattern.kind}' variants, to recast one of them: "
-                + " | ".join(unused)
-                + "."
-            )
-        notes.append(note)
-    return notes
+    return repeats
+
+
+def _repeat_note(repeat: Repeat) -> str:
+    """The passive note: the slides, and the variants of their kind left unused."""
+    pattern = repeat.pattern
+    note = (
+        f"Slides {', '.join(map(str, repeat.slides))} all use the template slide "
+        f"'{pattern.label}'."
+    )
+    if repeat.unused:
+        note += (
+            f" Unused '{pattern.kind}' variants, to recast one of them: "
+            + " | ".join(repeat.unused)
+            + "."
+        )
+    return note
 
 
 def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
@@ -660,5 +705,6 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     ]
-    notes += _variety_notes(slides, chosen, pool)
-    return Assignment(patterns=patterns, notes=notes)
+    repeats = _repeats(slides, chosen, pool)
+    notes += [_repeat_note(r) for r in repeats]
+    return Assignment(patterns=patterns, notes=notes, repeats=repeats)

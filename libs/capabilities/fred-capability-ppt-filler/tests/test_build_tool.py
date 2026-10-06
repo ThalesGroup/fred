@@ -342,6 +342,86 @@ async def test_the_corrected_plan_is_built_as_a_whole(monkeypatch):
     assert len(deck.slides) == 3
 
 
+# --- variety, asked once on the first deck --------------------------------------------------
+
+
+def _steps(n: int) -> dict:
+    items = [
+        {"number": "1", "heading": "a", "text": "b"},
+        {"number": "2", "heading": "c", "text": "d"},
+    ]
+    return {"title": f"Step {n}", "items": items}
+
+
+_REPEATED = [COVER] + [_steps(n) for n in range(4)]
+
+
+@pytest.mark.asyncio
+async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkeypatch):
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert result.is_error and workspace.writes == []
+    payload = json.loads(text[text.index("{") :])
+    assert payload["status"] == "needs_revision"
+    (repeat,) = payload["variety"]
+    assert repeat["slides"] == [2, 3, 4, 5] and repeat["kind"] == "process"
+    assert any(
+        o.startswith("'figures' for short numeric items") for o in repeat["options"]
+    )
+    assert "send the same plan again: it will be built as is" in text
+    # The same plan again: built, with the passive note only.
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert not result.is_error, text
+    assert "Slides 2, 3, 4, 5 all use the template slide 'Process'" in text
+
+
+@pytest.mark.asyncio
+async def test_a_deck_after_the_first_one_only_gets_the_note(monkeypatch):
+    """A later turn (a new tool instance) sees the delivered deck in the
+    conversation's outputs folder: the user may have asked for these slides."""
+    workspace = FakeWorkspace()
+    await _build(monkeypatch, workspace=workspace, slides=[COVER])
+    assert workspace.writes
+    text, result = await _build(monkeypatch, workspace=workspace, slides=_REPEATED)
+    assert not result.is_error, text
+    assert "all use the template slide 'Process'" in text
+
+
+@pytest.mark.asyncio
+async def test_structural_repeats_are_never_a_revision(monkeypatch):
+    sections = [COVER] + [{"title": f"Part {n}", "kind": "section"} for n in range(4)]
+    text, result = await _build(monkeypatch, slides=sections)
+    assert not result.is_error, text
+
+
+@pytest.mark.asyncio
+async def test_a_heading2_column_is_returned_for_revision_not_dropped(monkeypatch):
+    workspace = FakeWorkspace()
+    text, result = await _build(
+        monkeypatch,
+        workspace=workspace,
+        slides=[
+            COVER,
+            {
+                "kind": "two_columns",
+                "title": "Implantation",
+                "columns": {
+                    "bullets": ["2 800 experts"],
+                    "heading": "Espagne",
+                    "heading2": "Italie",
+                },
+            },
+        ],
+    )
+    assert result.is_error and workspace.writes == []
+    (problem,) = json.loads(text[text.index("{") :])["slides"]
+    assert problem["slide"] == 2
+    assert "heading2 'Italie' is not a column field" in problem["problem"]
+
+
 def test_the_success_notes_name_what_was_cut_per_slide():
     """Read from the render's after-check report, one line per slide."""
     plan = DeckPlan.model_validate({"slides": [COVER, "junk"]})

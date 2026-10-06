@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-from fred_sdk.contracts.context import PublishedArtifact
+from fred_sdk.contracts.context import FsEntry, PublishedArtifact
 from fred_sdk.contracts.runtime import (
     AgentAssetPort,
     DocumentContentPort,
@@ -75,8 +75,8 @@ class FakeAssets(AgentAssetPort):
 class FakeWorkspace(WorkspaceFsPort):
     """``WorkspaceFsPort`` whose ``write`` records bytes and mints a durable href.
 
-    Only ``write`` is functional (the fill tool's single workspace need); every
-    other abstract method raises so an accidental use is loud, not silent.
+    ``write`` and ``ls`` are functional (the tools' workspace needs); every other
+    abstract method raises so an accidental use is loud, not silent.
     """
 
     def __init__(self) -> None:
@@ -120,8 +120,14 @@ class FakeWorkspace(WorkspaceFsPort):
             mime=content_type,
         )
 
-    async def ls(self, path: str = "") -> list:  # pragma: no cover
-        raise NotImplementedError
+    async def ls(self, path: str = "") -> list:
+        """The files written under ``path``: a later build sees the earlier deck."""
+        prefix = path.rstrip("/") + "/"
+        return [
+            FsEntry(path=w["path"], size=len(w["content"]))
+            for w in self.writes
+            if w["path"].startswith(prefix)
+        ]
 
     async def delete(self, path: str) -> None:  # pragma: no cover
         raise NotImplementedError
