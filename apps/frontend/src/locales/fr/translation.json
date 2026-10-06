@@ -116,6 +116,10 @@
     }
   },
   "capability": {
+    "web_research": {
+      "name": "Rechercher sur le Web",
+      "description": "Rechercher des sources publiques et lire des pages Web via un accès externe contrôlé."
+    },
     "document_access": {
       "name": "Rechercher dans les ressources",
       "description": "Capacité de rechercher une information dans les ressources de l'équipe.",

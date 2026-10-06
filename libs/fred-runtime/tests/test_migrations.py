@@ -38,6 +38,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "a1e2f3c4d5b6_create_session_history.py",  # pragma: allowlist secret
         "b2f3a4e5c6d7_add_exchange_id.py",  # pragma: allowlist secret
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
+        "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
 
@@ -46,6 +47,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
         ("d4e5c6b7a8f9", "c3d4b5a6f7e8"),  # pragma: allowlist secret
         ("c3d4b5a6f7e8", "b2f3a4e5c6d7"),  # pragma: allowlist secret
         ("b2f3a4e5c6d7", "a1e2f3c4d5b6"),  # pragma: allowlist secret
@@ -64,6 +66,12 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(session_history)")
         }
+        assert connection.execute(
+            "PRAGMA table_info(runtime_web_research_activity)"
+        ).fetchall()
+        assert connection.execute(
+            "PRAGMA table_info(runtime_web_research_activity_gate)"
+        ).fetchall()
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()
@@ -81,7 +89,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "team_id",
         "agent_instance_id",
     }
-    assert revision == ("d4e5c6b7a8f9",)  # pragma: allowlist secret
+    assert revision == ("e5f6a7b8c9d0",)  # pragma: allowlist secret
 
 
 def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:

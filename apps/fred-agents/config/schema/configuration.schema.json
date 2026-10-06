@@ -1317,6 +1317,101 @@
       "title": "UserSecurity",
       "type": "object",
       "additionalProperties": false
+    },
+    "WebResearchDeploymentConfig": {
+      "additionalProperties": false,
+      "description": "Deployment policy; never editable by an agent or sent to the model.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "egress_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Egress Url"
+        },
+        "token_env": {
+          "default": "WEB_RESEARCH_EGRESS_TOKEN",
+          "pattern": "^[A-Z][A-Z0-9_]+$",
+          "title": "Token Env",
+          "type": "string"
+        },
+        "ca_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ca File"
+        },
+        "client_certificate": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Certificate"
+        },
+        "client_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Client Key"
+        },
+        "timeout_seconds": {
+          "default": 60,
+          "maximum": 120,
+          "minimum": 5,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "max_concurrency": {
+          "default": 4,
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Concurrency",
+          "type": "integer"
+        },
+        "activity_retention_days": {
+          "default": 30,
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Activity Retention Days",
+          "type": "integer"
+        },
+        "purge_interval_seconds": {
+          "default": 60,
+          "maximum": 3600,
+          "minimum": 5,
+          "title": "Purge Interval Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "WebResearchDeploymentConfig",
+      "type": "object"
     }
   },
   "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
@@ -1341,6 +1436,9 @@
     },
     "platform": {
       "$ref": "#/$defs/PodPlatformConfig"
+    },
+    "web_research": {
+      "$ref": "#/$defs/WebResearchDeploymentConfig"
     }
   },
   "required": [

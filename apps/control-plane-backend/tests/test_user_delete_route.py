@@ -111,7 +111,8 @@ async def _deployment(
     )
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
         configuration=SimpleNamespace(
-            security=SimpleNamespace(user_directory=user_directory)
+            security=SimpleNamespace(user_directory=user_directory),
+            platform=SimpleNamespace(runtime_catalog_sources=[]),
         ),
         create_keycloak_admin_client=lambda: (
             identity if identity_administration else KeycloackDisabled()

@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     from fred_core.filesystem.structures import BaseFilesystem
 
     from fred_runtime.app.platform_sql import PlatformSqlAdapter
+    from fred_runtime.app.web_research import WebResearchService
+    from fred_runtime.app.web_research_activity import WebResearchActivityStore
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,8 @@ class PodApplicationContext:
         self._filesystem: BaseFilesystem | None = None
         self._kpi_writer: BaseKPIWriter | None = None
         self._platform_sql: PlatformSqlAdapter | None = None
+        self.web_research: WebResearchService | None = None
+        self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
@@ -265,6 +269,52 @@ class PodApplicationContext:
                 "read-only enforced server-side)"
             )
 
+    async def initialize_web_research(self) -> None:
+        from fred_runtime.app.web_research import WebResearchService
+        from fred_runtime.app.web_research_activity import WebResearchActivityStore
+
+        policy = self.configuration.web_research
+        if self._sql_engine is None:
+            if policy.enabled:
+                raise RuntimeError(
+                    "Web research requires durable SQL activity storage."
+                )
+            return
+        store = WebResearchActivityStore(
+            self._sql_engine, policy.activity_retention_days
+        )
+        try:
+            await store.check_ready()
+        except Exception:
+            if policy.enabled:
+                raise RuntimeError(
+                    "Web research activity migration is required."
+                ) from None
+            return
+        self.web_research_activity = store
+        if policy.enabled:
+            self.web_research = WebResearchService(
+                policy, self._sql_engine, service_name=self.configuration.app.runtime_id
+            )
+            self._kpi_tasks.append(asyncio.create_task(self.web_research.health_loop()))
+        self._kpi_tasks.append(asyncio.create_task(self._purge_web_activity()))
+
+    async def _purge_web_activity(self) -> None:
+        while True:
+            try:
+                if self.web_research_activity is not None:
+                    await self.web_research_activity.purge()
+            except Exception:
+                from fred_runtime.app.web_research import ACTIVITY_FAILURES
+
+                ACTIVITY_FAILURES.labels(
+                    service=self.configuration.app.runtime_id, stage="purge"
+                ).inc()
+                logger.error(
+                    "event=web_activity_purge outcome=failed reason=storage_unavailable"
+                )
+            await asyncio.sleep(self.configuration.web_research.purge_interval_seconds)
+
     def start_metrics_exporter(self) -> None:
         """Start the Prometheus scrape endpoint when configured."""
         prom_cfg = self.configuration.observability.kpi.prometheus
@@ -300,7 +350,7 @@ class PodApplicationContext:
                     )
                 )
             )
-        self._kpi_tasks = tasks
+        self._kpi_tasks.extend(tasks)
 
     # ------------------------------------------------------------------
     # Accessors
@@ -357,6 +407,8 @@ class PodApplicationContext:
         if self._platform_sql is not None:
             await self._platform_sql.dispose()
             logger.info("[fred-runtime] platform SQL engine disposed")
+        if self.web_research is not None:
+            await self.web_research.close()
         if self._control_plane_http_client is not None:
             await self._control_plane_http_client.aclose()
         self._stop_metrics_exporter()

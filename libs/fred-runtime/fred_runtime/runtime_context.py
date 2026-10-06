@@ -22,8 +22,10 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.runtime import PlatformSqlPort
+from fred_sdk.contracts.web_research import WebResearchPort
 from langchain_core.language_models.chat_models import BaseChatModel
 
 if TYPE_CHECKING:
@@ -159,6 +161,7 @@ class RuntimeConfig:
     # `PodApplicationContext.initialize_platform_sql()`. None on the SQLite
     # dev escape hatch (Postgres-only enforcement).
     platform_sql: PlatformSqlPort | None = None
+    web_research_factory: Callable[[BoundRuntimeContext], WebResearchPort] | None = None
     # The two head blocks from the pod's `config/platform_prompt.json`, threaded
     # through from `AgentPodConfig.get_platform_prompt_file()` at boot.
     # `default_platform_prompt` is the fallback used by

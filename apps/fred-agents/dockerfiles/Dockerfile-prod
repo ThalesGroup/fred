@@ -33,6 +33,7 @@ COPY libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fr
 COPY libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
+COPY libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
 
 RUN make prod VENV=/app/venv TARGET=/app/target
 
@@ -80,6 +81,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-team-wiki 
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-web-research /workspace/libs/capabilities/fred-capability-web-research
 
 # alembic.ini is a real file only at the repo root; the per-project ones are dev-only
 # symlinks kept out of the build context (see .dockerignore), because Kaniko would copy
