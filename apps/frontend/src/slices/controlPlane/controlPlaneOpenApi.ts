@@ -3026,6 +3026,7 @@ export type FieldSpec = {
       )
     | null;
   ui?: UiHints;
+  scope_private?: boolean | null;
 };
 export type AssetSlot = {
   key: string;

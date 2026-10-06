@@ -96,6 +96,8 @@ from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
+    CapabilityConfigCopyRequest,
+    CapabilityConfigCopyResult,
     CapabilityIdentity,
     ChatControlsRequest,
     ChatControlsResponse,
@@ -168,6 +170,10 @@ from fred_runtime.capabilities import (
     enforce_asset_slots,
     evaluate_chat_controls_batch,
     validate_turn_options,
+)
+from fred_runtime.capabilities.copy import (
+    CapabilityCopyRejectedError,
+    prepare_capability_copy,
 )
 from fred_runtime.capabilities.errors import (
     CapabilityError,
@@ -5204,6 +5210,70 @@ def _build_agent_router(
             schema_version=capability.manifest.version,
             config=stored.model_dump(mode="json"),
         )
+
+    @router.post("/capabilities/{capability_id}/copy-config")
+    async def copy_capability_config(
+        capability_id: str,
+        body: CapabilityConfigCopyRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapabilityConfigCopyResult:
+        """
+        Prepare one capability's stored config for a copied agent instance.
+
+        POST <base_url>/agents/capabilities/{capability_id}/copy-config
+        Body: CapabilityConfigCopyRequest — the source envelope, the source and
+        target team and agent instance.
+
+        Why this endpoint exists:
+        - only the pod knows a capability's hidden and nested settings, so the
+          pod resets its scope-private settings when the scope changes and
+          re-submits its configuration files to the capability's own save in
+          the target, with the caller's token on both sides
+        - 404 when the capability is not installed here, 422 when it rejects
+          the config for the target; the control plane then copies the agent
+          without it. `notices` says what an editor must redo in the target.
+        """
+
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        capability = capability_registry.capability(capability_id)
+        user_id = (caller.uid if caller is not None else None) or "anonymous"
+        auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+
+        def save_ctx(team_id: str, agent_instance_id: str) -> SaveContext:
+            return SaveContext(
+                identity=CapabilityIdentity(
+                    user_id=user_id,
+                    team_id=team_id,
+                    agent_instance_id=agent_instance_id,
+                ),
+                services=_build_capability_save_services(
+                    capability_id=capability_id,
+                    user_id=user_id,
+                    team_id=team_id,
+                    access_token=access_token,
+                    agent_instance_id=agent_instance_id,
+                ),
+            )
+
+        try:
+            return await prepare_capability_copy(
+                capability,
+                body,
+                source_ctx=save_ctx(body.source_team_id, body.source_agent_instance_id),
+                target_ctx=save_ctx(body.target_team_id, body.target_agent_instance_id),
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     @router.post("/capabilities/chat-controls")
     async def evaluate_chat_controls(

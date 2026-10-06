@@ -52,11 +52,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import List
+from typing import Annotated, List
 
 from fastapi import APIRouter, File, UploadFile
 from fred_sdk.contracts.capability import (
     AgentCapability,
+    AssetKey,
     AssetSlot,
     CapabilityContext,
     CapabilityManifest,
@@ -77,6 +78,7 @@ from fred_capability_ppt_filler.concurrency import (
 )
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.folder_resolution import (
+    CODE_FOLDER_NOT_FOUND,
     FolderResolver,
     resolve_and_validate_images,
 )
@@ -130,7 +132,7 @@ class PptFillerConfig(BaseModel):
     The template BYTES never appear here (RFC §3.8).
     """
 
-    template_key: str = PPT_FILLER_TEMPLATE_KEY
+    template_key: Annotated[str, AssetKey(TEMPLATE_SLOT)] = PPT_FILLER_TEMPLATE_KEY
     schema_slides: List[SlideSchema] = []
 
 
@@ -142,6 +144,26 @@ class _PortFolderResolver:
 
     async def resolve(self, folder: str) -> str | None:
         return await self._port.resolve_folder(folder)
+
+
+def _unbound_image_fields_notice(
+    missing: Sequence[TemplateError], result: ParseResult
+) -> str:
+    """What an editor must redo after a copy: the image fields left without a folder."""
+
+    folder_by_key = {
+        key_field.key: key_field.folder
+        for slide_schema in result.slides
+        for key_field in slide_schema.keys
+    }
+    fields = ", ".join(
+        f"{{{{{error.key}}}}} ({folder_by_key.get(error.key) or '?'})"
+        for error in missing
+    )
+    return (
+        f"Image fields without their folder in this space: {fields}. Create "
+        "these folders in the resources, then upload the template again."
+    )
 
 
 def _format_template_errors(errors: Sequence[TemplateError]) -> str:
@@ -385,8 +407,17 @@ class PptFillerCapability(
                 result = await resolve_and_validate_images(pptx_bytes, result, resolver)
             finally:
                 release_heavy_job_slot()
-            if result.errors:
-                raise ValueError(_format_template_errors(result.errors))
+            errors = list(result.errors)
+            if ctx.copied_from_another_scope:
+                # A copy keeps the template even when the new space lacks its
+                # image folders: those fields stay unbound until an editor
+                # creates the folders and uploads the template again.
+                missing = [e for e in errors if e.code == CODE_FOLDER_NOT_FOUND]
+                errors = [e for e in errors if e.code != CODE_FOLDER_NOT_FOUND]
+                if missing:
+                    ctx.notices.append(_unbound_image_fields_notice(missing, result))
+            if errors:
+                raise ValueError(_format_template_errors(errors))
 
             assets = ctx.services.agent_assets
             if assets is None:
