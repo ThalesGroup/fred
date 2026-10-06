@@ -15,8 +15,10 @@
 import asyncio
 import logging
 from collections.abc import Iterable
+from uuid import UUID
 
 from fred_core import ORGANIZATION_ID, KeycloackDisabled, KeycloakUser, OrganizationPermission, create_keycloak_admin
+from fred_core.users.store.postgres_user_store import get_user_store
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakGetError
 
@@ -30,7 +32,21 @@ _USER_PAGE_SIZE = 200
 
 async def list_users(_curent_user: KeycloakUser) -> list[UserSummary]:
     await get_rebac_engine().check_user_permission_or_raise(_curent_user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID)
-    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if get_configuration().security.user_directory == "local":
+        store = get_user_store()
+        local_summaries: list[UserSummary] = []
+        offset = 0
+        while True:
+            page = await store.list_identities(offset, _USER_PAGE_SIZE)
+            local_summaries.extend(UserSummary.from_raw_user(raw) for raw in page)
+            if len(page) < _USER_PAGE_SIZE:
+                return local_summaries
+            offset += _USER_PAGE_SIZE
+
+    admin = create_keycloak_admin(
+        get_configuration().security.m2m,
+        user_directory=get_configuration().security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning empty user list.")
         return []
@@ -56,7 +72,21 @@ async def get_users_by_ids(user_ids: Iterable[str]) -> dict[str, UserSummary]:
     if not unique_ids:
         return {}
 
-    admin = create_keycloak_admin(get_configuration().security.m2m)
+    if get_configuration().security.user_directory == "local":
+        uuids = []
+        for user_id in unique_ids:
+            try:
+                uuids.append(UUID(user_id))
+            except ValueError:
+                continue
+        found = await get_user_store().get_identities(uuids)
+        summaries = {raw["id"]: UserSummary.from_raw_user(raw) for raw in found if isinstance(raw["id"], str)}
+        return {user_id: summaries.get(user_id, UserSummary(id=user_id)) for user_id in unique_ids}
+
+    admin = create_keycloak_admin(
+        get_configuration().security.m2m,
+        user_directory=get_configuration().security.user_directory,
+    )
     if isinstance(admin, KeycloackDisabled):
         logger.info("Keycloak admin client not configured; returning fallback users.")
         return {}

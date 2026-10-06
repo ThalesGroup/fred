@@ -37,6 +37,7 @@ from fred_pod.common import (
     parse_yaml_mapping_file,
 )
 from fred_pod.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
+from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_pod.security.structure import M2MSecurity
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 
@@ -147,9 +148,17 @@ class PodConfiguration(BaseModel):
         environment variable holds it, and the token provider reads that
         variable itself. Nothing here ever holds the value.
         """
+        m2m = self.security.m2m
+        token_endpoint = resolve_endpoints(
+            provider=m2m.provider,
+            realm_url=str(m2m.realm_url).rstrip("/"),
+            token_url=str(m2m.token_url) if m2m.token_url else None,
+        ).token_endpoint
         return M2MAuthConfig(
             keycloak_realm_url=str(self.security.m2m.realm_url).rstrip("/"),
             client_id=self.security.m2m.client_id,
+            scope=m2m.scope,
+            token_url_override=token_endpoint,
             secret_env=self.security.m2m.secret_env_var,
         )
 

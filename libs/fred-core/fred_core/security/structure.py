@@ -28,6 +28,7 @@ from fred_pod.security.structure import (
     RebacBaseConfig,
     RebacConfiguration,
     SecurityConfiguration,
+    UserClaims,
     UserSecurity,
     is_service_agent,
 )
@@ -43,6 +44,7 @@ __all__ = [
     "RebacBaseConfig",
     "RebacConfiguration",
     "SecurityConfiguration",
+    "UserClaims",
     "UserSecurity",
     "is_service_agent",
 ]

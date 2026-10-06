@@ -63,8 +63,9 @@ class ClientCredentialsProvider:
         client_secret: str,
         audience: Optional[str] = None,
         verify: Optional[bool] = None,
+        token_url: Optional[str] = None,
     ):
-        self.token_url = (
+        self.token_url = token_url or (
             f"{keycloak_base.rstrip('/')}/realms/{realm}/protocol/openid-connect/token"
         )
         self.client_id = client_id

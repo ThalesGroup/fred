@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import time
+from typing import cast
 
 import httpx
 import pytest
@@ -28,8 +29,9 @@ from fred_runtime.runtime_support.user_token_refresher import (
     aclose_token_refresh_client,
     refresh_user_access_token_from_keycloak,
 )
+from fred_sdk.contracts.context import RuntimeContext
 
-REALM = "http://keycloak/realms/test"
+TOKEN_URL = "http://keycloak/realms/test/protocol/openid-connect/token"
 
 # Every test here drives the async refresher; pytest-asyncio runs in strict mode
 # in this package, so the marker is applied module-wide rather than per test.
@@ -69,11 +71,61 @@ async def test_returns_new_token_on_success(monkeypatch):
     _install_transport(monkeypatch, lambda request: _token_response(payload))
 
     result = await refresh_user_access_token_from_keycloak(
-        REALM, "client-id", "old-refresh"
+        TOKEN_URL, "client-id", "old-refresh"
     )
 
     assert result["access_token"] == "new-access"
     assert result["refresh_token"] == "new-refresh"
+
+
+async def test_posts_to_explicit_oidc_token_endpoint(monkeypatch):
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _token_response({"access_token": "new-access"})
+
+    _install_transport(monkeypatch, handler)
+
+    await refresh_user_access_token_from_keycloak(
+        "https://identity.example/oauth2/v2.0/token", "client-id", "old-refresh"
+    )
+
+    assert str(seen[0].url) == "https://identity.example/oauth2/v2.0/token"
+
+
+async def test_runtime_adapter_passes_resolved_token_endpoint(monkeypatch):
+    from types import SimpleNamespace
+
+    from fred_runtime.integrations.v2_runtime import adapters
+
+    token_url = "https://identity.example/oauth2/v2.0/token"
+    seen: dict[str, str] = {}
+
+    async def fake_refresh(**kwargs):
+        seen.update(kwargs)
+        return {"access_token": "new-access", "refresh_token": "new-refresh"}
+
+    monkeypatch.setattr(adapters, "get_token_endpoint", lambda: token_url)
+    monkeypatch.setattr(adapters, "get_keycloak_client_id", lambda: "app-client")
+    monkeypatch.setattr(
+        adapters, "refresh_user_access_token_from_keycloak", fake_refresh
+    )
+    runtime_context = SimpleNamespace(
+        refresh_token="old-refresh", access_token="old-access"
+    )
+
+    result = await adapters._refresh_runtime_context_access_token(
+        cast(RuntimeContext, runtime_context)
+    )
+
+    assert result == "new-access"
+    assert seen == {
+        "token_url": token_url,
+        "client_id": "app-client",
+        "refresh_token": "old-refresh",
+    }
+    assert runtime_context.refresh_token == "new-refresh"
 
 
 async def test_adds_expires_at_timestamp(monkeypatch):
@@ -84,7 +136,7 @@ async def test_adds_expires_at_timestamp(monkeypatch):
 
     before = time.time()
     result = await refresh_user_access_token_from_keycloak(
-        REALM, "client-id", "old-refresh"
+        TOKEN_URL, "client-id", "old-refresh"
     )
     after = time.time()
 
@@ -101,7 +153,7 @@ async def test_expires_at_never_negative_when_expires_in_is_zero(monkeypatch):
     )
 
     result = await refresh_user_access_token_from_keycloak(
-        REALM, "client-id", "old-refresh"
+        TOKEN_URL, "client-id", "old-refresh"
     )
 
     expires_at = result["expires_at_timestamp"]
@@ -119,12 +171,12 @@ async def test_token_url_and_form_built_correctly(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     await refresh_user_access_token_from_keycloak(
-        f"{REALM}/",  # trailing slash must be stripped
+        TOKEN_URL,
         "my-client",
         "old-refresh",
     )
 
-    assert str(seen[0].url) == f"{REALM}/protocol/openid-connect/token"
+    assert str(seen[0].url) == TOKEN_URL
     body = dict(httpx.QueryParams(seen[0].content.decode()))
     assert body["grant_type"] == "refresh_token"
     assert body["client_id"] == "my-client"
@@ -165,7 +217,7 @@ async def test_http_error_reports_an_allow_listed_code(
     )
 
     with pytest.raises(RuntimeError, match="Token refresh failed") as exc_info:
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     message = str(exc_info.value)
     assert expected in message
@@ -186,7 +238,7 @@ async def test_error_body_never_reaches_the_log_or_the_exception(monkeypatch, ca
 
     with caplog.at_level(logging.ERROR):
         with pytest.raises(RuntimeError) as exc_info:
-            await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+            await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     blob = caplog.text + str(exc_info.value)
     for secret in ("8f2c-UID-alice", "SECRET", "error_description"):
@@ -230,7 +282,7 @@ async def test_malformed_2xx_body_never_reaches_a_log_sink(
 
     with caplog.at_level(logging.ERROR):
         with pytest.raises(RuntimeError, match="malformed token response") as exc_info:
-            await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+            await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     blob = caplog.text + str(exc_info.value)
     for secret in ("8f2c-UID-alice", "SECRET", "nested"):
@@ -245,7 +297,7 @@ async def test_non_json_2xx_body_fails_closed(monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="malformed token response"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
 
 async def test_huge_expires_in_is_clamped_to_the_ceiling(monkeypatch):
@@ -261,7 +313,9 @@ async def test_huge_expires_in_is_clamped_to_the_ceiling(monkeypatch):
         lambda request: _token_response({"access_token": "tok", "expires_in": 10**15}),
     )
 
-    result = await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    result = await refresh_user_access_token_from_keycloak(
+        TOKEN_URL, "client-id", "tok"
+    )
 
     expires_at = result["expires_at_timestamp"]
     assert isinstance(expires_at, float)
@@ -274,7 +328,9 @@ async def test_absent_expires_in_falls_back_to_the_documented_default(monkeypatc
         monkeypatch, lambda request: _token_response({"access_token": "tok"})
     )
 
-    result = await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    result = await refresh_user_access_token_from_keycloak(
+        TOKEN_URL, "client-id", "tok"
+    )
 
     expires_at = result["expires_at_timestamp"]
     assert isinstance(expires_at, float)
@@ -290,7 +346,7 @@ async def test_malformed_body_emits_error_status_not_ok(monkeypatch):
     writer = _install_kpi(monkeypatch)
 
     with pytest.raises(RuntimeError, match="malformed token response"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     assert writer.emitted[0][1]["status"] == "error"
 
@@ -302,7 +358,7 @@ async def test_timeout_is_bounded_and_fails_closed(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     with pytest.raises(RuntimeError, match="timed out"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
 
 async def test_transport_error_fails_closed(monkeypatch):
@@ -312,7 +368,7 @@ async def test_transport_error_fails_closed(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     with pytest.raises(RuntimeError, match="transport error"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
 
 async def test_raw_os_error_is_normalized_not_leaked(monkeypatch):
@@ -329,7 +385,7 @@ async def test_raw_os_error_is_normalized_not_leaked(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     with pytest.raises(RuntimeError, match="transport error"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
 
 async def test_failure_does_not_wedge_the_singleflight_slot(monkeypatch):
@@ -345,9 +401,11 @@ async def test_failure_does_not_wedge_the_singleflight_slot(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     with pytest.raises(RuntimeError):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
-    result = await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    result = await refresh_user_access_token_from_keycloak(
+        TOKEN_URL, "client-id", "tok"
+    )
     assert result["access_token"] == "recovered"
     assert calls["n"] == 2
 
@@ -370,7 +428,9 @@ async def test_concurrent_refreshes_for_one_identity_coalesce(monkeypatch):
 
     waiters = [
         asyncio.create_task(
-            refresh_user_access_token_from_keycloak(REALM, "client-id", "same-refresh")
+            refresh_user_access_token_from_keycloak(
+                TOKEN_URL, "client-id", "same-refresh"
+            )
         )
         for _ in range(10)
     ]
@@ -396,10 +456,10 @@ async def test_distinct_principals_never_share_a_token(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     alice = asyncio.create_task(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "alice-refresh")
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "alice-refresh")
     )
     bob = asyncio.create_task(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "bob-refresh")
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "bob-refresh")
     )
     await asyncio.sleep(0)
     release.set()
@@ -420,8 +480,8 @@ async def test_same_token_different_client_id_does_not_coalesce(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     await asyncio.gather(
-        refresh_user_access_token_from_keycloak(REALM, "client-a", "same"),
-        refresh_user_access_token_from_keycloak(REALM, "client-b", "same"),
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-a", "same"),
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-b", "same"),
     )
 
     assert calls["n"] == 2
@@ -439,7 +499,7 @@ async def test_concurrent_callers_all_see_a_refresh_failure(monkeypatch):
 
     waiters = [
         asyncio.create_task(
-            refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+            refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
         )
         for _ in range(3)
     ]
@@ -466,7 +526,7 @@ async def test_cancelled_sole_caller_leaves_no_unretrieved_exception(monkeypatch
     _install_transport(monkeypatch, handler)
 
     solo = asyncio.create_task(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     )
     await asyncio.sleep(0)
     solo.cancel()
@@ -491,10 +551,10 @@ async def test_cancelled_caller_does_not_abort_the_shared_refresh(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     quitter = asyncio.create_task(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "shared")
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "shared")
     )
     stayer = asyncio.create_task(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "shared")
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "shared")
     )
     await asyncio.sleep(0)
     quitter.cancel()
@@ -534,7 +594,7 @@ async def test_refresh_does_not_block_the_event_loop(monkeypatch):
 
     ticker_task = asyncio.create_task(ticker())
     try:
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     finally:
         ticker_task.cancel()
 
@@ -604,7 +664,9 @@ async def test_success_emits_duration_and_ok_status(monkeypatch):
     )
     writer = _install_kpi(monkeypatch)
 
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "secret-refresh")
+    await refresh_user_access_token_from_keycloak(
+        TOKEN_URL, "client-id", "secret-refresh"
+    )
 
     assert len(writer.emitted) == 1
     name, dims = writer.emitted[0]
@@ -625,7 +687,7 @@ async def test_metric_labels_survive_the_prometheus_allow_list(monkeypatch):
     )
     writer = _install_kpi(monkeypatch)
 
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     emitted_dims = set(writer.emitted[0][1])
     stripped = emitted_dims - set(PROMETHEUS_ALLOWED_LABELS)
@@ -637,7 +699,7 @@ async def test_failure_emits_error_status(monkeypatch):
     writer = _install_kpi(monkeypatch)
 
     with pytest.raises(RuntimeError):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     assert writer.emitted[0][1]["status"] == "error"
 
@@ -656,7 +718,7 @@ async def test_timeout_emits_timeout_status_not_error(monkeypatch):
     writer = _install_kpi(monkeypatch)
 
     with pytest.raises(RuntimeError, match="timed out"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     assert writer.emitted[0][1]["status"] == "timeout"
 
@@ -673,7 +735,7 @@ async def test_total_wait_is_bounded_even_if_a_phase_hangs(monkeypatch):
 
     started = time.perf_counter()
     with pytest.raises(RuntimeError, match="timed out"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     elapsed = time.perf_counter() - started
 
     assert elapsed < 5, f"caller parked {elapsed:.1f}s despite the total budget"
@@ -699,7 +761,7 @@ async def test_the_exchange_task_itself_is_bounded_not_just_its_waiters(monkeypa
     monkeypatch.setattr(user_token_refresher, "REFRESH_TIMEOUT_SECONDS", 0.05)
 
     with pytest.raises(RuntimeError, match="timed out"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     state = user_token_refresher._LOOP_STATE[asyncio.get_running_loop()]
     assert state.inflight == {}, "the timed-out exchange kept its singleflight slot"
@@ -719,7 +781,7 @@ async def test_emitted_dims_carry_no_secret_or_user_identity(monkeypatch):
     writer = _install_kpi(monkeypatch)
 
     await refresh_user_access_token_from_keycloak(
-        REALM, "client-id", "super-secret-refresh"
+        TOKEN_URL, "client-id", "super-secret-refresh"
     )
 
     blob = json.dumps(writer.emitted)
@@ -737,7 +799,7 @@ async def test_aclose_releases_the_loop_client(monkeypatch):
         monkeypatch,
         lambda request: _token_response({"access_token": "tok", "expires_in": 300}),
     )
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     loop = asyncio.get_running_loop()
     state = user_token_refresher._LOOP_STATE[loop]
 
@@ -759,12 +821,12 @@ async def test_refresh_after_shutdown_fails_instead_of_rebuilding_a_client(monke
         monkeypatch,
         lambda request: _token_response({"access_token": "tok", "expires_in": 300}),
     )
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     first = user_token_refresher._LOOP_STATE[asyncio.get_running_loop()].client
     await aclose_token_refresh_client()
 
     with pytest.raises(RuntimeError, match="shut down"):
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     # Same (closed) client — no second pool was built behind the closer's back.
     assert user_token_refresher._LOOP_STATE[asyncio.get_running_loop()].client is first
@@ -791,7 +853,7 @@ async def test_client_closed_under_an_inflight_exchange_is_reported_as_shutdown(
         monkeypatch,
         lambda request: _token_response({"access_token": "tok", "expires_in": 300}),
     )
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     state = user_token_refresher._LOOP_STATE[asyncio.get_running_loop()]
     # Exactly the drain's own step, without marking the state closed — the
     # `_loop_state()` shutdown guard would otherwise answer first and this
@@ -805,7 +867,7 @@ async def test_client_closed_under_an_inflight_exchange_is_reported_as_shutdown(
     caplog.clear()
     with caplog.at_level(logging.WARNING):
         with pytest.raises(RuntimeError, match="client closed"):
-            await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+            await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     assert [r.levelname for r in caplog.records] == ["WARNING"]
     assert "client closed during shutdown" in caplog.records[0].message
@@ -831,7 +893,7 @@ async def test_unexpected_runtime_error_is_not_reported_as_an_orderly_shutdown(
     caplog.clear()  # same order-independence guard as the test above
     with caplog.at_level(logging.WARNING):
         with pytest.raises(RuntimeError, match="internal error"):
-            await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+            await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     assert [r.levelname for r in caplog.records] == ["ERROR"]
     assert "NotImplementedError" in caplog.records[0].getMessage()
@@ -893,8 +955,10 @@ async def test_shared_client_never_persists_cookies_across_principals(monkeypatc
 
     _install_transport(monkeypatch, handler)
 
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "alice-refresh")
-    await refresh_user_access_token_from_keycloak(REALM, "client-id", "bob-refresh")
+    await refresh_user_access_token_from_keycloak(
+        TOKEN_URL, "client-id", "alice-refresh"
+    )
+    await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "bob-refresh")
 
     assert seen == ["", ""], f"cookie leaked between principals: {seen}"
 
@@ -919,7 +983,7 @@ async def test_aclose_drains_inflight_before_closing_the_transport(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     inflight = asyncio.create_task(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
     )
     await asyncio.sleep(0)
 
@@ -948,7 +1012,9 @@ async def test_refresh_still_works_without_a_runtime_context(monkeypatch):
         lambda request: _token_response({"access_token": "tok", "expires_in": 300}),
     )
 
-    result = await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+    result = await refresh_user_access_token_from_keycloak(
+        TOKEN_URL, "client-id", "tok"
+    )
     assert result["access_token"] == "tok"
 
 
@@ -973,7 +1039,7 @@ def test_dead_loop_state_is_swept_not_leaked(monkeypatch):
     )
 
     async def one_refresh() -> None:
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", "tok")
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "tok")
 
     asyncio.run(one_refresh())  # loop A lives, refreshes, then closes
     assert len(user_token_refresher._LOOP_STATE) == 1  # A's entry still there
@@ -1025,7 +1091,7 @@ async def test_refresh_arriving_mid_drain_is_also_drained(monkeypatch):
     _install_transport(monkeypatch, handler)
 
     async def refresh(tag: str, token: str) -> None:
-        await refresh_user_access_token_from_keycloak(REALM, "client-id", token)
+        await refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", token)
         order.append(tag)
 
     first = asyncio.create_task(refresh("first", "tok-a"))
@@ -1077,8 +1143,8 @@ async def test_coalesced_callers_each_get_their_own_payload(monkeypatch):
     )
 
     a, b = await asyncio.gather(
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "same"),
-        refresh_user_access_token_from_keycloak(REALM, "client-id", "same"),
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "same"),
+        refresh_user_access_token_from_keycloak(TOKEN_URL, "client-id", "same"),
     )
 
     assert a == b

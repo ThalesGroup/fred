@@ -27,9 +27,9 @@ from fred_core import (
     OrganizationPermission,
     RebacEngine,
     get_current_user,
-    get_current_user_without_gcu,
 )
 from fred_core.common import personal_team_id
+from fred_core.security.oidc import get_current_user_before_gcu
 from fred_core.users.store.postgres_user_store import get_user_store
 from pydantic import BaseModel
 
@@ -61,8 +61,10 @@ from control_plane_backend.users.platform_roles import (
     revoke_platform_role as revoke_platform_role_from_service,
 )
 from control_plane_backend.users.schemas import (
+    AccountSuspensionDisabledError,
     CreateUserRequest,
     GrantPlatformRoleRequest,
+    IdentityManagedByProviderError,
     KeycloakM2MUserOperationDisabledError,
     PlatformAdminRootOnlyError,
     PlatformBootstrapNotCompletedError,
@@ -144,12 +146,33 @@ def _parse_user_uuid(user: KeycloakUser) -> UUID:
 def register_exception_handlers(app: FastAPI) -> None:
     """Register user-domain exception handlers."""
 
+    @app.exception_handler(AccountSuspensionDisabledError)
+    async def account_suspension_disabled_handler(
+        _request, exc: AccountSuspensionDisabledError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": str(exc), "reason": "account_suspension_disabled"},
+        )
+
     @app.exception_handler(KeycloakM2MUserOperationDisabledError)
     async def keycloak_disabled_for_users_handler(
         _request,
         exc: KeycloakM2MUserOperationDisabledError,
     ) -> JSONResponse:
         return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+    @app.exception_handler(IdentityManagedByProviderError)
+    async def identity_managed_by_provider_handler(
+        _request, exc: IdentityManagedByProviderError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": str(exc),
+                "reason": "managed_by_identity_provider",
+            },
+        )
 
     @app.exception_handler(UserAlreadyExistsError)
     async def user_already_exists_handler(
@@ -383,16 +406,18 @@ async def delete_user(
     await rebac.check_user_permission_or_raise(
         user, OrganizationPermission.CAN_ADMINISTER_USERS, ORGANIZATION_ID
     )
-    # PLATFORM-ADMIN-DELEGATION-RFC.md §3 (#2405): deleting the bootstrap
-    # root's Keycloak account would be a one-call bypass of the root's
-    # unrevocability — completed_by could never authenticate again while
-    # bootstrap stays permanently closed, freezing the platform_admin
-    # population with no in-product recovery.
+    # Deleting the root would freeze bootstrap with no in-product recovery.
     if user_id == await bootstrap_store.get_completed_by():
         raise PlatformRoleRootProtectedError()
     # "*" is the wildcard subject and "#" marks a userset: neither names a person.
     if user_id == "*" or "#" in user_id:
         raise UserNotFoundError(user_id)
+    if deps.configuration.security.user_directory == "local":
+        if not rebac.requires_active_accounts:
+            raise AccountSuspensionDisabledError()
+        await rebac.suspend_account(user_id)
+        return
+
     admin = _get_keycloak_admin_for_user_operations(deps)
     # The ban alone ends access, so the person's other relations stay. It comes before
     # the identity-provider account: a failure after it leaves the person refused, and
@@ -416,7 +441,7 @@ class UserDetails(BaseModel):
 )
 async def get_user_details(
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> UserDetails:
     """Return the personal team through the shared team resolver.
@@ -446,7 +471,7 @@ async def get_user_details(
 async def validate_gcu(
     deps: UserDependencies,
     team_deps: TeamDependencies,
-    user: KeycloakUser = Depends(get_current_user_without_gcu),
+    user: KeycloakUser = Depends(get_current_user_before_gcu),
     user_store: BaseUserStore = Depends(get_user_store),
 ) -> None:
     """

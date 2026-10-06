@@ -94,6 +94,7 @@ class _Installed:
     issuers: frozenset[str]
     user_clients: frozenset[str]
     account_status: RebacEngine | None = None
+    account_status_required: bool = False
 
 
 _installed = _Installed(DelegationConfig(), frozenset(), frozenset())
@@ -120,6 +121,7 @@ def initialize_delegation(
         config=config,
         issuers=frozenset(issuer.rstrip("/") for issuer in issuers if issuer),
         user_clients=frozenset(user_clients) | frozenset(config.user_clients),
+        account_status_required=config.in_use,
     )
     logger.info(
         "[AUTH] Delegation initialized: act_for_people=%s accept_delegated_calls=%s "
@@ -148,10 +150,15 @@ def get_delegation_config() -> DelegationConfig:
 async def enforce_account_status(engine: RebacEngine) -> None:
     """Validate `engine`'s account status model and install it for each request's check.
 
-    Does nothing with both switches off; a failed validation stops startup.
+    Local-directory engines also enforce status with delegation off.
+    A failed validation stops startup.
     """
     global _installed
-    if not _installed.config.in_use:
+    required = _installed.config.in_use or engine.requires_active_accounts
+    _installed = replace(
+        _installed, account_status=None, account_status_required=required
+    )
+    if not required:
         return
     if not engine.requires_active_accounts:
         raise ValueError("Delegation requires an engine that enforces account status.")
@@ -161,7 +168,7 @@ async def enforce_account_status(engine: RebacEngine) -> None:
 
 async def require_active_subject(subject: KeycloakUser | AssertedUser) -> None:
     """Refuse a request whose subject is suspended, or whose account status is unknown."""
-    if not _installed.config.in_use:
+    if not _installed.account_status_required:
         return
     engine = _installed.account_status
     if engine is None:

@@ -80,6 +80,7 @@ async def _deployment(
     *,
     rebac: AccountStatusRebacEngine | None = None,
     identity_administration: bool = True,
+    user_directory: str = "keycloak",
 ) -> AsyncIterator[_Deployment]:
     calls: list[str] = []
     engine_under_test = rebac if rebac is not None else AccountStatusRebacEngine()
@@ -109,9 +110,12 @@ async def _deployment(
         uid="synthetic-admin", username="synthetic-admin", roles=[]
     )
     app.dependency_overrides[get_user_service_dependencies] = lambda: SimpleNamespace(
+        configuration=SimpleNamespace(
+            security=SimpleNamespace(user_directory=user_directory)
+        ),
         create_keycloak_admin_client=lambda: (
             identity if identity_administration else KeycloackDisabled()
-        )
+        ),
     )
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -296,3 +300,65 @@ async def test_a_failed_ban_write_keeps_the_identity_account() -> None:
         assert response.status_code == 500
         assert deployment.calls == ["suspend_account"]
         await _assert_person_untouched(deployment)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("delegation_enabled", [False, True])
+async def test_local_delete_bans_person_without_calling_identity_provider(
+    delegation_enabled: bool,
+) -> None:
+    async with _deployment(user_directory="local") as deployment:
+        initialize_delegation(DelegationConfig(act_for_people=delegation_enabled))
+        await enforce_account_status(deployment.rebac)
+        deployment.calls.clear()
+        person = KeycloakUser(uid=_PERSON, username="synthetic", roles=[])
+        await require_active_subject(person)
+
+        response = await deployment.client.delete(_DELETE)
+
+        assert response.status_code == 204
+        assert deployment.calls == ["suspend_account"]
+        assert deployment.identity.accounts == {_PERSON, _BYSTANDER}
+        assert _MEMBERSHIP in deployment.rebac.relations
+        await _assert_banned(deployment.rebac)
+        with pytest.raises(AccountStatusError):
+            await require_active_subject(person)
+        await require_active_subject(
+            KeycloakUser(uid=_BYSTANDER, username="synthetic", roles=[])
+        )
+
+
+@pytest.mark.asyncio
+async def test_local_delete_refuses_when_account_suspension_is_disabled() -> None:
+    rebac = AccountStatusRebacEngine(requires_active_accounts=False)
+    async with _deployment(user_directory="local", rebac=rebac) as deployment:
+        response = await deployment.client.delete(_DELETE)
+
+        assert response.status_code == 403
+        assert response.json() == {
+            "detail": "Account suspension is disabled in this deployment.",
+            "reason": "account_suspension_disabled",
+        }
+        assert deployment.calls == []
+        await _assert_person_untouched(deployment)
+
+
+@pytest.mark.asyncio
+async def test_local_delete_does_not_succeed_when_the_ban_write_fails() -> None:
+    async with _deployment(
+        user_directory="local", rebac=_BanWriteFails()
+    ) as deployment:
+        response = await deployment.client.delete(_DELETE)
+
+        assert response.status_code == 500
+        assert deployment.calls == ["suspend_account"]
+        await _assert_person_untouched(deployment)
+
+
+@pytest.mark.asyncio
+async def test_local_delete_still_protects_bootstrap_root() -> None:
+    async with _deployment(user_directory="local") as deployment:
+        response = await deployment.client.delete(f"/users/{_ROOT}")
+
+        assert response.status_code == 403
+        assert deployment.calls == []
