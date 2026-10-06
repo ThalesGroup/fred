@@ -408,12 +408,15 @@
           "agentDefault": "The agent's model"
         },
         "variety_check": {
-          "title": "Variety check",
-          "description": "Before the first presentation of a conversation, the agent is asked to vary its slides when the same template slide, or the same type of slide, comes back three times or more.",
+          "title": "Enforce variety",
+          "atMost": "at most",
+          "times": "times each",
+          "modeAria": "What must vary",
+          "maxAria": "Maximum number of times",
+          "description": "Keeps the same slide from coming back too often, as far as the template allows. The agent is asked to revise the first presentation of each conversation.",
           "options": {
-            "template_slide": "By template slide",
-            "kind": "By slide type",
-            "off": "None"
+            "template_slide": "By slide name",
+            "kind": "By identified slide type"
           }
         }
       },

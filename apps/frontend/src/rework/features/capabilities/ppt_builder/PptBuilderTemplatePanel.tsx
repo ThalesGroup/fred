@@ -14,7 +14,7 @@
 
 // The one surface both the Advanced widget and the Simple pack options render
 // for ppt_builder: an optional template upload, the background analysis
-// status, a summary with a "review patterns" entry, and the vision settings.
+// status, a summary with a "review patterns" entry, the vision and variety settings.
 // Nothing here is mandatory.
 
 import { useRef, useState } from "react";
@@ -24,6 +24,7 @@ import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { PatternReviewDialog } from "./PatternReviewDialog";
+import { PptBuilderVarietySettings } from "./PptBuilderVarietySettings";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { isInProgress, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
 import type { VisionAvailability } from "./useVisionAvailability";
@@ -134,6 +135,8 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
         onConfigChange={onConfigChange}
         vision={vision}
       />
+
+      <PptBuilderVarietySettings disabled={disabled} configValues={configValues} onConfigChange={onConfigChange} />
 
       {reviewOpen && effective && (
         <PatternReviewDialog

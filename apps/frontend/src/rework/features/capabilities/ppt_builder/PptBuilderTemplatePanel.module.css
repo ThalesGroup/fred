@@ -95,6 +95,35 @@
   font: var(--font-body-small);
 }
 
+/* The variety row: the vision row's layout, but a div (its selects must not
+   toggle the switch); the sentence wraps its selects under the label when narrow. */
+.varietyRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-m);
+}
+
+.varietyRow > :last-child {
+  flex-shrink: 0;
+}
+
+.sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.modeSelect {
+  flex: 0 1 15rem;
+  min-width: 10rem;
+}
+
+.maxSelect {
+  flex: 0 0 4.5rem;
+}
+
 /* The selector only exists under its toggle: the same indent as the form's
    other dependent fields. */
 .dependent {

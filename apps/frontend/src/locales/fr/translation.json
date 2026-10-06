@@ -408,12 +408,15 @@
           "agentDefault": "Le modèle de l'agent"
         },
         "variety_check": {
-          "title": "Vérification de la variété",
-          "description": "Avant la première présentation d'une conversation, l'agent est invité à varier ses slides quand la même slide du modèle, ou le même type de slide, revient trois fois ou plus.",
+          "title": "Forcer de la variété",
+          "atMost": "au plus",
+          "times": "fois chacune",
+          "modeAria": "Ce qui doit varier",
+          "maxAria": "Nombre maximal de fois",
+          "description": "Évite qu'une même slide revienne trop souvent, autant que le modèle le permet. L'agent est invité à corriger la première présentation de chaque conversation.",
           "options": {
-            "template_slide": "Par slide du modèle",
-            "kind": "Par type de slide",
-            "off": "Aucune"
+            "template_slide": "Par nom de slide",
+            "kind": "Par type de slide identifié"
           }
         }
       },

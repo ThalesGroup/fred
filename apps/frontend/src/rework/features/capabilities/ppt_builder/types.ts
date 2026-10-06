@@ -53,6 +53,8 @@ export const TEMPLATE_SHA_KEY = "template_sha256";
 export const OVERRIDES_KEY = "overrides";
 export const USE_VISION_KEY = "use_vision";
 export const LABELLING_MODEL_KEY = "labelling_model";
+export const VARIETY_CHECK_KEY = "variety_check";
+export const VARIETY_MAX_USES_KEY = "variety_max_uses";
 
 export function readOverrides(configValues: Record<string, unknown>): PatternOverride[] {
   const raw = configValues[OVERRIDES_KEY];
