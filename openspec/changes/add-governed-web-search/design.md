@@ -1,0 +1,24 @@
+## Context
+
+The existing package has a reusable asynchronous DuckDuckGo/extraction engine wrapped in a FastAPI egress server. The runtime calls that server with a private bearer token and independently owns attribution, retention and metrics. #2980 is still a draft PR. The user explicitly authorizes revising this existing OpenSpec and applying the simplified design.
+
+## Goals / Non-Goals
+
+**Goals:** Start Fred normally and enable web research without another local process, certificate generation or service credential. Keep direct and proxy deployments on one internal execution path with existing authorization and activity guarantees. Delete server/deployment complexity.
+
+**Non-Goals:** Move execution to Knowledge Flow, deploy the DMZ proxy, implement a proxy server, or change user-visible tools/activity storage.
+
+## Decisions
+
+1. **Internal engine.** Rename `egress.py` to `research.py`; preserve provider/extraction, bounded worker threads, cancellation, cookies isolation and SafeSearch. Remove FastAPI routes, listener, wire serialization, service authentication and dedicated metrics. The runtime calls the engine directly and retains shared semaphore/deadline, attribution, error sanitization and shutdown ownership. Lazy import the installed capability engine only when enabled; runtime remains usable without this optional capability.
+2. **Deployment configuration.** Default off; enabled with no `proxy_url` means direct. Configure `proxy_url` as an HTTP(S) forward proxy without embedded credentials, query or fragment. Optional `proxy_auth_env` contains a Basic `username:password` credential read from the secret environment; never a model argument or ordinary HTTP header. `proxy_ca_file` validates an HTTPS proxy separately from public origin TLS. Keep concurrency, deadline, retention, purge; expose bounded bytes, retries and SafeSearch floor. Remove `egress_url`, service token and client/server certificates. Old fields fail configuration validation with migration guidance rather than being silently ignored.
+3. **Direct security.** Reuse the public-only numeric connection backend preserving original Host/SNI and verified TLS. HTTP(S) syntax, credentials, ports 80/443 and each redirect remain checked. Empty Cookie headers prevent cross-user leakage; no caller headers.
+4. **Proxy security.** Explicit HTTPX forward-proxy transport, `trust_env=False`, no direct fallback. Fred checks destination syntax and locally resolved addresses on every request; standard CONNECT keeps hostname/SNI and end-to-end public certificate validation. The proxy resolves the final target and MUST enforce non-global/private denial, including mixed DNS, redirects and rebinding, at connection time. Fred's local DNS check is not a claim that it pins the proxy's connection. This responsibility is an explicit operator deployment prerequisite. Permit only proxy connectivity at the Fred host firewall in this mode. No TLS interception is configured. Authentication is scoped to HTTPX proxy metadata; no user identity or token is forwarded to origins. Private addresses are allowed only for the configured proxy, never for page URLs. Deployment DNS must resolve public destinations for Fred's local checks.
+5. **Monitoring.** Keep runtime counts, latency, activity failures; remove the dedicated endpoint-health gauge and alerts. Add a content-free `busy`/saturation outcome on failed admission, and alert on research failure rate/saturation using existing Fred metrics. No background Internet probe; operation failures expose provider/proxy outages. Keep restricted activity access/expiry/erasure, including the durable late-write fence.
+
+## Risks / Trade-offs
+
+- Proxy network policy belongs to the operator; application preflight alone cannot prove the remote DNS destination. Provide a precise acceptance checklist instead of claiming the old direct pinning covers proxy connections.
+- HTML provider availability/layout/captcha risks remain unchanged. No live provider or production DMZ verification is claimed by fixture tests.
+- Internal extraction uses bounded worker threads; cancellation must keep worker capacity until completion. Pools live for the runtime process lifetime and close with it.
+- The old configuration is incompatible but exists only in this draft feature. Keep the issue/PR and update its guide; do not maintain a second egress mode.
