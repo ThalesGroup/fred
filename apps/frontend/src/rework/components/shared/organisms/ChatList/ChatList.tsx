@@ -18,9 +18,9 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import { useNavigate } from "react-router-dom";
 import {
   useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useTeamAgentInstances } from "@hooks/useTeamAgentInstances.ts";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
@@ -67,10 +67,7 @@ export default function ChatList({ teamId }: ChatListProps) {
     isSuccess: agentsResolved,
     isError: agentsError,
     refetch: refetchAgents,
-  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId: teamId! },
-    crossSessionRefreshOptions(!teamId),
-  );
+  } = useTeamAgentInstances(teamId, crossSessionRefreshOptions(!teamId));
   useRefetchOnWindowFocus(refetchAgents, !teamId);
   const agentNameByInstanceId = new Map(
     agentInstances?.map((instance) => [instance.agent_instance_id, instance.display_name]),
