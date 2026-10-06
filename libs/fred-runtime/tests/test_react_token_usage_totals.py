@@ -60,7 +60,7 @@ class _FakePortable:
 
 
 class _FakeRuntimeContext:
-    pass
+    skill = None
 
 
 class _FakeBinding:
@@ -69,6 +69,7 @@ class _FakeBinding:
 
 
 class _FakeServices:
+    skills = None
     tracer = None
     metrics = None
 

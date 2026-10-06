@@ -1161,3 +1161,72 @@ def test_migrated_sqlite_startup_reads_and_writes_history(
 
     assert len(messages) == 1
     assert messages[0].parts[0].text == "hello"
+
+
+def test_skill_load_history_is_compact_and_duplicate_status_is_not_persisted() -> None:
+    from fred_sdk.contracts.skills import SkillLoadAttribution
+
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    attribution = SkillLoadAttribution(
+        name="compte-rendu",
+        origin="user",
+        revision="r",
+        load_id="load",
+        agent_id="test",
+    )
+    payload = {
+        "kind": "status",
+        "status": "skill_loaded",
+        "skill_load": attribution.model_dump(mode="json"),
+    }
+    asyncio.run(
+        _write_turn_history(
+            session_id="s",
+            user_id="user",
+            exchange_id="e",
+            request_message="notes",
+            payloads=[payload, payload, {"kind": "final", "content": "answer"}],
+            history_store=store,
+        )
+    )
+    rows = store.save.call_args.kwargs["messages"]
+    loads = [row for row in rows if row.channel == Channel.system_note]
+    assert len(loads) == 1
+    row = loads[0]
+    assert row.role == Role.system and row.parts[0].text == "compte-rendu"
+    assert row.exchange_id == "e"
+    assert row.metadata.extras["skill_load"] == attribution.model_dump(mode="json")
+    # The same JSON is used by GET history and the live SSE projection.
+    assert (
+        row.model_dump(mode="json")["metadata"]["extras"]["skill_load"]["origin"]
+        == "user"
+    )
+
+
+def test_runtime_rejects_missing_or_forged_skill_before_inference(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_runtime.app.config import PodSkillsConfig
+
+    model = ToolFriendlyFakeChatModel(responses=[AIMessage(content="done")])
+    factory = StaticChatModelFactory(model)
+    monkeypatch.setattr(
+        agent_app_module, "_build_chat_model_factory", lambda config: factory
+    )
+    config = _build_config(tmp_path)
+    config.skills = PodSkillsConfig(directory="package")
+    definition = _PingAgent()
+    app = create_agent_app(registry={definition.agent_id: definition}, config=config)
+    with TestClient(app) as client:
+        request = {
+            "agent_id": definition.agent_id,
+            "input": "notes",
+            "runtime_context": {"skill": {"name": "missing"}},
+        }
+        response = client.post("/pod/v1/agents/execute", json=request)
+        assert response.status_code == 422, response.text
+        assert model.i == 0
+        request["runtime_context"]["skill"] = {"name": "compte-rendu", "body": "FORGED"}
+        response = client.post("/pod/v1/agents/execute", json=request)
+        assert response.status_code == 422, response.text

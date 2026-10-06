@@ -3060,6 +3060,7 @@ async def _write_turn_history(
     final_finish_reason: str | None = None
     final_context_tokens: int | None = None
 
+    skill_load_ids: set[str] = set()
     for payload in payloads:
         kind = payload.get("kind")
 
@@ -3067,6 +3068,9 @@ async def _write_turn_history(
             from fred_sdk.contracts.skills import SkillLoadAttribution
 
             attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
+            if attribution.load_id in skill_load_ids:
+                continue
+            skill_load_ids.add(attribution.load_id)
             messages.append(
                 ChatMessage(
                     session_id=session_id,

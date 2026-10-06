@@ -32,6 +32,7 @@ async def get_instance_skills(
     from fred_runtime.common.outbound_credentials import static_person_provider
 
     request = RuntimeExecuteRequest(
+        input="List available platform skills",
         agent_instance_id=agent_instance_id,
         runtime_context=RuntimeContext(team_id=team_id),
     )

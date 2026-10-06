@@ -16,6 +16,7 @@ import stat
 import threading
 from collections import Counter
 from importlib.resources import as_file, files
+from itertools import islice
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import cast
@@ -43,6 +44,9 @@ from langgraph.runtime import Runtime
 logger = logging.getLogger(__name__)
 MAX_SKILLS = 64
 MAX_FILES = 128
+MAX_DIRECTORIES = 128
+MAX_ENTRIES_PER_DIRECTORY = 512
+MAX_DEPTH = 8
 MAX_FILE_BYTES = 64 * 1024
 MAX_TOTAL_BYTES = 4 * 1024 * 1024
 _NAME = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -122,12 +126,51 @@ class _SafeDiscoveryDiagnostics(logging.Filter):
     def __init__(self) -> None:
         super().__init__()
         self.thread_id = threading.get_ident()
+        self.folder = "unknown"
 
     def filter(self, record: logging.LogRecord) -> bool:
         if record.thread == self.thread_id:
-            record.msg = "Platform skill discovery warning; invalid entries are omitted"
-            record.args = ()
+            record.msg = "Platform skill %s discovery warning; invalid entry omitted"
+            record.args = (self.folder,)
         return True
+
+
+def _bounded_children(directory: Path) -> list[Path]:
+    with os.scandir(directory) as entries:
+        children = list(islice(entries, MAX_ENTRIES_PER_DIRECTORY + 1))
+    if len(children) > MAX_ENTRIES_PER_DIRECTORY:
+        raise ValueError("directory entry limit")
+    return sorted((Path(entry.path) for entry in children), key=lambda path: path.name)
+
+
+def _read_confined(root: Path, target: Path) -> bytes:
+    """Open every canonical path component relative to a pinned directory fd.
+
+    A link swapped into an ancestor after resolution cannot escape confinement.
+    """
+    fd = os.open(root.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        parts = (*root.parts[1:], *target.relative_to(root).parts)
+        for component in parts[:-1]:
+            next_fd = os.open(
+                component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd
+            )
+            os.close(fd)
+            fd = next_fd
+        file_fd = os.open(
+            parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd
+        )
+        with os.fdopen(file_fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
+                raise ValueError("invalid file type or size")
+            content = stream.read(MAX_FILE_BYTES + 1)
+        if len(content) > MAX_FILE_BYTES:
+            raise ValueError("file size limit")
+        content.decode("utf-8")
+        return content
+    finally:
+        os.close(fd)
 
 
 def _snapshot(root: Path) -> dict[str, bytes]:
@@ -135,8 +178,8 @@ def _snapshot(root: Path) -> dict[str, bytes]:
     total = 0
     try:
         root = root.resolve(strict=True)
-        directories = sorted(root.iterdir(), key=lambda p: p.name)
-    except OSError:
+        directories = _bounded_children(root)
+    except (OSError, ValueError, RuntimeError):
         logger.warning("Platform skills directory unavailable; catalog is empty")
         return contents
     count = 0
@@ -153,34 +196,28 @@ def _snapshot(root: Path) -> dict[str, bytes]:
             skill_root = directory.resolve(strict=True)
             if not skill_root.is_relative_to(root):
                 raise ValueError("escaping skill directory")
-            # Do not recurse through directory links. Resolve file links before
-            # opening the confined canonical target without following links.
             candidates: list[Path] = []
-            for current, dirs, names in os.walk(directory, followlinks=False):
-                dirs[:] = sorted(
-                    d for d in dirs if not (Path(current) / d).is_symlink()
-                )
-                candidates.extend(
-                    Path(current) / name
-                    for name in sorted(names)
-                    if Path(name).suffix.lower() in _TEXT_EXTENSIONS
-                )
-                if len(candidates) > MAX_FILES:
-                    raise ValueError("file count limit")
+            pending = [(directory, 0)]
+            visited = 0
+            while pending:
+                current, depth = pending.pop()
+                visited += 1
+                if visited > MAX_DIRECTORIES or depth > MAX_DEPTH:
+                    raise ValueError("directory traversal limit")
+                for child in _bounded_children(current):
+                    if child.is_dir():
+                        if not child.is_symlink():
+                            pending.append((child, depth + 1))
+                    elif child.suffix.lower() in _TEXT_EXTENSIONS:
+                        candidates.append(child)
+                        if len(candidates) > MAX_FILES:
+                            raise ValueError("file count limit")
             skill_files: dict[str, bytes] = {}
             for candidate in candidates:
                 target = candidate.resolve(strict=True)
                 if not target.is_relative_to(skill_root):
                     raise ValueError("escaping skill file")
-                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-                with os.fdopen(fd, "rb") as stream:
-                    info = os.fstat(stream.fileno())
-                    if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
-                        raise ValueError("invalid file type or size")
-                    content = stream.read(MAX_FILE_BYTES + 1)
-                if len(content) > MAX_FILE_BYTES:
-                    raise ValueError("file size limit")
-                content.decode("utf-8")
+                content = _read_confined(skill_root, target)
                 skill_files[
                     f"/skills/{directory.name}/{candidate.relative_to(directory).as_posix()}"
                 ] = content
@@ -189,7 +226,7 @@ def _snapshot(root: Path) -> dict[str, bytes]:
                 raise ValueError("snapshot size limit")
             contents.update(skill_files)
             total += size
-        except (OSError, ValueError, UnicodeError):
+        except (OSError, ValueError, UnicodeError, RuntimeError):
             logger.warning(
                 "Platform skill %s skipped: unreadable, unsafe or over bounds",
                 directory.name,
@@ -210,6 +247,7 @@ class PlatformSkills:
             # Discover each folder separately: upstream merges by name, which
             # would otherwise hide duplicates before Fred can refuse them.
             for folder in backend.ls("/skills/").entries or []:
+                diagnostics.folder = PurePosixPath(folder["path"]).name
                 prefix = folder["path"] + "/"
                 subset = SnapshotBackend(
                     {
@@ -221,9 +259,16 @@ class PlatformSkills:
                 upstream = SkillsMiddleware(
                     backend=subset, sources=["/skills/"], system_prompt=None
                 )
-                update = upstream.before_agent(
-                    cast(SkillsState, {}), Runtime(), RunnableConfig()
-                )
+                try:
+                    update = upstream.before_agent(
+                        cast(SkillsState, {}), Runtime(), RunnableConfig()
+                    )
+                except (RecursionError, ValueError, TypeError):
+                    logger.warning(
+                        "Platform skill %s skipped: invalid discovery metadata",
+                        diagnostics.folder,
+                    )
+                    continue
                 if update is not None:
                     metadata.extend(update["skills_metadata"])
         finally:
@@ -233,7 +278,10 @@ class PlatformSkills:
         for item in metadata:
             name = item["name"]
             if counts[name] != 1 or len(name) > 64 or not _NAME.fullmatch(name):
-                logger.warning("Platform skill skipped: invalid or duplicated name")
+                logger.warning(
+                    "Platform skill %s skipped: invalid or duplicated name",
+                    PurePosixPath(item["path"]).parent.name,
+                )
                 continue
             accepted.append(item)
         self._metadata = tuple(accepted)

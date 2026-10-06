@@ -296,6 +296,39 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
+  it.each(["user", "agent", "child"] as const)(
+    "projects one compact %s skill load from repeated live statuses",
+    async (source) => {
+      const load = {
+        name: "compte-rendu",
+        origin: source === "user" ? "user" : "agent",
+        load_id: "same-load",
+        revision: "snapshot",
+        agent_id: "test",
+        child: source === "child",
+        child_id: source === "child" ? "child" : null,
+      };
+      const status = { kind: "status", status: "skill_loaded", skill_load: load };
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValue(
+          new Response(`data: ${JSON.stringify(status)}\n\ndata: ${JSON.stringify(status)}\n\n`, { status: 200 }),
+        );
+      mount();
+      await act(async () => {
+        await latest.send("notes", "session-1", { skill: { name: "compte-rendu" } });
+      });
+      const rows = latest.messages.filter((message) => message.channel === "system_note");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].parts).toEqual([{ type: "text", text: "compte-rendu" }]);
+      expect(rows[0].metadata?.extras).toEqual({ skill_load: load });
+      expect(JSON.parse(String(fetchSpy.mock.calls[0][1]?.body)).runtime_context.skill).toEqual({
+        name: "compte-rendu",
+      });
+      fetchSpy.mockRestore();
+    },
+  );
+
   it("calls prepare-execution and fires onTurnStarted exactly once when the write barrier reports success", async () => {
     flushPendingWrites = async () => true;
     // The stream fetch itself is irrelevant to this assertion — let it fail
