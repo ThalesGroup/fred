@@ -34,7 +34,7 @@ if name == "kubectl":
 """
 
 
-class ConfigureTests(unittest.TestCase):
+class HookTests(unittest.TestCase):
     def exercise(self, changed: bool, fresh: bool = False) -> tuple[str, list]:
         with tempfile.TemporaryDirectory(prefix="fred configure ") as directory:
             root = Path(directory)
@@ -43,8 +43,8 @@ class ConfigureTests(unittest.TestCase):
             (root / "deploy/grafana/dashboard.json").write_text(
                 '{"datasource": "${DS_PROMETHEUS}"}'
             )
-            script = root / "deploy/k3d/configure.sh"
-            shutil.copy(Path(__file__).with_name("configure.sh"), script)
+            for hook in ("prepare", "finish"):
+                shutil.copy(Path(__file__).with_name(hook), root / "deploy/k3d" / hook)
             fakebin = root / "bin"
             fakebin.mkdir()
             for name in ("kubectl", "curl", "getent"):
@@ -64,9 +64,9 @@ class ConfigureTests(unittest.TestCase):
                 FRESH="1" if fresh else "",
             )
             output = ""
-            for phase in ("key", "finish"):
+            for hook in ("prepare", "finish"):
                 result = subprocess.run(
-                    ["bash", str(script), phase],
+                    ["bash", str(root / "deploy/k3d" / hook)],
                     env=env,
                     capture_output=True,
                     text=True,

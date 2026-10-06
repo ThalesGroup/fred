@@ -1,3 +1,4 @@
+import importlib.machinery
 import importlib.util
 import json
 import subprocess
@@ -6,9 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location(
-    "build_images", Path(__file__).with_name("build-images.py")
+# build has no .py extension: it is the executable the factory runs.
+loader = importlib.machinery.SourceFileLoader(
+    "build", str(Path(__file__).with_name("build"))
 )
+spec = importlib.util.spec_from_loader("build", loader)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -34,9 +37,9 @@ class BuildImagesTests(unittest.TestCase):
                 ) as run,
             ):
                 module.build(root, output)
-                before = (output / "images.json").read_text()
+                before = (output / "images.yaml").read_text()
                 module.build(root, output)
-            self.assertEqual(before, (output / "images.json").read_text())
+            self.assertEqual(before, (output / "images.yaml").read_text())
             applications = json.loads(before)["applications"]
             self.assertEqual(len(applications), 6)
             for prefix in ("knowledge-flow", "control-plane"):
@@ -58,7 +61,7 @@ class BuildImagesTests(unittest.TestCase):
     def test_failed_build_does_not_publish_partial_values(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
-            (output / "images.json").write_text("previous complete build")
+            (output / "images.yaml").write_text("previous complete build")
             with (
                 patch.object(
                     module.subprocess, "check_output", return_value="fred:dev"
@@ -76,7 +79,7 @@ class BuildImagesTests(unittest.TestCase):
                 module.build(output, output)
             self.assertEqual(run.call_count, 2)
             self.assertEqual(
-                (output / "images.json").read_text(), "previous complete build"
+                (output / "images.yaml").read_text(), "previous complete build"
             )
             self.assertFalse((output / "images.txt").exists())
 

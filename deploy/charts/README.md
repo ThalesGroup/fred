@@ -20,16 +20,13 @@ chart's `appVersion`; set `applications.<app>.image.tag` to run another one.
 `make docker-build` at the repository root builds all four from this checkout.
 
 On a local cluster, the image must be inside the cluster's nodes. For a k3d cluster, don't
-import them by hand: fred-deployment-factory's `make k3d-app` builds them, copies them into
-every node and deploys this chart through Helmfile (root `README.md` → "k3d Local Deployment").
-The factory owns `helmfile.yaml.gotmpl` and installation values. This checkout owns
-`deploy/k3d/build-images.py` (the four images and worker mapping) and
-`deploy/k3d/configure.sh` (model key, dashboards and first-login guidance).
-Generated `.cache/k3d/images.json` is ordinary Helm values, not a deployment blueprint.
-From the factory, `make k3d-app-validate FRED_DIR=/path/to/fred` checks the chart and
-installation values without building or changing the cluster. Set `FRED_IMAGE_VALUES`
-to the generated file to include a prepared build in this validation.
-This workflow currently targets local k3d only, using the checkout's chart.
+import them by hand: fred-deployment-factory's `make k3d-app DIR=<this checkout>` builds
+them, copies them into every node and deploys this chart (root `README.md` → "k3d Local
+Deployment"). It reads `deploy/k3d/`: `helmfile.yaml.gotmpl` (the `fred-app` release),
+`values.yaml` (the k3d values), `build` (the four images and the worker mapping),
+`prepare` (the model key) and `finish` (dashboards and first-login guidance).
+`make k3d-app-validate DIR=<this checkout>` there checks the chart and the values
+without building or changing the cluster.
 
 ## Your values file
 
@@ -45,7 +42,7 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
   own contract: `deploy/README.md` → "Root bootstrap secret contract (AUTHZ-07)".
 
-A complete, working example is fred-deployment-factory's `k3d-apps/fred/values.yaml`: every
+A complete, working example is `deploy/k3d/values.yaml`, the k3d instance's: every
 address, credential and choice a deployment has to make, each one commented. The security
 profile (`c3`) is described in `deploy/README.md` → "Security profiles & classification
 tiers". To brand the frontend without rebuilding it, see "Theme overlay" in

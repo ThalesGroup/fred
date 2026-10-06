@@ -295,8 +295,8 @@ include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
 # k3d: fred-deployment-factory deploys this chart on its local k3d instance
-# (`make k3d-up`, then `make k3d-app FRED_DIR=<this checkout>`), building the
-# images with each app's `docker-build`. The instance values live there.
+# (`make k3d-up`, then `make k3d-app DIR=<this checkout>`) from deploy/k3d/:
+# its helmfile, its values, and the build, prepare and finish hooks.
 
 .PHONY: k3d-tests
 k3d-tests: ## Test local k3d image preparation and configuration without a cluster

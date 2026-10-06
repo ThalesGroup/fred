@@ -18,17 +18,22 @@ versions are Helmfile 1.8.1 and Helm 3.21.2. Keep the existing k3d cluster and v
 
 ## Configuration
 
-Factory installation values remain in `k3d-apps/fred/values.yaml`, selected by
-`FRED_VALUES` (one file). `FRED_DIR` selects the local Fred checkout. The chart comes
-from that checkout; the former OCI chart/version options are no longer supported
-by this local command. Model credentials remain outside Git in the existing secret.
+Fred's k3d installation now lives in this repository, in `deploy/k3d/`:
+`helmfile.yaml.gotmpl` (the `fred-app` release), `values.yaml` (moved from the factory's
+`k3d-apps/fred/values.yaml`, unchanged), and the `build`, `prepare` and `finish` hooks the
+factory runs. The chart comes from this checkout; the former `FRED_CHART`,
+`FRED_CHART_VERSION`, `FRED_VALUES` and `FRED_DIR` options are gone. Extra values files go
+in the factory's `VALUES`. Model credentials remain outside Git in the existing secret.
 
 ## Upgrade
 
-In the factory, replace `make k3d-fred` with `make k3d-app FRED_DIR=/path/to/fred`.
-First run `make k3d-app-validate FRED_DIR=/path/to/fred` for non-mutating validation.
-The existing release is upgraded; no cluster recreation or data migration is required.
-Initial bootstrap guidance now prints a token-retrieval command instead of the token.
+In the factory, replace `make k3d-fred FRED_DIR=/path/to/fred` with
+`make k3d-app DIR=/path/to/fred`, and `make k3d-evaluator` with
+`make k3d-app DIR=/path/to/fred-agent-evaluator`. `make k3d-app-validate DIR=...` checks
+without building or changing the cluster. A local edit to the factory's
+`k3d-apps/fred/values.yaml` moves to `deploy/k3d/values.yaml` here. The existing release
+is upgraded; no cluster recreation or data migration is required. Initial bootstrap
+guidance now prints a token-retrieval command instead of the token.
 
 ## Validation
 

@@ -17,6 +17,10 @@ Evidence: scope confirmed on 2026-10-05 with local-only simplification; tracking
 - [x] 3.1 Remove `k3d-fred` and its obsolete launcher without compatibility aliases; update Make help and active references in both repositories, excluding historical archives and immutable notes. Verify searches and help show the replacement commands.
 - [x] 3.2 Update existing deployment guides and add the Fred migration note for local prerequisite/command changes; document direct Helmfile use versus full preparation/deploy, and verify `make migration-check`.
 
+## 3b. Generalize (2026-10-05)
+
+- [x] 3b.1 Move the release, the k3d values and the hooks into `deploy/k3d/` (helmfile, values, build, prepare, finish); the factory deploys any product through `make k3d-app DIR=...`. Verified: renders identical to the former factory values; 5 Fred and 8 factory command tests pass.
+
 ## 4. Verify and deliver
 
 - [ ] 4.1 Run targeted command tests and required repository quality checks; record exact results separately from real Helm rendering evidence.

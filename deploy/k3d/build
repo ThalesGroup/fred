@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Build Fred's local k3d images and write ordinary Helm image values."""
+"""Build Fred's four images for the local k3d instance (fred-deployment-factory).
 
-import argparse
+Writes $K3D_APP_OUT/images.txt, the content-tagged references to copy into the
+cluster, and $K3D_APP_OUT/images.yaml, the Helm values selecting them.
+"""
+
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -60,7 +64,7 @@ def build(root: Path, output: Path) -> None:
         print(f"Built {app}: {reference}", flush=True)
     # Publish only a complete build's outputs; JSON is also valid Helm values YAML.
     for name, content in {
-        "images.json": json.dumps({"applications": applications}, indent=2) + "\n",
+        "images.yaml": json.dumps({"applications": applications}, indent=2) + "\n",
         "images.txt": "\n".join(images) + "\n",
     }.items():
         temporary = output / f"{name}.tmp"
@@ -69,8 +73,6 @@ def build(root: Path, output: Path) -> None:
 
 
 if __name__ == "__main__":
-    root = Path(__file__).resolve().parents[2]
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=root / ".cache/k3d")
-    args = parser.parse_args()
-    build(root, args.output.resolve())
+    build(
+        Path(__file__).resolve().parents[2], Path(os.environ["K3D_APP_OUT"]).resolve()
+    )

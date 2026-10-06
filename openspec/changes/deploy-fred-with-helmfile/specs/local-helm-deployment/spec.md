@@ -5,15 +5,15 @@ Allow developers to prepare Fred images and deploy the product chart to a local 
 ## ADDED Requirements
 
 ### Requirement: Installation configuration remains inspectable and separate from product builds
-The local deployment SHALL use the product chart and factory installation values, retain the configured release and namespace identities, and expose standard Helmfile validation and deployment commands. Chart defaults, one installation values file and generated image overrides SHALL apply in that order. Missing paths or invalid values MUST fail clearly, and paths containing spaces MUST work independently of the caller's directory.
+The local deployment SHALL use the product chart and the product's k3d values (`deploy/k3d/values.yaml`), retain the configured release and namespace identities, and expose standard Helmfile validation and deployment commands. Chart defaults, the k3d values, generated image overrides and any factory-supplied extra values SHALL apply in that order. Missing paths or invalid values MUST fail clearly, and paths containing spaces MUST work independently of the caller's directory.
 
 #### Scenario: Existing installation is redeployed
 - **WHEN** the developer deploys Fred with default local settings
-- **THEN** the existing `fred-app` release in namespace `fred` is upgraded using the checkout's chart and the factory's installation values
+- **THEN** the existing `fred-app` release in namespace `fred` is upgraded using the checkout's chart and its k3d values
 - **AND** the `fred-stack` release is not redeployed or uninstalled
 
-#### Scenario: Checkout or values path includes spaces
-- **WHEN** valid checkout and values paths contain spaces and the command is invoked from another directory
+#### Scenario: Checkout path includes spaces
+- **WHEN** the checkout path contains spaces and the command is invoked from another directory
 - **THEN** the same files and value precedence are used without shell splitting
 
 ### Requirement: Image preparation preserves service and worker consistency
