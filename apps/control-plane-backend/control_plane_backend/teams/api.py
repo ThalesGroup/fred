@@ -19,13 +19,13 @@ from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
 
+from control_plane_backend.common.avatar_image import AvatarUploadError
 from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
 )
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
-    AvatarUploadError,
     CreateTeamRequest,
     DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,

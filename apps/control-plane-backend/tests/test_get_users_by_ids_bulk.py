@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any, cast
+from unittest.mock import MagicMock
 
 import pytest
 from control_plane_backend.users import service as users_service
@@ -82,6 +83,7 @@ def _deps(admin: _FakeKeycloakAdmin) -> UserServiceDependencies:
     return UserServiceDependencies(
         configuration=cast(Any, object()),
         create_keycloak_admin_client=cast(Any, lambda: admin),
+        get_content_store=MagicMock,
     )
 
 

@@ -15,7 +15,7 @@
 import secrets
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -52,6 +52,7 @@ async def test_local_user_reads_never_construct_admin(monkeypatch):
         get_identities=AsyncMock(return_value=[raw]),
         find_ids_by_usernames=AsyncMock(return_value={"alice": str(user_id)}),
         identity_exists=AsyncMock(return_value=True),
+        get_avatar_keys=AsyncMock(return_value={}),
     )
     monkeypatch.setattr(service, "get_user_store", lambda: store)
 
@@ -64,6 +65,7 @@ async def test_local_user_reads_never_construct_admin(monkeypatch):
             SimpleNamespace(security=SimpleNamespace(user_directory="local")),
         ),
         create_keycloak_admin_client=no_admin,
+        get_content_store=MagicMock,
     )
 
     assert [
@@ -107,6 +109,7 @@ async def test_local_single_and_bulk_resolution_refuse_real_store_collisions(
             SimpleNamespace(security=SimpleNamespace(user_directory="local")),
         ),
         create_keycloak_admin_client=no_admin,
+        get_content_store=MagicMock,
     )
     try:
         for _ in range(2):
@@ -140,6 +143,7 @@ async def test_local_user_creation_is_refused_before_admin_client() -> None:
         create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
             AssertionError("Keycloak Admin API must not be constructed")
         ),
+        get_content_store=MagicMock,
     )
     request = CreateUserRequest(
         username="alice", email="alice@example.test", password=secrets.token_urlsafe()

@@ -445,6 +445,7 @@ def _user_deps(
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+        get_content_store=MagicMock,
     )
     return deps, admin
 
@@ -456,6 +457,7 @@ def _writable_user_deps(
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+        get_content_store=MagicMock,
     )
     return deps, admin
 
@@ -573,6 +575,7 @@ async def test_local_import_checks_referenced_collisions_before_business_writes(
             SimpleNamespace(security=SimpleNamespace(user_directory="local")),
         ),
         create_keycloak_admin_client=no_admin,
+        get_content_store=MagicMock,
     )
     rebac = _FakeTeamRebac()
     structural_writes = AsyncMock()
@@ -1053,6 +1056,7 @@ async def test_import_aborts_before_any_postgres_write_when_keycloak_m2m_disable
         user_deps = UserServiceDependencies(
             configuration=cast(Any, MagicMock()),
             create_keycloak_admin_client=KeycloackDisabled,
+            get_content_store=MagicMock,
         )
         platform_admin = _admin_user()
 
@@ -1360,6 +1364,7 @@ async def test_local_import_reuses_resolved_identity_even_with_password() -> Non
         create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
             AssertionError("Keycloak Admin API must not be constructed")
         ),
+        get_content_store=MagicMock,
     )
     resolver = UserSubResolver({"alice": "existing-id"})
     report = MigrationReport(import_id="local-existing", source_platform="swift")
@@ -1389,6 +1394,7 @@ async def test_local_import_refuses_unknown_password_identities_before_role_writ
             SimpleNamespace(security=SimpleNamespace(user_directory="local")),
         ),
         create_keycloak_admin_client=no_admin,
+        get_content_store=MagicMock,
     )
     resolver = UserSubResolver({"known": "existing-id"})
     report = MigrationReport(import_id="local-import", source_platform="swift")
@@ -1419,6 +1425,7 @@ async def test_find_user_sub_by_username_resolves_existing_user() -> None:
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+        get_content_store=MagicMock,
     )
 
     sub = await find_user_sub_by_username("alice", deps)
@@ -1433,6 +1440,7 @@ async def test_find_user_sub_by_username_returns_none_when_not_found() -> None:
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+        get_content_store=MagicMock,
     )
 
     assert await find_user_sub_by_username("ghost", deps) is None
@@ -1443,6 +1451,7 @@ async def test_find_user_sub_by_username_returns_none_when_keycloak_disabled() -
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=KeycloackDisabled,
+        get_content_store=MagicMock,
     )
 
     assert await find_user_sub_by_username("alice", deps) is None
@@ -1458,6 +1467,7 @@ async def test_find_user_sub_by_username_never_calls_a_write_method() -> None:
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+        get_content_store=MagicMock,
     )
 
     await find_user_sub_by_username("alice", deps)
@@ -1478,6 +1488,7 @@ async def test_find_user_subs_bulk_resolves_the_whole_directory() -> None:
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=cast(KeycloakAdminFactory, lambda: admin),
+        get_content_store=MagicMock,
     )
 
     assert await find_user_subs_bulk(deps) == {"alice": "alice-sub", "bob": "bob-sub"}
@@ -1492,6 +1503,7 @@ async def test_find_user_subs_bulk_raises_when_keycloak_disabled() -> None:
     deps = UserServiceDependencies(
         configuration=cast(Any, MagicMock()),
         create_keycloak_admin_client=KeycloackDisabled,
+        get_content_store=MagicMock,
     )
 
     with pytest.raises(KeycloakM2MUserOperationDisabledError):

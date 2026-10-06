@@ -14,7 +14,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional, cast
+from typing import Iterable, Optional, cast
 from uuid import UUID
 
 from sqlalchemy import case, func, or_, select, update
@@ -314,3 +314,55 @@ class PostgresUserStore(BaseUserStore):
                         )
                     )
                 )
+
+    async def swap_avatar_key(
+        self,
+        user_id: UUID,
+        key: str | None,
+        session: AsyncSession | None = None,
+    ) -> str | None:
+        async with use_session(self._sessions, session) as s:
+            # Row lock so two concurrent uploads cannot both read the same
+            # previous key and leave one object orphaned.
+            previous = await s.execute(
+                select(UserRow.avatar_object_storage_key)
+                .where(UserRow.id == user_id)
+                .with_for_update()
+            )
+            row = previous.one_or_none()
+            if row is not None:
+                await s.execute(
+                    update(UserRow)
+                    .where(UserRow.id == user_id)
+                    .values(avatar_object_storage_key=key)
+                )
+                return row[0]
+            if key is None:
+                return None
+            try:
+                async with s.begin_nested():
+                    s.add(UserRow(id=user_id, avatar_object_storage_key=key))
+            except IntegrityError:
+                # A concurrent first write created the row: swap on it instead.
+                return await self.swap_avatar_key(user_id, key, session=s)
+            return None
+
+    async def get_avatar_keys(
+        self, user_ids: Iterable[str], session: AsyncSession | None = None
+    ) -> dict[str, str]:
+        requested: dict[UUID, str] = {}
+        for user_id in user_ids:
+            try:
+                requested[UUID(str(user_id))] = user_id
+            except ValueError:
+                continue
+        if not requested:
+            return {}
+        async with use_session(self._sessions, session) as s:
+            result = await s.execute(
+                select(UserRow.id, UserRow.avatar_object_storage_key).where(
+                    UserRow.id.in_(requested.keys()),
+                    UserRow.avatar_object_storage_key.is_not(None),
+                )
+            )
+            return {requested[row_id]: key for row_id, key in result.all()}

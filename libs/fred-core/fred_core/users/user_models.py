@@ -47,3 +47,4 @@ class UserRow(Base):
     current_resources_storage_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=False, default=0
     )
+    avatar_object_storage_key: Mapped[str | None] = mapped_column(String, nullable=True)

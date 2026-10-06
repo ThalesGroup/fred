@@ -174,6 +174,7 @@ class UserSummary(BaseModel):
     last_name: str | None = None
     username: str | None = None
     email: str | None = None
+    avatar_image_url: str | None = None
 
     @classmethod
     def from_keycloak_user(cls, user: Any) -> "UserSummary":

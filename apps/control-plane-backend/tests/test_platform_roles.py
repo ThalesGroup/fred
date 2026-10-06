@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -156,6 +156,9 @@ class _FakeUserDeps:
 
     def create_keycloak_admin_client(self):
         return KeycloackDisabled()
+
+    def get_content_store(self):
+        return MagicMock()
 
 
 def _user(uid: str) -> KeycloakUser:
@@ -359,6 +362,7 @@ async def test_local_grant_refuses_unknown_identity_without_writing(monkeypatch)
         create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
             AssertionError("Keycloak Admin API must not be constructed")
         ),
+        get_content_store=MagicMock,
     )
     rebac = _FakeRebac()
 
