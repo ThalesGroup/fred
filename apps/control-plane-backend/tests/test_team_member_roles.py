@@ -485,6 +485,55 @@ async def test_revoke_team_member_role_allows_admin_revoke_when_another_admin_ex
 
 
 @pytest.mark.asyncio
+async def test_concurrent_admin_revocations_keep_one_active_admin() -> None:
+    first_admin_read = asyncio.Event()
+    release_first_read = asyncio.Event()
+
+    class _PausedAdminReadRebac(_FakeRebac):
+        admin_read_consistency: list[str | None] = []
+
+        async def lookup_subjects(
+            self, resource, relation: RelationType, subject_type, **kwargs
+        ):
+            subjects = await super().lookup_subjects(
+                resource, relation, subject_type, **kwargs
+            )
+            if relation == RelationType.TEAM_ADMIN:
+                self.admin_read_consistency.append(kwargs.get("consistency_token"))
+                if not first_admin_read.is_set():
+                    first_admin_read.set()
+                    await release_first_read.wait()
+            return subjects
+
+    rebac = _PausedAdminReadRebac(
+        roles={
+            "bob": {UserTeamRelation.TEAM_ADMIN},
+            "alice": {UserTeamRelation.TEAM_ADMIN},
+        }
+    )
+    deps = _deps(rebac, "fredlab")
+    revocations = [
+        asyncio.create_task(
+            revoke_team_member_role(
+                _user(), TeamId("fredlab"), uid, UserTeamRelation.TEAM_ADMIN, deps
+            )
+        )
+        for uid in ("bob", "alice")
+    ]
+    await asyncio.wait_for(first_admin_read.wait(), 1)
+    await asyncio.sleep(0.02)
+    release_first_read.set()
+    outcomes = await asyncio.gather(*revocations, return_exceptions=True)
+
+    assert sum(isinstance(result, TeamAdminConstraintError) for result in outcomes) == 1
+    assert sum(result is None for result in outcomes) == 1
+    assert (
+        sum(UserTeamRelation.TEAM_ADMIN in roles for roles in rebac.roles.values()) == 1
+    )
+    assert rebac.admin_read_consistency == ["HIGHER_CONSISTENCY"] * 2
+
+
+@pytest.mark.asyncio
 async def test_revoke_sole_admin_still_blocks_last_active_admin_without_writes() -> (
     None
 ):

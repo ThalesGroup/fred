@@ -524,7 +524,7 @@ async def _promote_pending_team_admin_after_acceptance(
     deps: TeamServiceDependencies, team_id: TeamId, user_id: str
 ) -> None:
     async with deps.get_team_metadata_store().advisory_lock(
-        _team_member_role_lock_key(team_id, user_id)
+        _team_member_role_lock_key(team_id)
     ):
         roles = await _get_user_roles_in_team(
             deps.rebac,
@@ -576,7 +576,7 @@ async def reconcile_team_admin_charter_roles(deps: TeamServiceDependencies) -> i
                 ):
                     continue
                 async with metadata_store.advisory_lock(
-                    _team_member_role_lock_key(metadata.id, user_id)
+                    _team_member_role_lock_key(metadata.id)
                 ):
                     held = await _get_user_roles_in_team(
                         deps.rebac,
@@ -1473,8 +1473,8 @@ async def search_candidate_team_members(
     ]
 
 
-def _team_member_role_lock_key(team_id: TeamId, user_id: str) -> str:
-    return f"team_member_roles:{team_id}:{user_id}"
+def _team_member_role_lock_key(team_id: TeamId) -> str:
+    return f"team_member_roles:{team_id}"
 
 
 async def remove_team_member(
@@ -1509,7 +1509,7 @@ async def remove_team_member(
     # single "primary" role, and the last-admin guard applies whenever
     # team_admin is among them.
     async with deps.get_team_metadata_store().advisory_lock(
-        _team_member_role_lock_key(team_id, user_id)
+        _team_member_role_lock_key(team_id)
     ):
         target_roles = await _get_user_roles_in_team(
             rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
@@ -1679,7 +1679,7 @@ async def revoke_team_member_role(
         raise TeamNotFoundError(team_id)
 
     async with deps.get_team_metadata_store().advisory_lock(
-        _team_member_role_lock_key(team_id, user_id)
+        _team_member_role_lock_key(team_id)
     ):
         current_roles = await _get_user_roles_in_team(
             rebac, team_id, user_id, consistency_token=RebacEngine.HIGHER_CONSISTENCY
@@ -2143,11 +2143,14 @@ async def _get_team_users_by_relation(
     rebac: RebacEngine,
     team_id: TeamId,
     relation: RelationType,
+    *,
+    consistency_token: str | None = None,
 ) -> set[str]:
     subjects = await rebac.lookup_subjects(
         RebacReference(type=Resource.TEAM, id=team_id),
         relation,
         Resource.USER,
+        consistency_token=consistency_token,
     )
     if isinstance(subjects, RebacDisabledResult):
         return set()
@@ -2486,7 +2489,10 @@ async def _ensure_team_keeps_at_least_one_admin(
         return
 
     admin_ids = await _get_team_users_by_relation(
-        rebac, team_id, RelationType.TEAM_ADMIN
+        rebac,
+        team_id,
+        RelationType.TEAM_ADMIN,
+        consistency_token=RebacEngine.HIGHER_CONSISTENCY,
     )
     if user_id in admin_ids and len(admin_ids) <= 1:
         raise TeamAdminConstraintError(
