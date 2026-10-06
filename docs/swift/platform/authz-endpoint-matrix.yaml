@@ -484,6 +484,17 @@ operations:
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}
     review_status: pending_review
     required_permission: pending_review
+  # Copy: team.can_update_agents on the source, and again on every destination.
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/copy-targets
+    review_status: pending_review
+    required_permission: team.can_update_agents
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/copy
+    review_status: pending_review
+    required_permission: team.can_update_agents
   - service: control-plane
     method: POST
     path: /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/prepare-execution

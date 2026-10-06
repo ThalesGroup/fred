@@ -684,6 +684,68 @@ class PromptPromoteRequest(BaseModel):
     target_team_id: str = Field(..., min_length=1)
 
 
+class AgentCopyCapability(BaseModel):
+    """One capability of the agent, as shown to the user."""
+
+    id: str
+    name: str = Field(description="i18n key of the capability's display name.")
+
+
+class AgentCopyTarget(BaseModel):
+    """Readiness of one destination for copying an agent (advisory)."""
+
+    team_id: TeamId
+    template_enabled: bool
+    missing_capabilities: list[AgentCopyCapability] = Field(default_factory=list)
+
+
+class AgentCopyTargetsResponse(BaseModel):
+    """Destinations the caller can copy an agent to: personal space and edited teams."""
+
+    targets: list[AgentCopyTarget]
+
+
+class AgentCopyRequest(BaseModel):
+    """Copy one agent into one or more destinations.
+
+    `display_name` is the "Duplicate" case: allowed only for a single target
+    equal to the source team, and kept as is. Otherwise the source name is
+    kept when free in the destination, else suffixed ``_imported-N``.
+    """
+
+    target_team_ids: list[str] = Field(..., min_length=1)
+    display_name: str | None = Field(default=None, min_length=1)
+
+
+class AgentCopyNotice(BaseModel):
+    """A capability copied with something left for an editor to redo."""
+
+    capability: AgentCopyCapability
+    message: str
+
+
+class AgentCopyResult(BaseModel):
+    """Outcome of copying an agent into one destination."""
+
+    team_id: str
+    agent: ManagedAgentInstanceSummary | None = None
+    dropped_capabilities: list[AgentCopyCapability] = Field(
+        default_factory=list,
+        description="Capabilities left out: not usable in the destination, or rejected there.",
+    )
+    notices: list[AgentCopyNotice] = Field(
+        default_factory=list,
+        description="What an editor must redo in the destination, per capability.",
+    )
+    error: str | None = None
+
+
+class AgentCopyResponse(BaseModel):
+    """Per-destination results of an agent copy."""
+
+    results: list[AgentCopyResult]
+
+
 class MarketplaceImportRequest(BaseModel):
     """Request body for importing a published prompt into one or more teams.
 
