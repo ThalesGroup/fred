@@ -47,6 +47,7 @@ from fred_sdk.contracts.context import (
 )
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder.assign import (
     Assignment,
@@ -61,6 +62,7 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
+    PlanTable,
     SlidePlan,
     has_content,
     zone_summary,
@@ -166,9 +168,16 @@ def _kind_enum(kinds: Tuple[SlideKind, ...]) -> Any:
 # on the event loop, and templates share a handful of kind sets.
 @lru_cache(maxsize=64)
 def _schema_for(kinds: Tuple[SlideKind, ...]) -> type[BaseModel]:
+    # Offered only when the template holds a table: the field is noise otherwise.
+    table: Any = (
+        (Optional[PlanTable], SlidePlan.model_fields["table"])
+        if "table" in kinds
+        else (SkipJsonSchema[Optional[PlanTable]], None)
+    )
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
+        table=table,
         kind=(
             Optional[SlideKind],
             Field(
@@ -263,6 +272,7 @@ def _issue_line(report: SlideReport) -> str:
         )
     if report.lost:
         parts.append("not placed: " + ", ".join(report.lost))
+    parts.extend(report.shrunk)
     return f"Slide {report.position}: " + "; ".join(parts) + "."
 
 
@@ -362,7 +372,9 @@ def _description(inventory: TemplateInventory) -> str:
         "once: each call produces a complete presentation of its own, so splitting delivers several truncated "
         "decks instead of one. For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
-        "heading, text, label, image}], image/images (document_ids from list_images_in_folder), notes; then, "
+        "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
+        + ("table {header, rows} for tabular data, " if "table" in kinds else "")
+        + "notes; then, "
         "optionally, its `kind` from the list below (left out, it is inferred from the content; a kind "
         "the template cannot use there is replaced by one that holds the content). The tool picks the "
         "template slide for each entry."

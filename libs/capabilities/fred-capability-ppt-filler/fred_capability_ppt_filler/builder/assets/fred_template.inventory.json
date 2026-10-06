@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 9,
+  "analysis_version": 10,
   "patterns": [
    {
     "id": "slide:256",
@@ -27,7 +27,8 @@
       "chars_per_line": 26,
       "max_lines": 2,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:104",
@@ -43,7 +44,8 @@
       "chars_per_line": 59,
       "max_lines": 2,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:105",
@@ -59,7 +61,8 @@
       "chars_per_line": 86,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -91,7 +94,8 @@
       "chars_per_line": 11,
       "max_lines": 2,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:102",
@@ -107,7 +111,8 @@
       "chars_per_line": 51,
       "max_lines": 9,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -139,7 +144,8 @@
       "chars_per_line": 7,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:104",
@@ -155,7 +161,8 @@
       "chars_per_line": 28,
       "max_lines": 2,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:105",
@@ -171,7 +178,8 @@
       "chars_per_line": 66,
       "max_lines": 2,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -203,7 +211,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:101",
@@ -219,7 +228,8 @@
       "chars_per_line": 98,
       "max_lines": 10,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -251,7 +261,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:101",
@@ -267,7 +278,8 @@
       "chars_per_line": 50,
       "max_lines": 11,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:102",
@@ -283,7 +295,8 @@
       "chars_per_line": 50,
       "max_lines": 11,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -315,7 +328,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:103",
@@ -331,7 +345,8 @@
       "chars_per_line": 34,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:104",
@@ -347,7 +362,8 @@
       "chars_per_line": 44,
       "max_lines": 8,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:105",
@@ -363,7 +379,8 @@
       "chars_per_line": 34,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:106",
@@ -379,7 +396,8 @@
       "chars_per_line": 44,
       "max_lines": 8,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -411,7 +429,8 @@
       "chars_per_line": 28,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:101",
@@ -427,7 +446,8 @@
       "chars_per_line": 54,
       "max_lines": 11,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:103",
@@ -443,7 +463,8 @@
       "chars_per_line": null,
       "max_lines": null,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -475,7 +496,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:110",
@@ -491,7 +513,8 @@
       "chars_per_line": 151,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [
@@ -518,7 +541,8 @@
          "chars_per_line": 7,
          "max_lines": 1,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:103",
@@ -534,7 +558,8 @@
          "chars_per_line": 24,
          "max_lines": 4,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -552,7 +577,8 @@
          "chars_per_line": 7,
          "max_lines": 1,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:106",
@@ -568,7 +594,8 @@
          "chars_per_line": 24,
          "max_lines": 4,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -586,7 +613,8 @@
          "chars_per_line": 7,
          "max_lines": 1,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:109",
@@ -602,7 +630,8 @@
          "chars_per_line": 24,
          "max_lines": 4,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ]
       ],
@@ -641,7 +670,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [
@@ -668,7 +698,8 @@
          "chars_per_line": 14,
          "max_lines": 2,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:105",
@@ -684,7 +715,8 @@
          "chars_per_line": 19,
          "max_lines": 6,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -702,7 +734,8 @@
          "chars_per_line": 14,
          "max_lines": 2,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:110",
@@ -718,7 +751,8 @@
          "chars_per_line": 19,
          "max_lines": 6,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -736,7 +770,8 @@
          "chars_per_line": 14,
          "max_lines": 2,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:115",
@@ -752,7 +787,8 @@
          "chars_per_line": 19,
          "max_lines": 6,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -770,7 +806,8 @@
          "chars_per_line": 14,
          "max_lines": 2,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "ph:120",
@@ -786,7 +823,8 @@
          "chars_per_line": 19,
          "max_lines": 6,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ]
       ],
@@ -826,7 +864,8 @@
       "chars_per_line": 52,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:103",
@@ -842,7 +881,8 @@
       "chars_per_line": 23,
       "max_lines": 9,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -874,7 +914,8 @@
       "chars_per_line": 52,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:101",
@@ -890,7 +931,8 @@
       "chars_per_line": 53,
       "max_lines": 7,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -922,7 +964,8 @@
       "chars_per_line": 48,
       "max_lines": 4,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:102",
@@ -938,7 +981,8 @@
       "chars_per_line": 95,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -970,7 +1014,8 @@
       "chars_per_line": 52,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -1002,7 +1047,8 @@
       "chars_per_line": 26,
       "max_lines": 2,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:104",
@@ -1018,7 +1064,8 @@
       "chars_per_line": 65,
       "max_lines": 4,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -1065,7 +1112,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      },
      {
       "key": "ph:103",
@@ -1081,7 +1129,8 @@
       "chars_per_line": 23,
       "max_lines": 9,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -1113,7 +1162,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [],
@@ -1145,7 +1195,8 @@
       "chars_per_line": 56,
       "max_lines": 1,
       "grows": false,
-      "purpose": null
+      "purpose": null,
+      "table": null
      }
     ],
     "groups": [
@@ -1172,7 +1223,8 @@
          "chars_per_line": 19,
          "max_lines": 1,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "sp:5",
@@ -1188,7 +1240,8 @@
          "chars_per_line": 26,
          "max_lines": 5,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -1206,7 +1259,8 @@
          "chars_per_line": 19,
          "max_lines": 1,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "sp:8",
@@ -1222,7 +1276,8 @@
          "chars_per_line": 26,
          "max_lines": 5,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ],
        [
@@ -1240,7 +1295,8 @@
          "chars_per_line": 19,
          "max_lines": 1,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         },
         {
          "key": "sp:11",
@@ -1256,7 +1312,8 @@
          "chars_per_line": 26,
          "max_lines": 5,
          "grows": false,
-         "purpose": null
+         "purpose": null,
+         "table": null
         }
        ]
       ],

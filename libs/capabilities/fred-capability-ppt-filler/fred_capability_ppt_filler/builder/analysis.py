@@ -58,6 +58,7 @@ from fred_capability_ppt_filler.builder.models import (
     Pattern,
     RepeatGroup,
     SlideKind,
+    TableSpec,
     TemplateInventory,
     Zone,
     ZoneRole,
@@ -165,7 +166,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 9
+ANALYSIS_VERSION = 10
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -626,6 +627,103 @@ def _declared_role(rec: _Rec) -> Optional[str]:
     return lexicon.role_from_shape_name(rec.name)
 
 
+_MERGES = ("gridSpan", "rowSpan", "hMerge", "vMerge")
+# OOXML defaults for a table cell's margins, in EMU.
+_CELL_MARGIN_LR = 91440
+_CELL_MARGIN_TB = 45720
+
+
+def _default_text_pt(presentation) -> float:
+    """The presentation's default text size: what a table cell draws with."""
+    node = presentation.part._element.find(
+        f"{qn('p:defaultTextStyle')}/{qn('a:lvl1pPr')}/{qn('a:defRPr')}"
+    )
+    size = node.get("sz") if node is not None else None
+    return int(size) / 100 if size else 18.0
+
+
+def _cell_text(tc) -> str:
+    return "\n".join(
+        "".join(t.text or "" for t in p.iter(qn("a:t"))) for p in tc.iter(qn("a:p"))
+    ).strip()
+
+
+def _cell_fill(tc) -> str:
+    """The cell's own fill, serialised, so body cells can be compared."""
+    props = tc.find(qn("a:tcPr"))
+    if props is None:
+        return ""
+    fills = [
+        child
+        for child in props
+        if child.tag in (qn("a:solidFill"), qn("a:gradFill"), qn("a:pattFill"))
+    ]
+    return b"".join(etree.tostring(f) for f in fills).decode()
+
+
+def _cell_pt(tc) -> Optional[float]:
+    for tag in ("a:rPr", "a:endParaRPr"):
+        for node in tc.iter(qn(tag)):
+            if node.get("sz"):
+                return int(node.get("sz")) / 100
+    return None
+
+
+def table_spec(
+    tbl, frame_height: int, default_pt: float, font_name: Optional[str]
+) -> Optional[Tuple[TableSpec, float]]:
+    """(spec, font size) of a data table: at least 2 columns and 2 rows, no
+    merged cells, body cells empty or sample text, one fill for every body
+    cell. Anything else is a drawing (a Gantt grid) and stays excluded."""
+    rows = tbl.findall(qn("a:tr"))
+    widths = [int(c.get("w", "0")) for c in tbl.iter(qn("a:gridCol"))]
+    if len(widths) < 2 or len(rows) < 2 or min(widths) <= 0:
+        return None
+    if any(tc.get(attr) for tc in tbl.iter(qn("a:tc")) for attr in _MERGES):
+        return None
+    if any(len(tr.findall(qn("a:tc"))) != len(widths) for tr in rows):
+        return None
+    props = tbl.find(qn("a:tblPr"))
+    header = props is not None and props.get("firstRow") in ("1", "true")
+    body = [tc for tr in rows[1 if header else 0 :] for tc in tr.findall(qn("a:tc"))]
+    if any(
+        (text := _cell_text(tc)) and not lexicon.is_sample_text(text) for tc in body
+    ):
+        return None
+    if len({_cell_fill(tc) for tc in body}) > 1:
+        return None
+    first = rows[-1].find(qn("a:tc"))
+    cell = first.find(qn("a:tcPr")) if first is not None else None
+
+    def margin(name: str, default: int) -> int:
+        value = cell.get(name) if cell is not None else None
+        return int(value) if value else default
+
+    lr = margin("marL", _CELL_MARGIN_LR) + margin("marR", _CELL_MARGIN_LR)
+    tb = margin("marT", _CELL_MARGIN_TB) + margin("marB", _CELL_MARGIN_TB)
+    pt = next((p for tc in body if (p := _cell_pt(tc))), None) or default_pt
+    columns = [
+        text_metrics.chars_per_line(max(0, w - lr) / 914400 * 72, pt, font_name, False)
+        for w in widths
+    ]
+    row_heights = [int(tr.get("h", "0")) for tr in rows]
+    line_pt = pt * text_metrics.LINE_HEIGHT
+    pad_pt = tb / 914400 * 72
+    row_pt = max(row_heights[-1] / 914400 * 72, line_pt + pad_pt)
+    height_pt = max(frame_height, sum(row_heights)) / 914400 * 72
+    spec = TableSpec(
+        header=header,
+        columns=columns,
+        widths=widths,
+        margin=lr,
+        line_pt=round(line_pt, 2),
+        pad_pt=round(pad_pt, 2),
+        row_pt=round(row_pt, 2),
+        height_pt=round(height_pt, 2),
+    )
+    return spec, pt
+
+
 class _Analyzer:
     def __init__(self, presentation) -> None:
         self.prs = presentation
@@ -633,6 +731,7 @@ class _Analyzer:
         self.height = presentation.slide_height
         self.shared_texts: set[str] = set()
         self.theme = theme_fonts(presentation)
+        self.default_pt = _default_text_pt(presentation)
 
     # -- entry -----------------------------------------------------------------
 
@@ -849,6 +948,17 @@ class _Analyzer:
                 if declared == "image" or rec.area >= _REPLACEABLE_PICTURE_AREA:
                     zones.append(_zone(rec, "image", self.width, self.height))
 
+        # 4b. The slide's one main table, when it is data to fill.
+        tables = [
+            rec
+            for rec in records
+            if rec.kind == "table" and rec.area >= _MAIN_CONTENT_AREA
+        ]
+        if len(tables) == 1:
+            zone = self._table_zone(tables[0])
+            if zone is not None:
+                zones.append(zone)
+
         pattern = Pattern(
             id=f"slide:{slide.slide_id}",
             source="slide",
@@ -888,6 +998,25 @@ class _Analyzer:
         _quote_roles(pattern)
         pattern.reusable = pattern.kind != "other"
         return pattern
+
+    def _table_zone(self, rec: _Rec) -> Optional[Zone]:
+        tbl = rec.shape._element.find(f".//{qn('a:tbl')}")
+        found = (
+            table_spec(tbl, int(rec.shape.height), self.default_pt, self.theme[1])
+            if tbl is not None
+            else None
+        )
+        if found is None:
+            return None
+        spec, pt = found
+        return Zone(
+            key=rec.key,
+            role="table",
+            box=rec.box,
+            font_pt=pt,
+            max_lines=max(1, spec.body_lines()),
+            table=spec,
+        )
 
     def _slide_label(self, title_text: str, layout_name: str, number: int) -> str:
         if (
@@ -1060,7 +1189,10 @@ class _Analyzer:
     # -- exclusions --------------------------------------------------------------------
 
     def _apply_exclusions(self, pattern: Pattern, slide, records: List[_Rec]) -> None:
+        tables = {z.key for z in pattern.zones if z.role == "table"}
         for rec in records:
+            if rec.key in tables:
+                continue
             if rec.kind in ("chart", "table") and rec.area >= _MAIN_CONTENT_AREA:
                 pattern.included = False
                 pattern.exclusion_reason = rec.kind  # type: ignore[assignment]
@@ -1317,6 +1449,8 @@ def _kind(
     """The slide kind from the template's own hints, else from the slot roles.
     A slide holding real body content is never a cover, a section or a quote."""
     zones = [z for z in pattern.zones if z.role != "keep"]
+    if any(z.role == "table" for z in zones):
+        return "table"
     hinted = _hinted_kind(pattern, records, name, layout_type)
     if not zones and not pattern.groups:
         return "closing" if hinted == "closing" else "other"

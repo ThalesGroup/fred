@@ -181,6 +181,67 @@ class PlanColumn(BaseModel):
         return {"bullets": _as_text_list(value)}
 
 
+def _cells(value: Any) -> List[str]:
+    if isinstance(value, dict):
+        value = list(value.values())
+    if not isinstance(value, (list, tuple)):
+        value = [value]
+    return [(_as_text(cell) or "").strip() for cell in value]
+
+
+class PlanTable(BaseModel):
+    """A data table: column titles and rows of cells, filled into a table the
+    template holds."""
+
+    header: List[str] = Field(
+        default_factory=list, description="Column titles, one per column."
+    )
+    rows: List[List[str]] = Field(
+        default_factory=list,
+        description="Rows of cells, each as many cells as the header; short text.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce(cls, value: Any) -> Any:
+        if isinstance(value, (list, tuple)):
+            value = {"rows": value}
+        if not isinstance(value, dict):
+            return {"rows": [[_as_text(value) or ""]]}
+        header = value.get("header") or value.get("headers") or value.get("columns")
+        rows = value.get("rows") or value.get("data") or value.get("body") or []
+        if not isinstance(rows, (list, tuple)):
+            rows = [rows]
+        # Rows written as objects name their columns.
+        first = next((r for r in rows if isinstance(r, dict)), None)
+        if not header and first is not None:
+            header = list(first)
+        header_cells = _cells(header) if header else []
+        cells = [
+            [(_as_text(r.get(h)) or "").strip() for h in header_cells]
+            if isinstance(r, dict) and header_cells
+            else _cells(r)
+            for r in rows
+            if r is not None
+        ]
+        cells = [r for r in cells if any(r)]
+        # Ragged rows are padded: a missing cell is an empty one.
+        width = max([len(header_cells)] + [len(r) for r in cells])
+        return {
+            "header": header_cells + [""] * (width - len(header_cells))
+            if header_cells
+            else [],
+            "rows": [r + [""] * (width - len(r)) for r in cells],
+        }
+
+    @property
+    def width(self) -> int:
+        return max([len(self.header)] + [len(r) for r in self.rows])
+
+    def has_content(self) -> bool:
+        return any(self.header) or any(any(r) for r in self.rows)
+
+
 class SlidePlan(BaseModel):
     title: Optional[str] = None
     subtitle: Optional[str] = None
@@ -197,6 +258,10 @@ class SlidePlan(BaseModel):
     images: List[str] = Field(
         default_factory=list,
         description="document_ids for a pattern with several image zones, in order.",
+    )
+    table: Optional[PlanTable] = Field(
+        default=None,
+        description="A data table {header, rows}; only on a kind that lists a table.",
     )
     notes: Optional[str] = Field(default=None, description="Speaker notes.")
     # Last on purpose: the model writes the content first, then names its kind.
@@ -270,6 +335,7 @@ def has_content(slide: SlidePlan) -> bool:
         )
         or slide.image
         or slide.images
+        or (slide.table is not None and slide.table.has_content())
     )
 
 
@@ -290,6 +356,23 @@ def _limit(zones: Sequence[Zone]) -> str:
         return ""
     tightest = min(bounded, key=lambda z: (z.chars_per_line or 0) * (z.max_lines or 0))
     return " " + capacity_text(tightest.chars_per_line or 1, tightest.max_lines or 1)
+
+
+def table_summary(zone: Zone) -> str:
+    spec = zone.table
+    if spec is None:
+        return "table"
+    widths = sorted(set(spec.columns))
+    per_cell = (
+        f"≈{widths[0]}"
+        if len(widths) == 1
+        else "≈" + "/".join(str(c) for c in spec.columns)
+    )
+    head = "header + " if spec.header else ""
+    return (
+        f"table 2 to {len(spec.columns)} columns ({per_cell} chars per cell line), "
+        f"{head}≈{zone.max_lines} lines of rows"
+    )
 
 
 def zone_summary(pattern: Pattern) -> str:
@@ -329,6 +412,7 @@ def zone_summary(pattern: Pattern) -> str:
     images = sum(1 for z in pattern.zones if z.role == "image")
     if images:
         parts.append(f"images×{images}")
+    parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
     for group in pattern.groups:
         fields: Dict[str, List[Zone]] = {}
         for item in group.items:

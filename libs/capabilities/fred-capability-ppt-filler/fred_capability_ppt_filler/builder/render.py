@@ -40,11 +40,13 @@ from pptx.util import Emu
 from fred_capability_ppt_filler import text_metrics
 from fred_capability_ppt_filler.builder import checks, lexicon
 from fred_capability_ppt_filler.builder.analysis import (
+    _cell_text,
     _font_name_of,
     estimate_capacity,
     theme_fonts,
 )
 from fred_capability_ppt_filler.builder.models import (
+    TABLE_SLACK_PT,
     Pattern,
     RepeatGroup,
     TemplateInventory,
@@ -53,6 +55,7 @@ from fred_capability_ppt_filler.builder.models import (
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
     PlanItem,
+    PlanTable,
     SlidePlan,
     has_content,
 )
@@ -417,8 +420,11 @@ def _write_lines(shape, lines: Sequence[_Line]) -> None:
     of that level clones; a level the template lacks takes the first
     paragraph's. Inline ``**bold**``/``*italic*`` is honoured per span.
     """
-    text_frame = shape.text_frame
-    txBody = text_frame._txBody
+    _write_paragraphs(shape.text_frame._txBody, lines)
+
+
+def _write_paragraphs(txBody, lines: Sequence[_Line]) -> None:
+    """:func:`_write_lines` on a bare ``txBody`` (a table cell has no shape)."""
     paragraphs = txBody.findall(qn("a:p"))
     styles: Dict[int, Tuple[Any, Any]] = {}
     base: Tuple[Any, Any] = (None, None)
@@ -467,17 +473,7 @@ def _set_font_scale(shape, scale: float, base_pt: Optional[float] = None) -> Non
     ``normAutofit`` (``fontScale`` in 1/1000 %)."""
     txBody = shape.text_frame._txBody
     if base_pt:
-        for tag in ("a:rPr", "a:endParaRPr"):
-            for rPr in txBody.iter(qn(tag)):
-                current = rPr.get("sz")
-                size = int(current) / 100 if current else base_pt
-                rPr.set("sz", str(max(600, int(size * scale * 100))))
-        for run in txBody.iter(qn("a:r")):
-            if run.find(qn("a:rPr")) is None:
-                rPr = run.makeelement(
-                    qn("a:rPr"), {"sz": str(max(600, int(base_pt * scale * 100)))}
-                )
-                run.insert(0, rPr)
+        _scale_runs(txBody, scale, base_pt)
         return
     bodyPr = txBody.find(qn("a:bodyPr"))
     if bodyPr is None:
@@ -489,6 +485,21 @@ def _set_font_scale(shape, scale: float, base_pt: Optional[float] = None) -> Non
     autofit.set("fontScale", str(int(scale * 100000)))
     autofit.set("lnSpcReduction", "10000")
     bodyPr.append(autofit)
+
+
+def _scale_runs(element, scale: float, base_pt: float) -> None:
+    """Give every run under ``element`` an explicit size, scaled."""
+    for tag in ("a:rPr", "a:endParaRPr"):
+        for rPr in element.iter(qn(tag)):
+            current = rPr.get("sz")
+            size = int(current) / 100 if current else base_pt
+            rPr.set("sz", str(max(600, int(size * scale * 100))))
+    for run in element.iter(qn("a:r")):
+        if run.find(qn("a:rPr")) is None:
+            rPr = run.makeelement(
+                qn("a:rPr"), {"sz": str(max(600, int(base_pt * scale * 100)))}
+            )
+            run.insert(0, rPr)
 
 
 # PowerPoint's default text inset, used when a box declares none.
@@ -657,6 +668,182 @@ def _auto_number(sample: str, index: int) -> str:
     if sample.strip().isdigit():
         return str(index + 1)
     return ""
+
+
+# --- tables -------------------------------------------------------------------------------
+
+_TABLE_SCALES = (1.0, 0.95, 0.9, 0.85, 0.8, 0.75, MIN_FONT_SCALE)
+_A16 = "{http://schemas.microsoft.com/office/drawing/2014/main}"
+
+
+@dataclass
+class TableFit:
+    """How a plan table sits in a template table: the fit check and the
+    renderer both read it. ``problem`` is ``(what, fix)`` when it does not fit."""
+
+    header: Optional[List[str]] = None
+    rows: List[List[str]] = field(default_factory=list)
+    widths: List[int] = field(default_factory=list)
+    scale: Optional[float] = None
+    heights: List[float] = field(default_factory=list)  # pt, header row first
+    problem: Optional[Tuple[str, str]] = None
+
+
+def _cell_lines(text: str, room_em: float) -> int:
+    return sum(
+        max(1, math.ceil(text_metrics.width_em(line) / room_em))
+        for line in (text.splitlines() or [""])
+    )
+
+
+def fit_table(zone: Zone, table: PlanTable) -> TableFit:
+    """Columns dropped from the right (others widened), rows grown or removed,
+    and the one font scale at which every row fits the template's height.
+    Cells are never cut: what does not fit is a problem."""
+    spec = zone.table
+    if spec is None:
+        return TableFit(problem=("table: this slide has no table", "drop table"))
+    count, most = table.width, len(spec.columns)
+    header = list(table.header) if any(table.header) else None
+    rows, first = [list(r) for r in table.rows], 0
+    if spec.header and header is None and len(rows) >= 2:
+        header, rows, first = rows[0], rows[1:], 1
+    elif not spec.header and header is not None:
+        rows, header, first = [header] + rows, None, -1
+    if count > most:
+        return TableFit(
+            problem=(
+                f"table: {count} columns given, max {most}",
+                f"keep at most {most} columns or split the table over two slides",
+            )
+        )
+    if count < 2:
+        return TableFit(
+            problem=("table: a table needs at least 2 columns", "write it as bullets")
+        )
+    if not rows:
+        return TableFit(
+            problem=("table: no rows under the header", "add rows, or use bullets")
+        )
+    if spec.header and header is None:
+        header = [""] * count
+    kept = spec.widths[:count]
+    widths = [round(w * sum(spec.widths) / sum(kept)) for w in kept]
+    widths[-1] += sum(spec.widths) - sum(widths)
+    columns = [
+        max(1, int(c * max(1, w2 - spec.margin) / max(1, w - spec.margin)))
+        for c, w, w2 in zip(spec.columns, kept, widths)
+    ]
+    cells = ([header] if header is not None else []) + rows
+    char = text_metrics.char_em()
+
+    def heights(scale: float) -> List[float]:
+        return [
+            spec.row_height(
+                max(_cell_lines(t, c * char / scale) for t, c in zip(row, columns)),
+                scale,
+            )
+            for row in cells
+        ]
+
+    for scale in _TABLE_SCALES:
+        found = heights(scale)
+        if sum(found) <= spec.height_pt + TABLE_SLACK_PT:
+            return TableFit(
+                header, rows, widths, None if scale == 1.0 else scale, found
+            )
+
+    def lines(scale: float) -> List[int]:
+        return [
+            max(_cell_lines(t, c * char / scale) for t, c in zip(row, columns))
+            for row in cells
+        ]
+
+    full, floor = lines(1.0), lines(MIN_FONT_SCALE)
+    head = 1 if header is not None else 0
+    holds = spec.body_lines(1.0, full[0] if head else 1)
+    holds_floor = spec.body_lines(MIN_FONT_SCALE, floor[0] if head else 1)
+    r, c = max(
+        ((r, c) for r in range(len(rows)) for c in range(count)),
+        key=lambda rc: len(rows[rc[0]][rc[1]]),
+    )
+    return TableFit(
+        problem=(
+            f"table: {len(rows)} rows need ≈{sum(full[head:])} lines; this table holds "
+            f"≈{holds} (≈{holds_floor} at the smallest size); longest cell "
+            f"rows[{r + first}][{c}] {len(rows[r][c])} chars, its column holds "
+            f"≈{columns[c]} chars per line",
+            f"shorten the longest cells or keep about {holds_floor} one-line rows; "
+            "split the table over two slides",
+        )
+    )
+
+
+def _clear_cell(tc) -> None:
+    txBody = tc.find(qn("a:txBody"))
+    if txBody is not None:
+        checks.clear_paragraphs(txBody)
+
+
+def _fresh_row_ids(tbl, rows: Sequence[Any]) -> None:
+    """A cloned row keeps its source's ``a16:rowId``; PowerPoint repairs a
+    table holding two rows with one id."""
+    ids = [node for node in tbl.iter(f"{_A16}rowId")]
+    taken = {int(node.get("val", "0")) for node in ids}
+    for row in rows:
+        for node in row.iter(f"{_A16}rowId"):
+            new = (max(taken) + 1) % 2**32
+            taken.add(new)
+            node.set("val", str(new))
+
+
+def fill_table(frame, zone: Zone, fit: TableFit) -> List[str]:
+    """Write ``fit`` into a duplicated table frame; returns the template cell
+    text the check found left over (and cleared)."""
+    tbl = frame._element.find(f".//{qn('a:tbl')}")
+    grid = tbl.find(qn("a:tblGrid"))
+    originals = {_cell_text(tc) for tc in tbl.iter(qn("a:tc"))} - {""}
+    columns = grid.findall(qn("a:gridCol"))
+    for column in columns[len(fit.widths) :]:
+        grid.remove(column)
+    for column, width in zip(columns, fit.widths):
+        column.set("w", str(width))
+    trs = tbl.findall(qn("a:tr"))
+    for tr in trs:
+        for tc in tr.findall(qn("a:tc"))[len(fit.widths) :]:
+            tr.remove(tc)
+    head = trs[:1] if zone.table is not None and zone.table.header else []
+    body = trs[len(head) :]
+    for tr in body[len(fit.rows) :]:
+        tbl.remove(tr)
+    added = []
+    for _ in range(len(fit.rows) - len(body)):
+        clone = copy.deepcopy(body[-1])
+        for tc in clone.findall(qn("a:tc")):
+            _clear_cell(tc)
+        tbl.findall(qn("a:tr"))[-1].addnext(clone)
+        added.append(clone)
+    _fresh_row_ids(tbl, added)
+    values = ([fit.header] if head and fit.header is not None else []) + fit.rows
+    for tr, row, height in zip(tbl.findall(qn("a:tr")), values, fit.heights):
+        tr.set("h", str(round(height * 12700)))
+        for tc, text in zip(tr.findall(qn("a:tc")), row):
+            _clear_cell(tc)
+            if text:
+                _write_paragraphs(
+                    tc.find(qn("a:txBody")), [_Line(t) for t in text.splitlines()]
+                )
+    if fit.scale is not None and zone.font_pt:
+        _scale_runs(tbl, fit.scale, zone.font_pt)
+    frame.height = Emu(round(sum(fit.heights) * 12700))
+    wanted = {t for row in values for t in row}
+    left = []
+    for tc in tbl.iter(qn("a:tc")):
+        text = _cell_text(tc)
+        if text in originals and text not in wanted:
+            left.append(text)
+            _clear_cell(tc)
+    return left
 
 
 # --- zone mapping -----------------------------------------------------------------------
@@ -1090,6 +1277,9 @@ class _Renderer:
             lost.append(f"{len(plan_images) - len(zmap.images)} image(s)")
         if plan.items and not pattern.groups:
             lost.append("items")
+        tables = [z for z in pattern.zones if z.role == "table"]
+        if plan.table is not None and plan.table.has_content() and not tables:
+            lost.append("table")
         lost.extend(
             _unused_item_fields(pattern.groups, plan, (self.width, self.height))
         )
@@ -1219,6 +1409,12 @@ class _Renderer:
             for shape, zone, _ in group_scales:
                 _set_font_scale(shape, smallest, zone.font_pt)
 
+        for zone in tables:
+            placed = index.get(zone.key)
+            if placed is None or plan.table is None:
+                continue
+            self._fill_table(placed, zone, plan.table, position, pattern.label)
+
         for zone in [z for z in pattern.zones if z.role == "image"] + [
             z
             for g in pattern.groups
@@ -1245,6 +1441,32 @@ class _Renderer:
                     _remove(placed)
                 continue
             self._place_image(slide, placed, prepared)
+
+    def _fill_table(
+        self,
+        placed: PlacedShape,
+        zone: Zone,
+        table: PlanTable,
+        position: int,
+        label: str,
+    ) -> None:
+        report = self.report.slide(position)
+        fit = fit_table(zone, table)
+        if fit.problem is not None:
+            report.lost.append("table")
+            self.warnings.append(f"Slide {position}: {fit.problem[0]}; table left out.")
+            return
+        frame = cast(Any, placed.shape)
+        removed = fill_table(frame, zone, fit)
+        if removed:
+            report.removed.extend(removed)
+        if fit.scale is not None:
+            report.shrunk.append(f"table text at {round(fit.scale * 100)} % to fit")
+        if placed.top + frame.height > self.height:
+            report.lost.append("table rows below the slide")
+            self.warnings.append(
+                f"Slide {position}: the table of '{label}' runs off the slide."
+            )
 
     @staticmethod
     def _loose_decoration(
@@ -1465,7 +1687,7 @@ class _Renderer:
 
     @staticmethod
     def _fillable_text_zones(pattern: Pattern) -> List[Zone]:
-        zones = [z for z in pattern.zones if z.role not in ("image", "keep")]
+        zones = [z for z in pattern.zones if z.role not in ("image", "keep", "table")]
         for group in pattern.groups:
             for item in group.items:
                 zones.extend(z for z in item if z.role not in ("image", "keep"))

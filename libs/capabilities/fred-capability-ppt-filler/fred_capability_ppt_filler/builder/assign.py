@@ -51,6 +51,7 @@ from fred_capability_ppt_filler.builder.render import (
     _Line,
     _only_names_the_slide,
     _unused_item_fields,
+    fit_table,
     zone_capacity,
 )
 
@@ -131,6 +132,8 @@ def _sequential(numbers: Sequence[str]) -> bool:
 def infer_kinds(slide: SlidePlan) -> List[SlideKind]:
     """Kinds the slide's content shape suits, best first."""
     kinds: List[SlideKind]
+    if slide.table is not None and slide.table.has_content():
+        return ["table"]
     if len(slide.columns) >= 2:
         headed = all(c.heading for c in slide.columns)
         kinds = (
@@ -267,9 +270,26 @@ def misfit(
                 f"keep at most {most} columns or split them over two slides",
             ),
         )
+    cost = 0.0
+    tables = [z for z in pattern.zones if z.role == "table"]
+    given = slide.table is not None and slide.table.has_content()
+    if given and not tables:
+        lost.append("table")
+    elif given and slide.table is not None:
+        fit = fit_table(tables[0], slide.table)
+        if fit.problem is not None:
+            reasons.append(Misfit(*fit.problem))
+        elif fit.scale is not None:
+            cost += _SHRUNK
+    elif tables:
+        reasons.append(
+            Misfit(
+                "this slide shows a table and needs `table` {header, rows}",
+                "give the content as `table`, or another kind",
+            )
+        )
     reasons[:0] = [_no_place(what) for what in lost if what not in held]
 
-    cost = 0.0
     zones = {z.key: z for z in pattern.zones}
     for key, lines in text.items():
         zone = zones[key]
@@ -297,7 +317,7 @@ def misfit(
     for zone in pattern.zones:
         if zone.role == "image":
             cost += 0.0 if images else _IMAGE_HOLE
-        elif zone.role != "keep" and zone.key not in text:
+        elif zone.role not in ("keep", "table") and zone.key not in text:
             cost += _EMPTY_ZONE
     for group in pattern.groups:
         for item, zones in zip(slide.items, group.items):
@@ -384,6 +404,21 @@ def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
         if p.kind in rank and _allowed(p, slide, has_cover)
     ]
     options: List[str] = []
+    table = slide.plan.table
+    if (
+        table is not None
+        and table.has_content()
+        and not any(z.role == "table" for p, _, _ in slide.checked for z in p.zones)
+    ):
+        return SlideProblem(
+            slide.index,
+            "table: this template has no table slide",
+            [
+                "write the table as items (one item per row) or as columns",
+                "or keep its key rows as bullets",
+            ],
+            slide.plan.kind,
+        )
     if not own:
         problem = "this template has no slide that can take this position"
     else:

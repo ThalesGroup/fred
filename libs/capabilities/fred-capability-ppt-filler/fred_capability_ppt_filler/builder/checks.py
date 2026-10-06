@@ -40,10 +40,12 @@ class SlideReport:
     truncated: List[str] = field(default_factory=list)
     # Plan content no zone received ("subtitle", "2 item(s)", ...).
     lost: List[str] = field(default_factory=list)
+    # A table set smaller as a whole to fit its rows (nothing cut).
+    shrunk: List[str] = field(default_factory=list)
 
     @property
     def clean(self) -> bool:
-        return not (self.removed or self.truncated or self.lost)
+        return not (self.removed or self.truncated or self.lost or self.shrunk)
 
 
 @dataclass
@@ -82,8 +84,8 @@ def original_texts(slide) -> Dict[str, str]:
     return {key: text for key, shape in _text_shapes(slide) if (text := _text(shape))}
 
 
-def _clear(shape) -> None:
-    txBody = shape.text_frame._txBody
+def clear_paragraphs(txBody) -> None:
+    """Empty a text body, keeping its first paragraph's formatting."""
     paragraphs = txBody.findall(qn("a:p"))
     for extra in paragraphs[1:]:
         txBody.remove(extra)
@@ -119,5 +121,5 @@ def remove_leftovers(
             element = shape._element
             element.getparent().remove(element)
         else:
-            _clear(shape)
+            clear_paragraphs(shape.text_frame._txBody)
     return removed

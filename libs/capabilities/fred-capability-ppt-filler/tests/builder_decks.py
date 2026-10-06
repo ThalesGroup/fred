@@ -219,8 +219,49 @@ def add_chart_slide(presentation):
 
 
 def add_table_slide(presentation):
+    """A grid with a merged cell: a drawing, not data, so it stays excluded."""
     slide = _titled(presentation, "Table")
-    slide.shapes.add_table(3, 3, Inches(1), Inches(1.5), Inches(8), Inches(4))
+    frame = slide.shapes.add_table(3, 3, Inches(1), Inches(1.5), Inches(8), Inches(4))
+    table = cast(Any, frame).table
+    table.cell(0, 0).merge(table.cell(0, 1))
+    return slide
+
+
+_A16 = "http://schemas.microsoft.com/office/drawing/2014/main"
+
+
+def add_data_table_slide(presentation, rows: int = 12, cols: int = 5):
+    """The Paintress table slide: an empty title over a header-row table of
+    empty cells, each row carrying its ``a16:rowId``."""
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
+    frame = slide.shapes.add_table(
+        rows, cols, Inches(0.5), Inches(1.1), Inches(9), Emu(383378 * rows)
+    )
+    table = cast(Any, frame).table
+    for number, row in enumerate(table.rows):
+        row.height = Emu(383378)
+        tr = row._tr
+        ext_list = tr.makeelement(qn("a:extLst"), {})
+        ext = ext_list.makeelement(
+            qn("a:ext"), {"uri": "{0D108BD9-81ED-4DB2-BD59-A6C34878D82A}"}
+        )
+        ext.append(ext.makeelement(f"{{{_A16}}}rowId", {"val": str(1000 + number)}))
+        ext_list.append(ext)
+        tr.append(ext_list)
+    return slide
+
+
+def add_gantt_slide(presentation):
+    """A month grid whose bars are cell fills: a drawing, never data."""
+    slide = _titled(presentation, "Timeline 1 an")
+    frame = slide.shapes.add_table(4, 6, Inches(0.5), Inches(1.5), Inches(9), Inches(4))
+    table = cast(Any, frame).table
+    for column, month in enumerate(("", "JAN", "FEV", "MAR", "AVR", "MAI")):
+        table.cell(0, column).text = month
+    for row in range(1, 4):
+        table.cell(row, 0).text = f"Titre {row}"
+        for column in range(row, row + 2):
+            table.cell(row, column).fill.solid()
     return slide
 
 

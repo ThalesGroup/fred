@@ -35,6 +35,7 @@ ZoneRole = Literal[
     "number",
     "label",
     "image",
+    "table",
     "keep",
 ]
 
@@ -67,6 +68,7 @@ SlideKind = Literal[
     "team",
     "quote",
     "image_text",
+    "table",
     "closing",
     "other",
 ]
@@ -86,6 +88,38 @@ ExclusionReason = Literal[
     "unsupported_parts",
     "author",
 ]
+
+
+# Rounding room when rows are summed against the table's height budget.
+TABLE_SLACK_PT = 0.5
+
+
+class TableSpec(BaseModel):
+    """What a template's data table holds, measured at analysis (design.md D14).
+
+    Heights are in points. A row is never shorter than ``row_pt`` (the
+    template's own rows) and the rows together never taller than ``height_pt``.
+    """
+
+    header: bool
+    # Characters per line of each column at its template width (cell margins off).
+    columns: List[int]
+    widths: List[int]  # EMU, per column
+    margin: int  # EMU, left plus right cell margin
+    line_pt: float
+    pad_pt: float  # top plus bottom cell margin
+    row_pt: float
+    height_pt: float
+
+    def row_height(self, lines: int, scale: float = 1.0) -> float:
+        return max(self.row_pt * scale, lines * self.line_pt * scale + self.pad_pt)
+
+    def body_lines(self, scale: float = 1.0, header_lines: int = 1) -> int:
+        """One-line body rows the table holds under its header at ``scale``."""
+        room = self.height_pt + TABLE_SLACK_PT
+        if self.header:
+            room -= self.row_height(header_lines, scale)
+        return max(0, int(room // self.row_height(1, scale)))
 
 
 class Zone(BaseModel):
@@ -109,6 +143,8 @@ class Zone(BaseModel):
     grows: bool = False
     # What the slot says on this slide ("subtitle", "KPI value"), from vision.
     purpose: Optional[str] = None
+    # Set on a `table` zone; its ``max_lines`` are the body lines at full size.
+    table: Optional[TableSpec] = None
 
 
 class RepeatGroup(BaseModel):
