@@ -51,18 +51,16 @@ def build_registry() -> dict[str, ReActAgentDefinition | GraphAgentDefinition]:
                                MCP servers via the control-plane agent form.
                                First entry → default agent in fred-agents-cli.
     - fred.github.deep_assistant  General-purpose deep-agent (LangGraph planner)
-                               counterpart to fred.github.assistant. No
-                               filesystem MCP by default (DeepAgentRuntime's
-                               filesystem-tool guard blocks it until an
-                               operator adds it explicitly).
+                               counterpart to fred.github.assistant. Its
+                               workspace tools come from DeepAgentRuntime.
     - fred.github.sentinel     Monitoring ReAct agent. Requires OpenSearch MCP.
                                Expected to fail gracefully in standalone mode —
                                useful for validating error detection and handling.
     - fred.github.rag_expert   Document-grounded ReAct agent (Rico). Uses the Fred
                                built-in knowledge.search declared_tool_ref (not
                                MCP). Reference for ReAct/built-in-tool pattern.
-    - fred.github.react_rag_mcp  Document-grounded ReAct template backed by the
-                               Knowledge Flow MCP text-search server. Exposes
+    - fred.github.react_rag_mcp  Document-grounded ReAct template backed by
+                               native document_access. Exposes
                                library picker, search policy, and RAG scope in
                                the Tools tab. Operator sets the name at
                                enrollment time.

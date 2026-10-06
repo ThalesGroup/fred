@@ -11,5 +11,5 @@
 ## 3. Verify retained consumers and close out
 
 - [x] 3.1 Update tests that used the retired MCPs as fixtures and run affected Knowledge Flow, agent-pod, SDK and configuration tests; verify `list_document_tree` and PPT Filler's direct HTTP `/fs` path remain covered.
-- [ ] 3.2 Review the full branch diff against its target and record any findings and dispositions; verify remaining MCP servers, direct corpus APIs, and direct filesystem APIs retain their contracts.
-- [ ] 3.3 Reconcile, validate, sync and archive the OpenSpec change after implementation; verify the durable `mcp-capabilities` spec describes the shipped catalog.
+- [x] 3.2 Review the full branch diff against its target and record any findings and dispositions; verify remaining MCP servers, direct corpus APIs, and direct filesystem APIs retain their contracts.
+- [x] 3.3 Reconcile, validate, sync and archive the OpenSpec change after implementation; verify the durable `mcp-capabilities` spec describes the shipped catalog.

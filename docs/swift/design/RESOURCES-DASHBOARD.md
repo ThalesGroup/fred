@@ -29,7 +29,7 @@ Four tabs, one shared table shell:
 **Feature flag:** Mon espace/Espace d'équipe/Agents are gated behind
 `enableAllResourceSpaces` (`FrontendFeatureFlags`, `configuration.yaml`, platform-wide,
 default off) — a product-maturity call, not a technical limitation. All three are fully
-built, tested, and reachable via the API/MCP `/fs` boundary regardless of the flag; **the
+built, tested, and reachable via the HTTP `/fs` API regardless of the flag; **the
 flag only hides their tab in the UI**, it is not a backend access control. The actual
 team-scoping gap on that boundary is tracked separately as issue #2113 (Critical).
 
@@ -126,5 +126,3 @@ retrievable costs an optimistic row update + single row/page invalidation.
 
 - Should chat contexts and templates stay outside this workspace (as today, e.g.
   `PromptsPage` for prompts) or move into a dedicated rework page per kind?
-- Should "Mon espace" become part of the MCP filesystem view (FILES-01) instead of the
-  document-library/tag model it uses today?

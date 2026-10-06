@@ -7,7 +7,7 @@ The unused “Mon espace” personal file area adds a fourth resource root, back
 - **BREAKING** Remove the “Mon espace” tab and its personal-file statistics and actions from Team Resources.
 - **BREAKING** Stop exposing or accepting `/teams/{team_id}/users/{uid}` as a filesystem area in Knowledge Flow, including synthetic directory listings, stat, search, and writes. Existing stored objects remain intact pending a separate retention or migration decision.
 - **BREAKING** Remove the personal-file helper from the SDK workspace filesystem contract and the personal template fallback; resolve templates from the agent's own files and then team-shared files.
-- Keep the distinct `/teams/{team_id}/agents/{agent_id}/users/{uid}` area, team-shared files, agent configuration assets, and the `/fs` MCP/API surface used by them. MCP filesystem retirement is a separate lot.
+- Keep the distinct `/teams/{team_id}/agents/{agent_id}/users/{uid}` area, team-shared files, agent configuration assets, and the direct HTTP `/fs` API used by them. The filesystem MCP is retired in the separate `retire-unused-corpus-and-filesystem-mcp` lot.
 - Update active product and authoring documentation and focused tests to describe only supported roots.
 
 ## Capabilities

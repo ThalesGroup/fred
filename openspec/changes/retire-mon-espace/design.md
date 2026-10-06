@@ -9,7 +9,7 @@ See [proposal.md](proposal.md) for motivation. The frontend currently renders a 
 - Make the remaining API and UI behavior explicit without changing stored object bytes.
 
 **Non-Goals:**
-- Retire the MCP filesystem service or `/fs` routes, which still serve team-shared, agent, and configuration files.
+- Retire the direct HTTP `/fs` routes, which still serve team-shared, agent, and configuration files. The filesystem MCP retirement is handled by `retire-unused-corpus-and-filesystem-mcp`.
 - Migrate, export, or delete existing objects under the retired personal prefix.
 - Replace the Deep conversation filesystem or implement durable conversation documents.
 
