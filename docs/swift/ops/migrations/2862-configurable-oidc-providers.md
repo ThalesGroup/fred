@@ -2,6 +2,7 @@
 schema: 1
 title: "Configure OIDC identity providers and a local user directory"
 impact: minor
+after: [2972-configurable-gcu-versions]
 configuration: production
 configuration_reason: "Optional OIDC provider, claim, scope, delegation and local-directory settings are exposed through the Fred chart; existing Keycloak defaults remain in effect when omitted."
 ---
@@ -20,7 +21,7 @@ For an ordinary Keycloak upgrade, keep the existing provider and directory setti
 
 ## Upgrade
 
-Apply the control-plane Alembic migration that adds nullable user identity snapshot columns before enabling the local directory. Deploy the matching application and chart versions together. Existing Keycloak deployments can retain their configuration. For optional OIDC activation, update the provider configuration on all backends together, then restart the affected workloads and begin with a fresh browser session. Keep the issuer and identity claim stable after activation because they determine Fred user IDs.
+Follow the [coordinated database upgrade](2972-configurable-gcu-versions.md), which includes the nullable identity snapshot columns, before enabling the local directory. Deploy the matching application and chart versions together. Existing Keycloak deployments can retain their configuration. For optional OIDC activation, update the provider configuration on all backends together, then restart the affected workloads and begin with a fresh browser session. Keep the issuer and identity claim stable after activation because they determine Fred user IDs.
 
 ## Validation
 
@@ -30,7 +31,7 @@ For both Keycloak and generic OIDC, verify that a definitive renewal refusal (su
 
 ## Rollback
 
-Restore the previous application and chart versions and the prior Keycloak configuration. Retain the additive nullable database columns during rollback; remove them only after confirming no deployed version needs local identity snapshots. Switching an activated deployment back to a previous issuer may produce different Fred user IDs and will not automatically transfer personal spaces or authorization state.
+A provider-only rollback can restore the prior Keycloak configuration while keeping the v3.2.0 application and chart. For a full rollback to v3.1.1, follow the [coordinated rollback](2972-configurable-gcu-versions.md), including its CGU downgrade guard, before restarting old readers. Nullable identity snapshot columns can remain only if the selected database rollback target retains them; a full reverse migration chain drops them. Switching an activated deployment back to a previous issuer may produce different Fred user IDs and will not automatically transfer personal spaces or authorization state.
 
 ## Limitations
 

@@ -2,6 +2,7 @@
 schema: 1
 title: "Store the latest configurable CGU acceptance in users"
 impact: minor
+after: [extract-mcp-agent-instructions]
 configuration: none
 configuration_reason: "The existing app.gcu_version string and charter settings retain their keys, defaults and optional behavior."
 ---
@@ -12,8 +13,11 @@ table, whether or not CGU gating is currently enabled.
 
 ## Prerequisites
 
-Back up the shared database. Deploy backend versions together: the old ORM
-expects an enum, while the new version reads text.
+Back up the shared database, agent tuning and chart values. Complete the
+[frontend flag cleanup](2910-remove-unused-task-tray.md) and
+[MCP catalog preparation](extract-mcp-agent-instructions.md) before deployment.
+Deploy backend versions together: the old ORM expects an enum, while the new
+version reads text.
 
 ## Configuration
 
@@ -23,14 +27,23 @@ Configure the same active CGU version in all enforcing backends.
 
 ## Upgrade
 
-1. Stop old control-plane, knowledge-flow and agent backends that read the shared
-   users table. Do not mix old and new readers during this migration.
-2. Run control-plane `alembic upgrade head` with the new release. The sole PR
-   revision `a7e9c2d41063`, after `b4e8d2a9c613`, converts
-   `users.gcuVersionAccepted` from enum `V1` to text `v1`. It creates no tables
-   or columns. The chain stays linear with one head.
-3. Start updated backends and deploy the regenerated frontend. No changes to the
-   other backend migration trees are needed.
+1. Pause new traffic and agent edits, drain in-flight work, then stop old
+   control-plane, knowledge-flow and agent backends and their workers that read
+   the shared users table. Do not mix old and new readers during this migration.
+2. For databases already at the retired-MCP revision from a prerelease build,
+   first follow the conditional replay procedure in the
+   [MCP note](extract-mcp-agent-instructions.md), using its original image for
+   the no-op downgrade. Ordinary upgrades from `code/v3.1.1` skip this replay.
+3. Run the normal control-plane `alembic upgrade head` once with the new release,
+   while old readers remain stopped. The linear chain applies prompt favorites,
+   UI settings, local identity snapshots, CGU conversion, retired-MCP cleanup
+   and profile pictures, ending at `aac66348e27b`. Revision `a7e9c2d41063`, after
+   `b4e8d2a9c613`, converts `users.gcuVersionAccepted` from enum `V1` to text `v1`.
+   It creates no tables or columns itself. The other backend migration trees
+   have no new revisions in this release.
+4. Start matching updated backends, workers and frontend with the paired chart,
+   validate the database head and services, then resume traffic and agent edits.
+   Do not re-ingest documents or conversation attachments for this upgrade.
 
 ## Validation
 
@@ -44,7 +57,14 @@ was created and the identity snapshot fields remain intact.
 
 ## Rollback
 
-Stop updated readers before downgrade. Downgrading `a7e9c2d41063` restores the
+Stop updated readers before any database downgrade. For a full rollback to
+v3.1.1, apply the normal reverse migration chain with the new image, including
+the CGU guard below, before restarting the old readers. New favorites, theme
+settings and avatar references are lost if their tables or columns are dropped;
+stored avatar objects remain. Removed legacy MCP selections require restoring
+agent tuning from the backup and are not recreated by downgrade.
+
+Downgrading `a7e9c2d41063` restores the
 old enum only when every current stored acceptance is `v1` or null; it refuses
 other versions before changing schema or data. If a current newer acceptance
 must be retained, restore a coordinated pre-upgrade backup or make a separate,

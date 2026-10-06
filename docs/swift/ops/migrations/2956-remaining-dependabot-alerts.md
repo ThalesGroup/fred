@@ -32,4 +32,7 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-The `http-cache-semantics` alert in `libs/frontend` has no patched version yet; it is only used by `sigstore` when publishing frontend packages.
+The later dependency update in this release replaces `http-cache-semantics`
+4.2.0 with 4.3.0 in the frontend library lockfiles. It is used by `sigstore`
+for package publication; the complete current vulnerability assessment is
+presented separately before release approval.

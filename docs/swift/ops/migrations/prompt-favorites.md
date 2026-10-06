@@ -2,6 +2,7 @@
 schema: 1
 title: "Users can mark library prompts as favorites"
 impact: minor
+after: [2972-configurable-gcu-versions]
 configuration: none
 configuration_reason: "No configuration key, default or secret changes; the feature is unconditional."
 ---
@@ -20,10 +21,10 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy Fred normally. The control-plane Alembic upgrade (revision
-`d7822fba0d40`) creates one new, empty table, `prompt_favorite`, with a foreign
-key to `prompt` and an index on `prompt_id`. No existing row is read or
-rewritten, so the migration is immediate.
+The [coordinated database upgrade](2972-configurable-gcu-versions.md) includes
+revision `d7822fba0d40`, which creates the empty `prompt_favorite` table, with
+a foreign key to `prompt` and an index on `prompt_id`. It does not rewrite
+existing prompt rows. No separate migration run is needed.
 
 The table holds personal data (which prompts a user starred). Rows are deleted
 with their prompt, when the user leaves or is removed from the prompt's team,
@@ -35,7 +36,8 @@ New API surface, additive only: `PUT` and `DELETE
 
 ## Validation
 
-After the upgrade, `alembic_version_control_plane` holds `d7822fba0d40`. In the
+After the full release upgrade, `alembic_version_control_plane` holds
+`aac66348e27b`; `d7822fba0d40` is an intermediate revision, not the final head. In the
 UI, star a prompt on the Prompts page: the star stays filled after a reload, and
 the Favorites filter lists it.
 
