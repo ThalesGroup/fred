@@ -78,7 +78,8 @@ Live remote transport remains in `fred-runtime`.
    this revision to run `alembic downgrade -1`. Its downgrade is a no-op for
    agent tuning and returns to that version's actual predecessor. Then switch
    to the updated code/image and run `alembic upgrade head`. The revision now
-   follows `c4d7e2a91b30`; older feature builds followed `21e235382895`. Using
+   follows `a7e9c2d41063`; older feature builds followed `c4d7e2a91b30`
+   or `21e235382895`. Using
    the original version for the downgrade ensures the intervening migrations
    are applied by the subsequent upgrade. Do not use this replay procedure if
    the database is at a later or divergent revision: it would also downgrade

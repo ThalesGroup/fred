@@ -3,7 +3,7 @@
 """Remove retired document-search and GitHub MCP selections/configuration.
 
 Revision ID: ba2c3c7fd0c1
-Revises: c4d7e2a91b30
+Revises: a7e9c2d41063
 Create Date: 2026-09-30
 """
 
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "ba2c3c7fd0c1"  # pragma: allowlist secret
-down_revision: str = "c4d7e2a91b30"  # pragma: allowlist secret
+down_revision: str = "a7e9c2d41063"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 

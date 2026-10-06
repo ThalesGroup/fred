@@ -326,14 +326,14 @@ def _loop_state() -> _LoopState:
     return state
 
 
-def _identity_digest(keycloak_url: str, client_id: str, refresh_token: str) -> str:
+def _identity_digest(token_url: str, client_id: str, refresh_token: str) -> str:
     """Stable coalescing key for one principal's refresh, holding no secret.
 
     Why it exists:
     - concurrent refreshes must coalesce per identity, but the raw refresh
       token must not become a dictionary key we could later log or dump.
     """
-    material = "\x00".join((keycloak_url, client_id, refresh_token))
+    material = "\x00".join((token_url, client_id, refresh_token))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -381,12 +381,11 @@ async def _post_token_request(
 
 async def _exchange_refresh_token(
     client: httpx.AsyncClient,
-    keycloak_url: str,
+    token_url: str,
     client_id: str,
     refresh_token: str,
 ) -> dict[str, object]:
-    """Perform one Keycloak refresh round trip and normalize its failures."""
-    token_url = f"{keycloak_url.rstrip('/')}/protocol/openid-connect/token"
+    """Perform one token refresh round trip and normalize its failures."""
 
     form = {
         "grant_type": "refresh_token",
@@ -500,7 +499,7 @@ async def _exchange_refresh_token(
 
 
 async def refresh_user_access_token_from_keycloak(
-    keycloak_url: str, client_id: str, refresh_token: str
+    token_url: str, client_id: str, refresh_token: str
 ) -> dict[str, object]:
     """Exchange a refresh token for a fresh access/refresh pair, without blocking.
 
@@ -524,12 +523,12 @@ async def refresh_user_access_token_from_keycloak(
 
     Example:
         >>> payload = await refresh_user_access_token_from_keycloak(
-        ...     "https://kc/realms/app", "app-client", refresh_token
+        ...     "https://kc/realms/app/protocol/openid-connect/token", "app-client", refresh_token
         ... )
         >>> payload["access_token"]
     """
     state = _loop_state()
-    digest = _identity_digest(keycloak_url, client_id, refresh_token)
+    digest = _identity_digest(token_url, client_id, refresh_token)
 
     # There is no `await` between the lookup and the insert, so the event loop
     # cannot interleave another caller here. That is the whole mutual exclusion
@@ -537,9 +536,7 @@ async def refresh_user_access_token_from_keycloak(
     task = state.inflight.get(digest)
     if task is None:
         task = asyncio.create_task(
-            _exchange_refresh_token(
-                state.client, keycloak_url, client_id, refresh_token
-            ),
+            _exchange_refresh_token(state.client, token_url, client_id, refresh_token),
             name="keycloak-token-refresh",
         )
         state.inflight[digest] = task

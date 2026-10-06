@@ -5078,7 +5078,7 @@ consolidation phase's scope-discipline rule — each is its own change):
    code but not in the committed spec. Runtime is unaffected (`FastApiMCP`
    reads the live app), but the committed spec feeds frontend codegen.
 7. **Resolved 2026-09-30:** the unimplemented GitHub catalog entry was removed
-   with the legacy local MCP transport (see §8.100).
+   with the legacy local MCP transport (see §8.104).
 
 ---
 
@@ -6469,7 +6469,26 @@ holding admission. File-backed SQLite uses `<database>.graph-locks/`; do not rem
 sidecars while any runtime process is running. Unsupported providers reject Continue.
 No schema migration, claim purge, lease or heartbeat is introduced.
 
-### 8.102 MCP catalog packages use SDK capability primitives (2026-09-29)
+### 8.102 Capability config copy and scope classification (2026-10-04)
+
+Additive. `POST /agents/capabilities/{id}/copy-config` (body `CapabilityConfigCopyRequest`:
+source envelope, source and target team and agent instance) returns the target
+`StoredCapabilityConfig`, or 404 when the capability is not installed and 422 when it
+cannot be prepared for the target. When the teams differ, settings declared
+`ScopePrivate` (or `FieldSpec.scope_private: true` for catalog-declared keys) go back to
+their default. Every `AssetKey` file is read in the source and re-submitted to the
+capability's `validate_config` in the target, with the caller's token on both sides.
+The response is `CapabilityConfigCopyResult`: the envelope plus `notices`. In another
+scope, `SaveContext.copied_from_another_scope` is true: a capability may then leave a
+reference the target lacks unset instead of rejecting, and append to
+`SaveContext.notices` what an editor must redo (ppt-filler: image folders missing in
+the target).
+Teams are the only scope today; the classification is scope-based so that it holds for
+future kinds of scope. `FieldSpec` gains the optional `scope_private`. Authoring rule:
+`capabilities/AUTHORING.md` "Scope-private settings". Acceptance:
+`openspec/changes/copy-agent-across-teams/`.
+
+### 8.103 MCP catalog packages use SDK capability primitives (2026-09-29)
 
 `McpCapability`, its prompt/configuration types and builders now live in
 `fred_sdk.contracts.capability.mcp`; runtime imports remain compatibility aliases.
@@ -6490,7 +6509,7 @@ at boot. Internal HTTP entries declare `service` + `path`; their resolved URLs
 preserve the configured port and API prefix. Service references are catalog-only metadata,
 absent from capability payloads; concrete deployment-owned URLs remain supported.
 
-### 8.103 Retire local MCP transport and duplicate document search (2026-09-30)
+### 8.104 Retire local MCP transport and duplicate document search (2026-09-30)
 
 MCP configuration no longer accepts `inprocess` or exposes a `provider` field;
 local toolkit factories and lifecycle support have been removed. Native capability

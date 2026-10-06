@@ -61,6 +61,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     CapabilityManifest,
     EmptyModel,
+    reset_scope_private,
 )
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -1023,3 +1024,15 @@ def test_multiple_tools_from_one_capability_assemble() -> None:
         for t in (getattr(mw, "tools", None) or [])
     }
     assert {"alpha_tool", "beta_tool"} <= tool_names
+
+
+def test_copy_to_another_scope_drops_the_library_restriction_switch() -> None:
+    # Copied with its list emptied, a switch left on would hide the chat's
+    # library picker while restricting nothing.
+    stored = DocumentAccessConfig(
+        bind_libraries=True, library_tag_ids=["lib-1"], default_top_k=5
+    )
+    copied = reset_scope_private(stored)
+    assert copied.bind_libraries is False
+    assert copied.library_tag_ids == []
+    assert copied.default_top_k == 5

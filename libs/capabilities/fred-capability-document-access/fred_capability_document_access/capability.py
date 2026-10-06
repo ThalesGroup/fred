@@ -84,6 +84,7 @@ from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityManifest,
     ChatControlSpec,
+    ScopePrivate,
     TeamScopePolicy,
 )
 from fred_sdk.contracts.context import (
@@ -262,11 +263,13 @@ class DocumentAccessConfig(BaseModel):
     as evidence.
     """
 
-    library_tag_ids: list[str] = []
-    document_uids: list[str] = []
+    library_tag_ids: ScopePrivate[list[str]] = []
+    document_uids: ScopePrivate[list[str]] = []
     default_top_k: int = 8
     search_policy: str | None = None
-    bind_libraries: bool = False
+    # The switch and its list form one team-owned setting: a copy that kept the
+    # switch on with an empty list would hide the library picker for nothing.
+    bind_libraries: ScopePrivate[bool] = False
     show_library_selection: bool = True
     show_document_selection: bool = True
     show_attach_files_control: bool = True

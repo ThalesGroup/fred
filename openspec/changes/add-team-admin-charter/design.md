@@ -69,7 +69,7 @@ When the frontend is enabled, `applications.frontend.extraEnvVars` configures `F
 - [A version change on a large deployment reads every team at startup] → Only once per change, under a lock, and the applied version skips it afterwards.
 - [Existing admins lose their rights at the startup that applies a new version] → Intended; they accept from their team page. The rollout order in the contract publishes the text first.
 - [A nomination racing an acceptance leaves the user pending] → The team page shows the charter again and a repeat acceptance promotes it.
-- [A user holding only `pending_team_admin` cannot drop it by revoking, it is their last role] → An admin removes the member instead, as for any last role.
+- [Cancelling a sole pending nomination must keep the person on the team] -> The role-revoke service grants a direct `team_member` before deleting `pending_team_admin`; full member removal remains separate (see `demote-team-role-to-member`).
 - [During a rolling update that changes the version, a pod still on the previous configuration can grant `team_admin` to someone who has not accepted the new version, and reconciliation, which only runs when the version differs from the applied one, never corrects it] → Accepted: the window is the rollout itself. When it matters, change the version with a rollout that stops old pods first; reconciling at every startup was rejected for its cost of one ReBAC read per team per replica.
 - [The two control-plane migrations must stay linear with `swift`] → Re-parent on the current head before merge, per CLAUDE.md.
 

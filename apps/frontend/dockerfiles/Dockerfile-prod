@@ -14,6 +14,7 @@ WORKDIR /workspace/apps/frontend
 # Copy project files
 COPY apps/frontend/ /workspace/apps/frontend/
 COPY scripts/ /workspace/scripts/
+COPY validation/fixtures/oidc_uid_vector.json /workspace/validation/fixtures/oidc_uid_vector.json
 ARG DIAG=1
 RUN if [ "$DIAG" = "1" ]; then \
       echo "== TIMESTAMP ==" && date -u; \

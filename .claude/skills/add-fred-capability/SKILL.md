@@ -104,6 +104,15 @@ For conversation files, use `ctx.services.conversation_filesystem` with absolute
 Pass `origin="agent"` for model-supplied paths and `origin="system"` for trusted internal artifacts;
 see `AUTHORING.md` for the permission and mount contract.
 
+**Classify every setting by scope.** A setting that points to an item the agent's scope
+owns (library, folder, document, tag id) is `ScopePrivate[...]` and must have a default; a
+field holding a configuration-file key is `Annotated[str, AssetKey("<slot>")]`; an
+identifier-like field safe to copy is `Public[...]`. A copy to another scope resets the
+first, re-submits the second through `validate_config`, keeps the rest. Classify against
+the scope, never the team. MCP catalog fields use `scope_private: true|false`. The guard
+`apps/fred-agents/tests/test_capability_scope_classification.py` fails on an unclassified
+reference. See AUTHORING.md "Scope-private settings".
+
 **Adding a field to an already-shipped `ConfigModel`?** If it's optional with a default,
 you're done — no version bump, no migration code, old stored configs just get the default.
 Only a removed/renamed/retyped field needs `manifest.version` bumped plus an

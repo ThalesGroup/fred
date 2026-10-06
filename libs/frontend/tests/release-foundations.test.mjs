@@ -166,7 +166,12 @@ test("authoritative manifests permit a future SDK-only fixture coordinate withou
     JSON.parse(await readFile(path.join(root, "ui/package.json"), "utf8"))
       .version,
   );
-  assert.equal(contract.packages.designTokens.version, "0.1.0-alpha.2");
+  assert.equal(
+    contract.packages.designTokens.version,
+    JSON.parse(
+      await readFile(path.join(root, "design-tokens/package.json"), "utf8"),
+    ).version,
+  );
   await assert.rejects(
     buildReleaseCandidate({
       contract,

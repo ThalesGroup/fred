@@ -183,6 +183,7 @@ value is served by a separate **public (unauthenticated)** surface:
     - `enabled`
     - `realm_url` — emitted only when `enabled`
     - `client_id` — emitted only when `enabled`
+    - `provider`, `scope`, `user_directory`, `uid_claim`, `roles_claim` — added 2026-09-30 for the common browser OIDC flow; public provider and identity mapping only, with Keycloak defaults when authentication is disabled.
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
@@ -775,6 +776,8 @@ See `docs/swift/design/FILESYSTEM.md`.
 - `POST /teams/{team_id}/agent-instances` → `ManagedAgentInstanceSummary`
 - `PATCH /teams/{team_id}/agent-instances/{id}` → `ManagedAgentInstanceSummary`
 - `DELETE /teams/{team_id}/agent-instances/{id}` → 204
+- `GET /teams/{team_id}/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`
+- `POST /teams/{team_id}/agent-instances/{id}/copy` → `AgentCopyResponse` (§58)
 
 > **2026-07-17 (CAPAB-01, PR review finding — closes an unmet #1980 acceptance
 > criterion).** `capability_ids` omitted (or explicitly `null`) on
@@ -1224,13 +1227,19 @@ RFC):
   `UpdateTeamMemberRequest`). Grants one additional role. Checked against
   `can_administer_{admins,editors,analysts,members}` for the granted role,
   exactly as before.
-- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` — revokes one
-  role, leaving any other role the member holds untouched. Refuses to revoke
-  a role not currently held (`404`) or a member's only remaining role
-  (`409`, `TeamMemberLastRoleError` — that is a removal, not a role change;
-  use `DELETE /teams/{team_id}/members/{user_id}` instead). The "team must
+- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` - revokes one
+  role, leaving any other stored role untouched. When it is the person's only
+  stored elevated role (`team_admin`, `pending_team_admin`, `team_editor`, or
+  `team_analyst`), the service first grants a direct `team_member` relation,
+  requiring `can_administer_members` as well as permission for the revoked role.
+  This retains the person as a simple member. A role not held returns `404`;
+  revoking the sole direct `team_member` returns `409` (`TeamMemberLastRoleError`).
+  Full removal uses `DELETE /teams/{team_id}/members/{user_id}`. The "team must
   keep at least one `team_admin`" guard applies exactly when `team_admin` is
-  the role being revoked, by either this endpoint or a full member removal.
+  the role being revoked, by either endpoint. Both endpoints serialize their
+  role reads and writes for the same team member with a Postgres advisory lock
+  and force a higher-consistency direct-role read after acquiring it, so a
+  concurrent demotion cannot recreate membership after full removal.
 
 `AddTeamMemberRequest` (`POST /teams/{team_id}/members`, for a brand-new
 member) and `DELETE /teams/{team_id}/members/{user_id}` (full removal) are
@@ -3931,6 +3940,19 @@ platform features — capabilities, agent templates and models — so it takes t
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
 
+## Versioned terms acceptance (2026-10-06)
+
+CGU acceptance uses opaque, case-sensitive configured strings. `POST /gcu`
+replaces the accepted version and timestamp in `users`; no acceptance history
+is kept. First acceptance alone enrolls default teams (section 52).
+
+`GET /user` keeps the `cguValidated` name and returns the stored `string | null`.
+It remains reachable before acceptance. Protected human requests require that
+the stored version matches the active configuration, including when returning
+to an older version; existing service/asserted-user exemptions remain in effect.
+The charter retains its independent per-version history. Deployment steps live
+in the [CGU migration note](../ops/migrations/2972-configurable-gcu-versions.md).
+
 ## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
 
 **What it is.** A platform admin picks any number of registry teams that every
@@ -4016,7 +4038,18 @@ team creation, import) writes `pending_team_admin` instead while a version is
 set and the user has not accepted it. `pending_team_admin` cannot be requested
 directly (422). Revoking it cancels the nomination and needs
 `can_administer_admins`; removing the member deletes it with the other roles.
-`my_relations` and the member list expose it.
+`my_relations` and the member list expose it. Charter acceptance and startup
+reconciliation take the same per-member lock as nomination cancellation and
+recheck the pending tuple with higher consistency before promotion; a
+completed cancellation cannot be promoted from a stale lookup.
+
+**Display contacts (2026-10-05).** Membership-enriched team listings include
+both `team_admin` and `pending_team_admin` in `Team.admins`, so marketplace
+cards keep showing whom to contact before charter acceptance. The per-team
+`TeamWithPermissions.admins` projection keeps accepted `team_admin` users only,
+as required by the charter gate. While only bootstrap contacts are available,
+a pending administrator sees the charter until the detail confirms an accepted
+administrator exists. Contact avatars confer no permissions.
 
 **Endpoint.**
 
@@ -4207,6 +4240,41 @@ admin-authored content. The frontend caches it so its boot script can apply the
 theme before the next load's config arrives; a change applies to each user at
 their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
 
+## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
+
+**What it is.** An editor copies an agent's configuration into the personal
+space or other teams they edit, or duplicates it in its own team. Each
+destination gets a new, independent agent; nothing records its origin except
+the audit event.
+
+**Endpoints.** Both require `team.can_update_agents` on the source team.
+
+- `GET …/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`: for
+  the personal space and every team the caller edits (the source included),
+  `template_enabled` and `missing_capabilities` (`id`, `name` i18n key).
+  Advisory; the copy re-checks everything.
+- `POST …/agent-instances/{id}/copy` with `AgentCopyRequest`
+  (`target_team_ids`, optional `display_name`) → `AgentCopyResponse`, one
+  `AgentCopyResult` per distinct target (`agent` or `error`, plus
+  `dropped_capabilities` and `notices`, each naming the capability by `id` and
+  `name` i18n key; a notice says what an editor must redo there). Each target needs `team.can_update_agents` and is
+  stored under its canonical id (`personal` → `personal-<uid>`). A target where
+  the template is not enabled fails; a failed target never stops the others.
+  `display_name` is only accepted for a single target equal to the source
+  (Duplicate), otherwise 422.
+
+**What a copy carries.** Name (kept when free in the destination, else the
+first free `<name>_imported-<n>`), description, template, tuning values and
+reasoning settings. Each selected capability the destination can use goes
+through the pod's `copy-config` (`RUNTIME-EXECUTION-CONTRACT.md` §8.102):
+scope-private settings are reset when the team changes, configuration files
+are recreated. A capability the destination cannot use, or that the pod
+answers with 404/422, is left out and listed. Not carried: conversations, the
+agent file space, prompt references, team-level settings. Emits the KPI
+`agent.created_total` and the audit event `agent.copied` (source agent and
+team, target team, new agent, user, dropped capabilities). Full behavior:
+OpenSpec `agent-copy`.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
@@ -4246,6 +4314,39 @@ and presents no bearer to the agent pod
 Detailed cases are in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 
+## Definitive browser renewal refusal clears the Fred session (2026-10-05)
+
+The common Keycloak/OIDC browser lifecycle classifies structured renewal error
+codes. `invalid_grant`, `login_required`, `interaction_required`,
+`consent_required` and `account_selection_required` immediately invalidate live
+credentials and clear the persisted OIDC user before coalesced refresh callers
+receive `false`. Failed storage cleanup cannot expose credentials in the current
+session. Network failures, timeouts and transient provider errors retain an
+otherwise unexpired bearer and allow retry. Late results cannot restore an
+invalidated generation or erase a newer accepted session. The boolean facade
+and existing provider sign-out flow remain compatible.
+
+## Local username ambiguity aborts import preflight (2026-10-05)
+
+In local-directory mode, username resolution rejects distinct IDs sharing the
+same exact username with `ambiguous_username`; it never picks an ID by row order.
+The importer prefetches its referenced names before opening the business-data
+transaction, so an ambiguity prevents all bundle SQL and OpenFGA writes. Names
+outside the bundle do not block it. Unique/missing-name behavior, case-sensitive
+resolution, identity snapshots and the Keycloak path remain unchanged. Failure
+is reported through the existing migration task error. No database uniqueness
+constraint or current IdP ownership lookup is introduced.
+
+## Local-directory suspension is independent of delegation (2026-10-05)
+
+With `security.user_directory: local`, an enforced OpenFGA engine validates
+account-status support at startup and refuses suspended authenticated subjects
+regardless of the delegation switches. `DELETE /users/{user_id}` retains root
+and wildcard protection, writes the suspension and leaves memberships, local
+identity snapshots and provider accounts unchanged. Disabled enforcement returns
+403 with `reason: account_suspension_disabled` before any write; unavailable
+account-status checks retain 503 `account_status_unavailable`.
+
 ## Deleting a person suspends their account first (2026-09-23)
 
 User deletion retains administrator permission and protected-account checks,
@@ -4259,7 +4360,7 @@ already authorized. That includes personal-team routes such as the runtime-bindi
 lookup and execution preparation, which refuse a suspended subject with 403
 `account_suspended`, or 503 `account_status_unavailable` when account status cannot
 be read. Direct identity-provider changes do not update platform account status.
-With account status disabled, deletion writes no suspension. Exact refusal and retry
+With the Keycloak directory and account status disabled, deletion writes no suspension. Exact refusal and retry
 scenarios are maintained in the
 [subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
 

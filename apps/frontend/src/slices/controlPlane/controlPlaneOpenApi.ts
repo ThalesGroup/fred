@@ -354,6 +354,24 @@ const injectedRtkApi = api.injectEndpoints({
           body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
         }),
       }),
+    getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
+      GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse,
+      GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/copy-targets`,
+      }),
+    }),
+    postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: build.mutation<
+      PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiResponse,
+      PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/copy`,
+        method: "POST",
+        body: queryArg.agentCopyRequest,
+      }),
+    }),
     getTeamPromptsControlPlaneV1TeamsTeamIdPromptsGet: build.query<
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse,
       GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg
@@ -1785,6 +1803,19 @@ export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstan
     agentInstanceId: string;
     bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
   };
+export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
+  /** status 200 Successful Response */ AgentCopyTargetsResponse;
+export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
+export type PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiResponse =
+  /** status 200 Successful Response */ AgentCopyResponse;
+export type PostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  agentCopyRequest: AgentCopyRequest;
+};
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiResponse =
   /** status 200 Successful Response */ PromptSummary[];
 export type GetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetApiArg = {
@@ -2735,7 +2766,6 @@ export type PlatformRolesResponse = {
 export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
-export type GcuVersionsType = "v1";
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
@@ -2785,7 +2815,7 @@ export type TeamWithPermissions = {
   retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
-  cguValidated: GcuVersionsType | null;
+  cguValidated: string | null;
   personalTeam: TeamWithPermissions;
   currentUser?: UserSummary | null;
 };
@@ -2909,6 +2939,11 @@ export type FrontendUserAuthConfig = {
   enabled: boolean;
   realm_url?: string | null;
   client_id?: string | null;
+  provider?: string;
+  scope?: string | null;
+  user_directory?: string;
+  uid_claim?: string;
+  roles_claim?: string[] | null;
 };
 export type FrontendUiThemes = {
   default_theme?: string | null;
@@ -3026,6 +3061,7 @@ export type FieldSpec = {
       )
     | null;
   ui?: UiHints;
+  scope_private?: boolean | null;
 };
 export type AssetSlot = {
   key: string;
@@ -3219,6 +3255,39 @@ export type BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentIn
     asset_slots?: string[];
     asset_files?: string[];
   };
+export type AgentCopyCapability = {
+  id: string;
+  /** i18n key of the capability's display name. */
+  name: string;
+};
+export type AgentCopyTarget = {
+  team_id: string;
+  template_enabled: boolean;
+  missing_capabilities?: AgentCopyCapability[];
+};
+export type AgentCopyTargetsResponse = {
+  targets: AgentCopyTarget[];
+};
+export type AgentCopyNotice = {
+  capability: AgentCopyCapability;
+  message: string;
+};
+export type AgentCopyResult = {
+  team_id: string;
+  agent?: ManagedAgentInstanceSummary | null;
+  /** Capabilities left out: not usable in the destination, or rejected there. */
+  dropped_capabilities?: AgentCopyCapability[];
+  /** What an editor must redo in the destination, per capability. */
+  notices?: AgentCopyNotice[];
+  error?: string | null;
+};
+export type AgentCopyResponse = {
+  results: AgentCopyResult[];
+};
+export type AgentCopyRequest = {
+  target_team_ids: string[];
+  display_name?: string | null;
+};
 export type PromptSummary = {
   id: string;
   name: string;
@@ -4401,6 +4470,9 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
+  useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
+  usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
   useGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   useLazyGetTeamPromptsControlPlaneV1TeamsTeamIdPromptsGetQuery,
   usePostTeamPromptControlPlaneV1TeamsTeamIdPromptsPostMutation,

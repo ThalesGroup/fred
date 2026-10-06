@@ -52,14 +52,17 @@ from __future__ import annotations
 
 import io
 import json
+import secrets
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from control_plane_backend.config.models import Configuration
 from control_plane_backend.import_export.bundle import open_bundle
 from control_plane_backend.import_export.importer import (
     BundleProvisioningError,
@@ -82,11 +85,15 @@ from control_plane_backend.teams.schemas import (
     UserTeamRelation,
 )
 from control_plane_backend.teams.service import grant_team_member_role
+from control_plane_backend.users import service as user_service
 from control_plane_backend.users.dependencies import (
     KeycloakAdminFactory,
     UserServiceDependencies,
 )
-from control_plane_backend.users.schemas import KeycloakM2MUserOperationDisabledError
+from control_plane_backend.users.schemas import (
+    IdentityManagedByProviderError,
+    KeycloakM2MUserOperationDisabledError,
+)
 from control_plane_backend.users.service import (
     find_user_sub_by_username,
     find_user_subs_bulk,
@@ -112,6 +119,8 @@ from fred_core.tasks.models import (
 )
 from fred_core.tasks.service import TaskService
 from fred_core.teams.metadata_store import TeamMetadataStore
+from fred_core.users.store.base_user_store import AmbiguousUsernameError
+from fred_core.users.store.postgres_user_store import PostgresUserStore
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 # ── fixtures / fakes ───────────────────────────────────────────────────────
@@ -467,7 +476,9 @@ def _build_bundle_bytes_from_fixture() -> bytes:
     return buf.getvalue()
 
 
-def _build_bundle_bytes(users: list[dict[str, Any]]) -> bytes:
+def _build_bundle_bytes(
+    users: list[dict[str, Any]], *, team_metadata: list[dict[str, Any]] | None = None
+) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(
@@ -484,6 +495,11 @@ def _build_bundle_bytes(users: list[dict[str, Any]]) -> bytes:
             ),
         )
         zf.writestr("users.json", json.dumps(users))
+        if team_metadata:
+            zf.writestr(
+                "postgres/team_metadata.jsonl",
+                "".join(json.dumps(row) + "\n" for row in team_metadata),
+            )
     return buf.getvalue()
 
 
@@ -530,6 +546,85 @@ async def _run(
 
 
 # ── users phase: end-to-end through run_import ─────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ambiguous_referenced", [False, True])
+@pytest.mark.parametrize(
+    "collision_name, unique_name", [("alice", "unique"), ("Alice", "alice")]
+)
+async def test_local_import_checks_referenced_collisions_before_business_writes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ambiguous_referenced: bool,
+    collision_name: str,
+    unique_name: str,
+) -> None:
+    engine = await _make_engine(tmp_path, "local-ambiguous-users.sqlite3")
+    store = PostgresUserStore(engine)
+    monkeypatch.setattr(user_service, "get_user_store", lambda: store)
+
+    def no_admin():
+        raise AssertionError("Local import must not construct a Keycloak client")
+
+    user_deps = UserServiceDependencies(
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
+        create_keycloak_admin_client=no_admin,
+    )
+    rebac = _FakeTeamRebac()
+    structural_writes = AsyncMock()
+    monkeypatch.setattr(rebac, "ensure_team_organization_relations", structural_writes)
+    team_deps = _team_deps(engine, rebac)
+    try:
+        old_owner, new_owner, unique_id = uuid4(), uuid4(), uuid4()
+        await store.upsert_identity(old_owner, collision_name, None, None, None)
+        await store.upsert_identity(new_owner, "bob", None, None, None)
+        await store.upsert_identity(new_owner, collision_name, None, None, None)
+        await store.upsert_identity(unique_id, unique_name, None, None, None)
+        users = [{"username": unique_name, "platform_roles": ["admin"]}]
+        if ambiguous_referenced:
+            users.append({"username": collision_name, "platform_roles": ["admin"]})
+        bundle = _build_bundle_bytes(
+            users, team_metadata=[{"id": "team-gamma", "name": "Gamma"}]
+        )
+
+        if ambiguous_referenced:
+            with pytest.raises(AmbiguousUsernameError, match=collision_name):
+                await _run(
+                    bundle,
+                    engine,
+                    platform_admin=_admin_user(),
+                    user_deps=user_deps,
+                    team_deps=team_deps,
+                )
+            assert (
+                await team_deps.get_team_metadata_store().get_by_name("Gamma") is None
+            )
+            assert rebac.org_relations == rebac.team_relations == []
+            structural_writes.assert_not_awaited()
+        else:
+            report = await _run(
+                bundle,
+                engine,
+                platform_admin=_admin_user(),
+                user_deps=user_deps,
+                team_deps=team_deps,
+            )
+            assert report.platform_roles_granted == 1
+            assert (
+                await team_deps.get_team_metadata_store().get_by_name("Gamma")
+                is not None
+            )
+            assert [relation.subject.id for relation in rebac.org_relations] == [
+                str(unique_id)
+            ]
+            structural_writes.assert_awaited_once_with(["team-gamma"])
+        assert await store.count_identities() == 3
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -1253,6 +1348,66 @@ async def test_provision_bundle_identities_creates_missing_user_with_password() 
     ]
     # existing/nopass never triggered a_create_user.
     assert {c["username"] for c in admin.create_calls} == {"newuser"}
+
+
+@pytest.mark.asyncio
+async def test_local_import_reuses_resolved_identity_even_with_password() -> None:
+    deps = UserServiceDependencies(
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
+        create_keycloak_admin_client=lambda: (_ for _ in ()).throw(
+            AssertionError("Keycloak Admin API must not be constructed")
+        ),
+    )
+    resolver = UserSubResolver({"alice": "existing-id"})
+    report = MigrationReport(import_id="local-existing", source_platform="swift")
+
+    await _provision_bundle_identities(
+        [BundleUserEntry(username="alice", password=secrets.token_urlsafe(16))],
+        resolver,
+        deps,
+        _admin_user(),
+        report,
+    )
+
+    assert report.identities_created == 0
+    assert await resolver.find_sub("alice") == "existing-id"
+
+
+@pytest.mark.asyncio
+async def test_local_import_refuses_unknown_password_identities_before_role_writes() -> (
+    None
+):
+    def no_admin():
+        raise AssertionError("Keycloak Admin API must not be constructed")
+
+    deps = UserServiceDependencies(
+        configuration=cast(
+            Configuration,
+            SimpleNamespace(security=SimpleNamespace(user_directory="local")),
+        ),
+        create_keycloak_admin_client=no_admin,
+    )
+    resolver = UserSubResolver({"known": "existing-id"})
+    report = MigrationReport(import_id="local-import", source_platform="swift")
+    entries = [
+        BundleUserEntry(username="known", password=secrets.token_urlsafe(16)),
+        BundleUserEntry(username="alice", password=secrets.token_urlsafe(16)),
+        BundleUserEntry(username="bob", password=secrets.token_urlsafe(16)),
+    ]
+
+    with pytest.raises(IdentityManagedByProviderError) as raised:
+        await _provision_bundle_identities(
+            entries, resolver, deps, _admin_user(), report
+        )
+
+    assert "alice, bob" in str(raised.value)
+    assert "managed_by_identity_provider" in str(raised.value)
+    assert report.identities_created == 0
+    assert report.team_roles_granted == 0
+    assert report.platform_roles_granted == 0
 
 
 # ── find_user_sub_by_username: unit tests ──────────────────────────────────

@@ -27,6 +27,7 @@ so it authenticates as the platform service principal using the existing
 from __future__ import annotations
 
 import pytest
+from control_plane_backend.app.container import build_application_container
 from control_plane_backend.app.context import ApplicationContext
 from control_plane_backend.config.loader import load_configuration
 
@@ -50,6 +51,45 @@ def test_service_token_provider_is_built_from_control_plane_sa(
     assert provider.cfg.token_url.endswith("/protocol/openid-connect/token")
     # Cached: the provider (and its token cache) is reused across calls.
     assert ctx.get_service_token_provider() is provider
+
+
+def test_service_token_provider_uses_oidc_endpoint_and_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CONFIG_FILE", "./config/configuration_test.yaml")
+    config = load_configuration()
+    config.security.m2m = config.security.m2m.model_copy(
+        update={
+            "provider": "oidc",
+            "enabled": True,
+            "scope": "api://fred/.default",
+            "token_url": "https://identity.example/token",
+        }
+    )
+    monkeypatch.setattr(
+        "fred_pod.security.oidc_endpoints.httpx.get",
+        lambda *_args, **_kwargs: type(
+            "DiscoveryResponse",
+            (),
+            {
+                "status_code": 200,
+                "json": lambda self: {
+                    "issuer": str(config.security.m2m.realm_url).rstrip("/"),
+                    "jwks_uri": "https://identity.example/keys",
+                },
+            },
+        )(),
+    )
+
+    ctx = build_application_container(config)
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.resolve_endpoints",
+        lambda **kwargs: pytest.fail("Discovery must not run after startup"),
+    )
+    provider = ctx.get_service_token_provider()
+
+    assert provider.cfg.scope == "api://fred/.default"
+    assert provider.cfg.token_url == "https://identity.example/token"
 
 
 @pytest.mark.asyncio
@@ -82,3 +122,20 @@ async def test_get_service_bearer_fails_closed_without_secret(
     # un-done (retryable) rather than silently skipping the erase.
     with pytest.raises(RuntimeError):
         await ctx.get_service_bearer()
+
+
+def test_oidc_workload_discovery_failure_stops_container_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _context(monkeypatch).configuration
+    config.security.m2m.provider = "oidc"
+    config.security.m2m.enabled = True
+
+    def fail_discovery(**kwargs):
+        raise RuntimeError("OIDC discovery failed")
+
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.resolve_endpoints", fail_discovery
+    )
+    with pytest.raises(RuntimeError, match="OIDC discovery failed"):
+        build_application_container(config)

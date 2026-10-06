@@ -1311,6 +1311,36 @@
       "suspended": "Suspendu — une capacité utilisée par cet agent est défectueuse ou indisponible. Modifiez l'agent pour corriger le problème.",
       "suspendedToggleLocked": "Suspendu",
       "duplicate": "Dupliquer",
+      "copyTo": "Copier dans…",
+      "copyDialog": {
+        "title": "Copier {{name}} dans une autre équipe",
+        "subtitle": "Sélectionnez les espaces où copier cet agent.",
+        "confirm": "Copier",
+        "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un agent — demandez ce rôle à un administrateur de l'équipe.",
+        "templateDisabled": "Template d'agent non activé",
+        "missingCapabilities_one": "{{count}} capacité manquante",
+        "missingCapabilities_other": "{{count}} capacités manquantes",
+        "missingCapabilitiesTitle": "Non activées dans cette équipe :",
+        "explanation": "Certaines équipes n'ont pas toutes les capacités de cet agent. La copie y fonctionnera sans elles, mais ses instructions et ses autres réglages restent intacts.",
+        "info": {
+          "copiedLabel": "Copié",
+          "copied": "Nom, description, instructions et réglages de l'agent",
+          "resetLabel": "Remis à zéro",
+          "reset": "Les choix propres à l'équipe d'origine : bibliothèques, dossiers, documents. Les capacités restent activées.",
+          "recreatedLabel": "Recréé",
+          "recreated": "Les fichiers de configuration, comme un modèle PowerPoint",
+          "notCopiedLabel": "Non copié",
+          "notCopied": "Les conversations, les fichiers de l'agent et les capacités non activées dans l'équipe"
+        },
+        "loadError": "Impossible de vérifier les équipes de destination.",
+        "successToast_one": "Agent copié dans {{count}} espace",
+        "successToast_other": "Agent copié dans {{count}} espaces",
+        "droppedToast": "Copié sans certaines capacités",
+        "droppedDetail": "{{team}} : sans {{capabilities}}",
+        "noticesToast": "Copié, avec des réglages à refaire",
+        "errorToast_one": "Échec de la copie dans {{count}} espace",
+        "errorToast_other": "Échec de la copie dans {{count}} espaces"
+      },
       "delete": "Supprimer",
       "tooltip": {
         "label": "Détails de l'agent",
@@ -1333,6 +1363,7 @@
       },
       "duplicateSuccess": "{{agent}} dupliqué",
       "duplicateError": "Échec de la duplication : {{agent}}",
+      "duplicateDropped": "Sans : {{capabilities}}",
       "deleteSuccess": "{{agent}} supprimé",
       "deleteError": "Échec de la suppression : {{agent}}",
       "createSuccess": "{{agent}} créé",
@@ -1757,17 +1788,12 @@
         "empty": "Aucun prompt n'a encore été publié sur la marketplace.",
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "import": {
-          "title": "Copier ce prompt dans une équipe",
-          "subtitle": "Sélectionnez les espaces où copier « {{name}} ».",
-          "confirm": "Copier",
-          "personalSpace": "Espace personnel",
-          "searchPlaceholder": "Rechercher une équipe",
-          "clearSearch": "Effacer la recherche",
-          "noTeams": "Aucune équipe ne correspond.",
-          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un prompt — demandez ce rôle à un administrateur de l'équipe.",
-          "successToast": "Prompt copié ({{count}})",
-          "errorToast": "Échec de la copie ({{count}})",
-          "originTeam": "Équipe d'origine"
+          "title": "Importer ce prompt dans une équipe",
+          "subtitle": "Sélectionnez les espaces où importer « {{name}} ».",
+          "confirm": "Importer",
+          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un prompt — demandez ce rôle à un administrateur de l'équipe.",
+          "successToast": "Prompt importé ({{count}})",
+          "errorToast": "Échec de l'import ({{count}})"
         },
         "unpublish": {
           "title": "Retirer ce prompt de la marketplace ?",
@@ -2259,6 +2285,8 @@
         "title": "Auto-test"
       },
       "report": {
+        "verified": "Vérifié",
+        "partial": "Partiel — aucun échec",
         "running": "En cours…",
         "empty": "Aucune exécution.",
         "counts": "{{passed}} réussis · {{failed}} échoués · {{skipped}} ignorés · {{total}} étapes",
@@ -2271,6 +2299,9 @@
         "run": "Lancer la campagne"
       },
       "authz": {
+        "identityTitle": "Auto-test d’authentification JWT",
+        "identityDescription": "Vérifie l’accès aux trois API, le refus des jetons absents ou invalides, les routes publiques et l’identité de l’espace personnel. Les contrôles non applicables au fournisseur sont ignorés avec une explication.",
+        "identityRun": "Lancer les contrôles",
         "title": "Auto-test d'autorisation",
         "subtitle": "Prouve que l'API réelle respecte le modèle d'autorisation : les drapeaux platform-admin correspondent aux accès réels des endpoints, et personne — pas même un platform_admin — n'a d'accès implicite à une équipe dont il n'est pas membre.",
         "runSelf": "Lancer pour moi-même",
@@ -2818,7 +2849,7 @@
             "publish": "Publier sur la marketplace",
             "unpublish": "Retirer de la marketplace",
             "delete": "Supprimer",
-            "import": "Copier dans...",
+            "import": "Importer dans...",
             "removeFromMarketplace": "Retirer de la marketplace"
           }
         },
@@ -3257,6 +3288,14 @@
         "title": "Supprimer cette annonce ?",
         "message": "« {{title}} » sera définitivement supprimée. Les utilisateurs qui la voient cesseront de la voir."
       }
+    },
+    "copyToTeams": {
+      "personalSpace": "Espace personnel",
+      "searchPlaceholder": "Rechercher une équipe",
+      "clearSearch": "Effacer la recherche",
+      "noTeams": "Aucune équipe ne correspond.",
+      "originTeam": "Équipe d'origine",
+      "infoLabel": "Ce que fait une copie"
     }
   },
   "runtime": {

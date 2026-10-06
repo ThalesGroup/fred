@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
 app:
+  gcu_version: v1
   # Must match this pod's entry in the control-plane's runtime_catalog_sources:
   # that equality is what joins a log line to its own KPI.
   runtime_id: "fred-agents"

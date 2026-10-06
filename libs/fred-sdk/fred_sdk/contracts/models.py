@@ -151,6 +151,10 @@ class FieldSpec(BaseModel):
     pattern: Optional[str] = None
     item_type: Optional[FieldType] = None
     ui: UIHints = UIHints()
+    # Scope classification for catalog-declared fields (MCP servers): True resets
+    # the value when the agent is copied to another scope, False declares an
+    # identifier-like field public. See `fred_sdk.contracts.capability.scope`.
+    scope_private: Optional[bool] = None
 
 
 # Params of the stock composer widgets `AgentCapability.chat_controls` emits
@@ -339,6 +343,31 @@ class StoredCapabilityConfig(BaseModel):
 
     schema_version: str = Field(min_length=1)
     config: dict[str, Any] = Field(default_factory=dict)
+
+
+class CapabilityConfigCopyRequest(BaseModel):
+    """
+    Body of the pod's `copy-config` operation: one stored capability config,
+    prepared for a new agent instance, possibly in another scope.
+
+    Teams are today's only scope; the scopes differ when the team ids differ.
+    """
+
+    config: StoredCapabilityConfig
+    source_team_id: str = Field(min_length=1)
+    source_agent_instance_id: str = Field(min_length=1)
+    target_team_id: str = Field(min_length=1)
+    target_agent_instance_id: str = Field(min_length=1)
+
+
+class CapabilityConfigCopyResult(StoredCapabilityConfig):
+    """
+    The pod's answer to `copy-config`: the envelope to persist, plus what the
+    capability left for an editor to redo in the new scope. Persist only
+    `schema_version` and `config`.
+    """
+
+    notices: list[str] = Field(default_factory=list)
 
 
 class AgentTuning(BaseModel):

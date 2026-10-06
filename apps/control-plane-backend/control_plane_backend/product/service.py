@@ -453,6 +453,11 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
             enabled=True,
             realm_url=str(user_security.realm_url),
             client_id=user_security.client_id,
+            provider=user_security.provider,
+            scope=user_security.scope,
+            user_directory=deps.configuration.security.user_directory,
+            uid_claim=user_security.claims.uid,
+            roles_claim=user_security.roles_claim,
         )
         if user_security.enabled
         else FrontendUserAuthConfig(enabled=False)
@@ -2762,23 +2767,34 @@ async def enroll_agent_instance(
 
     store = deps.get_agent_instance_store()
     created = await store.create(record)
+    emit_agent_created_kpi(created, user=user, deps=deps)
+    return _record_to_summary(created)
+
+
+def emit_agent_created_kpi(
+    record: AgentInstanceRecord,
+    *,
+    user: KeycloakUser,
+    deps: ProductServiceDependencies,
+) -> None:
+    """Count one created agent instance; a KPI failure never fails the save."""
+
     try:
-        system_prompt = tuning.values.get("prompts.system")
+        system_prompt = record.tuning.values.get("prompts.system")
         system_prompt_chars = len(str(system_prompt)) if system_prompt else 0
         deps.get_kpi_writer().count(
             "agent.created_total",
             dims={
-                "team_id": str(team_id),
-                "template_id": request.template_id,
-                "source_runtime_id": source_runtime_id,
-                "agent_instance_id": agent_instance_id,
+                "team_id": str(record.team_id),
+                "template_id": record.template_id,
+                "source_runtime_id": record.source_runtime_id,
+                "agent_instance_id": record.agent_instance_id,
                 "system_prompt_chars": str(system_prompt_chars),
             },
             actor=to_kpi_actor(user),
         )
     except Exception:
         logger.exception("[control-plane][kpi] Failed to emit agent.created_total")
-    return _record_to_summary(created)
 
 
 async def update_agent_instance(

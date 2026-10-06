@@ -32,10 +32,12 @@ class KeycloackDisabled:
 
 def create_keycloak_admin(
     m2m_security: M2MSecurity,
+    *,
+    user_directory: str = "keycloak",
 ) -> KeycloakAdmin | KeycloackDisabled:
     """Create a Keycloak admin client using the configured service account. Returns KeycloackDisabled if M2M security is not enabled."""
 
-    if not m2m_security or not m2m_security.enabled:
+    if user_directory == "local" or not m2m_security or not m2m_security.enabled:
         return KeycloackDisabled()
 
     client_secret = os.getenv(m2m_security.secret_env_var)

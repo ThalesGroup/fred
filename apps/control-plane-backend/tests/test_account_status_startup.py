@@ -37,8 +37,9 @@ _SWITCHES = pytest.mark.parametrize(
     [
         DelegationConfig(act_for_people=True),
         DelegationConfig(accept_delegated_calls=True),
+        DelegationConfig(),
     ],
-    ids=["act_for_people", "accept_delegated_calls"],
+    ids=["act_for_people", "accept_delegated_calls", "local_without_delegation"],
 )
 
 
@@ -144,7 +145,7 @@ async def test_startup_over_a_stored_suspension_keeps_that_person_refused() -> N
 @pytest.mark.asyncio
 async def test_startup_makes_no_account_status_call_with_both_switches_off() -> None:
     initialize_delegation(DelegationConfig())
-    rebac = AccountStatusRebacEngine()
+    rebac = AccountStatusRebacEngine(requires_active_accounts=False)
 
     await enforce_account_status(rebac)
 
@@ -248,10 +249,13 @@ def _app_recording_startup(
     ],
     ids=["off", "act_for_people", "accept_delegated_calls"],
 )
+@pytest.mark.parametrize("local_directory", [False, True])
 async def test_lifespan_installs_the_engine_before_the_startup_reconciliations(
-    monkeypatch: pytest.MonkeyPatch, switch: DelegationConfig
+    monkeypatch: pytest.MonkeyPatch, switch: DelegationConfig, local_directory: bool
 ) -> None:
-    rebac = AccountStatusRebacEngine()
+    rebac = AccountStatusRebacEngine(
+        requires_active_accounts=local_directory or switch.in_use
+    )
     app = _app_recording_startup(monkeypatch, rebac)
     # After create_app, which installs the configuration's own delegation block.
     initialize_delegation(switch)
@@ -264,7 +268,10 @@ async def test_lifespan_installs_the_engine_before_the_startup_reconciliations(
         "_reconcile_team_admin_charter_roles",
         "_seed_capability_registration_defaults",
     ]
-    assert rebac.calls == (_STARTUP_CALLS if switch.in_use else []) + reconciliations
+    assert (
+        rebac.calls
+        == (_STARTUP_CALLS if rebac.requires_active_accounts else []) + reconciliations
+    )
     assert rebac.relations == set()
 
 

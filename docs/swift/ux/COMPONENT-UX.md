@@ -304,9 +304,15 @@ hover-edit pencil is now an always-visible **more-menu** (`IconButtonMenu`,
 `MarketplacePrompts` ("Prompts de la communauté") reuses the `MarketplaceTeams`
 header pattern (`h1` + `SearchInput`) and `FilterChips` (one chip per author
 team). Reached from a nav item under the teams marketplace (`MarketplaceNavbar`,
-`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`:
-a multi-select of the personal space + every editable team, with an `xs`
-`SearchInput` filter.
+`description` icon) at `/marketplace/prompts`. Import opens `ImportPromptDialog`,
+a thin wrapper over the shared `CopyToTeamsDialog` organism: a multi-select of
+the personal space + every editable team, with an `xs` `SearchInput` filter.
+The agent card's **Copy to…** uses the same organism (`CopyAgentDialog`) with
+per-team status: a team without the agent template is disabled with its reason;
+a team missing capabilities shows a `warning`-colored icon + label whose tooltip
+lists them, and a `warning-container` paragraph explains the consequence above
+the list. An info icon in the Dialog's `titleAddon` slot opens a label/value
+tooltip describing what a copy carries.
 
 #### Open UX issues
 
@@ -2067,6 +2073,11 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 **Location:** `src/rework/components/shared/organisms/TeamCard/TeamCard.tsx`
 **Status:** `Functional`
+
+The footer's administrator avatars include accepted and pending administrators,
+so enabling the charter keeps nominated contacts visible before acceptance.
+These avatars do not indicate administrator authority; the charter gate uses
+the accepted administrator roster from the per-team detail response.
 
 Displays one team in the marketplace (`MarketplaceTeams`). The footer's join
 affordance (TEAM-09, narrowed to 2 states 2026-07-26) is driven entirely by

@@ -25,6 +25,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.chatControlsRequest,
       }),
     }),
+    copyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPost: build.mutation<
+      CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse,
+      CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/capabilities/${queryArg.capabilityId}/copy-config`,
+        method: "POST",
+        body: queryArg.capabilityConfigCopyRequest,
+      }),
+    }),
     validateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPost: build.mutation<
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse,
       ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiArg
@@ -183,6 +193,12 @@ export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiRespon
   /** status 200 Successful Response */ ChatControlsResponse;
 export type EvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostApiArg = {
   chatControlsRequest: ChatControlsRequest;
+};
+export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiResponse =
+  /** status 200 Successful Response */ CapabilityConfigCopyResult;
+export type CopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostApiArg = {
+  capabilityId: string;
+  capabilityConfigCopyRequest: CapabilityConfigCopyRequest;
 };
 export type ValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostApiResponse =
   /** status 200 Successful Response */ StoredCapabilityConfig;
@@ -354,6 +370,20 @@ export type ChatControlsRequestItem = {
 };
 export type ChatControlsRequest = {
   items?: ChatControlsRequestItem[];
+};
+export type CapabilityConfigCopyResult = {
+  config?: {
+    [key: string]: any;
+  };
+  notices?: string[];
+  schema_version: string;
+};
+export type CapabilityConfigCopyRequest = {
+  config: StoredCapabilityConfig;
+  source_agent_instance_id: string;
+  source_team_id: string;
+  target_agent_instance_id: string;
+  target_team_id: string;
 };
 export type CheckpointThreadSummary = {
   blob_bytes_total: number;
@@ -1021,6 +1051,7 @@ export type FieldSpec = {
   min?: number | null;
   pattern?: string | null;
   required?: boolean;
+  scope_private?: boolean | null;
   title: string;
   type:
     | "string"
@@ -1151,6 +1182,7 @@ export const {
   useGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useLazyGetAuditEventsPodV1AgentsAuditEventsGetQuery,
   useEvaluateChatControlsPodV1AgentsCapabilitiesChatControlsPostMutation,
+  useCopyCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdCopyConfigPostMutation,
   useValidateCapabilityConfigPodV1AgentsCapabilitiesCapabilityIdValidateConfigPostMutation,
   useListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,
   useLazyListCheckpointThreadsPodV1AgentsCheckpointsGetQuery,

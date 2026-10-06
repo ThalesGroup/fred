@@ -668,3 +668,41 @@ async def test_update_team_visibility_write_propagates_its_own_token() -> None:
     assert engine.add_relations_calls  # the public relation write actually happened
     assert engine.list_direct_relations_tokens == ["consistency-token"]
     assert engine.has_permissions_tokens == ["consistency-token"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_active_admin", [False, True])
+async def test_team_detail_keeps_only_active_admins_for_charter_gate(
+    with_active_admin: bool,
+) -> None:
+    relations = [
+        Relation(
+            subject=_user_ref("pending"),
+            relation=RelationType.PENDING_TEAM_ADMIN,
+            resource=_team_ref("fredlab"),
+        )
+    ]
+    if with_active_admin:
+        relations.append(_admin_relation("fredlab", "active"))
+    engine = CountingRebacEngine(
+        org_linked_team_ids={"fredlab"},
+        granted_permissions={TeamPermission.CAN_READ},
+        direct_relations=relations,
+    )
+    store = _FakeMetadataStore(
+        {"fredlab": TeamMetadata(id=TeamId("fredlab"), name="Fredlab")}
+    )
+    deps = _deps(engine, store)
+    deps.configuration.app.team_admin_charter_version = "2026-09"
+
+    team = await get_team_by_id(_user("pending"), TeamId("fredlab"), deps)
+
+    assert {admin.id for admin in team.admins} == (
+        {"active"} if with_active_admin else set()
+    )
+    assert team.my_relations == [UserTeamRelation.PENDING_TEAM_ADMIN]
+    assert team.member_count == (2 if with_active_admin else 1)
+    assert team.is_member is True
+    assert team.permissions == [TeamPermission.CAN_READ]
+    assert len(engine.list_direct_relations_calls) == 1
+    assert len(engine.has_permissions_calls) == 1

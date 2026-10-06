@@ -23,8 +23,10 @@ resolution.
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Iterator
+from pathlib import Path
 from types import SimpleNamespace
 
 import jwt as pyjwt
@@ -32,9 +34,11 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
+from pydantic import AnyUrl
 
 from fred_core.security import delegation, oidc
 from fred_core.security.delegation import DelegationConfig
+from fred_core.security.structure import UserClaims, UserSecurity, is_service_agent
 
 _REALM = "http://localhost:8080/realms/app"
 _CLIENT = "app"
@@ -142,6 +146,236 @@ def test_strict_accepts_exact_issuer_and_audience(_rsa_keypair):
     assert "token_issuer" not in user.model_dump()
     assert "token_audiences" not in user.model_dump()
     assert "token_type" not in user.model_dump()
+
+
+def test_configured_claims_and_flat_roles_are_read_from_the_verified_token(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=AnyUrl(_REALM),
+            client_id=_CLIENT,
+            roles_claim=["roles"],
+            claims=UserClaims(
+                username="upn",
+                email="mail",
+                given_name="givenName",
+                family_name="surname",
+            ),
+        ),
+    )
+
+    user = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=_REALM,
+            aud=_CLIENT,
+            upn="alice@example.test",
+            mail="alice@example.test",
+            givenName="Alice",
+            surname="Example",
+            roles=["service_agent"],
+            resource_access={_CLIENT: {"roles": ["viewer"]}},
+        )
+    )
+
+    assert user.username == "alice@example.test"
+    assert user.email == "alice@example.test"
+    assert user.first_name == "Alice"
+    assert user.last_name == "Example"
+    assert user.roles == ["service_agent"]
+    assert is_service_agent(user)
+    assert "Alice" not in repr(user)
+    assert "Example" not in repr(user)
+    assert "first_name" not in user.model_dump()
+    assert "last_name" not in user.model_dump()
+
+
+def test_default_claims_keep_keycloak_role_and_name_paths(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_SECURITY_CONFIG", None)
+
+    user = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=_REALM,
+            aud=_CLIENT,
+            email="alice@example.test",
+            given_name="Alice",
+            family_name="Example",
+            resource_access={_CLIENT: {"roles": ["viewer"]}},
+        )
+    )
+
+    assert user.username == "alice"
+    assert user.email == "alice@example.test"
+    assert user.first_name == "Alice"
+    assert user.last_name == "Example"
+    assert user.roles == ["viewer"]
+
+
+def test_keycloak_keeps_a_non_uuid_identity_unchanged(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_SECURITY_CONFIG", None)
+
+    user = oidc.decode_jwt(
+        _token(private_key, iss=_REALM, aud=_CLIENT, sub="legacy-subject")
+    )
+
+    assert user.uid == "legacy-subject"
+
+
+def test_configured_keycloak_identity_claim_is_used(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=AnyUrl(_REALM),
+            client_id=_CLIENT,
+            claims=UserClaims(uid="employee_id"),
+        ),
+    )
+
+    user = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=_REALM,
+            aud=_CLIENT,
+            sub="unused-subject",
+            employee_id="employee-42",
+        )
+    )
+
+    assert user.uid == "employee-42"
+
+
+def test_oidc_uuid_claim_is_used_unchanged(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    identity = "7eb6ce18-77f9-4d04-bd97-2fcf82109703"
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=AnyUrl(_REALM),
+            client_id=_CLIENT,
+            provider="oidc",
+            claims=UserClaims(uid="oid"),
+        ),
+    )
+
+    user = oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT, oid=identity))
+
+    assert user.uid == identity
+
+
+def test_oidc_non_uuid_identity_matches_the_shared_vector(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    vector_path = (
+        Path(__file__).resolve().parents[5] / "validation/fixtures/oidc_uid_vector.json"
+    )
+    vector = json.loads(vector_path.read_text())
+    issuer = vector["issuer"]
+    monkeypatch.setattr(oidc, "KEYCLOAK_URL", issuer)
+    monkeypatch.setattr(oidc, "USER_ISSUER", issuer)
+    monkeypatch.setattr(oidc, "_REALM_ISSUERS", frozenset({issuer}))
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=AnyUrl(f"{issuer}/"), client_id=_CLIENT, provider="oidc"
+        ),
+    )
+
+    first = oidc.decode_jwt(
+        _token(private_key, iss=issuer, aud=_CLIENT, sub=vector["value"])
+    )
+    second = oidc.decode_jwt(
+        _token(
+            private_key,
+            iss=issuer,
+            aud=_CLIENT,
+            sub=vector["value"],
+            azp="another-caller",
+        )
+    )
+
+    assert first.uid == second.uid == vector["expected_uuid"]
+
+
+def test_blank_oidc_identity_is_rejected(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(realm_url=AnyUrl(_REALM), client_id=_CLIENT, provider="oidc"),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT, sub=" "))
+    assert exc.value.status_code == 401
+
+
+def test_missing_configured_identity_claim_is_rejected(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(
+        oidc,
+        "USER_SECURITY_CONFIG",
+        UserSecurity(
+            realm_url=AnyUrl(_REALM),
+            client_id=_CLIENT,
+            provider="oidc",
+            claims=UserClaims(uid="oid"),
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT))
+    assert exc.value.status_code == 401
+
+
+def test_strict_uses_a_separate_api_audience(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_AUDIENCE", "fred-api")
+
+    user = oidc.decode_jwt(_token(private_key, iss=_REALM, aud="fred-api"))
+    assert user.token_audiences == frozenset({"fred-api"})
+
+    with pytest.raises(HTTPException) as exc:
+        oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT))
+    assert exc.value.status_code == 401
+
+
+def test_soft_audience_diagnostic_uses_the_api_audience(
+    _rsa_keypair, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    private_key, _ = _rsa_keypair
+    monkeypatch.setattr(oidc, "USER_AUDIENCE", "fred-api")
+    monkeypatch.setattr(oidc, "STRICT_AUDIENCE", False)
+    caplog.set_level("DEBUG", logger=oidc.__name__)
+
+    oidc.decode_jwt(_token(private_key, iss=_REALM, aud=_CLIENT))
+
+    assert "audience does not include the configured audience" in caplog.text
 
 
 def test_strict_rejects_wrong_audience(_rsa_keypair):
