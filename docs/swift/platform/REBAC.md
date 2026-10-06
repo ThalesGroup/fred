@@ -88,12 +88,17 @@ team's own `team_admin`(s), never on `platform_admin`.
 A person may hold `team_admin`, `team_editor`, and `team_analyst` on the same
 team at the same time — common on small teams where one person governs, edits
 content, and evaluates. Nothing in the OpenFGA schema enforces exclusivity;
-each role is an independent stored relation. Each grant and each revoke is its
-own explicit, individually permission-checked action (`POST
+each role is an independent stored relation. Grants and revocations use
+individually permission-checked actions (`POST
 /teams/{team_id}/members/{user_id}/roles`, `DELETE
-/teams/{team_id}/members/{user_id}/roles/{relation}`) — never a bulk "replace
-the role set" call. Revoking a member's only remaining role is refused (use
-`DELETE /teams/{team_id}/members/{user_id}` to remove them entirely instead).
+/teams/{team_id}/members/{user_id}/roles/{relation}`), with no bulk role-set
+replacement. Revoking the only stored elevated role grants a direct
+`team_member` relation before removing that role, so the person remains a simple
+member. Revoking a sole direct `team_member` is refused; use
+`DELETE /teams/{team_id}/members/{user_id}` to remove the person entirely.
+Role revocation and explicit removal of the same person use a shared advisory
+lock and read direct roles with higher consistency after acquiring it, so a
+concurrent demotion cannot restore membership after removal.
 
 ### Team admin — team `team_admin`
 
@@ -112,7 +117,8 @@ charter (`app.team_admin_charter_version`) holds `pending_team_admin` instead:
 a `team_member` with no admin authority. Accepting the charter
 (`POST /team-admin-charter`) turns it into `team_admin`, and a version change
 moves admins back to pending at the next startup. The last-admin guard and the
-rescue check count `team_admin` only. Contract:
+rescue check count `team_admin` only. Charter acceptance and startup reconciliation recheck a pending nomination
+under the same per-member lock as cancellation before promotion. Contract:
 `CONTROL-PLANE-PRODUCT-CONTRACT.md` §54.
 
 Cannot (unless also separately granted `team_editor`/`team_analyst` — see

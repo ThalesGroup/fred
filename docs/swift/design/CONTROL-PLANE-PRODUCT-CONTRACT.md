@@ -1226,13 +1226,19 @@ RFC):
   `UpdateTeamMemberRequest`). Grants one additional role. Checked against
   `can_administer_{admins,editors,analysts,members}` for the granted role,
   exactly as before.
-- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` — revokes one
-  role, leaving any other role the member holds untouched. Refuses to revoke
-  a role not currently held (`404`) or a member's only remaining role
-  (`409`, `TeamMemberLastRoleError` — that is a removal, not a role change;
-  use `DELETE /teams/{team_id}/members/{user_id}` instead). The "team must
+- `DELETE /teams/{team_id}/members/{user_id}/roles/{relation}` - revokes one
+  role, leaving any other stored role untouched. When it is the person's only
+  stored elevated role (`team_admin`, `pending_team_admin`, `team_editor`, or
+  `team_analyst`), the service first grants a direct `team_member` relation,
+  requiring `can_administer_members` as well as permission for the revoked role.
+  This retains the person as a simple member. A role not held returns `404`;
+  revoking the sole direct `team_member` returns `409` (`TeamMemberLastRoleError`).
+  Full removal uses `DELETE /teams/{team_id}/members/{user_id}`. The "team must
   keep at least one `team_admin`" guard applies exactly when `team_admin` is
-  the role being revoked, by either this endpoint or a full member removal.
+  the role being revoked, by either endpoint. Both endpoints serialize their
+  role reads and writes for the same team member with a Postgres advisory lock
+  and force a higher-consistency direct-role read after acquiring it, so a
+  concurrent demotion cannot recreate membership after full removal.
 
 `AddTeamMemberRequest` (`POST /teams/{team_id}/members`, for a brand-new
 member) and `DELETE /teams/{team_id}/members/{user_id}` (full removal) are
@@ -4036,7 +4042,10 @@ team creation, import) writes `pending_team_admin` instead while a version is
 set and the user has not accepted it. `pending_team_admin` cannot be requested
 directly (422). Revoking it cancels the nomination and needs
 `can_administer_admins`; removing the member deletes it with the other roles.
-`my_relations` and the member list expose it.
+`my_relations` and the member list expose it. Charter acceptance and startup
+reconciliation take the same per-member lock as nomination cancellation and
+recheck the pending tuple with higher consistency before promotion; a
+completed cancellation cannot be promoted from a stale lookup.
 
 **Display contacts (2026-10-05).** Membership-enriched team listings include
 both `team_admin` and `pending_team_admin` in `Team.admins`, so marketplace

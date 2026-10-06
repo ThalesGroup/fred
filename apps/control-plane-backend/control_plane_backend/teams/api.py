@@ -476,8 +476,8 @@ async def revoke_team_member_role(
     deps: TeamDependencies,
     user: KeycloakUser = Depends(get_current_user),
 ) -> None:
-    """AUTHZ-06 (RFC Part 7 §34-35): revokes exactly one role, leaving any
-    other role the member holds untouched. Revoking a member's only
-    remaining role is refused (`TeamMemberLastRoleError`, 409) — use
-    `DELETE /teams/{team_id}/members/{user_id}` to remove a member entirely."""
+    """Revoke one role, retaining a sole elevated-role holder as a member.
+
+    A sole direct `team_member` is refused (409); full removal uses the member route.
+    """
     await revoke_team_member_role_from_service(user, team_id, user_id, relation, deps)
