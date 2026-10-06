@@ -487,7 +487,8 @@ def _raw_texts(value: Any, key: Optional[str] = None) -> List[str]:
 
 
 def _bare(text: str) -> str:
-    return _norm(text.replace("*", "")).removeprefix("- ")
+    """Compared without the inline markers the renderer turns into formatting."""
+    return _norm(re.sub(r"[*_`]", "", text)).removeprefix("- ")
 
 
 def _lost_texts(
