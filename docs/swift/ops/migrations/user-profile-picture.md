@@ -31,6 +31,9 @@ Deploy Fred normally. The control-plane Alembic migration `aac66348e27b` adds
 the nullable column `users.avatar_object_storage_key`; it runs with the usual
 migration step and needs no backfill, since everyone starts without a picture.
 
+The crop editor now exports team avatars and profile pictures at 192x192
+(WebP, quality 0.85) instead of 320x320. Existing team avatars are unchanged.
+
 ## Validation
 
 Open **Profile → Settings**, import a picture and save the crop: it appears in

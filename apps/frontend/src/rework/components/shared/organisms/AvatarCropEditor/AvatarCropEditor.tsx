@@ -18,12 +18,11 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import styles from "./AvatarCropEditor.module.scss";
 
-// Display size of the square crop viewport, and the exported avatar size. The
-// export is bounded so a huge source image never reaches the avatar surfaces at
-// full resolution. 320 covers the largest consumer (the 96px settings preview)
-// at 3x DPR; every other surface renders it at 28-48px.
+// Crop viewport size and exported avatar size. 192 covers the largest consumer
+// (the 96px settings preview) at 2x DPR; every other surface renders 28-48px.
 const VIEWPORT = 288;
-const OUTPUT = 320;
+const OUTPUT = 192;
+const WEBP_QUALITY = 0.85;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 
@@ -132,7 +131,9 @@ export default function AvatarCropEditor({ file, open, onCancel, onSave, saving 
     const sx = -offset.x / bz;
     const sy = -offset.y / bz;
     ctx.drawImage(el, sx, sy, sSize, sSize, 0, 0, OUTPUT, OUTPUT);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/webp", 0.9));
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), "image/webp", WEBP_QUALITY),
+    );
     if (blob) await onSave(blob);
   };
 
