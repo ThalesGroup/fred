@@ -276,6 +276,25 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** the variety ask is returned
 - **THEN** it names the first slide with `timeline` and the two others with `two_columns` or `cards`, only when the template offers that kind with a slide holding that many entries; the suggestions come from text patterns, without any model call
 
+#### Scenario: Variety asked on the first call only
+
+- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **WHEN** the first `build_presentation` call of the turn has a fit problem and no kind repeat, and the corrected second call repeats one kind on three slides
+- **THEN** the second call is built, with the repetition only reported in the success message: no variety ask after a fit repair
+
+#### Scenario: Variety ask merged with fit problems
+
+- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **WHEN** the first call of the turn has slides that fit nothing and, among the slides that fit, one kind on three slides or more
+- **THEN** one `needs_revision` lists the fit problems and the variety block together, and the next call is built once it fits, whatever its kinds
+
+#### Scenario: Suggestions state what the slide holds
+
+- **WHEN** the variety ask suggests a kind for a slide from its content
+- **THEN** the suggestion quotes, from the inventory, what the favoured variant of that kind holds: `up to N items` with each item field and its size, or `exactly 2 columns` with the heading and bullets sizes
+- **AND** when the slide's longest entry is longer than that room, it says to shorten each entry to that size
+- **AND** a kind whose variants cannot hold the slide's entries is not suggested
+
 #### Scenario: Later deck notes the kind repeat
 
 - **GIVEN** a conversation where a deck was already delivered

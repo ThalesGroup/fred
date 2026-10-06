@@ -1,6 +1,6 @@
 Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/` unless rooted; tests under `libs/capabilities/fred-capability-ppt-filler/tests/`. Each work package (WP) names the files it owns; a WP edits only its own files.
 
-**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15 → WP16. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
+**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15 → WP16 → WP17 → WP18. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
 
 ## Kept from the first iteration (done, still valid)
 
@@ -204,3 +204,13 @@ Owns: `assign.py` (repeats by kind, content shapes), `tools.py` (variety payload
 - [x] 17.6 Eval: `thales_spain_italy` prompt (no explicit comparison); "max kind repeat" metric (non-structural)
 - [x] 17.7 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (paintress rules + vision, corporate, builtin) vs WP16; paintress rules with `chat.mistral.medium`; `fred-performance-reviewer` on the tool path; `verification.md`
 - [x] 17.8 Closing slide "Merci" wrapped by the preview: diagnosed (template vs render vs font), fixed only if the render causes it — LibreOffice font substitution on the template's own layout text; no code change
+
+## WP18. Variety asked on the first call only, with fit hints (D17)
+
+Owns: `assign.py` (repeats beside problems, content shape lengths, fit hints), `tools.py` (first-call ask, merged revision), tests `test_assign.py`, `test_build_tool.py`, `verification.md`.
+
+- [ ] 18.1 The variety ask is evaluated on the first call of a turn only; a later call (after a fit repair or a resend) is never asked
+- [ ] 18.2 The assigner computes repeats over the fitting slides when other slides have problems; a first call with both returns one `needs_revision` holding the problems and the variety block
+- [ ] 18.3 Each content-based suggestion carries what the favoured variant holds (items max and item fields, or exactly 2 columns, with sizes from the inventory) and a shorten hint when the slide's longest entry exceeds its room
+- [ ] 18.4 Tests: ask only on the first call; no ask after a fit repair; merged ask + problems in one revision; hints carry the inventory's numbers; resend built; later deck note only
+- [ ] 18.5 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (14 prompts, paintress rules + vision, corporate, builtin) vs WP16 and WP17; `fred-performance-reviewer` on the tool path; `verification.md`
