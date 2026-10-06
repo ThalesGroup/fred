@@ -308,6 +308,9 @@ class RunResult:
     lost: int = 0
     lost_texts: List[str] = field(default_factory=list)
     variety_asks: int = 0
+    # Model tokens over the run, for cost comparisons between models.
+    input_tokens: int = 0
+    output_tokens: int = 0
     attempts: List[Attempt] = field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
 
@@ -350,6 +353,9 @@ async def run_one(variant: Variant, prompt_id: str, profile: Profile) -> RunResu
             answer = await model.ainvoke(messages)
             assert isinstance(answer, AIMessage)
             messages.append(answer)
+            usage = answer.usage_metadata or {}
+            run.input_tokens += usage.get("input_tokens", 0)
+            run.output_tokens += usage.get("output_tokens", 0)
             if not any(c["name"] == tool.name for c in answer.tool_calls):
                 run.attempts.append(
                     Attempt(time.monotonic() - t0, False, "no_tool_call", _text(answer))
@@ -614,8 +620,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
         "| 3-in-a-row | distinct/slides | max reuse | max kind repeat (max / mean) | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
-        "| leftovers | removed by check | truncated | lost | variety asks | avg wall s |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| leftovers | removed by check | truncated | lost | variety asks | avg wall s | tokens in / out (k) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -649,7 +655,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "
             f"| {sum(r.variety_asks for r in runs)} "
-            f"| {mean([r.wall_seconds for r in runs])} |"
+            f"| {mean([r.wall_seconds for r in runs])} "
+            f"| {sum(r.input_tokens for r in runs) / 1000:.0f} / "
+            f"{sum(r.output_tokens for r in runs) / 1000:.0f} |"
         )
     lines += [
         "",
