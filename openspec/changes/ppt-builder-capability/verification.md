@@ -429,7 +429,7 @@ medium.
 
 ## Results: WP20 (max uses setting)
 
-Run on 2026-10-08 after `b940f3e20` (the later commits are frontend and docs only), `make eval`
+Run on 2026-10-07 after `b940f3e20` (the later commits are frontend and docs only), `make eval`
 with `--no-builtin --modes rules --variety … --max-uses …` on the Paintress template, six
 processes strictly one after the other, 14 prompts each, nothing else running, no 429 or quota
 sign in any log. One run per cell: read differences of one or two runs as noise. Success
