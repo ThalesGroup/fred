@@ -430,7 +430,11 @@ def test_zone_role_names_used_as_plan_keys_still_fill_the_zones():
     assert result.warnings == []
     assert "Kick-off meeting" in _texts(deck.slides[0])
     assert any("one" in text and "two" in text for text in _texts(deck.slides[1]))
-    assert PlanItem.model_validate({"text": "kept", "body": "alias"}).text == "kept"
+    # A field under its name and an alias keeps both texts, never first-wins.
+    assert PlanItem.model_validate({"text": "kept", "body": "alias"}).text == (
+        "kept\nalias"
+    )
+    assert PlanItem.model_validate({"text": "same", "body": "same"}).text == "same"
 
 
 def test_one_line_heading_shrinks_then_asks_to_be_shortened():
@@ -960,14 +964,6 @@ def test_the_hero_image_is_not_dropped_when_images_is_also_given():
     )
     assert _pictures(deck.slides[0]) >= 1
     assert not [w for w in result.warnings if "not a usable image" in w]
-
-
-def test_a_field_the_model_invented_is_reported_not_swallowed():
-    slide = SlidePlan.model_validate(
-        {"title": "Results", "bullets": ["Up"], "footnote": "Source: internal"}
-    )
-    result, _ = _render((_pattern("Title and Content"), slide))
-    assert any("footnote" in w for w in result.warnings)
 
 
 def test_a_bullet_wrapped_under_an_unknown_key_keeps_its_text():

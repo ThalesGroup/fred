@@ -1143,14 +1143,6 @@ class _Renderer:
                     f"({slide_plan.invalid_entry!r})."
                 )
                 continue
-            if slide_plan.ignored_fields:
-                self.warnings.append(
-                    f"Slide {position}: {', '.join(sorted(slide_plan.ignored_fields))} "
-                    "is not a field of a slide, and its content is not in the deck."
-                )
-                self.report.slide(position).lost.extend(
-                    sorted(slide_plan.ignored_fields)
-                )
             pattern = patterns[position - 1]
             if pattern is None:
                 raise RenderError(f"Slide {position} has no assigned pattern.")

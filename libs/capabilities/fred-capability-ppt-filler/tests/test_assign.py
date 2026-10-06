@@ -631,3 +631,87 @@ def test_a_heading_that_does_not_fit_beside_the_text_is_reported():
     size = (_cards_inventory().slide_width, _cards_inventory().slide_height)
     reasons, _ = misfit(text_cards, item, size)
     assert any("items' heading" in r.text for r in reasons)
+
+
+# --- text the deck would drop ---------------------------------------------------------------
+
+
+def _dropped(slide: dict) -> str:
+    assignment = assign(INVENTORY, _plan(COVER, slide))
+    (problem,) = assignment.problems
+    assert problem.index == 2 and not assignment.patterns
+    return problem.problem + " | " + " | ".join(problem.options)
+
+
+def test_a_second_column_written_as_heading2_is_a_problem_not_a_lost_heading():
+    """The real call: one `columns` object holding `heading2` and no second
+    bullets. The coercion used to drop `heading2` and the deck showed one column."""
+    text = _dropped(
+        {
+            "kind": "two_columns",
+            "title": "Implantation et effectifs",
+            "columns": {
+                "bullets": ["45 ans d'implantation", "2 800 experts"],
+                "heading": "Espagne",
+                "heading2": "Italie",
+            },
+        }
+    )
+    assert "columns[0]: heading2 'Italie' is not a column field" in text
+    assert "one {heading, bullets} per column" in text
+
+
+def test_a_half_written_column_or_item_is_a_problem():
+    text = _dropped(
+        {
+            "title": "Implantation",
+            "columns": [
+                {"heading": "Espagne", "bullets": ["2 800 experts"]},
+                {"heading": "Italie"},
+            ],
+        }
+    )
+    assert "columns[1] has heading 'Italie' but no bullets" in text
+    text = _dropped(
+        {
+            "title": "Axes",
+            "items": [{"heading": "Cloud", "text": "Migrate"}, {"text": "Train"}],
+        }
+    )
+    assert "items[1] has text but no heading" in text
+    # Headings alone (an agenda) are a whole list, not half-written entries.
+    assert not assign(
+        INVENTORY,
+        _plan(
+            COVER, {"title": "Agenda", "items": [{"heading": "A"}, {"heading": "B"}]}
+        ),
+    ).problems
+
+
+def test_a_field_the_model_invented_is_a_problem_naming_its_text():
+    text = _dropped(
+        {"title": "Results", "bullets": ["Up"], "footnote": "Source: internal"}
+    )
+    assert "footnote 'Source: internal': not a slide field" in text
+    text = _dropped(
+        {"title": "Axes", "items": [{"heading": "Cloud", "detail": "Migrate"}] * 2}
+    )
+    assert "items[0]: detail 'Migrate' is not an item field" in text
+
+
+def test_the_coercion_keeps_every_text_it_maps():
+    column = PlanColumn.model_validate({"title": "A", "text": "x", "bullets": ["y"]})
+    assert (column.heading, column.bullets, column.ignored_fields) == (
+        "A",
+        ["y", "x"],
+        [],
+    )
+    slide = SlidePlan.model_validate(
+        {"title": "T", "bullets": [{"heading": "Cloud", "text": "migrate"}]}
+    )
+    assert slide.bullets == ["Cloud: migrate"]
+    # The tool re-validates a dump: the ignored fields survive the round trip.
+    again = SlidePlan.model_validate(
+        SlidePlan.model_validate({"title": "T", "extra": "kept"}).model_dump()
+    )
+    assert again.ignored_fields == ["extra 'kept'"]

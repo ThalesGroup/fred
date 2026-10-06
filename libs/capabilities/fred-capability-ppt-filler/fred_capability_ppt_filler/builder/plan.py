@@ -42,6 +42,7 @@ SLIDE_FIELDS: Dict[str, str] = {
     "caption": "bullets",
     "heading": "columns.heading",
 }
+ITEM_KEYS = ("number", "heading", "text", "label", "image")
 ITEM_FIELDS: Dict[str, str] = {
     "number": "number",
     "heading": "heading",
@@ -69,9 +70,10 @@ def _as_text(value: Any) -> Optional[str]:
     if isinstance(value, (list, tuple)):
         return "\n".join(t for t in (_as_text(v) for v in value) if t)
     if isinstance(value, dict):
-        named = value.get("text") or value.get("heading") or value.get("title")
-        if named is not None:
-            return _as_text(named)
+        # A bullet written as {heading, text} keeps both.
+        named = [_as_text(value.get(k)) for k in ("heading", "title", "text")]
+        if any(named):
+            return ": ".join(t for t in named if t)
         # A model that wrapped a bullet under a key of its own invention still
         # meant the text inside; dropping it loses content without a word.
         texts = [t for t in (_as_text(v) for v in value.values()) if t and t.strip()]
@@ -95,22 +97,45 @@ def _as_text_list(value: Any) -> List[str]:
     return [text] if text else []
 
 
+def _empty(value: Any) -> bool:
+    return value in (None, "", [], {})
+
+
+def _seq(value: Any) -> List[Any]:
+    return list(value) if isinstance(value, (list, tuple)) else [value]
+
+
 def _with_aliases(value: Dict[str, Any], aliases: Dict[str, str]) -> Dict[str, Any]:
     """Rename the field names a model guesses from zone roles to the plan's
-    own; a field given under its own name wins over an alias.
-
-    Two aliases of the same field (``text`` and ``content`` both meaning
-    ``bullets``) are kept in order rather than first-wins, which used to drop
-    one of them silently.
-    """
+    own. A field given under its name and an alias keeps both texts (first-wins
+    dropped one silently); only ``kind`` keeps the first."""
     out = {k: v for k, v in value.items() if k not in aliases}
-    extra: Dict[str, List[Any]] = {}
     for alias, field in aliases.items():
-        if alias in value and not out.get(field):
-            extra.setdefault(field, []).append(value[alias])
-    for field, values in extra.items():
-        out[field] = values[0] if len(values) == 1 else values
+        extra = value.get(alias)
+        if _empty(extra):
+            continue
+        current = out.get(field)
+        if _empty(current):
+            out[field] = extra
+        elif field != "kind" and _as_text(extra) != _as_text(current):
+            out[field] = _seq(current) + _seq(extra)
     return out
+
+
+def _quote(value: Any) -> str:
+    text = " ".join((_as_text(value) or "").split())
+    return text if len(text) <= 40 else text[:39] + "…"
+
+
+def _ignored(value: Dict[str, Any], known: set[str]) -> List[str]:
+    """Keys that match no field nor alias, with their text: content the deck
+    would not hold. A re-validated dump carries the earlier ones."""
+    carried = list(value.get("ignored_fields") or [])
+    return carried + [
+        f"{key} '{_quote(content)}'"
+        for key, content in value.items()
+        if key not in known and not _empty(content)
+    ]
 
 
 # The catalogue shows these zone roles; a model naturally reuses them as keys.
@@ -119,6 +144,12 @@ _ITEM_ALIASES = {
     "description": "text",
     "value": "number",
     "title": "heading",
+}
+_COLUMN_ALIASES = {
+    "title": "heading",
+    "text": "bullets",
+    "body": "bullets",
+    "content": "bullets",
 }
 _SLIDE_ALIASES = {
     "body": "bullets",
@@ -151,14 +182,17 @@ class PlanItem(BaseModel):
         description="document_id of an image for the item, from list_images_in_folder.",
     )
 
+    ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
+
     @model_validator(mode="before")
     @classmethod
     def _coerce(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                k: _as_text(v) for k, v in _with_aliases(value, _ITEM_ALIASES).items()
-            }
-        return {"heading": _as_text(value)}
+        if not isinstance(value, dict):
+            return {"heading": _as_text(value)}
+        renamed = _with_aliases(value, _ITEM_ALIASES)
+        texts = {k: _as_text(renamed.get(k)) for k in ITEM_KEYS}
+        known = set(cls.model_fields) | set(_ITEM_ALIASES)
+        return {**texts, "ignored_fields": _ignored(value, known)}
 
 
 class PlanColumn(BaseModel):
@@ -170,15 +204,20 @@ class PlanColumn(BaseModel):
         description="Column bullets; prefix '- ' for a sub-bullet.",
     )
 
+    ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
+
     @model_validator(mode="before")
     @classmethod
     def _coerce(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {
-                "heading": _as_text(value.get("heading") or value.get("title")),
-                "bullets": _as_text_list(value.get("bullets") or value.get("text")),
-            }
-        return {"bullets": _as_text_list(value)}
+        if not isinstance(value, dict):
+            return {"bullets": _as_text_list(value)}
+        renamed = _with_aliases(value, _COLUMN_ALIASES)
+        known = set(cls.model_fields) | set(_COLUMN_ALIASES)
+        return {
+            "heading": _as_text(renamed.get("heading")),
+            "bullets": _as_text_list(renamed.get("bullets")),
+            "ignored_fields": _ignored(value, known),
+        }
 
 
 def _cells(value: Any) -> List[str]:
@@ -271,8 +310,8 @@ class SlidePlan(BaseModel):
     )
     # Set when the model sent something that is not a slide object at all.
     invalid_entry: SkipJsonSchema[Optional[str]] = None
-    # Keys of the call that match no field and no alias: their content is not in
-    # the deck, and the agent can only fix that if it is told.
+    # Keys of the call that match no field and no alias (`key 'text'`): the
+    # assigner returns them as a problem rather than drop their text.
     ignored_fields: SkipJsonSchema[List[str]] = Field(default_factory=list)
 
     @model_validator(mode="before")
@@ -282,12 +321,7 @@ class SlidePlan(BaseModel):
             return {"invalid_entry": str(value)[:80]}
         renamed = _with_aliases(value, _SLIDE_ALIASES)
         known = set(cls.model_fields) | set(_SLIDE_ALIASES)
-        ignored = [
-            key
-            for key, content in value.items()
-            if key not in known and content not in (None, "", [], {})
-        ]
-        return {**renamed, "ignored_fields": ignored}
+        return {**renamed, "ignored_fields": _ignored(value, known)}
 
     @field_validator("title", "subtitle", "image", "notes", mode="before")
     @classmethod

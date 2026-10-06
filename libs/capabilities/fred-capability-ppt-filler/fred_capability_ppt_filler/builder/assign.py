@@ -341,6 +341,64 @@ def _many(found: List[Misfit]) -> Misfit:
     )
 
 
+# --- text the deck would drop -----------------------------------------------------------
+
+
+def _unbalanced(
+    name: str, body: str, entries: List[Tuple[Optional[str], bool]]
+) -> List[str]:
+    """In a list where one entry has a heading and a body, an entry missing one
+    is a half-written entry: its column or card would show a heading alone."""
+    if not any(heading and has_body for heading, has_body in entries):
+        return []
+    found = []
+    for index, (heading, has_body) in enumerate(entries):
+        if heading and not has_body:
+            found.append(f"{name}[{index}] has heading '{heading}' but no {body}")
+        elif has_body and not heading:
+            found.append(f"{name}[{index}] has {body} but no heading")
+    return found
+
+
+def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
+    """Plan text the coercion could not map, or a half-written column or item."""
+    found: List[str] = []
+    options: List[str] = []
+    if slide.ignored_fields:
+        found.append(f"{', '.join(slide.ignored_fields)}: not a slide field")
+        options.append(
+            "put that text in title, subtitle, bullets, columns, items or notes"
+        )
+    for n, column in enumerate(slide.columns):
+        if column.ignored_fields:
+            found.append(
+                f"columns[{n}]: {', '.join(column.ignored_fields)} is not a column field"
+            )
+            options.append("write columns as a list, one {heading, bullets} per column")
+    for n, item in enumerate(slide.items):
+        if item.ignored_fields:
+            found.append(
+                f"items[{n}]: {', '.join(item.ignored_fields)} is not an item field"
+            )
+            options.append("give each item only number, heading, text, label, image")
+    halves = _unbalanced(
+        "columns", "bullets", [(c.heading, bool(c.bullets)) for c in slide.columns]
+    ) + _unbalanced(
+        "items", "text", [(i.heading, bool(i.text or i.label)) for i in slide.items]
+    )
+    if halves:
+        found += halves
+        options += ["complete each entry, or drop the half-written one"]
+    if not found:
+        return None
+    return SlideProblem(
+        index,
+        "this text would be lost: " + "; ".join(found),
+        list(dict.fromkeys(options)),
+        slide.kind,
+    )
+
+
 # --- deck assignment ----------------------------------------------------------------------
 
 
@@ -565,6 +623,10 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
     ]
     problems: List[SlideProblem] = []
     for slide in slides:
+        dropped = _dropped_text(slide.index, slide.plan)
+        if dropped is not None:
+            problems.append(dropped)
+            continue
         if not has_content(slide.plan) and not (slide.last and "closing" in offered):
             problems.append(
                 SlideProblem(
