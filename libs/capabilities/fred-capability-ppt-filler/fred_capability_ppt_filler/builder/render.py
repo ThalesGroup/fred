@@ -689,11 +689,8 @@ class TableFit:
     problem: Optional[Tuple[str, str]] = None
 
 
-def _cell_lines(text: str, room_em: float) -> int:
-    return sum(
-        max(1, math.ceil(text_metrics.width_em(line) / room_em))
-        for line in (text.splitlines() or [""])
-    )
+def _cell_lines(widths_em: Sequence[float], room_em: float) -> int:
+    return sum(max(1, math.ceil(width / room_em)) for width in widths_em)
 
 
 def fit_table(zone: Zone, table: PlanTable) -> TableFit:
@@ -734,30 +731,25 @@ def fit_table(zone: Zone, table: PlanTable) -> TableFit:
         max(1, int(c * max(1, w2 - spec.margin) / max(1, w - spec.margin)))
         for c, w, w2 in zip(spec.columns, kept, widths)
     ]
-    cells = ([header] if header is not None else []) + rows
     char = text_metrics.char_em()
-
-    def heights(scale: float) -> List[float]:
-        return [
-            spec.row_height(
-                max(_cell_lines(t, c * char / scale) for t, c in zip(row, columns)),
-                scale,
-            )
-            for row in cells
-        ]
-
-    for scale in _TABLE_SCALES:
-        found = heights(scale)
-        if sum(found) <= spec.height_pt + TABLE_SLACK_PT:
-            return TableFit(
-                header, rows, widths, None if scale == 1.0 else scale, found
-            )
+    # Measured once: only the room per line changes with the scale.
+    measured = [
+        [[text_metrics.width_em(line) for line in t.splitlines() or [""]] for t in row]
+        for row in ([header] if header is not None else []) + rows
+    ]
 
     def lines(scale: float) -> List[int]:
         return [
             max(_cell_lines(t, c * char / scale) for t, c in zip(row, columns))
-            for row in cells
+            for row in measured
         ]
+
+    for scale in _TABLE_SCALES:
+        found = [spec.row_height(n, scale) for n in lines(scale)]
+        if sum(found) <= spec.height_pt + TABLE_SLACK_PT:
+            return TableFit(
+                header, rows, widths, None if scale == 1.0 else scale, found
+            )
 
     full, floor = lines(1.0), lines(MIN_FONT_SCALE)
     head = 1 if header is not None else 0
