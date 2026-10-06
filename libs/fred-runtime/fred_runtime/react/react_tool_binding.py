@@ -39,12 +39,12 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from fred_sdk import MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
+from fred_sdk.contracts.capability.mcp import McpPromptGroup
 from fred_sdk.contracts.context import BoundRuntimeContext, ToolInvocationResult
 from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
 from fred_sdk.contracts.runtime import TracerPort
 from langchain_core.tools import BaseTool, StructuredTool
 
-from ..capabilities.mcp import McpPromptGroup
 from .react_tool_resolution import FredRuntimeToolSpec
 from .react_tool_utils import normalize_payload
 from .react_tracing import tool_span

@@ -1319,7 +1319,7 @@
       "additionalProperties": false
     }
   },
-  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and `config/mcp_catalog.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
+  "description": "Complete structured configuration for a Fred agent pod.\n\nMirrors agentic-backend's `Configuration` model, scoped to what an agent\npod actually needs. All field types are reused from fred-core and fred-sdk\n\u2014 no new types invented here.\n\nHow to use it:\n- write a `config/configuration.yaml` alongside `config/models_catalog.yaml`\n  and, optionally, `config/mcp_catalog_external.yaml`\n- call `load_agent_pod_config()` at startup\n- pass the result to `create_agent_app(config=...)`\n\nThe `security` field is a `SecurityConfiguration` from fred-core, the same\ntype used in agentic-backend. When `security.user.enabled` is True,\n`create_agent_app` enforces Keycloak JWT validation on every endpoint.",
   "properties": {
     "app": {
       "$ref": "#/$defs/PodAppConfig"

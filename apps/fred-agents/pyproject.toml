@@ -19,6 +19,8 @@ dependencies = [
   "fred-capability-team-wiki>=0.1.0",
   "fred-capability-documents>=0.1.0",
   "fred-capability-document-access>=0.1.0",
+  # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
+  "fred-capability-mcp>=0.1.0",
   "uvicorn>=0.35",
 ]
 
@@ -64,6 +66,7 @@ fred-capability-html-artifact = { path = "../../libs/capabilities/fred-capabilit
 fred-capability-team-wiki = { path = "../../libs/capabilities/fred-capability-team-wiki", editable = true }
 fred-capability-documents = { path = "../../libs/capabilities/fred-capability-documents", editable = true }
 fred-capability-document-access = { path = "../../libs/capabilities/fred-capability-document-access", editable = true }
+fred-capability-mcp = { path = "../../libs/capabilities/fred-capability-mcp", editable = true }
 
 [dependency-groups]
 dev = [

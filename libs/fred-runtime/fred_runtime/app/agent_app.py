@@ -222,7 +222,6 @@ from fred_runtime.runtime_support.hitl_batch import (
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 
 from ..common.structures import AgentSettingsLike
-from ..integrations.inprocess_toolkit_registry import build_inprocess_toolkit
 from ..integrations.v2_runtime.adapters import (
     AgentConfigAssetsAdapter,
     CompositeToolInvoker,
@@ -6344,7 +6343,6 @@ def create_agent_app(
                         platform_instructions=_platform_prompt_file_field(
                             config, "platform_instructions"
                         ),
-                        inprocess_toolkit_factory=build_inprocess_toolkit,
                         control_plane_url=config.platform.control_plane_url,
                         control_plane_http_client=container.get_control_plane_http_client(),
                         rebac_engine=rebac_engine,

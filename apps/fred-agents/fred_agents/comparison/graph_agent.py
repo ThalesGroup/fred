@@ -25,7 +25,6 @@ each paired passage.
 from __future__ import annotations
 
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     FieldSpec,
     GraphAgent,
     GraphExecutionOutput,
@@ -67,7 +66,7 @@ class ComparisonGraphAgent(GraphAgent):
     )
 
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
+        MCPServerRef(id="document_access"),
     )
 
     fields: tuple[FieldSpec, ...] = (

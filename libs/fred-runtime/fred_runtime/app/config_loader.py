@@ -80,7 +80,10 @@ def load_agent_pod_config() -> AgentPodConfig:
     2. `CONFIG_FILE` env var → YAML path (default: `./config/configuration.yaml`)
     3. `FRED_MODELS_CATALOG_FILE` optionally overrides
        `./config/models_catalog.yaml`
-    4. `FRED_MCP_CATALOG_FILE` optionally overrides `./config/mcp_catalog.yaml`
+    4. `FRED_MCP_CATALOG_FILE` optionally replaces installed MCP catalogs with
+       `./config/mcp_catalog.yaml`
+    5. Otherwise, `FRED_MCP_EXTERNAL_CATALOG_FILE` optionally adds servers from
+       `./config/mcp_catalog_external.yaml` to installed MCP catalogs
 
     Raises:
     - FileNotFoundError if the YAML config file is not found.
