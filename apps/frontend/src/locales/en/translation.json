@@ -2937,6 +2937,17 @@
         "title": "Conversation profile"
       },
       "disconnect": "Disconnect",
+      "picture": {
+        "title": "Profile picture",
+        "import": "Import",
+        "hint": "JPEG, PNG or WebP · 5 MB maximum",
+        "empty": "No picture",
+        "delete": "Delete",
+        "deleteTitle": "Delete your profile picture?",
+        "deleteMessage": "Your initials will be shown instead.",
+        "deleteConfirm": "Delete",
+        "deleteCancel": "Cancel"
+      },
       "title": "Your profile"
     },
     "taskActivity": {
