@@ -53,5 +53,5 @@
 - [x] 8.2 control-plane: `cd apps/control-plane-backend && make test && make code-quality && make db-check-heads && make db-check-sqlite` all green.
 - [x] 8.3 Alembic against a real Postgres: `make db-upgrade`, `make db-downgrade`, `make db-upgrade` in `apps/control-plane-backend` succeed and `uv run alembic heads` shows exactly one head.
 - [x] 8.4 Frontend without wiping a running Vite (warn the developer first; never run through a symlinked worktree `node_modules`): `cd apps/frontend && npx tsc --noEmit && npx prettier --check src && npx eslint src && npx vitest run src/rework/components/shared src/rework/components/pages/UserSettingsPage src/rework/features/helpCenter` all green.
-- [ ] 8.5 Manual check on a local stack: upload, replace and delete a picture; confirm it appears in the nav rail, settings page, personal-space header, home team list and team-card admins; confirm the old object is gone from MinIO after replace and delete.
+- [x] 8.5 Manual check on a local stack: upload, replace and delete a picture; confirm it appears in the nav rail, settings page, personal-space header, home team list and team-card admins; confirm the old object is gone from MinIO after replace and delete.
 - [x] 8.6 Record the exact command outputs in the change (verification evidence) before archiving.

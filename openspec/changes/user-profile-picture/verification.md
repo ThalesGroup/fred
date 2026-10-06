@@ -44,10 +44,16 @@ throwaway Postgres check above.
   confirmed delete and cancelled delete; navbar personal picture; team-card
   admins with and without a picture.
 
+### Manual check (task 8.5)
+
+Local stack on this branch, SeaweedFS S3 storage, 2026-10-06: the developer
+uploaded, replaced and deleted a picture and saw it in every place listed in
+the spec. Afterwards the migration chain `c4d7e2a91b30 -> b4e8d2a9c613 ->
+aac66348e27b` applied on startup, and `control-plane-content-objects` held
+exactly one object under `users/<uid>/`, the one the users row references.
+
 ### Not proven yet
 
-- Task 8.5, the manual check on a local stack (upload, replace, delete; the
-  picture in every place; old objects gone from MinIO).
 - GCS presign latency for teams with many admins who have pictures (presigns of
   one batch run sequentially in one thread hop); needs a load test on a GCS
   deployment.
