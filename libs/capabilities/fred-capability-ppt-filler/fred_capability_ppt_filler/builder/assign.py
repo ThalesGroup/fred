@@ -39,6 +39,7 @@ from fred_capability_ppt_filler.builder.plan import (
     ITEM_FIELDS,
     SLIDE_FIELDS,
     DeckPlan,
+    PlanItem,
     SlidePlan,
     capacity_text,
     has_content,
@@ -392,6 +393,17 @@ def _unbalanced(
     return found
 
 
+def _item_entries(items: List[PlanItem]) -> List[Tuple[Optional[str], bool]]:
+    """An item's figure leads it as a heading would; a figure with its label
+    (a figures card) is a whole entry, never reported."""
+    return [
+        (None, False)
+        if i.number and i.label and not i.text
+        else (i.heading or i.number, bool(i.text))
+        for i in items
+    ]
+
+
 def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
     """Plan text the coercion could not map, or a half-written column or item."""
     found: List[str] = []
@@ -413,14 +425,9 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
                 f"items[{n}]: {', '.join(item.ignored_fields)} is not an item field"
             )
             options.append("give each item only number, heading, text, label, image")
-    # An item's figure leads it as a heading would (a figures card).
     halves = _unbalanced(
         "columns", "bullets", [(c.heading, bool(c.bullets)) for c in slide.columns]
-    ) + _unbalanced(
-        "items",
-        "text",
-        [(i.heading or i.number, bool(i.text)) for i in slide.items],
-    )
+    ) + _unbalanced("items", "text", _item_entries(slide.items))
     if not found and not halves:
         return None
     parts = (["this text would be lost: " + "; ".join(found)] if found else []) + (

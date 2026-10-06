@@ -722,6 +722,7 @@ def test_an_item_led_by_its_figure_is_not_half_written():
         "title": "CO2",
         "items": [
             {"number": "18%", "text": "less since 2022"},
+            {"number": "32%", "label": "women"},
             {"heading": "Net zero", "text": "by 2040"},
         ],
     }
