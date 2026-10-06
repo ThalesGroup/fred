@@ -261,8 +261,8 @@ The system SHALL accept from the model a plan of slides carrying content only �
 #### Scenario: Choice guide in the description
 
 - **WHEN** the tool description is built
-- **THEN** it says, for the kinds the template offers, which content suits each (numbers → figures, dates → timeline, parallel items → cards, ordered steps → process, a comparison → table, not restated as columns) and that each slide should look different
-- **AND** when the template offers `bullets` and another kind of that guide, it says at most 2 bullets slides per deck
+- **THEN** it says, for the kinds the template offers, which content suits each (numbers → figures, dates → timeline, parallel items → cards, ordered steps → process, a comparison → table, not restated as columns)
+- **AND** when the variety check is on, it states the maximum: with `variety_max_uses` 1, that each slide of the deck must look different; otherwise at most N uses of any variant (`template_slide`) or at most N slides of any non-structural kind (`kind`); with the check off it states no maximum
 
 #### Scenario: One kind on three slides is a repeat
 
@@ -317,7 +317,32 @@ The system SHALL accept from the model a plan of slides carrying content only �
 
 - **GIVEN** the capability's `variety_check` setting, `template_slide` (default), `kind` or `off`
 - **WHEN** a deck is built on the next turn after the setting changed
-- **THEN** the ask follows the setting without re-analysing the template; `off` never asks; every mode keeps the passive note and the choice guide; an agent saved before the setting existed uses `template_slide`
+- **THEN** the ask follows the setting without re-analysing the template; `off` never asks; every mode keeps the passive note and the choice guide's content pairs; an agent saved before the setting existed uses `template_slide`
+
+#### Scenario: Max uses setting
+
+- **GIVEN** the capability's `variety_max_uses` setting, 1 to 5, default 2, and a variety check that is not `off`
+- **WHEN** a first deck of the conversation is assessed on the first call of the turn
+- **THEN** a variety ask is returned when one non-structural template slide (`template_slide`) or kind (`kind`) is on more slides than the maximum, and each variety entry states that maximum; with 2 the ask comes from the third use, as before the setting existed
+- **AND** an agent saved before the setting existed uses 2, and changing it never re-runs the analysis
+
+#### Scenario: Max uses steers the assignment
+
+- **GIVEN** a variety check that is not `off`, `variety_max_uses` 1, and four bullets slides on a template with four bullets variants that fit them
+- **WHEN** the deck is assigned
+- **THEN** each slide gets a different variant; a slide whose requested kind has fewer variants than its slides keeps that kind (the reuse is priced, never switched to another kind)
+
+#### Scenario: Max uses never demands the impossible
+
+- **GIVEN** `variety_max_uses` 1 and more content slides of one kind than the template has variants of it (or, in `kind` mode, more content slides than the template has content kinds)
+- **WHEN** the deck is assessed
+- **THEN** the maximum applied is raised to the slides divided by the variants (rounded up), so a deck within that is neither re-priced nor asked; cover, agenda, section and closing slides never count
+
+#### Scenario: Variety row in the agent form
+
+- **GIVEN** the ppt_builder settings in the agent form
+- **WHEN** the author turns the variety switch off
+- **THEN** `variety_check` is saved as `off` and the mode and max selects are disabled; turning it on restores the last mode (`template_slide` by default); the max select saves `variety_max_uses`
 
 #### Scenario: Empty item pictures are a cost
 

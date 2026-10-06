@@ -225,3 +225,15 @@ Owns: `assign.py` (structural exclusion, grouping by mode, caps, spread), `tools
 - [x] 19.4 Frontend fr/en title, description, option labels; generic form renders it (checked); Help Center fr/en mentions it; ppt_builder slice regenerated only if the dump changes
 - [x] 19.5 Tests: one figures variant → at most one figures suggestion; structural slides never suggested; spread across kinds; small-model plan no ask; each mode's behaviour; default for a missing value; setting not in `labelling_key`
 - [x] 19.6 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` strictly sequential, final code, 14 prompts: `template_slide` vs `kind` on Paintress rules + vision and corporate rules (`mistral-small`), Paintress rules (`mistral-medium`); `off` on Paintress rules (`mistral-small`); `fred-performance-reviewer` on the tool path; `verification.md` with a recommendation for the default
+
+## WP20. Max uses setting, variety row (D19)
+
+Owns: `assign.py` (caps, over-max cost, ask threshold), `tools.py` (`at_most`, guide), `capability.py` (`variety_max_uses`, widget hints), `eval/` (`--max-uses`, `--no-builtin`), frontend `ppt_builder/` (variety row), locales fr/en, Help Center fr/en, tests, `verification.md`.
+
+- [ ] 20.1 `variety_max_uses` (1..5, default 2) on `PptBuilderConfig` + `FieldSpec`; both variety fields owned by the `ppt_builder_template` widget; missing value → 2; not in `labelling_key`
+- [ ] 20.2 Realistic caps per template slide / per kind, structural exempt; beam adds `_OVER_MAX` per content use beyond the cap when the check is on; requested kind never switched
+- [ ] 20.3 Ask when a group exceeds its cap (D17 timing unchanged); `at_most` in each variety entry; `off` keeps the 3+ note
+- [ ] 20.4 Choice guide per mode and max, none when off; bullets cap removed
+- [ ] 20.5 Tests: max 1 spreads a kind's slides over distinct variants; requested kind kept when only one variant; cap raised when the deck forces it; ask fires at max+1 per mode; guide sentences; default for a stored config without the field
+- [ ] 20.6 Frontend row (switch, two small selects, fr/en), generic select labels removed, Help Center fr/en; vitest (off → "off", on → last mode, max writes `variety_max_uses`, labels); tsc/prettier/eslint; slice regenerated only if the dump changes
+- [ ] 20.7 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `fred-performance-reviewer` on the tool path; targeted eval, strictly sequential (6 cells: small Paintress rules template_slide ×2/×1, kind ×2/×1; medium Paintress rules kind ×1, template_slide ×1), one contact sheet per cell for `thales_spain_italy`; `verification.md` with a recommendation for the V1 beta defaults

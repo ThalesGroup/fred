@@ -157,6 +157,19 @@ Found in two live sessions on Paintress (WP18 code). `mistral-small` (reasoning 
 
 Rejected: changing the default to `kind` now (the head-to-head eval decides; the developer chooses); a per-turn chat control (an author's choice, not a user's).
 
+### D19. Max uses as a setting; one variety row in the widget
+
+The WP19 eval showed `template_slide` nearly inert (the fixed "3+ uses" trigger rarely fires, since D12 already spreads template slides) and `kind` effective but tied to the same threshold. The developer approved an author-set maximum.
+
+- **Setting `variety_max_uses`** (int 1..5, default 2) on `PptBuilderConfig`. 2 is the D15–D18 threshold (asked from the 3rd use); 1 means every content slide unique. With `variety_check: off` it does nothing (switch off = no enforcement). Not in `labelling_key`; a stored config without it validates to 2.
+- **Realistic cap.** The max never applies below what the deck forces: per kind K, a template slide of kind K has the cap `max(max_uses, ceil(n_K / v_K))`, `n_K` the non-structural slides with a K candidate, `v_K` the template slides of kind K in the pool; in `kind` mode the kind cap is `max(max_uses, ceil(n / k))`, `n` the non-structural slides that fit, `k` the distinct non-structural kinds of the pool. Computed once per `assign`, before the beam, and reused by the ask, so the cost and the ask agree. Structural slides (D18) are exempt everywhere.
+- **Assigner.** The D12 `_REUSE × k` cost stays; when the check is on, each content use of a template slide beyond its cap adds `_OVER_MAX` (100), above `_KIND_STEP` and the fit costs, below `_TRIPLE`: another variant of the same tier wins while one fits; a requested kind is still its slide's only tier (D7), so the cost never switches it. The assigner prices template slides in both modes (the one thing it chooses); `kind` mode counts kinds for the ask.
+- **Ask threshold.** A group (template slide or kind, per mode) is a repeat when its slides exceed its cap; timing, merge with fit problems, first deck only, resend built and suggestion caps (D15–D18) unchanged. Each variety entry carries `at_most` (the cap), so the model knows how many slides to recast. `off` keeps the passive note at 3+ slides of one kind.
+- **Choice guide.** The "each slide should look different, at most 2 bullets slides" sentence goes; when the check is on: max 1 → "Each slide of the deck must look different."; otherwise "Use any variant below at most N times per deck" (`template_slide`) or "Use any kind below on at most N slides per deck, cover, agenda, section and closing aside" (`kind`). The bullets cap goes (the max covers it).
+- **UI.** Both fields carry `ui=UIHints(widget="ppt_builder_template")`: the plugin widget renders one row, "Enforce variety [By slide name ▾] at most [2 ▾] times each", switch at the end (the vision row's pattern; a `div`, not a `label`, so the selects never toggle it). Switch off writes `variety_check: "off"` and disables the selects (stable layout); switch on restores the last mode seen while the form is open (default `template_slide`). The generic select field and its option labels are deleted.
+
+Rejected: a per-kind max (one number is what an author can reason about); hiding the selects when off (the row would jump).
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.
