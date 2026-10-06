@@ -131,6 +131,7 @@ Export does not carry people, so it has nothing to attach pictures to. Pictures 
 - [The object delete fails during account deletion, leaving an orphan with no key] → a warning is logged with the user id. Accepted: it is rare, and it is never visible to anyone.
 - [When Keycloak M2M is disabled, `get_users_by_ids` returns nothing, so admin summaries carry no picture] → accepted. It matches the existing fallback, under which names are missing too.
 - [A browser keeps a cached image after a replace] → each picture gets a new UUID key, hence a new URL.
+- [With local filesystem storage, `get_presigned_url` raises `NotImplementedError`, so no picture URL is served and initials stay] → accepted and not fixed here, the same limitation team avatars already have. Uploads and deletes still work on that store.
 
 ## Migration Plan
 

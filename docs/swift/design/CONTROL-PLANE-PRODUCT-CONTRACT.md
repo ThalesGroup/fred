@@ -4291,8 +4291,9 @@ the caller and no parameter can name someone else.
 
 **Model.** Nullable `users.avatar_object_storage_key`; objects live at
 `users/{uid}/avatar-{uuid}{ext}` in the content bucket. The previous object is
-deleted (best effort, warning on failure) on replace, delete and account
-deletion; `ContentStore.delete_object` is idempotent on every backend.
+deleted (best effort, warning on failure) on replace, delete and
+identity-provider account deletion (the local directory only suspends, so the
+picture stays); `ContentStore.delete_object` is idempotent on every backend.
 
 **Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
 where a picture renders: the bootstrap `current_user` and team admin summaries

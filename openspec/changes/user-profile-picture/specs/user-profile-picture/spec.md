@@ -58,7 +58,7 @@ The control plane SHALL let an authenticated person delete their own profile pic
 
 ### Requirement: Replaced and deleted pictures leave object storage
 
-When a profile picture is replaced, deleted, or its owner's account is deleted, the control plane SHALL remove the previous picture's object from object storage, on every supported storage backend. A failure to remove the old object SHALL NOT fail the user's request once the new state is recorded; it SHALL be logged without the picture content or any presigned URL.
+When a profile picture is replaced, deleted, or its owner's account is deleted through the identity provider, the control plane SHALL remove the previous picture's object from object storage, on every supported storage backend. A failure to remove the old object SHALL NOT fail the user's request once the new state is recorded; it SHALL be logged without the picture content or any presigned URL.
 
 #### Scenario: Replace removes the old object
 
@@ -72,8 +72,13 @@ When a profile picture is replaced, deleted, or its owner's account is deleted, 
 
 #### Scenario: Account deletion removes the object
 
-- **WHEN** an administrator deletes Alice's account and Alice had a picture
+- **WHEN** an administrator deletes Alice's account through the identity provider and Alice had a picture
 - **THEN** the object holding it no longer exists in object storage and no picture key remains recorded for her
+
+#### Scenario: Local directory deletion keeps the picture
+
+- **WHEN** an administrator deletes Alice's account in the local user directory, which only suspends it
+- **THEN** her picture and its key are kept, like her other data
 
 #### Scenario: Old object removal fails
 
