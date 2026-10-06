@@ -10,7 +10,7 @@
 #
 #  DISABLE A COMPONENT  : applications.<name>.enabled: false
 #  OVERRIDE VALUES      : helm install fred ./charts/fred -f my-overrides.yaml
-#  COMPLETE EXAMPLE     : fred-deployment-factory, k3d-apps/fred/values.yaml
+#  COMPLETE EXAMPLE     : deploy/k3d/values.yaml (the local k3d instance)
 #                         (how to write one: deploy/charts/README.md)
 #
 #  SECTIONS:

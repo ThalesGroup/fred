@@ -46,7 +46,7 @@ clean: ## Clean all submodules
 ##@ Tests
 
 .PHONY: test
-test: ## Run non-integration test suites in all submodules and print coverage summary
+test: k3d-tests ## Run non-integration test suites in all submodules and print coverage summary
 	@set -e; \
 	for dir in $(TEST_DIRS); do \
 		echo "************ Running tests in $$dir ************"; \
@@ -295,8 +295,12 @@ include scripts/makefiles/help.mk
 include scripts/makefiles/chart-schema.mk
 
 # k3d: fred-deployment-factory deploys this chart on its local k3d instance
-# (`make k3d-up`, then `make k3d-fred FRED_DIR=<this checkout>`), building the
-# images with each app's `docker-build`. The instance values live there.
+# (`make k3d-up`, then `make k3d-app DIR=<this checkout>`) from deploy/k3d/:
+# its helmfile, its values, and the build, prepare and finish hooks.
+
+.PHONY: k3d-tests
+k3d-tests: ## Test local k3d image preparation and configuration without a cluster
+	python3 -m unittest discover -s deploy/k3d -p 'test_*.py'
 
 ##@ Migration notes and release preparation
 

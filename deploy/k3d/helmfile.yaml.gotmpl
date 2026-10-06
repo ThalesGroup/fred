@@ -1,0 +1,12 @@
+# Fred on the local k3d instance of fred-deployment-factory, which runs
+#   make k3d-app DIR=<this checkout>
+# and passes the kube context and the namespace. deploy/k3d/build writes the
+# images' values (K3D_IMAGE_VALUES); without it the chart's default images run.
+releases:
+  - name: fred-app
+    chart: ../charts/fred
+    values:
+      - values.yaml
+      {{- with env "K3D_IMAGE_VALUES" }}
+      - {{ . | quote }}
+      {{- end }}

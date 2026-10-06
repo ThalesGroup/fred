@@ -1839,12 +1839,12 @@
         "empty": "Aucun prompt n'a encore été publié sur la marketplace.",
         "emptySearch": "Aucun prompt ne correspond à cette recherche.",
         "import": {
-          "title": "Copier ce prompt dans une équipe",
-          "subtitle": "Sélectionnez les espaces où copier « {{name}} ».",
-          "confirm": "Copier",
-          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y copier un prompt — demandez ce rôle à un administrateur de l'équipe.",
-          "successToast": "Prompt copié ({{count}})",
-          "errorToast": "Échec de la copie ({{count}})"
+          "title": "Importer ce prompt dans une équipe",
+          "subtitle": "Sélectionnez les espaces où importer « {{name}} ».",
+          "confirm": "Importer",
+          "noEditableTeams": "Vous n'êtes éditeur d'aucune équipe. Seul un éditeur peut y importer un prompt — demandez ce rôle à un administrateur de l'équipe.",
+          "successToast": "Prompt importé ({{count}})",
+          "errorToast": "Échec de l'import ({{count}})"
         },
         "unpublish": {
           "title": "Retirer ce prompt de la marketplace ?",
@@ -2895,7 +2895,7 @@
             "publish": "Publier sur la marketplace",
             "unpublish": "Retirer de la marketplace",
             "delete": "Supprimer",
-            "import": "Copier dans...",
+            "import": "Importer dans...",
             "removeFromMarketplace": "Retirer de la marketplace"
           }
         },
