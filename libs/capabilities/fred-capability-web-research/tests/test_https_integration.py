@@ -90,7 +90,8 @@ async def test_split_service_https_native_tool_and_activity(
     from fred_sdk.contracts.web_research import WebPage
 
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
-    subprocess.run(
+    await asyncio.to_thread(
+        subprocess.run,
         [
             "openssl",
             "req",

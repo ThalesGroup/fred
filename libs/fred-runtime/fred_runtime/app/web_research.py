@@ -165,7 +165,7 @@ class WebResearchAdapter(WebResearchPort):
                     body = bytearray()
                     async for chunk in response.aiter_bytes():
                         body.extend(chunk)
-                        if len(body) > 7_000_000:
+                        if len(body) > 8_000_000:
                             raise WebResearchError("invalid_response")
                     if response.status_code != 200:
                         try:

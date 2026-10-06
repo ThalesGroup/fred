@@ -1,6 +1,7 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
+import json
 from datetime import timedelta
 
 import httpx
@@ -186,12 +187,20 @@ async def test_valid_combined_unicode_response_within_wire_budget(service):
         transport=httpx.MockTransport(
             lambda request: httpx.Response(
                 200,
-                json={
-                    "results": [
-                        {"url": "https://example.com", "content": "😀" * 50_000}
-                        for _ in range(10)
-                    ]
-                },
+                content=json.dumps(
+                    {
+                        "results": [
+                            {
+                                "url": "https://example.com/" + "😀" * 4000,
+                                "final_url": "https://example.com/" + "😀" * 4000,
+                                "title": "😀" * 512,
+                                "snippet": "😀" * 2000,
+                                "content": "😀" * 50_000,
+                            }
+                            for _ in range(10)
+                        ]
+                    }
+                ),
             )
         ),
         base_url="https://egress/",

@@ -300,7 +300,7 @@ class Egress:
                 )
             except WebResearchError:
                 raise
-            except Exception:
+            except Exception:  # noqa: BLE001 -- Provider failures must never expose queries or raw exceptions.
                 if attempt == self.config.retries:
                     raise WebResearchError("provider_failed") from None
                 await asyncio.sleep(0.5 * (attempt + 1))
@@ -346,7 +346,7 @@ class Egress:
                     not content_type and data.lstrip().startswith(b"<")
                 ):
 
-                    def extract() -> tuple[str, str]:
+                    def extract(data: bytes = data, url: str = url) -> tuple[str, str]:
                         import trafilatura
 
                         html = trafilatura.load_html(data)
@@ -372,13 +372,13 @@ class Egress:
                     "application/rss+xml",
                 }:
                     content, title = await self.in_thread(
-                        lambda: (data.decode("utf-8", errors="replace"), "")
+                        lambda data=data: (data.decode("utf-8", errors="replace"), "")
                     )
                 else:
                     raise WebResearchError("unsupported_content")
                 if request.focus:
                     content = await self.in_thread(
-                        lambda: select_passages(
+                        lambda content=content: select_passages(
                             content, request.focus or "", request.max_passages
                         )
                     )
@@ -514,7 +514,7 @@ def create_app(
         body = bytearray()
         async for chunk in request.stream():
             body.extend(chunk)
-            if len(body) > 16_384:
+            if len(body) > 128 * 1024:
                 return JSONResponse({"error_code": "rejected"}, status_code=413)
         request._body = bytes(body)
         return await call_next(request)
@@ -563,7 +563,7 @@ def create_app(
         except asyncio.CancelledError:
             outcome = "cancelled"
             raise
-        except Exception:
+        except Exception:  # noqa: BLE001 -- HTTP privacy boundary: sanitize unexpected provider/parser failures.
             return JSONResponse({"error_code": "unavailable"}, status_code=502)
         finally:
             requests.labels(operation=request.operation, outcome=outcome).inc()
@@ -597,7 +597,7 @@ def main() -> None:
         config = EgressConfig.model_validate(
             yaml.safe_load(Path(files.resolve_config_file_path()).read_text()) or {}
         )
-    except Exception:
+    except (OSError, ValueError, TypeError, yaml.YAMLError):
         raise RuntimeError("Invalid web egress configuration.") from None
     app = create_app(config, token=os.getenv("WEB_RESEARCH_EGRESS_TOKEN", ""))
     uvicorn.run(

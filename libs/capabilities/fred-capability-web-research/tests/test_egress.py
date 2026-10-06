@@ -98,7 +98,9 @@ async def test_authentication_safesearch_floor_and_bounded_body(monkeypatch, cap
         assert response.json()["safesearch"] == "on"
         assert provider.requests[0].safesearch == "on"
         assert (
-            await client.post("/v1/research", content=b"x" * 16_385, headers=headers)
+            await client.post(
+                "/v1/research", content=b"x" * (128 * 1024 + 1), headers=headers
+            )
         ).status_code == 413
         assert "PRIVATE-QUERY" not in caplog.text
         assert token not in caplog.text
@@ -212,7 +214,7 @@ async def test_binary_and_encoded_responses_fail_closed():
     ]:
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(
-                lambda request: httpx.Response(
+                lambda request, headers=headers: httpx.Response(
                     200, headers=headers, stream=httpx.ByteStream(b"binary")
                 )
             )
@@ -220,3 +222,42 @@ async def test_binary_and_encoded_responses_fail_closed():
             egress = Egress(EgressConfig(), Provider(), client)
             with pytest.raises(WebResearchError, match="unsupported_content"):
                 await egress.fetch(FetchRequest(url="https://example.com"))
+
+
+@pytest.mark.asyncio
+async def test_valid_unicode_fetch_arguments_fit_request_wire_budget():
+    import json
+
+    token = "test-service-token-01234567890123456789"  # pragma: allowlist secret
+    outbound = httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                headers={"content-type": "text/plain"},
+                stream=httpx.ByteStream(b"public"),
+            )
+        )
+    )
+    app = create_app(EgressConfig(), token=token, provider=Provider(), client=outbound)
+    payload = {
+        "operation": "fetch_url",
+        "url": "https://example.com/" + "😀" * 4000,
+        "focus": "😀" * 2048,
+    }
+    async with (
+        outbound,
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="https://egress"
+        ) as client,
+    ):
+        response = await client.post(
+            "/v1/research",
+            content=json.dumps(payload),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Request-ID": str(uuid4()),
+                "Content-Type": "application/json",
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["results"][0]["content"] == "public"
