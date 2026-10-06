@@ -35,7 +35,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast, get_args
 
 import yaml
 from dotenv import dotenv_values
@@ -44,6 +44,7 @@ from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import (
     _STRUCTURAL,
+    VarietyCheck,
     assign,
     assignable,
     misfit,
@@ -315,14 +316,16 @@ class RunResult:
     plan: Optional[Dict[str, Any]] = None
 
 
-def _build_tool(variant: Variant, workspace: MemoryWorkspace) -> BaseTool:
+def _build_tool(
+    variant: Variant, workspace: MemoryWorkspace, variety: VarietyCheck
+) -> BaseTool:
     """The tool the capability's middleware registers once the analysis is in
     the pod's cache, with the template read from memory."""
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
             user_id="eval", session_id="eval", agent_instance_id="eval-instance"
         ),
-        config=PptBuilderConfig(template_sha256="eval"),
+        config=PptBuilderConfig(template_sha256="eval", variety_check=variety),
         turn_options=EmptyModel(),
         services=RuntimeServices(workspace_fs=cast(Any, workspace)),
     )
@@ -334,10 +337,12 @@ def _build_tool(variant: Variant, workspace: MemoryWorkspace) -> BaseTool:
     return tools_mod.build_builder_tools(ctx, load, variant.inventory)[0]
 
 
-async def run_one(variant: Variant, prompt_id: str, profile: Profile) -> RunResult:
+async def run_one(
+    variant: Variant, prompt_id: str, profile: Profile, variety: VarietyCheck
+) -> RunResult:
     _renders.set([])
     workspace = MemoryWorkspace()
-    tool = _build_tool(variant, workspace)
+    tool = _build_tool(variant, workspace, variety)
     model = profile.model.bind_tools([tool])
     messages: List[BaseMessage] = [
         SystemMessage(content=f"{_BASE_PROMPT}\n\n{_BUILD_INSTRUCTIONS}"),
@@ -729,6 +734,9 @@ async def main() -> None:
         "--out", type=Path, default=Path(os.environ.get("PPT_EVAL_OUT", "target/eval"))
     )
     parser.add_argument("--contact-sheets", action="store_true")
+    parser.add_argument(
+        "--variety", choices=get_args(VarietyCheck), default="template_slide"
+    )
     args = parser.parse_args()
 
     rebuild_ui_part_union([PptPreviewPart])
@@ -739,7 +747,10 @@ async def main() -> None:
     modes = [m for m in args.modes.split(",") if m]
     prompt_ids = [p for p in args.prompts.split(",") if p]
     args.out.mkdir(parents=True, exist_ok=True)
-    print(f"agent model {agent.profile_id}, vision model {vision.profile_id}")
+    print(
+        f"agent model {agent.profile_id}, vision model {vision.profile_id}, "
+        f"variety check {args.variety}"
+    )
 
     variants: List[Variant] = []
     for name, path in _templates(args.template):
@@ -762,7 +773,7 @@ async def main() -> None:
 
     async def bounded(variant: Variant, prompt_id: str) -> RunResult:
         async with semaphore:
-            result = await run_one(variant, prompt_id, agent)
+            result = await run_one(variant, prompt_id, agent, args.variety)
         print(
             f"{variant.template}/{variant.mode}/{prompt_id}: "
             f"{'ok' if result.success else result.failure} repairs={result.repairs} "
@@ -795,7 +806,8 @@ async def _sheets(results: List[RunResult], variants: List[Variant], out: Path) 
             continue
         variant = by_key[(result.template, result.mode)]
         workspace = MemoryWorkspace()
-        tool = _build_tool(variant, workspace)
+        # A fresh tool's first call: "off", or a variety ask would replace the deck.
+        tool = _build_tool(variant, workspace, "off")
         _renders.set([])
         await tool.ainvoke(result.plan)
         pdf = next((b for k, b in workspace.files.items() if k.endswith(".pdf")), None)
