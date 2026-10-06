@@ -77,6 +77,11 @@ PROMPTS: dict[str, str] = {
         "(2026) ; défis : souveraineté des données et délais d'export. Une section par pays, puis "
         "une comparaison des deux pays et une conclusion."
     ),
+    # The real session's request (no comparison asked): its first deck held
+    # five bullets slides on five different template slides.
+    "thales_spain_italy": (
+        "Prépare une présentation exposant les activités de Thales en Espagne et en Italie."
+    ),
     # Tabular content (design.md D14): offers × criteria, a schedule.
     "offers_table": (
         "Make a 4-slide deck comparing three cloud offers for our data platform: AWS, Azure "

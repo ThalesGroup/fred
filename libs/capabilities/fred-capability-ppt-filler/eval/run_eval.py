@@ -42,7 +42,12 @@ from dotenv import dotenv_values
 from fred_capability_ppt_filler.builder import analysis_job, checks
 from fred_capability_ppt_filler.builder import tools as tools_mod
 from fred_capability_ppt_filler.builder.analysis import analyze_template
-from fred_capability_ppt_filler.builder.assign import assign, assignable, misfit
+from fred_capability_ppt_filler.builder.assign import (
+    _STRUCTURAL,
+    assign,
+    assignable,
+    misfit,
+)
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.capability import (
     _BUILD_INSTRUCTIONS,
@@ -285,6 +290,8 @@ class RunResult:
     # Deck-wide variety: the most uses of one pattern, A B A B returns, and
     # reuses while an unused pattern of the same kind would have held the slide.
     max_reuse: int = 0
+    # Most slides of one content kind (cover, section, agenda, closing aside).
+    max_kind_repeat: int = 0
     alternations: int = 0
     avoidable_reuses: int = 0
     # Tables (design.md D14): given in the plan, put on a table slide, rendered
@@ -551,6 +558,8 @@ def _variety(
 ) -> None:
     ids = [p.id for p in chosen]
     run.max_reuse = max((ids.count(i) for i in ids), default=0)
+    content = [p.kind for p in chosen if p.kind not in _STRUCTURAL]
+    run.max_kind_repeat = max((content.count(k) for k in content), default=0)
     run.alternations = sum(
         1 for i in range(2, len(ids)) if ids[i] == ids[i - 2] != ids[i - 1]
     )
@@ -603,10 +612,10 @@ def _leftovers(
 def _summary(results: List[RunResult], variants: List[Variant]) -> str:
     lines = [
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
-        "| 3-in-a-row | distinct/slides | max reuse | A-B-A | avoidable reuses "
+        "| 3-in-a-row | distinct/slides | max reuse | max kind repeat (max / mean) | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
         "| leftovers | removed by check | truncated | lost | variety asks | avg wall s |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -629,6 +638,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(r.triples for r in ok)} "
             f"| {mean([r.distinct_ratio for r in ok])} "
             f"| {max((r.max_reuse for r in ok), default=0)} "
+            f"| {max((r.max_kind_repeat for r in ok), default=0)} / "
+            f"{mean([float(r.max_kind_repeat) for r in ok])} "
             f"| {sum(r.alternations for r in ok)} | {sum(r.avoidable_reuses for r in ok)} "
             f"| {len(across)}/{len(assignable(variant.inventory))} "
             f"| {sum(r.tables_used for r in ok)}/{sum(r.tables_given for r in ok)} "
