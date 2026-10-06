@@ -35,160 +35,56 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable
+from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Any, Literal
+from typing import cast
 
-import yaml
 from fred_sdk.contracts.models import MCPServerConfiguration
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from fred_sdk.contracts.services import ServiceEndpointsPort
+from fred_sdk.resources.mcp import McpCatalog
+from fred_sdk.resources.mcp import McpCatalog as _LoadedMcpConfiguration
+from fred_sdk.resources.mcp import load_mcp_catalog as load_mcp_catalog
+from pydantic import BaseModel, ConfigDict, Field
 
 from .config import AgentPodConfig
+from .service_endpoints import ConfiguredServiceEndpoints
+
+__all__ = ["_LoadedMcpConfiguration", "load_mcp_catalog"]
 
 logger = logging.getLogger(__name__)
 
 MCP_CATALOG_ENV = "FRED_MCP_CATALOG_FILE"
+MCP_EXTERNAL_CATALOG_ENV = "FRED_MCP_EXTERNAL_CATALOG_FILE"
 MODELS_CATALOG_ENV = "FRED_MODELS_CATALOG_FILE"
 PLATFORM_PROMPT_ENV = "FRED_PLATFORM_PROMPT_FILE"
 MCP_CATALOG_DEFAULT_PATH = "./config/mcp_catalog.yaml"
+MCP_EXTERNAL_CATALOG_DEFAULT_PATH = "./config/mcp_catalog_external.yaml"
 MODELS_CATALOG_DEFAULT_PATH = "./config/models_catalog.yaml"
 PLATFORM_PROMPT_DEFAULT_PATH = "./config/platform_prompt.json"
 
 
-class _CatalogFile(BaseModel):
-    """Strict base model for pod catalog file payloads."""
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class _LoadedMcpConfiguration(BaseModel):
-    """
-    Internal MCP configuration object attached to `AgentPodConfig`.
-
-    Why this exists:
-    - the pod runtime still needs a `servers + get_server(...)` object for MCP
-      wiring after the public `AgentPodConfig` schema stops exposing an `mcp`
-      section
-
-    How to use it:
-    - create it only inside the catalog bootstrap helpers and attach it with
-      `config.set_mcp_configuration(...)`
-
-    Example:
-    - `config.set_mcp_configuration(_LoadedMcpConfiguration(servers=[...]))`
-    """
-
-    servers: list[MCPServerConfiguration] = Field(default_factory=list)
-
-    def get_server(self, id: str) -> MCPServerConfiguration | None:
-        """
-        Return one enabled MCP server from the loaded catalog.
-
-        Why this exists:
-        - runtime MCP adapters expect a configuration object with `get_server`
-
-        How to use it:
-        - call from runtime adapter code through the shared MCP configuration
-
-        Example:
-        - `server = loaded_config.get_server("mcp-knowledge-flow-corpus")`
-        """
-
-        for server in self.servers:
-            if server.id == id and server.enabled:
-                return server
-        return None
-
-
-class _McpCatalog(_CatalogFile):
-    """
-    File contract for `mcp_catalog.yaml`.
-
-    Why this exists:
-    - pod startup needs the same strict YAML validation as agentic-backend when
-      loading the external MCP catalog
-
-    How to use it:
-    - created indirectly through `load_mcp_catalog(path)`
-
-    Example:
-    - `catalog = load_mcp_catalog("./config/mcp_catalog.yaml")`
-    """
-
-    version: Literal["v1"] = "v1"
-    servers: list[MCPServerConfiguration] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _reject_duplicate_server_ids(self) -> "_McpCatalog":
-        """
-        Reject duplicate MCP server ids in one catalog.
-
-        Why this exists:
-        - the managed-agent contract now stores per-server config keyed by MCP
-          server id, so duplicates would make selection and config resolution
-          ambiguous and unsafe
-
-        How to use it:
-        - triggered automatically during `_McpCatalog.model_validate(...)`
-
-        Example:
-        - `load_mcp_catalog("./config/mcp_catalog.yaml")`
-        """
-
-        seen: set[str] = set()
-        duplicates: list[str] = []
-        for server in self.servers:
-            if server.id in seen and server.id not in duplicates:
-                duplicates.append(server.id)
-            seen.add(server.id)
-        if duplicates:
-            duplicates_text = ", ".join(repr(server_id) for server_id in duplicates)
-            raise ValueError(
-                f"Duplicate MCP server id(s) in catalog: {duplicates_text}"
-            )
-        return self
-
-
-def _load_yaml_mapping(path: Path) -> dict[str, Any]:
-    """
-    Load one YAML mapping file from disk.
-
-    Why this exists:
-    - both model and MCP catalog bootstrap need the same strict "YAML mapping"
-      validation rule
-
-    How to use it:
-    - pass a catalog file path and receive the decoded mapping payload
-
-    Example:
-    - `payload = _load_yaml_mapping(Path("./config/mcp_catalog.yaml"))`
-    """
-
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if payload is None:
-        raise ValueError(f"Catalog file is empty: {path}")
-    if not isinstance(payload, dict):
-        raise ValueError(f"Catalog file must be a YAML mapping object: {path}")
-    return payload
-
-
-def load_mcp_catalog(path: str | Path) -> _McpCatalog:
-    """
-    Load and validate an external MCP catalog file.
-
-    Why this exists:
-    - pod bootstrap should reuse the same strict MCP catalog contract as the
-      backend instead of treating `mcp_catalog.yaml` as ad-hoc YAML
-
-    How to use it:
-    - call from `apply_external_catalog_overrides(...)` when external MCP
-      servers should populate the internal pod MCP configuration
-
-    Example:
-    - `catalog = load_mcp_catalog("./config/mcp_catalog.yaml")`
-    """
-
-    catalog_path = Path(path)
-    return _McpCatalog.model_validate(_load_yaml_mapping(catalog_path))
+def load_installed_mcp_catalogs(services: ServiceEndpointsPort) -> McpCatalog:
+    """Resolve installed catalog providers once, before MCP transport and registration."""
+    servers: list[MCPServerConfiguration] = []
+    for entry in sorted(
+        entry_points(group="fred.mcp_catalogs"), key=lambda ep: (ep.name, ep.value)
+    ):
+        try:
+            provider = entry.load()
+            if not callable(provider):
+                raise TypeError(
+                    "expected a catalog loader accepting a service endpoint provider"
+                )
+            catalog = cast(Callable[[ServiceEndpointsPort], object], provider)(services)
+            if not isinstance(catalog, McpCatalog):
+                raise TypeError("catalog loader must return McpCatalog")
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load MCP catalog '{entry.name}' ({entry.value}): {exc}"
+            ) from exc
+        servers.extend(catalog.servers)
+    return McpCatalog(servers=servers)
 
 
 def resolve_models_catalog_path() -> Path:
@@ -354,23 +250,42 @@ def apply_external_catalog_overrides(config: AgentPodConfig) -> AgentPodConfig:
         )
 
     mcp_catalog_path = resolve_mcp_catalog_path()
-    if not mcp_catalog_path.exists():
-        config.set_mcp_configuration(None)
+    services = ConfiguredServiceEndpoints(config)
+    if os.getenv(MCP_CATALOG_ENV) or mcp_catalog_path.exists():
+        if not mcp_catalog_path.exists():
+            config.set_mcp_configuration(None)
+            logger.info(
+                "[fred-runtime][config] MCP catalog not found at %s; pod starts with no external MCP servers",
+                mcp_catalog_path,
+            )
+            return config
+
+        catalog = load_mcp_catalog(mcp_catalog_path, services=services)
+        config.set_mcp_configuration(catalog)
         logger.info(
-            "[fred-runtime][config] MCP catalog not found at %s; pod starts with no external MCP servers",
+            "[fred-runtime][config] loaded MCP catalog from %s (servers=%d)",
             mcp_catalog_path,
+            len(catalog.servers),
         )
         return config
 
-    catalog = load_mcp_catalog(mcp_catalog_path)
-    config.set_mcp_configuration(
-        _LoadedMcpConfiguration(
-            servers=[server.model_copy(deep=True) for server in catalog.servers]
+    installed = load_installed_mcp_catalogs(services)
+    selected_external = os.getenv(MCP_EXTERNAL_CATALOG_ENV)
+    external_path = Path(selected_external or MCP_EXTERNAL_CATALOG_DEFAULT_PATH)
+    if selected_external and not external_path.exists():
+        raise FileNotFoundError(
+            f"Selected external MCP catalog file was not found: {external_path}"
         )
+    external = (
+        load_mcp_catalog(external_path, services=services)
+        if external_path.exists()
+        else McpCatalog()
     )
+    catalog = McpCatalog(servers=[*installed.servers, *external.servers])
+    config.set_mcp_configuration(catalog if catalog.servers else None)
     logger.info(
-        "[fred-runtime][config] loaded MCP catalog from %s (servers=%d)",
-        mcp_catalog_path,
-        len(catalog.servers),
+        "[fred-runtime][config] loaded MCP catalogs (installed=%d external=%d)",
+        len(installed.servers),
+        len(external.servers),
     )
     return config

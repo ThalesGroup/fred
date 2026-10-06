@@ -62,9 +62,6 @@ MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS: Final[str] = (
 MCP_SERVER_KNOWLEDGE_FLOW_TABULAR: Final[str] = "mcp-knowledge-flow-mcp-tabular"
 """Tabular analysis MCP server id used by Tabular-style agents."""
 
-MCP_SERVER_KNOWLEDGE_FLOW_TEXT: Final[str] = "mcp-knowledge-flow-mcp-text"
-"""Text search MCP server id — document full-text retrieval from the knowledge flow."""
-
 MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS: Final[str] = (
     "mcp-knowledge-flow-prometheus-ops"
 )
@@ -77,5 +74,4 @@ __all__ = [
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",
-    "MCP_SERVER_KNOWLEDGE_FLOW_TEXT",
 ]

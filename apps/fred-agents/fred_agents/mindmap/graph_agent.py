@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from fred_core.store import VectorSearchHit
 from fred_sdk import (
-    MCP_SERVER_KNOWLEDGE_FLOW_TEXT,
     TOOL_REF_KNOWLEDGE_SEARCH,
     FieldSpec,
     GraphAgent,
@@ -61,7 +60,7 @@ class MindmapGraphAgent(GraphAgent):
     )
 
     default_mcp_servers: tuple[MCPServerRef, ...] = (
-        MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TEXT),
+        MCPServerRef(id="document_access"),
     )
 
     declared_tool_refs: tuple[ToolRefRequirement, ...] = (

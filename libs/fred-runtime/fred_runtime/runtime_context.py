@@ -52,22 +52,6 @@ class McpConfigurationLike(Protocol):
         raise NotImplementedError
 
 
-class InprocessToolkitFactory(Protocol):
-    """
-    Provider for in-process MCP toolkits.
-
-    Why this exists:
-    - fred-runtime should not hardcode agentic-backend toolkits
-
-    How to use it:
-    - supply a callable that maps a provider key + the current agent turn to a
-      toolkit instance (the agent carries the bound runtime context and settings)
-    """
-
-    def __call__(self, provider: str | None, agent: Any) -> Any:
-        raise NotImplementedError
-
-
 @dataclass(frozen=True, slots=True)
 class RuntimeTimeouts:
     """
@@ -162,7 +146,6 @@ class RuntimeConfig:
     )
     checkpointer: Any | None = None  # FredSqlCheckpointer — avoids circular import
     history_store: Any | None = None  # PostgresHistoryStore — avoids circular import
-    inprocess_toolkit_factory: InprocessToolkitFactory | None = None
     http_client_limits: Mapping[str, Any] | None = None
     # Resolved models_catalog.yaml path (OBSERV-02 v3, AGENT-CAPABILITY-RFC.md
     # §8.7) — threaded through from AgentPodConfig.get_models_catalog_path()
@@ -283,13 +266,6 @@ class RuntimeContext:
         if self._config.chat_model_provider is None:
             raise RuntimeError("RuntimeContext missing chat_model_provider.")
         return self._config.chat_model_provider()
-
-    def get_inprocess_toolkit_factory(self) -> InprocessToolkitFactory | None:
-        """
-        Return the in-process toolkit factory, if configured.
-        """
-
-        return self._config.inprocess_toolkit_factory
 
     def get_http_client_limits(self) -> Mapping[str, Any] | None:
         """

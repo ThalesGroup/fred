@@ -234,16 +234,9 @@ class MCPServerConfiguration(BaseModel):
     description: Optional[str] = Field(
         None, description="react-i18next key for the description of the MCP server."
     )
-    transport: Optional[str] = Field(
+    transport: Literal["sse", "stdio", "websocket", "streamable_http"] | None = Field(
         "sse",
-        description=(
-            "MCP server transport. Can be sse, stdio, websocket, streamable_http, "
-            "or inprocess (local toolkit provider exposed in the MCP catalog)."
-        ),
-    )
-    provider: Optional[str] = Field(
-        None,
-        description="Local provider key when transport=inprocess.",
+        description="MCP server transport: sse, stdio, websocket or streamable_http.",
     )
     url: Optional[str] = Field(None, description="URL and endpoint of the MCP server")
     sse_read_timeout: Optional[int] = Field(

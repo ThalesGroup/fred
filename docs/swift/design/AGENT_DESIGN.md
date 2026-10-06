@@ -55,17 +55,14 @@ A tool is the executable unit seen by the LLM / LangChain:
 
 A connector is a configured entry that makes a capability available to agents.
 
-Today this is represented in the "MCP" catalog UI, but conceptually it already includes:
-
-- **remote MCP endpoints**
-- **local in-process providers**
+The MCP catalog represents remote MCP endpoints. Local tools are supplied by
+native capability packages.
 
 ### Transport / Provider
 
 Transport is **how** a capability is reached:
 
 - `streamable_http`, `stdio`, `websocket`, ...
-- `inprocess` (local provider inside `agentic-backend`)
 
 Key principle:
 
@@ -77,10 +74,8 @@ Key principle:
 
 ### 1. Agent Runtime and Tool Resolution
 
-Fred currently resolves tools through `MCPRuntime`, which now supports:
-
-- remote MCP servers (traditional MCP transports)
-- local in-process providers (`transport = "inprocess"`, `provider = ...`)
+Fred resolves MCP tools through `MCPRuntime` and local tools through native
+capabilities. Both paths support ReAct and Graph agents.
 
 This gives a unified runtime outcome:
 
@@ -377,7 +372,7 @@ This is acceptable as a transitional step, but the naming is conceptually mislea
 Target abstraction should be:
 
 - **Capability catalog** (what it enables)
-- with provider/transport metadata (`mcp`, `inprocess`, ...)
+- with provider/transport metadata (`mcp`, native capability, ...)
 
 ### 2. Tool decision logic is still partially agent-local
 
@@ -421,7 +416,7 @@ Replace transport-first thinking ("MCP servers") with capability-first thinking:
 Each capability then declares how it is delivered:
 
 - provider kind: `mcp`, `local`
-- transport (if applicable): `streamable_http`, `stdio`, `inprocess`, ...
+- transport (if applicable): `streamable_http`, `stdio`, ...
 
 #### Why this should be next
 

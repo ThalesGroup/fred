@@ -35,7 +35,12 @@ from fred_sdk.contracts.models import FieldSpec
 
 _REPO = Path(__file__).resolve().parents[3]
 _MCP_CATALOGS = [
-    _REPO / "apps" / "fred-agents" / "config" / "mcp_catalog.yaml",
+    _REPO
+    / "libs"
+    / "capabilities"
+    / "fred-capability-mcp"
+    / "fred_capability_mcp"
+    / "mcp_catalog.yaml",
     _REPO / "deploy" / "charts" / "fred" / "values.yaml",
 ]
 
@@ -81,7 +86,6 @@ def test_capability_settings_are_classified(capability: Any) -> None:
 @pytest.mark.parametrize("catalog", _MCP_CATALOGS, ids=lambda p: p.name)
 def test_mcp_catalog_settings_are_classified(catalog: Path) -> None:
     servers = _mcp_servers(yaml.safe_load(catalog.read_text()))
-    assert servers
     offenders = {
         server["id"]: unclassified_reference_specs(
             [

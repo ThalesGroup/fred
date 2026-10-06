@@ -914,50 +914,6 @@
         "description": "Allow your agent to query Prometheus metrics and execute PromQL requests",
         "name": "Prometheus access"
       },
-      "search_documents": {
-        "description": "Legacy semantic document search (pre-capability MCP path, no per-agent scoping). Superseded by the Document access capability — do not enable both on the same agent.",
-        "name": "Document search (legacy)",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Document library picker",
-              "description": "Show a document library selector in the chat interface."
-            },
-            "libraries_binding": {
-              "title": "Bind to specific libraries",
-              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
-            },
-            "bound_library_ids": {
-              "title": "Bound document libraries",
-              "description": "Restrict the chat library picker to this preselected set of document libraries."
-            },
-            "documents_selection": {
-              "title": "Document picker",
-              "description": "Show a document selector in the chat interface."
-            },
-            "attach_files": {
-              "title": "File attachments",
-              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-            },
-            "search_policy_enabled": {
-              "title": "Search policy picker in chat",
-              "description": "Allow users to switch the search policy from the chat interface."
-            },
-            "search_policy": {
-              "title": "Default search policy",
-              "description": "Search strategy used when the user has not overridden it."
-            },
-            "search_rag_scope_enabled": {
-              "title": "RAG scope picker in chat",
-              "description": "Allow users to switch the RAG scope from the chat interface."
-            },
-            "search_rag_scope": {
-              "title": "Default RAG scope",
-              "description": "Scope used when the user has not overridden it."
-            }
-          }
-        }
-      },
       "search_opensearch": {
         "description": "Allow your agent to search in opensearch indices",
         "name": "Search in opensearch"
@@ -965,10 +921,6 @@
       "tabular": {
         "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
         "name": "Use tabular files"
-      },
-      "web_github_readonly": {
-        "description": "Local in-process capability for public web pages and GitHub repository inspection (read-only)",
-        "name": "Web + GitHub Read-only"
       }
     }
   },
@@ -999,7 +951,6 @@
       "env": "Environment variables",
       "id": "Identifier",
       "name": "Display name (i18n key)",
-      "provider": "Local provider",
       "timeout": "SSE timeout (s)",
       "transport": "Transport",
       "url": "Server URL"
@@ -1014,14 +965,13 @@
     },
     "helpers": {
       "args": "Space or comma separated arguments",
-      "env": "One KEY=VALUE per line",
-      "provider": "Example: web_github_readonly"
+      "env": "One KEY=VALUE per line"
     },
     "noResultsHint": "Try removing filters or broadening the search.",
     "noResultsTitle": "No connector matches your search",
     "restoreButton": "Restore catalog from configuration",
     "resultsLabel": "results",
-    "searchPlaceholder": "Search by id, name, description, URL, command, or provider",
+    "searchPlaceholder": "Search by id, name, description, URL, command",
     "source": {
       "local": "Local",
       "mcp": "MCP"
@@ -1042,7 +992,6 @@
       "updated": "MCP server updated"
     },
     "transport": {
-      "inprocess": "inprocess",
       "sse": "Server-sent events",
       "stdio": "stdio",
       "streamable_http": "HTTP",

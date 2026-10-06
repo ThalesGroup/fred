@@ -240,6 +240,11 @@ def test_load_agent_pod_config_honors_catalog_env_overrides(
     _write_models_catalog(override_models_catalog, chat_name="gpt-5-mini")
     _write_mcp_catalog(override_mcp_catalog, server_id="mcp-override")
 
+    instructions = "# Search instructions\n\nUse the retrieved sources.\n"
+    (tmp_path / "search.md").write_text(instructions, encoding="utf-8")
+    with override_mcp_catalog.open("a", encoding="utf-8") as catalog:
+        catalog.write("\n    prompt_file: search.md\n")
+
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CONFIG_FILE", str(config_dir / "configuration.yaml"))
     monkeypatch.setenv("ENV_FILE", str(config_dir / ".env"))
@@ -252,6 +257,7 @@ def test_load_agent_pod_config_honors_catalog_env_overrides(
     mcp_configuration = config.get_mcp_configuration()
     assert mcp_configuration is not None
     assert [server.id for server in mcp_configuration.servers] == ["mcp-override"]
+    assert mcp_configuration.servers[0].agent_instructions == instructions
 
 
 def test_load_agent_pod_config_requires_models_catalog_file(
