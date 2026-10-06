@@ -2766,7 +2766,6 @@ export type PlatformRolesResponse = {
 export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
 };
-export type GcuVersionsType = "v1";
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
 export type TeamVisibility = "public" | "private";
@@ -2816,7 +2815,7 @@ export type TeamWithPermissions = {
   retention?: TeamRetentionView | null;
 };
 export type UserDetails = {
-  cguValidated: GcuVersionsType | null;
+  cguValidated: string | null;
   personalTeam: TeamWithPermissions;
   currentUser?: UserSummary | null;
 };

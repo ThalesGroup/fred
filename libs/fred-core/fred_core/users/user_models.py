@@ -15,7 +15,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, Index, String, Uuid, text
+from sqlalchemy import BigInteger, DateTime, Index, String, Text, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -40,9 +40,7 @@ class UserRow(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    gcuVersionAccepted: Mapped[GcuVersionsType | None] = mapped_column(
-        Enum(GcuVersionsType, name="gcu_version_type"), nullable=True
-    )
+    gcuVersionAccepted: Mapped[str | None] = mapped_column(Text(), nullable=True)
     gcuAcceptedAt: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

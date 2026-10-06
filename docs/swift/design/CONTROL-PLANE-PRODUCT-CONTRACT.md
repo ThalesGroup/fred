@@ -3940,6 +3940,19 @@ platform features — capabilities, agent templates and models — so it takes t
 name of the role that governs it. The backend endpoints keep their
 `/admin/capabilities` prefix: there the word is accurate.
 
+## Versioned terms acceptance (2026-10-06)
+
+CGU acceptance uses opaque, case-sensitive configured strings. `POST /gcu`
+replaces the accepted version and timestamp in `users`; no acceptance history
+is kept. First acceptance alone enrolls default teams (section 52).
+
+`GET /user` keeps the `cguValidated` name and returns the stored `string | null`.
+It remains reachable before acceptance. Protected human requests require that
+the stored version matches the active configuration, including when returning
+to an older version; existing service/asserted-user exemptions remain in effect.
+The charter retains its independent per-version history. Deployment steps live
+in the [CGU migration note](../ops/migrations/2972-configurable-gcu-versions.md).
+
 ## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
 
 **What it is.** A platform admin picks any number of registry teams that every
