@@ -95,9 +95,8 @@ folder.
 
 **Its limits** — the agent fills a template, it does not design a presentation:
 without an uploaded template the capability does not work. The template is
-checked on upload and marker errors are reported to you. A duplicated agent
-keeps the configuration but **not the template file**, which has to be uploaded
-again.
+checked on upload and marker errors are reported to you. An agent duplicated or
+copied to another team takes its own copy of the template.
 
 **An example** — a five-slide monthly review template, which the agent fills
 each month from the period's documents.

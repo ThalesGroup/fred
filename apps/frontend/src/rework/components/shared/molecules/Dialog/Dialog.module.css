@@ -41,11 +41,15 @@
 }
 
 .titleContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
   padding: var(--spacing-s) var(--spacing-m);
 }
 
 .title {
   margin: 0;
+  min-width: 0;
   color: var(--on-surface);
   font: var(--font-title-medium);
 }

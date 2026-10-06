@@ -101,8 +101,7 @@ attendre du texte ou une image tirée d'un dossier de ressources.
 **Ses limites** — l'agent remplit un modèle, il ne conçoit pas de
 présentation : sans modèle déposé, la capacité ne fonctionne pas. Le modèle est
 vérifié au dépôt et les erreurs de repérage vous sont signalées. Un agent
-dupliqué conserve la configuration mais **pas le fichier du modèle**, qui est à
-redéposer.
+dupliqué ou copié dans une autre équipe emporte son propre exemplaire du modèle.
 
 **Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
