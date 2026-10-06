@@ -86,6 +86,11 @@ class LocalContentStore:
             payload = payload.encode("utf-8")
         path.write_bytes(payload)
 
+    def delete_object(self, key: str) -> None:
+        """Remove object `key` from disk; a missing file is a no-op."""
+
+        self._safe_under_root(key).unlink(missing_ok=True)
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:

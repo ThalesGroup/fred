@@ -180,6 +180,11 @@ class MinioContentStore:
             content_type=content_type or "application/octet-stream",
         )
 
+    def delete_object(self, key: str) -> None:
+        """Remove object `key`; S3 `remove_object` is already a no-op when missing."""
+
+        self.client.remove_object(self.object_bucket, self._normalize_key(key))
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:

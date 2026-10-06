@@ -25,6 +25,7 @@ from io import BytesIO
 import pytest
 from fred_core.store import gcs_content_store
 from fred_core.store.gcs_content_store import GcsContentStore
+from google.cloud.exceptions import NotFound
 
 
 class _FakeBlob:
@@ -37,6 +38,11 @@ class _FakeBlob:
 
     def exists(self, _client=None):
         return self.name in self._bucket
+
+    def delete(self):
+        if self.name not in self._bucket:
+            raise NotFound("missing")
+        del self._bucket[self.name]
 
 
 class _FakeBucket:
@@ -83,6 +89,23 @@ def test_put_object_normalizes_leading_slash(store_and_buckets):
     store.put_object("/teams/t1/banner.png", BytesIO(b"x"), content_type="image/png")
 
     assert "teams/t1/banner.png" in buckets["fred-objects"]
+
+
+def test_delete_object_removes_an_existing_object(store_and_buckets):
+    store, buckets = store_and_buckets
+    store.put_object("/users/u1/avatar.png", BytesIO(b"x"), content_type="image/png")
+
+    store.delete_object("/users/u1/avatar.png")
+
+    assert "users/u1/avatar.png" not in buckets["fred-objects"]
+
+
+def test_delete_object_ignores_a_missing_object(store_and_buckets):
+    store, buckets = store_and_buckets
+
+    store.delete_object("users/u1/missing.png")
+
+    assert buckets["fred-objects"] == {}
 
 
 def test_get_presigned_url_requires_signing_email(store_and_buckets):

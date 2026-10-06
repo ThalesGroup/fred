@@ -135,6 +135,20 @@ class GcsContentStore:
             "[CONTENT][GCS] put object=%s bucket='%s'", object_name, self.bucket_name
         )
 
+    def delete_object(self, key: str) -> None:
+        """Remove object `key`; a missing object is a no-op."""
+
+        object_name = self._normalize_key(key)
+        try:
+            self.bucket.blob(object_name).delete()
+        except NotFound:
+            return
+        logger.info(
+            "[CONTENT][GCS] deleted object=%s bucket='%s'",
+            object_name,
+            self.bucket_name,
+        )
+
     def _mint_access_token(self) -> str:
         """Return a valid OAuth2 access token for the IAM signBlob signing call.
 
