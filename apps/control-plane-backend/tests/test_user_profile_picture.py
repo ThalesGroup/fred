@@ -142,12 +142,12 @@ async def test_read_avatar_upload_rejects(
 
 
 @pytest.mark.asyncio
-async def test_read_avatar_upload_falls_back_to_the_mime_extension() -> None:
-    payload, content_type, extension = await read_avatar_upload(
-        _upload(_WEBP, "image/webp", filename="blob")
+async def test_read_avatar_upload_takes_the_extension_from_the_content() -> None:
+    _, content_type, extension = await read_avatar_upload(
+        _upload(_PNG, "image/png", filename="avatar.webp")
     )
 
-    assert (payload, content_type, extension) == (_WEBP, "image/webp", ".webp")
+    assert (content_type, extension) == ("image/png", ".png")
 
 
 # --- URLs on summaries ------------------------------------------------------

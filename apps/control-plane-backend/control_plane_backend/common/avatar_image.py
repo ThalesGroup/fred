@@ -16,8 +16,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import UploadFile
 
 MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024
@@ -50,8 +48,9 @@ def _detect_image_content_type(payload: bytes) -> str | None:
 async def read_avatar_upload(file: UploadFile) -> tuple[bytes, str, str]:
     """Read and validate an avatar upload; return `(payload, content_type, extension)`.
 
-    The declared type must be JPEG/PNG/WebP and match the file's magic bytes.
-    Raises `AvatarUploadError` otherwise. The caller still owns `file.close()`.
+    The declared type must be JPEG/PNG/WebP and match the file's magic bytes;
+    the extension comes from that type, never the filename. Raises
+    `AvatarUploadError` otherwise. The caller still owns `file.close()`.
     """
     payload = await file.read(MAX_AVATAR_FILE_SIZE_BYTES + 1)
     if len(payload) > MAX_AVATAR_FILE_SIZE_BYTES:
@@ -75,7 +74,8 @@ async def read_avatar_upload(file: UploadFile) -> tuple[bytes, str, str]:
             f"File content doesn't match declared content type: {detected_content_type}"
         )
 
-    extension = Path(file.filename or "").suffix.lower()
-    if not extension:
-        extension = _AVATAR_EXTENSION_BY_MIME[detected_content_type]
-    return payload, detected_content_type, extension
+    return (
+        payload,
+        detected_content_type,
+        _AVATAR_EXTENSION_BY_MIME[detected_content_type],
+    )

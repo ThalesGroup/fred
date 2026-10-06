@@ -158,6 +158,10 @@ Divergences found while implementing, all small:
   so both invalidate the whole `ControlPlaneUser` tag type (covers `ME` and the
   caller's id) plus `ControlPlaneTeam LIST`.
 - **`AvatarUploadCard`** takes a `deleteLabel` prop next to `onDelete`.
+- **Key extension from the content.** The stored key's extension now always
+  comes from the detected MIME type, never the uploaded filename, for team
+  avatars too (they used the filename suffix before). A PNG crop sent as
+  `avatar.webp` can no longer be stored under a `.webp` key.
 - **Presign scope narrowed after review.** URLs were first attached inside
   `get_users_by_ids`, so member lists, platform roles and `/users/by-ids` paid
   for presigns they never render; §5 now attaches them only for team admins and
