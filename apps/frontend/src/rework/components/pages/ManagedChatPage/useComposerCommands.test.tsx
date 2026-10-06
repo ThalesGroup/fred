@@ -52,10 +52,14 @@ const fetchPrompt = vi.fn();
 let listResult: { data?: typeof PROMPTS } = { data: PROMPTS };
 
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetAgentInstanceSkillsQuery: () => ({ currentData: skillCatalog }),
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery: () => listResult,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [fetchPrompt],
 }));
 
+let skillCatalog: { supported: boolean; skills: { name: string; description: string }[] } | undefined;
+const onRunSkill = vi.fn();
+const onSkillError = vi.fn();
 const onRunCommand = vi.fn();
 const onSend = vi.fn();
 const onResolveError = vi.fn();
@@ -65,6 +69,9 @@ function Host() {
   const [input, setInput] = useState("");
   const commands = useComposerCommands({
     teamId: "team-1",
+    agentInstanceId: "instance-1",
+    onRunSkill,
+    onSkillError,
     input,
     setInput,
     onRunCommand,
@@ -87,6 +94,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  skillCatalog = undefined;
   listResult = { data: PROMPTS };
   fetchPrompt.mockImplementation(({ promptId }: { promptId: string }) => ({
     unwrap: () => Promise.resolve({ id: promptId, text: PROMPT_TEXT[promptId] }),
@@ -403,5 +411,65 @@ describe("callback identity", () => {
     expect(latest.menu?.optionId).toBe(first.menu?.optionId);
     expect(latest.menu?.onActivate).toBe(first.menu?.onActivate);
     expect(latest.menu?.onFocusEntry).toBe(first.menu?.onFocusEntry);
+  });
+});
+
+describe("platform skills", () => {
+  function activateSkills() {
+    skillCatalog = {
+      supported: true,
+      skills: [
+        { name: "compte-rendu", description: "Meeting minutes" },
+        { name: "review", description: "Review" },
+      ],
+    };
+    act(() => root.render(<Host />));
+    act(() => textarea().focus());
+  }
+
+  it("completes a skill with Enter without sending an empty request", () => {
+    activateSkills();
+    type("/skill c");
+    expect(labels()).toEqual(["/skill compte-rendu"]);
+    press("Enter");
+    expect(textarea().value).toBe("/skill compte-rendu ");
+    expect(onSend).not.toHaveBeenCalled();
+    expect(onRunSkill).not.toHaveBeenCalled();
+    expect(fetchPrompt).not.toHaveBeenCalled();
+  });
+
+  it("sends a typed selection separately from the request", () => {
+    activateSkills();
+    type("/skill compte-rendu Notes de la réunion");
+    press("Enter");
+    expect(onRunSkill).toHaveBeenCalledWith({ text: "Notes de la réunion", skill: { name: "compte-rendu" } });
+    expect(onRunCommand).not.toHaveBeenCalled();
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("blocks bare prefix, missing request and unavailable skills", () => {
+    activateSkills();
+    type("/skill");
+    press("Escape");
+    press("Enter");
+    expect(onSkillError).toHaveBeenLastCalledWith("usage");
+    type("/skill compte-rendu ");
+    press("Escape");
+    press("Enter");
+    expect(onSkillError).toHaveBeenLastCalledWith("usage");
+    type("/skill missing notes");
+    press("Enter");
+    expect(onSkillError).toHaveBeenLastCalledWith("unavailable");
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("does not use a previous catalog when the current selection has none", () => {
+    activateSkills();
+    skillCatalog = undefined;
+    act(() => root.render(<Host />));
+    type("/skill compte-rendu notes");
+    press("Enter");
+    expect(onSkillError).toHaveBeenCalledWith("unavailable");
+    expect(onRunSkill).not.toHaveBeenCalled();
   });
 });

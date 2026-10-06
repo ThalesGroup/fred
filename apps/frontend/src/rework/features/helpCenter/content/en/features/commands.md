@@ -55,3 +55,23 @@ was actually sent, if you want to check it.
 To read or adapt a prompt before sending it, go through the library instead —
 see [Prompts](/help/en/features/prompts) and
 [Conversations](/help/en/features/chat).
+
+## Platform skills
+
+For agents whose runtime provides skills, type `/skill`, choose a skill with
+**↑/↓** and **Tab** or **Enter**, then add your request before sending. For example:
+
+`/skill compte-rendu Summarize these meeting notes: we chose option A; Alex will draft the proposal.`
+
+Selecting the skill only completes its name. Sending requires both a known name
+and a request. The catalog depends on the selected agent. The agent may also
+choose relevant skills on an ordinary request and use several before answering.
+A compact step shows the skill name and whether you, the agent or a child agent
+requested it, including after reopening the conversation.
+
+Loaded instructions remain in the conversation context and apply when relevant
+to the current request. They grant no additional tools or permissions.
+
+`/skill` is reserved. An older prompt with that command remains available in the
+library and editable; rename its command to restore its command shortcut. It
+cannot be newly assigned, imported or promoted with the reserved command.

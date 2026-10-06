@@ -15,11 +15,13 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { CommandMenuEntry } from "@shared/molecules/CommandMenu/CommandMenu";
 import type { CommandTriggerBinding } from "@shared/molecules/RichInputField/RichInputField";
+import { useTranslation } from "react-i18next";
 import {
+  useGetAgentInstanceSkillsQuery,
   useGetTeamPromptCommandsControlPlaneV1TeamsTeamIdPromptCommandsGetQuery,
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import type { TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
+import type { SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 
 /**
  * The composer's command trigger: the menu `/` opens, and the resolution of a
@@ -51,6 +53,9 @@ export interface ComposerCommandsMenu {
 
 export function useComposerCommands(params: {
   teamId: string;
+  agentInstanceId?: string;
+  onRunSkill?: (run: { text: string; skill: SkillInvocation }) => void;
+  onSkillError?: (reason: "usage" | "unavailable") => void;
   input: string;
   setInput: (value: string) => void;
   /** Sends the assembled prompt text with the descriptor on the turn's context. */
@@ -60,7 +65,15 @@ export function useComposerCommands(params: {
   /** The prompt behind a command could not be read. */
   onResolveError: () => void;
 }): { trigger: CommandTriggerBinding; menu: ComposerCommandsMenu | null; submit: () => void } {
-  const { teamId } = params;
+  const { teamId, agentInstanceId } = params;
+  const { t } = useTranslation();
+  const { currentData: catalog } = useGetAgentInstanceSkillsQuery(
+    { teamId, agentInstanceId: agentInstanceId ?? "" },
+    { skip: !teamId || !agentInstanceId, refetchOnMountOrArgChange: true },
+  );
+  const skills = catalog?.supported ? (catalog.skills ?? []) : [];
+  const skillsRef = useRef(skills);
+  skillsRef.current = skills;
   const listboxId = useId();
   const optionIdPrefix = useId();
 
@@ -80,15 +93,29 @@ export function useComposerCommands(params: {
   const [fetchPrompt] = useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery();
 
   const commands = useMemo<CommandMenuEntry[]>(
-    () =>
-      (prompts ?? []).map((prompt) => ({
-        promptId: prompt.prompt_id,
-        command: prompt.command,
-        name: prompt.name,
-        description: prompt.description,
-        emoji: prompt.emoji,
-      })),
-    [prompts],
+    () => [
+      ...(prompts ?? [])
+        .filter((prompt) => prompt.command !== "skill")
+        .map((prompt) => ({
+          promptId: prompt.prompt_id,
+          command: prompt.command,
+          name: prompt.name,
+          description: prompt.description,
+          emoji: prompt.emoji,
+        })),
+      ...(skills.length
+        ? [
+            {
+              promptId: "platform:skill",
+              command: "skill",
+              name: t("chatbot.skills.menuTitle"),
+              description: t("chatbot.skills.usage"),
+              kind: "skill" as const,
+            },
+          ]
+        : []),
+    ],
+    [prompts, skills.length, t],
   );
   const commandsRef = useRef(commands);
   commandsRef.current = commands;
@@ -104,8 +131,21 @@ export function useComposerCommands(params: {
   const [focused, setFocused] = useState(false);
 
   const entries = useMemo(
-    () => (query === null ? [] : commands.filter((entry) => entry.command.startsWith(query))),
-    [commands, query],
+    () =>
+      query === null
+        ? []
+        : query.startsWith("skill ")
+          ? skills
+              .filter((skill) => skill.name.startsWith(query.slice(6)))
+              .map((skill) => ({
+                promptId: "platform:skill:" + skill.name,
+                command: "skill " + skill.name,
+                name: skill.name,
+                description: skill.description,
+                kind: "skill" as const,
+              }))
+          : commands.filter((entry) => entry.command.startsWith(query)),
+    [commands, skills, query],
   );
   const safeIndex = entries.length === 0 ? 0 : Math.min(activeIndex, entries.length - 1);
   // Two distinct states. The panel is shown whenever the trigger is live — with
@@ -139,7 +179,7 @@ export function useComposerCommands(params: {
   const prefetchedRef = useRef(new Set<string>());
   const focusedPromptId = panelOpen && hasEntries ? (entries[safeIndex]?.promptId ?? null) : null;
   useEffect(() => {
-    if (!focusedPromptId) return;
+    if (!focusedPromptId || focusedPromptId.startsWith("platform:skill")) return;
     const key = `${teamId}:${focusedPromptId}`;
     if (prefetchedRef.current.has(key)) return;
     prefetchedRef.current.add(key);
@@ -153,8 +193,14 @@ export function useComposerCommands(params: {
 
   const run = useCallback(
     async (entry: CommandMenuEntry, appended: string) => {
+      if (entry.kind === "skill") {
+        complete(entry);
+        return;
+      }
+      const instanceAtSubmit = paramsRef.current.agentInstanceId;
       try {
         const detail = await fetchPrompt({ teamId, promptId: entry.promptId }, true).unwrap();
+        if (paramsRef.current.teamId !== teamId || paramsRef.current.agentInstanceId !== instanceAtSubmit) return;
         const text = detail.text?.trim();
         if (!text) throw new Error("empty prompt");
         paramsRef.current.onRunCommand({
@@ -167,14 +213,28 @@ export function useComposerCommands(params: {
           },
         });
       } catch {
+        if (paramsRef.current.teamId !== teamId || paramsRef.current.agentInstanceId !== instanceAtSubmit) return;
         paramsRef.current.onResolveError();
       }
     },
-    [fetchPrompt, teamId],
+    [fetchPrompt, teamId, complete],
   );
 
   const submit = useCallback(() => {
     const parsed = parseCommandLine(paramsRef.current.input);
+    if (parsed?.command === "skill") {
+      const match = /^(\S+)\s+([\s\S]+)$/.exec(parsed.appended);
+      if (!match || !match[2].trim()) {
+        paramsRef.current.onSkillError?.("usage");
+        return;
+      }
+      if (!skillsRef.current.some((skill) => skill.name === match[1]) || !paramsRef.current.onRunSkill) {
+        paramsRef.current.onSkillError?.("unavailable");
+        return;
+      }
+      paramsRef.current.onRunSkill({ text: match[2].trim(), skill: { name: match[1] } });
+      return;
+    }
     const entry = parsed ? commandsRef.current.find((candidate) => candidate.command === parsed.command) : null;
     // No command, or a token no prompt holds: the user may genuinely have
     // meant to write it, so it goes out as typed.

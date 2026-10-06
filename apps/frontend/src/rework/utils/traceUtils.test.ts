@@ -15,6 +15,7 @@
 import { describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import {
+  skillLoadOf,
   asFailedSqlQueryResult,
   asRagSearchResult,
   asSqlQueryResult,
@@ -1389,5 +1390,44 @@ describe("groupTraceEntries deduplication", () => {
     const call2 = toolCallMsg("c2", "search");
     const entries = groupTraceEntries([call1, call2]);
     expect(entries).toHaveLength(2);
+  });
+});
+
+describe("skill load history", () => {
+  it.each(["user", "agent"] as const)("retains compact %s attribution and hides successful body traces", (origin) => {
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { skill_load: { name: "compte-rendu", origin, load_id: "load", child: false } } },
+    });
+    const rows = groupTraceEntries([
+      toolCallMsg("load", "load_skill", { name: "compte-rendu" }),
+      step,
+      toolResultMsg("load", "PRIVATE BODY"),
+      step,
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe("solo");
+    expect(skillLoadOf(step)).toMatchObject({ name: "compte-rendu", origin, child: false });
+    expect(entryLabel(rows[0], (key) => key)).toBe("chatbot.skills.loaded");
+  });
+  it("retains child identity and leaves failed loads inspectable", () => {
+    const step = msg({
+      role: "system",
+      channel: "system_note",
+      metadata: {
+        extras: {
+          skill_load: { name: "compte-rendu", origin: "agent", load_id: "child:load", child: true, child_id: "child" },
+        },
+      },
+    });
+    expect(skillLoadOf(step)?.child).toBe(true);
+    const rows = groupTraceEntries([
+      step,
+      toolCallMsg("failed", "load_skill"),
+      toolResultMsg("failed", "Unavailable", false),
+    ]);
+    expect(rows).toHaveLength(2);
+    expect(rows[1].kind).toBe("combo");
   });
 });

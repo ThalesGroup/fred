@@ -32,7 +32,7 @@ import { setCachedSessionHistory } from "./sessionHistoryCache";
 import { useChatAttachments } from "./useChatAttachments";
 import { buildComposerRuntimeContext } from "./runtimeContextBuilder";
 import { reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
-import type { ChatMessage, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ChatMessage, SkillInvocation, TurnCommand } from "../../../../slices/runtime/runtimeOpenApi";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
 import { hasToolApprovalGrants, rememberToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 import { KeyCloakService } from "../../../../security/KeycloakService";
@@ -98,6 +98,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     draft: string;
     text: string;
     command?: TurnCommand;
+    skill?: SkillInvocation;
   } | null>(null);
   const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
   const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
@@ -705,7 +706,12 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // through the composer. `turnCommand` only adds the descriptor to the
   // context; every guard, session write and restore below is shared.
   const sendTurn = useCallback(
-    async (text: string, turnCommand?: TurnCommand, interrupted?: InterruptedRunChoice): Promise<boolean> => {
+    async (
+      text: string,
+      turnCommand?: TurnCommand,
+      interrupted?: InterruptedRunChoice,
+      skill?: SkillInvocation,
+    ): Promise<boolean> => {
       const attachmentContext = attachments.attachmentsMarkdown;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
@@ -809,11 +815,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // `send()` receives the trimmed wire value, but a backend rejection must
         // restore the complete editable draft, including surrounding whitespace —
         // for a command, the command line the user actually typed.
-        submittedDraftRef.current = { sessionId: sid, draft: input, text, command: turnCommand };
+        submittedDraftRef.current = { sessionId: sid, draft: input, text, command: turnCommand, skill };
         return send(
           text,
           sid,
-          turnCommand ? { ...runtimeContext, command: turnCommand } : runtimeContext,
+          { ...runtimeContext, ...(turnCommand ? { command: turnCommand } : {}), ...(skill ? { skill } : {}) },
           turnOptions,
           interrupted,
         );
@@ -852,7 +858,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // its identity across keystrokes.
   const restartLastTurn = () => {
     const submitted = submittedDraftRef.current;
-    return sendTurn(submitted?.text ?? input.trim(), submitted?.command, { action: "restart" });
+    return sendTurn(submitted?.text ?? input.trim(), submitted?.command, { action: "restart" }, submitted?.skill);
   };
   const restartLastTurnRef = useRef(restartLastTurn);
   restartLastTurnRef.current = restartLastTurn;
@@ -860,6 +866,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // Runs a prompt command: the assembled text goes on the wire, the descriptor
   // on the turn's context, and the composer keeps the short command line the
   // user typed until the turn actually starts.
+  const runSkill = useCallback(
+    async (run: { text: string; skill: SkillInvocation }) => {
+      await sendTurn(run.text, undefined, undefined, run.skill);
+    },
+    [sendTurn],
+  );
+
   const runCommand = useCallback(
     async (run: { text: string; command: TurnCommand }) => {
       await sendTurn(run.text, run.command);
@@ -1225,6 +1238,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     isHistorySettled,
     handleSend,
     runCommand,
+    runSkill,
     handleHitlAnswer,
     handleSendAllHitl,
     handleSkipAllHitl,

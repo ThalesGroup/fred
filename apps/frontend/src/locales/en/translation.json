@@ -598,6 +598,16 @@
       "empty": "No prompts in this space.",
       "emptyFilters": "No prompts match these filters.",
       "categoryLabel": "Category"
+    },
+    "skills": {
+      "menuTitle": "Skills",
+      "usage": "Use /skill <name> <request>. Select a skill, then write your request.",
+      "errorTitle": "Skill could not be used",
+      "unavailable": "This skill is unavailable for the selected agent. Check its available skills and try again.",
+      "loaded": "Skill loaded",
+      "originUser": "Requested by you",
+      "originAgent": "Selected by the agent",
+      "originChild": "Selected by a sub-agent"
     }
   },
   "comingSoon": {
@@ -2914,7 +2924,8 @@
           "commandHelp": "Launch shortcuts in the chat",
           "description": "Description",
           "name": "Name",
-          "text": "Prompt text"
+          "text": "Prompt text",
+          "commandReserved": "/skill is reserved for platform skills. Choose another command."
         },
         "loading": "Loading prompts...",
         "modalCreate": "New prompt",

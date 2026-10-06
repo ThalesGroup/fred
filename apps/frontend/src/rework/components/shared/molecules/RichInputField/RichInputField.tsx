@@ -44,7 +44,7 @@ export interface CommandTriggerBinding {
  * completion adds close the menu on its own.
  */
 export function commandQueryOf(value: string): string | null {
-  const match = /^\/(\S*)$/.exec(value);
+  const match = /^\/(skill [a-z0-9-]*|\S*)$/.exec(value);
   return match ? match[1] : null;
 }
 

@@ -167,6 +167,15 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/pod/v1/agents/sessions/${queryArg.sessionId}/messages` }),
     }),
+    getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/skills`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          team_id: queryArg.teamId,
+        },
+      }),
+    }),
     listAgentTemplatesPodV1AgentsTemplatesGet: build.query<
       ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse,
       ListAgentTemplatesPodV1AgentsTemplatesGetApiArg
@@ -320,6 +329,11 @@ export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiResponse
 export type GetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetApiArg = {
   sessionId: string;
 };
+export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetRuntimeInstanceSkillsApiArg = {
+  agentInstanceId: string;
+  teamId: string;
+};
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiResponse =
   /** status 200 Successful Response */ AgentTemplateSummary[];
 export type ListAgentTemplatesPodV1AgentsTemplatesGetApiArg = {
@@ -460,6 +474,9 @@ export type TurnCommand = {
   prompt_id?: string | null;
   prompt_name?: string | null;
 };
+export type SkillInvocation = {
+  name: string;
+};
 export type RuntimeContext = {
   access_token?: string | null;
   access_token_expires_at?: number | null;
@@ -502,6 +519,7 @@ export type RuntimeContext = {
   selected_document_libraries_ids?: string[] | null;
   selected_document_uids?: string[] | null;
   session_id?: string | null;
+  skill?: SkillInvocation | null;
   team_id?: string | null;
   template_agent_id?: string | null;
   trace_id?: string | null;
@@ -748,10 +766,20 @@ export type NodeErrorRuntimeEvent = {
   routed_to: string;
   sequence?: number;
 };
+export type SkillLoadAttribution = {
+  agent_id: string;
+  child?: boolean;
+  child_id?: string | null;
+  load_id: string;
+  name: string;
+  origin: "user" | "agent";
+  revision: string;
+};
 export type StatusRuntimeEvent = {
   detail?: string | null;
   kind?: "status";
   sequence?: number;
+  skill_load?: SkillLoadAttribution | null;
   status: string;
 };
 export type ThoughtDeltaEvent = {
@@ -990,6 +1018,15 @@ export type ChatMessage = {
   session_id: string;
   timestamp: string;
 };
+export type SkillSummary = {
+  description: string;
+  name: string;
+};
+export type SkillCatalog = {
+  revision?: string;
+  skills?: SkillSummary[];
+  supported?: boolean;
+};
 export type AssetSlot = {
   accepted_types: string[];
   key: string;
@@ -1210,6 +1247,8 @@ export const {
   useDeleteSessionFilesystemPodV1AgentsSessionsSessionIdFilesystemDeleteMutation,
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
+  useGetRuntimeInstanceSkillsQuery,
+  useLazyGetRuntimeInstanceSkillsQuery,
   useListAgentTemplatesPodV1AgentsTemplatesGetQuery,
   useLazyListAgentTemplatesPodV1AgentsTemplatesGetQuery,
 } = injectedRtkApi;

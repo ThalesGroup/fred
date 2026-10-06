@@ -542,6 +542,13 @@ export default function ManagedChatPage() {
   // menu reach the same send.
   const commands = useComposerCommands({
     teamId,
+    agentInstanceId,
+    onRunSkill: (run) => void chat.runSkill(run),
+    onSkillError: (reason) =>
+      showError({
+        summary: t("chatbot.skills.errorTitle"),
+        detail: t(reason === "usage" ? "chatbot.skills.usage" : "chatbot.skills.unavailable"),
+      }),
     input: chat.input,
     setInput: chat.setInput,
     onRunCommand: (run) => void chat.runCommand(run),

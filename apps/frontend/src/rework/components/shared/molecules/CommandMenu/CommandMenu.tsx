@@ -18,6 +18,7 @@ import styles from "./CommandMenu.module.css";
 
 /** One invocable entry. Today always a library prompt carrying a command. */
 export interface CommandMenuEntry {
+  kind?: "skill";
   promptId: string;
   command: string;
   name: string;
@@ -90,7 +91,13 @@ export const CommandMenu = memo(function CommandMenu({
     <div id={id} ref={listRef} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
       <div className={styles.group} role="group" aria-labelledby={headingId}>
         <div id={headingId} className={styles.groupTitle}>
-          {t("chatbot.commandMenu.promptsSection")}
+          {t(
+            entries.every((entry) => entry.kind === "skill")
+              ? "chatbot.skills.menuTitle"
+              : entries.some((entry) => entry.kind === "skill")
+                ? "chatbot.commandMenu.ariaLabel"
+                : "chatbot.commandMenu.promptsSection",
+          )}
         </div>
         {entries.map((entry, index) => (
           <div

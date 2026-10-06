@@ -20,6 +20,7 @@ import {
   primaryTextForEntry,
   secondaryTextForEntry,
   statusForEntry,
+  skillLoadOf,
   toolDiscriminator,
 } from "../../../../../utils/traceUtils";
 import { useTraceDrawer } from "../traceDrawerContext";
@@ -47,6 +48,24 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const label = entryLabel(entry, (key) => t(key));
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
+  const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
+  if (skill)
+    return (
+      <div className={styles.row}>
+        <DotStatus status="ok" />
+        <span className={styles.label}>{t("chatbot.skills.loaded")}</span>
+        <span className={styles.primary}>{skill.name}</span>
+        <span className={styles.secondary}>
+          {t(
+            skill.child
+              ? "chatbot.skills.originChild"
+              : skill.origin === "user"
+                ? "chatbot.skills.originUser"
+                : "chatbot.skills.originAgent",
+          )}
+        </span>
+      </div>
+    );
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
   // The turn-crash line is a solo error-channel entry (execution_error). A

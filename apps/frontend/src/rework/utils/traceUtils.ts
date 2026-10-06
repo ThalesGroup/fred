@@ -23,6 +23,20 @@ import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
 import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
 
+export function skillLoadOf(
+  message: ChatMessage,
+): { name: string; origin: "user" | "agent"; load_id: string; child: boolean } | null {
+  const extras = message.metadata?.extras as Record<string, unknown> | undefined;
+  const value = extras?.skill_load;
+  if (!value || typeof value !== "object") return null;
+  const load = value as Record<string, unknown>;
+  return typeof load.name === "string" &&
+    typeof load.load_id === "string" &&
+    (load.origin === "user" || load.origin === "agent")
+    ? { name: load.name, origin: load.origin, load_id: load.load_id, child: load.child === true }
+    : null;
+}
+
 export const TRACE_CHANNELS: Channel[] = [
   "plan",
   "thought",
@@ -521,7 +535,9 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
     case "tool_result":
       return "Tool result";
     case "system_note":
-      return "System";
+      return entry.kind === "solo" && skillLoadOf(entry.message) && translate
+        ? translate("chatbot.skills.loaded")
+        : "System";
     case "error":
       return "Error";
     default:
@@ -621,7 +637,21 @@ export function groupTraceEntries(messages: ChatMessage[]): TraceEntry[] {
     if (snapshot?.callId && !failedCallIds.has(snapshot.callId)) representedTodoCallIds.add(snapshot.callId);
   }
 
+  const skillLoads = new Set(
+    messages.flatMap((message) => {
+      const load = skillLoadOf(message);
+      return load ? [load.load_id] : [];
+    }),
+  );
+  const seenLoads = new Set<string>();
   const trace = messages.filter((m) => {
+    const load = skillLoadOf(m);
+    if (load) {
+      if (seenLoads.has(load.load_id)) return false;
+      seenLoads.add(load.load_id);
+    }
+    if ((isToolCall(m) && skillLoads.has(toolCallId(m))) || (isToolResult(m) && skillLoads.has(toolResultId(m))))
+      return false;
     if (!isTraceChannel(m.channel) || isRedundantToolUseThought(m)) return false;
     const todoSnapshot = parseWriteTodosSnapshot(m);
     if (todoSnapshot && representedTodoCallIds.has(todoSnapshot.callId)) return false;

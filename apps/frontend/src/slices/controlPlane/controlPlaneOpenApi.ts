@@ -665,6 +665,11 @@ const injectedRtkApi = api.injectEndpoints({
           },
         }),
       }),
+    getAgentInstanceSkills: build.query<GetAgentInstanceSkillsApiResponse, GetAgentInstanceSkillsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/skills`,
+      }),
+    }),
     prepareAgentExecution: build.mutation<PrepareAgentExecutionApiResponse, PrepareAgentExecutionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/prepare-execution`,
@@ -2013,6 +2018,11 @@ export type PostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRun
     run?: string | null;
     agent?: string | null;
   };
+export type GetAgentInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
+export type GetAgentInstanceSkillsApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+};
 export type PrepareAgentExecutionApiResponse = /** status 200 Successful Response */ ExecutionPreparation;
 export type PrepareAgentExecutionApiArg = {
   teamId: string;
@@ -3428,6 +3438,7 @@ export type MarketplaceImportResult = {
   team_id: string;
   prompt?: PromptSummary | null;
   error?: string | null;
+  error_code?: string | null;
 };
 export type MarketplaceImportResponse = {
   results: MarketplaceImportResult[];
@@ -3601,6 +3612,15 @@ export type RuntimeAgentExecutionPreparation = {
   team_id: string;
   /** Ingress-relative URL for POST /agents/evaluate. */
   evaluate_url: string;
+};
+export type SkillSummary = {
+  name: string;
+  description: string;
+};
+export type SkillCatalog = {
+  supported?: boolean;
+  revision?: string;
+  skills?: SkillSummary[];
 };
 export type ChatControlDescriptor = {
   capability_id: string;
@@ -4520,6 +4540,8 @@ export const {
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation,
   usePostPrepareRuntimeAgentExecutionControlPlaneV1TeamsTeamIdRuntimesRuntimeIdAgentsAgentIdPrepareExecutionPostMutation,
+  useGetAgentInstanceSkillsQuery,
+  useLazyGetAgentInstanceSkillsQuery,
   usePrepareAgentExecutionMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
