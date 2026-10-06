@@ -39,7 +39,7 @@ from pydantic import BaseModel
 def _port(port: WebResearchPort | None) -> WebResearchPort:
     if port is None:
         raise RuntimeError(
-            "Web research requires a configured egress service and activity sink."
+            "Web research requires an enabled internal engine and activity sink."
         )
     return port
 

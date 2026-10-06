@@ -296,7 +296,6 @@ class PodApplicationContext:
             self.web_research = WebResearchService(
                 policy, self._sql_engine, service_name=self.configuration.app.runtime_id
             )
-            self._kpi_tasks.append(asyncio.create_task(self.web_research.health_loop()))
         self._kpi_tasks.append(asyncio.create_task(self._purge_web_activity()))
 
     async def _purge_web_activity(self) -> None:

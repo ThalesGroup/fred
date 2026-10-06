@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Fred-owned HTTPS egress service. No user identities or activity records live here."""
+"""Internal asynchronous web research engine; no server or user activity storage."""
 
 from __future__ import annotations
 
@@ -9,50 +9,27 @@ import ipaddress
 import logging
 import os
 import re
-import secrets
 import socket
 import ssl
-import time
 import unicodedata
 from collections.abc import Awaitable, Callable
-from contextlib import asynccontextmanager
 from typing import Any, Protocol, TypeVar
-from uuid import UUID
 
 import httpcore
 import httpx
-from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
 from fred_sdk.contracts.web_research import (
     FetchArguments,
     FetchRequest,
-    SafeSearch,
     WebPage,
+    WebResearchDeploymentConfig,
     WebResearchError,
     WebResearchRequest,
     WebResearchResult,
     WebSearchRequest,
 )
 from httpcore._backends.auto import AutoBackend
-from prometheus_client import CollectorRegistry, Counter, Histogram, generate_latest
-from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
-
-
-class EgressConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    max_concurrency: int = Field(default=8, ge=1, le=32)
-    max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
-    timeout_seconds: float = Field(default=30, ge=1, le=60)
-    retries: int = Field(default=1, ge=0, le=2)
-    safesearch: SafeSearch = "on"
-    host: str = "127.0.0.1"
-    port: int = Field(default=8120, ge=1, le=65535)
-    tls_certificate: str | None = None
-    tls_key: str | None = None
-    tls_client_ca: str | None = None
 
 
 def is_public(address: str) -> bool:
@@ -234,9 +211,12 @@ class DuckDuckGoProvider:
 _T = TypeVar("_T")
 
 
-class Egress:
+class ResearchEngine:
     def __init__(
-        self, config: EgressConfig, provider: SearchProvider, client: httpx.AsyncClient
+        self,
+        config: WebResearchDeploymentConfig,
+        provider: SearchProvider,
+        client: httpx.AsyncClient,
     ) -> None:
         self.config = config
         self.provider = provider
@@ -457,160 +437,56 @@ def select_passages(content: str, focus: str, count: int) -> str:
     return "\n\n".join(blocks[index] for index in indices) if indices else content
 
 
-def create_app(
-    config: EgressConfig,
-    *,
-    token: str,
-    provider: SearchProvider | None = None,
-    client: httpx.AsyncClient | None = None,
-) -> FastAPI:
-    if len(token) < 32:
-        raise RuntimeError("A service token of at least 32 characters is required.")
-    # These libraries can log queries, URLs or extracted text. Their diagnostic
-    # output is not a permitted telemetry stream in this service.
+class ProxyTransport(httpx.AsyncHTTPTransport):
+    """Preflight public destinations; the forward proxy enforces final DNS policy."""
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        try:
+            FetchArguments(url=str(request.url))
+        except ValueError:
+            raise WebResearchError("unsafe_destination") from None
+        await resolve_public(
+            request.url.host,
+            request.url.port or (443 if request.url.scheme == "https" else 80),
+        )
+        return await super().handle_async_request(request)
+
+
+def create_engine(config: WebResearchDeploymentConfig) -> ResearchEngine:
+    # Diagnostic libraries can include raw queries/URLs; only Fred's metadata
+    # metrics and restricted activity store are authorized to observe requests.
     for name in ("trafilatura", "httpx", "httpcore"):
         library_logger = logging.getLogger(name)
         library_logger.handlers = [logging.NullHandler()]
         library_logger.propagate = False
-    outbound = client or httpx.AsyncClient(
-        transport=PublicTransport(config.max_concurrency),
+    if config.proxy_url:
+        credentials = None
+        if config.proxy_auth_env:
+            secret = os.getenv(config.proxy_auth_env, "")
+            username, separator, password = secret.partition(":")
+            if not separator or not username or not password:
+                raise RuntimeError(
+                    "Configured web research proxy credentials are missing or invalid."
+                )
+            credentials = (username, password)
+        proxy_tls = (
+            ssl.create_default_context(cafile=config.proxy_ca_file)
+            if config.proxy_url.startswith("https://")
+            else None
+        )
+        proxy = httpx.Proxy(config.proxy_url, auth=credentials, ssl_context=proxy_tls)
+        transport: httpx.AsyncHTTPTransport = ProxyTransport(
+            proxy=proxy,
+            verify=ssl.create_default_context(),
+            trust_env=False,
+            limits=httpx.Limits(max_connections=config.max_concurrency),
+        )
+    else:
+        transport = PublicTransport(config.max_concurrency)
+    client = httpx.AsyncClient(
+        transport=transport,
         timeout=config.timeout_seconds,
         follow_redirects=False,
         trust_env=False,
     )
-    egress = Egress(
-        config, provider or DuckDuckGoProvider(outbound, config.max_bytes), outbound
-    )
-    slots = asyncio.Semaphore(config.max_concurrency)
-    registry = CollectorRegistry()
-    requests = Counter(
-        "fred_web_egress_requests_total",
-        "Egress operations",
-        ["operation", "outcome"],
-        registry=registry,
-    )
-    duration = Histogram(
-        "fred_web_egress_duration_seconds",
-        "Egress latency",
-        ["operation"],
-        registry=registry,
-    )
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        yield
-        await outbound.aclose()
-
-    app = FastAPI(title="Fred web egress", version="1", lifespan=lifespan)
-
-    @app.middleware("http")
-    async def authenticate_and_bound(request: Request, call_next: Any) -> Response:
-        if not secrets.compare_digest(
-            request.headers.get("authorization", "").encode(),
-            f"Bearer {token}".encode(),
-        ):
-            return JSONResponse({"error_code": "rejected"}, status_code=401)
-        # Bound the body before FastAPI/Pydantic parses it, including chunked requests.
-        body = bytearray()
-        async for chunk in request.stream():
-            body.extend(chunk)
-            if len(body) > 128 * 1024:
-                return JSONResponse({"error_code": "rejected"}, status_code=413)
-        request._body = bytes(body)
-        return await call_next(request)
-
-    @app.exception_handler(RequestValidationError)
-    async def invalid_arguments(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
-        return JSONResponse({"error_code": "rejected"}, status_code=422)
-
-    @app.get("/health")
-    async def health() -> dict[str, str]:
-        return {"status": "ok"}
-
-    @app.get("/metrics")
-    async def metrics() -> Response:
-        return Response(
-            generate_latest(registry), media_type="text/plain; version=0.0.4"
-        )
-
-    @app.post("/v1/research", response_model=WebResearchResult)
-    async def research(
-        request: WebResearchRequest, x_request_id: str = Header()
-    ) -> Any:
-        try:
-            UUID(x_request_id)
-        except ValueError:
-            raise HTTPException(status_code=422, detail="invalid_correlation") from None
-        if slots.locked():
-            requests.labels(operation=request.operation, outcome="busy").inc()
-            return JSONResponse({"error_code": "busy"}, status_code=429)
-        started = time.monotonic()
-        outcome = "failed"
-        try:
-            async with slots, asyncio.timeout(config.timeout_seconds):
-                result = await egress.execute(request)
-                outcome = "succeeded"
-                return result
-        except WebResearchError as exc:
-            return JSONResponse(
-                {"error_code": exc.code},
-                status_code=400 if exc.code == "unsafe_destination" else 502,
-            )
-        except (TimeoutError, httpx.TimeoutException):
-            return JSONResponse({"error_code": "timed_out"}, status_code=504)
-        except asyncio.CancelledError:
-            outcome = "cancelled"
-            raise
-        except Exception:  # noqa: BLE001 -- HTTP privacy boundary: sanitize unexpected provider/parser failures.
-            return JSONResponse({"error_code": "unavailable"}, status_code=502)
-        finally:
-            requests.labels(operation=request.operation, outcome=outcome).inc()
-            duration.labels(operation=request.operation).observe(
-                time.monotonic() - started
-            )
-            logger.info(
-                "event=web_egress operation=%s outcome=%s request_id=%s duration_ms=%d",
-                request.operation,
-                outcome,
-                x_request_id,
-                int((time.monotonic() - started) * 1000),
-            )
-
-    return app
-
-
-def main() -> None:
-    import logging
-    from pathlib import Path
-
-    import uvicorn
-    import yaml
-    from fred_pod.common.config_files import ConfigFiles
-
-    quiet = logging.getLogger("fred.web_egress.config")
-    quiet.disabled = True
-    files = ConfigFiles(logger=quiet)
-    try:
-        files.load_environment()
-        config = EgressConfig.model_validate(
-            yaml.safe_load(Path(files.resolve_config_file_path()).read_text()) or {}
-        )
-    except (OSError, ValueError, TypeError, yaml.YAMLError):
-        raise RuntimeError("Invalid web egress configuration.") from None
-    app = create_app(config, token=os.getenv("WEB_RESEARCH_EGRESS_TOKEN", ""))
-    uvicorn.run(
-        app,
-        host=config.host,
-        port=config.port,
-        ssl_certfile=config.tls_certificate,
-        ssl_keyfile=config.tls_key,
-        ssl_ca_certs=config.tls_client_ca,
-        ssl_cert_reqs=ssl.CERT_REQUIRED if config.tls_client_ca else ssl.CERT_NONE,
-        access_log=False,
-    )
-
-
-if __name__ == "__main__":
-    main()
+    return ResearchEngine(config, DuckDuckGoProvider(client, config.max_bytes), client)

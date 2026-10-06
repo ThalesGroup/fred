@@ -1,17 +1,18 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
-from uuid import uuid4
 
 import httpx
 import pytest
-from fred_capability_web_research.egress import (
-    EgressConfig,
+from fred_capability_web_research.research import (
     PublicNetworkBackend,
-    create_app,
     is_public,
 )
-from fred_sdk.contracts.web_research import WebPage, WebResearchError
+from fred_sdk.contracts.web_research import (
+    WebPage,
+    WebResearchDeploymentConfig,
+    WebResearchError,
+)
 
 
 class Provider:
@@ -54,9 +55,9 @@ async def test_tcp_connect_uses_only_vetted_address_and_preserves_hostname_above
         assert host == "8.8.8.8"
         return object()
 
-    monkeypatch.setattr("fred_capability_web_research.egress.resolve_public", resolve)
+    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", resolve)
     monkeypatch.setattr(
-        "fred_capability_web_research.egress.AutoBackend.connect_tcp", connect
+        "fred_capability_web_research.research.AutoBackend.connect_tcp", connect
     )
     await PublicNetworkBackend().connect_tcp("example.com", 443)
     assert calls == [("example.com", 443)]
@@ -64,7 +65,7 @@ async def test_tcp_connect_uses_only_vetted_address_and_preserves_hostname_above
 
 @pytest.mark.asyncio
 async def test_mixed_dns_record_is_rejected_before_connection(monkeypatch):
-    from fred_capability_web_research.egress import resolve_public
+    from fred_capability_web_research.research import resolve_public
 
     async def addresses(*args, **kwargs):
         return [(2, 1, 6, "", ("8.8.8.8", 443)), (2, 1, 6, "", ("10.0.0.1", 443))]
@@ -75,40 +76,29 @@ async def test_mixed_dns_record_is_rejected_before_connection(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_authentication_safesearch_floor_and_bounded_body(monkeypatch, caplog):
+async def test_safesearch_floor_in_internal_engine(monkeypatch):
+    from fred_capability_web_research.research import ResearchEngine
+    from fred_sdk.contracts.web_research import WebSearchRequest
+
     async def resolve(host, port):
         return "8.8.8.8"
 
-    monkeypatch.setattr("fred_capability_web_research.egress.resolve_public", resolve)
+    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", resolve)
     provider = Provider()
-    token = "test-service-token-01234567890123456789"  # pragma: allowlist secret
-    app = create_app(EgressConfig(), token=token, provider=provider)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="https://egress"
-    ) as client:
-        headers = {"Authorization": f"Bearer {token}", "X-Request-ID": str(uuid4())}
-        payload = {
-            "operation": "web_search",
-            "query": "PRIVATE-QUERY",
-            "safesearch": "off",
-        }
-        assert (await client.post("/v1/research", json=payload)).status_code == 401
-        response = await client.post("/v1/research", json=payload, headers=headers)
-        assert response.status_code == 200
-        assert response.json()["safesearch"] == "on"
+    async with httpx.AsyncClient() as client:
+        engine = ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), provider, client
+        )
+        result = await engine.execute(
+            WebSearchRequest(query="PRIVATE-QUERY", safesearch="off")
+        )
+        assert result.safesearch == "on"
         assert provider.requests[0].safesearch == "on"
-        assert (
-            await client.post(
-                "/v1/research", content=b"x" * (128 * 1024 + 1), headers=headers
-            )
-        ).status_code == 413
-        assert "PRIVATE-QUERY" not in caplog.text
-        assert token not in caplog.text
 
 
 @pytest.mark.asyncio
 async def test_redirects_are_checked_and_binary_responses_rejected(monkeypatch):
-    from fred_capability_web_research.egress import Egress
+    from fred_capability_web_research.research import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     calls = []
@@ -120,7 +110,9 @@ async def test_redirects_are_checked_and_binary_responses_rejected(monkeypatch):
         raise AssertionError("unsafe redirect connected")
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        egress = Egress(EgressConfig(), Provider(), client)
+        egress = ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), Provider(), client
+        )
         with pytest.raises(WebResearchError, match="unsafe_destination"):
             await egress.fetch(FetchRequest(url="https://example.com"))
     assert len(calls) == 1
@@ -128,7 +120,7 @@ async def test_redirects_are_checked_and_binary_responses_rejected(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_text_fetch_is_bounded_and_focus_selects_passages():
-    from fred_capability_web_research.egress import Egress
+    from fred_capability_web_research.research import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     def respond(request):
@@ -140,7 +132,9 @@ async def test_text_fetch_is_bounded_and_focus_selects_passages():
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        page = await Egress(EgressConfig(), Provider(), client).fetch(
+        page = await ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), Provider(), client
+        ).fetch(
             FetchRequest(url="https://example.com", focus="evidence", max_passages=1)
         )
     assert page.content == "Evidence first"
@@ -150,7 +144,7 @@ async def test_text_fetch_is_bounded_and_focus_selects_passages():
 async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
     from urllib.parse import parse_qs
 
-    from fred_capability_web_research.egress import DuckDuckGoProvider, Egress
+    from fred_capability_web_research.research import DuckDuckGoProvider, ResearchEngine
     from fred_sdk.contracts.web_research import WebSearchRequest
 
     def respond(request):
@@ -165,7 +159,9 @@ async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        egress = Egress(EgressConfig(), Provider(), client)
+        egress = ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), Provider(), client
+        )
         provider = DuckDuckGoProvider(client, 5000)
         pages = await provider.search(WebSearchRequest(query="query"), egress.in_thread)
         assert pages[0].url == "https://example.com"
@@ -174,7 +170,7 @@ async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
 
 @pytest.mark.asyncio
 async def test_cookies_not_forwarded_across_users_or_redirects():
-    from fred_capability_web_research.egress import Egress
+    from fred_capability_web_research.research import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     calls = []
@@ -197,7 +193,9 @@ async def test_cookies_not_forwarded_across_users_or_redirects():
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
-        egress = Egress(EgressConfig(), Provider(), client)
+        egress = ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), Provider(), client
+        )
         await egress.fetch(FetchRequest(url="https://first.example.com"))
         await egress.fetch(FetchRequest(url="https://second.example.com"))
     assert calls == ["first.example.com", "second.example.com", "second.example.com"]
@@ -205,7 +203,7 @@ async def test_cookies_not_forwarded_across_users_or_redirects():
 
 @pytest.mark.asyncio
 async def test_binary_and_encoded_responses_fail_closed():
-    from fred_capability_web_research.egress import Egress
+    from fred_capability_web_research.research import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     for headers in [
@@ -219,17 +217,19 @@ async def test_binary_and_encoded_responses_fail_closed():
                 )
             )
         ) as client:
-            egress = Egress(EgressConfig(), Provider(), client)
+            egress = ResearchEngine(
+                WebResearchDeploymentConfig(enabled=True), Provider(), client
+            )
             with pytest.raises(WebResearchError, match="unsupported_content"):
                 await egress.fetch(FetchRequest(url="https://example.com"))
 
 
 @pytest.mark.asyncio
-async def test_valid_unicode_fetch_arguments_fit_request_wire_budget():
-    import json
+async def test_valid_unicode_arguments_need_no_wire_serialization():
+    from fred_capability_web_research.research import ResearchEngine
+    from fred_sdk.contracts.web_research import FetchRequest
 
-    token = "test-service-token-01234567890123456789"  # pragma: allowlist secret
-    outbound = httpx.AsyncClient(
+    async with httpx.AsyncClient(
         transport=httpx.MockTransport(
             lambda request: httpx.Response(
                 200,
@@ -237,27 +237,11 @@ async def test_valid_unicode_fetch_arguments_fit_request_wire_budget():
                 stream=httpx.ByteStream(b"public"),
             )
         )
-    )
-    app = create_app(EgressConfig(), token=token, provider=Provider(), client=outbound)
-    payload = {
-        "operation": "fetch_url",
-        "url": "https://example.com/" + "😀" * 4000,
-        "focus": "😀" * 2048,
-    }
-    async with (
-        outbound,
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="https://egress"
-        ) as client,
-    ):
-        response = await client.post(
-            "/v1/research",
-            content=json.dumps(payload),
-            headers={
-                "Authorization": f"Bearer {token}",
-                "X-Request-ID": str(uuid4()),
-                "Content-Type": "application/json",
-            },
+    ) as client:
+        engine = ResearchEngine(
+            WebResearchDeploymentConfig(enabled=True), Provider(), client
         )
-        assert response.status_code == 200
-        assert response.json()["results"][0]["content"] == "public"
+        result = await engine.execute(
+            FetchRequest(url="https://example.com/" + "😀" * 4000, focus="😀" * 2048)
+        )
+        assert result.results[0].content == "public"

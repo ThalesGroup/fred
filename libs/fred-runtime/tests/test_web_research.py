@@ -1,7 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
-import json
 from datetime import timedelta
 
 import httpx
@@ -30,28 +29,29 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 @pytest_asyncio.fixture
 async def service(monkeypatch):
-    monkeypatch.setenv(
-        "WEB_RESEARCH_EGRESS_TOKEN", "test-service-token-01234567890123456789"
-    )
+    async def resolve(host, port):
+        return "8.8.8.8"
+
+    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", resolve)
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
         await connection.run_sync(WebResearchActivityBase.metadata.create_all)
 
     async def reply(request):
         assert "user_id" not in request.content.decode()
-        assert request.headers["x-request-id"]
+        assert "authorization" not in request.headers
         return httpx.Response(
             200,
-            json={
-                "results": [{"url": "https://example.com", "snippet": "PAGE-CONTENT"}]
-            },
+            stream=httpx.ByteStream(
+                b'<div class="result"><a class="result__a" href="https://example.com">Source</a><a class="result__snippet">PAGE-CONTENT</a></div>'
+            ),
         )
 
     client = httpx.AsyncClient(
-        transport=httpx.MockTransport(reply), base_url="https://egress/"
+        transport=httpx.MockTransport(reply),
     )
     backend = WebResearchService(
-        WebResearchDeploymentConfig(enabled=True, egress_url="https://egress"),
+        WebResearchDeploymentConfig(enabled=True),
         engine,
         client=client,
     )
@@ -113,7 +113,9 @@ async def test_activity_failure_prevents_egress(service, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_cancelled_call_keeps_terminal_outcome_and_user_erasure(service):
+async def test_cancelled_call_keeps_terminal_outcome_and_user_erasure(
+    service, monkeypatch
+):
     backend, _ = service
     started = asyncio.Event()
 
@@ -122,10 +124,9 @@ async def test_cancelled_call_keeps_terminal_outcome_and_user_erasure(service):
         await asyncio.Event().wait()
         return httpx.Response(200)
 
-    await backend.client.aclose()
-    backend.client = httpx.AsyncClient(
-        transport=httpx.MockTransport(blocked), base_url="https://egress/"
-    )
+    await backend.research.client.aclose()
+    backend.research.client = httpx.AsyncClient(transport=httpx.MockTransport(blocked))
+    monkeypatch.setattr(backend.research.provider, "client", backend.research.client)
     task = asyncio.create_task(
         backend.bind(binding()).execute(WebSearchRequest(query="PRIVATE-QUERY"))
     )
@@ -139,13 +140,17 @@ async def test_cancelled_call_keeps_terminal_outcome_and_user_erasure(service):
     assert await backend.store.list(user_id="user", limit=10) == []
 
 
-def test_egress_configuration_requires_verified_https():
-    with pytest.raises(ValueError):
-        WebResearchDeploymentConfig(egress_url="http://untrusted")
+def test_proxy_configuration_rejects_embedded_credentials_and_old_service_fields():
     with pytest.raises(ValueError):
         WebResearchDeploymentConfig(
-            egress_url="https://secret:token@egress"  # pragma: allowlist secret
+            proxy_url="https://secret:token@proxy"  # pragma: allowlist secret
         )
+    with pytest.raises(ValueError):
+        WebResearchDeploymentConfig.model_validate(
+            {"egress_url": "https://old-service"}
+        )
+    with pytest.raises(ValueError):
+        WebResearchDeploymentConfig(proxy_auth_env="PROXY_AUTH")
 
 
 @pytest.mark.asyncio
@@ -178,34 +183,37 @@ async def test_erasure_fences_late_begin_and_is_shared_by_new_store(service):
 
 
 @pytest.mark.asyncio
-async def test_valid_combined_unicode_response_within_wire_budget(service):
-    from fred_sdk.contracts.web_research import SearchAndFetchRequest
+async def test_busy_call_is_recorded_without_dispatch(service):
+    backend, _ = service
+    backend._slots = asyncio.Semaphore(0)
+    with pytest.raises(WebResearchError, match="busy"):
+        await backend.bind(binding()).execute(WebSearchRequest(query="query"))
+    rows = await backend.store.list(user_id="user", limit=10)
+    assert rows[0].outcome == "failed" and rows[0].error_code == "busy"
+
+
+@pytest.mark.asyncio
+async def test_native_tool_calls_internal_engine(service):
+    from fred_capability_web_research.capability import WebResearchCapability
+    from fred_sdk.contracts.capability import (
+        CapabilityContext,
+        CapabilityIdentity,
+        EmptyModel,
+    )
+    from fred_sdk.contracts.runtime import RuntimeServices
 
     backend, _ = service
-    await backend.client.aclose()
-    backend.client = httpx.AsyncClient(
-        transport=httpx.MockTransport(
-            lambda request: httpx.Response(
-                200,
-                content=json.dumps(
-                    {
-                        "results": [
-                            {
-                                "url": "https://example.com/" + "😀" * 4000,
-                                "final_url": "https://example.com/" + "😀" * 4000,
-                                "title": "😀" * 512,
-                                "snippet": "😀" * 2000,
-                                "content": "😀" * 50_000,
-                            }
-                            for _ in range(10)
-                        ]
-                    }
-                ),
-            )
-        ),
-        base_url="https://egress/",
+    tools = WebResearchCapability().tools(
+        CapabilityContext(
+            identity=CapabilityIdentity(user_id="user"),
+            config=EmptyModel(),
+            turn_options=EmptyModel(),
+            services=RuntimeServices(web_research=backend.bind(binding())),
+        )
     )
-    result = await backend.bind(binding()).execute(
-        SearchAndFetchRequest(query="query", max_results=10, max_chars_per_page=50_000)
+    result = await next(tool for tool in tools if tool.name == "web_search").ainvoke(
+        {"query": "PRIVATE-QUERY"}
     )
-    assert len(result.results) == 10
+    assert "PAGE-CONTENT" in str(result)
+    rows = await backend.store.list(user_id="user", limit=10)
+    assert len(rows) == 1 and rows[0].outcome == "succeeded"

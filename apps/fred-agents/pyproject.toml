@@ -21,7 +21,7 @@ dependencies = [
   "fred-capability-document-access>=0.1.0",
   # Default MCP catalog and instructions, discovered through fred.mcp_catalogs.
   "fred-capability-mcp>=0.1.0",
-  "fred-capability-web-research[egress]>=0.1.0",
+  "fred-capability-web-research>=0.1.0",
   "uvicorn>=0.35",
 ]
 

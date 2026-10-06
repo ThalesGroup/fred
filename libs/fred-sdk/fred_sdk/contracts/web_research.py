@@ -1,6 +1,6 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Bounded web research wire contract; deployment and identity stay outside tools."""
+"""Bounded web research contract; deployment and identity stay outside tools."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 SafeSearch = Literal["on", "moderate", "off"]
 Freshness = Literal["d", "w", "m", "y"]
@@ -139,33 +139,47 @@ class WebResearchDeploymentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    egress_url: str | None = None
-    token_env: str = Field(
-        default="WEB_RESEARCH_EGRESS_TOKEN", pattern=r"^[A-Z][A-Z0-9_]+$"
-    )
-    ca_file: str | None = None
-    client_certificate: str | None = None
-    client_key: str | None = None
+    proxy_url: str | None = None
+    proxy_auth_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
+    proxy_ca_file: str | None = None
+    max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
+    retries: int = Field(default=1, ge=0, le=2)
+    safesearch: SafeSearch = "on"
     timeout_seconds: float = Field(default=60, ge=5, le=120)
     max_concurrency: int = Field(default=4, ge=1, le=32)
     activity_retention_days: int = Field(default=30, ge=1, le=365)
     purge_interval_seconds: int = Field(default=60, ge=5, le=3600)
 
-    @field_validator("egress_url")
+    @field_validator("proxy_url")
     @classmethod
-    def https_endpoint(cls, value: str | None) -> str | None:
+    def proxy_endpoint(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        parsed = urlsplit(value)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-        ):
+        try:
+            parsed = urlsplit(value)
+            valid = (
+                parsed.scheme in {"http", "https"}
+                and bool(parsed.hostname)
+                and parsed.username is None
+                and parsed.password is None
+                and not parsed.query
+                and not parsed.fragment
+                and parsed.path in {"", "/"}
+                and not any(char.isspace() for char in value)
+                and (parsed.port is None or 1 <= parsed.port <= 65535)
+            )
+        except ValueError:
+            valid = False
+        if not valid:
             raise ValueError(
-                "Web research egress must use HTTPS without embedded credentials."
+                "Invalid forward proxy endpoint; credentials belong in the secret environment."
             )
         return value.rstrip("/")
+
+    @model_validator(mode="after")
+    def proxy_material(self) -> WebResearchDeploymentConfig:
+        if (self.proxy_auth_env or self.proxy_ca_file) and not self.proxy_url:
+            raise ValueError("Proxy credentials and CA require a proxy endpoint.")
+        if self.proxy_ca_file and not (self.proxy_url or "").startswith("https://"):
+            raise ValueError("A proxy CA requires an HTTPS proxy.")
+        return self

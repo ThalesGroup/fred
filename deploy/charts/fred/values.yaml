@@ -828,11 +828,12 @@ applications:
       # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
       web_research:
         enabled: false
-        egress_url: null # e.g. https://web-egress.dmz.example:8120
-        token_env: WEB_RESEARCH_EGRESS_TOKEN
-        ca_file: null
-        client_certificate: null
-        client_key: null
+        proxy_url: null # Direct when null; e.g. https://proxy.dmz.example:3128
+        proxy_auth_env: null # Optional env var containing Basic username:password
+        proxy_ca_file: null # Optional private CA for an HTTPS proxy
+        max_bytes: 5242880
+        retries: 1
+        safesearch: "on"
         timeout_seconds: 60
         max_concurrency: 4
         activity_retention_days: 30

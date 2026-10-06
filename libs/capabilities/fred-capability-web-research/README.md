@@ -1,11 +1,12 @@
 # Native web research
 
 Installing this package registers `web_research` through `fred.capabilities`.
-The agent uses `web_search`, `fetch_url` and `search_and_fetch` through the typed
-SDK port; deployment policy, service credentials and user identity are never
-model arguments. Fred Agents installs the package, with the egress extra, so
-the same Fred image can also run the egress process in a DMZ.
+The runtime executes search and extraction internally using the typed SDK port.
+Deployment configuration and user identity stay outside model arguments.
 
-Deployment, monitoring and retention instructions are in
-[the operator note](../../../docs/swift/ops/migrations/2980-native-web-research.md).
-No MCP server registration is involved.
+Enable `web_research.enabled` and start Fred normally: no extra process, MCP
+server, local certificate or service token. Without `proxy_url`, outbound access
+is direct. An explicitly configured HTTP(S) forward proxy routes all research
+traffic; its operator enforces the final DNS/destination policy.
+
+See [activation, proxy and retention instructions](../../../docs/swift/ops/migrations/2980-native-web-research.md).

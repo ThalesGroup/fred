@@ -1327,7 +1327,7 @@
           "title": "Enabled",
           "type": "boolean"
         },
-        "egress_url": {
+        "proxy_url": {
           "anyOf": [
             {
               "type": "string"
@@ -1337,49 +1337,56 @@
             }
           ],
           "default": null,
-          "title": "Egress Url"
+          "title": "Proxy Url"
         },
-        "token_env": {
-          "default": "WEB_RESEARCH_EGRESS_TOKEN",
-          "pattern": "^[A-Z][A-Z0-9_]+$",
-          "title": "Token Env",
+        "proxy_auth_env": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][A-Z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy Auth Env"
+        },
+        "proxy_ca_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Proxy Ca File"
+        },
+        "max_bytes": {
+          "default": 5242880,
+          "maximum": 10485760,
+          "minimum": 1024,
+          "title": "Max Bytes",
+          "type": "integer"
+        },
+        "retries": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer"
+        },
+        "safesearch": {
+          "default": "on",
+          "enum": [
+            "on",
+            "moderate",
+            "off"
+          ],
+          "title": "Safesearch",
           "type": "string"
-        },
-        "ca_file": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Ca File"
-        },
-        "client_certificate": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Client Certificate"
-        },
-        "client_key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Client Key"
         },
         "timeout_seconds": {
           "default": 60,

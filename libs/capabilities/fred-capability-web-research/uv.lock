@@ -619,26 +619,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
+    { name = "httpcore" },
+    { name = "httpx" },
     { name = "langchain-core" },
     { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "fastapi" },
-    { name = "httpcore" },
-    { name = "httpx" },
-    { name = "prometheus-client" },
     { name = "trafilatura" },
-    { name = "uvicorn" },
-]
-egress = [
-    { name = "fastapi" },
-    { name = "httpcore" },
-    { name = "httpx" },
-    { name = "prometheus-client" },
-    { name = "trafilatura" },
-    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -646,7 +631,6 @@ dev = [
     { name = "bandit" },
     { name = "basedpyright" },
     { name = "detect-secrets" },
-    { name = "fred-capability-web-research", extra = ["egress"] },
     { name = "fred-runtime", extra = ["app"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -657,25 +641,19 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", marker = "extra == 'egress'", specifier = ">=0.139.0" },
-    { name = "fred-capability-web-research", extras = ["egress"], marker = "extra == 'dev'" },
     { name = "fred-sdk", extras = ["agents"], editable = "../../fred-sdk" },
-    { name = "httpcore", marker = "extra == 'egress'", specifier = ">=1.0.9,<2" },
-    { name = "httpx", marker = "extra == 'egress'", specifier = ">=0.28.1,<0.29" },
+    { name = "httpcore", specifier = ">=1.0.9,<2" },
+    { name = "httpx", specifier = ">=0.28.1,<0.29" },
     { name = "langchain-core", specifier = ">=1.6.5" },
-    { name = "prometheus-client", marker = "extra == 'egress'", specifier = ">=0.21" },
     { name = "pydantic", specifier = ">=2.7,<3" },
-    { name = "trafilatura", marker = "extra == 'egress'", specifier = ">=2.0,<3" },
-    { name = "uvicorn", marker = "extra == 'egress'", specifier = ">=0.35" },
+    { name = "trafilatura", specifier = ">=2.0,<3" },
 ]
-provides-extras = ["egress", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.8.6" },
     { name = "basedpyright", specifier = "==1.31.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
-    { name = "fred-capability-web-research", extras = ["egress"] },
     { name = "fred-runtime", extras = ["app"], editable = "../../fred-runtime" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },
@@ -886,6 +864,7 @@ dev = [
     { name = "bandit", specifier = ">=1.8.6" },
     { name = "basedpyright", specifier = "==1.31.0" },
     { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "fred-capability-web-research", editable = "." },
     { name = "httpx2", specifier = ">=2.13.1" },
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-asyncio", specifier = ">=1.2.0" },

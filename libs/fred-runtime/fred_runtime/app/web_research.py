@@ -1,14 +1,11 @@
 # Copyright Thales 2026
 # SPDX-License-Identifier: Apache-2.0
-"""Pod-lifetime HTTPS client and per-user adapter for the web research SDK port."""
+"""Pod-lifetime internal engine and per-user adapter for the web research SDK port."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
-import ssl
 import time
 from uuid import uuid4
 
@@ -21,7 +18,7 @@ from fred_sdk.contracts.web_research import (
     WebResearchRequest,
     WebResearchResult,
 )
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import Counter, Histogram
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fred_runtime.app.web_research_activity import (
@@ -45,9 +42,6 @@ ACTIVITY_FAILURES = Counter(
     "Restricted activity sink errors",
     ["service", "stage"],
 )
-EGRESS_UP = Gauge(
-    "fred_web_research_egress_up", "Authenticated HTTPS egress health", ["service"]
-)
 
 
 class WebResearchService:
@@ -59,50 +53,35 @@ class WebResearchService:
         client: httpx.AsyncClient | None = None,
         service_name: str = "fred",
     ) -> None:
-        if not config.enabled or not config.egress_url:
-            raise RuntimeError(
-                "Enabled web research requires an HTTPS egress endpoint."
-            )
-        token = os.getenv(config.token_env, "")
-        if len(token) < 32:
-            raise RuntimeError("Web research service credentials are required.")
+        if not config.enabled:
+            raise RuntimeError("Web research is disabled.")
         if engine.echo:
             raise RuntimeError(
                 "Web research activity requires SQL statement logging to be disabled."
             )
-        tls = ssl.create_default_context(cafile=config.ca_file)
-        if config.client_certificate:
-            tls.load_cert_chain(config.client_certificate, config.client_key)
+        from fred_capability_web_research.research import (
+            DuckDuckGoProvider,
+            ResearchEngine,
+            create_engine,
+        )
+
         self.config = config
         self.service_name = service_name
         self.store = WebResearchActivityStore(engine, config.activity_retention_days)
-        self.client = client or httpx.AsyncClient(
-            base_url=config.egress_url + "/",
-            verify=tls,
-            timeout=config.timeout_seconds,
-            follow_redirects=False,
-            trust_env=False,
-            limits=httpx.Limits(max_connections=config.max_concurrency),
-            headers={"Authorization": f"Bearer {token}"},
+        self.research = (
+            ResearchEngine(config, DuckDuckGoProvider(client, config.max_bytes), client)
+            if client is not None
+            else create_engine(config)
         )
         self._slots = asyncio.Semaphore(config.max_concurrency)
 
     def bind(self, binding: BoundRuntimeContext) -> WebResearchPort:
         return WebResearchAdapter(self, binding)
 
-    async def health_loop(self) -> None:
-        while True:
-            try:
-                response = await self.client.get("health", timeout=5)
-                EGRESS_UP.labels(service=self.service_name).set(
-                    int(response.status_code == 200)
-                )
-            except Exception:
-                EGRESS_UP.labels(service=self.service_name).set(0)
-            await asyncio.sleep(self.config.purge_interval_seconds)
-
     async def close(self) -> None:
-        await self.client.aclose()
+        await self.research.client.aclose()
+        if self.research.pending:
+            await asyncio.gather(*self.research.pending, return_exceptions=True)
 
 
 class WebResearchAdapter(WebResearchPort):
@@ -153,27 +132,10 @@ class WebResearchAdapter(WebResearchPort):
         cancelled = False
         try:
             async with asyncio.timeout(service.config.timeout_seconds):
-                async with (
-                    service._slots,
-                    service.client.stream(
-                        "POST",
-                        "v1/research",
-                        json=request.model_dump(),
-                        headers={"X-Request-ID": request_id},
-                    ) as response,
-                ):
-                    body = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        body.extend(chunk)
-                        if len(body) > 8_000_000:
-                            raise WebResearchError("invalid_response")
-                    if response.status_code != 200:
-                        try:
-                            code = json.loads(body).get("error_code", "unavailable")
-                        except (ValueError, AttributeError):
-                            code = "unavailable"
-                        raise WebResearchError(code)
-                    result = WebResearchResult.model_validate_json(body)
+                if service._slots.locked():
+                    raise WebResearchError("busy")
+                async with service._slots:
+                    result = await service.research.execute(request)
         except (TimeoutError, httpx.TimeoutException):
             error = WebResearchError("timed_out")
         except httpx.HTTPError:
@@ -219,7 +181,13 @@ class WebResearchAdapter(WebResearchPort):
         REQUESTS.labels(
             service=service.service_name,
             operation=request.operation,
-            outcome="cancelled" if cancelled else "failed" if error else "succeeded",
+            outcome="cancelled"
+            if cancelled
+            else "busy"
+            if error and error.code == "busy"
+            else "failed"
+            if error
+            else "succeeded",
         ).inc()
         DURATION.labels(
             service=service.service_name, operation=request.operation
