@@ -97,7 +97,7 @@ export default function UserSettingsPage() {
           </Button>
         </div>
         <div className={styles.userSettingsDescription}>
-          <UserAvatar name={userFullName} size={"large"} />
+          <UserAvatar name={userFullName} size={"large"} imageUrl={pictureUrl} />
           <div className={styles.userSettingsIdentity}>
             <span className={styles.userSettingsIdentityName}>{username}</span>
             <span className={styles.userSettingsIdentityFullname}>{userFullName}</span>

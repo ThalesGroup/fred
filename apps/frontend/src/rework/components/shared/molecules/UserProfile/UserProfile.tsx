@@ -19,6 +19,7 @@ import styles from "./UserProfile.module.scss";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
+import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap.ts";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
@@ -38,6 +39,7 @@ export default function UserProfile() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
+  const { bootstrap } = useFrontendBootstrap();
   const userEmail = KeyCloakService.GetUserMail();
 
   useEffect(() => {
@@ -114,7 +116,7 @@ export default function UserProfile() {
           aria-haspopup="menu"
           aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
         >
-          <UserAvatar name={userFullName} size="small" />
+          <UserAvatar name={userFullName} size="small" imageUrl={bootstrap?.current_user?.avatar_image_url} />
         </button>
       </Tooltip>
     </div>

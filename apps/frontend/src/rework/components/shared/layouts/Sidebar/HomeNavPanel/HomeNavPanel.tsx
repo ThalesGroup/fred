@@ -40,7 +40,7 @@ import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
 export default function HomeNavPanel() {
   const { t } = useTranslation();
   const { defaultTeamAvatarFile } = useFrontendProperties();
-  const { activeTeam, availableTeams } = useFrontendBootstrap();
+  const { bootstrap, activeTeam, availableTeams } = useFrontendBootstrap();
   const [search, setSearch] = useState("");
   // The search field is hidden behind a magnifier button and only mounts (as an
   // overlay over the list header) once opened; it collapses again when it loses
@@ -92,6 +92,7 @@ export default function HomeNavPanel() {
           redirection={`/team/${personalTeamId}/agents`}
           name={t("rework.sidebar.team.userTeam")}
           personal
+          imgUrl={bootstrap?.current_user?.avatar_image_url ?? undefined}
           avatarName={KeyCloakService.GetUserFullName()}
           avatarColor={PERSONAL_TEAM_COLOR}
         />

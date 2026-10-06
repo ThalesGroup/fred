@@ -140,3 +140,20 @@ describe("TeamCard joining_mode rendering", () => {
     expect(container.textContent).not.toContain("rework.teamCard.join");
   });
 });
+
+describe("TeamCard admin avatars", () => {
+  it("shows an admin's picture and falls back to initials for an admin without one", () => {
+    const withPicture = { ...admin, avatar_image_url: "https://objects.test/ay.webp" };
+    const withoutPicture = { id: "u-2", first_name: "Bea", last_name: "Two" };
+    render(
+      <TeamCard
+        team={baseTeam({ joining_mode: "invite_only", admins: [withPicture, withoutPicture] })}
+        withDescription={false}
+      />,
+    );
+
+    const images = Array.from(container.querySelectorAll("img")).map((img) => img.getAttribute("src"));
+    expect(images).toContain("https://objects.test/ay.webp");
+    expect(container.textContent).toContain("BT");
+  });
+});

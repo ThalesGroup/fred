@@ -35,10 +35,10 @@
 
 ## 6. Frontend display
 
-- [ ] 6.1 Add optional `imageUrl` to `atoms/UserAvatar/UserAvatar.tsx`: `<img>` with intrinsic size and `decoding="async"`, error state falling back to initials, reset when the URL changes; verify a vitest covers image shown, initials without URL, initials after `onError`.
-- [ ] 6.2 Pass the current user's `avatar_image_url` (bootstrap) to `UserAvatar` in `molecules/UserProfile/UserProfile.tsx`, `UserSettingsPage.tsx`, `layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx` and `molecules/TeamSelectionListItem` (as used by `HomeNavPanel.tsx`); verify existing tests of these components pass and one asserts the image renders when the URL is set.
-- [ ] 6.3 Pass each admin's `avatar_image_url` in `molecules/AvatarGroup/AvatarGroup.tsx` (consumed by `TeamCard` and `AdminTeamsPage`); verify `TeamCard.test.tsx` covers one admin with a picture and one without.
-- [ ] 6.4 Add fr + en i18n keys for the user picture card (title, hint, import, empty, delete, confirmation title/body); verify `npx tsc --noEmit` and no missing-key warnings in the touched tests.
+- [x] 6.1 Add optional `imageUrl` to `atoms/UserAvatar/UserAvatar.tsx`: `<img>` with intrinsic size and `decoding="async"`, error state falling back to initials, reset when the URL changes; verify a vitest covers image shown, initials without URL, initials after `onError`.
+- [x] 6.2 Pass the current user's `avatar_image_url` (bootstrap) to `UserAvatar` in `molecules/UserProfile/UserProfile.tsx`, `UserSettingsPage.tsx`, `layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx` and `molecules/TeamSelectionListItem` (as used by `HomeNavPanel.tsx`); verify existing tests of these components pass and one asserts the image renders when the URL is set.
+- [x] 6.3 Pass each admin's `avatar_image_url` in `molecules/AvatarGroup/AvatarGroup.tsx` (consumed by `TeamCard` and `AdminTeamsPage`); verify `TeamCard.test.tsx` covers one admin with a picture and one without.
+- [x] 6.4 Add fr + en i18n keys for the user picture card (title, hint, import, empty, delete, confirmation title/body); verify `npx tsc --noEmit` and no missing-key warnings in the touched tests.
 
 ## 7. Docs, Help Center and migration note
 
