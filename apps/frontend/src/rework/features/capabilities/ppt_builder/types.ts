@@ -34,6 +34,7 @@ export const SLIDE_KINDS: readonly SlideKind[] = [
   "team",
   "quote",
   "image_text",
+  "table",
   "closing",
   "other",
 ];

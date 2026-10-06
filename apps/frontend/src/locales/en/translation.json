@@ -469,6 +469,7 @@
         "team": "Team",
         "quote": "Quote",
         "image_text": "Image and text",
+        "table": "Table",
         "closing": "Closing",
         "other": "Other"
       },

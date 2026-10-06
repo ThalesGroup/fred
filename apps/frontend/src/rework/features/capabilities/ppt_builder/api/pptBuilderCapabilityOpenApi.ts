@@ -48,9 +48,19 @@ export type Box = {
   w: number;
   h: number;
 };
+export type TableSpec = {
+  header: boolean;
+  columns: number[];
+  widths: number[];
+  margin: number;
+  line_pt: number;
+  pad_pt: number;
+  row_pt: number;
+  height_pt: number;
+};
 export type Zone = {
   key: string;
-  role: "title" | "subtitle" | "heading" | "body" | "caption" | "number" | "label" | "image" | "keep";
+  role: "title" | "subtitle" | "heading" | "body" | "caption" | "number" | "label" | "image" | "table" | "keep";
   box: Box;
   sample?: string;
   font_pt?: number | null;
@@ -58,11 +68,23 @@ export type Zone = {
   max_lines?: number | null;
   grows?: boolean;
   purpose?: string | null;
+  table?: TableSpec | null;
 };
 export type RepeatGroup = {
   key: string;
   count: number;
-  item_zones: ("title" | "subtitle" | "heading" | "body" | "caption" | "number" | "label" | "image" | "keep")[];
+  item_zones: (
+    | "title"
+    | "subtitle"
+    | "heading"
+    | "body"
+    | "caption"
+    | "number"
+    | "label"
+    | "image"
+    | "table"
+    | "keep"
+  )[];
   items: Zone[][];
   item_keys: string[];
 };
@@ -86,6 +108,7 @@ export type Pattern = {
     | "team"
     | "quote"
     | "image_text"
+    | "table"
     | "closing"
     | "other";
   zones?: Zone[];
