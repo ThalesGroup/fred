@@ -26,6 +26,7 @@ Ref: docs/backlog/BACKLOG.md §3d — managed agent CRUD, enrollment, update, tu
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -6212,6 +6213,15 @@ async def test_upload_team_avatar_rejects_file_too_large(
     assert resp.json()["detail"].startswith("File too large:")
 
 
+class _PresentTeamMetadataStore:
+    async def get_by_team_id(self, team_id: TeamId):
+        return TeamMetadata(id=team_id, name="Test team")
+
+    @asynccontextmanager
+    async def advisory_lock(self, _key: str):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -> None:
     class _FakeRebac:
@@ -6275,6 +6285,10 @@ async def test_delete_team_member_enqueues_matching_team_sessions(monkeypatch) -
     monkeypatch.setattr(
         "control_plane_backend.teams.service._validate_team_and_check_permission",
         _fake_validate_team_and_check_permission,
+    )
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _PresentTeamMetadataStore(),
     )
     monkeypatch.setattr(
         "control_plane_backend.app.context.ApplicationContext.get_rebac_engine",
@@ -6395,7 +6409,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         configuration=cast(Any, fake_configuration),
         rebac=cast(Any, fake_rebac),
         scheduler_backend=SchedulerBackend.MEMORY,
-        get_team_metadata_store=lambda: cast(Any, object()),
+        get_team_metadata_store=lambda: cast(Any, _PresentTeamMetadataStore()),
         get_default_team_store=cast(Any, object),
         get_team_admin_charter_store=cast(Any, object),
         get_prompt_store=cast(Any, _FakePromptStore),
@@ -6507,11 +6521,18 @@ async def test_revoke_team_member_role_blocks_last_admin_demotion(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
+        *,
+        consistency_token: str | None = None,
     ) -> set[str]:
+        assert consistency_token == "HIGHER_CONSISTENCY"
         if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
 
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _PresentTeamMetadataStore(),
+    )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_user_roles_in_team",
         _fake_get_user_roles_in_team,
@@ -6549,11 +6570,18 @@ async def test_remove_team_member_blocks_removing_last_admin(
         _rebac,
         _team_id: TeamId,
         relation: RelationType,
+        *,
+        consistency_token: str | None = None,
     ) -> set[str]:
+        assert consistency_token == "HIGHER_CONSISTENCY"
         if relation == RelationType.TEAM_ADMIN:
             return {"user-001"}
         return set()
 
+    monkeypatch.setattr(
+        "control_plane_backend.app.context.ApplicationContext.get_team_metadata_store",
+        lambda _self: _PresentTeamMetadataStore(),
+    )
     monkeypatch.setattr(
         "control_plane_backend.teams.service._get_user_roles_in_team",
         _fake_get_user_roles_in_team,
