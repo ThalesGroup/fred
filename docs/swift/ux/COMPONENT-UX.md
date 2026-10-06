@@ -3608,6 +3608,12 @@ a Markdown WYSIWYG editor (`@mdxeditor/editor`) where the user and the agent co-
 documents. Tab strip when the session has several documents; editor remounts on agent
 writes (keyed `${document_id}:${updated_at}`) but never while the user types; 800 ms
 debounced autosave with a "Saving…" indicator; export menu (Word `.docx` / Markdown).
+Once per document/version import, a Markdown compatibility sanitizer escapes
+literal `<` in text and converts angle-bracket autolinks to explicit links. Code, supported
+HTML tags/attributes and link labels/destinations are preserved, including literal
+comparisons inside supported HTML blocks. The pane ignores the editor's initial
+normalization callback, so opening a document does not save a reformatted copy;
+only user edits use the existing autosave path.
 Restored behind the conversation (2026-09-11): the chat page holds a panel-open
 request until the thread has something on screen (messages rendered, or history
 settled with none), then applies it. Mounting the editor is one long synchronous
