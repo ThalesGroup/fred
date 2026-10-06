@@ -97,13 +97,17 @@ def _tools(ctx) -> dict[str, Any]:
     return {tool.name: cast(Any, tool) for tool in cast(Any, middleware).tools}
 
 
-def _configured(extend=None) -> tuple[PptBuilderConfig, FakeAssets]:
+def _configured(
+    extend=None, variety: str = "template_slide"
+) -> tuple[PptBuilderConfig, FakeAssets]:
     """A template whose analysis succeeded and is in this pod's cache."""
     inventory = analyze_template(TEMPLATE).inventory
     assert inventory is not None
     if extend is not None:
         inventory = extend(inventory)
-    config = PptBuilderConfig(template_sha256="sha-test")
+    config = PptBuilderConfig.model_validate(
+        {"template_sha256": "sha-test", "variety_check": variety}
+    )
     analysis_job.remember_inventory(
         "inst-7", "sha-test", config.labelling_key(), inventory
     )
@@ -111,9 +115,17 @@ def _configured(extend=None) -> tuple[PptBuilderConfig, FakeAssets]:
     return config, assets
 
 
-async def _build(monkeypatch, *, workspace=None, docs=None, extend=None, **kwargs):
+async def _build(
+    monkeypatch,
+    *,
+    workspace=None,
+    docs=None,
+    extend=None,
+    variety="template_slide",
+    **kwargs,
+):
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    config, assets = _configured(extend)
+    config, assets = _configured(extend, variety)
     tools = _tools(_ctx(config, assets=assets, docs=docs, workspace=workspace))
     return await tools[BUILD_TOOL_NAME].coroutine(**kwargs)
 
@@ -380,9 +392,12 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     assert payload["status"] == "needs_revision"
     (repeat,) = payload["variety"]
     assert repeat["slides"] == [2, 3, 4, 5] and repeat["kind"] == "process"
-    assert any(
-        o.startswith("'figures' for a few key numbers") for o in repeat["options"]
-    )
+    # Two figures variants: two slides suggested, none left to offer as an option.
+    assert repeat["suggested"] == [
+        "slides 2, 3 (short figures) → figures holds items max 4 [number, label]"
+    ]
+    assert not any(o.startswith("'figures'") for o in repeat["options"])
+    assert any(o.startswith("'two_columns'") for o in repeat["options"])
     assert "send the same plan again: it will be built as is" in text
     # The same plan again: built, with the passive note only.
     text, result = await build.coroutine(slides=_REPEATED)
@@ -468,7 +483,7 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
     """The real first deck: five bullets slides on five template slides."""
     workspace = FakeWorkspace()
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    config, assets = _configured(with_item_slides)
+    config, assets = _configured(with_item_slides, "kind")
     build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert result.is_error and workspace.writes == []
@@ -479,8 +494,7 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
         s.startswith("slide 7 (dated items) → timeline holds items max 6 [heading ≈20")
         for s in suggested
     )
-    assert any("→ two_columns holds exactly 2 columns [" in s for s in suggested)
-    assert any(s.startswith("slide 10 (3 groups") for s in suggested)
+    assert any(s.startswith("slide 5 (parallel") for s in suggested)
     text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert not result.is_error, text
     assert "Slides 3, 5, 7, 9, 10 are all 'bullets' slides" in text
@@ -494,11 +508,51 @@ async def test_a_later_deck_repeating_a_kind_only_gets_the_note(monkeypatch):
         monkeypatch,
         workspace=workspace,
         extend=with_item_slides,
+        variety="kind",
         slides=EVIDENCE_SLIDES,
     )
     assert not result.is_error, text
     assert "are all 'bullets' slides" in text
     assert "slide 7 (dated items) → timeline holds items max 6" in text
+
+
+@pytest.mark.asyncio
+async def test_each_variety_check_mode_asks_for_its_own_repeat(monkeypatch):
+    """Five bullets slides on five template slides: a kind repeat, no template
+    slide used three times; the steps reuse one template slide."""
+    for variety, plan, asked in [
+        ("template_slide", EVIDENCE_SLIDES, False),
+        ("kind", EVIDENCE_SLIDES, True),
+        ("template_slide", _REPEATED, True),
+        ("off", _REPEATED, False),
+        ("off", EVIDENCE_SLIDES, False),
+    ]:
+        # The added item slides are never rendered: only the evidence plan needs them.
+        extend = with_item_slides if plan is EVIDENCE_SLIDES else None
+        text, result = await _build(
+            monkeypatch, extend=extend, variety=variety, slides=plan
+        )
+        assert result.is_error is asked, (variety, text)
+        assert not asked or '"variety": [' in text
+        if variety == "off":  # no ask, the passive note stays
+            assert "all use the template slide" in text or "are all" in text
+
+
+def test_the_variety_check_defaults_and_never_triggers_a_re_analysis():
+    stored = PptBuilderConfig.model_validate({"template_sha256": "sha"})
+    assert stored.variety_check == "template_slide"
+    keys = {
+        PptBuilderConfig(template_sha256="sha", variety_check=v).labelling_key()
+        for v in ("template_slide", "kind", "off")
+    }
+    assert keys == {stored.labelling_key()}
+    (field,) = [
+        f
+        for f in PptBuilderCapability.manifest.config_fields
+        if f.key == "variety_check"
+    ]
+    assert field.enum == ["template_slide", "kind", "off"]
+    assert field.default == "template_slide" and field.ui.widget is None
 
 
 @pytest.mark.asyncio

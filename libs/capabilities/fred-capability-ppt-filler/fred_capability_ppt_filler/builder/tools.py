@@ -512,6 +512,7 @@ def build_builder_tools(
     previous_problems: _Previous = {}
     # Variety is asked on the first call of the turn (one tool instance) only.
     called = False
+    variety = ctx.config.variety_check
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         nonlocal called
@@ -531,10 +532,11 @@ def build_builder_tools(
                 "items…) and call build_presentation again."
             )
         # Before any I/O: a plan that needs revision costs no template fetch.
-        assignment = await asyncio.to_thread(assign, inventory, plan)
+        assignment = await asyncio.to_thread(assign, inventory, plan, variety)
         workspace = services.workspace_fs
         session_id = identity.session_id
-        repeats = [r for r in assignment.repeats if r.revisable] if first else []
+        asking = first and variety != "off"
+        repeats = [r for r in assignment.repeats if r.revisable] if asking else []
         # Listed only when an ask would follow: the usual call adds no I/O.
         if repeats and (
             workspace is None or await _deck_delivered(workspace, session_id)

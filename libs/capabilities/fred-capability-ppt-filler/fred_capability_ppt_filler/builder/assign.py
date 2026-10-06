@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Literal, NamedTuple, Optional, Sequence, Tuple
 
 from fred_capability_ppt_filler.builder import lexicon
 from fred_capability_ppt_filler.builder.models import (
@@ -76,6 +76,8 @@ _BEAM = 32
 _VARIETY_NOTE_USES = 3
 # Slides a deck legitimately repeats: never a reason to ask for variety.
 _STRUCTURAL = ("cover", "section", "agenda", "closing")
+# What a variety ask counts (design.md D18): one template slide, one kind, or nothing.
+VarietyCheck = Literal["template_slide", "kind", "off"]
 # What each kind suits, in the order alternatives are offered.
 SHAPE_HINTS: Dict[str, str] = {
     "figures": "a few key numbers, each a value + a short label",
@@ -128,19 +130,20 @@ class SlideProblem:
 
 @dataclass
 class Repeat:
-    """A content kind on three slides or more (a structural template slide used
-    three times or more), and what else could vary it."""
+    """A template slide, or a content kind, on three slides or more, and what
+    else could vary it."""
 
     kind: str
     slides: List[int]  # 1-based positions in the plan
     labels: List[str]  # the template slides they use, distinct
     unused: List[str]  # unused variants of its kind, "label: zones"
     others: List[str]  # one unused slide per other non-structural kind
-    suggested: List[str]  # "slides 9, 10 → two_columns or cards (why)"
+    suggested: List[str]  # "slides 9, 10 → cards holds … (why)"
+    structural: bool = False  # cover/section/agenda/closing slides: never asked
 
     @property
     def revisable(self) -> bool:
-        return self.kind not in _STRUCTURAL and bool(
+        return not self.structural and bool(
             self.unused or self.others or self.suggested
         )
 
@@ -760,48 +763,92 @@ def _advice(pool: List[Pattern], kind: str, shape: Shape) -> Optional[str]:
     return f"{kind} holds {best.hint}{shorten}"
 
 
-def _suggested(slides: List[_Slide], kind: str, pool: List[Pattern]) -> List[str]:
-    """Per slide, the other kinds its content already suits and what the
-    template's slide of that kind holds; slides with the same advice share one line."""
+def _suggested(
+    slides: List[_Slide],
+    kind: str,
+    pool: List[Pattern],
+    budget: Dict[str, int],
+    given: Dict[str, int],
+) -> List[str]:
+    """Per slide, one other kind its content suits, the least suggested so far,
+    while the template has a variant of it left; slides with the same advice share a line."""
     found: Dict[Tuple[str, str], List[int]] = {}
     for slide in slides:
         shape = content_shape(slide.plan)
         if shape is None:
             continue
-        advice = [
-            a for k in shape.kinds if k != kind and (a := _advice(pool, k, shape))
+        options = [
+            (k, a)
+            for k in shape.kinds
+            if k != kind and budget.get(k, 0) > 0 and (a := _advice(pool, k, shape))
         ]
-        if advice:
-            found.setdefault((shape.why, "; or ".join(advice)), []).append(slide.index)
+        if not options:
+            continue
+        chosen, advice = min(options, key=lambda o: given.get(o[0], 0))
+        budget[chosen] -= 1
+        given[chosen] = given.get(chosen, 0) + 1
+        found.setdefault((shape.why, advice), []).append(slide.index)
     return [
         f"slide{'s' if len(at) > 1 else ''} {', '.join(map(str, at))} ({why}) → {advice}"
         for (why, advice), at in found.items()
     ]
 
 
+def _wanted(slide: _Slide) -> Optional[str]:
+    """The kind asked for the slide, or the one its content suggests first."""
+    return slide.tiers[0][0] if slide.tiers and slide.tiers[0] else slide.plan.kind
+
+
 def _repeats(
-    slides: List[_Slide], chosen: List[Pattern], pool: List[Pattern]
+    slides: List[_Slide],
+    chosen: Dict[int, Pattern],
+    pool: List[Pattern],
+    by_kind: bool,
 ) -> List[Repeat]:
-    """Content kinds on three slides or more, even on different template
-    slides: five lists look alike whatever slide holds each one."""
-    used = {p.id for p in chosen}
+    """Template slides (or, ``by_kind``, content kinds) on three slides or more.
+    Structural slides count apart; a kind is offered only while the template
+    has more variants of it than the deck already uses (design.md D18)."""
+    used = {p.id for p in chosen.values()}
     unused = [p for p in pool if p.id not in used]
-    groups: Dict[str, List[Tuple[_Slide, Pattern]]] = {}
-    for slide, pattern in zip(slides, chosen):
-        key = pattern.id if pattern.kind in _STRUCTURAL else pattern.kind
+    variants: Dict[str, set[str]] = {}
+    for p in pool:
+        variants.setdefault(p.kind, set()).add(zone_summary(p))
+    budget = {k: len(v) for k, v in variants.items()}
+    for slide in slides:
+        k = chosen[slide.index].kind if slide.index in chosen else _wanted(slide)
+        if k in budget:
+            budget[k] -= 1
+    given: Dict[str, int] = {}
+    groups: Dict[Tuple[str, str], List[Tuple[_Slide, Pattern]]] = {}
+    for slide in slides:
+        pattern = chosen.get(slide.index)
+        if pattern is None:
+            continue
+        if pattern.kind in _STRUCTURAL or _wanted(slide) in _STRUCTURAL:
+            key = ("structural", pattern.id)
+        else:
+            key = ("kind", pattern.kind) if by_kind else ("slide", pattern.id)
         groups.setdefault(key, []).append((slide, pattern))
     repeats = []
-    for group in groups.values():
+    for (group_by, _), group in groups.items():
         if len(group) < _VARIETY_NOTE_USES:
             continue
         kind = group[0][1].kind
-        labels = list(dict.fromkeys(p.label for _, p in group))
+        structural = group_by == "structural"
         reused = len({p.id for _, p in group}) < len(group)
         same = [f"{p.label}: {zone_summary(p)}" for p in unused if p.kind == kind]
+        suggested = (
+            []
+            if structural
+            else _suggested([s for s, _ in group], kind, pool, budget, given)
+        )
         others = [
             f"'{other}' for {hint}: {p.label}: {zone_summary(p)}"
             for other, hint in SHAPE_HINTS.items()
-            if other not in _STRUCTURAL and other != kind
+            if not structural
+            and other not in _STRUCTURAL
+            and other != kind
+            and budget.get(other, 0) > 0
             for p in [next((q for q in unused if q.kind == other), None)]
             if p is not None
         ]
@@ -809,12 +856,11 @@ def _repeats(
             Repeat(
                 kind,
                 [s.index for s, _ in group],
-                labels,
+                list(dict.fromkeys(p.label for _, p in group)),
                 list(dict.fromkeys(same)) if reused else [],
                 others[:_MAX_OTHER_KINDS],
-                []
-                if kind in _STRUCTURAL
-                else _suggested([s for s, _ in group], kind, pool),
+                suggested,
+                structural,
             )
         )
     return repeats
@@ -843,8 +889,13 @@ def _repeat_note(repeat: Repeat) -> str:
     return note
 
 
-def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
-    """One pattern per slide of ``plan``, or the problems that prevent it."""
+def assign(
+    inventory: TemplateInventory,
+    plan: DeckPlan,
+    variety: VarietyCheck = "template_slide",
+) -> Assignment:
+    """One pattern per slide of ``plan``, or the problems that prevent it;
+    ``variety`` says how repeats are grouped (``off`` groups by kind, for the note)."""
     pool = assignable(inventory)
     has_cover = any(p.kind == "cover" for p in pool)
     offered = {p.kind for p in pool}
@@ -881,11 +932,13 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
             problems.append(_problem(slide, has_cover))
     if not slides:
         return Assignment(problems=problems)
+    by_kind = variety != "template_slide"
     if problems:
         # Repeats among the slides that fit, so a variety ask can join the problems.
         fitting = [s for s in slides if s.candidates]
+        found = {s.index: p for s, p in zip(fitting, _beam(fitting))}
         return Assignment(
-            problems=problems, repeats=_repeats(fitting, _beam(fitting), pool)
+            problems=problems, repeats=_repeats(slides, found, pool, by_kind)
         )
 
     chosen = _beam(slides)
@@ -903,6 +956,7 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     ]
-    repeats = _repeats(slides, chosen, pool)
+    found = {s.index: p for s, p in zip(slides, chosen)}
+    repeats = _repeats(slides, found, pool, by_kind)
     notes += [_repeat_note(r) for r in repeats]
     return Assignment(patterns=patterns, notes=notes, repeats=repeats)

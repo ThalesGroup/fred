@@ -29,7 +29,7 @@ import io
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, get_args
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
@@ -74,6 +74,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     spawn_analysis,
     status_response,
 )
+from fred_capability_ppt_filler.builder.assign import VarietyCheck
 from fred_capability_ppt_filler.builder.builtin import builtin_template
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
@@ -131,6 +132,8 @@ class PptBuilderConfig(BaseModel):
     use_vision: bool = True
     labelling_model: Optional[str] = None
     overrides: List[PatternOverride] = []
+    # Read by the build tool each turn, never by the analysis: no re-run.
+    variety_check: VarietyCheck = "template_slide"
 
     def labelling_key(self) -> str:
         return labelling_key(self.use_vision, self.labelling_model)
@@ -421,7 +424,7 @@ class PptBuilderCapability(
         description="capability.ppt_builder.description",
         icon="co_present",
         config_fields=[
-            # All four fields belong to the plugin's widget (rendered once): the
+            # The first four belong to the plugin's widget (rendered once): the
             # vision toggle depends on the team's models, which a generic field cannot know.
             FieldSpec(
                 key="template_sha256",
@@ -451,6 +454,14 @@ class PptBuilderCapability(
                 title="capability.ppt_builder.fields.labelling_model.title",
                 description="capability.ppt_builder.fields.labelling_model.description",
                 ui=UIHints(widget="ppt_builder_template"),
+            ),
+            FieldSpec(
+                key="variety_check",
+                type="select",
+                default="template_slide",
+                enum=list(get_args(VarietyCheck)),
+                title="capability.ppt_builder.fields.variety_check.title",
+                description="capability.ppt_builder.fields.variety_check.description",
             ),
         ],
         assets=[

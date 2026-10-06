@@ -572,7 +572,11 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
         SlidePlan(title=f"P{n}", bullets=["a long enough line"], kind="bullets")
         for n in range(5)
     ]
-    assignment = assign(inventory, _plan(*slides))
+    (note,) = [n for n in assign(inventory, _plan(*slides)).notes if "all use" in n]
+    assert note.startswith("Slides 1, 3, 5 all use the template slide 'A'.")
+    assert "Narrow: title ≈60 chars; bullets ≈2 chars" in note
+    # By kind, the two template slides make one repeat.
+    assignment = assign(inventory, _plan(*slides), "kind")
     (note,) = [n for n in assignment.notes if "are all" in n]
     assert note.startswith(
         "Slides 1, 2, 3, 4, 5 are all 'bullets' slides (template slides 'A', 'B')."
@@ -586,18 +590,17 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
     """The real first deck: five lists on five template slides look alike;
     their lines name the kind each one suits."""
     inventory = with_item_slides(INVENTORY)
-    assignment = assign(inventory, _plan(*EVIDENCE_SLIDES))
+    assignment = assign(inventory, _plan(*EVIDENCE_SLIDES), "kind")
     (repeat,) = assignment.repeats
     assert repeat.kind == "bullets" and repeat.slides == [3, 5, 7, 9, 10]
     assert len(repeat.labels) == 5 and repeat.revisable
     # Each suggestion says what the template's slide of that kind holds.
     items = "items max 6 [heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines]"
+    # One cards and one timeline variant; the one two_columns variant already
+    # holds two slides: slides 9 and 10 get nothing left to suggest.
     assert repeat.suggested == [
         f"slide 5 (parallel 'Label : text' points) → cards holds {items}",
         f"slide 7 (dated items) → timeline holds {items}",
-        "slide 9 (2 groups of '- ' lines under 'Label :' lines) → two_columns holds "
-        f"exactly 2 columns [bullets ≈22 chars × 8 lines]; or cards holds {items}",
-        f"slide 10 (3 groups of '- ' lines under 'Label :' lines) → cards holds {items}",
     ]
     (note,) = [n for n in assignment.notes if "are all" in n]
     assert note.startswith("Slides 3, 5, 7, 9, 10 are all 'bullets' slides")
@@ -605,15 +608,12 @@ def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
 
 
 def test_advice_names_only_kinds_the_template_can_hold():
-    # No timeline nor cards slide in the showcase: only the two groups remain.
-    (repeat,) = assign(INVENTORY, _plan(*EVIDENCE_SLIDES)).repeats
-    assert repeat.suggested == [
-        "slide 9 (2 groups of '- ' lines under 'Label :' lines) → two_columns holds "
-        "exactly 2 columns [bullets ≈22 chars × 8 lines]"
-    ]
+    # No timeline nor cards slide in the showcase, and its two_columns slide is used.
+    (repeat,) = assign(INVENTORY, _plan(*EVIDENCE_SLIDES), "kind").repeats
+    assert repeat.suggested == []
     # Three dated lines need a timeline of three items or more.
     small = with_item_slides(INVENTORY, kinds=("timeline",), count=2)
-    (repeat,) = assign(small, _plan(*EVIDENCE_SLIDES)).repeats
+    (repeat,) = assign(small, _plan(*EVIDENCE_SLIDES), "kind").repeats
     assert not any("timeline" in s for s in repeat.suggested)
 
 
@@ -637,7 +637,7 @@ def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
             "bullets": [long, "Juin 2025 : radars", "Mars 2026 : pôle spatial"],
         }
         slides = [COVER, dated] + [_points(n) for n in range(3)]
-        (repeat,) = assign(inventory, _plan(*slides)).repeats
+        (repeat,) = assign(inventory, _plan(*slides), "kind").repeats
         return repeat.suggested
 
     lead = "slide 2 (dated items) → timeline holds items max 6 ["
@@ -708,6 +708,100 @@ def test_structural_kinds_count_by_template_slide_only():
     parts = [SlidePlan(title=f"Part {n}", kind="section") for n in range(4)]
     assignment = assign(INVENTORY, _plan(*parts))
     assert not [r for r in assignment.repeats if r.revisable]
+
+
+# The live mistral-small first call on Paintress: the agenda, too long for the
+# agenda slide, lands on a bullets slide beside two bullets slides.
+SMALL_MODEL_PLAN = [
+    {
+        "kind": "cover",
+        "title": "Thales en Espagne et en Italie",
+        "subtitle": "Activités",
+    },
+    {
+        "kind": "agenda",
+        "title": "Sommaire",
+        "bullets": ["Contexte", "Espagne", "Italie", "Chiffres", "Synthèse", "Suite"],
+    },
+    {"kind": "section", "title": "Espagne"},
+    {
+        "kind": "bullets",
+        "title": "Activités en Espagne",
+        "bullets": ["Défense", "Spatial"],
+    },
+    {
+        "kind": "figures",
+        "title": "Chiffres Espagne",
+        "items": [
+            {"number": "3", "label": "Sites"},
+            {"number": "1200", "label": "Staff"},
+        ],
+    },
+    {"kind": "section", "title": "Italie"},
+    {"kind": "bullets", "title": "Activités en Italie", "bullets": ["Radars", "Rail"]},
+    {
+        "kind": "figures",
+        "title": "Chiffres Italie",
+        "items": [
+            {"number": "3", "label": "Sites"},
+            {"number": "950", "label": "Staff"},
+        ],
+    },
+]
+
+
+def test_a_structural_slide_never_counts_towards_a_repeat():
+    plan = _plan(*SMALL_MODEL_PLAN)
+    assignment = assign(INVENTORY, plan, "kind")
+    assert assignment.patterns[1] is not None
+    assert assignment.patterns[1].kind == "bullets"  # the agenda, by fallback
+    assert not [r for r in assignment.repeats if r.revisable]
+    assert not [r for r in assign(INVENTORY, plan).repeats if r.revisable]
+
+
+def _figure_lines(n: int) -> dict:
+    return {
+        "title": f"Chiffres {n}",
+        "kind": "bullets",
+        "bullets": [f"{n}2 sites", f"{n}00 experts", f"{n}5 ans"],
+    }
+
+
+def test_a_kind_is_suggested_no_more_than_the_template_has_variants():
+    # Paintress-like: a single figures slide in the template.
+    single = INVENTORY.model_copy(
+        update={"patterns": [p for p in INVENTORY.patterns if p.id != "slide:268"]}
+    )
+    slides = [COVER] + [_figure_lines(n) for n in range(1, 5)]
+    (repeat,) = assign(single, _plan(*slides), "kind").repeats
+    assert sum("→ figures" in s for s in repeat.suggested) == 1
+    assert len(repeat.suggested[0].split("(")[0].split(",")) == 1  # one slide
+    assert not any(o.startswith("'figures'") for o in repeat.others)
+    # A figures slide already in the deck uses that variant: none left to suggest.
+    figures = {"title": "KPI", "items": [{"number": "3", "label": "Sites"}] * 2}
+    (repeat,) = assign(single, _plan(*slides, figures), "kind").repeats
+    assert repeat.revisable and not repeat.suggested
+    assert not any(o.startswith("'figures'") for o in repeat.others)
+
+
+def test_suggestions_spread_across_the_kinds_a_slide_suits():
+    inventory = with_item_slides(INVENTORY, kinds=("cards",))
+    cards = inventory.patterns[-1]
+    wide = cards.model_copy(deep=True, update={"id": "slide:902"})
+    for item in wide.groups[0].items:
+        item[1].chars_per_line = 30
+    second = _pattern("Two Content").model_copy(deep=True, update={"id": "layout:903"})
+    for zone in second.zones:
+        zone.chars_per_line = 30 if zone.role == "body" else zone.chars_per_line
+    inventory.patterns += [wide, second]
+    groups = ["Espagne :", "- défense", "- spatial", "Italie :", "- radars", "- rail"]
+    slides = [COVER] + [
+        {"title": f"Pays {n}", "kind": "bullets", "bullets": groups} for n in range(3)
+    ]
+    (repeat,) = assign(inventory, _plan(*slides), "kind").repeats
+    kinds = {s.split("→ ")[1].split(" ")[0]: s.split(" (")[0] for s in repeat.suggested}
+    # Two variants each: two_columns, then cards, then two_columns again.
+    assert kinds == {"two_columns": "slides 2, 4", "cards": "slide 3"}
 
 
 def test_empty_item_pictures_cost_like_empty_slide_pictures():
