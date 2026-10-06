@@ -159,6 +159,13 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     assert "ONE call builds the WHOLE deck" in description
     assert "Never split a deck across several calls" in description
     assert "The first slide is always the template's cover" in description
+    # The choice guide names only kinds this template offers.
+    assert (
+        "numeric items (value + label) → figures" in description
+        and "ordered steps → process" in description
+    )
+    assert "→ timeline" not in description
+    assert "Each slide of a deck should look different." in description
 
 
 # --- delivery -------------------------------------------------------------------------------

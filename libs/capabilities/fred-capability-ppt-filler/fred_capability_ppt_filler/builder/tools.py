@@ -51,6 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
 from fred_capability_ppt_filler.builder.assign import (
+    SHAPE_HINTS,
     Assignment,
     Repeat,
     assign,
@@ -416,6 +417,18 @@ def build_list_images_tool(
     )
 
 
+_GUIDE_KINDS = ("figures", "timeline", "cards", "process", "table")
+
+
+def _guide(kinds: List[SlideKind]) -> str:
+    """Which content suits which offered kind, so slides differ by design."""
+    pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
+    if "table" in kinds:
+        pairs[-1] += ", not restated as columns before it"
+    lead = f" Shape the content: {'; '.join(pairs)}." if pairs else ""
+    return lead + " Each slide of a deck should look different."
+
+
 def _description(inventory: TemplateInventory) -> str:
     kinds = offered_kinds(inventory)
     rules = ""
@@ -444,9 +457,8 @@ def _description(inventory: TemplateInventory) -> str:
         "slide, what to change: apply it and call again with the whole deck. The result is shown to the "
         "user automatically; never write a download link. To correct a deck, call again once with the "
         "whole amended plan; the new deck replaces the previous one.\n"
-        " Vary the content shapes across the deck - items, columns, figures, a quote - rather than "
-        "bullets everywhere: each variant below is a different template slide, and the deck "
-        "looks best when it uses many of them.\n"
+        + _guide(kinds)
+        + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
         "size (≈chars per line × lines; items max N; variants separated by |). Write to these sizes:\n"
         + catalogue(inventory)
