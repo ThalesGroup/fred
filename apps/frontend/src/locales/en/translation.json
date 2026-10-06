@@ -2955,7 +2955,8 @@
         "deleteCancel": "Cancel",
         "deleteFailed": "The profile picture could not be deleted",
         "deleteFailedDetail": "Please try again in a moment.",
-        "uploaded": "Profile picture updated"
+        "uploaded": "Profile picture updated",
+        "deleted": "Profile picture deleted"
       },
       "title": "Your profile"
     },

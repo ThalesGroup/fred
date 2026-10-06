@@ -71,6 +71,7 @@ export default function UserSettingsPage() {
       onConfirm: () => {
         deletePicture()
           .unwrap()
+          .then(() => showSuccess({ summary: t("rework.userSettings.picture.deleted") }))
           .catch((error) =>
             notifyApiError(error, {
               summary: t("rework.userSettings.picture.deleteFailed"),

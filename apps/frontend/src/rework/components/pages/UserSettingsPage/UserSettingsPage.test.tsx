@@ -15,8 +15,8 @@
 
 // The theme picker lists only the themes the platform offers, and disappears
 // when there is nothing to choose; the light/dark/system choice always stays.
-// The profile picture card uploads the crop, confirms it, and deletes only after
-// confirmation; a failed delete is reported to the user.
+// The profile picture card uploads the crop and deletes only after confirmation,
+// each confirmed by a toast; a failed delete is reported to the user.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -222,6 +222,7 @@ describe("UserSettingsPage profile picture", () => {
     expect(options.criticalAction).toBe(true);
     await act(async () => options.onConfirm());
     expect(picture.remove).toHaveBeenCalledTimes(1);
+    expect(picture.showSuccess).toHaveBeenCalledWith({ summary: "rework.userSettings.picture.deleted" });
   });
 
   it("tells the user when the delete fails", async () => {
@@ -239,6 +240,7 @@ describe("UserSettingsPage profile picture", () => {
       { status: 500 },
       expect.objectContaining({ summary: "rework.userSettings.picture.deleteFailed" }),
     );
+    expect(picture.showSuccess).not.toHaveBeenCalled();
   });
 
   it("keeps the picture when the confirmation is cancelled", async () => {
@@ -250,5 +252,6 @@ describe("UserSettingsPage profile picture", () => {
     options.onCancel?.();
 
     expect(picture.remove).not.toHaveBeenCalled();
+    expect(picture.showSuccess).not.toHaveBeenCalled();
   });
 });
