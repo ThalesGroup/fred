@@ -712,7 +712,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.4.1"
+version = "4.4.2"
 source = { editable = "../../fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
@@ -741,6 +741,7 @@ requires-dist = [
     { name = "langchain", marker = "extra == 'agents'", specifier = ">=1.4.2" },
     { name = "langchain-core", marker = "extra == 'agents'", specifier = ">=1.6.5" },
     { name = "langgraph", marker = "extra == 'agents'", specifier = ">=1.2.12" },
+    { name = "prometheus-client", marker = "extra == 'knowledge-base'", specifier = ">=0.20.0" },
     { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },

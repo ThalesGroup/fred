@@ -297,8 +297,9 @@ owns, the same keys under `security.m2m` and `scheduler.temporal`, environment
 variables carrying secrets only. A Knowledge Base pod installs
 `fred-sdk[knowledge-base]`: fred-pod plus the workflow engine, none of the
 agents platform. There is no `security.user` block — a
-Knowledge Base pod serves no user, opens no inbound port and validates no user
-token.
+Knowledge Base pod serves no user and validates no user token. The only port it
+may open is the read-only metrics endpoint described in *Operational metrics*
+below.
 
 `fred-samples/knowledge-bases/local-folder` is the shortest complete example;
 its `knowledge_base.py` is the whole authoring surface.

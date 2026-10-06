@@ -28,12 +28,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 from pydantic import BaseModel
 
+from fred_sdk.knowledge_base import telemetry
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,9 @@ _TERMINAL_STATES = (_SUCCEEDED, _FAILED, "cancelled")
 # A poll answered with one of these says nothing about the task: the request
 # timed out at a proxy, or Fred asked to slow down. Polling on is the answer.
 _TRANSIENT_STATUSES = (408, 429)
+
+# The `target` every call made here is measured under.
+_KNOWLEDGE_FLOW = "knowledge_flow"
 
 
 class _RefusedError(RuntimeError):
@@ -147,10 +151,14 @@ async def declare_library_synchronized(
         async with httpx.AsyncClient(
             timeout=_DECLARE_TIMEOUT, auth=M2MBearerAuth(tokens)
         ) as client:
-            response = await client.put(
-                f"{configuration.knowledge_flow_url}/libraries/{library_id}/synchronized-by",
-                json={"synchronized_by": machine},
-            )
+            with telemetry.observing_request(
+                _KNOWLEDGE_FLOW, "declare_synchronized"
+            ) as answered:
+                response = await client.put(
+                    f"{configuration.knowledge_flow_url}/libraries/{library_id}/synchronized-by",
+                    json={"synchronized_by": machine},
+                )
+                answered(response.status_code)
     except Exception:  # noqa: BLE001 - reported, never fatal to the run
         logger.warning(
             "Could not declare library %s as filled by %s",
@@ -212,7 +220,9 @@ class DocumentPublisher:
         identifiers ever has to be remembered here.
         `profile` selects ingestion processing and defaults to `medium`.
         """
-        response = await self._client.post(
+        response = await self._send(
+            "publish",
+            "POST",
             f"{self._base_url}/libraries/{self._library_id}/documents",
             files={
                 "file": (
@@ -235,7 +245,9 @@ class DocumentPublisher:
 
     async def outcome(self, task_id: str) -> DocumentOutcome:
         """Where the ingestion behind a handle stands right now."""
-        response = await self._client.get(f"{self._base_url}/tasks/{task_id}")
+        response = await self._send(
+            "task_status", "GET", f"{self._base_url}/tasks/{task_id}"
+        )
         _raise_for(response, DocumentPublishError, f"task {task_id}")
         return DocumentOutcome.model_validate(response.json())
 
@@ -256,7 +268,8 @@ class DocumentPublisher:
         Polls `poll_interval` apart at first, doubling up to `max_poll_interval`.
         """
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
+        started = loop.time()
+        deadline = started + timeout
         interval = poll_interval
         while True:
             try:
@@ -273,9 +286,13 @@ class DocumentPublisher:
                 logger.debug("Poll of task %s failed, polling on: %s", task_id, error)
             else:
                 if outcome.terminal:
+                    telemetry.observe_ingestion_wait(
+                        outcome.state, loop.time() - started
+                    )
                     return outcome
             remaining = deadline - loop.time()
             if remaining <= 0:
+                telemetry.observe_ingestion_wait("timeout", loop.time() - started)
                 raise DocumentWaitTimeout(task_id)
             await asyncio.sleep(min(interval, remaining))
             interval = min(interval * 2, max_poll_interval)
@@ -286,7 +303,9 @@ class DocumentPublisher:
         A failed write is left out so the next run writes that key again; one
         still in flight is listed, so a version match on it is not a second write.
         """
-        response = await self._client.get(
+        response = await self._send(
+            "list",
+            "GET",
             f"{self._base_url}/libraries/{self._library_id}/documents",
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
@@ -311,7 +330,8 @@ class DocumentPublisher:
         which is the only retraction a source's disappearance justifies. A key
         the library does not hold is not an error.
         """
-        response = await self._client.request(
+        response = await self._send(
+            "retract",
             "DELETE",
             f"{self._base_url}/libraries/{self._library_id}/documents",
             params={"source_key": relative_path},
@@ -324,7 +344,9 @@ class DocumentPublisher:
         Lets a source that can say what changed since a version (a Git
         revision, a change token) resume from Fred rather than keep a ledger.
         """
-        response = await self._client.get(
+        response = await self._send(
+            "source_version_get",
+            "GET",
             f"{self._base_url}/libraries/{self._library_id}/source-version",
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
@@ -332,11 +354,22 @@ class DocumentPublisher:
 
     async def record_source_version(self, value: str) -> None:
         """Store how far this library got in its source. Kept verbatim."""
-        response = await self._client.put(
+        response = await self._send(
+            "source_version_put",
+            "PUT",
             f"{self._base_url}/libraries/{self._library_id}/source-version",
             json={"source_version": value},
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
+
+    async def _send(
+        self, operation: str, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response:
+        """Every call this publisher makes, measured under its operation."""
+        with telemetry.observing_request(_KNOWLEDGE_FLOW, operation) as answered:
+            response = await self._client.request(method, url, **kwargs)
+            answered(response.status_code)
+        return response
 
     async def aclose(self) -> None:
         await self._client.aclose()

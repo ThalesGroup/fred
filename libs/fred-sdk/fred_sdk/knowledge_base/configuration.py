@@ -36,6 +36,7 @@ from fred_pod.common import (
     load_configuration_with_config_files,
     parse_yaml_mapping_file,
 )
+from fred_pod.common.structures import KpiPrometheusSinkConfig
 from fred_pod.security.backend_to_backend_auth import M2MAuthConfig, M2MTokenProvider
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_pod.security.structure import M2MSecurity
@@ -84,9 +85,9 @@ class PodSecurity(BaseModel):
 
     The key path is the one every Fred backend uses, and `M2MSecurity` is the
     same model they parse it with. What is absent is `security.user`: a
-    Knowledge Base pod serves no user, opens no inbound port and validates no
-    user token, so requiring a block it would never read would be configuration
-    theatre.
+    Knowledge Base pod serves no user and validates no user token — the only
+    port it may open is a read-only metrics endpoint — so requiring a block it
+    would never read would be configuration theatre.
     """
 
     m2m: M2MSecurity
@@ -109,6 +110,43 @@ class PodScheduler(BaseModel):
     temporal: TemporalSchedulerConfig = Field(default_factory=TemporalSchedulerConfig)
 
 
+class PodKpi(BaseModel):
+    """The Prometheus half of `observability.kpi`, and only that half.
+
+    Same key path and same model as every Fred backend. The log and OpenSearch
+    sinks beside it there are absent here: a pod writes no KPI event, so it
+    would never read them.
+    """
+
+    prometheus: KpiPrometheusSinkConfig = Field(default_factory=KpiPrometheusSinkConfig)
+
+
+class TemporalMetricsConfig(KpiPrometheusSinkConfig):
+    """The workflow engine's own exporter: polls, task latencies, slots.
+
+    Served by the engine's core on a port of its own — its metrics never pass
+    through `prometheus_client` — so it is scraped beside `kpi.prometheus`.
+    """
+
+    port: int = 9001
+
+
+class PodTemporalObservability(BaseModel):
+    prometheus: TemporalMetricsConfig = Field(default_factory=TemporalMetricsConfig)
+
+
+class PodObservability(BaseModel):
+    """What this pod exposes to be scraped. Nothing listens unless enabled.
+
+    The address defaults to loopback, as on every Fred backend: a deployment
+    that wants a pod scraped binds it outward explicitly, and the endpoint it
+    opens is read-only.
+    """
+
+    kpi: PodKpi = Field(default_factory=PodKpi)
+    temporal: PodTemporalObservability = Field(default_factory=PodTemporalObservability)
+
+
 class PodConfiguration(BaseModel):
     """Everything a Knowledge Base pod needs to reach Fred and Temporal."""
 
@@ -117,6 +155,7 @@ class PodConfiguration(BaseModel):
     knowledge_base: KnowledgeBaseSettings
     security: PodSecurity
     scheduler: PodScheduler = Field(default_factory=PodScheduler)
+    observability: PodObservability = Field(default_factory=PodObservability)
 
     # ── the values the rest of the SDK reads ──────────────────────────────────
 

@@ -497,3 +497,46 @@ def test_every_call_carries_the_pod_identity(monkeypatch):
 
     assert len(fred.calls) == 4
     assert isinstance(fred.auth, M2MBearerAuth)
+
+
+def _waits(kb: str, state: str) -> float:
+    from prometheus_client import REGISTRY
+
+    return (
+        REGISTRY.get_sample_value(
+            "fred_kb_ingestion_wait_seconds_count",
+            {"knowledge_base": kb, "state": state},
+        )
+        or 0.0
+    )
+
+
+def test_a_wait_is_measured_by_how_the_ingestion_ended(monkeypatch):
+    from fred_sdk.knowledge_base import telemetry
+
+    kb = f"acme.kb.w{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_knowledge_base", kb)
+    fred = _Fred().answers(
+        "GET",
+        (200, _summary("running")),
+        (200, _summary("failed", error="conversion failed")),
+    )
+    publisher = _publisher(fred, monkeypatch)
+
+    asyncio.run(publisher.wait(TASK, poll_interval=0.001))
+
+    assert (_waits(kb, "failed"), _waits(kb, "succeeded")) == (1, 0)
+
+
+def test_a_wait_that_runs_out_is_measured_as_a_timeout(monkeypatch):
+    from fred_sdk.knowledge_base import telemetry
+
+    kb = f"acme.kb.w{secrets.token_hex(4)}"
+    monkeypatch.setattr(telemetry, "_knowledge_base", kb)
+    fred = _Fred().answers("GET", (200, _summary("running")))
+    publisher = _publisher(fred, monkeypatch)
+
+    with pytest.raises(DocumentWaitTimeout):
+        asyncio.run(publisher.wait(TASK, timeout=0.01, poll_interval=0.001))
+
+    assert _waits(kb, "timeout") == 1

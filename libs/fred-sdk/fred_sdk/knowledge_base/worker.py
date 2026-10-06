@@ -29,19 +29,21 @@ import logging
 
 from temporalio import activity
 from temporalio.client import Client
+from temporalio.runtime import PrometheusConfig, Runtime, TelemetryConfig
 from temporalio.worker import Worker
 from temporalio.worker.workflow_sandbox import (
     SandboxedWorkflowRunner,
     SandboxRestrictions,
 )
 
+from fred_sdk.knowledge_base import telemetry
 from fred_sdk.knowledge_base._workflow import (
     SYNCHRONIZE_ACTIVITY,
     SynchronizeInput,
     SynchronizeWorkflow,
 )
 from fred_sdk.knowledge_base.client import ControlPlaneClient
-from fred_sdk.knowledge_base.configuration import PodConfiguration
+from fred_sdk.knowledge_base.configuration import PodConfiguration, PodObservability
 from fred_sdk.knowledge_base.documents import declare_library_synchronized
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 from fred_sdk.knowledge_base.routing import task_queue_for
@@ -66,6 +68,34 @@ def build_workflow_runner() -> SandboxedWorkflowRunner:
     )
 
 
+def build_runtime(
+    knowledge_base: KnowledgeBase, observability: PodObservability
+) -> Runtime | None:
+    """The engine runtime, exporting its own metrics when configured to.
+
+    None keeps the engine's default runtime, which exports nothing. Every
+    series is tagged with the definition, as the SDK's own are, so the two
+    endpoints join on one label.
+    """
+    exporter = observability.temporal.prometheus
+    if not exporter.enabled:
+        return None
+    logger.info(
+        "Workflow engine metrics served at %s:%s", exporter.address, exporter.port
+    )
+    return Runtime(
+        telemetry=TelemetryConfig(
+            metrics=PrometheusConfig(
+                bind_address=f"{exporter.address}:{exporter.port}",
+                counters_total_suffix=True,
+                unit_suffix=True,
+                durations_as_seconds=True,
+            ),
+            global_tags={"knowledge_base": knowledge_base.id},
+        )
+    )
+
+
 def _build_activity(
     knowledge_base: KnowledgeBase,
     control_plane: ControlPlaneClient,
@@ -75,20 +105,25 @@ def _build_activity(
 
     @activity.defn(name=SYNCHRONIZE_ACTIVITY)
     async def synchronize(payload: SynchronizeInput, run_id: str) -> str:
-        context = await control_plane.fetch_run_context(
-            payload.definition_id,
-            payload.instance_id,
-            run_id,
-        )
-        # Before the handler, not after: a run that fails halfway still filled
-        # part of the library, and people should not have been able to edit it
-        # in the meantime. Idempotent, so every later run changes nothing.
-        await declare_library_synchronized(
-            configuration,
-            library_id=context.library_id,
-            instance_id=context.instance_id,
-        )
-        result = await handler(context)
+        with telemetry.observing_run() as run:
+            context = await control_plane.fetch_run_context(
+                payload.definition_id,
+                payload.instance_id,
+                run_id,
+            )
+            # Before the handler, not after: a run that fails halfway still
+            # filled part of the library, and people should not have been able
+            # to edit it in the meantime. Idempotent, so every later run changes
+            # nothing.
+            run.stage = "declare"
+            await declare_library_synchronized(
+                configuration,
+                library_id=context.library_id,
+                instance_id=context.instance_id,
+            )
+            run.stage = "handler"
+            result = await handler(context)
+            run.result = result
         # Nothing but the outcome travels back: Fred runs the engine, so a second
         # source for a run's state would disagree exactly when a pod is killed
         # mid-run. The workflow turns this outcome into a terminal state.
@@ -100,8 +135,12 @@ def _build_activity(
 async def serve(knowledge_base: KnowledgeBase, configuration: PodConfiguration) -> None:
     """Poll this definition's queue until the process is stopped."""
     task_queue = task_queue_for(knowledge_base.id)
+    telemetry.bind(knowledge_base)
+    telemetry.start_exporter(configuration.observability.kpi.prometheus)
     client = await Client.connect(
-        configuration.temporal_host, namespace=configuration.temporal_namespace
+        configuration.temporal_host,
+        namespace=configuration.temporal_namespace,
+        runtime=build_runtime(knowledge_base, configuration.observability),
     )
     control_plane = ControlPlaneClient(configuration)
     logger.info("Knowledge Base %s serving runs on %s", knowledge_base.id, task_queue)
