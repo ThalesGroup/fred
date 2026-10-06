@@ -376,7 +376,7 @@ class TabularService:
         if missing_uids:
             owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
             for document_uid, dataset in owned.items():
-                datasets_by_uid[document_uid] = [dataset]
+                datasets_by_uid[document_uid] = dataset
             missing_uids = [document_uid for document_uid in missing_uids if document_uid not in owned]
         if missing_uids:
             permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
@@ -1065,7 +1065,7 @@ class TabularService:
         if missing_uids:
             owned = await self._resolve_owned_attachment_datasets(user, missing_uids)
             for document_uid, dataset in owned.items():
-                datasets_by_uid[document_uid] = [dataset]
+                datasets_by_uid[document_uid] = dataset
             missing_uids = [document_uid for document_uid in missing_uids if document_uid not in owned]
         if missing_uids:
             permission_checks = await asyncio.gather(*(self.rebac.has_user_permission(user, DocumentPermission.READ, document_uid) for document_uid in missing_uids))
@@ -1107,36 +1107,33 @@ class TabularService:
         return self._as_owned_attachment_dataset(metadata, user=user)
 
     @staticmethod
-    def _as_owned_attachment_dataset(metadata: DocumentMetadata, *, user: KeycloakUser) -> ResolvedDataset | None:
-        """
-        Apply the ATTACH-TAB-01 ownership check to one already-fetched
-        metadata row. Shared by the single-uid and batch resolvers so both
-        apply identical source_tag/uploaded_by/tags/artifact checks.
-        """
-
+    def _as_owned_attachment_datasets(metadata: DocumentMetadata, *, user: KeycloakUser) -> list[ResolvedDataset]:
+        """Resolve every table of one uploader-owned, tagless attachment."""
         if metadata.source_tag != FAST_INGEST_SOURCE_TAG:
-            return None
-        if metadata.identity.uploaded_by != user.uid:
-            return None
-        # `source_tag` is an operator-configured, client-suppliable string
-        # (`document_sources`) — nothing reserves "fast_ingest" against an
-        # operator naming a real corpus source the same way. A genuine
-        # attachment is always tagless by construction
-        # (`_build_attachment_tabular_dataset`); requiring that here too
-        # means a same-named corpus document (which normal ingestion always
-        # tags) can never be misidentified as an owned attachment.
-        if metadata.tags.tag_ids:
-            return None
+            return []
+        if metadata.identity.uploaded_by != user.uid or metadata.tags.tag_ids:
+            return []
         artifact = read_tabular_artifact(metadata)
-        if artifact is None:
-            return None
-        return ResolvedDataset(
-            metadata=metadata,
-            artifact=artifact,
-            query_alias=build_default_query_alias(metadata.document_uid, metadata.document_name),
-        )
+        if artifact is not None:
+            return [
+                ResolvedDataset(
+                    metadata=metadata,
+                    artifact=artifact,
+                    query_alias=build_default_query_alias(metadata.document_uid, metadata.document_name),
+                )
+            ]
+        multi = read_tabular_multi_artifact(metadata)
+        if multi is None:
+            return []
+        return [ResolvedDataset(metadata=metadata, artifact=table, query_alias=table.query_alias) for table in multi.tables]
 
-    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str]) -> dict[str, ResolvedDataset]:
+    @staticmethod
+    def _as_owned_attachment_dataset(metadata: DocumentMetadata, *, user: KeycloakUser) -> ResolvedDataset | None:
+        """Return the first table for legacy single-dataset preview callers."""
+        datasets = TabularService._as_owned_attachment_datasets(metadata, user=user)
+        return datasets[0] if datasets else None
+
+    async def _resolve_owned_attachment_datasets(self, user: KeycloakUser, document_uids: list[str]) -> dict[str, list[ResolvedDataset]]:
         """
         Batch form of `_resolve_owned_attachment_dataset` for the uids a
         caller's ReBAC-authorized set didn't already resolve.
@@ -1161,11 +1158,11 @@ class TabularService:
         if not document_uids:
             return {}
         rows = await self.metadata_store.get_metadata_by_uids(document_uids)
-        resolved: dict[str, ResolvedDataset] = {}
+        resolved: dict[str, list[ResolvedDataset]] = {}
         for metadata in rows:
-            dataset = self._as_owned_attachment_dataset(metadata, user=user)
-            if dataset is not None:
-                resolved[metadata.document_uid] = dataset
+            datasets = self._as_owned_attachment_datasets(metadata, user=user)
+            if datasets:
+                resolved[metadata.document_uid] = datasets
         return resolved
 
     async def _resolve_scope_tag_ids(

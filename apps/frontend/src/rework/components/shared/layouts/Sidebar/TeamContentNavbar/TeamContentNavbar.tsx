@@ -80,7 +80,7 @@ export default function TeamContentNavbar() {
     navigate(`/team/${teamId}/agents`);
   };
   const capabilities = useTeamCapabilities(selectedTeam);
-  const { canUpdateAgents, canUpdateInfo } = capabilities;
+  const { canUpdateInfo } = capabilities;
 
   const settingsBase = `/team/${teamId}/settings`;
   const inSettings = !!teamId && pathname.startsWith(settingsBase);
@@ -238,11 +238,6 @@ export default function TeamContentNavbar() {
     });
   }
 
-  // Launching and cancelling evaluation campaigns requires agent-update rights
-  // (AGENT-EVALUATION-RFC §8.4), not member administration — so the Evaluations
-  // section is gated separately from the settings entry point itself.
-  const canManageEvaluations = canUpdateAgents;
-
   // AUTHZ-09: the settings entry point is now open to every team member
   // (`canOpenTeamSettings` = `canReadMembers`), so Activity — meant only for
   // elevated roles, not the baseline member surface — needs its own gate
@@ -289,14 +284,6 @@ export default function TeamContentNavbar() {
       label: t("rework.teamSettings.navigation.activity"),
       icon: { category: "outlined", type: "build", filled: false },
       linkProps: { to: `${settingsBase}/activity` },
-    });
-  }
-  if (canManageEvaluations) {
-    settingsItems.push({
-      type: "link",
-      label: t("rework.teamSettings.navigation.evaluations"),
-      icon: { category: "outlined", type: "reviews", filled: false },
-      linkProps: { to: `${settingsBase}/evaluations` },
     });
   }
   if (canSeeActivity) {

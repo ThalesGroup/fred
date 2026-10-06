@@ -20,7 +20,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useChatSse } from "@hooks/useChatSse";
-import type { HitlBatchAnswer, RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
+import type { HitlBatchAnswer, InterruptedRunChoice, RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import {
   useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
   useGetTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdGetQuery,
@@ -52,6 +52,19 @@ function hitlKey(event: RuntimeAwaitingHumanEvent): string {
   ].join(":");
 }
 
+function answerWithOtherPriority(
+  event: RuntimeAwaitingHumanEvent,
+  answer: string | boolean | undefined,
+  freeText?: string,
+): string | boolean | undefined {
+  return event.payload.stage === "agent_question" &&
+    event.payload.free_text &&
+    event.payload.choices?.length &&
+    freeText?.trim()
+    ? undefined
+    : answer;
+}
+
 function resolvedHitlAnswer(
   event: RuntimeAwaitingHumanEvent,
   stagedAnswers: ReadonlyMap<string, StagedHitlAnswer>,
@@ -79,7 +92,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
 
   const sessionId = searchParams.get("session");
   const [input, setInput] = useState("");
-  const submittedDraftRef = useRef<{ sessionId: string; draft: string } | null>(null);
+  // `text`/`command` are what went on the wire, so a Restart re-sends the same turn.
+  const submittedDraftRef = useRef<{
+    sessionId: string;
+    draft: string;
+    text: string;
+    command?: TurnCommand;
+  } | null>(null);
   const [pendingHitls, setPendingHitls] = useState<RuntimeAwaitingHumanEvent[]>([]);
   const pendingHitlsRef = useRef<RuntimeAwaitingHumanEvent[]>([]);
   const [selectedHitlKey, setSelectedHitlKey] = useState<string | null>(null);
@@ -122,7 +141,13 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         if (staged && (!staged.skipped || value.trim())) {
           const next = new Map(stagedHitlAnswersRef.current);
           if (staged.answer === undefined && !value.trim()) next.delete(key);
-          else next.set(key, { ...staged, freeText: value.trim() ? value : undefined, skipped: false });
+          else
+            next.set(key, {
+              ...staged,
+              answer: answerWithOtherPriority(selected, staged.answer, value),
+              freeText: value.trim() ? value : undefined,
+              skipped: false,
+            });
           replaceStagedHitlAnswers(next);
         }
       }
@@ -142,7 +167,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
       const selected = current.find((event) => hitlKey(event) === selectedHitlKey) ?? current[0];
       if (!selected || current.length < 2) return;
       const nextAnswers = new Map(stagedHitlAnswersRef.current);
-      nextAnswers.set(hitlKey(selected), { answer, freeText, skipped });
+      nextAnswers.set(hitlKey(selected), {
+        answer: answerWithOtherPriority(selected, answer, freeText),
+        freeText,
+        skipped,
+      });
       replaceStagedHitlAnswers(nextAnswers);
       const index = current.findIndex((event) => hitlKey(event) === hitlKey(selected));
       const next = [...current.slice(index + 1), ...current.slice(0, index)].find(
@@ -676,7 +705,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   // through the composer. `turnCommand` only adds the descriptor to the
   // context; every guard, session write and restore below is shared.
   const sendTurn = useCallback(
-    async (text: string, turnCommand?: TurnCommand) => {
+    async (text: string, turnCommand?: TurnCommand, interrupted?: InterruptedRunChoice): Promise<boolean> => {
       const attachmentContext = attachments.attachmentsMarkdown;
       console.debug(
         `[useManagedChat] sendTurn() — inputChars=${inputCharacterCount} waitResponse=${waitResponse} sessionId=${sessionId ?? "null"}`,
@@ -696,11 +725,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         console.debug(
           `[useManagedChat] sendTurn() BLOCKED — hasText=${!!text} attachments=${!!attachmentContext} waitResponse=${waitResponse} uploading=${attachments.hasUploadingAttachments} inputTooLong=${inputTooLong}`,
         );
-        return;
+        return false;
       }
       if (handleSendOwnerRef.current) {
         console.debug("[useManagedChat] sendTurn() IGNORED — a send is already in flight");
-        return;
+        return false;
       }
       // `inputTooLong` above measures the composer draft, which on a command
       // is the short command line — not what goes on the wire. The runtime
@@ -715,7 +744,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           summary: t("chatbot.commandMenu.runErrorSummary"),
           detail: t("chatbot.errors.chatInputTooLong", { limit: maxChatInputChars }),
         });
-        return;
+        return false;
       }
       handleSendOwnerRef.current = true;
       try {
@@ -761,7 +790,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         const writesOk = await flushSessionWrites(sid);
         if (!writesOk) {
           console.debug("[useManagedChat] sendTurn() ABORTED — a pending session write failed");
-          return;
+          return false;
         }
 
         // Input/attachments stay untouched here too — cleared only from
@@ -780,8 +809,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
         // `send()` receives the trimmed wire value, but a backend rejection must
         // restore the complete editable draft, including surrounding whitespace —
         // for a command, the command line the user actually typed.
-        submittedDraftRef.current = { sessionId: sid, draft: input };
-        send(text, sid, turnCommand ? { ...runtimeContext, command: turnCommand } : runtimeContext, turnOptions);
+        submittedDraftRef.current = { sessionId: sid, draft: input, text, command: turnCommand };
+        return send(
+          text,
+          sid,
+          turnCommand ? { ...runtimeContext, command: turnCommand } : runtimeContext,
+          turnOptions,
+          interrupted,
+        );
       } finally {
         handleSendOwnerRef.current = false;
       }
@@ -813,6 +848,14 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const handleSend = useCallback(async () => {
     await sendTurn(input.trim());
   }, [sendTurn, input]);
+  // Read at answer time, like buildTurnContextRef, so the card's handler keeps
+  // its identity across keystrokes.
+  const restartLastTurn = () => {
+    const submitted = submittedDraftRef.current;
+    return sendTurn(submitted?.text ?? input.trim(), submitted?.command, { action: "restart" });
+  };
+  const restartLastTurnRef = useRef(restartLastTurn);
+  restartLastTurnRef.current = restartLastTurn;
 
   // Runs a prompt command: the assembled text goes on the wire, the descriptor
   // on the turn's context, and the composer keeps the short command line the
@@ -827,6 +870,28 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const handleHitlAnswer = useCallback(
     (answer: string | boolean | undefined, freeText?: string, skipped = false, rememberApproval = false) => {
       if (!pendingHitl || hitlResumeOwnerRef.current === pendingHitl) return;
+      if (pendingHitl.payload.stage === "execution_interrupted") {
+        // Not a HITL resume: the answer is a new turn that continues or restarts.
+        const prompt = pendingHitl;
+        const interruptionId = prompt.payload.metadata?.interruption_id;
+        replacePendingHitls([]);
+        if (answer === "later") return;
+        // A request that never started leaves the run interrupted: offer the choice again.
+        const restoreIfNotSent = (started: boolean) => {
+          if (!started && activeSessionIdRef.current === prompt.session_id) {
+            if (pendingHitlsRef.current.length === 0) replacePendingHitls([prompt]);
+          }
+        };
+        if (answer === "continue" && typeof interruptionId === "string" && interruptionId) {
+          const { runtimeContext, turnOptions } = buildTurnContextRef.current();
+          void send("", prompt.session_id, runtimeContext, turnOptions, { action: "continue", interruptionId }).then(
+            restoreIfNotSent,
+          );
+        } else {
+          void restartLastTurnRef.current().then(restoreIfNotSent);
+        }
+        return;
+      }
       if (
         freeText !== undefined &&
         maxChatInputChars !== undefined &&
@@ -900,9 +965,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             }
           }
         : undefined;
+      const selectedAnswer = answerWithOtherPriority(prompt, answer, freeText);
       const resume = onAccepted
-        ? sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped, onAccepted)
-        : sendHitlResume(prompt, answer, freeText, runtimeContext, turnOptions, skipped);
+        ? sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped, onAccepted)
+        : sendHitlResume(prompt, selectedAnswer, freeText, runtimeContext, turnOptions, skipped);
       void resume
         .then((reached) => {
           if (reached) {
@@ -926,7 +992,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           if (prompt.payload.stage === "agent_question") setResumingAgentQuestionSessionId(null);
         });
     },
-    [agentInstanceId, maxChatInputChars, pendingHitl, replacePendingHitls, sendHitlResume, showError, t],
+    [agentInstanceId, maxChatInputChars, pendingHitl, replacePendingHitls, send, sendHitlResume, showError, t],
   );
 
   const submitHitlBatch = useCallback(
@@ -947,7 +1013,11 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
           countUnicodeCodePoints(staged.freeText) > maxChatInputChars
         )
           return;
-        answers.push({ event, ...staged });
+        answers.push({
+          event,
+          ...staged,
+          answer: answerWithOtherPriority(event, staged.answer, staged.freeText),
+        });
       }
       const owner = prompts[0];
       hitlResumeOwnerRef.current = owner;

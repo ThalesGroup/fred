@@ -45,11 +45,19 @@ from fred_core.kpi import runtime_stage_timer
 from fred_core.security.structure import PrincipalContext
 from pydantic import ValidationError
 
+from control_plane_backend.agent_instances.store import AgentInstanceRecord
+from control_plane_backend.product.agent_copy import (
+    copy_agent_instance,
+    list_agent_copy_targets,
+)
 from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
 from control_plane_backend.product.schemas import (
+    AgentCopyRequest,
+    AgentCopyResponse,
+    AgentCopyTargetsResponse,
     AgentTemplateSummary,
     BulkDeleteSessionsRequest,
     BulkDeleteSessionsResponse,
@@ -123,6 +131,7 @@ from control_plane_backend.product.service import (
     promote_prompt,
     record_marketplace_prompt_use,
     record_prompt_use,
+    set_prompt_favorite,
     set_prompt_published,
     unenroll_agent_instance,
     update_agent_instance,
@@ -617,6 +626,125 @@ async def delete_team_agent_instance(
         )
 
 
+async def _editable_agent_record(
+    user: KeycloakUser,
+    team_id: TeamId,
+    agent_instance_id: str,
+    deps: ProductServiceDependencies,
+) -> AgentInstanceRecord:
+    """The agent to copy, once the caller is checked as an editor of its team."""
+
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    record = await deps.get_agent_instance_store().get_for_team(
+        agent_instance_id, team_id
+    )
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent instance {agent_instance_id!r} not found for team {team_id!r}.",
+        )
+    return record
+
+
+@router.get(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/copy-targets",
+    response_model=AgentCopyTargetsResponse,
+    summary="List where an agent can be copied, with each destination's readiness.",
+)
+async def get_agent_instance_copy_targets(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> AgentCopyTargetsResponse:
+    """
+    For the personal space and every team the caller edits: whether the agent
+    template is enabled there, and which of the agent's capabilities are not.
+
+    Advisory only: the copy re-checks everything.
+
+    Example:
+    - `GET /control-plane/v1/teams/bid-and-capture/agent-instances/abc/copy-targets`
+    """
+    record = await _editable_agent_record(user, team_id, agent_instance_id, deps)
+    try:
+        targets = await list_agent_copy_targets(user=user, record=record, deps=deps)
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    return AgentCopyTargetsResponse(targets=targets)
+
+
+@router.post(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/copy",
+    response_model=AgentCopyResponse,
+    response_model_exclude_none=True,
+    summary="Copy an agent into one or more teams, or duplicate it in its own team.",
+)
+async def post_agent_instance_copy(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    body: AgentCopyRequest,
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> AgentCopyResponse:
+    """
+    Copy one agent's configuration into every selected destination.
+
+    The caller must edit agents in the source team and in each destination.
+    Public settings travel; scope-private settings are reset when the team
+    changes; configuration files are recreated in the destination. A
+    capability the destination cannot use, or rejects, is left out and listed
+    in `dropped_capabilities`. A failed destination never stops the others.
+
+    Example:
+    - `POST /control-plane/v1/teams/bid-and-capture/agent-instances/abc/copy`
+      `{ "target_team_ids": ["personal", "proposals"] }`
+    """
+    record = await _editable_agent_record(user, team_id, agent_instance_id, deps)
+    if body.display_name is not None and (
+        len(body.target_team_ids) != 1
+        or await require_team_access(
+            user,
+            TeamId(body.target_team_ids[0]),
+            deps.team_dependencies,
+            required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+        )
+        != record.team_id
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="display_name is only allowed when duplicating into the source team.",
+        )
+
+    async def require_editor(target_team_id: TeamId) -> TeamId:
+        return await require_team_access(
+            user,
+            target_team_id,
+            deps.team_dependencies,
+            required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+        )
+
+    try:
+        results = await copy_agent_instance(
+            user=user,
+            record=record,
+            target_team_ids=body.target_team_ids,
+            display_name=body.display_name,
+            deps=deps,
+            authorization=http_request.headers.get("Authorization"),
+            require_editor=require_editor,
+        )
+    except EnrollmentError as exc:
+        raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
+    return AgentCopyResponse(results=results)
+
+
 @router.get(
     "/teams/{team_id}/prompts",
     response_model=list[PromptSummary],
@@ -650,7 +778,7 @@ async def get_team_prompts(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    return await list_prompts(team_id, deps)
+    return await list_prompts(team_id, deps, user_id=user.uid)
 
 
 @router.get(
@@ -896,6 +1024,62 @@ async def put_team_prompt(
             detail=f"Prompt {prompt_id!r} not found for team {team_id!r}.",
         )
     return result
+
+
+async def _set_team_prompt_favorite(
+    team_id: TeamId,
+    prompt_id: str,
+    favorite: bool,
+    deps: ProductDependencies,
+    user: KeycloakUser,
+) -> None:
+    # Reading a prompt is enough to favorite it: read-only members can too.
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
+    )
+    try:
+        await set_prompt_favorite(user, team_id, prompt_id, favorite, deps)
+    except PromptRequestError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail=_prompt_error_detail(exc)
+        ) from exc
+
+
+@router.put(
+    "/teams/{team_id}/prompts/{prompt_id}/favorite",
+    status_code=204,
+    response_model=None,
+    summary="Mark one of the team's prompts as a favorite of the caller.",
+)
+async def add_team_prompt_favorite(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Idempotent. `PUT /control-plane/v1/teams/personal/prompts/1234/favorite`"""
+
+    await _set_team_prompt_favorite(team_id, prompt_id, True, deps, user)
+
+
+@router.delete(
+    "/teams/{team_id}/prompts/{prompt_id}/favorite",
+    status_code=204,
+    response_model=None,
+    summary="Remove one of the team's prompts from the caller's favorites.",
+)
+async def remove_team_prompt_favorite(
+    team_id: Annotated[TeamId, Path()],
+    prompt_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    """Idempotent. `DELETE /control-plane/v1/teams/personal/prompts/1234/favorite`"""
+
+    await _set_team_prompt_favorite(team_id, prompt_id, False, deps, user)
 
 
 @router.delete(

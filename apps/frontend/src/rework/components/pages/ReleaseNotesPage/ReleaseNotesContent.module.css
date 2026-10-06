@@ -58,7 +58,7 @@
 }
 
 .codenameBadge:hover {
-  background: var(--surface-container-low);
+  background: var(--state-on-surface-hover);
   color: var(--on-surface);
 }
 

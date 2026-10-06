@@ -71,8 +71,8 @@ export default function MultiSeriesLineChart({
   const css = useCssVars(
     sectionRef,
     "--on-surface-retreat",
-    "--outline-retreat",
-    "--surface-container-highest",
+    "--outline-muted",
+    "--surface-floating",
     "--on-surface",
     "--font-family-base",
     "--radius-s",
@@ -99,7 +99,7 @@ export default function MultiSeriesLineChart({
       {!!rows.length && (
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-retreat"]} />
+            <CartesianGrid strokeDasharray="3 3" stroke={css["--outline-muted"]} />
             <XAxis
               dataKey="date"
               tick={{
@@ -108,7 +108,7 @@ export default function MultiSeriesLineChart({
                 fontFamily: css["--font-family-base"],
               }}
               tickLine={false}
-              axisLine={{ stroke: css["--outline-retreat"] }}
+              axisLine={{ stroke: css["--outline-muted"] }}
             />
             <YAxis
               allowDecimals={false}
@@ -122,10 +122,10 @@ export default function MultiSeriesLineChart({
               width={32}
             />
             <Tooltip
-              cursor={{ stroke: css["--outline-retreat"] }}
+              cursor={{ stroke: css["--outline-muted"] }}
               contentStyle={{
-                background: css["--surface-container-highest"],
-                border: `1px solid ${css["--outline-retreat"]}`,
+                background: css["--surface-floating"],
+                border: `1px solid ${css["--outline-muted"]}`,
                 borderRadius: css["--radius-s"],
                 color: css["--on-surface"],
                 fontSize: 12,

@@ -10,7 +10,7 @@
 #
 #  DISABLE A COMPONENT  : applications.<name>.enabled: false
 #  OVERRIDE VALUES      : helm install fred ./charts/fred -f my-overrides.yaml
-#  COMPLETE EXAMPLE     : fred-deployment-factory, k3d-apps/fred/values.yaml
+#  COMPLETE EXAMPLE     : deploy/k3d/values.yaml (the local k3d instance)
 #                         (how to write one: deploy/charts/README.md)
 #
 #  SECTIONS:
@@ -1009,6 +1009,8 @@ applications:
               description: "Restrict this agent to a fixed set of document libraries chosen at configuration time."
               default: false
             - key: "chat_options.bound_library_ids"
+              # Library ids belong to the agent's scope: reset when the agent is copied.
+              scope_private: true
               type: "array"
               item_type: "string"
               title: "Bound document libraries"
@@ -2052,6 +2054,8 @@ applications:
             # Deployment-wide kill switch for the integrated Apps surface,
             # catalog/API, and frontend application-service gateway.
             enableApplications: false
+            enableAllResourceSpaces: false
+            enableInformationSystems: false
           # Optional deployer-configured upload warning, shown on upload
           # surfaces (document upload drawer, chat attachments). Omit to show
           # nothing. Texts resolved from the user's locale, "en" fallback.

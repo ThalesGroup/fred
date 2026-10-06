@@ -26,6 +26,8 @@ import PromptCard from "@shared/organisms/PromptCard/PromptCard.tsx";
 import { CategoryPicker } from "@shared/molecules/CategoryPicker/CategoryPicker.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips.tsx";
+import FavoritesFilterChip from "@shared/molecules/FavoritesFilterChip/FavoritesFilterChip.tsx";
+import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle.ts";
 import { filterPrompts, NO_CATEGORY_FILTER_ID } from "@shared/utils/promptFilter.ts";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog.tsx";
 import PromptViewDialog from "./PromptViewDialog/PromptViewDialog.tsx";
@@ -105,6 +107,8 @@ export default function PromptsPage() {
   const [seededForId, setSeededForId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const toggleFavorite = usePromptFavoriteToggle(teamId);
   const FILTER_VISIBLE = 4;
 
   const {
@@ -186,8 +190,8 @@ export default function PromptsPage() {
   }, [prompts]);
 
   const filtered = useMemo(
-    () => filterPrompts(prompts, { search, categoryId: activeCategory }),
-    [prompts, search, activeCategory],
+    () => filterPrompts(prompts, { search, categoryId: activeCategory, favoritesOnly }),
+    [prompts, search, activeCategory, favoritesOnly],
   );
 
   const isSubmitting = isCreating || isUpdating;
@@ -419,7 +423,7 @@ export default function PromptsPage() {
                     <Button
                       color="primary"
                       variant="filled"
-                      size="medium"
+                      size="small"
                       icon={{ category: "outlined", type: "add" }}
                       onClick={openCreate}
                     >
@@ -433,13 +437,13 @@ export default function PromptsPage() {
                         onChange={setSearch}
                         placeholder={t("rework.teams.prompts.searchPlaceholder")}
                         clearAriaLabel={t("rework.teams.prompts.clearSearch")}
-                        size="small"
+                        size="xs"
                       />
                     </div>
                     {canManage && (
                       <Tooltip text={t("rework.promptCategories.manage.buttonAria")}>
                         <IconButton
-                          size="medium"
+                          size="small"
                           color="on-surface-retreat"
                           variant="icon"
                           icon={{ category: "outlined", type: "tune" }}
@@ -454,34 +458,43 @@ export default function PromptsPage() {
             />
           </div>
 
-          {/* ── Category filter chips ── */}
-          {categories.length > 0 && (
-            <div className={styles.filterBar}>
-              <FilterChips
-                options={[
-                  {
-                    id: NO_CATEGORY_FILTER_ID,
-                    label: t("rework.promptCategories.noCategory"),
-                    count: categoryCounts.noCategory,
-                  },
-                  ...categories.map((cat) => ({
-                    id: cat.id,
-                    label: cat.name,
-                    count: categoryCounts.byId.get(cat.id) ?? 0,
-                  })),
-                ]}
-                value={activeCategory}
-                onChange={(v) => setActiveCategory(v)}
-                allLabel={t("rework.teams.agents.podFilter.all")}
-                maxVisible={FILTER_VISIBLE}
-                showMoreLabel={(count) => `+${count}`}
-                showLessLabel="−"
+          {/* ── Favorites toggle, then the category chips (radio) ── */}
+          <div className={styles.filterBar}>
+            <div className={styles.filterRow}>
+              <FavoritesFilterChip
+                label={t("rework.teams.prompts.favorite.filter")}
+                active={favoritesOnly}
+                onToggle={() => setFavoritesOnly((on) => !on)}
               />
+              {categories.length > 0 && (
+                <FilterChips
+                  options={[
+                    {
+                      id: NO_CATEGORY_FILTER_ID,
+                      label: t("rework.promptCategories.noCategory"),
+                      count: categoryCounts.noCategory,
+                    },
+                    ...categories.map((cat) => ({
+                      id: cat.id,
+                      label: cat.name,
+                      count: categoryCounts.byId.get(cat.id) ?? 0,
+                    })),
+                  ]}
+                  value={activeCategory}
+                  onChange={(v) => setActiveCategory(v)}
+                  allLabel={t("rework.teams.agents.podFilter.all")}
+                  maxVisible={FILTER_VISIBLE}
+                  showMoreLabel={(count) => `+${count}`}
+                  showLessLabel="−"
+                />
+              )}
             </div>
-          )}
+          </div>
 
           {filtered.length === 0 ? (
-            <div className={styles.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
+            <div className={styles.emptyState}>
+              {favoritesOnly ? t("rework.teams.prompts.favorite.empty") : t("rework.teams.prompts.emptySearch")}
+            </div>
           ) : (
             <div className={styles.promptList}>
               {filtered.map((prompt) => (
@@ -499,6 +512,7 @@ export default function PromptsPage() {
                   onPublish={() => handlePublish(prompt)}
                   onUnpublish={() => handleUnpublish(prompt)}
                   onDelete={() => handleDelete(prompt)}
+                  onToggleFavorite={() => void toggleFavorite(prompt)}
                 />
               ))}
             </div>

@@ -97,6 +97,8 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   // chat-input policy wiring, and the label's own behaviour is covered in
   // ReasoningChip.test.tsx.
   useEffectiveChatModelQuery: () => ({ data: undefined }),
+  useAddPromptFavoriteMutation: () => [vi.fn()],
+  useRemovePromptFavoriteMutation: () => [vi.fn()],
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useLazyGetTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdGetQuery: () => [

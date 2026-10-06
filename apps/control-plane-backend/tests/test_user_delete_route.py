@@ -91,9 +91,15 @@ async def _deployment(
     async def root() -> str:
         return _ROOT
 
+    async def no_favorites(user_id: str) -> None:
+        calls.append("delete_favorites")
+
     container = SimpleNamespace(
         get_rebac_engine=lambda: engine_under_test,
         get_platform_bootstrap_store=lambda: SimpleNamespace(get_completed_by=root),
+        get_prompt_store=lambda: SimpleNamespace(
+            delete_favorites_for_user=no_favorites
+        ),
     )
     app = FastAPI()
     app.include_router(users_api.router)
@@ -136,7 +142,11 @@ async def test_delete_bans_before_identity_deletion() -> None:
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 204
-        assert deployment.calls == ["suspend_account", "delete_identity_account"]
+        assert deployment.calls == [
+            "suspend_account",
+            "delete_favorites",
+            "delete_identity_account",
+        ]
         await _assert_banned(deployment.rebac)
         assert ban(_PERSON) in deployment.rebac.relations
         assert deployment.identity.accounts == {_BYSTANDER}
@@ -194,7 +204,11 @@ async def test_identity_failure_after_the_ban_leaves_the_person_banned() -> None
         retried = await deployment.client.delete(_DELETE)
 
         assert retried.status_code == 204
-        assert deployment.calls == ["suspend_account", "delete_identity_account"]
+        assert deployment.calls == [
+            "suspend_account",
+            "delete_favorites",
+            "delete_identity_account",
+        ]
         assert deployment.identity.accounts == {_BYSTANDER}
 
 
@@ -206,7 +220,11 @@ async def test_missing_identity_returns_not_found_after_the_ban() -> None:
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 404
-        assert deployment.calls == ["suspend_account", "delete_identity_account"]
+        assert deployment.calls == [
+            "suspend_account",
+            "delete_favorites",
+            "delete_identity_account",
+        ]
         await _assert_banned(deployment.rebac)
 
 
@@ -231,7 +249,7 @@ async def test_without_account_status_enforcement_delete_writes_no_ban() -> None
         response = await deployment.client.delete(_DELETE)
 
         assert response.status_code == 204
-        assert deployment.calls == ["delete_identity_account"]
+        assert deployment.calls == ["delete_favorites", "delete_identity_account"]
         assert ban(_PERSON) not in rebac.relations
         assert await _can_read_team(rebac, _PERSON)
         assert deployment.identity.accounts == {_BYSTANDER}

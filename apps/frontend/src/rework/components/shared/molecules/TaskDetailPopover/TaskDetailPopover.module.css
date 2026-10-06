@@ -22,7 +22,7 @@
   box-shadow: var(--shadow-m);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
-  background: var(--surface-container-high);
+  background: var(--surface-floating);
   padding: var(--spacing-s);
   width: 280px;
   /* A long backend error (e.g. a raw DuckDB sniffer dump) can be taller than

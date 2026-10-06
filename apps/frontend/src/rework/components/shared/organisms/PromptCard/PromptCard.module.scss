@@ -23,12 +23,12 @@
   gap: var(--spacing-xs);
   cursor: pointer;
   border: 1px solid transparent;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-ms);
   background: var(--surface-container);
   padding: 12px var(--spacing-m);
 
   &:hover {
-    border-color: var(--outline-retreat);
+    border-color: var(--outline-variant);
     background: var(--state-on-surface-hover);
   }
 
@@ -41,9 +41,15 @@
 /* ── More menu ──────────────────────────────────────────────────────────────── */
 
 .moreMenu {
+  display: flex;
   position: absolute;
   top: var(--spacing-2xs);
   right: var(--spacing-2xs);
+}
+
+/* Two buttons in the corner instead of one: keep the header text clear of both. */
+.card[data-has-favorite="true"] .header {
+  padding-right: calc(var(--spacing-xl) + var(--spacing-l));
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────────── */
@@ -76,8 +82,12 @@
 
 /* ── Body ───────────────────────────────────────────────────────────────────── */
 
+/* Always two lines tall, so every card in the grid has the same height whatever
+   the filter leaves on a row. */
 .body {
   flex: 1;
+  min-height: calc(2em * 1.45);
+  font: var(--font-body-medium);
 }
 
 .description {
@@ -98,7 +108,7 @@
   margin: 0;
   -webkit-line-clamp: 2;
   overflow: hidden;
-  color: var(--on-surface-variant);
+  color: var(--on-surface-retreat);
   font: var(--font-body-medium);
   font-style: italic;
   line-height: 1.45;
@@ -106,12 +116,15 @@
 
 /* ── Footer: usage count + published badge ─────────────────────────────────── */
 
+/* Bottom-aligned and as tall as the published chip, so the usage count sits in the
+   same place, and the card keeps its height, whether the chip is there or not. */
 .footer {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--spacing-xs);
   margin-top: var(--spacing-2xs);
+  min-height: 1.25rem;
 }
 
 .uses {

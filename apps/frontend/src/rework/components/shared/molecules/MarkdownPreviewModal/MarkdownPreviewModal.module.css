@@ -76,7 +76,7 @@
 
 .body {
   flex: 1;
-  border: 1px solid var(--outline-retreat);
+  border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
   background: var(--surface-container-low);
   padding: var(--spacing-l);

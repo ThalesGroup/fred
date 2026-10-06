@@ -34,18 +34,22 @@
   flex-direction: column;
   box-shadow: var(--shadow-s);
   border-radius: var(--radius-m);
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-floating);
   width: min(400px, 90vw);
   max-height: calc(100dvh - var(--spacing-xl));
   color: var(--on-surface);
 }
 
 .titleContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
   padding: var(--spacing-s) var(--spacing-m);
 }
 
 .title {
   margin: 0;
+  min-width: 0;
   color: var(--on-surface);
   font: var(--font-title-medium);
 }

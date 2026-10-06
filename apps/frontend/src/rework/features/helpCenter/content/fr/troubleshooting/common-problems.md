@@ -59,9 +59,9 @@ Il est **suspendu**. Trois causes :
 - La **configuration** d'une de ses fonctions n'est plus valide : décochez la
   fonction sur l'agent, enregistrez, recochez-la, enregistrez à nouveau.
 
-Cas voisin : un agent **dupliqué** hérite de la configuration mais pas des
-fichiers qu'elle référence. Un modèle PowerPoint, par exemple, doit être
-redéposé sur la copie.
+Cas voisin : un agent **copié dans une autre équipe** perd ses choix propres à
+l'équipe d'origine (bibliothèques, dossiers, documents) et les capacités que
+cette équipe n'a pas. Rattachez-lui les ressources de sa nouvelle équipe.
 
 ## La réponse s'interrompt ou n'arrive pas
 

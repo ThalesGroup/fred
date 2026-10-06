@@ -19,7 +19,7 @@
   align-items: center;
   gap: var(--spacing-2xs);
   border-radius: var(--radius-xs);
-  background: var(--surface-container-high);
+  background: var(--surface-container-highest);
   padding: 2px var(--spacing-xs);
   color: var(--on-surface-retreat);
   font: var(--font-label-small);

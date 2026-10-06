@@ -46,7 +46,7 @@
   bottom: 0;
   left: var(--trace-rail-x, 0);
   transform: translateX(-50%);
-  background: var(--outline-retreat);
+  background: var(--outline-muted);
   width: 1px;
   content: "";
 }
@@ -54,7 +54,7 @@
 .row:hover,
 .row:focus-visible {
   outline: none;
-  background: var(--surface-container);
+  background: var(--state-on-surface-focused);
 }
 
 /* The marker sits ON the rail (`--trace-rail-x`, set by ThoughtTrace) so the

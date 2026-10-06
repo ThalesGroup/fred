@@ -91,7 +91,7 @@ vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
 // a fresh `vi.fn()` per render would make those deps look "changed" every
 // render, re-firing the sessionId-change reset effect forever (observed as
 // an OOM from an actual infinite render loop while writing this test).
-const sendMock = vi.fn(async (..._args: unknown[]) => {});
+const sendMock = vi.fn(async (..._args: unknown[]) => true);
 const prepareChatControlsMock = vi.fn(async () => ({}));
 const chatSseResetMock = vi.fn();
 // Default: the resume reached the backend. `useManagedChat` calls `.then()` on
@@ -1385,6 +1385,205 @@ describe("useManagedChat — session write reliability", () => {
     },
   };
   const grantScope = { userId: "alice", agentInstanceId: "agent-1", sessionId: "session-1" };
+
+  const interruptedEvent = {
+    type: "awaiting_human",
+    session_id: "session-1",
+    exchange_id: "exchange-1",
+    payload: {
+      stage: "execution_interrupted",
+      choices: [
+        { id: "continue", label: "Continue" },
+        { id: "restart", label: "Restart" },
+      ],
+      metadata: { node_id: "publish", interruption_id: "int-1" },
+    },
+  };
+
+  it("Later dismisses unfinished work without sending or losing the draft", () => {
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("draft"));
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+    act(() => latest.handleHitlAnswer("later"));
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.input).toBe("draft");
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    expect(latest.pendingHitl).toEqual(interruptedEvent);
+  });
+
+  it("continue on an interrupted run sends the interruption, not a HITL resume, and keeps the draft", async () => {
+    mount();
+    bindSession("session-1");
+    act(() => latest.setInput("again"));
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("continue");
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledWith("", "session-1", expect.any(Object), undefined, {
+      action: "continue",
+      interruptionId: "int-1",
+    });
+    expect(latest.pendingHitl).toBeNull();
+    expect(latest.input).toBe("again");
+  });
+
+  it("keeps offering the choice when the continue request never started", async () => {
+    sendMock.mockResolvedValueOnce(false);
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("continue");
+      await Promise.resolve();
+    });
+    rerender();
+
+    expect(latest.pendingHitl).toEqual(interruptedEvent);
+  });
+
+  it("restart on an interrupted run re-sends the same turn, command included, with restart", async () => {
+    mount();
+    bindSession("session-1");
+    const command = { command: "plan", prompt_name: "Plan", appended_text: "" };
+    act(() => latest.setInput("/plan"));
+    rerender();
+    await act(async () => {
+      await latest.runCommand({ text: "assembled prompt", command } as never);
+    });
+    act(() => capturedOnAwaitingHuman?.(interruptedEvent));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("restart");
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).not.toHaveBeenCalled();
+    const restart = sendMock.mock.calls[1];
+    expect(restart[0]).toBe("assembled prompt");
+    expect(restart[2]).toMatchObject({ command });
+    expect(restart[4]).toEqual({ action: "restart" });
+  });
+
+  it("submits Other text alone after a single question choice", async () => {
+    const question = {
+      ...awaitingHumanEvent,
+      payload: {
+        ...awaitingHumanEvent.payload,
+        stage: "agent_question",
+        choices: [{ id: "paris", label: "Paris" }],
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => capturedOnAwaitingHuman?.(question));
+    rerender();
+
+    await act(async () => {
+      latest.handleHitlAnswer("paris", "Lyon");
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(question, undefined, "Lyon", expect.any(Object), undefined, false);
+  });
+
+  it("replaces a staged choice with Other text in a grouped answer", async () => {
+    const first = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Destination?",
+        interrupt_id: "interrupt-a",
+        occurrence_id: "call-a",
+        choices: [{ id: "paris", label: "Paris" }],
+        free_text: true,
+      },
+    };
+    const second = {
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: "Budget?",
+        interrupt_id: "interrupt-b",
+        occurrence_id: "call-b",
+        choices: [{ id: "low", label: "Low" }],
+        free_text: true,
+      },
+    };
+    mount();
+    bindSession("session-1");
+    act(() => {
+      capturedOnAwaitingHuman?.(first);
+      capturedOnAwaitingHuman?.(second);
+    });
+    rerender();
+    act(() => latest.stageHitlAnswer("paris"));
+    act(() => latest.selectHitlTab(first));
+    act(() => latest.setHitlFreeText("Lyon"));
+    expect(latest.stagedHitlAnswer).toEqual({ answer: undefined, freeText: "Lyon", skipped: false });
+    act(() => latest.stageHitlAnswer(undefined, "Lyon"));
+    act(() => latest.stageHitlAnswer("low"));
+
+    await act(async () => {
+      latest.handleSendAllHitl();
+      await Promise.resolve();
+    });
+
+    expect(sendHitlResumeMock).toHaveBeenCalledWith(
+      first,
+      undefined,
+      undefined,
+      expect.any(Object),
+      undefined,
+      false,
+      expect.any(Function),
+      [
+        { event: first, answer: undefined, freeText: "Lyon", skipped: false },
+        { event: second, answer: "low", freeText: undefined, skipped: false },
+      ],
+    );
+  });
+
+  it("wraps Next to the first unanswered question tab", () => {
+    const questions = ["first", "second", "third", "fourth"].map((id) => ({
+      ...awaitingHumanEvent,
+      payload: {
+        stage: "agent_question",
+        question: `${id}?`,
+        interrupt_id: `interrupt-${id}`,
+        occurrence_id: `call-${id}`,
+        choices: [{ id, label: id }],
+        free_text: true,
+      },
+    }));
+    mount();
+    bindSession("session-1");
+    act(() => questions.forEach((question) => capturedOnAwaitingHuman?.(question)));
+    rerender();
+
+    act(() => latest.selectHitlTab(questions[3]));
+    act(() => latest.stageHitlAnswer("fourth"));
+    expect(latest.pendingHitl).toEqual(questions[0]);
+    act(() => latest.stageHitlAnswer("first"));
+    expect(latest.pendingHitl).toEqual(questions[1]);
+    act(() => latest.selectHitlTab(questions[3]));
+    act(() => latest.stageHitlAnswer("fourth"));
+    expect(latest.pendingHitl).toEqual(questions[1]);
+    act(() => latest.stageHitlAnswer("second"));
+    expect(latest.pendingHitl).toEqual(questions[2]);
+  });
 
   it("stages simultaneous answers, permits revision, then resumes once", async () => {
     const first = {

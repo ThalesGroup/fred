@@ -97,6 +97,10 @@ async def authorize_task_mutation(
     raise HTTPException(status_code=403, detail="Not authorized to cancel this task")
 
 
+# Keeps a read's URL far below nginx's default 8 KB request line.
+MAX_TASK_IDS_PER_READ = 50
+
+
 async def list_tasks_scoped(
     service: TaskService,
     rebac: RebacEngine,
@@ -106,17 +110,33 @@ async def list_tasks_scoped(
     team_id: str | None,
     kind: str | None,
     state: str | None,
+    task_ids: list[str] | None = None,
 ) -> TaskListResponse:
     """The single owner of the GET /tasks scope → authz → query rule (RFC §7.2).
 
     - ``user``: no role required — only the caller's own tasks (terminal ones
-      hidden unless a state filter is given).
+      hidden unless a state filter is given). With ``task_ids``, those of the
+      caller's tasks in any state: how the frontend follows progress. Ids the
+      caller does not own are simply absent.
     - ``platform``: requires ``can_manage_platform``.
     - ``team``: requires ``team_id`` and either ``can_manage_platform`` or
       ``CAN_READ_MEMBERS`` on that team.
 
     ``scope`` is assumed already validated to ``platform|team|user`` by the route.
     """
+    if task_ids is not None:
+        if scope != "user":
+            raise HTTPException(
+                status_code=422, detail="task_id is only supported with scope=user"
+            )
+        if not 1 <= len(task_ids) <= MAX_TASK_IDS_PER_READ:
+            raise HTTPException(
+                status_code=422,
+                detail=f"task_id takes 1 to {MAX_TASK_IDS_PER_READ} values",
+            )
+        return await service.list_tasks(
+            created_by=user.uid, kind=kind, state=state, task_ids=task_ids
+        )
     if scope == "user":
         return await service.list_tasks(
             created_by=user.uid,

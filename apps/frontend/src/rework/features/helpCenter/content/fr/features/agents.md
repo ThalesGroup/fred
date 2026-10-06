@@ -98,13 +98,54 @@ que de diagnostiquer un agent qui en a trop.
   si vous en avez besoin (voir
   [Administration](/help/fr/features/administration)).
 
-## Dupliquer, suspendre, supprimer
+## Dupliquer, copier, suspendre, supprimer
 
-- **Dupliquer** — repartir d'un agent existant pour en faire une variante. La
-  configuration est copiée, mais **pas les fichiers** qu'elle référence : un
-  modèle PowerPoint, par exemple, est à redéposer sur la copie.
+- **Dupliquer** — repartir d'un agent existant pour en faire une variante dans
+  la même équipe. Tout est repris, y compris ses fichiers comme un modèle
+  PowerPoint.
+- **Copier dans…** — donner une copie de l'agent à une autre équipe ou à votre
+  espace personnel. Voir ci-dessous.
 - **Suspendu** — un agent suspendu reste visible mais inutilisable. C'est
   qu'une fonction dont il dépend a été désactivée, que l'accès de l'équipe y a
   été retiré, ou que sa configuration n'est plus valide. Voir
   [Problèmes courants](/help/fr/troubleshooting/common-problems).
 - **Supprimer** — la suppression est définitive.
+
+## Copier un agent dans une autre équipe
+
+Le menu **⋮** de la carte d'un agent propose **Copier dans…**. Vous choisissez
+un ou plusieurs espaces : votre espace personnel et les équipes où vous êtes
+**Éditeur**. Il faut aussi être Éditeur de l'équipe de l'agent.
+
+Chaque équipe reçoit son propre agent, indépendant de l'original : les
+modifications de l'un ne touchent pas l'autre. Tous les éditeurs de l'équipe
+peuvent l'utiliser et le régler aussitôt. Si le nom est déjà pris, la copie
+reçoit un suffixe, par exemple `Analyste_imported-1`.
+
+**Ce qui est repris** : le nom, la description, les instructions et les
+réglages de l'agent.
+
+**Ce qui est remis à zéro** : les choix propres à l'équipe d'origine — une
+bibliothèque, un dossier ou des documents choisis. La capacité reste activée,
+mais elle porte désormais sur les ressources de la nouvelle équipe. Un agent
+qui lisait le wiki de son équipe lira celui de l'équipe qui reçoit la copie.
+
+**Ce qui est recréé** : les fichiers de configuration, comme un modèle
+PowerPoint, sont déposés à nouveau dans la nouvelle équipe, comme si un
+éditeur l'avait fait lui-même. Si le modèle va chercher ses images dans des
+dossiers que la nouvelle équipe n'a pas, ces champs image restent vides : un
+message vous indique les dossiers à créer, puis le modèle à redéposer.
+
+**Ce qui n'est jamais copié** : les conversations et les fichiers produits par
+l'agent.
+
+Avant de valider, la fenêtre signale les équipes qui ne pourront pas tout
+recevoir :
+
+- **Template d'agent non activé** — l'équipe n'a pas accès au modèle de cet
+  agent. Elle ne peut pas être choisie.
+- **Capacités manquantes** — l'équipe n'a pas toutes les capacités de l'agent
+  (survolez le message pour la liste). Vous pouvez copier quand même : l'agent
+  y fonctionnera sans elles, avec ses instructions intactes. Pour les obtenir,
+  demandez leur ouverture (voir
+  [Administration](/help/fr/features/administration)).

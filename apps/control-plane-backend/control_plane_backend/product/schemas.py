@@ -105,6 +105,13 @@ class FrontendUserAuthConfig(BaseModel):
     client_id: str | None = None
 
 
+class FrontendUiThemes(BaseModel):
+    """Platform default UI theme and hidden theme ids, as the frontend reads them."""
+
+    default_theme: str | None = None
+    hidden_themes: list[str] = Field(default_factory=list)
+
+
 class FrontendConfig(BaseModel):
     """Public pre-auth frontend configuration surface.
 
@@ -154,6 +161,14 @@ class FrontendConfig(BaseModel):
             "'not completed' alone as 'must show the bootstrap page'. The "
             "frontend must gate on this field, not re-derive the ReBAC/auth "
             "predicate itself."
+        ),
+    )
+    ui_themes: FrontendUiThemes | None = Field(
+        default=None,
+        description=(
+            "Platform UI theme settings, omitted when never saved. Public on "
+            "purpose: the frontend resolves the theme before its first paint, "
+            "before authentication. Theme ids only, no admin-authored content."
         ),
     )
 
@@ -591,6 +606,8 @@ class PromptSummary(BaseModel):
     avg_output_tokens: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    # For the caller only; set on the team listing, False elsewhere.
+    is_favorite: bool = False
 
 
 class PromptCommandSummary(BaseModel):
@@ -652,6 +669,7 @@ class ContextPromptSummary(BaseModel):
     version: int
     session_count: int
     score: float | None = None
+    is_favorite: bool = False
 
 
 class PromptScoreUpdateRequest(BaseModel):
@@ -664,6 +682,68 @@ class PromptPromoteRequest(BaseModel):
     """Request body for promoting (copy-by-value) one prompt to another team."""
 
     target_team_id: str = Field(..., min_length=1)
+
+
+class AgentCopyCapability(BaseModel):
+    """One capability of the agent, as shown to the user."""
+
+    id: str
+    name: str = Field(description="i18n key of the capability's display name.")
+
+
+class AgentCopyTarget(BaseModel):
+    """Readiness of one destination for copying an agent (advisory)."""
+
+    team_id: TeamId
+    template_enabled: bool
+    missing_capabilities: list[AgentCopyCapability] = Field(default_factory=list)
+
+
+class AgentCopyTargetsResponse(BaseModel):
+    """Destinations the caller can copy an agent to: personal space and edited teams."""
+
+    targets: list[AgentCopyTarget]
+
+
+class AgentCopyRequest(BaseModel):
+    """Copy one agent into one or more destinations.
+
+    `display_name` is the "Duplicate" case: allowed only for a single target
+    equal to the source team, and kept as is. Otherwise the source name is
+    kept when free in the destination, else suffixed ``_imported-N``.
+    """
+
+    target_team_ids: list[str] = Field(..., min_length=1)
+    display_name: str | None = Field(default=None, min_length=1)
+
+
+class AgentCopyNotice(BaseModel):
+    """A capability copied with something left for an editor to redo."""
+
+    capability: AgentCopyCapability
+    message: str
+
+
+class AgentCopyResult(BaseModel):
+    """Outcome of copying an agent into one destination."""
+
+    team_id: str
+    agent: ManagedAgentInstanceSummary | None = None
+    dropped_capabilities: list[AgentCopyCapability] = Field(
+        default_factory=list,
+        description="Capabilities left out: not usable in the destination, or rejected there.",
+    )
+    notices: list[AgentCopyNotice] = Field(
+        default_factory=list,
+        description="What an editor must redo in the destination, per capability.",
+    )
+    error: str | None = None
+
+
+class AgentCopyResponse(BaseModel):
+    """Per-destination results of an agent copy."""
+
+    results: list[AgentCopyResult]
 
 
 class MarketplaceImportRequest(BaseModel):

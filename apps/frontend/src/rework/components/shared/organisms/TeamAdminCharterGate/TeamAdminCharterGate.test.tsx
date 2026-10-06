@@ -24,7 +24,7 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-type SelectedTeam = { id: string; my_relations: string[]; admins: Array<{ id: string }> };
+type SelectedTeam = { id: string; my_relations: string[]; admins: Array<{ id: string }>; permissions?: string[] };
 
 const h = vi.hoisted(() => ({
   team: undefined as SelectedTeam | undefined,
@@ -94,7 +94,12 @@ describe("TeamAdminCharterGate", () => {
 
   it("shows no notice while bootstrap has not reported charter enablement", () => {
     h.charterEnabled = undefined;
-    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
+    h.team = {
+      id: "team-1",
+      my_relations: ["pending_team_admin", "team_editor"],
+      admins: [{ id: "alice" }],
+      permissions: ["can_read"],
+    };
     render();
 
     expect(container.textContent).toBe("team-pages");
@@ -107,8 +112,33 @@ describe("TeamAdminCharterGate", () => {
     expect(container.textContent).toBe("charter-page");
   });
 
+  it("keeps the charter visible while only bootstrap contacts are available", () => {
+    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "pending" }] };
+    render();
+
+    expect(container.textContent).toBe("charter-page");
+    expect(container.querySelector('[role="status"]')).toBeNull();
+
+    h.team = { ...h.team, admins: [{ id: "accepted" }], permissions: ["can_read"] };
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/team/team-1/agents"]}>
+          <TeamAdminCharterGate>team-pages</TeamAdminCharterGate>
+        </MemoryRouter>,
+      );
+    });
+
+    expect(container.textContent).toContain("team-pages");
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+  });
+
   it("leaves the pages to a pending admin's other roles once the team has an accepted admin", () => {
-    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
+    h.team = {
+      id: "team-1",
+      my_relations: ["pending_team_admin", "team_editor"],
+      admins: [{ id: "alice" }],
+      permissions: ["can_read"],
+    };
     render();
 
     expect(container.querySelector('[role="status"]')?.textContent).toContain("rework.teamAdminCharter.pendingNotice");
@@ -117,14 +147,19 @@ describe("TeamAdminCharterGate", () => {
   });
 
   it("drops the notice on the Responsibilities section, which holds the Accept action", () => {
-    h.team = { id: "team-1", my_relations: ["pending_team_admin"], admins: [{ id: "alice" }] };
+    h.team = {
+      id: "team-1",
+      my_relations: ["pending_team_admin"],
+      admins: [{ id: "alice" }],
+      permissions: ["can_read"],
+    };
     render("/team/team-1/settings/responsibilities");
 
     expect(container.textContent).toBe("team-pages");
   });
 
   it("leaves a team's pages to its admins and members", () => {
-    h.team = { id: "team-1", my_relations: ["team_admin"], admins: [{ id: "alice" }] };
+    h.team = { id: "team-1", my_relations: ["team_admin"], admins: [{ id: "alice" }], permissions: ["can_read"] };
     render();
 
     expect(container.textContent).toBe("team-pages");
@@ -137,7 +172,12 @@ describe("TeamAdminCharterGate", () => {
   });
 
   it("ignores the last team still loaded once the user is back on the home page", () => {
-    h.team = { id: "team-1", my_relations: ["pending_team_admin", "team_editor"], admins: [{ id: "alice" }] };
+    h.team = {
+      id: "team-1",
+      my_relations: ["pending_team_admin", "team_editor"],
+      admins: [{ id: "alice" }],
+      permissions: ["can_read"],
+    };
     h.offTeamPages = true;
     render("/home");
 

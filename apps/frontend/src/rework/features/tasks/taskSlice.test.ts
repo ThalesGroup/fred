@@ -17,8 +17,8 @@ import {
   taskSlice,
   taskRegistered,
   taskEventReceived,
+  taskSnapshotsReceived,
   taskEvicted,
-  trayClockTicked,
   taskAcknowledged,
   completedTasksCleared,
   selectActiveTasks,
@@ -38,6 +38,7 @@ import {
 } from "./taskSlice";
 import type { TasksState } from "./taskSlice";
 import type { ErasureTaskEvent, IngestionTaskEvent, TaskTarget, TaskViewModel } from "./taskTypes";
+import type { TaskSummary } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 
 const { reducer } = taskSlice;
 
@@ -74,6 +75,7 @@ function vm(overrides: Partial<TaskViewModel> = {}): TaskViewModel {
     terminalAt: null,
     acknowledgedAt: null,
     warnings: null,
+    untracked: false,
     ...overrides,
   };
 }
@@ -240,22 +242,6 @@ describe("taskEvicted", () => {
     const init = { byId: { t1: vm() } };
     const s = reducer(init, taskEvicted("unknown"));
     expect(Object.keys(s.byId)).toHaveLength(1);
-  });
-});
-
-// ── trayClockTicked ───────────────────────────────────────────────────────────
-
-describe("trayClockTicked", () => {
-  it("advances the tick counter without touching tasks", () => {
-    const init = { byId: { t1: vm() }, tick: 0 };
-    const s = reducer(init, trayClockTicked());
-    expect(s.tick).toBe(1);
-    expect(s.byId).toEqual(init.byId);
-  });
-
-  it("treats a missing tick as zero", () => {
-    const s = reducer({ byId: {} }, trayClockTicked());
-    expect(s.tick).toBe(1);
   });
 });
 
@@ -602,7 +588,7 @@ describe("selectAllTasks", () => {
     vi.useFakeTimers();
     const now = 1_000_000;
     vi.setSystemTime(now);
-    // Older than the tray eviction window — selectVisibleTasks would drop this,
+    // Older than the visible-task window: selectVisibleTasks drops this,
     // but the admin history must retain it.
     const s = { byId: { old: vm({ taskId: "old", state: "succeeded", terminalAt: now - EVICTION_DELAY_MS - 1 }) } };
     expect(selectVisibleTasks(root(s))).toHaveLength(0);
@@ -716,5 +702,102 @@ describe("the two stages of an import", () => {
     const running = reducer(handed, taskEventReceived(ev({ task_id: "task-1", state: "running", seq: 1 })));
 
     expect(reducer(running, uploadFailed({ localId: "task-1", error: "late" })).byId["task-1"].state).toBe("running");
+  });
+});
+
+// ── taskSnapshotsReceived ─────────────────────────────────────────────────────
+
+function summary(overrides: Partial<TaskSummary> = {}): TaskSummary {
+  return {
+    task_id: "t1",
+    kind: "ingestion",
+    state: "running",
+    created_at: "2026-10-03T00:00:00Z",
+    updated_at: "2026-10-03T00:00:00Z",
+    ...overrides,
+  };
+}
+
+const snapshot = (tasks: TaskSummary[], requestedIds = tasks.map((task) => task.task_id)) =>
+  taskSnapshotsReceived({ requestedIds, tasks });
+
+describe("taskSnapshotsReceived", () => {
+  it("applies the server's current state, keeping fields a snapshot leaves empty", () => {
+    const init = { byId: { t1: vm({ state: "pending", progress: 0.4, step: "processing" }) } };
+    const s = reducer(init, snapshot([summary({ state: "running", progress: null, step: null })]));
+    expect(s.byId.t1).toMatchObject({ state: "running", progress: 0.4, step: "processing" });
+  });
+
+  it("stamps the time of the first outcome", () => {
+    const s = reducer({ byId: { t1: vm() } }, snapshot([summary({ state: "succeeded" })]));
+    expect(s.byId.t1.state).toBe("succeeded");
+    expect(s.byId.t1.terminalAt).not.toBeNull();
+  });
+
+  it("keeps a failure a failure, with its cause", () => {
+    const s = reducer({ byId: { t1: vm() } }, snapshot([summary({ state: "failed", error: "extraction failed" })]));
+    expect(s.byId.t1).toMatchObject({ state: "failed", error: "extraction failed" });
+  });
+
+  it.each(["ingestion", "migration", "erasure"])("never moves a %s outcome back", (kind) => {
+    const init = { byId: { t1: vm({ kind, state: "failed", terminalAt: 5 }) } };
+    const s = reducer(init, snapshot([summary({ kind, state: "running" })]));
+    expect(s.byId.t1).toMatchObject({ state: "failed", terminalAt: 5 });
+  });
+
+  it("marks a requested task the answer leaves out as untracked, never as an outcome", () => {
+    const s = reducer({ byId: { t1: vm({ state: "pending" }) } }, snapshot([], ["t1"]));
+    expect(s.byId.t1).toMatchObject({ state: "pending", untracked: true, terminalAt: null });
+  });
+
+  it("ignores a task it did not ask about", () => {
+    const init = { byId: { t1: vm(), t2: vm({ taskId: "t2" }) } };
+    const s = reducer(init, snapshot([summary({ task_id: "t2", state: "succeeded" })], ["t1"]));
+    expect(s.byId.t1.untracked).toBe(true);
+    expect(s.byId.t2.state).toBe("running");
+  });
+
+  it("reads migration warnings from the task's detail", () => {
+    const init = { byId: { t1: vm({ kind: "migration" }) } };
+    const detail = { step_id: "s", processed: 1, total: 1, failed: 0, result: { warnings: ["skipped one"] } };
+    const s = reducer(
+      init,
+      snapshot([summary({ kind: "migration", state: "succeeded", detail } as Partial<TaskSummary>)]),
+    );
+    expect(s.byId.t1.warnings).toEqual(["skipped one"]);
+  });
+});
+
+describe("an untracked task", () => {
+  const state = () => ({ byId: { t1: vm({ state: "pending", untracked: true }) } });
+
+  it("is no longer followed nor counted as running", () => {
+    expect(selectActiveTasks(root(state()))).toHaveLength(0);
+    expect(selectActiveCount(root(state()))).toBe(0);
+  });
+
+  it("no longer speaks for its document, which shows its own status", () => {
+    expect(selectActiveTaskForTarget("document", "doc-1")(root(state()))).toBeUndefined();
+  });
+
+  it("has its document refreshed, since the row now reads the document's own copy", () => {
+    expect(makeSelectSettledTargetsOfType("document")(root(state()))).toEqual([{ taskId: "t1", targetId: "doc-1" }]);
+  });
+
+  it("stays listed until dismissed, then leaves like a dismissed failure", () => {
+    expect(selectVisibleTasks(root(state()))).toHaveLength(1);
+    const dismissedLongAgo = {
+      byId: { t1: vm({ untracked: true, acknowledgedAt: Date.now() - EVICTION_DELAY_MS - 1 }) },
+    };
+    expect(selectVisibleTasks(root(dismissedLongAgo))).toHaveLength(0);
+  });
+
+  it("sorts with the finished tasks, below the ones still followed", () => {
+    const mixed = { byId: { t1: vm({ untracked: true, registeredAt: 2 }), t2: vm({ taskId: "t2", registeredAt: 1 }) } };
+    expect(selectAllTasks(root(mixed)).map((task) => task.taskId)).toEqual(["t2", "t1"]);
+  });
+
+  it("is cleared with the completed tasks", () => {
+    expect(reducer(state(), completedTasksCleared()).byId).toEqual({});
   });
 });

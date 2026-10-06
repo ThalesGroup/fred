@@ -33,7 +33,7 @@ COPY libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fr
 COPY libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 
-RUN make dev VENV=/app/venv TARGET=/app/target
+RUN make prod VENV=/app/venv TARGET=/app/target
 
 # -----------------------------------------------------------------------------
 # FINAL STAGE
@@ -49,6 +49,7 @@ ARG GROUP_ID=1000
 # stage, so it has to be installed here - without it the fill tool silently degrades
 # to a download-only chip and the user loses the preview.
 RUN apt-get update && \
+    apt-get upgrade -y --no-install-recommends && \
     apt-get install -y --no-install-recommends libreoffice && \
     rm -rf /var/lib/apt/lists/*
 
@@ -61,7 +62,7 @@ ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
 
-# `make dev` installs local packages in editable mode, so we keep the matching
+# `make prod` installs local packages in editable mode, so we keep the matching
 # source roots in the final image under the same `/workspace/...` paths.
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/pyproject.toml /workspace/apps/fred-agents/pyproject.toml
 COPY --chown=${USER_ID}:${GROUP_ID} apps/fred-agents/README.md /workspace/apps/fred-agents/README.md

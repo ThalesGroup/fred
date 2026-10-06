@@ -18,52 +18,28 @@
   position: relative;
 }
 
+/* The Tooltip wraps the trigger in an inline-flex span sized to its content;
+ * stretch it so the trigger keeps the full rail width and stays centred. */
+.container > :last-child {
+  width: 100%;
+}
+
+/* Avatar-only trigger at the bottom of the rail: the hit area spans the whole
+ * rail width, not just the avatar circle. */
 .trigger {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: var(--spacing-s);
   cursor: pointer;
   border: none;
-  border-radius: var(--spacing-xs);
-  background-color: var(--surface-container-highest);
-  padding: 0 var(--spacing-xs) 0 var(--spacing-s);
+  border-radius: var(--radius-full);
+  background: none;
+  padding: var(--spacing-xs) 0;
   width: 100%;
-  height: 3.5rem;
-  color: var(--on-surface);
-  text-align: left;
 }
 
-/* Standard hover state layer: an 8% on-surface (neutral) layer over the
-   resting surface, no animation — matches every other hoverable tile. */
 .trigger:hover {
-  background-image: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover));
-}
-
-.identity {
-  display: flex;
-  flex-direction: column;
-  margin-right: auto;
-  min-width: 0;
-}
-
-.identityName {
-  overflow: hidden;
-  color: var(--on-surface);
-  font: var(--font-body-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.identityId {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
-.chevron {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: var(--on-surface-retreat);
-  font-size: 1.25rem;
+  background-color: var(--state-on-surface-hover);
 }
 
 /* ── Popover ────────────────────────────────────────────────────────────── */
@@ -72,10 +48,10 @@
  * MenuPopover molecule so this menu and the chat options menu stay identical. */
 .popoverWrap {
   position: absolute;
-  right: 0;
-  bottom: calc(100% + var(--spacing-2xs));
-  left: 0;
+  bottom: 0;
+  left: calc(100% + var(--spacing-xs));
   z-index: 10;
+  width: 240px;
 }
 
 .popoverBox {

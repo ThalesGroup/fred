@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { UiTheme } from "./uiThemes.ts";
+
 /**
  * Theme mode options
  */
@@ -42,6 +44,16 @@ export interface ApplicationContextStruct {
   themeMode: ThemeMode;
 
   /**
+   * The current UI theme.
+   */
+  uiTheme: UiTheme;
+
+  /**
+   * Themes the user may pick (shipped and not hidden by the platform).
+   */
+  offeredUiThemes: UiTheme[];
+
+  /**
    * Toggles the sidebar collapsed state.
    */
   toggleSidebar: () => void;
@@ -50,4 +62,9 @@ export interface ApplicationContextStruct {
    * Sets the theme mode.
    */
   setThemeMode: (mode: ThemeMode) => void;
+
+  /**
+   * Sets the UI theme.
+   */
+  setUiTheme: (theme: UiTheme) => void;
 }

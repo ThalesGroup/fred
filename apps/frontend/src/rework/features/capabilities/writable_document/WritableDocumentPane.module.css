@@ -18,7 +18,6 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  background-color: var(--surface-container);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -133,10 +132,9 @@
  * `.mdxeditor`, not a child. So the mapping above never reaches the popups and they
  * fall back to the default slate scale (unreadable on dark). Repeat the mapping on
  * the popup container. The rule is unscoped on purpose (it lives outside .editorArea).
- * The popup panel is deliberately one surface step ABOVE the pane/toolbar so it reads
- * as an elevated floating layer. */
+ * The popup panel uses the floating surface so it reads as an elevated layer. */
 :global(.mdxeditor-popup-container) {
-  --basePageBg: var(--surface-container-highest);
+  --basePageBg: var(--surface-floating);
   --baseBase: var(--surface-container);
   --baseBgSubtle: var(--surface-container);
   --baseBg: var(--state-on-surface-hover);
@@ -225,6 +223,6 @@
  * elevated surface with a border to match the other popup panels. */
 :global(.mdxeditor-popup-container [class*="tooltipContent"]) {
   border: 1px solid var(--outline-muted);
-  background-color: var(--surface-container-highest);
+  background-color: var(--surface-floating);
   color: var(--on-surface);
 }

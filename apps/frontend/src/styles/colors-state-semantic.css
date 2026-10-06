@@ -28,10 +28,6 @@
   --state-on-surface-retreat-focused: color-mix(in srgb, var(--on-surface-retreat), transparent 84%);
   --state-on-surface-retreat-selected: color-mix(in srgb, var(--on-surface-retreat), transparent 84%);
 
-  --state-surface-main-hover: color-mix(in srgb, var(--surface-main), transparent 92%);
-  --state-surface-main-pressed: color-mix(in srgb, var(--surface-main), transparent 88%);
-  --state-surface-main-focused: color-mix(in srgb, var(--surface-main), transparent 84%);
-  --state-surface-main-selected: color-mix(in srgb, var(--surface-main), transparent 84%);
   --state-surface-main-disabled: color-mix(in srgb, var(--surface-main), transparent 90%);
 
   /* Tint of --primary itself (not --on-primary) — for an element whose own

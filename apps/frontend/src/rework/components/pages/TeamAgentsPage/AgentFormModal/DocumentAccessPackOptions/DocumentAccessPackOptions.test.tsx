@@ -28,7 +28,7 @@ vi.mock("@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker
 }));
 
 vi.mock("../../AgentCreateEditModal/SwitchRow/SwitchRow.tsx", () => ({
-  SwitchRow: ({ label }: { label: string }) => <div data-testid="bind-switch">{label}</div>,
+  SwitchRow: ({ label, checked }: { label: string; checked: boolean }) => <div data-checked={checked}>{label}</div>,
 }));
 
 import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions";
@@ -40,8 +40,15 @@ function render(configValues: Record<string, unknown>): string {
 }
 
 describe("DocumentAccessPackOptions", () => {
-  it("always shows the restrict switch", () => {
-    expect(render({})).toContain("bind-switch");
+  it("shows the attachment-only switch below library scoping", () => {
+    const html = render({ bind_libraries: true, search_attachments_only: true });
+    const scoping = "capability.document_access.fields.bind_libraries.title";
+    const attachmentsOnly = "capability.document_access.fields.search_attachments_only.title";
+
+    expect(html.indexOf(scoping)).toBeLessThan(html.indexOf(attachmentsOnly));
+    expect(html.indexOf("folder-tree")).toBeLessThan(html.indexOf(attachmentsOnly));
+    expect(html).toContain(`data-checked="true">${attachmentsOnly}`);
+    expect(render({})).toContain(`data-checked="false">${attachmentsOnly}`);
   });
 
   it("hides the folder tree until libraries are bound", () => {

@@ -55,6 +55,8 @@ export interface DialogProps {
   hideCancel?: boolean;
   confirmColor?: ColorTheme;
   maxWidth?: number;
+  /** Optional element shown right after the title, e.g. an info icon with a tooltip. */
+  titleAddon?: ReactNode;
   /** Optional caller-owned portal container inside the themed .fred-ui root. */
   portalContainer?: HTMLElement | null;
 }
@@ -71,6 +73,7 @@ export function DialogPrimitive({
   hideCancel = false,
   confirmColor = "primary",
   maxWidth,
+  titleAddon,
   portalContainer,
 }: DialogProps) {
   const titleId = useId();
@@ -201,17 +204,19 @@ export function DialogPrimitive({
                 <p id={titleId} className={styles.title}>
                   {title}
                 </p>
+                {titleAddon}
               </div>
               <div ref={contentRef} className={styles.content} tabIndex={bodyScrolls ? 0 : undefined}>
                 {children}
               </div>
               <div className={styles.actions}>
                 {!hideCancel && (
-                  <Button color="on-surface" variant="text" size="medium" onClick={onCancel}>
+                  <Button type="button" color="on-surface" variant="text" size="medium" onClick={onCancel}>
                     {cancelLabel}
                   </Button>
                 )}
                 <Button
+                  type="button"
                   color={confirmColor}
                   variant="filled"
                   size="medium"

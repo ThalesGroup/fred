@@ -466,6 +466,13 @@ cat <<'EOF'
         try_files $uri =404;
     }
 
+    # Applies the stored UI theme before the first paint; must never be stale,
+    # or a removed theme id would leave the page without theme tokens.
+    location = /theme-boot.js {
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri /index.html;
     }

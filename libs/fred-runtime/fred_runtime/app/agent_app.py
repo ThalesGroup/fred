@@ -96,6 +96,8 @@ from fred_core.security.rebac.rebac_factory import rebac_factory
 from fred_core.security.structure import KeycloakUser, is_service_agent
 from fred_sdk.contracts.capability import (
     CapabilityCatalogEntry,
+    CapabilityConfigCopyRequest,
+    CapabilityConfigCopyResult,
     CapabilityIdentity,
     ChatControlsRequest,
     ChatControlsResponse,
@@ -140,8 +142,10 @@ from fred_sdk.contracts.runtime import (
     FinalRuntimeEvent,
     HistoryStorePort,
     HumanInputRequest,
+    InterruptedAction,
     RuntimeErrorEvent,
     RuntimeEvent,
+    RuntimeEventKind,
     RuntimeServices,
     parse_human_input_answer,
 )
@@ -166,6 +170,10 @@ from fred_runtime.capabilities import (
     enforce_asset_slots,
     evaluate_chat_controls_batch,
     validate_turn_options,
+)
+from fred_runtime.capabilities.copy import (
+    CapabilityCopyRejectedError,
+    prepare_capability_copy,
 )
 from fred_runtime.capabilities.errors import (
     CapabilityError,
@@ -796,6 +804,8 @@ class LocalRegistryAgentInvoker(AgentInvokerPort):
             context=context_dict,
             resume_payload=None,
             invocation_turns=request.prior_turns,
+            # A child has no user to offer "continue" to.
+            interrupted_action="restart",
         )
 
         # Each child names itself on the run it shares with its parent, so a
@@ -1175,6 +1185,8 @@ class _AgentExecuteRequest(BaseModel):
         default=(),
         description="Prior conversation turns forwarded by the calling agent.",
     )
+    interrupted_action: InterruptedAction | None = None
+    interruption_id: str | None = Field(default=None, min_length=1)
     inline_tuning: dict[str, TuningValue] | None = Field(
         default=None,
         description="Optional inline tuning overrides. Honored only in agent_id (direct template) mode.",
@@ -1211,7 +1223,11 @@ class _AgentExecuteRequest(BaseModel):
 
         if bool(self.agent_id) == bool(self.agent_instance_id):
             raise ValueError("Provide exactly one of agent_id or agent_instance_id")
-        if self.resume_payload is None and not self.message.strip():
+        if (
+            self.resume_payload is None
+            and self.interrupted_action != "continue"
+            and not self.message.strip()
+        ):
             raise ValueError("message is required when resume_payload is not set")
         return self
 
@@ -1239,6 +1255,8 @@ def _to_internal_request(r: RuntimeExecuteRequest) -> "_AgentExecuteRequest":
         occurrence_id=r.occurrence_id,
         resume_payload=r.resume_payload,
         invocation_turns=r.invocation_turns,
+        interrupted_action=r.interrupted_action,
+        interruption_id=r.interruption_id,
         inline_tuning=r.inline_tuning,
         turn_options=r.turn_options,
     )
@@ -2824,6 +2842,15 @@ def _turn_command(ctx: dict[str, Any]) -> CommandDescriptor | None:
         return None
 
 
+def _ran_no_turn(payloads: list[dict[str, Any]]) -> bool:
+    """An interrupted execution was only reported; the user's message returns
+    to the composer, so the turn leaves no history row and no KPI."""
+    return any(
+        payload.get("kind") == RuntimeEventKind.EXECUTION_INTERRUPTED.value
+        for payload in payloads
+    )
+
+
 async def _write_turn_history(
     *,
     session_id: str,
@@ -2888,6 +2915,8 @@ async def _write_turn_history(
     )
     from fred_core.store.vector_search import VectorSearchHit
 
+    if _ran_no_turn(payloads):
+        return
     try:
         base_rank: int = await history_store.next_rank(session_id)
     except Exception:
@@ -3425,6 +3454,8 @@ def _emit_turn_completed(
       Incremented only on execution_error turns.  Lets Prometheus alert on
       the error rate without filtering histograms by label value.
     """
+    if _ran_no_turn(payloads):
+        return
     try:
         kpi = get_runtime_context().get_kpi_writer()
         outcome = _parse_turn_outcome(payloads, turn_start)
@@ -4449,6 +4480,8 @@ async def _iterate_runtime_event_payloads_inner(
         interrupt_id=request.interrupt_id,
         resume_payload=request.resume_payload,
         invocation_turns=getattr(request, "invocation_turns", ()),
+        interrupted_action=request.interrupted_action,
+        interruption_id=request.interruption_id,
     )
 
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
@@ -4508,7 +4541,8 @@ async def _iterate_runtime_event_payloads_inner(
             # On a HITL resume the runtime ignores input entirely (state is loaded
             # from the checkpoint), so bypass validation with model_construct.
             input_cls = definition.input_model()
-            if request.resume_payload is not None:
+            continuing = request.interrupted_action == "continue"
+            if request.resume_payload is not None or continuing:
                 graph_input = input_cls.model_construct(message="")
             else:
                 graph_input = input_cls.model_validate(
@@ -4545,6 +4579,8 @@ async def _iterate_runtime_event_payloads_inner(
             if graph_claim is not None:
                 await graph_claim.consume()
         else:
+            if request.interrupted_action == "continue":
+                raise RuntimeError("Only Graph agents can continue an interrupted run.")
             # DeepAgentDefinition is-a ReActAgentDefinition (same typed
             # input/output, same event contract), so it shares this branch's
             # ReActInput plumbing below — only the runtime class differs.
@@ -5174,6 +5210,70 @@ def _build_agent_router(
             schema_version=capability.manifest.version,
             config=stored.model_dump(mode="json"),
         )
+
+    @router.post("/capabilities/{capability_id}/copy-config")
+    async def copy_capability_config(
+        capability_id: str,
+        body: CapabilityConfigCopyRequest,
+        http_request: Request,
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> CapabilityConfigCopyResult:
+        """
+        Prepare one capability's stored config for a copied agent instance.
+
+        POST <base_url>/agents/capabilities/{capability_id}/copy-config
+        Body: CapabilityConfigCopyRequest — the source envelope, the source and
+        target team and agent instance.
+
+        Why this endpoint exists:
+        - only the pod knows a capability's hidden and nested settings, so the
+          pod resets its scope-private settings when the scope changes and
+          re-submits its configuration files to the capability's own save in
+          the target, with the caller's token on both sides
+        - 404 when the capability is not installed here, 422 when it rejects
+          the config for the target; the control plane then copies the agent
+          without it. `notices` says what an editor must redo in the target.
+        """
+
+        capability_registry = _capability_registry_of(http_request)
+        if capability_registry is None or capability_id not in capability_registry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Capability '{capability_id}' is not installed on this pod.",
+            )
+        capability = capability_registry.capability(capability_id)
+        user_id = (caller.uid if caller is not None else None) or "anonymous"
+        auth = http_request.headers.get("Authorization", "")
+        access_token = auth.removeprefix("Bearer ").strip() or None
+
+        def save_ctx(team_id: str, agent_instance_id: str) -> SaveContext:
+            return SaveContext(
+                identity=CapabilityIdentity(
+                    user_id=user_id,
+                    team_id=team_id,
+                    agent_instance_id=agent_instance_id,
+                ),
+                services=_build_capability_save_services(
+                    capability_id=capability_id,
+                    user_id=user_id,
+                    team_id=team_id,
+                    access_token=access_token,
+                    agent_instance_id=agent_instance_id,
+                ),
+            )
+
+        try:
+            return await prepare_capability_copy(
+                capability,
+                body,
+                source_ctx=save_ctx(body.source_team_id, body.source_agent_instance_id),
+                target_ctx=save_ctx(body.target_team_id, body.target_agent_instance_id),
+            )
+        except CapabilityCopyRejectedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(exc),
+            ) from exc
 
     @router.post("/capabilities/chat-controls")
     async def evaluate_chat_controls(

@@ -13,22 +13,21 @@
 // limitations under the License.
 
 import { useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useStore } from "react-redux";
 import { useAcknowledgeTaskMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation } from "../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { taskBackendFor } from "./taskKinds";
-import { taskAcknowledged } from "./taskSlice";
+import { taskAcknowledged, type TasksState } from "./taskSlice";
 
 /**
  * Shared per-task acknowledgement — `POST /tasks/{id}/ack`
  * (TASK-EVENT-STREAM-RFC.md §2.10), a server-persisted record visible to
  * every other admin of that scope, replacing the old per-browser
- * `failuresAcknowledged` bulk flag. Used by every place a `TaskCard`/
- * `TaskDetailPopover` renders a dismiss affordance (`TaskTray`,
- * `MigrationPage`), so the call + local-store update happens exactly once.
+ * `failuresAcknowledged` bulk flag. Shared by task detail and migration
+ * surfaces so the call and local store update happen in one place.
  *
- * Routed by `taskBackendFor` (same map `useTaskSseManager` uses for its SSE
- * stream) — this used to always call control-plane regardless of which
+ * Routed by `taskBackendFor` (same map `useTaskPolling` reads progress by)
+ * — this used to always call control-plane regardless of which
  * backend actually owns the task, so a failed ingestion task's ack 404'd
  * and silently left the button visible (#2123 review).
  *
@@ -36,28 +35,23 @@ import { taskAcknowledged } from "./taskSlice";
  * `useChatAttachments.addFiles`) never had a server-side task record created
  * for them in the first place (the fast-ingest route is synchronous and
  * registers no task), so POSTing an ack for one always 404s. Acknowledging
- * one is a purely local Redux update instead of a network call — same as
- * `useTaskSseManager` already excludes `localOnly` tasks from its SSE
- * subscription for the same underlying reason.
+ * one is a purely local Redux update instead of a network call — the same
+ * reason `useTaskPolling` never reads `localOnly` tasks.
  */
 export function useTaskAcknowledgement() {
   const dispatch = useDispatch();
+  const store = useStore<{ tasks: TasksState }>();
   const [ackControlPlane] = useAcknowledgeTaskMutation();
   const [ackKnowledgeFlow] = useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   const acknowledge = async (taskId: string, kind: string | null, localOnly?: boolean) => {
-    if (localOnly) {
+    // An untracked task is no longer known to the server either: its ack would 404.
+    if (localOnly || store.getState().tasks.byId[taskId]?.untracked) {
       dispatch(taskAcknowledged({ taskId, acknowledgedAt: new Date().toISOString() }));
       return;
     }
     const backend = taskBackendFor(kind);
-    if (backend === "evaluation") {
-      // No acknowledgement endpoint exists on the evaluation backend yet
-      // (tracked separately, not part of #2123) — nothing to call; the
-      // button stays visible rather than silently pretending to succeed.
-      return;
-    }
     setPendingTaskId(taskId);
     try {
       const result = await (

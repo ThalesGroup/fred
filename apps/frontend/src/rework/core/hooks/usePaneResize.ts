@@ -29,7 +29,7 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import { useLocalStorageState } from "src/hooks/useLocalStorageState";
+import { useLocalStorageState } from "../../../hooks/useLocalStorageState.ts";
 
 interface UsePaneResizeOptions {
   /** Full localStorage key for the persisted width. */

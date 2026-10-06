@@ -196,6 +196,47 @@ describe("buildAgentFormSubmitPayload", () => {
     expect(payload.capabilityConfigValues).toEqual({ "ppt-filler": { tone: "formal" } });
   });
 
+  it("preserves partial document access selections on an unrelated edit", () => {
+    const template = makeCapabilityTemplate([
+      "document_access",
+      "document_summarize",
+      "document_similarity",
+      "mcp-knowledge-flow-mcp-tabular",
+    ]);
+    const cases = [
+      {
+        ids: ["document_access", "document_summarize"],
+        config: { search_attachments_only: true, show_attach_files_control: true },
+      },
+      {
+        ids: ["document_access", "document_similarity", "mcp-knowledge-flow-mcp-tabular"],
+        config: { search_attachments_only: false, show_attach_files_control: false },
+      },
+    ];
+
+    for (const { ids, config } of cases) {
+      const payload = buildAgentFormSubmitPayload(
+        {
+          templateId: "runtime:agent",
+          displayName: "Renamed agent",
+          role: "",
+          description: "",
+          usageStatement: "",
+          reasoningEnabled: false,
+          reasoningDefaultOn: false,
+          tuningValues: {},
+          ...EMPTY_CAPABILITY_STATE,
+          selectedCapabilityIds: ids,
+          capabilityConfigValues: { document_access: config },
+        },
+        template,
+      );
+
+      expect(payload.selectedCapabilityIds).toEqual(ids);
+      expect(payload.capabilityConfigValues).toEqual({ document_access: config });
+    }
+  });
+
   it("keeps MCP capabilities like any other capability (#1988 — MCP capability ids are plain catalog server ids)", () => {
     const payload = buildAgentFormSubmitPayload(
       {

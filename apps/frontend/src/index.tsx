@@ -23,7 +23,8 @@ import { createRoot } from "react-dom/client";
 import FredUi from "./app/App.tsx";
 import { store } from "./common/store.tsx";
 import { KeyCloakService } from "./security/KeycloakService.ts";
-import { loadConfig } from "./common/config.tsx";
+import { getPlatformUiThemes, loadConfig } from "./common/config.tsx";
+import { applyResolvedTheme } from "./app/uiThemes.ts";
 import "./i18n";
 import "@fontsource/inter/100.css";
 import "@fontsource/inter/200.css";
@@ -31,6 +32,10 @@ import "@fontsource/inter/300.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
+import "@fontsource/nunito/400.css";
+import "@fontsource/nunito/500.css";
+import "@fontsource/nunito/600.css";
+import "@fontsource/nunito/700.css";
 import { reportCaughtReactError } from "./rework/features/applications/ApplicationErrorBoundary.tsx";
 
 // <html> is deliberately `overflow: hidden` (styles/index.css) — every real
@@ -61,6 +66,8 @@ const startApp = async () => {
   console.info("Starting Fred UI...");
   try {
     await loadConfig(); // <-- await config loading FIRST
+    // theme-boot.js used the cached platform settings; apply the fresh ones before anything renders.
+    applyResolvedTheme(getPlatformUiThemes());
     console.info("Configuration loaded successfully");
     KeyCloakService.CallLogin(() => {
       const root = createRoot(document.getElementById("root"), { onCaughtError: reportCaughtReactError });

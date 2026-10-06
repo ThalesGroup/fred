@@ -22,8 +22,8 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import { TaskCard } from "@shared/molecules/TaskCard/TaskCard";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
-import KpiStatCard from "@shared/molecules/KpiStatCard/KpiStatCard.tsx";
-import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/DataTable.tsx";
+import KpiStatCard from "@shared/molecules/KpiStatCard/LocalizedKpiStatCard.tsx";
+import DataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import {
   usePlatformStatsQuery,
@@ -52,11 +52,12 @@ export default function MigrationPage() {
   const [resetPlatform, { isLoading: isResetting }] = useResetPlatformMutation();
 
   const migrationTasks = useMemo(() => tasks.filter((t) => t.kind === "migration"), [tasks]);
+  // An untracked task is no longer followed: it belongs with the finished ones.
   const activeTasks = migrationTasks.filter(
-    (t) => t.state === "running" || t.state === "pending" || t.state === "cancelling",
+    (t) => !t.untracked && (t.state === "running" || t.state === "pending" || t.state === "cancelling"),
   );
   const terminalTasks = migrationTasks.filter(
-    (t) => t.state === "succeeded" || t.state === "failed" || t.state === "cancelled",
+    (t) => t.untracked || t.state === "succeeded" || t.state === "failed" || t.state === "cancelled",
   );
 
   // Refresh the summary whenever an import/reset/export task settles (the

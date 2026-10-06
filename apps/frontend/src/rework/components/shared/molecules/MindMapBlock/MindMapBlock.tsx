@@ -113,7 +113,7 @@ function resolveFontSizePx(source: HTMLElement, name: string): number {
 }
 
 function buildMindMapTheme(source: HTMLElement): MindMapTheme {
-  const tooltipBackground = readCssVar(source, "--surface-container-highest");
+  const tooltipBackground = readCssVar(source, "--surface-floating");
   const tooltipBorder = readCssVar(source, "--outline-variant");
   const tooltipText = readCssVar(source, "--on-surface");
   const nodeSize = resolveTokenLengthPx(source, "--spacing-s");

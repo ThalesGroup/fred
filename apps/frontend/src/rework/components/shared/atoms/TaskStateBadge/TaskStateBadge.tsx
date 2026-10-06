@@ -13,12 +13,11 @@
 // limitations under the License.
 
 import { useTranslation } from "react-i18next";
-import type { TaskState } from "../../../../features/tasks/taskTypes";
-import { STATE_COLOR, stateLabel } from "../../../../features/tasks/taskLabels";
+import { STATE_COLOR, stateLabel, type TaskDisplayState } from "../../../../features/tasks/taskLabels";
 import styles from "./TaskStateBadge.module.css";
 
 interface TaskStateBadgeProps {
-  state: TaskState;
+  state: TaskDisplayState;
   showLabel?: boolean;
   size?: "sm" | "md";
 }

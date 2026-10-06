@@ -34,7 +34,7 @@ from fred_core.kpi import BaseKPIWriter, KPIActor
 from tabulate import tabulate
 
 from knowledge_flow_backend.core.stores.content.base_content_store import FileMetadata
-from knowledge_flow_backend.features.tabular.artifacts import read_tabular_artifact
+from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, read_tabular_artifact, read_tabular_multi_artifact
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +297,15 @@ class ContentService:
         try:
             document_metadata = await self.get_document_metadata(user, document_uid)
         except (FileNotFoundError, AuthorizationError):
+            attachment = await self.metadata_store.get_metadata_by_uid(document_uid)
+            if (
+                attachment is not None
+                and attachment.source_tag == FAST_INGEST_SOURCE_TAG
+                and not attachment.tags.tag_ids
+                and attachment.identity.uploaded_by == user.uid
+                and (read_tabular_artifact(attachment) is not None or read_tabular_multi_artifact(attachment) is not None)
+            ):
+                raise FileNotFoundError("This attachment is a tabular dataset, not a complete text document. Use the tabular schema and query tools to read its tables.") from None
             # No corpus record the caller may read: either a session attachment
             # (no metadata, no ReBAC tuple, so the check fails closed) or a uid
             # they genuinely cannot reach. Reconstruction joins only the

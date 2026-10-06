@@ -17,8 +17,21 @@ import { fetchBaseQuery, FetchArgs, FetchBaseQueryError } from "@reduxjs/toolkit
 import type { BaseQueryFn } from "@reduxjs/toolkit/query";
 import { KeyCloakService } from "../security/KeycloakService";
 
+/** Same as fetchBaseQuery's default, except that an array repeats its key
+ *  (`a=1&a=2`), as OpenAPI query arrays and FastAPI expect, instead of `a=1,2`. */
+export function serializeQueryParams(params: Record<string, unknown>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) value.forEach((item) => search.append(key, String(item)));
+    else search.append(key, String(value));
+  }
+  return search.toString();
+}
+
 export const createDynamicBaseQuery = (): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> => {
   const raw = fetchBaseQuery({
+    paramsSerializer: serializeQueryParams,
     prepareHeaders: (headers) => {
       const token = KeyCloakService.GetToken();
       if (token) headers.set("Authorization", `Bearer ${token}`);

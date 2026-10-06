@@ -1,6 +1,6 @@
 [project]
 name = "fred-capability-documents"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fred agent capabilities over the Knowledge Flow document ports: summarize, similarity, label search, extract, verbatim read."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

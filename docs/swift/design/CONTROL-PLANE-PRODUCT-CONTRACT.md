@@ -186,6 +186,10 @@ value is served by a separate **public (unauthenticated)** surface:
   - `gcu_version` — **added 2026-06-22 (FRONT-10)** — active Terms-of-Use / CGU
     version the deployment requires, or omitted/`null` when gating is off. This
     is the **authoritative** source the frontend GCU guard reads.
+  - `ui_themes` → `FrontendUiThemes` — **added 2026-10-02 (#2933)** — platform
+    default UI theme and hidden theme ids, omitted until an admin saves them
+    (§57). Pre-auth for the same reason as `gcu_version`: the frontend resolves
+    the theme before its first paint.
 
 The handler derives `user_auth` directly from `fred_core` `SecurityConfiguration.user`
 (`security.user`), the same config that drives backend JWT validation — so the backend
@@ -673,6 +677,18 @@ snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
   only), `POST /marketplace/prompts/{id}/import` (per-target
   `can_update_resources`, `_imported-N` naming)
 
+Per-user favorites (2026-10-01, OpenSpec `add-prompt-favorites`):
+
+- table `prompt_favorite (user_id, prompt_id → prompt ON DELETE CASCADE)`;
+  personal data, never read on behalf of another user
+- `PUT` / `DELETE /teams/{team_id}/prompts/{prompt_id}/favorite`: idempotent,
+  `204`, `can_use_team_agents` (reading the prompt is enough), `404` for a
+  prompt outside the team
+- `PromptSummary.is_favorite` (team listing) and `ContextPromptSummary.is_favorite`
+  (chat picker) are computed for the caller; other payloads carry `false`
+- removed with the prompt, when the user leaves or is removed from the
+  prompt's team (`remove_team_member`), and on account deletion (`DELETE /users/{id}`)
+
 ### 3.7 Feedback
 
 Feedback must align with managed execution semantics:
@@ -759,6 +775,8 @@ See `docs/swift/design/FILESYSTEM.md`.
 - `POST /teams/{team_id}/agent-instances` → `ManagedAgentInstanceSummary`
 - `PATCH /teams/{team_id}/agent-instances/{id}` → `ManagedAgentInstanceSummary`
 - `DELETE /teams/{team_id}/agent-instances/{id}` → 204
+- `GET /teams/{team_id}/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`
+- `POST /teams/{team_id}/agent-instances/{id}/copy` → `AgentCopyResponse` (§58)
 
 > **2026-07-17 (CAPAB-01, PR review finding — closes an unmet #1980 acceptance
 > criterion).** `capability_ids` omitted (or explicitly `null`) on
@@ -4011,6 +4029,14 @@ reconciliation take the same per-member lock as nomination cancellation and
 recheck the pending tuple with higher consistency before promotion; a
 completed cancellation cannot be promoted from a stale lookup.
 
+**Display contacts (2026-10-05).** Membership-enriched team listings include
+both `team_admin` and `pending_team_admin` in `Team.admins`, so marketplace
+cards keep showing whom to contact before charter acceptance. The per-team
+`TeamWithPermissions.admins` projection keeps accepted `team_admin` users only,
+as required by the charter gate. While only bootstrap contacts are available,
+a pending administrator sees the charter until the detail confirms an accepted
+administrator exists. Contact avatars confer no permissions.
+
 **Endpoint.**
 
 | Method | Path                                   | Permission    |
@@ -4171,6 +4197,70 @@ a collision in the destination team, appends the first free `-N` suffix from
 turn; the turn's content is the prompt's text, and the runtime knows nothing
 about prompts.
 
+## 57. Contract Notes — platform UI theme settings (2026-10-02, #2933)
+
+**What it is.** A platform admin sets the UI theme users get by default and the
+themes withdrawn from their choice. Theme ids are opaque to the control plane:
+the frontend owns the theme catalog and ignores ids it does not ship.
+
+**Model.** One `platform_ui_settings` row at most (`id = 'default'`, CHECK
+constraint): `default_theme` (nullable), `hidden_themes` (JSON list),
+`updated_by`, `updated_at`. No row means "never set".
+
+**Endpoints.**
+
+- `GET /control-plane/v1/admin/platform/ui-settings` → `PlatformUiSettings`
+  (`default_theme`, `hidden_themes`, `updated_by`, `updated_at`; defaults and
+  `updated_at: null` when never saved).
+- `PUT /control-plane/v1/admin/platform/ui-settings` with
+  `SetPlatformUiSettingsRequest` (`default_theme`, `hidden_themes`) replaces both.
+  Ids match `^[a-z][a-z0-9-]{0,31}$`, at most 32 distinct hidden ids, and the
+  default must not be hidden; violations are 422 at parsing. Emits the audit
+  event `platform.ui_settings.updated`.
+- Both require `organization#can_manage_platform`, like announcements.
+
+**Public exposure.** `FrontendConfig.ui_themes` (`default_theme`,
+`hidden_themes`) on the unauthenticated `GET /frontend/config`, omitted while
+no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
+admin-authored content. The frontend caches it so its boot script can apply the
+theme before the next load's config arrives; a change applies to each user at
+their next load. Full behavior: OpenSpec `platform-ui-theme-settings`.
+
+## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
+
+**What it is.** An editor copies an agent's configuration into the personal
+space or other teams they edit, or duplicates it in its own team. Each
+destination gets a new, independent agent; nothing records its origin except
+the audit event.
+
+**Endpoints.** Both require `team.can_update_agents` on the source team.
+
+- `GET …/agent-instances/{id}/copy-targets` → `AgentCopyTargetsResponse`: for
+  the personal space and every team the caller edits (the source included),
+  `template_enabled` and `missing_capabilities` (`id`, `name` i18n key).
+  Advisory; the copy re-checks everything.
+- `POST …/agent-instances/{id}/copy` with `AgentCopyRequest`
+  (`target_team_ids`, optional `display_name`) → `AgentCopyResponse`, one
+  `AgentCopyResult` per distinct target (`agent` or `error`, plus
+  `dropped_capabilities` and `notices`, each naming the capability by `id` and
+  `name` i18n key; a notice says what an editor must redo there). Each target needs `team.can_update_agents` and is
+  stored under its canonical id (`personal` → `personal-<uid>`). A target where
+  the template is not enabled fails; a failed target never stops the others.
+  `display_name` is only accepted for a single target equal to the source
+  (Duplicate), otherwise 422.
+
+**What a copy carries.** Name (kept when free in the destination, else the
+first free `<name>_imported-<n>`), description, template, tuning values and
+reasoning settings. Each selected capability the destination can use goes
+through the pod's `copy-config` (`RUNTIME-EXECUTION-CONTRACT.md` §8.102):
+scope-private settings are reset when the team changes, configuration files
+are recreated. A capability the destination cannot use, or that the pod
+answers with 404/422, is left out and listed. Not carried: conversations, the
+agent file space, prompt references, team-level settings. Emits the KPI
+`agent.created_total` and the audit event `agent.copied` (source agent and
+team, target team, new agent, user, dropped capabilities). Full behavior:
+OpenSpec `agent-copy`.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation
@@ -4267,3 +4357,19 @@ enabled default. `false` disables questions on new turns; an absent descriptor
 sends no field. A question already pending remains
 answerable when the control is switched off during its pause. Asserted-person
 preparation does not offer the control.
+
+## Task progress read by id — 2026-10-03
+
+`GET /tasks?scope=user` on Knowledge Flow and Control Plane accepts a repeated
+`task_id` query parameter of 1 to 50 values. With it, the response holds the
+caller's own tasks among those ids, terminal ones included; ids the caller did
+not create are absent, which reveals nothing about them. More than 50 values, or
+the parameter with another scope, is rejected with HTTP 422. Without it, the
+listing is unchanged. The single owner is `fred_core.tasks.authz.list_tasks_scoped`.
+
+The frontend follows the tasks a user started with this read, in rounds five
+seconds apart (batches of 50, one read at a time) while any is active, instead of one SSE connection per task: held-open connections
+filled the browser's six per HTTP/1.1 origin during an import. A task absent from
+the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
+remains for its other consumers. Current behaviour:
+`openspec/specs/task-progress-tracking/spec.md`.

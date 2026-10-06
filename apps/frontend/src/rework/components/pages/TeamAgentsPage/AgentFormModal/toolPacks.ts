@@ -12,47 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/**
- * Capability packs — hardcoded source of truth for the agent form's **Simple**
- * capabilities view (#2220).
- *
- * A "pack" is a user-facing grouping of related backend capabilities that make
- * sense together, so a non-technical user can enable a whole coherent feature
- * ("let this agent use the team's resources") with one switch instead of
- * reasoning about individual capabilities (RAG vs. tabular vs. summarize…).
- *
- * This is deliberately a **front-only presentation layer** over the existing
- * capability model: enabling a pack just flips the underlying
- * `selectedCapabilityIds` / `capabilityConfigValues` the form already stores —
- * no admin "Features" change, no backend/DB change. See `toolPackLogic.ts` for
- * how pack on/off state is derived from, and written back to, that selection.
- *
- * Several tools are shared by the two document-access packs ("team resources"
- * and "conversation attachments"). `document_access` is the subtle one: its mode
- * is COMPUTED from their combination rather than owned by one pack (truth table
- * below). `document_summarize`, `document_verbatim` and `document_extract` are
- * simply on when either pack is on. See `toolPackLogic.ts`.
- *
- *   Team resources | Attachments | corpus searchable | attach files | search scope
- *   ---------------+-------------+-------------------+--------------+-------------------
- *        off       |     off     |        no         |     no       | (tool off)
- *        off       |     on      |        no         |     yes      | attachments only
- *        on        |     off     |        yes        |     no       | corpus
- *        on        |     on      |        yes        |     yes      | corpus + attachments
- *
- * One day this registry becomes admin-editable; today it is static and
- * intentionally the only place to edit pack content.
+/** Simple-view packs map user-facing switches to the agent's capability selection.
+ * The resource pack enables corpus access and conversation attachments together.
  */
 
 /** Reasoning is a form field (`reasoningEnabled`), not a `CapabilityManifest`
  *  capability — the reasoning pack toggles that field instead of a capability
  *  id. Every other pack maps to real backend capability ids. */
 export type ToolPackKind = "capabilities" | "reasoning";
-
-/** How a pack contributes to the shared `document_access` tool. Two packs
- *  contribute (corpus vs. attachments); their combination computes the tool's
- *  single config (see the truth table above). */
-export type DocumentAccessIntent = "corpus" | "attachments";
 
 /** One line in a pack's expandable "included capabilities" list. */
 export interface ToolPackIncludedCapability {
@@ -75,14 +42,10 @@ export interface ToolPack {
   /** Capabilities shown in the pack's expandable list, each with an admin-status
    *  badge. Display only — activation is driven by the fields below. */
   includes: ToolPackIncludedCapability[];
-  /**
-   * Plain on/off capability ids this pack enables (the "available" ones). Does
-   * NOT include `document_access`, whose config is computed from
-   * `documentAccessIntent` because two packs share it.
-   */
+  /** Capability ids selected by this pack when available to the team. */
   enablesCapabilityIds: string[];
-  /** Contribution to the shared `document_access` tool, if any. */
-  documentAccessIntent?: DocumentAccessIntent;
+  /** The resource pack also configures document access for both sources. */
+  resourceBundle?: true;
 }
 
 export interface ToolPackSection {
@@ -103,23 +66,21 @@ export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 // corpus targets and never the conversation's attachments. It also needs a uid
 // source, which this pack's document_access provides.
 export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
+// CSV and Excel attachments expose SQL datasets through tabular tools.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_HTML_ARTIFACT = "html_artifact";
-// Document-reading pair: verbatim read + exhaustive extraction. Granted by both
-// document-access packs (on when either is on); the Advanced view keeps each
-// toggle separate.
+// The resource pack grants both reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
 export const CAP_TEAM_WIKI = "team_wiki";
 
-/** `document_access` config field keys the resource packs compute. */
+/** `document_access` option keys used by the resource pack. */
 export const DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY = "search_attachments_only";
 export const DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL = "show_attach_files_control";
 
 const PACK_TEAM_RESOURCES = "team_resources";
-const PACK_CONVERSATION_ATTACHMENTS = "conversation_attachments";
 const PACK_TEAM_WIKI = "team_wiki";
 
 export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
@@ -145,17 +106,15 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
           { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
           { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
         ],
-        // document_access is handled via documentAccessIntent (computed config);
-        // `withResourceState` is what actually selects the rest — this list
-        // documents the pack, it does not drive it.
         enablesCapabilityIds: [
+          CAP_DOCUMENT_ACCESS,
           CAP_TABULAR,
           CAP_DOCUMENT_SUMMARIZE,
           CAP_DOCUMENT_SIMILARITY,
           CAP_DOCUMENT_VERBATIM,
           CAP_DOCUMENT_EXTRACT,
         ],
-        documentAccessIntent: "corpus",
+        resourceBundle: true,
       },
       {
         // Same icon as the wiki's own entry in the team navigation panel, so the
@@ -167,23 +126,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "rework.teams.formAgent.capabilities.packs.teamWiki.description",
         includes: [{ capabilityId: CAP_TEAM_WIKI, labelKey: "capability.team_wiki.name" }],
         enablesCapabilityIds: [CAP_TEAM_WIKI],
-      },
-      {
-        id: PACK_CONVERSATION_ATTACHMENTS,
-        kind: "capabilities",
-        icon: "attach_file",
-        titleKey: "rework.teams.formAgent.capabilities.packs.conversationAttachments.title",
-        descriptionKey: "rework.teams.formAgent.capabilities.packs.conversationAttachments.description",
-        // document_access is deliberately absent: this card presents attaching
-        // files, not the capability that implements it (delivered via
-        // documentAccessIntent). document_similarity too — see its constant.
-        includes: [
-          { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
-          { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
-          { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
-        ],
-        enablesCapabilityIds: [CAP_DOCUMENT_SUMMARIZE, CAP_DOCUMENT_VERBATIM, CAP_DOCUMENT_EXTRACT],
-        documentAccessIntent: "attachments",
       },
     ],
   },

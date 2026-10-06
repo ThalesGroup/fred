@@ -589,10 +589,12 @@ function DocumentWorkspace({
     },
   });
   // Refresh document state and quota after a durable terminal task event.
-  useRefetchOnTaskSettled("document", (documentUid) => {
+  // A batch of tasks settling together reloads each affected folder once.
+  useRefetchOnTaskSettled("document", (documentUids) => {
     onDocumentsChanged?.();
+    const settled = new Set(documentUids);
     for (const [tagId, page] of Object.entries(perTag)) {
-      if (page.docs.some((doc) => doc.identity.document_uid === documentUid)) {
+      if (page.docs.some((doc) => settled.has(doc.identity.document_uid))) {
         void loadTagPage(tagId, page.offset);
       }
     }
@@ -649,9 +651,8 @@ function DocumentWorkspace({
                   taskId,
                   kind: "ingestion",
                   target: { type: "document", id: doc.identity.document_uid, label: doc.identity.document_name },
-                  // Re-processing a document already in the corpus: the row and
-                  // the task tray follow it, the import panel has nothing to
-                  // say about a file nobody imported.
+                  // Re-processing an existing document is not an import;
+                  // its row follows the task without adding it to the import panel.
                   stage: null,
                 }),
               );

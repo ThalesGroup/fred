@@ -1,5 +1,10 @@
 # Ingestion: workers, queues and performance
 
+> **Scope:** this document describes current behavior and its stated limitations.
+> Proposed changes to corpus ownership, folder permissions and project context
+> are defined in the [team/project authorization change](../../../openspec/changes/simplify-corpus-authorization/proposal.md),
+> not implemented by this documentation update.
+
 Reference for the Knowledge Flow ingestion architecture.
 **Branch status:** normal-path local test passed; failure recovery and production sizing remain to validate.
 
@@ -232,8 +237,8 @@ Temporal orchestration errors to expose the cause. Exhausted activity attempts
 are named only when Temporal reports them. Resource error details include a
 copyable document reference; task details include the task reference as well.
 Resources reads terminal history after reload, including explicit failed/succeeded
-queries for personal space. The global task tray still restores only active tasks;
-restoring its historical failures and retrying its initial fetch remain separate.
+queries for personal space. The import panel rehydrates non-terminal user tasks;
+completed tasks remain available through Resources history.
 
 **User cancellation is deferred.** The document menu has no Stop ingestion action;
 the task cancellation endpoint rejects ingestion tasks with HTTP 409 after the

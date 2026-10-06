@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -205,6 +205,7 @@ class TaskService:
         state: str | None = None,
         created_by: str | None = None,
         exclude_terminal: bool = False,
+        task_ids: Sequence[str] | None = None,
     ) -> TaskListResponse:
         summaries = await self.store.list_tasks(
             team_id=team_id,
@@ -212,6 +213,7 @@ class TaskService:
             state=state,
             created_by=created_by,
             exclude_terminal=exclude_terminal,
+            task_ids=task_ids,
         )
         return TaskListResponse(tasks=summaries)
 
