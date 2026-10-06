@@ -126,16 +126,21 @@ class SlideProblem:
 
 @dataclass
 class Repeat:
-    """A template slide used three times or more, and what else could vary it."""
+    """A content kind on three slides or more (a structural template slide used
+    three times or more), and what else could vary it."""
 
-    pattern: Pattern
+    kind: str
     slides: List[int]  # 1-based positions in the plan
+    labels: List[str]  # the template slides they use, distinct
     unused: List[str]  # unused variants of its kind, "label: zones"
     others: List[str]  # one unused slide per other non-structural kind
+    suggested: List[str]  # "slides 9, 10 → two_columns or cards (why)"
 
     @property
     def revisable(self) -> bool:
-        return self.pattern.kind not in _STRUCTURAL and bool(self.unused or self.others)
+        return self.kind not in _STRUCTURAL and bool(
+            self.unused or self.others or self.suggested
+        )
 
 
 @dataclass
@@ -205,6 +210,64 @@ def infer_kinds(slide: SlidePlan) -> List[SlideKind]:
     elif named == "closing" and not slide.items and not slide.columns:
         kinds.insert(0, "closing")
     return kinds
+
+
+# Text patterns of a list that another kind would show better (design.md D16).
+_DATED = re.compile(r"^(?:\w{1,10}\.?\s+)?(?:19|20)\d{2}\b")
+_STEP = re.compile(r"^(?:\d{1,2}\s*[.)]|(?:étape|etape|step|phase)\s*\d)", re.I)
+_LABELLED = re.compile(r"^([^:]{1,40}?)\s*:\s*(.*)$")
+_FIGURE_CHARS = 40
+
+
+def _lines(slide: SlidePlan) -> List[str]:
+    """The slide's text as bullet lines, a sub-line prefixed with '- '."""
+    lines = list(slide.bullets)
+    for column in slide.columns:
+        lines += ([f"{column.heading} :"] if column.heading else []) + [
+            f"- {b.removeprefix('- ')}" for b in column.bullets
+        ]
+    for item in slide.items:
+        head = " ".join(t for t in (item.number, item.heading) if t)
+        body = " ".join(t for t in (item.text, item.label) if t)
+        lines.append(f"{head} : {body}" if head and body else head or body)
+    return [re.sub(r"[*_`]", "", line).strip() for line in lines if line.strip()]
+
+
+def content_shape(
+    slide: SlidePlan,
+) -> Optional[Tuple[Tuple[SlideKind, ...], int, str]]:
+    """The kinds a slide's lines suit, how many entries they make and why,
+    read from text patterns only: dates, steps, figures, labelled groups."""
+    lines = _lines(slide)
+    sub = [line.startswith("- ") for line in lines]
+    texts = [line[2:].strip() if s else line for line, s in zip(lines, sub)]
+    top = [t for t, s in zip(texts, sub) if not s]
+    if len(top) >= 3 and all(_STEP.match(t) for t in top):
+        return ("process",), len(top), "numbered steps"
+    dated = sum(1 for t in texts if _DATED.match(t))
+    if dated >= 3 or (dated >= 2 and 2 * dated >= len(texts)):
+        return ("timeline",), dated, "dated items"
+    if not any(sub) and 2 <= len(top) <= 6:
+        if all(len(t) <= _FIGURE_CHARS and re.search(r"\d", t) for t in top):
+            return ("figures",), len(top), "short figures"
+    # Each top-level line with its sub-lines: [labelled, text after ':', sub-lines].
+    entries: List[List[bool]] = []
+    for text, is_sub in zip(texts, sub):
+        if is_sub and entries:
+            entries[-1][2] = True
+        elif not is_sub:
+            m = _LABELLED.match(text)
+            short = m is not None and len(m.group(1).split()) <= 4
+            entries.append([short, bool(m and m.group(2)), False])
+    n = len(entries)
+    if not (2 <= n <= 6 and all(e[0] and (e[1] or e[2]) for e in entries)):
+        return None
+    if all(e[2] and not e[1] for e in entries):
+        kinds: Tuple[SlideKind, ...] = (
+            ("two_columns", "cards") if n == 2 else ("cards",)
+        )
+        return kinds, n, f"{n} groups of '- ' lines under 'Label :' lines"
+    return ("cards",), n, "parallel 'Label : text' points"
 
 
 # --- fit check ----------------------------------------------------------------------------
@@ -618,45 +681,97 @@ def _beam(slides: List[_Slide]) -> List[Pattern]:
     return [slides[i].candidates[c][0] for i, c in enumerate(paths[0].chosen)]
 
 
+def _holds(pool: List[Pattern], kind: str, entries: int) -> bool:
+    """Whether a slide of ``kind`` has room for that many entries."""
+    return any(
+        max(g.count for g in p.groups) >= entries
+        if p.groups
+        else kind in ("two_columns", "comparison") and entries == 2
+        for p in pool
+        if p.kind == kind
+    )
+
+
+def _suggested(slides: List[_Slide], kind: str, pool: List[Pattern]) -> List[str]:
+    """Per slide, the other kinds its content already suits and the template
+    can hold; slides with the same advice share one line."""
+    found: Dict[Tuple[Tuple[str, ...], str], List[int]] = {}
+    for slide in slides:
+        shape = content_shape(slide.plan)
+        if shape is None:
+            continue
+        kinds, entries, why = shape
+        fit = tuple(k for k in kinds if k != kind and _holds(pool, k, entries))
+        if fit:
+            found.setdefault((fit, why), []).append(slide.index)
+    return [
+        f"slide{'s' if len(at) > 1 else ''} {', '.join(map(str, at))} → "
+        f"{' or '.join(kinds)} ({why})"
+        for (kinds, why), at in found.items()
+    ]
+
+
 def _repeats(
     slides: List[_Slide], chosen: List[Pattern], pool: List[Pattern]
 ) -> List[Repeat]:
+    """Content kinds on three slides or more, even on different template
+    slides: five lists look alike whatever slide holds each one."""
     used = {p.id for p in chosen}
     unused = [p for p in pool if p.id not in used]
+    groups: Dict[str, List[Tuple[_Slide, Pattern]]] = {}
+    for slide, pattern in zip(slides, chosen):
+        key = pattern.id if pattern.kind in _STRUCTURAL else pattern.kind
+        groups.setdefault(key, []).append((slide, pattern))
     repeats = []
-    for pattern in {p.id: p for p in chosen}.values():
-        at = [s.index for s, p in zip(slides, chosen) if p.id == pattern.id]
-        if len(at) < _VARIETY_NOTE_USES:
+    for group in groups.values():
+        if len(group) < _VARIETY_NOTE_USES:
             continue
-        same = [
-            f"{p.label}: {zone_summary(p)}" for p in unused if p.kind == pattern.kind
-        ]
+        kind = group[0][1].kind
+        labels = list(dict.fromkeys(p.label for _, p in group))
+        reused = len({p.id for _, p in group}) < len(group)
+        same = [f"{p.label}: {zone_summary(p)}" for p in unused if p.kind == kind]
         others = [
-            f"'{kind}' for {hint}: {p.label}: {zone_summary(p)}"
-            for kind, hint in SHAPE_HINTS.items()
-            if kind not in _STRUCTURAL and kind != pattern.kind
-            for p in [next((q for q in unused if q.kind == kind), None)]
+            f"'{other}' for {hint}: {p.label}: {zone_summary(p)}"
+            for other, hint in SHAPE_HINTS.items()
+            if other not in _STRUCTURAL and other != kind
+            for p in [next((q for q in unused if q.kind == other), None)]
             if p is not None
         ]
         repeats.append(
-            Repeat(pattern, at, list(dict.fromkeys(same)), others[:_MAX_OTHER_KINDS])
+            Repeat(
+                kind,
+                [s.index for s, _ in group],
+                labels,
+                list(dict.fromkeys(same)) if reused else [],
+                others[:_MAX_OTHER_KINDS],
+                []
+                if kind in _STRUCTURAL
+                else _suggested([s for s, _ in group], kind, pool),
+            )
         )
     return repeats
 
 
 def _repeat_note(repeat: Repeat) -> str:
-    """The passive note: the slides, and the variants of their kind left unused."""
-    pattern = repeat.pattern
-    note = (
-        f"Slides {', '.join(map(str, repeat.slides))} all use the template slide "
-        f"'{pattern.label}'."
-    )
+    """The passive note: the slides, the variants of their kind left unused,
+    and the kinds their content suits."""
+    at = ", ".join(map(str, repeat.slides))
+    if len(repeat.labels) == 1:
+        note = f"Slides {at} all use the template slide '{repeat.labels[0]}'."
+    else:
+        note = (
+            f"Slides {at} are all '{repeat.kind}' slides (template slides "
+            + ", ".join(f"'{label}'" for label in repeat.labels)
+            + ")."
+        )
     if repeat.unused:
         note += (
-            f" Unused '{pattern.kind}' variants, to recast one of them: "
+            f" Unused '{repeat.kind}' variants, to recast one of them: "
             + " | ".join(repeat.unused)
             + "."
         )
+    if repeat.suggested:
+        note += " Their content suits: " + "; ".join(repeat.suggested) + "."
     return note
 
 

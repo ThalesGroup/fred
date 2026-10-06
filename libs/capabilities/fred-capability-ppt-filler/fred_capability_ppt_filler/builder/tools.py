@@ -281,11 +281,10 @@ def _variety_revision(
         "variety": [
             {
                 "slides": r.slides,
-                "template_slide": r.pattern.label,
-                "kind": r.pattern.kind,
-                "options": [
-                    f"another '{r.pattern.kind}' variant: {u}" for u in r.unused
-                ]
+                "kind": r.kind,
+                "template_slides": r.labels,
+                **({"suggested": r.suggested} if r.suggested else {}),
+                "options": [f"another '{r.kind}' variant: {u}" for u in r.unused]
                 + r.others,
             }
             for r in repeats
@@ -293,7 +292,8 @@ def _variety_revision(
     }
     return _error(
         "No deck was built yet: several slides would look the same. Recast some of the slides "
-        "listed below into one of their options, rewriting the content in that shape"
+        "listed below into one of their options (`suggested` names the kind each slide's "
+        "content already suits), rewriting the content in that shape"
         + (
             ", and do not restate a table's content as columns on the slide before it"
             if restated
@@ -434,7 +434,8 @@ def _guide(kinds: List[SlideKind]) -> str:
         if pairs
         else ""
     )
-    return lead + " Each slide of a deck should look different."
+    cap = ", at most 2 bullets slides per deck" if pairs and "bullets" in kinds else ""
+    return lead + f" Each slide of a deck should look different{cap}."
 
 
 def _description(inventory: TemplateInventory) -> str:

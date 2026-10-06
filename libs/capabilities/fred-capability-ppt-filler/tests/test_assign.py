@@ -19,9 +19,14 @@ from __future__ import annotations
 
 from typing import Any, List
 
-from builder_decks import build_showcase_template
+from builder_decks import EVIDENCE_SLIDES, build_showcase_template, with_item_slides
 from fred_capability_ppt_filler.builder.analysis import analyze_template
-from fred_capability_ppt_filler.builder.assign import assign, infer_kinds, misfit
+from fred_capability_ppt_filler.builder.assign import (
+    assign,
+    content_shape,
+    infer_kinds,
+    misfit,
+)
 from fred_capability_ppt_filler.builder.models import (
     Box,
     Pattern,
@@ -567,11 +572,67 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
         for n in range(5)
     ]
     assignment = assign(inventory, _plan(*slides))
-    (note,) = [n for n in assignment.notes if "all use" in n]
-    assert note.startswith("Slides 1, 3, 5 all use the template slide 'A'.")
+    (note,) = [n for n in assignment.notes if "are all" in n]
+    assert note.startswith(
+        "Slides 1, 2, 3, 4, 5 are all 'bullets' slides (template slides 'A', 'B')."
+    )
     # The unused variants of that kind, with their sizes; never another kind's.
     assert "Narrow: title ≈60 chars; bullets ≈2 chars" in note
     assert "cards" not in note
+
+
+def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():
+    """The real first deck: five lists on five template slides look alike;
+    their lines name the kind each one suits."""
+    inventory = with_item_slides(INVENTORY)
+    assignment = assign(inventory, _plan(*EVIDENCE_SLIDES))
+    (repeat,) = assignment.repeats
+    assert repeat.kind == "bullets" and repeat.slides == [3, 5, 7, 9, 10]
+    assert len(repeat.labels) == 5 and repeat.revisable
+    assert repeat.suggested == [
+        "slide 5 → cards (parallel 'Label : text' points)",
+        "slide 7 → timeline (dated items)",
+        "slide 9 → two_columns or cards (2 groups of '- ' lines under 'Label :' lines)",
+        "slide 10 → cards (3 groups of '- ' lines under 'Label :' lines)",
+    ]
+    (note,) = [n for n in assignment.notes if "are all" in n]
+    assert note.startswith("Slides 3, 5, 7, 9, 10 are all 'bullets' slides")
+    assert "slide 7 → timeline (dated items)" in note
+
+
+def test_advice_names_only_kinds_the_template_can_hold():
+    # No timeline nor cards slide in the showcase: only the two groups remain.
+    (repeat,) = assign(INVENTORY, _plan(*EVIDENCE_SLIDES)).repeats
+    assert repeat.suggested == [
+        "slide 9 → two_columns (2 groups of '- ' lines under 'Label :' lines)"
+    ]
+    # Three dated lines need a timeline of three items or more.
+    small = with_item_slides(INVENTORY, kinds=("timeline",), count=2)
+    (repeat,) = assign(small, _plan(*EVIDENCE_SLIDES)).repeats
+    assert not any("timeline" in s for s in repeat.suggested)
+
+
+def test_content_shapes_are_read_from_text_patterns():
+    def shape(*bullets: str) -> Any:
+        found = content_shape(SlidePlan(title="T", bullets=list(bullets)))
+        return found and (found[0], found[1])
+
+    assert shape("1. Frame", "2. Build", "3. Ship") == (("process",), 3)
+    assert shape("2024 : centre cyber", "Q2 2025 : radar", "2027 : usine") == (
+        ("timeline",),
+        3,
+    )
+    assert shape("2 800 experts", "9 sites", "45 ans") == (("figures",), 3)
+    assert shape("Coût : élevé", "Délai : court") == (("cards",), 2)
+    # A plain list, or a long lead before the colon, is no other shape.
+    assert shape("Frame the need", "Build it", "Ship it") is None
+    assert shape("Présence historique en Europe du Sud : 1980", "Objectif : x") is None
+
+
+def test_structural_kinds_count_by_template_slide_only():
+    parts = [SlidePlan(title=f"Part {n}", kind="section") for n in range(4)]
+    assignment = assign(INVENTORY, _plan(*parts))
+    assert not [r for r in assignment.repeats if r.revisable]
 
 
 def test_empty_item_pictures_cost_like_empty_slide_pictures():

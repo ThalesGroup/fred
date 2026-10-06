@@ -23,7 +23,7 @@ import json
 from typing import Any, cast
 
 import pytest
-from builder_decks import build_showcase_template
+from builder_decks import EVIDENCE_SLIDES, build_showcase_template, with_item_slides
 from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder import analysis_job
 from fred_capability_ppt_filler.builder import tools as tools_mod
@@ -97,10 +97,12 @@ def _tools(ctx) -> dict[str, Any]:
     return {tool.name: cast(Any, tool) for tool in cast(Any, middleware).tools}
 
 
-def _configured() -> tuple[PptBuilderConfig, FakeAssets]:
+def _configured(extend=None) -> tuple[PptBuilderConfig, FakeAssets]:
     """A template whose analysis succeeded and is in this pod's cache."""
     inventory = analyze_template(TEMPLATE).inventory
     assert inventory is not None
+    if extend is not None:
+        inventory = extend(inventory)
     config = PptBuilderConfig(template_sha256="sha-test")
     analysis_job.remember_inventory(
         "inst-7", "sha-test", config.labelling_key(), inventory
@@ -109,9 +111,9 @@ def _configured() -> tuple[PptBuilderConfig, FakeAssets]:
     return config, assets
 
 
-async def _build(monkeypatch, *, workspace=None, docs=None, **kwargs):
+async def _build(monkeypatch, *, workspace=None, docs=None, extend=None, **kwargs):
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
-    config, assets = _configured()
+    config, assets = _configured(extend)
     tools = _tools(_ctx(config, assets=assets, docs=docs, workspace=workspace))
     return await tools[BUILD_TOOL_NAME].coroutine(**kwargs)
 
@@ -165,7 +167,10 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
         and "ordered steps → process" in description
     )
     assert "→ timeline" not in description
-    assert "Each slide of a deck should look different." in description
+    assert (
+        "Each slide of a deck should look different, at most 2 bullets slides per deck."
+        in description
+    )
 
 
 # --- delivery -------------------------------------------------------------------------------
@@ -413,6 +418,44 @@ async def test_an_outputs_folder_never_written_means_a_first_deck():
     assert not await tools_mod._deck_delivered(Listing(Missing()), "s")
     # Any other failure counts as delivered: never an extra revision.
     assert await tools_mod._deck_delivered(Listing(RuntimeError("down")), "s")
+
+
+@pytest.mark.asyncio
+async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
+    monkeypatch,
+):
+    """The real first deck: five bullets slides on five template slides."""
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured(with_item_slides)
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
+    assert result.is_error and workspace.writes == []
+    (repeat,) = json.loads(text[text.index("{") :])["variety"]
+    assert repeat["kind"] == "bullets" and repeat["slides"] == [3, 5, 7, 9, 10]
+    assert "slide 7 → timeline (dated items)" in repeat["suggested"]
+    assert any(
+        s.startswith("slide 9 → two_columns or cards") for s in repeat["suggested"]
+    )
+    assert any(s.startswith("slide 10 → cards") for s in repeat["suggested"])
+    text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
+    assert not result.is_error, text
+    assert "Slides 3, 5, 7, 9, 10 are all 'bullets' slides" in text
+
+
+@pytest.mark.asyncio
+async def test_a_later_deck_repeating_a_kind_only_gets_the_note(monkeypatch):
+    workspace = FakeWorkspace()
+    await _build(monkeypatch, workspace=workspace, slides=[COVER])
+    text, result = await _build(
+        monkeypatch,
+        workspace=workspace,
+        extend=with_item_slides,
+        slides=EVIDENCE_SLIDES,
+    )
+    assert not result.is_error, text
+    assert "are all 'bullets' slides" in text
+    assert "slide 7 → timeline (dated items)" in text
 
 
 @pytest.mark.asyncio

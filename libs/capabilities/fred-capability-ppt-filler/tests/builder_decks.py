@@ -27,6 +27,7 @@ import io
 from typing import Any, List, Optional, cast
 
 from deck_builders import png_bytes
+from fred_capability_ppt_filler.builder.models import Box, Pattern, RepeatGroup, Zone
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
@@ -466,7 +467,134 @@ def build_slides(builders: List) -> bytes:
     return _save(presentation)
 
 
+# --- variety: the plan of a real first deck -------------------------------------------------
+
+# Five `bullets` slides (3, 5, 7, 9, 10) whose lines suit other kinds: labelled
+# points (5), dated events (7), two then three 'Label :' groups (9, 10).
+EVIDENCE_SLIDES: List[dict] = [
+    {"title": "Thales en Espagne et en Italie", "subtitle": "Activités"},
+    {"title": "Sommaire", "items": [{"heading": "Espagne"}, {"heading": "Italie"}]},
+    {
+        "title": "Introduction",
+        "kind": "bullets",
+        "bullets": [
+            "Thales : acteur mondial de la défense",
+            "Présence historique en Europe du Sud : 1980",
+            "Objectif : explorer les activités locales",
+        ],
+    },
+    {
+        "title": "Espagne",
+        "columns": [{"bullets": ["Défense"]}, {"bullets": ["Spatial"]}],
+    },
+    {
+        "title": "Espagne : enjeux",
+        "kind": "bullets",
+        "bullets": [
+            "Direction : IA souveraine et spatial",
+            "Objectif : hub exportateur",
+            "Enjeux majeurs :",
+            "- Chaînes de valeur de défense",
+            "- Décarbonation des transports",
+        ],
+    },
+    {"title": "Italie", "columns": [{"bullets": ["Cyber"]}, {"bullets": ["Défense"]}]},
+    {
+        "title": "Italie : réalisations",
+        "kind": "bullets",
+        "bullets": [
+            "Événements clés récents :",
+            "- Janvier 2025 : accord national cyber",
+            "- Juin 2025 : radars pour la Marine",
+            "- Mars 2026 : pôle spatial à Turin",
+            "Perspectives :",
+            "- Croissance portée par le PNRR",
+        ],
+    },
+    {"title": "Chiffres", "items": [{"number": "2 800", "label": "experts"}] * 2},
+    {
+        "title": "Synthèse",
+        "kind": "bullets",
+        "bullets": [
+            "Espagne :",
+            "- Hub exportateur",
+            "- IA souveraine",
+            "Italie :",
+            "- Moteur de croissance",
+            "- Cyber et défense",
+        ],
+    },
+    {
+        "title": "Recommandations",
+        "kind": "bullets",
+        "bullets": [
+            "Pour l'Espagne :",
+            "- Attirer les talents cyber",
+            "Pour l'Italie :",
+            "- Co-investissements",
+            "Recommandation globale :",
+            "- Soutien actif du COMEX",
+        ],
+    },
+    {"title": "Conclusion", "kind": "section"},
+]
+
+
+def with_item_slides(
+    inventory: Any, kinds: Any = ("timeline", "cards"), count: int = 6
+):
+    """``inventory`` plus one example slide per kind holding ``count`` heading +
+    text items: what the variety advice may name. Never rendered."""
+
+    def zone(key: str, role: Any, x: int) -> Zone:
+        box = Box(x=x, y=2_000_000, w=1_000_000, h=2_000_000)
+        return Zone(
+            key=key, role=role, box=box, font_pt=14.0, chars_per_line=20, max_lines=4
+        )
+
+    extra = []
+    for n, kind in enumerate(kinds):
+        pid = f"slide:{900 + n}"
+        items = [
+            [
+                zone(f"{pid}/{i}/h", "heading", i * 1_200_000),
+                zone(f"{pid}/{i}/b", "body", i * 1_200_000),
+            ]
+            for i in range(count)
+        ]
+        group = RepeatGroup(
+            key=f"{pid}/g",
+            count=count,
+            item_zones=["heading", "body"],
+            items=items,
+            item_keys=[f"{pid}/{i}" for i in range(count)],
+        )
+        title = Zone(
+            key="ph:0",
+            role="title",
+            box=Box(x=0, y=0, w=9_000_000, h=900_000),
+            font_pt=32.0,
+            chars_per_line=40,
+            max_lines=1,
+        )
+        extra.append(
+            Pattern(
+                id=pid,
+                source="slide",
+                source_index=900 + n,
+                name=kind,
+                label=f"Synthetic {kind}",
+                kind=kind,
+                zones=[title],
+                groups=[group],
+            )  # type: ignore[arg-type]
+        )
+    return inventory.model_copy(update={"patterns": inventory.patterns + extra})
+
+
 __all__ = [name for name in globals() if name.startswith(("add_", "build_"))] + [
     "FOOTER",
     "Emu",
+    "EVIDENCE_SLIDES",
+    "with_item_slides",
 ]
