@@ -125,6 +125,15 @@ already used for uncategorized prompts (`hashColorIndex`, frontend).
 
 ### 3.2 Prompt commands (PROMPT-CMD-01)
 
+`skill` is reserved for the platform composer command `/skill <name> <request>`.
+Create, reassignment and promotion refuse it with HTTP 409 and
+`prompt_command_reserved`. Marketplace import returns HTTP 200 with that code
+in each refused target's `error_code` alongside `error`. Existing homonymous rows remain readable in the
+library and editable, including while keeping their old command, but are excluded
+from the slash catalog. Renaming restores their ordinary prompt shortcut. This
+reservation applies even when the selected runtime has no skills.
+
+
 A prompt may carry an optional `command`: a lowercase unaccented slug
 (`^[a-z0-9_-]+$`, at most 64 characters) that runs it from the chat composer by
 typing `/` plus that slug. Authoring it takes `team_editor`, like any other
@@ -327,6 +336,15 @@ See [`PROMPT-SYSTEM-HARDENING-RFC.md`](../rfc/PROMPT-SYSTEM-HARDENING-RFC.md)
 for the improvement proposal.
 
 ## 8. System Prompt Assembly (PROMPT-10)
+
+When enabled, platform skill names/descriptions and loading guidance are included
+inside the existing `<tools>` block for ReAct, Deep and native children. Bodies
+are loaded progressively through tools or a user-selected preload, never eagerly
+injected into the system prompt. Metadata, bodies and references escape reserved
+Fred block tags; platform precedence remains unchanged. With skills absent,
+prompt composition is byte-for-byte unchanged. Resource/configuration and
+checkpoint semantics are defined in the runtime execution contract.
+
 
 `compose_system_prompt` (`fred_runtime/react/react_prompting.py`, shared by
 the ReAct and Deep runtimes) sends the model four XML-wrapped blocks. Their

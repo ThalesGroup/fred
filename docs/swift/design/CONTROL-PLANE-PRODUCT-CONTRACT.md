@@ -382,6 +382,19 @@ Do not model platform-owned selectors as generic tuning fields. In particular:
 - `require_tools: list[str]` — tool names the agent requires
 - `config_fields: list[ManagedAgentFieldSpec]` — configurable parameters owned by the MCP tool and persisted via `mcp_config_values`
 
+#### Skill catalog for a managed instance
+
+`GET /control-plane/v1/teams/{team_id}/agent-instances/{agent_instance_id}/skills`
+requires `CAN_USE_TEAM_AGENTS`, verifies the instance belongs to that team and
+is enabled, and proxies only its enabled `source_runtime_id`. It forwards the
+verified bearer identity to that runtime's authenticated metadata route; it never
+merges other pod catalogs. `SkillCatalog` contains only support, revision and
+name/description metadata. A 404 from an older runtime means unsupported during
+rolling upgrades; an unavailable source and invalid upstream metadata fail safely.
+The composer fetches the actual selected instance and ignores stale data from
+previous selections. Runtime selection and load attribution are defined in the
+runtime execution contract.
+
 ### 3.3 Runtime binding stays internal
 
 `RuntimeBinding` is not a primary frontend product contract.
@@ -650,6 +663,7 @@ managed agent instances:
 Rules:
 
 - prompt ownership is team-scoped
+- `skill` is reserved for platform skills; command assignment/copy rules and legacy handling are defined in `PROMPTS.md` §3.2
 - the reserved system team `personal` is the personal prompt library; do not
   introduce a parallel user-scoped prompt API
 - prompt `text` uses the same template-validation contract as agent
@@ -4184,7 +4198,9 @@ uncapped.
 **Error shape — one new code.** A prompt write that collides on the command
 returns 409 with an **object** detail, `{"code": "prompt_command_conflict",
 "message": ...}`, so a form can mark the command field rather than the name.
-Every other prompt error keeps the plain-string detail. The two conflicts are
+Reserved `skill` assignment also returns an object detail with
+`prompt_command_reserved`; legacy and batch-import rules are in `PROMPTS.md`
+§3.2. Other prompt errors keep plain-string detail. Name and command conflicts are
 told apart by asking the database which constraint fired, not by parsing the
 driver's message; a name collision wins when both apply.
 

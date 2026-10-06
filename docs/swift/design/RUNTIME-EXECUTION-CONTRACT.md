@@ -485,6 +485,13 @@ Convergence rule for future work:
   agent-to-agent calls if the existing runtime execute transport can carry the
   needed typed fields.
 
+The optional `runtime_context.skill: SkillInvocation` carries only `name`;
+extra fields (including a client body) are rejected. On a fresh ReAct/Deep turn,
+admission validates the selected name against the pod snapshot before inference.
+The runtime reads its own procedure and prepends it to ordinary checkpoint
+messages through the common tool execution boundary. Resume does not repeat
+this preload. Graph agents report skills unsupported.
+
 ### 2.4 Pre-execution authorization gate — `_authorize_and_resolve`
 
 There is no `validate_execution_grant` helper. Every execute / execute-stream /
@@ -542,6 +549,14 @@ Managed execution invariant:
 
 ---
 
+### Platform skill metadata
+
+`GET /agents/skills?agent_instance_id=...&team_id=...` uses the same verified
+caller, team-use authorization and managed-instance resolution as execution.
+It returns `SkillCatalog`: `supported`, a snapshot `revision` and names/descriptions
+only; no bodies, filesystem paths or cross-source aggregation. See the product
+contract for the authenticated frontend proxy.
+
 ## 4. OpenAI Compatibility — `fred-sdk/contracts/openai_compat.py`
 
 The `/v1/chat/completions` endpoint is a **secondary interface** for external
@@ -593,6 +608,14 @@ Runtime events emitted during agent execution (both native SSE and OpenAI compat
 | `final`            | Turn complete; carries content, sources, token_usage, ui_parts    |
 | `turn_persisted`   | **Schema only — not emitted over SSE in Phase 1** (see gap below) |
 | `status`           | Internal status update (dropped by OpenAI compat layer)           |
+
+`StatusRuntimeEvent.skill_load` optionally carries `SkillLoadAttribution`:
+`name`, `origin` (`user` or `agent`), `revision`, `load_id`, `agent_id`, `child`
+and optional `child_id`. Explicit preloads use user origin; model tool calls use
+agent origin. Native child loads use a namespace-derived opaque child identity.
+The event projects to `system/system_note` history with the same typed object in
+`metadata.extras.skill_load`. The UI renders a compact step and deduplicates by
+exchange/load identity; successful load bodies are not exposed in a trace inspector.
 
 ### SSE stream termination
 
@@ -713,6 +736,27 @@ MUST remain runtime-environment concerns and MUST NOT appear in frontend-facing
 contracts.
 
 ---
+
+### Platform skill resources and continuity
+
+Optional pod `skills.directory` enables a fixed, bounded, read-only startup
+snapshot. `package` selects resources under `fred_runtime/skills`; relative
+project paths resolve against the configuration file parent. Absence disables
+the feature. Valid skills are available to all ReAct/Deep agents and native
+Deep children through shared public upstream discovery/state hooks and Fred's
+normalized `load_skill(name)` / `read_skill_file(name, path)` tools. Invalid entries
+are omitted with bounded diagnostics; duplicate names are refused. Referenced
+UTF-8 text stays confined to the skill directory; scripts, writes and execution
+are unsupported. Startup limits are 64 skills, 128 text files per skill, 64 KiB
+per file and 4 MiB total. Traversal is bounded to 128 directories per skill,
+depth 8, and 512 entries per directory. Accepted text extensions are `.md`,
+`.txt`, `.json`, `.yaml`, `.yml` and `.csv`. Changes require pod restart; checkpoint catalog metadata is
+refreshed from the current snapshot at the next turn.
+
+Loaded instructions remain ordinary messages under existing context limits.
+They apply according to the current request, grant no tools/permissions, and
+can be reloaded after trimming. No persistent active-skill mode or automatic
+checkpoint reset is introduced. Prompt assembly is defined in `PROMPTS.md`.
 
 ## 7. Kubernetes-Native Platform Boundary
 
