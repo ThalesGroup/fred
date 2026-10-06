@@ -65,6 +65,18 @@ PROMPTS: dict[str, str] = {
         "40% women in management target, supplier audit figures (220 audits, 95% compliant), a "
         "quote from the CEO, and the 2030 timeline."
     ),
+    # Two countries with figures, domains, dated initiatives and challenges:
+    # the plan that sent `heading2` columns and repeated one slide four times.
+    "country_comparison": (
+        "Prépare une présentation de 10 slides sur nos implantations en Espagne et en Italie. "
+        "Espagne : 45 ans d'implantation, 2 800 experts, 9 sites ; domaines défense, spatial et "
+        "cybersécurité ; initiatives : centre cyber à Madrid (2024), contrat radar naval (2025), "
+        "usine de Séville (2027) ; défis : recrutement d'ingénieurs et coûts de l'énergie. "
+        "Italie : 30 ans d'implantation, 1 900 experts, 6 sites ; domaines spatial, transport et "
+        "identité numérique ; initiatives : satellite de Turin (2024), signalisation ferroviaire "
+        "(2026) ; défis : souveraineté des données et délais d'export. Une section par pays, puis "
+        "une comparaison des deux pays et une conclusion."
+    ),
     # Tabular content (design.md D14): offers × criteria, a schedule.
     "offers_table": (
         "Make a 4-slide deck comparing three cloud offers for our data platform: AWS, Azure "

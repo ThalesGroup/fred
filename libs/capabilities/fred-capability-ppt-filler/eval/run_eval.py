@@ -59,7 +59,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
-from fred_sdk.contracts.context import PublishedArtifact
+from fred_sdk.contracts.context import FsEntry, PublishedArtifact
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -76,6 +76,7 @@ from langchain_core.messages import (
 )
 from langchain_core.tools import BaseTool
 from pptx import Presentation
+from pptx.oxml.ns import qn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from prompts import PROMPTS  # noqa: E402
@@ -219,7 +220,7 @@ async def analyse(
 
 
 class MemoryWorkspace:
-    """The write half of the workspace port, kept in memory."""
+    """The write and list halves of the workspace port, kept in memory."""
 
     def __init__(self) -> None:
         self.files: Dict[str, bytes] = {}
@@ -235,6 +236,10 @@ class MemoryWorkspace:
             document_uid=path,
             mime=None,
         )
+
+    async def ls(self, path: str = "") -> List[FsEntry]:
+        prefix = path.rstrip("/") + "/"
+        return [FsEntry(path=k) for k in self.files if k.startswith(prefix)]
 
 
 _renders: contextvars.ContextVar[List[RenderResult]] = contextvars.ContextVar("renders")
@@ -291,7 +296,11 @@ class RunResult:
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
+    # Text strings of the raw tool arguments absent from the delivered deck:
+    # catches what the coercion drops before the renderer's report sees it.
     lost: int = 0
+    lost_texts: List[str] = field(default_factory=list)
+    variety_asks: int = 0
     attempts: List[Attempt] = field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
 
@@ -353,6 +362,7 @@ async def run_one(variant: Variant, prompt_id: str, profile: Profile) -> RunResu
                 messages.append(result)
                 text = str(result.content)
                 status = _status(text)
+                run.variety_asks += '"variety": [' in text
                 run.attempts.append(
                     Attempt(
                         time.monotonic() - t0,
@@ -453,11 +463,58 @@ def _measure(
         for slide_report in report.slides.values():
             run.removed_by_check += len(slide_report.removed)
             run.truncated += len(slide_report.truncated)
-            run.lost += len(slide_report.lost)
     deck = next((b for k, b in workspace.files.items() if k.endswith(".pptx")), None)
     if deck is not None:
         run.leftovers = _leftovers(variant, slides, chosen, deck)
         _tables(run, slides, chosen, deck)
+        assigned = assign(inventory, plan).patterns
+        run.lost_texts = _lost_texts(args, assigned, deck)
+        run.lost = len(run.lost_texts)
+
+
+_NOT_TEXT = {"kind", "type", "pattern", "image", "images", "notes", "file_name"}
+
+
+def _raw_texts(value: Any, key: Optional[str] = None) -> List[str]:
+    """Every text line of the model's raw arguments, under whatever key."""
+    if key in _NOT_TEXT or isinstance(value, bool) or value is None:
+        return []
+    if isinstance(value, dict):
+        return [t for k, v in value.items() for t in _raw_texts(v, k)]
+    if isinstance(value, list):
+        return [t for v in value for t in _raw_texts(v, key)]
+    return str(value).splitlines()
+
+
+def _bare(text: str) -> str:
+    return _norm(text.replace("*", "")).removeprefix("- ")
+
+
+def _lost_texts(
+    args: Dict[str, Any], patterns: Sequence[Optional[Pattern]], deck: bytes
+) -> List[str]:
+    """Raw-argument text that is not on its slide of the deck; fixed slides
+    (shown as is) and step numbers (the item order shows them) are not content."""
+    shown = iter(
+        "\n".join(
+            _bare("".join(t.text or "" for t in p.iter(qn("a:t"))))
+            for p in slide._element.iter(qn("a:p"))
+        )
+        for slide in Presentation(io.BytesIO(deck)).slides
+    )
+    raw = args.get("slides") or []
+    lost = []
+    for entry, pattern in zip(raw if isinstance(raw, list) else [], patterns):
+        if pattern is None:  # not a slide: nothing rendered for it
+            continue
+        on_slide = next(shown, "")
+        if not isinstance(entry, dict) or not pattern.fillable:
+            continue
+        for text in _raw_texts(entry):
+            key = _bare(text)
+            if key and not (key.isdigit() and len(key) <= 2) and key not in on_slide:
+                lost.append(text[:60])
+    return lost
 
 
 def _tables(
@@ -547,8 +604,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
         "| 3-in-a-row | distinct/slides | max reuse | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
-        "| leftovers | removed by check | truncated | lost | avg wall s |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| leftovers | removed by check | truncated | lost | variety asks | avg wall s |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -579,6 +636,7 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "
+            f"| {sum(r.variety_asks for r in runs)} "
             f"| {mean([r.wall_seconds for r in runs])} |"
         )
     lines += [
