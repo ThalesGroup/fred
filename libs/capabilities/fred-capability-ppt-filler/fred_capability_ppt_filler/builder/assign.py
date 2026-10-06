@@ -75,7 +75,7 @@ _VARIETY_NOTE_USES = 3
 _STRUCTURAL = ("cover", "section", "agenda", "closing")
 # What each kind suits, in the order alternatives are offered.
 SHAPE_HINTS: Dict[str, str] = {
-    "figures": "short numeric items (value + label)",
+    "figures": "a few key numbers, each a value + a short label",
     "timeline": "dated items or milestones",
     "cards": "parallel items",
     "process": "ordered steps",

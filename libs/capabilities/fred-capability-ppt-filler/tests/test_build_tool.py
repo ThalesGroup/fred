@@ -161,7 +161,7 @@ def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     assert "The first slide is always the template's cover" in description
     # The choice guide names only kinds this template offers.
     assert (
-        "numeric items (value + label) → figures" in description
+        "key numbers, each a value + a short label → figures" in description
         and "ordered steps → process" in description
     )
     assert "→ timeline" not in description
@@ -376,7 +376,7 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     (repeat,) = payload["variety"]
     assert repeat["slides"] == [2, 3, 4, 5] and repeat["kind"] == "process"
     assert any(
-        o.startswith("'figures' for short numeric items") for o in repeat["options"]
+        o.startswith("'figures' for a few key numbers") for o in repeat["options"]
     )
     assert "send the same plan again: it will be built as is" in text
     # The same plan again: built, with the passive note only.

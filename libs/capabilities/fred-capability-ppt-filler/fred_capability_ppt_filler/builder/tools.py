@@ -428,7 +428,12 @@ def _guide(kinds: List[SlideKind]) -> str:
     pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
     if "table" in kinds:
         pairs[-1] += ", not restated as columns before it"
-    lead = f" Shape the content: {'; '.join(pairs)}." if pairs else ""
+    lead = (
+        f" Shape the content, within the fields and items max each variant lists below: "
+        f"{'; '.join(pairs)}."
+        if pairs
+        else ""
+    )
     return lead + " Each slide of a deck should look different."
 
 
