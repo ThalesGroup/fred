@@ -715,3 +715,18 @@ def test_the_coercion_keeps_every_text_it_maps():
         SlidePlan.model_validate({"title": "T", "extra": "kept"}).model_dump()
     )
     assert again.ignored_fields == ["extra 'kept'"]
+
+
+def test_an_item_led_by_its_figure_is_not_half_written():
+    figures = {
+        "title": "CO2",
+        "items": [
+            {"number": "18%", "text": "less since 2022"},
+            {"heading": "Net zero", "text": "by 2040"},
+        ],
+    }
+    assert not [
+        p
+        for p in assign(INVENTORY, _plan(COVER, figures)).problems
+        if p.index == 2 and "incomplete" in p.problem
+    ]

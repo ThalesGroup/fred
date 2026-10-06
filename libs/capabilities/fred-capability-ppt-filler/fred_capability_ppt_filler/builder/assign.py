@@ -413,21 +413,23 @@ def _dropped_text(index: int, slide: SlidePlan) -> Optional[SlideProblem]:
                 f"items[{n}]: {', '.join(item.ignored_fields)} is not an item field"
             )
             options.append("give each item only number, heading, text, label, image")
+    # An item's figure leads it as a heading would (a figures card).
     halves = _unbalanced(
         "columns", "bullets", [(c.heading, bool(c.bullets)) for c in slide.columns]
     ) + _unbalanced(
-        "items", "text", [(i.heading, bool(i.text or i.label)) for i in slide.items]
+        "items",
+        "text",
+        [(i.heading or i.number, bool(i.text)) for i in slide.items],
+    )
+    if not found and not halves:
+        return None
+    parts = (["this text would be lost: " + "; ".join(found)] if found else []) + (
+        ["incomplete entries: " + "; ".join(halves)] if halves else []
     )
     if halves:
-        found += halves
-        options += ["complete each entry, or drop the half-written one"]
-    if not found:
-        return None
+        options.append("complete each entry, or drop the half-written one")
     return SlideProblem(
-        index,
-        "this text would be lost: " + "; ".join(found),
-        list(dict.fromkeys(options)),
-        slide.kind,
+        index, "; ".join(parts), list(dict.fromkeys(options)), slide.kind
     )
 
 
