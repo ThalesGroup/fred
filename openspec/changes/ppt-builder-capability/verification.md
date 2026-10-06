@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16 and WP17 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17 and WP18 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -307,6 +307,62 @@ are `no_tool_call`: it wrote a slide plan and asked the user to confirm before b
 which a one-turn harness counts as a failure. Same tokens and wall time per delivered deck
 as small: the cost difference is the per-token price only (not measured here).
 
+## Results: WP18 (variety asked on the first call only, with fit hints)
+
+Run on 2026-10-06 after `c6043beaa`, same harness, model (`chat.mistral.small`) and 14 prompts
+as WP17. Two `make eval` processes one after the other (Paintress, then corporate; each also
+runs the built-in template), nothing else running, no 429. Like-for-like on the WP16
+thirteen prompts (78 runs per state; WP16 = `eval-wp16c-*`, WP17 = `eval-wp17-*`, WP18 =
+`eval-wp18-*`); the built-in cell gives the Paintress process's run / the corporate
+process's run:
+
+| template | mode | success | first call | tool calls | variety asks | decks with a kind ×3+ | max kind repeat (mean) | lost |
+|---|---|---|---|---|---|---|---|---|
+| builtin | rules | 12/12 → 9/9 → 10/11 | 2/2 → 1/0 → 1/1 | 34/30 → 40/41 → 35/38 | 2/2 → 9/9 → 8/7 | 8/7 → 3/3 → 4/6 | 7/6 (3.42/3.08) → 4/4 (2.56/2.33) → 4/7 (2.40/3.09) | 1/0 → 0/0 → 0/0 |
+| corporate | rules | 11 → 12 → 13 | 3 → 1 → 0 | 27 → 37 → 33 | 1 → 9 → 8 | 7 → 7 → 8 | 10 (3.82) → 9 (3.17) → 7 (3.31) | 0 → 0 → 0 |
+| corporate | vision | 13 → 9 → 12 | 5 → 1 → 1 | 26 → 43 → 35 | 2 → 10 → 9 | 9 → 2 → 7 | 10 (3.92) → 3 (1.78) → 8 (2.83) | 0 → 9* → 0 |
+| paintress | rules | 12 → 12 → 11 | 3 → 3 → 1 | 26 → 34 → 32 | 2 → 9 → 7 | 5 → 6 → 1 | 11 (3.25) → 7 (2.75) → 3 (1.91) | 0 → 0 → 0 |
+| paintress | vision | 13 → 12 → 12 | 6 → 1 → 2 | 24 → 37 → 30 | 0 → 9 → 10 | 7 → 3 → 5 | 9 (3.69) → 4 (2.00) → 10 (3.17) | 0 → 0 → 0 |
+| **total** | | **73 → 63 → 69** | **21 → 7 → 6** | **167 → 232 → 203** | **9 → 55 → 49** | **43 → 24 → 31** | **11 → 9 → 10** | 1 → 9* → 0 |
+
+\* the three-parallel-calls harness artifact of WP17 (see there). Cover once at 1: 100 %;
+leftovers 0.
+
+- **Success recovers most of the loss: 63 → 69 of 78** (WP16: 73). Without the harness
+  artifact (an invented image id, no `document_content` port: 3 / 4 / 4 runs), the other
+  failures go 2 → 11 → 5, and only 2 of WP18's 5 had an ask (WP17: 9 of 11). The 5 are
+  `repairs_exhausted` on the built-in template (`esg_report` ×2, `training_12`,
+  `offers_table`) and `paintress/vision/esg_report`, all ending on fit problems (cover
+  subtitle, figure labels, row lengths).
+- **The ask no longer costs a round of its own**: 29 of the 48 recorded asks came merged with
+  the first call's fit problems (WP17: every ask was a separate round, after the repair). No
+  ask followed a fit repair. Tool calls drop 232 → 203 (−12.5 %), still +22 % over WP16.
+- **First call does not recover (7 → 6)**, as expected: the ask still fires on most first
+  decks (49 asks), and an asked deck is never a first-call success. Most first-call misses
+  are fit problems that would be there without the ask (cover subtitle ≈32 chars and figure
+  labels ≈12 chars on Paintress).
+- **Variety: part of WP17's gain is kept.** Decks with one kind on 3+ slides 43 → 24 → 31;
+  the gain holds on Paintress rules (1 deck, worst 3) and the built-in Paintress run, and
+  shrinks on corporate and Paintress vision, where a merged ask is answered by fixing the
+  fit problem and keeping the kinds (the resend rule) more often. Worst kind repeat 11 → 9
+  → 10 (`paintress/vision/training_12`: 10 bullets slides, the model kept them).
+- **Fit hints**: 37 of the 48 recorded asks carry a `holds` line (run logs keep 2 000 chars of
+  each answer, so this is a lower bound). A first Paintress run (`eval-wp18a`, before
+  `c6043beaa`) showed a cards suggestion quoting `items max 4 [number, label ≈12 chars]` for
+  `Label : text` points: an unmeasured `number` field counted as endless room. Fixed (room sums
+  measured fields; holding the longest entry outranks an empty item picture) and both
+  processes re-run; the table is the re-run.
+- Example of the ask as the model sees it (`paintress/rules/quarterly_review`, first call,
+  delivered on the second; option list shortened here):
+
+  ```
+  No deck was built: some slides fit no slide of this template. Fix each slide listed under `slides` with one of its options. Also, several other slides would look the same: recast some of the slides under `variety` into one of their options (`suggested` names the kind each slide's content already suits and what that slide holds), rewriting the content in that shape and to those sizes. Then call build_presentation again with the WHOLE deck. If the slides under `variety` must stay alike, keep them: the next deck that fits is built as is.
+  {"status": "needs_revision", "slides": [{"slide": 4, "kind": "figures", "problem": "closest fit, a 'figures' slide: items: 5 given, max 4", "options": ["trim to 4 items or split them over two slides", "a 'figures' slide takes: title ≈71 chars; items max 4 [number, label ≈12 chars]"]}], "variety": [{"slides": [3, 5, 7, 8], "kind": "bullets", "suggested": ["slide 7 (parallel 'Label : text' points) → cards holds items max 6 [heading+text ≈31 chars × 4 lines]"], "options": ["'figures' for a few key numbers, each a value + a short label: Indicateurs de performance / chiffres clés: title ≈71 chars; items max 4 [number, label ≈12 chars]", "'timeline' for dated items or milestones: …", "…"]}]}
+  ```
+
+  The delivered deck: `[cover, agenda, cards, figures, cards, process, bullets, bullets]`.
+- Model tokens (now recorded): 796k in / 237k out over the 78 runs (no earlier baseline).
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -373,6 +429,18 @@ as small: the cost difference is the per-token price only (not measured here).
 
 ## Checks
 
+- WP18: package `make code-quality` passed; `make test` 389 passed, 4 skipped (2 new in
+  `test_assign.py` for the hints and their ranking, 1 for repeats beside problems, 2 in
+  `test_build_tool.py`: no ask after a fit repair, ask merged with problems); with
+  `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 393 passed; on the Paintress deck the
+  reference-bearing files 152 passed. No
+  API model change (no frontend regeneration). `fred-performance-reviewer` on the tool path: no
+  new I/O except the existing outputs listing, now also on a first call that has fit problems
+  and a repeat (once per turn at most); `assign` still in `asyncio.to_thread`; on a plan with
+  problems it now also runs the beam over the fitting slides: 29-slide deck against Paintress
+  233 ms (no problem) / 272 ms (one unfit slide, 30 slides), measured median of 7; the hints
+  read stored capacities only. The tool-instance `called` flag is per turn, as the WP16 flag
+  was; no shared state. No finding.
 - WP17: package `make code-quality` passed; `make test` 384 passed, 4 skipped (4 new in
   `test_assign.py`, 2 in `test_build_tool.py`); with `PPT_BUILDER_REFERENCE_TEMPLATE` on the
   corporate deck 388 passed; on the Paintress deck the reference-bearing files 149 passed. No

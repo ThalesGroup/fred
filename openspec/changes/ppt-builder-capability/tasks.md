@@ -209,8 +209,8 @@ Owns: `assign.py` (repeats by kind, content shapes), `tools.py` (variety payload
 
 Owns: `assign.py` (repeats beside problems, content shape lengths, fit hints), `tools.py` (first-call ask, merged revision), tests `test_assign.py`, `test_build_tool.py`, `verification.md`.
 
-- [ ] 18.1 The variety ask is evaluated on the first call of a turn only; a later call (after a fit repair or a resend) is never asked
-- [ ] 18.2 The assigner computes repeats over the fitting slides when other slides have problems; a first call with both returns one `needs_revision` holding the problems and the variety block
-- [ ] 18.3 Each content-based suggestion carries what the favoured variant holds (items max and item fields, or exactly 2 columns, with sizes from the inventory) and a shorten hint when the slide's longest entry exceeds its room
-- [ ] 18.4 Tests: ask only on the first call; no ask after a fit repair; merged ask + problems in one revision; hints carry the inventory's numbers; resend built; later deck note only
-- [ ] 18.5 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (14 prompts, paintress rules + vision, corporate, builtin) vs WP16 and WP17; `fred-performance-reviewer` on the tool path; `verification.md`
+- [x] 18.1 The variety ask is evaluated on the first call of a turn only; a later call (after a fit repair or a resend) is never asked
+- [x] 18.2 The assigner computes repeats over the fitting slides when other slides have problems; a first call with both returns one `needs_revision` holding the problems and the variety block
+- [x] 18.3 Each content-based suggestion carries what the favoured variant holds (items max and item fields, or exactly 2 columns, with sizes from the inventory) and a shorten hint when the slide's longest entry exceeds its room
+- [x] 18.4 Tests: ask only on the first call; no ask after a fit repair; merged ask + problems in one revision; hints carry the inventory's numbers; resend built; later deck note only
+- [x] 18.5 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (14 prompts, paintress rules + vision, corporate, builtin) vs WP16 and WP17; `fred-performance-reviewer` on the tool path; `verification.md`
