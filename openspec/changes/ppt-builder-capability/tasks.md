@@ -1,6 +1,6 @@
 Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/` unless rooted; tests under `libs/capabilities/fred-capability-ppt-filler/tests/`. Each work package (WP) names the files it owns; a WP edits only its own files.
 
-**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
+**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15 → WP16. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
 
 ## Kept from the first iteration (done, still valid)
 
@@ -178,3 +178,16 @@ Owns: `analysis.py` (table zone, exclusion rule), `models.py` (`table` kind, tab
 - [x] 15.6 Checks: no template cell text left, frame on the slide, shrink reported
 - [x] 15.7 Tests: Paintress-like synthetic 12 × 5 table (fewer rows, more rows, fewer columns, too long → needs_revision), merged-cell and Gantt-style grids stay excluded, the output opens without repair (unique row ids)
 - [x] 15.8 Eval prompts with tabular content; metrics: table used when given, shape kept, no overflow; LibreOffice preview of the table style checked; `verification.md`; package `make code-quality` + `make test`; frontend slice regenerated and `tsc` clean
+
+## WP16. No dropped text, first-deck variety revision, choice guide (D15)
+
+Owns: `plan.py` (coercion: ignored fields, merged aliases), `assign.py` (content problems, repeats), `render.py` (ignored-field warning removal), `tools.py` (variety revision, description guide), `eval/` (prompt, `lost` metric, `ls`), tests `test_build_tool.py`, `test_assign.py`, `port_fakes.py`, `verification.md`.
+
+- [ ] 16.1 Coercion keeps unmapped keys of slides, columns and items as ignored fields (`key 'text'`); a field given under its name and an alias is merged; a `{heading, text}` bullet keeps both
+- [ ] 16.2 Assigner: ignored fields and unbalanced columns/items (heading without body, body without heading beside a complete entry) → `needs_revision` naming slide and field; renderer's ignored-field warning deleted
+- [ ] 16.3 Repeats (pattern, slides, unused variants of its kind, unused slides of other non-structural kinds) feed both the passive note and the revision
+- [ ] 16.4 First deck only (no `.pptx` in `outputs/{session_id}`, listed only when needed): a non-structural slide used ≥ 3 times with an alternative → `needs_revision` once per tool instance, accepting the next call; later turns keep the note
+- [ ] 16.5 Description: choice guide from the offered kinds replaces the variety sentence; length measured before/after
+- [ ] 16.6 Eval: comparison prompt (two countries, figures, domains, dated initiatives, challenges); `lost` counts raw-argument text absent from the deck; variety revisions counted; `MemoryWorkspace.ls`
+- [ ] 16.7 Tests: heading2-without-bullets plan → `needs_revision`; variety revision fires once on the first deck and accepts the resend; a later-turn deck gets only the note; coercion keeps every key
+- [ ] 16.8 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (paintress rules + vision, corporate, builtin) vs WP15; `fred-performance-reviewer` on the tool path; `verification.md`

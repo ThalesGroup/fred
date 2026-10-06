@@ -246,6 +246,23 @@ The system SHALL accept from the model a plan of slides carrying content only �
 - **WHEN** an unused pattern of the same kind tier also fits the slide
 - **THEN** the unused pattern is chosen; a pattern used three times or more is reported in the success message with the unused variants and their sizes
 
+#### Scenario: First deck asked to vary once
+
+- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **WHEN** the assignment uses one template slide that is not a cover, section, agenda or closing three times or more, and the template has an unused variant of its kind or an unused slide of another such kind
+- **THEN** no deck is written and `needs_revision` names the repeated slides and the alternatives with the content each suits; the next call is built as sent, even when it repeats the same plan
+
+#### Scenario: Later deck keeps the note
+
+- **GIVEN** a conversation where a deck was already delivered
+- **WHEN** a new plan uses one template slide three times or more
+- **THEN** the deck is built and the repetition is only reported in the success message
+
+#### Scenario: Choice guide in the description
+
+- **WHEN** the tool description is built
+- **THEN** it says, for the kinds the template offers, which content suits each (numbers → figures, dates → timeline, parallel items → cards, ordered steps → process, a comparison → table, not restated as columns) and that each slide should look different
+
 #### Scenario: Empty item pictures are a cost
 
 - **WHEN** a slide's items carry no images and both a card pattern with item pictures and one without fit
@@ -275,6 +292,11 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 
 - **WHEN** the model calls again and a slide has the same problem as in the previous result
 - **THEN** the result says whether that slide was resent unchanged or changed without fixing the problem, instead of repeating the same message
+
+#### Scenario: Plan text that would be dropped
+
+- **WHEN** a slide, column or item carries a key that is no field (`"columns": {"heading": "Espagne", "bullets": [...], "heading2": "Italie"}`), or a column or item has a heading without a body (or a body without a heading) while another entry of the same list has both
+- **THEN** no deck is written and `needs_revision` names the slide and the field (`columns: heading2 'Italie' is not a column field`, `columns[1] has heading 'Italie' but no bullets`) with the fix
 
 #### Scenario: Repair loop
 
@@ -332,8 +354,8 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 
 #### Scenario: Malformed plan from the model
 
-- **WHEN** the plan has wrong JSON shapes (a bullet list as one string, unknown keys, a non-object entry)
-- **THEN** the tool coerces what it can, and anything it could not place is named in the result
+- **WHEN** the plan has wrong JSON shapes (a bullet list as one string, a field under an alias or given twice, a non-object entry)
+- **THEN** the tool coerces what it can without losing text, a non-object entry is named in the result, and a key it cannot map is a `needs_revision` problem
 
 ### Requirement: Tables fill the template's table
 
