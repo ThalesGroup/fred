@@ -37,7 +37,7 @@ import {
 import DuplicateAgentDialog from "./DuplicateAgentDialog/DuplicateAgentDialog.tsx";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState.tsx";
 import { filterAgents } from "./agentFilter.ts";
-import { DEFAULT_AGENT_SORT, sortAgents, type AgentSortValue } from "./agentSort.ts";
+import { getStoredAgentSort, sortAgents, storeAgentSort, type AgentSortValue } from "./agentSort.ts";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useUsersByIdsQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
@@ -125,7 +125,11 @@ export default function TeamAgentsPage() {
   const [editingInstance, setEditingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [duplicatingInstance, setDuplicatingInstance] = useState<ManagedAgentInstanceSummary | null>(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<AgentSortValue>(DEFAULT_AGENT_SORT);
+  const [sort, setSort] = useState<AgentSortValue>(getStoredAgentSort);
+  const changeSort = (next: AgentSortValue) => {
+    setSort(next);
+    storeAgentSort(next);
+  };
 
   const { data: fetchedTeam } = useGetTeamQuery({ teamId: teamId || "" }, { skip: !teamId || isPersonalTeam });
   const team = isPersonalTeam ? activeTeam : fetchedTeam;
@@ -463,7 +467,7 @@ export default function TeamAgentsPage() {
                     compact
                     options={sortOptions}
                     value={sort}
-                    onChange={setSort}
+                    onChange={changeSort}
                     ariaLabel={t("rework.teams.agents.sortLabel")}
                   />
                 </div>
