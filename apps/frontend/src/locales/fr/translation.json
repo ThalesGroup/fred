@@ -2954,7 +2954,8 @@
         "deleteConfirm": "Supprimer",
         "deleteCancel": "Annuler",
         "deleteFailed": "La photo de profil n'a pas pu être supprimée",
-        "deleteFailedDetail": "Veuillez réessayer dans un instant."
+        "deleteFailedDetail": "Veuillez réessayer dans un instant.",
+        "uploaded": "Photo de profil mise à jour"
       },
       "title": "Votre profil"
     },

@@ -15,8 +15,8 @@
 
 // The theme picker lists only the themes the platform offers, and disappears
 // when there is nothing to choose; the light/dark/system choice always stays.
-// The profile picture card uploads the crop and deletes only after confirmation;
-// a failed delete is reported to the user.
+// The profile picture card uploads the crop, confirms it, and deletes only after
+// confirmation; a failed delete is reported to the user.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -59,6 +59,11 @@ const picture = vi.hoisted(() => ({
   remove: vi.fn(),
   confirm: vi.fn(),
   notifyApiError: vi.fn(),
+  showSuccess: vi.fn(),
+}));
+
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showSuccess: picture.showSuccess }),
 }));
 
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
@@ -98,7 +103,7 @@ vi.mock("@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx", () => ({
     <div data-testid="picture-card" data-image={imageUrl ?? ""}>
       <button
         data-testid="picture-upload"
-        onClick={() => onUpload(new File(["x"], "avatar.webp", { type: "image/webp" }))}
+        onClick={() => onUpload(new File(["x"], "avatar.webp", { type: "image/webp" })).catch(() => undefined)}
       />
       {onDelete && <button data-testid="picture-delete" onClick={onDelete} />}
     </div>
@@ -148,6 +153,7 @@ beforeEach(() => {
   picture.remove.mockReset();
   picture.confirm.mockReset();
   picture.notifyApiError.mockReset();
+  picture.showSuccess.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -191,6 +197,18 @@ describe("UserSettingsPage profile picture", () => {
       bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: { file: File };
     };
     expect(arg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost.file.type).toBe("image/webp");
+    expect(picture.showSuccess).toHaveBeenCalledWith({ summary: "rework.userSettings.picture.uploaded" });
+  });
+
+  it("confirms nothing when the upload fails", async () => {
+    picture.upload.mockImplementation(() => {
+      throw { status: 400 };
+    });
+    render(["cobalt"]);
+
+    await click("picture-upload");
+
+    expect(picture.showSuccess).not.toHaveBeenCalled();
   });
 
   it("deletes the picture only once the confirmation is accepted", async () => {

@@ -21,6 +21,7 @@ import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { UI_THEME_LABEL_KEYS, type UiTheme } from "../../../../app/uiThemes.ts";
@@ -51,11 +52,13 @@ export default function UserSettingsPage() {
   const [deletePicture, { isLoading: isDeletingPicture }] = useDeleteUserAvatarMutation();
   const { showConfirmationDialog } = useConfirmationDialog();
   const { notifyApiError } = useApiErrorToast();
+  const { showSuccess } = useToast();
 
   const handlePictureUpload = async (file: File) => {
     // The generated client types the multipart file as `string`; the enhanced
     // endpoint sends the real File via FormData.
     await uploadPicture({ bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: { file: file as never } }).unwrap();
+    showSuccess({ summary: t("rework.userSettings.picture.uploaded") });
   };
 
   const handlePictureDelete = () => {
