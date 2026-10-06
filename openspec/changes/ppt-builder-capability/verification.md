@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12 and WP13 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13 and WP15 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -139,6 +139,57 @@ alone (both delivered); the row's other metrics are over the main run's 7 decks.
   tool description grows from 3 555 to 4 349 chars on Paintress (≈+200 input tokens per
   model call).
 
+## Results: WP15 (table slides)
+
+One matrix on 2026-10-06, after `7f9dd85ad`, same harness and model as WP13, 12 prompts:
+the WP13 ten plus `offers_table` (three cloud offers × five criteria) and
+`schedule_table` (eight training sessions × date, theme, trainer, room). One process,
+nothing else running; no 429. Like-for-like against WP13 (its ten prompts only):
+
+| template | mode | success | first call | avg repairs | 3-in-a-row | distinct/slides | max reuse | A-B-A | avoidable reuses |
+|---|---|---|---|---|---|---|---|---|---|
+| builtin | rules | 10 → 9* | 5 → 4 | 0.6 → 0.8 | 1 → 0 | 0.80 → 0.82 | 4 → 2 | 3 → 2 | 0 → 0 |
+| corporate | rules | 10 → 9* | 3 → 4 | 0.8 → 1.1 | 2 → 0 | 0.91 → 0.91 | 4 → 4 | 0 → 0 | 0 → 0 |
+| corporate | vision | 10 → 10 | 3 → 5 | 0.9 → 0.8 | 1 → 3 | 0.87 → 0.86 | 3 → 4 | 0 → 0 | 0 → 0 |
+| paintress | rules | 9* → 10 | 3 → 4 | 0.9 → 0.7 | 1 → 1 | 0.88 → 0.88 | 5 → 3 | 2 → 1 | 0 → 0 |
+| paintress | vision | 9 → 10 | 4 → 6 | 1.0 → 0.5 | 1 → 1 | 0.91 → 0.90 | 3 → 3 | 1 → 0 | 0 → 0 |
+
+\* `training_12`: the known harness artifact (an invented image id, no
+`document_content` port). Leftovers, truncated and lost stay 0 everywhere; cover once at
+1 100 %. No regression beyond run-to-run noise.
+
+The two tabular prompts (all 10 runs delivered):
+
+| template | mode | tables used / given | shape kept | off the slide | first call | 3-in-a-row |
+|---|---|---|---|---|---|---|
+| paintress | rules | 2/2 (+1 in `esg_report`: 3/3) | 3 | 0 | 2/2 | 0 |
+| paintress | vision | 2/2 (+3 in `cyber_2027`, `options_comparison`, `quarterly_review`: 5/5) | 5 | 0 | 1/2 | 0 |
+| builtin, corporate | both | 0/0 (no table slide: no `table` field in the schema) | - | - | 3/6 | 7 |
+
+- **Paintress**: every table the model sent went to `slide:300`, rendered with the plan's
+  rows and columns (header row, Medium Style 2 banding, columns widened when fewer than
+  5, rows removed below the content, a two-line cell growing its row), nothing past the
+  slide. Contact sheets: `~/fred-tmp/wp15-eval/sheets/paintress-*-*_table.png`.
+- **Templates without a table slide** recast the table: `corporate/rules/schedule_table`
+  made one `two_columns` slide per session (8 in a row: 6 of the 7 corporate-rules
+  triples, max reuse 8), reported to the agent as repetitions. Not a WP13 regression (new
+  prompt); a table-less template has no better slide for eight rows.
+- Synthetic render (`~/fred-tmp/wp15/try.pptx`, `try.pdf`, `try-2.png`, `try-3.png`): a
+  5 × 4 comparison and a 13-row × 3 schedule on Paintress. LibreOffice converts it without
+  complaint; the 13-row table is set at 85 % in one size and ends above the footer; row ids
+  unique, `gridCol` count = cells per row, frame height = the rows' sum. PowerPoint itself
+  was not available: "opens without repair" is shown by those invariants, not by
+  PowerPoint.
+- Rules analysis of Paintress: `slide:300` is `table` (5 columns ≈18 chars per cell line,
+  header + 11 lines of rows); the Gantt grid `slide:278` stays excluded (`table`: its
+  body cells carry different fills). Corporate unchanged (no data table).
+- Behaviour beyond D14, decided in implementation: a plan table without `header` on a
+  template table with a header row takes its first row as the header; the `table` field
+  is in the tool schema only when the template offers a `table` kind; vision cannot turn
+  a table-zone slide into another kind (nor give `table` to a slide without one); shrink
+  goes by 5 % steps down to the 0.7 floor, a row never shorter than the template's own row
+  at that scale.
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -205,6 +256,18 @@ alone (both delivered); the row's other metrics are over the main run's 7 decks.
 
 ## Checks
 
+- WP15: package `make code-quality` passed; `make test` 369 passed, 4 skipped (12 new in
+  `test_table_slides.py`); with `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 373
+  passed; on the Paintress deck the reference-bearing files (analysis, render, assign)
+  141 passed. `make builtin-inventory` regenerated (`ANALYSIS_VERSION` 10; only the version
+  and the new `table: null` zone field changed). ppt_builder slice regenerated (`table`
+  kind and role, `TableSpec`), `table` added to `SLIDE_KINDS` with fr/en labels;
+  `npx tsc --noEmit` clean, vitest on `ppt_builder/` + `src/locales` 33 passed.
+  `fred-performance-reviewer` on the tool path: no I/O added; assign and render stay in
+  `asyncio.to_thread`; schema still cached per kind set; description 0.14 ms per turn. One
+  finding fixed (`7f9dd85ad`): cell widths were re-measured at every font scale; a
+  30-slide deck with ten overflowing 30 × 5 tables went from 326 ms to 130 ms of assign
+  CPU (122 ms without tables, WP13: 106-110 ms).
 - WP13: package `make code-quality` passed; `make test` 357 passed, 4 skipped; with
   `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 361 passed (the Paintress deck
   passes the reference tests too). `fred-performance-reviewer` on the assigner: no

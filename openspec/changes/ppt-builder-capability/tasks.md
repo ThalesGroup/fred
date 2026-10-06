@@ -170,11 +170,11 @@ Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/PatternReviewD
 
 Owns: `analysis.py` (table zone, exclusion rule), `models.py` (`table` kind, table zone fields), `labelling.py` (vocabulary, compatibility), `plan.py` (`table` field, coercion, summary), `assign.py` (fit, inference, misfits), `render.py` (table fill), `checks.py`, `tools.py` (schema, description), `eval/` (prompts, metrics), their tests, `assets/fred_template.inventory.json`, regenerated ppt_builder frontend slice + `types.ts` `SLIDE_KINDS` + kind locales, `verification.md`.
 
-- [ ] 15.1 `SlideKind` gains `table`; data-table detection (≥ 2 columns, no merges, body cells empty/sample, no varying per-cell fill) → table zone with header flag, per-column capacity, line height, `max_lines`; other tables keep the `table` exclusion; bump `ANALYSIS_VERSION`
-- [ ] 15.2 Vision prompt vocabulary + compatibility (`table` needs a table zone)
-- [ ] 15.3 Plan `table: {header, rows}` with coercion (ragged rows padded); `infer_kinds` → `table`; catalogue line `table: title …; table N columns (≈C chars per cell line), ≈L lines of rows`
-- [ ] 15.4 Fit check: per-row wrapped lines vs `max_lines` at full size and at the shrink floor; column count ≤ template (fewer allowed per Q10); misfits name the row/cell and the limits; no table slide in the template → misfit
-- [ ] 15.5 Render: header + cells with `endParaRPr` attributes, rows cloned (fresh `a16:rowId`) or removed, columns removed with widths rescaled, frame height updated, one table-wide font scale
-- [ ] 15.6 Checks: no template cell text left, frame on the slide, shrink reported
-- [ ] 15.7 Tests: Paintress-like synthetic 12 × 5 table (fewer rows, more rows, fewer columns, too long → needs_revision), merged-cell and Gantt-style grids stay excluded, the output opens without repair (unique row ids)
-- [ ] 15.8 Eval prompts with tabular content; metrics: table used when given, shape kept, no overflow; LibreOffice preview of the table style checked; `verification.md`; package `make code-quality` + `make test`; frontend slice regenerated and `tsc` clean
+- [x] 15.1 `SlideKind` gains `table`; data-table detection (≥ 2 columns, no merges, body cells empty/sample, no varying per-cell fill) → table zone with header flag, per-column capacity, line height, `max_lines`; other tables keep the `table` exclusion; bump `ANALYSIS_VERSION`
+- [x] 15.2 Vision prompt vocabulary + compatibility (`table` needs a table zone)
+- [x] 15.3 Plan `table: {header, rows}` with coercion (ragged rows padded); `infer_kinds` → `table`; catalogue line `table: title …; table N columns (≈C chars per cell line), ≈L lines of rows`
+- [x] 15.4 Fit check: per-row wrapped lines vs `max_lines` at full size and at the shrink floor; column count ≤ template (fewer allowed per Q10); misfits name the row/cell and the limits; no table slide in the template → misfit
+- [x] 15.5 Render: header + cells with `endParaRPr` attributes, rows cloned (fresh `a16:rowId`) or removed, columns removed with widths rescaled, frame height updated, one table-wide font scale
+- [x] 15.6 Checks: no template cell text left, frame on the slide, shrink reported
+- [x] 15.7 Tests: Paintress-like synthetic 12 × 5 table (fewer rows, more rows, fewer columns, too long → needs_revision), merged-cell and Gantt-style grids stay excluded, the output opens without repair (unique row ids)
+- [x] 15.8 Eval prompts with tabular content; metrics: table used when given, shape kept, no overflow; LibreOffice preview of the table style checked; `verification.md`; package `make code-quality` + `make test`; frontend slice regenerated and `tsc` clean
