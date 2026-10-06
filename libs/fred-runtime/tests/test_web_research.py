@@ -143,8 +143,8 @@ def test_egress_configuration_requires_verified_https():
         WebResearchDeploymentConfig(egress_url="http://untrusted")
     with pytest.raises(ValueError):
         WebResearchDeploymentConfig(
-            egress_url="https://secret:token@egress"
-        )  # pragma: allowlist secret
+            egress_url="https://secret:token@egress"  # pragma: allowlist secret
+        )
 
 
 @pytest.mark.asyncio
