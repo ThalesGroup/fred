@@ -92,6 +92,22 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/users/${queryArg.userId}`, method: "DELETE" }),
     }),
+    uploadMyAvatarControlPlaneV1UsersMeAvatarPost: build.mutation<
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse,
+      UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/users/me/avatar`,
+        method: "POST",
+        body: queryArg.bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost,
+      }),
+    }),
+    deleteMyAvatarControlPlaneV1UsersMeAvatarDelete: build.mutation<
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse,
+      DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/users/me/avatar`, method: "DELETE" }),
+    }),
     getUserDetailsControlPlaneV1UserGet: build.query<
       GetUserDetailsControlPlaneV1UserGetApiResponse,
       GetUserDetailsControlPlaneV1UserGetApiArg
@@ -1653,6 +1669,12 @@ export type DeleteUserControlPlaneV1UsersUserIdDeleteApiResponse = unknown;
 export type DeleteUserControlPlaneV1UsersUserIdDeleteApiArg = {
   userId: string;
 };
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiResponse = unknown;
+export type UploadMyAvatarControlPlaneV1UsersMeAvatarPostApiArg = {
+  bodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost: BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost;
+};
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiResponse = unknown;
+export type DeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteApiArg = void;
 export type GetUserDetailsControlPlaneV1UserGetApiResponse = /** status 200 Successful Response */ UserDetails;
 export type GetUserDetailsControlPlaneV1UserGetApiArg = void;
 export type ValidateGcuControlPlaneV1GcuPostApiResponse = /** status 200 Successful Response */ any;
@@ -2739,6 +2761,7 @@ export type UserSummary = {
   last_name?: string | null;
   username?: string | null;
   email?: string | null;
+  avatar_image_url?: string | null;
 };
 export type CreateUserRequest = {
   username: string;
@@ -2765,6 +2788,10 @@ export type PlatformRolesResponse = {
 };
 export type GrantPlatformRoleRequest = {
   relation: PlatformRoleRelation;
+};
+export type BodyUploadMyAvatarControlPlaneV1UsersMeAvatarPost = {
+  /** Profile picture file (max 5MB, JPEG/PNG/WebP) */
+  file: string;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -4424,6 +4451,8 @@ export const {
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation,
   useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation,
   useDeleteUserControlPlaneV1UsersUserIdDeleteMutation,
+  useUploadMyAvatarControlPlaneV1UsersMeAvatarPostMutation,
+  useDeleteMyAvatarControlPlaneV1UsersMeAvatarDeleteMutation,
   useGetUserDetailsControlPlaneV1UserGetQuery,
   useLazyGetUserDetailsControlPlaneV1UserGetQuery,
   useValidateGcuControlPlaneV1GcuPostMutation,

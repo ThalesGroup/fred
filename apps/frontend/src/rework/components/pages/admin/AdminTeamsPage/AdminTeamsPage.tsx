@@ -108,7 +108,10 @@ export default function AdminTeamsPage() {
         label: t("rework.adminTeams.existingTeams.table.admins"),
         cellRenderer: (team) => (
           <AvatarGroup
-            avatars={(team.admins ?? []).map((admin) => ({ name: `${admin.first_name} ${admin.last_name}` }))}
+            avatars={(team.admins ?? []).map((admin) => ({
+              name: `${admin.first_name} ${admin.last_name}`,
+              imageUrl: admin.avatar_image_url,
+            }))}
           />
         ),
       },

@@ -160,7 +160,11 @@ export default function TeamContentNavbar() {
   // is you" signal — sized down to fit this compact header.
   const teamDisplayName = isPersonalTeam ? t("rework.sidebar.team.userTeam") : (selectedTeam?.name ?? "");
   const teamAvatar = isPersonalTeam ? (
-    <UserAvatar name={KeyCloakService.GetUserFullName()} size="x-small" />
+    <UserAvatar
+      name={KeyCloakService.GetUserFullName()}
+      size="x-small"
+      imageUrl={bootstrap?.current_user?.avatar_image_url}
+    />
   ) : selectedTeam?.avatar_image_url ? (
     <img
       className={styles.teamPanelAvatar}

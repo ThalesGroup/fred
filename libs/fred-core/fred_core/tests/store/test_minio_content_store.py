@@ -132,3 +132,34 @@ def test_presigned_url_strips_the_leading_slash(store) -> None:
     store.get_presigned_url("/teams/t1/avatar-abc.webp")
 
     assert store.public_client.calls[0]["object"] == "teams/t1/avatar-abc.webp"
+
+
+class _FakeWriteClient:
+    """Mimics S3 `remove_object`, which succeeds whether or not the key exists."""
+
+    def __init__(self, objects: set[str]) -> None:
+        self.objects = objects
+        self.removed: list[tuple[str, str]] = []
+
+    def remove_object(self, bucket_name, object_name):
+        self.removed.append((bucket_name, object_name))
+        self.objects.discard(object_name)
+
+
+def test_delete_object_removes_an_existing_object(store) -> None:
+    client = _FakeWriteClient({"users/u1/avatar.png"})
+    store.client = cast(Minio, client)
+
+    store.delete_object("/users/u1/avatar.png")
+
+    assert client.objects == set()
+    assert client.removed == [("control-plane-content-objects", "users/u1/avatar.png")]
+
+
+def test_delete_object_on_a_missing_object_is_a_no_op(store) -> None:
+    client = _FakeWriteClient(set())
+    store.client = cast(Minio, client)
+
+    store.delete_object("users/u1/missing.png")
+
+    assert client.removed == [("control-plane-content-objects", "users/u1/missing.png")]

@@ -4275,6 +4275,34 @@ agent file space, prompt references, team-level settings. Emits the KPI
 team, target team, new agent, user, dropped capabilities). Full behavior:
 OpenSpec `agent-copy`.
 
+## 59. Contract Notes — user profile pictures (2026-10-06, #2977)
+
+**What it is.** A person sets or removes their own profile picture; it replaces
+their initials wherever their avatar is shown.
+
+**Endpoints.** Both are `authenticated_user`, self only: the target is always
+the caller and no parameter can name someone else.
+
+- `POST /control-plane/v1/users/me/avatar` (multipart, field `file`) → 204.
+  Same validation as team avatars (5 MB, JPEG/PNG/WebP, declared type must match
+  the content), 400 otherwise with the picture unchanged. Accounts whose id is
+  not a UUID (service accounts) get 400.
+- `DELETE /control-plane/v1/users/me/avatar` → 204, idempotent.
+
+**Model.** Nullable `users.avatar_object_storage_key`; objects live at
+`users/{uid}/avatar-{uuid}{ext}` in the content bucket. The previous object is
+deleted (best effort, warning on failure) on replace, delete and
+identity-provider account deletion (the local directory only suspends, so the
+picture stays); `ContentStore.delete_object` is idempotent on every backend.
+
+**Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
+where a picture renders: the bootstrap `current_user` and team admin summaries
+(team list and single team). Member lists, platform-role holders,
+`GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
+display-name cache, so a change shows on the next call; presigns of one batch
+run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
+OpenSpec `user-profile-picture`.
+
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 
 `POST /knowledge-flow/v1/tasks/{task_id}/cancel` retains its existing task-mutation

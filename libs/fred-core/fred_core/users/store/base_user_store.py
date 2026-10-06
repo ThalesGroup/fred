@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Iterable, Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -104,3 +104,24 @@ class BaseUserStore(ABC):
     @abstractmethod
     async def identity_exists(self, user_id: UUID) -> bool:
         """Whether a signed-in identity exists."""
+
+    @abstractmethod
+    async def swap_avatar_key(
+        self,
+        user_id: UUID,
+        key: str | None,
+        session: AsyncSession | None = None,
+    ) -> str | None:
+        """Record `key` (or clear it with None) and return the previous key.
+
+        Creates the user row when missing, so callers can delete the old object.
+        """
+
+    @abstractmethod
+    async def get_avatar_keys(
+        self, user_ids: Iterable[str], session: AsyncSession | None = None
+    ) -> dict[str, str]:
+        """Return `{user_id: key}` for users that have a picture, in one query.
+
+        Ids that are not UUIDs are skipped.
+        """

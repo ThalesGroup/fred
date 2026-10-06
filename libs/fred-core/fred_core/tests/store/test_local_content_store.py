@@ -62,6 +62,35 @@ def test_local_content_store_rejects_path_traversal(tmp_path: Path) -> None:
         )
 
 
+def test_local_content_store_delete_object_removes_the_file(tmp_path: Path) -> None:
+    store = LocalContentStore(root_path=tmp_path)
+    store.put_object("users/u1/avatar.png", BytesIO(b"x"), content_type="image/png")
+
+    store.delete_object("users/u1/avatar.png")
+
+    assert not (tmp_path / "objects" / "users" / "u1" / "avatar.png").exists()
+
+
+def test_local_content_store_delete_object_ignores_a_missing_file(
+    tmp_path: Path,
+) -> None:
+    store = LocalContentStore(root_path=tmp_path)
+
+    store.delete_object("users/u1/missing.png")
+
+
+def test_local_content_store_delete_object_rejects_path_traversal(
+    tmp_path: Path,
+) -> None:
+    store = LocalContentStore(root_path=tmp_path)
+    outside = tmp_path / "escape.txt"
+    outside.write_text("keep")
+
+    with pytest.raises(ValueError, match="escapes storage root"):
+        store.delete_object("../escape.txt")
+    assert outside.exists()
+
+
 def test_local_content_store_presigned_url_is_not_supported(
     tmp_path: Path,
 ) -> None:

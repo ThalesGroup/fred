@@ -23,7 +23,7 @@ after already being granted `public` actually loses non-member read access.
 from __future__ import annotations
 
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from control_plane_backend.teams.service import list_all_teams_unfiltered
@@ -100,6 +100,7 @@ def _deps(rebac: _FakeRebac, store: _FakeMetadataStore):
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=cast(Any, lambda *_a, **_k: []),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )

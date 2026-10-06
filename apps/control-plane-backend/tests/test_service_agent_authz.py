@@ -15,7 +15,7 @@
 """Service-agent recognition in the control-plane team gate (RFC EVAL-AUTH, Sol. A)."""
 
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fred_core import KeycloakUser, Resource, TeamPermission
@@ -73,6 +73,7 @@ def _deps(rebac: _FakeRebac):
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, lambda *_a, **_k: {}),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=cast(Any, lambda *_a, **_k: []),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )

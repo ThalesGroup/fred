@@ -18,21 +18,29 @@ import asyncio
 import logging
 import math
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from datetime import timedelta
+from io import BytesIO
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from fastapi import UploadFile
 from fred_core import (
     BaseUserStore,
     KeycloackDisabled,
     KeycloakUser,
 )
 from fred_core.common import ThreadSafeLRUCache
+from fred_core.store import ContentStore
 from fred_core.users import UserRow
 from fred_core.users.store.postgres_user_store import get_user_store
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakGetError, KeycloakPostError
 
+from control_plane_backend.common.avatar_image import (
+    AvatarUploadError,
+    read_avatar_upload,
+)
 from control_plane_backend.users.dependencies import UserServiceDependencies
 from control_plane_backend.users.schemas import (
     CreateUserRequest,
@@ -52,6 +60,9 @@ _DIRECTORY_SCAN_MIN_IDS = 20
 _PER_ID_LOOKUP_CONCURRENCY = 10
 
 _USER_SUMMARY_CACHE_TTL_SECONDS = 300
+_AVATAR_URL_TTL = timedelta(hours=1)
+# Bounds threads held by GCS presigns (two network calls each) for one batch.
+_AVATAR_PRESIGN_CONCURRENCY = 8
 _USER_SUMMARY_CACHE: ThreadSafeLRUCache[str, tuple[float, UserSummary]] = (
     ThreadSafeLRUCache(max_size=5000)
 )
@@ -376,6 +387,113 @@ async def get_users_by_ids(
         _USER_SUMMARY_CACHE.set(user_id, (expires_at, summary))
 
     return summaries
+
+
+async def _presign_avatar_urls(
+    store: ContentStore, keys: dict[str, str]
+) -> dict[str, str]:
+    semaphore = asyncio.Semaphore(_AVATAR_PRESIGN_CONCURRENCY)
+
+    async def _presign(user_id: str, key: str) -> str | None:
+        async with semaphore:
+            try:
+                return await asyncio.to_thread(
+                    store.get_presigned_url, key, expires=_AVATAR_URL_TTL
+                )
+            except NotImplementedError:
+                # Local filesystem storage serves no URLs: initials stay.
+                return None
+            except Exception as exc:
+                logger.warning(
+                    "Profile picture URL unavailable for user %s (%s)",
+                    user_id,
+                    type(exc).__name__,
+                )
+                return None
+
+    urls = await asyncio.gather(*(_presign(uid, key) for uid, key in keys.items()))
+    return {uid: url for uid, url in zip(keys, urls) if url}
+
+
+async def attach_avatar_urls(
+    summaries: dict[str, UserSummary],
+    get_content_store: Callable[[], ContentStore],
+) -> dict[str, UserSummary]:
+    """Return `summaries` with `avatar_image_url` set for people with a picture.
+
+    Call it only where pictures render: one key query per batch, then bounded
+    concurrent presigns (GCS signs over the network). Inputs are never mutated.
+    """
+    if not summaries:
+        return summaries
+    keys = await get_user_store().get_avatar_keys(summaries.keys())
+    if not keys:
+        return summaries
+    urls = await _presign_avatar_urls(get_content_store(), keys)
+    return {
+        user_id: (
+            summary.model_copy(update={"avatar_image_url": urls[user_id]})
+            if user_id in urls
+            else summary
+        )
+        for user_id, summary in summaries.items()
+    }
+
+
+async def upload_user_avatar(
+    user: KeycloakUser,
+    file: UploadFile,
+    deps: UserServiceDependencies,
+) -> None:
+    """Validate and store the caller's profile picture, replacing any previous one.
+
+    Write order: new object, then key swap, then best-effort delete of the old
+    object, so a failure never leaves the key pointing at a missing object.
+    """
+    try:
+        try:
+            user_id = UUID(user.uid)
+        except ValueError as exc:
+            raise AvatarUploadError(
+                "This account cannot have a profile picture"
+            ) from exc
+        payload, content_type, extension = await read_avatar_upload(file)
+        key = f"users/{user_id}/avatar-{uuid4().hex}{extension}"
+        store = deps.get_content_store()
+        await asyncio.to_thread(
+            store.put_object, key, BytesIO(payload), content_type=content_type
+        )
+        previous = await get_user_store().swap_avatar_key(user_id, key)
+        if previous:
+            await _delete_avatar_object(store, user.uid, previous)
+    finally:
+        await file.close()
+
+
+async def remove_user_avatar(user_id: str, deps: UserServiceDependencies) -> None:
+    """Clear a person's profile picture and delete its object; idempotent.
+
+    Used by the self-service delete and by account deletion.
+    """
+    try:
+        uuid = UUID(user_id)
+    except ValueError:
+        return
+    previous = await get_user_store().swap_avatar_key(uuid, None)
+    if previous:
+        await _delete_avatar_object(deps.get_content_store(), user_id, previous)
+
+
+async def _delete_avatar_object(store: ContentStore, user_id: str, key: str) -> None:
+    try:
+        await asyncio.to_thread(store.delete_object, key)
+    except Exception as exc:
+        # The new state is recorded; an orphan object is not worth failing for.
+        logger.warning(
+            "Could not delete previous profile picture object for user %s (%s)",
+            user_id,
+            type(exc).__name__,
+        )
 
 
 async def _directory_scan_is_cheaper(admin: KeycloakAdmin, id_count: int) -> bool:

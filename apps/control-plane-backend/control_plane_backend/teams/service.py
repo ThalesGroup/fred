@@ -20,7 +20,6 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
@@ -54,6 +53,7 @@ from fred_core.teams.metadata_store import TeamMetadata, TeamMetadataPatch
 from fred_core.users.store.postgres_user_store import get_user_store
 from sqlalchemy.exc import IntegrityError
 
+from control_plane_backend.common.avatar_image import read_avatar_upload
 from control_plane_backend.product.prompt_starter_kit import (
     STARTER_CATEGORY_NAMES,
     STARTER_PROMPTS,
@@ -75,7 +75,6 @@ from control_plane_backend.scheduler.temporal.structures import LifecycleManager
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
-    AvatarUploadError,
     CreateTeamRequest,
     DefaultTeamForNewUsers,
     GrantTeamMemberRoleRequest,
@@ -107,14 +106,6 @@ from control_plane_backend.teams.system import (
 from control_plane_backend.users.schemas import UserSummary
 
 logger = logging.getLogger(__name__)
-
-_MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024
-_ALLOWED_AVATAR_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
-_AVATAR_EXTENSION_BY_MIME = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-}
 
 
 def _utcnow() -> datetime:
@@ -1177,39 +1168,12 @@ async def upload_team_avatar(
     )
 
     try:
-        payload = await file.read(_MAX_AVATAR_FILE_SIZE_BYTES + 1)
-        if len(payload) > _MAX_AVATAR_FILE_SIZE_BYTES:
-            raise AvatarUploadError(
-                f"File too large: {len(payload)} bytes (max: {_MAX_AVATAR_FILE_SIZE_BYTES})"
-            )
-        if not payload:
-            raise AvatarUploadError("Empty file upload is not allowed")
-
-        declared_content_type = (
-            file.content_type or "application/octet-stream"
-        ).lower()
-        if declared_content_type not in _ALLOWED_AVATAR_MIME_TYPES:
-            raise AvatarUploadError(f"Invalid content type: {declared_content_type}")
-
-        detected_content_type = _detect_image_content_type(payload)
-        if detected_content_type not in _ALLOWED_AVATAR_MIME_TYPES:
-            raise AvatarUploadError(
-                f"File content doesn't match allowed image formats: {detected_content_type or 'unknown'}"
-            )
-        if detected_content_type != declared_content_type:
-            raise AvatarUploadError(
-                f"File content doesn't match declared content type: {detected_content_type}"
-            )
-
-        file_ext = Path(file.filename or "").suffix.lower()
-        if not file_ext:
-            file_ext = _AVATAR_EXTENSION_BY_MIME[detected_content_type]
-
+        payload, content_type, file_ext = await read_avatar_upload(file)
         object_storage_key = f"teams/{team_id}/avatar-{uuid4().hex}{file_ext}"
         deps.get_content_store().put_object(
             object_storage_key,
             BytesIO(payload),
-            content_type=detected_content_type,
+            content_type=content_type,
         )
 
         await deps.get_team_metadata_store().upsert(
@@ -1910,7 +1874,9 @@ async def _enrich_teams_with_membership(
     all_admin_ids: set[str] = (
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
     )
-    user_summaries = await deps.get_users_by_ids(all_admin_ids)
+    user_summaries = await deps.attach_avatar_urls(
+        await deps.get_users_by_ids(all_admin_ids)
+    )
     default_max_storage = deps.configuration.app.default_team_max_resources_storage_size
 
     return [
@@ -2119,7 +2085,9 @@ async def _build_team_with_permissions(
         if UserTeamRelation.TEAM_ADMIN in roles
     }
     member_ids = set(roles_by_user.keys())
-    admin_summaries = await deps.get_users_by_ids(admin_ids)
+    admin_summaries = await deps.attach_avatar_urls(
+        await deps.get_users_by_ids(admin_ids)
+    )
 
     team = _build_team_dto(
         metadata,
@@ -2202,16 +2170,6 @@ async def count_all_personal_spaces(deps: TeamServiceDependencies) -> int:
         logger.info("Keycloak admin client not configured; user count unavailable.")
         return 0
     return int(await admin.a_users_count())
-
-
-def _detect_image_content_type(payload: bytes) -> str | None:
-    if payload.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if len(payload) >= 12 and payload[0:4] == b"RIFF" and payload[8:12] == b"WEBP":
-        return "image/webp"
-    return None
 
 
 def _is_absolute_url(value: str) -> bool:

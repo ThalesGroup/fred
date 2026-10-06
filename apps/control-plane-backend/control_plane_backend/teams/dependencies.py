@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Awaitable, Callable, Iterable, TypeAlias
 
 from fastapi import Request
@@ -47,10 +48,18 @@ from control_plane_backend.teams.admin_charter_store import TeamAdminCharterStor
 from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
 from control_plane_backend.users.dependencies import build_user_service_dependencies
 from control_plane_backend.users.schemas import UserSummary
-from control_plane_backend.users.service import get_users_by_ids, search_users
+from control_plane_backend.users.service import (
+    attach_avatar_urls,
+    get_users_by_ids,
+    search_users,
+)
 
 UserSummaryLookup: TypeAlias = Callable[
     [Iterable[str]],
+    Awaitable[dict[str, UserSummary]],
+]
+AvatarUrlAttacher: TypeAlias = Callable[
+    [dict[str, UserSummary]],
     Awaitable[dict[str, UserSummary]],
 ]
 UserSearch: TypeAlias = Callable[
@@ -95,6 +104,8 @@ class TeamServiceDependencies:
     get_purge_queue_store: Callable[[], PurgeQueueStore]
     get_policy_catalog: Callable[[], ConversationPolicyCatalog]
     get_users_by_ids: UserSummaryLookup
+    # Only where pictures render (team admins, bootstrap): presigning costs.
+    attach_avatar_urls: AvatarUrlAttacher
     search_users: UserSearch
     run_lifecycle_manager_once_in_memory: LifecycleRunner
 
@@ -213,6 +224,9 @@ def build_team_service_dependencies(
         get_purge_queue_store=container.get_purge_queue_store,
         get_policy_catalog=container.get_policy_catalog,
         get_users_by_ids=user_summary_lookup,
+        attach_avatar_urls=partial(
+            attach_avatar_urls, get_content_store=container.get_content_store
+        ),
         search_users=user_search,
         run_lifecycle_manager_once_in_memory=lifecycle_runner,
     )

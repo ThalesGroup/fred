@@ -115,7 +115,10 @@ export default function TeamCard({ team, withDescription, onJoined }: TeamCardPr
         <div className={styles.teamCardFooter}>
           <div className={styles.teamCardAdmins}>
             <AvatarGroup
-              avatars={(team.admins ?? []).map((o) => ({ name: o.first_name + " " + o.last_name }))}
+              avatars={(team.admins ?? []).map((o) => ({
+                name: o.first_name + " " + o.last_name,
+                imageUrl: o.avatar_image_url,
+              }))}
               max={canJoinDirectly ? 2 : 4}
             />
           </div>

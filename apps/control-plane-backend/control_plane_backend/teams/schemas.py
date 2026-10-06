@@ -36,14 +36,6 @@ class TeamNotFoundError(Exception):
         super().__init__(f"Team with id '{team_id}' not found")
 
 
-class AvatarUploadError(Exception):
-    """Raised when avatar upload validation fails."""
-
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(message)
-
-
 class TeamAdminConstraintError(Exception):
     """Raised when an operation would leave a team with no team_admin."""
 

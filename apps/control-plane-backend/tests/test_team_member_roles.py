@@ -33,7 +33,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from control_plane_backend.scheduler.policies.policy_models import (
@@ -299,6 +299,7 @@ def _deps(
         get_purge_queue_store=get_purge_queue_store,
         get_policy_catalog=get_policy_catalog,
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )

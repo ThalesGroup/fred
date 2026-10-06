@@ -717,6 +717,18 @@ operations:
     path: /control-plane/v1/users/by-ids
     review_status: approved
     required_permission: authenticated_user
+  # Own profile picture: the target is always the caller, no path parameter
+  # can name someone else.
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/users/me/avatar
+    review_status: approved
+    required_permission: authenticated_user # self only
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/users/me/avatar
+    review_status: approved
+    required_permission: authenticated_user # self only
   # Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   # can_administer_users gates all three; the platform_admin relation is
   # additionally guarded service-side: grant/revoke root-only, root never
