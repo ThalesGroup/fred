@@ -25,6 +25,8 @@ import styles from "./CapabilityCard.module.css";
 type CapabilityCardProps = {
   name: string;
   description?: string;
+  /** Shown right after the name, e.g. a Beta badge. */
+  badge?: ReactNode;
   /** Rendered inside the card's own sub-form shell (background/divider/padding)
    *  when truthy — omit or pass `false` for a card with nothing to configure. */
   subForm?: ReactNode;
@@ -49,13 +51,17 @@ export function CapabilityCard({
   disabled,
   onToggle,
   included,
+  badge,
   subForm,
 }: CapabilityCardProps) {
   const { t } = useTranslation();
   const active = included || checked;
   const meta = (
     <div className={styles.meta}>
-      <span className={`${styles.name} ${active ? styles.nameActive : ""}`}>{name}</span>
+      <span className={styles.nameRow}>
+        <span className={`${styles.name} ${active ? styles.nameActive : ""}`}>{name}</span>
+        {badge}
+      </span>
       {description && <span className={styles.description}>{description}</span>}
     </div>
   );

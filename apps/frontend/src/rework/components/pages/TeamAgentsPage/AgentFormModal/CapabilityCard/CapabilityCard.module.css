@@ -58,6 +58,12 @@
   min-width: 0;
 }
 
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .name {
   color: var(--on-surface);
   font: var(--font-body-large);

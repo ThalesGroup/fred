@@ -36,6 +36,7 @@ import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/Capabilit
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
 import type { CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
+  BETA_CAPABILITY_IDS,
   CAP_DOCUMENT_ACCESS,
   CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
@@ -50,6 +51,7 @@ import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelF
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
@@ -570,6 +572,7 @@ export function AgentFormBody({
                           checked={checked}
                           disabled={isSubmitting}
                           onToggle={toggle}
+                          badge={BETA_CAPABILITY_IDS.has(capability.id) && <BetaBadge />}
                           subForm={checked && renderConfigForm(capability)}
                         />
                       );
