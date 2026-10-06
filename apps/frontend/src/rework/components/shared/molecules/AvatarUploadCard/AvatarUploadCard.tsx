@@ -13,9 +13,12 @@
 // limitations under the License.
 
 import styles from "./AvatarUploadCard.module.scss";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import Button from "@shared/atoms/Button/Button.tsx";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import AvatarCropEditor from "@shared/organisms/AvatarCropEditor/AvatarCropEditor.tsx";
 import React, { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Mirrors the backend avatar validation (5 MB, JPEG/PNG/WebP).
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
@@ -57,6 +60,9 @@ export default function AvatarUploadCard({
   deleteLabel,
   deleting = false,
 }: AvatarUploadCardProps) {
+  const { t } = useTranslation();
+  const { showError } = useToast();
+  const { notifyApiError } = useApiErrorToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The image the user just picked, pending crop. Non-null opens the editor.
   const [cropFile, setCropFile] = useState<File | null>(null);
@@ -67,11 +73,11 @@ export default function AvatarUploadCard({
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (!file) return;
     if (!ALLOWED_TYPES.includes(file.type)) {
-      console.error("Invalid file type:", file.type);
+      showError({ summary: t("rework.avatarUpload.invalidType"), detail: hint });
       return;
     }
     if (file.size > MAX_AVATAR_SIZE) {
-      console.error("File size exceeds limit:", file.size);
+      showError({ summary: t("rework.avatarUpload.tooLarge"), detail: hint });
       return;
     }
     setCropFile(file);
@@ -81,7 +87,10 @@ export default function AvatarUploadCard({
     try {
       await onUpload(toAvatarFile(blob));
     } catch (error) {
-      console.error("Avatar upload error:", error);
+      notifyApiError(error, {
+        summary: t("rework.avatarUpload.uploadFailed"),
+        fallbackDetail: t("rework.avatarUpload.uploadFailedDetail"),
+      });
     } finally {
       setCropFile(null);
     }

@@ -1831,6 +1831,12 @@
       "save": "Save",
       "zoom": "Zoom"
     },
+    "avatarUpload": {
+      "invalidType": "This file type is not supported",
+      "tooLarge": "This image is larger than 5 MB",
+      "uploadFailed": "The image could not be uploaded",
+      "uploadFailedDetail": "Please try again in a moment."
+    },
     "home": {
       "title": "Home",
       "searchPlaceholder": "Search a team",
@@ -2946,7 +2952,9 @@
         "deleteTitle": "Delete your profile picture?",
         "deleteMessage": "Your initials will be shown instead.",
         "deleteConfirm": "Delete",
-        "deleteCancel": "Cancel"
+        "deleteCancel": "Cancel",
+        "deleteFailed": "The profile picture could not be deleted",
+        "deleteFailedDetail": "Please try again in a moment."
       },
       "title": "Your profile"
     },

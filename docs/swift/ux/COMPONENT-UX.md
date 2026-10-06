@@ -5138,7 +5138,9 @@ button sits under Import only when the caller passes `onDelete` and an image is
 set; team settings pass none, user settings pass one behind the critical
 `ConfirmationDialog`. Styles are unchanged from the team card. The card hands
 `onUpload` a ready `File` named and typed after the crop output: WebP, or PNG
-where the browser cannot encode WebP (Safari).
+where the browser cannot encode WebP (Safari). A refused pick (type, size) or
+a failed upload shows an error toast (`useToast` / `useApiErrorToast`); user
+settings report a failed delete the same way.
 
 `UserAvatar` takes an optional `imageUrl`: a round `<img>` with intrinsic size
 and `decoding="async"`, initials when absent or when the image fails to load,

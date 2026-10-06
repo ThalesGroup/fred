@@ -15,7 +15,8 @@
 
 // The theme picker lists only the themes the platform offers, and disappears
 // when there is nothing to choose; the light/dark/system choice always stays.
-// The profile picture card uploads the crop and deletes only after confirmation.
+// The profile picture card uploads the crop and deletes only after confirmation;
+// a failed delete is reported to the user.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -57,6 +58,11 @@ const picture = vi.hoisted(() => ({
   upload: vi.fn(),
   remove: vi.fn(),
   confirm: vi.fn(),
+  notifyApiError: vi.fn(),
+}));
+
+vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
+  useApiErrorToast: () => ({ notifyApiError: picture.notifyApiError }),
 }));
 
 vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
@@ -69,7 +75,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => 
     { isLoading: false },
   ],
   useDeleteUserAvatarMutation: () => [
-    () => ({ unwrap: () => Promise.resolve(picture.remove()) }),
+    () => ({ unwrap: () => Promise.resolve().then(() => picture.remove()) }),
     { isLoading: false },
   ],
 }));
@@ -141,6 +147,7 @@ beforeEach(() => {
   picture.upload.mockReset();
   picture.remove.mockReset();
   picture.confirm.mockReset();
+  picture.notifyApiError.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -197,6 +204,23 @@ describe("UserSettingsPage profile picture", () => {
     expect(options.criticalAction).toBe(true);
     await act(async () => options.onConfirm());
     expect(picture.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("tells the user when the delete fails", async () => {
+    picture.url = "https://objects.test/me.webp";
+    picture.remove.mockImplementation(() => {
+      throw { status: 500 };
+    });
+    render(["cobalt"]);
+
+    await click("picture-delete");
+    const options = picture.confirm.mock.calls[0][0] as { onConfirm: () => void };
+    await act(async () => options.onConfirm());
+
+    expect(picture.notifyApiError).toHaveBeenCalledWith(
+      { status: 500 },
+      expect.objectContaining({ summary: "rework.userSettings.picture.deleteFailed" }),
+    );
   });
 
   it("keeps the picture when the confirmation is cancelled", async () => {

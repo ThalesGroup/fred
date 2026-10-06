@@ -46,6 +46,8 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useUploadTeamAvatarMutation: () => [vi.fn(), { isLoading: false }],
 }));
 
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+
 vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ defaultTeamAvatarFile: undefined }),
 }));

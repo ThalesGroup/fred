@@ -1831,6 +1831,12 @@
       "save": "Enregistrer",
       "zoom": "Zoom"
     },
+    "avatarUpload": {
+      "invalidType": "Ce type de fichier n'est pas pris en charge",
+      "tooLarge": "Cette image dépasse 5 Mo",
+      "uploadFailed": "L'image n'a pas pu être importée",
+      "uploadFailedDetail": "Veuillez réessayer dans un instant."
+    },
     "home": {
       "title": "Accueil",
       "searchPlaceholder": "Rechercher une équipe",
@@ -2946,7 +2952,9 @@
         "deleteTitle": "Supprimer votre photo de profil ?",
         "deleteMessage": "Vos initiales seront affichées à la place.",
         "deleteConfirm": "Supprimer",
-        "deleteCancel": "Annuler"
+        "deleteCancel": "Annuler",
+        "deleteFailed": "La photo de profil n'a pas pu être supprimée",
+        "deleteFailedDetail": "Veuillez réessayer dans un instant."
       },
       "title": "Votre profil"
     },

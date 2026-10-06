@@ -125,7 +125,7 @@ The frontend SHALL show a person's picture instead of their initials in every pl
 
 ### Requirement: Profile picture settings reuse the team avatar experience
 
-The user settings page SHALL offer the same upload card, upload button, preview and square crop dialog as the team avatar settings, with the same client-side file type and size checks. It SHALL additionally offer a Delete action, shown only when a picture exists, that asks for confirmation before deleting. Team avatar settings SHALL keep their current behaviour and SHALL NOT gain a delete action.
+The user settings page SHALL offer the same upload card, upload button, preview and square crop dialog as the team avatar settings, with the same client-side file type and size checks. It SHALL additionally offer a Delete action, shown only when a picture exists, that asks for confirmation before deleting. A file refused by the client-side checks, a failed upload and a failed delete SHALL each be reported to the person with an error message, on both the user and the team settings. Team avatar settings SHALL keep their current behaviour otherwise and SHALL NOT gain a delete action.
 
 #### Scenario: Upload through the crop dialog
 
@@ -141,6 +141,16 @@ The user settings page SHALL offer the same upload card, upload button, preview 
 
 - **WHEN** Alice clicks Delete and cancels the confirmation
 - **THEN** her picture is unchanged
+
+#### Scenario: Upload refused by the server
+
+- **WHEN** Alice saves a crop and the server rejects the upload
+- **THEN** an error message tells her the image could not be uploaded, with the server's reason when it gives one, and her previous picture is unchanged
+
+#### Scenario: Delete fails
+
+- **WHEN** Alice confirms Delete and the request fails
+- **THEN** an error message tells her the picture could not be deleted
 
 #### Scenario: Team avatar settings unchanged
 

@@ -20,6 +20,7 @@ import Select from "@shared/molecules/Select/Select.tsx";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCard.tsx";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useContext } from "react";
 import { ApplicationContext } from "../../../../app/ApplicationContextProvider.tsx";
 import { UI_THEME_LABEL_KEYS, type UiTheme } from "../../../../app/uiThemes.ts";
@@ -49,6 +50,7 @@ export default function UserSettingsPage() {
   const [uploadPicture, { isLoading: isUploadingPicture }] = useUploadUserAvatarMutation();
   const [deletePicture, { isLoading: isDeletingPicture }] = useDeleteUserAvatarMutation();
   const { showConfirmationDialog } = useConfirmationDialog();
+  const { notifyApiError } = useApiErrorToast();
 
   const handlePictureUpload = async (file: File) => {
     // The generated client types the multipart file as `string`; the enhanced
@@ -66,7 +68,12 @@ export default function UserSettingsPage() {
       onConfirm: () => {
         deletePicture()
           .unwrap()
-          .catch((error) => console.error("Profile picture delete error:", error));
+          .catch((error) =>
+            notifyApiError(error, {
+              summary: t("rework.userSettings.picture.deleteFailed"),
+              fallbackDetail: t("rework.userSettings.picture.deleteFailedDetail"),
+            }),
+          );
       },
     });
   };

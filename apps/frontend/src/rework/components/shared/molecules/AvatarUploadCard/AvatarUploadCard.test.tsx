@@ -15,6 +15,7 @@
 
 // Only JPEG/PNG/WebP up to 5 MB reach the crop editor; saving the crop hands
 // `onUpload` a file typed after the crop output; Delete needs `onDelete` + image.
+// Rejected picks and failed uploads are reported to the user.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -22,6 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The crop output type; Safari cannot encode WebP and yields PNG.
 const crop = { type: "image/webp" };
+const toast = vi.hoisted(() => ({ showError: vi.fn() }));
+
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: toast.showError }) }));
 
 vi.mock("@shared/organisms/AvatarCropEditor/AvatarCropEditor.tsx", () => ({
   default: ({ file, onSave }: { file: File; onSave: (blob: Blob) => Promise<void> }) => (
@@ -44,10 +49,10 @@ let root: Root;
 
 beforeEach(() => {
   crop.type = "image/webp";
+  toast.showError.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -88,15 +93,32 @@ const deleteButton = () =>
   Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("Delete"));
 
 describe("AvatarUploadCard", () => {
-  it("rejects an unsupported file type", () => {
+  it("rejects an unsupported file type and says so", () => {
     render();
     pick(new File(["gif"], "me.gif", { type: "image/gif" }));
     expect(cropEditor()).toBeNull();
+    expect(toast.showError).toHaveBeenCalledWith({ summary: "rework.avatarUpload.invalidType", detail: "hint" });
   });
 
-  it("rejects a file over 5 MB", () => {
+  it("rejects a file over 5 MB and says so", () => {
     render();
     pick(new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.png", { type: "image/png" }));
+    expect(cropEditor()).toBeNull();
+    expect(toast.showError).toHaveBeenCalledWith({ summary: "rework.avatarUpload.tooLarge", detail: "hint" });
+  });
+
+  it("reports a failed upload with the server's reason", async () => {
+    render({ onUpload: vi.fn(() => Promise.reject({ status: 400, data: { detail: "File too large" } })) });
+    pick(new File(["png"], "me.png", { type: "image/png" }));
+
+    await act(async () => {
+      (container.querySelector('[data-testid="crop-save"]') as HTMLButtonElement).click();
+    });
+
+    expect(toast.showError).toHaveBeenCalledWith({
+      summary: "rework.avatarUpload.uploadFailed",
+      detail: "File too large",
+    });
     expect(cropEditor()).toBeNull();
   });
 
