@@ -111,8 +111,7 @@ describe("importPhaseLabel", () => {
 
   // Unplaced, a late step fell to the first phase: a file showing "Indexing"
   // went back to "Document preparation", the one thing a stepper must never
-  // do. Walked over both an import's own steps and the revectorize ones that
-  // can reach this panel.
+  // do. Walked over the steps an import can emit in this panel.
   it("never walks backwards on a step the server actually emits", () => {
     const order = ["listed", "uploading", "processing", "indexing", "vectorized", "done"];
     const walked = order.map((step) => importPhaseIndex(task({ stage: "analysis", state: "running", step })));

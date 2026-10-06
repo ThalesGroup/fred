@@ -893,7 +893,7 @@ async def test_public_team_read_access(
     # CAN_READ_MEMEBERS = `team_member` alone (no `public` fallback), so it
     # must stay denied for the same stranger on the same public team. This is
     # the exact public-vs-membership distinction that member-only endpoints
-    # (e.g. corpus_manager) must gate on instead of CAN_READ.
+    # must gate on instead of CAN_READ.
     assert await rebac_engine.has_permission(
         stranger,
         TeamPermission.CAN_READ,

@@ -5,7 +5,7 @@ The corpus-management HTTP facade was retained when its MCP transport was retire
 ## What Changes
 
 - **BREAKING** Remove every `/corpus/*` corpus-manager HTTP endpoint, its controller, service, request/response models, generated frontend client methods, and endpoint authorization inventory.
-- Remove maintenance workflows and activities that are reachable only through those endpoints, plus their dedicated tests and stale operational guidance.
+- Remove maintenance workflows and activities that are reachable only through those endpoints, plus their dedicated tests, shared task-result schema, task-activity display, and stale operational guidance.
 - Keep the independent `/documents/tree` corpus listing, ordinary ingestion and vector-search APIs, and the direct HTTP `/fs` filesystem API.
 - Document upgrade implications for callers and any in-flight maintenance tasks.
 
@@ -21,4 +21,4 @@ None.
 
 ## Impact
 
-Knowledge Flow routes, scheduler registrations, tests, OpenAPI and generated frontend types, authorization endpoint matrix, active contract documentation, and the current draft PR migration note.
+Knowledge Flow routes, scheduler registrations, tests, shared task models, both backends' OpenAPI and generated frontend types, task-activity UI, authorization endpoint matrix, active contract documentation, and the current draft PR migration note.

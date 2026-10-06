@@ -22,7 +22,6 @@ def test_corpus_and_filesystem_mcp_mounts_are_absent(app_context, monkeypatch) -
         "ExtractController",
         "ResourceController",
         "McpFilesystemController",
-        "CorpusManagerController",
         "TabularController",
         "OpenSearchOpsController",
         "SchedulerController",
@@ -40,3 +39,4 @@ def test_corpus_and_filesystem_mcp_mounts_are_absent(app_context, monkeypatch) -
 
     assert not any(path.startswith(f"{base}/mcp-fs") for path in paths)
     assert not any(path.startswith(f"{base}/mcp-corpus") for path in paths)
+    assert not any(path.startswith(f"{base}/corpus/") for path in paths)

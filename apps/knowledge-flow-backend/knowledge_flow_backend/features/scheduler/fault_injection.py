@@ -76,7 +76,7 @@ async def inject_ingestion_fault(*, stage: str, document_name: str, document_uid
         return
     info = activity.info()
     if info.activity_type not in _ACTIVITIES[stage]:
-        return  # In particular, exclude trusted maintenance/revectorization activities.
+        return  # Only ordinary ingestion activities are eligible.
     if fault.attempts is not None and info.attempt not in fault.attempts:
         return
     activity.logger.warning(

@@ -159,8 +159,8 @@ list[str]` is the public Pydantic/API projection: hydrated from
 `document_labels` on every read path (batched, no N+1), never stored
 verbatim — `PostgresDocumentMetadataStore._to_dict` excludes `labels` from
 every `doc` JSONB write, so a generic metadata save (rename, retrievable
-toggle, ingestion, a stale in-memory snapshot held by a long-running
-revectorize activity, …) can never add, remove, or otherwise touch a label —
+toggle, ingestion, or a stale in-memory snapshot held by a long-running
+task) can never add, remove, or otherwise touch a label —
 `mutate_document_labels` is the only method that writes to `document_labels`,
 full stop. There is exactly one persisted source of truth; the physical
 (table) and API (`list[str]`) shapes are allowed to differ. Nothing is

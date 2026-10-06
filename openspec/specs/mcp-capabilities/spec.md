@@ -186,7 +186,7 @@ be removed without adding a remote replacement.
 
 ### Requirement: Retired Knowledge Flow MCP servers
 
-Fred's packaged MCP catalog and Knowledge Flow deployment SHALL NOT expose the legacy `mcp-knowledge-flow-corpus` or `mcp-knowledge-flow-fs` servers. Fred SHALL continue to expose supported MCP servers and SHALL preserve the underlying HTTP corpus-management and filesystem APIs used by non-MCP consumers.
+Fred's packaged MCP catalog and Knowledge Flow deployment SHALL NOT expose the legacy `mcp-knowledge-flow-corpus` or `mcp-knowledge-flow-fs` servers. Knowledge Flow SHALL NOT expose the legacy corpus-manager HTTP routes under `/corpus/`. Fred SHALL continue to expose supported MCP servers, the independent `/documents/tree` API, and the authenticated HTTP filesystem API used by non-MCP consumers.
 
 #### Scenario: Default agent catalog
 - **WHEN** an agent pod loads the packaged MCP catalog
@@ -196,6 +196,10 @@ Fred's packaged MCP catalog and Knowledge Flow deployment SHALL NOT expose the l
 - **WHEN** a client requests `/mcp-corpus` or `/mcp-fs`
 - **THEN** Knowledge Flow does not provide those MCP transports
 
+#### Scenario: Legacy corpus-management API
+- **WHEN** a client requests a former `/corpus/` maintenance route
+- **THEN** Knowledge Flow does not expose that route or publish it in OpenAPI
+
 #### Scenario: Non-MCP consumers continue
-- **WHEN** PPT Filler reads its template or publishes a filled deck through the authenticated HTTP filesystem API
-- **THEN** those operations continue to work without either retired MCP server
+- **WHEN** an agent lists indexed documents through `document_access` or PPT Filler reads its template and publishes a filled deck through the authenticated HTTP filesystem API
+- **THEN** those operations continue to work without either retired MCP server or the corpus-manager facade

@@ -120,14 +120,6 @@ class IngestionService:
         logger.debug(f"Saving metadata {metadata}")
         return await self.metadata_service.save_document_metadata(user, metadata)
 
-    async def save_metadata_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> None:
-        """Same as `save_metadata`, but bypasses the per-tag permission check —
-        see `MetadataService.save_document_metadata_trusted` for why this is
-        safe: reachable only from the already-platform-authorized corpus-
-        revectorize migration path."""
-        logger.debug(f"Saving metadata (trusted) {metadata}")
-        return await self.metadata_service.save_document_metadata_trusted(user, metadata)
-
     async def persist_progress(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
         """Persist an ingestion in flight, or clean up after a lost race (#2315).
 
@@ -146,11 +138,6 @@ class IngestionService:
         stop early.
         """
         return await self._persist_progress(self.metadata_service.update_document_metadata, user, metadata)
-
-    async def persist_progress_trusted(self, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
-        """`persist_progress` without the per-tag permission check — same trust
-        rationale as `save_metadata_trusted`."""
-        return await self._persist_progress(self.metadata_service.update_document_metadata_trusted, user, metadata)
 
     async def _persist_progress(self, update, user: KeycloakUser, metadata: DocumentMetadata) -> bool:
         if await update(user, metadata):

@@ -12,7 +12,7 @@ The retired MCP's CorpusManager controller is still registered on Knowledge Flow
 
 1. Delete the controller and service together, rather than leaving an unmounted maintenance implementation. The controller is their only production caller.
 2. Remove the dedicated revectorize/repair workflow entry points, worker registrations and activities that become unreachable. Retain scheduler primitives that have independent ingestion consumers. Before rollout, operators must allow any already-started maintenance workflows to finish; removing worker registrations while such executions are active would strand them.
-3. Regenerate the frontend API client from Knowledge Flow OpenAPI. Remove endpoint matrix and validation scenarios that only exist for the deleted routes. Update active contract docs; preserve historical RFCs and archived changes.
+3. Remove the repair-only result from the shared task model and Task Activity UI, then regenerate both backend frontend API clients. Historical persisted task detail remains readable because task detail parsing ignores unknown fields; the task API will omit the old result counters, so operators needing that evidence must export the stored records before upgrade. Remove endpoint matrix and validation scenarios that only exist for the deleted routes. Update active contract docs; preserve historical RFCs and archived changes.
 
 ## Risks / Trade-offs
 

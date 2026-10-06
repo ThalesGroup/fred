@@ -21,7 +21,7 @@ import pytest
 from fred_core import KeycloakUser
 
 from knowledge_flow_backend.common.structures import IngestionProcessingProfile
-from knowledge_flow_backend.features.scheduler.activities import output_process, output_process_trusted
+from knowledge_flow_backend.features.scheduler.activities import output_process
 from knowledge_flow_backend.features.scheduler.push_files_activities import push_input_process
 from knowledge_flow_backend.features.scheduler.scheduler_structures import FileToProcess
 
@@ -233,18 +233,8 @@ async def test_output_process_cleans_worker_tempdir(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_output_process_and_trusted_variant_call_the_right_metadata_writer(tmp_path, monkeypatch):
-    """MIGR-07 CSV/cross-team fix, regression guard for the activity split:
-
-    `output_process` (normal per-document ingestion, used by the `OutputProcess`
-    workflow) must always persist through the permission-checked
-    `persist_progress` — never the trusted variant, or a caller with no ReBAC
-    grant on the document's tags could silently write it anyway.
-    `output_process_trusted` (corpus-revectorize migration path only) must
-    always go through `persist_progress_trusted` — never the checked one, or the
-    whole point of the trusted path (letting a root/platform admin
-    revectorize documents outside their own teams) breaks again.
-    """
+async def test_output_process_uses_permission_checked_metadata_writer(tmp_path, monkeypatch):
+    """Normal ingestion persists through the permission-checked writer."""
     metadata = _FakeMetadata(document_uid="doc-output", document_name="sample.csv")
     user = _user()
     file = FileToProcess(
@@ -259,14 +249,9 @@ async def test_output_process_and_trusted_variant_call_the_right_metadata_writer
     class _FakeService:
         def __init__(self) -> None:
             self.checked_calls = 0
-            self.trusted_calls = 0
 
         async def persist_progress(self, user, metadata) -> bool:
             self.checked_calls += 1
-            return True
-
-        async def persist_progress_trusted(self, user, metadata) -> bool:
-            self.trusted_calls += 1
             return True
 
         def get_local_copy(self, user, metadata, working_dir) -> pathlib.Path:
@@ -280,7 +265,6 @@ async def test_output_process_and_trusted_variant_call_the_right_metadata_writer
 
     fake_app_context = SimpleNamespace(is_tabular_file=lambda _: True, is_spreadsheet_file=lambda _: False)
     checked_service = _FakeService()
-    trusted_service = _FakeService()
 
     monkeypatch.setattr(
         "knowledge_flow_backend.application_context.ApplicationContext.get_instance",
@@ -292,7 +276,7 @@ async def test_output_process_and_trusted_variant_call_the_right_metadata_writer
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.activities.activity.logger",
-        logging.getLogger("test-output-process-trusted"),
+        logging.getLogger("test-output-process"),
     )
     monkeypatch.setattr(
         "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
@@ -305,16 +289,3 @@ async def test_output_process_and_trusted_variant_call_the_right_metadata_writer
     )
     await output_process(file=file, metadata=metadata, accept_memory_storage=True)
     assert checked_service.checked_calls > 0
-    assert checked_service.trusted_calls == 0
-
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.scheduler.activities.tempfile.TemporaryDirectory",
-        lambda prefix="": _TrackedTemporaryDirectory(tmp_path / "worker-output-trusted"),
-    )
-    monkeypatch.setattr(
-        "knowledge_flow_backend.features.ingestion.ingestion_service.get_ingestion_service",
-        lambda: trusted_service,
-    )
-    await output_process_trusted(file=file, metadata=metadata, accept_memory_storage=True)
-    assert trusted_service.trusted_calls > 0
-    assert trusted_service.checked_calls == 0

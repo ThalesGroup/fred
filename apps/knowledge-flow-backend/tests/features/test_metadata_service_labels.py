@@ -428,10 +428,9 @@ async def test_list_document_labels_returns_empty_when_the_user_can_read_nothing
 
 
 @pytest.mark.asyncio
-async def test_a_stale_trusted_save_cannot_reintroduce_a_label_removed_after_the_snapshot(tmp_path, monkeypatch) -> None:
+async def test_a_stale_save_cannot_reintroduce_a_label_removed_after_the_snapshot(tmp_path, monkeypatch) -> None:
     """Reproduces the exact lost-update scenario `_persist_metadata_and_follow_up`
-    used to allow: a long-running activity (corpus revectorize, via
-    `save_document_metadata_trusted`) loads a `DocumentMetadata` snapshot while
+    used to allow: a long-running activity loads a `DocumentMetadata` snapshot while
     it still carries 'DAT', the user removes 'DAT' through the canonical
     mutator in the meantime, and the activity's later save of its now-stale
     snapshot must not resurrect 'DAT'."""
@@ -449,7 +448,7 @@ async def test_a_stale_trusted_save_cannot_reintroduce_a_label_removed_after_the
     await service.remove_label_from_document(_user(), "doc-1", "DAT", "u-1")
 
     # The activity now saves its stale, pre-removal snapshot.
-    await service.save_document_metadata_trusted(_user(), stale_snapshot)
+    await service.save_document_metadata(_user(), stale_snapshot)
 
     assert await service.metadata_store.get_labels_for_document("doc-1") == []
     hydrated = await service.metadata_store.get_metadata_by_uid("doc-1")
@@ -458,9 +457,9 @@ async def test_a_stale_trusted_save_cannot_reintroduce_a_label_removed_after_the
 
 
 @pytest.mark.asyncio
-async def test_a_stale_trusted_save_does_not_erase_a_label_added_after_the_snapshot(tmp_path, monkeypatch) -> None:
+async def test_a_stale_save_does_not_erase_a_label_added_after_the_snapshot(tmp_path, monkeypatch) -> None:
     """Symmetric case: a label added AFTER a stale snapshot was taken must
-    survive a later trusted save of that (label-less) snapshot."""
+    survive a later save of that (label-less) snapshot."""
     engine = await _make_sqlite_engine(tmp_path, "stale_snapshot_add.sqlite3")
     service = _build_service(engine, _FakeRebac(), monkeypatch)
     await service.metadata_store.save_metadata(_doc("doc-1"))
@@ -471,6 +470,6 @@ async def test_a_stale_trusted_save_does_not_erase_a_label_added_after_the_snaps
 
     await service.add_label_to_document(_user(), "doc-1", "MEX", "u-1")
 
-    await service.save_document_metadata_trusted(_user(), stale_snapshot)
+    await service.save_document_metadata(_user(), stale_snapshot)
 
     assert await service.metadata_store.get_labels_for_document("doc-1") == ["MEX"]

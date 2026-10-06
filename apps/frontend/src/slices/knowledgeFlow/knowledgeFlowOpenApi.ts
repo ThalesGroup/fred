@@ -1118,103 +1118,6 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    corpusCapabilities: build.query<CorpusCapabilitiesApiResponse, CorpusCapabilitiesApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/capabilities`,
-        params: {
-          team_id: queryArg.teamId,
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    corpusBuildToc: build.mutation<CorpusBuildTocApiResponse, CorpusBuildTocApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/build-toc`,
-        method: "POST",
-        body: queryArg.buildCorpusTocRequestV1,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    corpusRevectorize: build.mutation<CorpusRevectorizeApiResponse, CorpusRevectorizeApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/revectorize`,
-        method: "POST",
-        body: queryArg.revectorizeCorpusRequestV1,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    corpusRepairVectorMetadata: build.mutation<CorpusRepairVectorMetadataApiResponse, CorpusRepairVectorMetadataApiArg>(
-      {
-        query: (queryArg) => ({
-          url: `/knowledge-flow/v1/corpus/repair-vector-metadata`,
-          method: "POST",
-          body: queryArg.repairVectorMetadataRequestV1,
-          params: {
-            person: queryArg.person,
-            run: queryArg.run,
-            agent: queryArg.agent,
-          },
-        }),
-      },
-    ),
-    corpusPurgeVectors: build.mutation<CorpusPurgeVectorsApiResponse, CorpusPurgeVectorsApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/purge-vectors`,
-        method: "POST",
-        body: queryArg.purgeVectorsRequestV1,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    corpusTasksGet: build.mutation<CorpusTasksGetApiResponse, CorpusTasksGetApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/tasks/get`,
-        method: "POST",
-        body: queryArg.taskGetRequestV1,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    corpusTasksResult: build.mutation<CorpusTasksResultApiResponse, CorpusTasksResultApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/tasks/result`,
-        method: "POST",
-        body: queryArg.taskResultRequestV1,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    corpusTasksList: build.mutation<CorpusTasksListApiResponse, CorpusTasksListApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/corpus/tasks/list`,
-        method: "POST",
-        body: queryArg.taskListRequestV1,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
     listTabularDocuments: build.query<ListTabularDocumentsApiResponse, ListTabularDocumentsApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/tabular/documents`,
@@ -2395,63 +2298,6 @@ export type FilesystemTypeStatsApiArg = {
   run?: string | null;
   agent?: string | null;
 };
-export type CorpusCapabilitiesApiResponse = /** status 200 Successful Response */ CorpusCapabilitiesV1;
-export type CorpusCapabilitiesApiArg = {
-  /** Team to check corpus-tool access for. */
-  teamId: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type CorpusBuildTocApiResponse = /** status 200 Successful Response */ any;
-export type CorpusBuildTocApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  buildCorpusTocRequestV1: BuildCorpusTocRequestV1;
-};
-export type CorpusRevectorizeApiResponse = /** status 200 Successful Response */ StartTaskResponse;
-export type CorpusRevectorizeApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  revectorizeCorpusRequestV1: RevectorizeCorpusRequestV1;
-};
-export type CorpusRepairVectorMetadataApiResponse = /** status 200 Successful Response */ StartTaskResponse;
-export type CorpusRepairVectorMetadataApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  repairVectorMetadataRequestV1: RepairVectorMetadataRequestV1;
-};
-export type CorpusPurgeVectorsApiResponse = /** status 200 Successful Response */ any;
-export type CorpusPurgeVectorsApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  purgeVectorsRequestV1: PurgeVectorsRequestV1;
-};
-export type CorpusTasksGetApiResponse = /** status 200 Successful Response */ any;
-export type CorpusTasksGetApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  taskGetRequestV1: TaskGetRequestV1;
-};
-export type CorpusTasksResultApiResponse = /** status 200 Successful Response */ any;
-export type CorpusTasksResultApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  taskResultRequestV1: TaskResultRequestV1;
-};
-export type CorpusTasksListApiResponse = /** status 200 Successful Response */ any;
-export type CorpusTasksListApiArg = {
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  taskListRequestV1: TaskListRequestV1;
-};
 export type ListTabularDocumentsApiResponse = /** status 200 Successful Response */ TabularDocumentListResponse[];
 export type ListTabularDocumentsApiArg = {
   /** Optional library tag IDs used to keep documents inside selected libraries. */
@@ -2853,18 +2699,6 @@ export type TaskTarget = {
   id: string;
   label: string;
 };
-export type RepairVectorMetadataResult = {
-  source_tag: string;
-  metadata_documents?: number;
-  already_done?: number;
-  eligible_with_vectors_and_content?: number;
-  repaired?: number;
-  missing_vectors?: number;
-  missing_content?: number;
-  tabular_excluded?: number;
-  failed_or_running_excluded?: number;
-  errors?: number;
-};
 export type IngestionDetail = {
   processed: number;
   total: number;
@@ -2872,7 +2706,6 @@ export type IngestionDetail = {
   preview: number;
   vectorized: number;
   sql_indexed: number;
-  result?: RepairVectorMetadataResult | null;
 };
 export type EvaluationDetail = {
   campaign_id: string;
@@ -3549,92 +3382,6 @@ export type FilesystemResourceInfoResult = {
 export type BodyRename = {
   new_name: string;
 };
-export type ToolSpecV1 = {
-  name: string;
-  summary: string;
-  request_schema: {
-    [key: string]: any;
-  };
-  async_task?: boolean;
-};
-export type CorpusCapabilitiesV1 = {
-  version?: "v1";
-  tools: ToolSpecV1[];
-};
-export type CorpusScopeV1 = {
-  library_id?: string | null;
-  project_id?: string | null;
-  tag_ids?: string[];
-  document_uids?: string[];
-  source_tag?: string | null;
-};
-export type TocBuildOptionsV1 = {
-  max_depth?: number;
-  max_sections?: number;
-  include_gaps?: boolean;
-  gap_sensitivity?: "low" | "medium" | "high";
-  output_format?: "markdown" | "json" | "both";
-  /** e.g. 'fr', 'en' */
-  language?: string | null;
-};
-export type BuildCorpusTocRequestV1 = {
-  version?: "v1";
-  scope: CorpusScopeV1;
-  options?: TocBuildOptionsV1;
-  title?: string | null;
-  team_id: string;
-  thread_id?: string | null;
-  exchange_id?: string | null;
-};
-export type StartTaskResponse = {
-  task_id: string;
-};
-export type RevectorizeOptionsV1 = {
-  mode?: "full" | "incremental";
-  force?: boolean;
-  embedding_model?: string | null;
-};
-export type RevectorizeCorpusRequestV1 = {
-  version?: "v1";
-  scope: CorpusScopeV1;
-  options?: RevectorizeOptionsV1;
-  team_id: string;
-  thread_id?: string | null;
-  exchange_id?: string | null;
-};
-export type RepairVectorMetadataRequestV1 = {
-  version?: "v1";
-  source_tag: string;
-  team_id: string;
-};
-export type PurgeVectorsOptionsV1 = {
-  purge_scope?: "vectors_only" | "vectors_and_chunks";
-  dry_run?: boolean;
-};
-export type PurgeVectorsRequestV1 = {
-  version?: "v1";
-  scope: CorpusScopeV1;
-  options?: PurgeVectorsOptionsV1;
-  team_id: string;
-  thread_id?: string | null;
-  exchange_id?: string | null;
-};
-export type TaskGetRequestV1 = {
-  task_id: string;
-  team_id: string;
-};
-export type TaskResultRequestV1 = {
-  task_id: string;
-  team_id: string;
-};
-export type TaskListRequestV1 = {
-  thread_id?: string | null;
-  exchange_id?: string | null;
-  operation?: string | null;
-  status?: ("queued" | "running" | "succeeded" | "failed" | "canceled") | null;
-  limit?: number;
-  team_id: string;
-};
 export type TabularDocumentListTableResponse = {
   query_alias: string;
   sheet?: string | null;
@@ -3945,15 +3692,6 @@ export const {
   useRenameMutation,
   useFilesystemTypeStatsQuery,
   useLazyFilesystemTypeStatsQuery,
-  useCorpusCapabilitiesQuery,
-  useLazyCorpusCapabilitiesQuery,
-  useCorpusBuildTocMutation,
-  useCorpusRevectorizeMutation,
-  useCorpusRepairVectorMetadataMutation,
-  useCorpusPurgeVectorsMutation,
-  useCorpusTasksGetMutation,
-  useCorpusTasksResultMutation,
-  useCorpusTasksListMutation,
   useListTabularDocumentsQuery,
   useLazyListTabularDocumentsQuery,
   useDescribeTabularDocumentsQuery,

@@ -4954,6 +4954,10 @@ inspection.
 
 ### 8.69 ✅ MCP tool descriptions stop carrying response schemas — issue #2412 item 2 (2026-08-28)
 
+This section records the August 2026 measurements. The filesystem and corpus
+MCP mounts, and later the corpus-manager HTTP API, were retired by #2984;
+the corresponding follow-up findings below are historical.
+
 **What changed.** No MCP tool description carries response documentation any
 more. Two steps, landed together in knowledge-flow's `main.py`:
 
