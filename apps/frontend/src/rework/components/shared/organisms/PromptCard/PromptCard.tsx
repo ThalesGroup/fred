@@ -90,7 +90,7 @@ export default function PromptCard({
       key: "import",
       value: "import",
       label: t("rework.teams.prompts.card.menu.import"),
-      icon: { category: "outlined", type: "content_copy" },
+      icon: { category: "outlined", type: "download" },
     });
     if (canRemoveFromMarketplace) {
       options.push({
