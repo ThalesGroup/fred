@@ -6,7 +6,7 @@ Lets an agent generate a PowerPoint presentation from a chat request on an unann
 
 ### Requirement: Template analysis needs no annotation
 
-The system SHALL inventory an uploaded `.pptx` without requiring any marker, note or shape name. The inventory SHALL hold master layouts and example slides as patterns, each with a stable id, a label, a `kind` from the closed vocabulary (`cover`, `agenda`, `section`, `bullets`, `two_columns`, `comparison`, `cards`, `figures`, `process`, `timeline`, `team`, `quote`, `image_text`, `closing`, `other`), a reusable flag, its text and image slots with capacities, and its repeated groups with their item count.
+The system SHALL inventory an uploaded `.pptx` without requiring any marker, note or shape name. The inventory SHALL hold master layouts and example slides as patterns, each with a stable id, a label, a `kind` from the closed vocabulary (`cover`, `agenda`, `section`, `bullets`, `two_columns`, `comparison`, `cards`, `figures`, `process`, `timeline`, `team`, `quote`, `image_text`, `table`, `closing`, `other`), a reusable flag, its text, image and table slots with capacities, and its repeated groups with their item count.
 
 #### Scenario: Every text shape of an example slide is a slot
 
@@ -37,9 +37,15 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 
 #### Scenario: Example slide that copies its layout
 
-- **GIVEN** an example slide holding only its layout's placeholders, filled with sample text
+- **GIVEN** an example slide holding every placeholder of its layout (empty picture placeholders included), with or without drawn decoration
 - **WHEN** it is analysed
 - **THEN** the inventory holds one pattern for that design, the slide (copied and filled), with its sample text, notes, shape names and position taken into account, and no separate pattern for the layout
+
+#### Scenario: Placeholders sharing an index
+
+- **GIVEN** an example slide with two placeholders of the same `idx`
+- **WHEN** it is analysed
+- **THEN** each gets its own slot key and the pattern carries a warning
 
 #### Scenario: First slide is the cover
 
@@ -49,8 +55,14 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 
 #### Scenario: Resource slides are excluded by default
 
-- **WHEN** an example slide is an icon bank, or a chart or table is its main content
+- **WHEN** an example slide is an icon bank, or a chart or a table that is not a data table is its main content (merged cells, or per-cell fills that vary across the body, as in a Gantt grid)
 - **THEN** it is inventoried but excluded, and the summary counts it as excluded
+
+#### Scenario: Data table becomes a table slot
+
+- **GIVEN** an example slide whose main content is a table of at least two columns, without merged cells, with empty or sample body cells and fills left to its table style
+- **WHEN** it is analysed
+- **THEN** the slide is a `table` pattern whose table slot records the header row flag, each column's characters per line and the lines its rows show
 
 #### Scenario: Optional annotations refine the analysis
 
@@ -179,6 +191,11 @@ The system SHALL let the author review the analysis — a thumbnail, label and k
 - **WHEN** an author excludes a pattern or changes its kind
 - **THEN** the assignment never uses an excluded pattern and treats a re-kinded pattern as its new kind
 
+#### Scenario: Example slides and layouts shown apart
+
+- **WHEN** the author opens the review
+- **THEN** the example slides of the deck come first, the remaining layouts follow in a separate collapsed section marked as fallback, excluded patterns last, and each card's controls stay inside it
+
 #### Scenario: Overrides after re-upload
 
 - **WHEN** a new template version is analysed
@@ -186,7 +203,7 @@ The system SHALL let the author review the analysis — a thumbnail, label and k
 
 ### Requirement: Slides are chosen by the code
 
-The system SHALL accept from the model a plan of slides carrying content only — title, subtitle, bullets, columns, items, images, notes and an optional `kind`, last in the schema — and SHALL assign each slide to a pattern deterministically. The tool schema and description SHALL NOT expose pattern ids; the description SHALL list the kinds the template offers with the measured capacity of each zone (characters per line × lines, maximum items).
+The system SHALL accept from the model a plan of slides carrying content only — title, subtitle, bullets, columns, items, table, images, notes and an optional `kind`, last in the schema — and SHALL assign each slide to a pattern deterministically. The tool schema and description SHALL NOT expose pattern ids; the description SHALL list the kinds the template offers and, per kind, every distinct variant with its label and the measured capacity of each zone (characters per line × lines, maximum items).
 
 #### Scenario: Example slide preferred over a layout
 
@@ -222,6 +239,28 @@ The system SHALL accept from the model a plan of slides carrying content only �
 
 - **WHEN** three consecutive slides would use the same pattern and another fitting pattern exists for one of them
 - **THEN** the assignment uses the alternative; when none exists the repetition is allowed and reported
+
+#### Scenario: Each template slide once where possible
+
+- **GIVEN** a pattern already used earlier in the deck, not necessarily on the previous slide
+- **WHEN** an unused pattern of the same kind tier also fits the slide
+- **THEN** the unused pattern is chosen; a pattern used three times or more is reported in the success message with the unused variants and their sizes
+
+#### Scenario: Empty item pictures are a cost
+
+- **WHEN** a slide's items carry no images and both a card pattern with item pictures and one without fit
+- **THEN** the pattern without pictures is chosen
+
+#### Scenario: Item heading without a heading zone
+
+- **GIVEN** items with a heading and a text, and a list whose items have a single text zone
+- **WHEN** the heading and the text fit that zone together
+- **THEN** the heading leads the item's text in bold and nothing is reported lost
+
+#### Scenario: Template icons kept
+
+- **WHEN** a card slide with icons is filled and some cards are removed
+- **THEN** the remaining cards keep the template's icons and the removed cards' icons leave with them
 
 ### Requirement: No silent fallback
 
@@ -295,6 +334,36 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 
 - **WHEN** the plan has wrong JSON shapes (a bullet list as one string, unknown keys, a non-object entry)
 - **THEN** the tool coerces what it can, and anything it could not place is named in the result
+
+### Requirement: Tables fill the template's table
+
+The system SHALL fill a `table` pattern's table from a plan's `table` (`header`, `rows`), keeping the template's table style, column count bound and slide position, and SHALL NOT cut a cell's text or draw a table the template does not hold.
+
+#### Scenario: Rows and columns adapted
+
+- **GIVEN** a template table of 12 rows × 5 columns with a header row
+- **WHEN** a plan gives a header and 6 rows of 4 cells
+- **THEN** the header row and 6 body rows are written, surplus rows removed, the fifth column removed and the others widened to the same total width, and the frame height follows the rows
+
+#### Scenario: More rows than the template shows
+
+- **WHEN** the rows fit the table's line budget at full size or at the shrink floor although they outnumber the template's rows
+- **THEN** body rows are cloned from the last one with fresh row ids and one font scale applies to the whole table
+
+#### Scenario: Table too large
+
+- **WHEN** the rows exceed the line budget at the shrink floor, or give more columns than the template
+- **THEN** no deck is written and `needs_revision` names the limits (lines needed vs held, longest cell and its column's characters per line, columns given vs max) with options (split the rows over two slides, shorten cells)
+
+#### Scenario: No table slide in the template
+
+- **WHEN** a plan gives a table and no included pattern has a table slot
+- **THEN** the slide is a misfit naming the missing table, never converted to bullets silently
+
+#### Scenario: No template cell text left
+
+- **WHEN** a table slide is rendered
+- **THEN** no template cell text remains, the frame stays on the slide and any shrink is reported
 
 ### Requirement: Built-in Fred template when none is configured
 

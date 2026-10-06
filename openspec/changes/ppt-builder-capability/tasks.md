@@ -1,6 +1,6 @@
 Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/` unless rooted; tests under `libs/capabilities/fred-capability-ppt-filler/tests/`. Each work package (WP) names the files it owns; a WP edits only its own files.
 
-**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12. WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
+**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
 
 ## Kept from the first iteration (done, still valid)
 
@@ -141,3 +141,40 @@ Owns: `analysis.py`, `render.py` (item removal), their tests, `assets/fred_templ
 - [x] 12.3 Renderer removes and recentres non-grouped items shape by shape
 - [x] 12.4 Tests: synthetic decks (figures row, process pairs, two/three-column bodies untouched, layout copy replaced, cover hint), built-in asset, reference template; bump `ANALYSIS_VERSION`, `make builtin-inventory`
 - [x] 12.5 Eval re-run (builtin rules, corporate and prism rules + vision); `verification.md` updated; package `make code-quality` + `make test`
+
+## WP13. Deck-wide variety (D12, D13 analysis part)
+
+Owns: `analysis.py` (`_copies_layout`, duplicate placeholder idx), `models.py` (delete `preferred`), `labelling.py` (`preferred` removal only), `assign.py`, `plan.py` (`zone_summary`), `render.py` (item heading lead, decoration of removed items), `tools.py` (catalogue, description, variety note), their tests, `assets/fred_template.inventory.json`, regenerated ppt_builder frontend slice, `verification.md`.
+
+- [ ] 13.1 Reuse cost `_REUSE × k` per prior use of the same pattern anywhere in the deck; beam search with use counts + last two choices replaces `_viterbi`; deck rules unchanged
+- [ ] 13.2 Empty item image zones cost `_IMAGE_HOLE` in `misfit`
+- [ ] 13.3 Item `heading` with no heading zone leads the single text zone in bold (fit check and renderer agree); lost only when it does not fit (Q8)
+- [ ] 13.4 Catalogue lists every distinct variant per kind with its label (drop `_MAX_VARIANTS`); description asks for varied content shapes
+- [ ] 13.5 Success message: a pattern used ≥ 3 times names its slides and the unused variants with their sizes
+- [ ] 13.6 `_copies_layout`: picture placeholders are slots; a slide holding all its layout's slots stands for it even with drawn decoration (Q7); duplicate `idx` on a slide → distinct keys + warning; bump `ANALYSIS_VERSION`, `make builtin-inventory`
+- [ ] 13.7 Decoration overlapping a removed item is removed with it (top-level icon on `slide:272`)
+- [ ] 13.8 Delete `Pattern.preferred` (models, analysis, labelling, API slice)
+- [ ] 13.9 Tests: A B A B avoided when a third fitting pattern exists, icon cards chosen for short items, image cards cost their empty pictures, heading+text items fit a one-text-zone card, covered layouts leave the inventory, catalogue shows 6 cards variants on the Paintress fixture
+- [ ] 13.10 Eval: add "max uses of one pattern" and "template patterns used across the run" metrics; re-run builtin + corporate; `verification.md`; package `make code-quality` + `make test`
+
+## WP14. Review dialog sections and card layout (D13 frontend part)
+
+Owns: `apps/frontend/src/rework/features/capabilities/ppt_builder/PatternReviewDialog.{tsx,module.css,test.tsx}`, `apps/frontend/src/locales/{en,fr}/translation.json` (ppt_builder keys), `docs/swift/ux/COMPONENT-UX.md` (ppt_builder section).
+
+- [x] 14.1 Three sections: slides of the deck, layouts (collapsed, one-line hint), excluded; thumbnails keep their page by pattern id
+- [x] 14.2 `.cardHeader` `grid-template-columns: minmax(0, 1fr) auto`; label `TextInput` `compact`; `Switch size="small"`; thumbnail page width from the thumbnail box
+- [x] 14.3 vitest: sections split by `source` and `included`; locales en/fr; COMPONENT-UX line
+- [ ] 14.4 Checked in the browser on the Paintress agent (switch inside the card, no gap above the kind select); frontend checks as tsc/prettier/eslint/scoped vitest (no `make` while Vite runs)
+
+## WP15. Table slides (D14)
+
+Owns: `analysis.py` (table zone, exclusion rule), `models.py` (`table` kind, table zone fields), `labelling.py` (vocabulary, compatibility), `plan.py` (`table` field, coercion, summary), `assign.py` (fit, inference, misfits), `render.py` (table fill), `checks.py`, `tools.py` (schema, description), `eval/` (prompts, metrics), their tests, `assets/fred_template.inventory.json`, regenerated ppt_builder frontend slice + `types.ts` `SLIDE_KINDS` + kind locales, `verification.md`.
+
+- [ ] 15.1 `SlideKind` gains `table`; data-table detection (≥ 2 columns, no merges, body cells empty/sample, no varying per-cell fill) → table zone with header flag, per-column capacity, line height, `max_lines`; other tables keep the `table` exclusion; bump `ANALYSIS_VERSION`
+- [ ] 15.2 Vision prompt vocabulary + compatibility (`table` needs a table zone)
+- [ ] 15.3 Plan `table: {header, rows}` with coercion (ragged rows padded); `infer_kinds` → `table`; catalogue line `table: title …; table N columns (≈C chars per cell line), ≈L lines of rows`
+- [ ] 15.4 Fit check: per-row wrapped lines vs `max_lines` at full size and at the shrink floor; column count ≤ template (fewer allowed per Q10); misfits name the row/cell and the limits; no table slide in the template → misfit
+- [ ] 15.5 Render: header + cells with `endParaRPr` attributes, rows cloned (fresh `a16:rowId`) or removed, columns removed with widths rescaled, frame height updated, one table-wide font scale
+- [ ] 15.6 Checks: no template cell text left, frame on the slide, shrink reported
+- [ ] 15.7 Tests: Paintress-like synthetic 12 × 5 table (fewer rows, more rows, fewer columns, too long → needs_revision), merged-cell and Gantt-style grids stay excluded, the output opens without repair (unique row ids)
+- [ ] 15.8 Eval prompts with tabular content; metrics: table used when given, shape kept, no overflow; LibreOffice preview of the table style checked; `verification.md`; package `make code-quality` + `make test`; frontend slice regenerated and `tsc` clean
