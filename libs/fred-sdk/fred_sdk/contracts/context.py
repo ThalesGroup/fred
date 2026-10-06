@@ -47,6 +47,8 @@ from fred_core.model.models import ModelProvider
 from fred_core.store import VectorSearchHit
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from .skills import SkillInvocation
+
 # NOTE: This module is the canonical home for portable context + UI parts.
 # Keep Link/Geo parts and RuntimeContext here to avoid circular imports.
 
@@ -455,6 +457,7 @@ class RuntimeContext(BaseModel):
     agent_instance_id: Optional[str] = None
     template_agent_id: Optional[str] = None
     execution_action: Optional[Literal["execute", "resume"]] = None
+    skill: SkillInvocation | None = None
 
     # Group B — Auth delegation (mutable; refreshed in place by token refresh logic)
     access_token: Optional[str] = None

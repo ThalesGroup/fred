@@ -424,6 +424,12 @@ class PodPlatformConfig(BaseModel):
     control_plane_url: str | None = None
 
 
+class PodSkillsConfig(BaseModel):
+    """Opt-in startup snapshot: package or a directory relative to configuration.yaml."""
+
+    directory: str = Field(min_length=1)
+
+
 class AgentPodConfig(BaseModel):
     """
     Complete structured configuration for a Fred agent pod.
@@ -458,6 +464,7 @@ class AgentPodConfig(BaseModel):
     storage: PodStorageConfig = Field(default_factory=PodStorageConfig)
     scheduler: PodSchedulerConfig = Field(default_factory=PodSchedulerConfig)
     platform: PodPlatformConfig = Field(default_factory=PodPlatformConfig)
+    skills: PodSkillsConfig | None = None
 
     def set_platform_prompt_file(self, file: Any) -> None:
         """

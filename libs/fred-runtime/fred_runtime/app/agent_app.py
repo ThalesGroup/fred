@@ -149,6 +149,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     parse_human_input_answer,
 )
+from fred_sdk.contracts.skills import SkillCatalog
 from fred_sdk.contracts.ui_part_union import current_ui_part_union
 from fred_sdk.support.authored_toolsets import (
     AuthoredToolRuntimePorts,
@@ -1099,6 +1100,7 @@ def _build_runtime_services(
             credentials=credential_provider,
         ),
         conversation_filesystem=conversation_port,
+        skills=runtime_config.skills,
     )
 
 
@@ -2404,6 +2406,24 @@ async def _authorize_and_resolve(
                 credentials=credentials or static_person_provider(access_token),
             )
         _validate_resolved_team(request, target.team_id, container)
+        selection = (
+            request.runtime_context.skill
+            if request.runtime_context is not None
+            else None
+        )
+        if selection is not None and request.resume_payload is None:
+            from fred_sdk.contracts.skills import SkillInvocation
+
+            selection = SkillInvocation.model_validate(selection)
+            skills = get_runtime_context().config.skills
+            if isinstance(target.definition, GraphAgentDefinition) or skills is None:
+                raise HTTPException(
+                    status_code=422, detail="Platform skills unavailable for this agent"
+                )
+            try:
+                skills.read(selection.name)
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from None
     except BaseException as exc:
         # Nothing past admission got as far as starting the run, so the record
         # it wrote has no owner left to release it.
@@ -3043,7 +3063,26 @@ async def _write_turn_history(
     for payload in payloads:
         kind = payload.get("kind")
 
-        if kind == "tool_call":
+        if kind == "status" and isinstance(payload.get("skill_load"), dict):
+            from fred_sdk.contracts.skills import SkillLoadAttribution
+
+            attribution = SkillLoadAttribution.model_validate(payload["skill_load"])
+            messages.append(
+                ChatMessage(
+                    session_id=session_id,
+                    exchange_id=exchange_id,
+                    rank=rank,
+                    timestamp=datetime.now(timezone.utc),
+                    role=Role.system,
+                    channel=Channel.system_note,
+                    parts=[TextPart(text=attribution.name)],
+                    metadata=ChatMetadata.model_validate(
+                        {"extras": {"skill_load": attribution.model_dump(mode="json")}}
+                    ),
+                )
+            )
+            rank += 1
+        elif kind == "tool_call":
             messages.append(
                 make_tool_call(
                     session_id,
@@ -4382,6 +4421,7 @@ async def _iterate_runtime_event_payloads_inner(
         agent_instance_id=request.agent_instance_id,
         template_agent_id=definition.agent_id,
         execution_action=execution_action,
+        skill=ctx.get("skill"),
         # Chat options forwarded from the frontend RuntimeContext.
         # These were present in ctx but were silently dropped, causing
         # ContextAwareTool and all KF search helpers to always use defaults.
@@ -4972,6 +5012,30 @@ def _build_agent_router(
             for definition in registry.values()
             if include_non_public or getattr(definition, "public", True)
         ]
+
+    @router.get(
+        "/skills",
+        response_model=SkillCatalog,
+        operation_id="get_runtime_instance_skills",
+    )
+    async def get_skills(
+        http_request: Request,
+        agent_instance_id: str,
+        team_id: str,
+        container: PodApplicationContext = Depends(get_pod_container),
+        caller: KeycloakUser | None = Depends(_authenticated_user),
+    ) -> SkillCatalog:
+        """List metadata after the same team-use and target checks as execution."""
+        from fred_runtime.skills.api import get_instance_skills
+
+        return await get_instance_skills(
+            agent_instance_id,
+            team_id,
+            caller,
+            http_request.headers.get("Authorization"),
+            container,
+            registry,
+        )
 
     @router.get("/mcp-catalog")
     async def get_mcp_catalog() -> _McpCatalogResponse:
@@ -6323,6 +6387,15 @@ def create_agent_app(
                 raise RuntimeError(
                     "Invalid runtime storage state: checkpointer and history store must be configured together."
                 )
+            from fred_runtime.skills.catalog import PlatformSkills
+
+            skills = (
+                await asyncio.to_thread(
+                    PlatformSkills.from_directory, config.skills.directory
+                )
+                if config.skills is not None
+                else None
+            )
             set_runtime_context(
                 FredRuntimeContext(
                     RuntimeConfig(
@@ -6333,6 +6406,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        skills=skills,
                         conversation_filesystem_quotas=(
                             config.storage.conversation_filesystem
                         ),

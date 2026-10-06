@@ -2103,6 +2103,30 @@
                   "title": "PodPlatformConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "skills": {
+                  "anyOf": [
+                    {
+                      "description": "Opt-in startup snapshot: package or a directory relative to configuration.yaml.",
+                      "properties": {
+                        "directory": {
+                          "minLength": 1,
+                          "title": "Directory",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "directory"
+                      ],
+                      "title": "PodSkillsConfig",
+                      "type": "object",
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null
                 }
               },
               "required": [

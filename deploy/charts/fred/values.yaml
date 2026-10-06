@@ -731,6 +731,11 @@ applications:
         max_chat_input_chars: 5000
         openai_compat: true
 
+      # Optional platform skill activation. Set to {directory: package} for the
+      # fred_runtime resources, or to an existing read-only volume mount path.
+      # No folder is read and no skill tools are added when omitted/null.
+      skills: null
+
       security:
         # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
         # The agentic pod is the execution authority: it validates the Keycloak JWT

@@ -429,6 +429,7 @@ def compose_system_prompt(
     binding: BoundRuntimeContext,
     agent_id: str,
     tool_suffix: str = "",
+    skills_prompt: str = "",
     tabular_tools_available: bool,
 ) -> str:
     """
@@ -447,7 +448,9 @@ def compose_system_prompt(
     """
 
     tools_content = "\n\n".join(
-        part for part in (tool_suffix.strip(), GLOBAL_BASE_PROMPT_MARKDOWN) if part
+        part
+        for part in (tool_suffix.strip(), GLOBAL_BASE_PROMPT_MARKDOWN, skills_prompt)
+        if part
     )
     contents = (
         build_platform_instructions_prefix(),

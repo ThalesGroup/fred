@@ -62,6 +62,7 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
+from .skills import SkillLoadAttribution, SkillsPort
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -220,6 +221,7 @@ class StatusRuntimeEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.STATUS] = RuntimeEventKind.STATUS
     status: str = Field(..., min_length=1)
     detail: str | None = None
+    skill_load: SkillLoadAttribution | None = None
 
 
 class ThoughtStartEvent(RuntimeEventBase):
@@ -1675,6 +1677,7 @@ class RuntimeServices:
     # Conversation-bound virtual workspace for capability text files.
     # Appended last to preserve positional compatibility.
     conversation_filesystem: ConversationFilesystemPort | None = None
+    skills: SkillsPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

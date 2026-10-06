@@ -42,6 +42,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     TracerPort,
 )
+from fred_sdk.contracts.skills import SkillsPort
 from langchain.agents.middleware import AgentMiddleware, TodoListMiddleware
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -94,6 +95,7 @@ from fred_runtime.react.react_tool_binding import (
 )
 from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.skills.catalog import build_skills_middleware
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +223,9 @@ class DeepAgentRuntime(ReActRuntime):
         )
         system_prompt = _compose_system_prompt(
             system_prompt,
+            skills_prompt=self.services.skills.prompt
+            if self.services.skills is not None
+            else "",
             binding=binding,
             agent_id=self.definition.agent_id,
             tool_suffix="\n\n".join(
@@ -281,6 +286,7 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
                 filesystem=filesystem,
+                skills=self.services.skills,
             ),
             subagent_middleware=_build_deepagent_runtime_middleware(
                 tracer=self.services.tracer,
@@ -290,6 +296,7 @@ class DeepAgentRuntime(ReActRuntime):
                 available_tool_names=available_tool_names,
                 capability_block=capability_block,
                 filesystem=child_filesystem,
+                skills=self.services.skills,
                 child=True,
             ),
             backend=backend,
@@ -445,6 +452,7 @@ def _build_deepagent_runtime_middleware(
     capability_block: CapabilityAgentBlock | None = None,
     filesystem: ConversationFilesystemPort | None = None,
     child: bool = False,
+    skills: SkillsPort | None = None,
 ) -> list[AgentMiddleware]:
     """Keep hygiene outermost and guard disabled tools before HITL runs.
 
@@ -459,6 +467,7 @@ def _build_deepagent_runtime_middleware(
             binding=binding,
             kpi=kpi,
         ),
+        *build_skills_middleware(skills),
         # Deep Agents no longer installs planning for non-Codex models.
         cast(AgentMiddleware, TodoListMiddleware()),
         *(capability_block.middleware if capability_block is not None else ()),
