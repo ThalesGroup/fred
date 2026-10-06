@@ -1,21 +1,21 @@
 ## Verification evidence (2026-10-06)
 
-Branch `feat/user-profile-picture`, rebased on `origin/swift` at `0c3be334f`
-(adds `a7e9c2d41063`, configurable GCU versions); the picture migration
+Branch `feat/user-profile-picture`, rebased on `origin/swift` at `ee1c521ee`
+(adds `ba2c3c7fd0c1`, retire legacy MCP document search); the picture migration
 `aac66348e27b` now revises it. Re-run after the review fixes (smaller crop,
-presign scope, Safari type, error toasts, MIME extension).
+presign scope, Safari type, error toasts, MIME extension) and the last rebase.
 
 | Area | Command | Result |
 | --- | --- | --- |
 | fred-core | `cd libs/fred-core && make test` | 1105 passed, 42 deselected |
 | fred-core | `make code-quality` | ruff, format, bandit, basedpyright: 0 errors |
-| control-plane | `cd apps/control-plane-backend && make test` | 1551 passed, 11 deselected |
+| control-plane | `cd apps/control-plane-backend && make test` | 1559 passed, 11 deselected |
 | control-plane | `make code-quality` | 0 errors |
 | Alembic | `make db-check-heads` | single head `aac66348e27b` |
-| Alembic | `make db-check-sqlite` | upgrade head (`a7e9c2d41063 -> aac66348e27b`), check, downgrade base passed |
-| Alembic | `make db-check-postgres-full` (throwaway Postgres on 5433) | upgrade head, check, downgrade base passed |
-| API client | `make generate-openapi` + `npx --no-install @rtk-query/codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json` + prettier | no diff against the rebased `controlPlaneOpenApi.ts` |
-| frontend | `npx tsc --noEmit`, `npx prettier --check src`, `npx eslint src` | clean |
+| Alembic | `make db-check-sqlite` | upgrade head (`ba2c3c7fd0c1 -> aac66348e27b`), check, downgrade base passed |
+| Alembic | `make db-check-postgres-full` (throwaway Postgres on 5433) | upgrade head, check, downgrade base passed (before the last rebase; SQLite re-run after it) |
+| API client | `cd apps/frontend && make update-control-plane-api` (services stopped) | no diff against the rebased `controlPlaneOpenApi.ts` |
+| frontend | `npx tsc --noEmit`, `npx prettier --check src`, `npx eslint src` | clean (tsc re-run after the last rebase) |
 | frontend | `npx vitest run src/rework/components/shared src/rework/components/pages/UserSettingsPage src/rework/components/pages/admin/AdminTeamsPage src/rework/features/helpCenter src/locales` | 96 files, 1162 tests passed |
 | docs | `make migration-check` | 1 new declaration valid |
 | performance | `fred-performance-reviewer` on the presign change | no blocking finding; see below |

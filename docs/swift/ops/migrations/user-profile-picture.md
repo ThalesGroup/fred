@@ -42,7 +42,7 @@ bucket that no object remains under `users/<your user id>/`.
 
 ## Rollback
 
-Downgrade the control-plane migration to `a7e9c2d41063` (drops the column),
+Downgrade the control-plane migration to `ba2c3c7fd0c1` (drops the column),
 then roll back the images. Pictures already uploaded stay in the content bucket
 under `users/`, unreferenced; delete that prefix by hand if needed.
 

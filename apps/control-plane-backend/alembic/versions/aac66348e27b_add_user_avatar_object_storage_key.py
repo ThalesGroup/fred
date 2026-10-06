@@ -16,7 +16,7 @@
 Nullable: everyone starts without a picture, so there is no backfill.
 
 Revision ID: aac66348e27b
-Revises: a7e9c2d41063
+Revises: ba2c3c7fd0c1
 """
 
 from typing import Sequence, Union
@@ -26,7 +26,7 @@ from alembic import op
 
 revision: str = "aac66348e27b"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "a7e9c2d41063"  # pragma: allowlist secret
+    "ba2c3c7fd0c1"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

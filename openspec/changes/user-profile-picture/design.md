@@ -146,7 +146,8 @@ Divergences found while implementing, all small:
 
 - **Base moved.** `swift` gained the local user directory (#2862) on the same
   user files while this change was planned; the unpublished branch was rebased
-  before coding. The migration's parent is therefore `a7e9c2d41063` (configurable GCU versions, #2974).
+  before coding, and rebased again after review. The migration's parent is
+  therefore `ba2c3c7fd0c1` (retire legacy MCP document search, #2874).
 - **Local user directory.** There, `delete_user` only suspends the account and
   returns before `delete_favorites_for_user`, so the picture is kept like the
   favorites; the identity-provider path deletes it as designed. Local-directory
