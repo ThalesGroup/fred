@@ -12,4 +12,4 @@
 
 - [x] 3.1 Run affected backend, capability and root quality checks; verify `list_document_tree`, PPT Filler and independent `/fs` consumers remain covered.
 - [x] 3.2 Review the full branch diff against `swift`, obtain independent read-only review, and disposition supported findings in the PR.
-- [ ] 3.3 Sync the final delta spec, validate it, archive this change, and update the draft PR and issue with final scope and verification.
+- [x] 3.3 Sync the final delta spec, validate it, archive this change, and update the draft PR and issue with final scope and verification.
