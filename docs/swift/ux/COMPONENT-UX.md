@@ -1187,11 +1187,15 @@ built-in template.
   vision-capable profiles only.
 - **Review dialog** (central `Dialog`, `maxWidth` 1040, single "Done"
   action). A grid of cards (`surface-container`, `--radius-s`, 1px
-  `outline-muted`): thumbnail (react-pdf page of the patterns PDF), label
-  `TextInput` (committed on blur), include `Switch`, kind `Select` (the
-  closed `SlideKind` list), meta line (source, "Named by rules" for a
-  heuristic label, exclusion reason). Set-aside slides fold under a
-  `<details>` with their count.
+  `outline-muted`): thumbnail (react-pdf page rendered at the box's width),
+  compact label `TextInput` (committed on blur) beside a small include
+  `Switch` (header grid `minmax(0, 1fr) auto`, so the switch stays inside
+  the card), kind `Select` (the closed `SlideKind` list), meta line (source,
+  "Named by rules" for a heuristic label, exclusion reason). Three sections
+  (Label Large, `on-surface-retreat`, separated by an `outline-muted` rule):
+  the template's slides, open; layouts ("Masques"), folded under a
+  `<details>` with a Body Small note that they are used only when no slide
+  fits; set-aside patterns, folded, with their count.
 - **Thumbnails** come from `GET /analysis/{instance_id}/patterns.pdf` or the
   built-in `/theme/preview.pdf`; best effort, a `slideshow` placeholder
   otherwise.
