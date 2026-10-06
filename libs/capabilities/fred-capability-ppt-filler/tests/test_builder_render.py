@@ -1060,8 +1060,8 @@ def test_a_title_that_auto_sizes_in_height_is_fitted_not_widened():
     template = build_spaced_template(space_before_pt=0, no_wrap_title=False)
     inventory = analyze_template(template).inventory
     assert inventory is not None
-    # The layout the fixture gives an auto-sizing title to.
-    pattern = next(p for p in inventory.patterns if p.id == "layout:1" and p.zones)
+    # The example slide standing for the layout given an auto-sizing title.
+    pattern = next(p for p in inventory.patterns if p.source == "slide")
     zone = next(z for z in pattern.zones if z.role == "title")
     assert not zone.grows
     designed = zone.box.w

@@ -165,7 +165,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 8
+ANALYSIS_VERSION = 9
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -652,8 +652,8 @@ class _Analyzer:
         self.shared_texts = self._shared_texts(slide_records)
 
         patterns: List[Pattern] = []
-        # Layout part → (its pattern, the placeholder idx holding a slot).
-        layout_slots: Dict[Any, Tuple[Pattern, frozenset]] = {}
+        # Layout part → (its pattern, the role of each placeholder idx holding a slot).
+        layout_slots: Dict[Any, Tuple[Pattern, Dict[int, ZoneRole]]] = {}
         # One running index over every master, matching the renderer's view.
         layouts = [
             layout
@@ -669,25 +669,25 @@ class _Analyzer:
         copied: set[Any] = set()
         for number, (slide, records) in enumerate(zip(slides, slide_records), start=1):
             pattern = self._slide_pattern(slide, number, records)
-            layout = layout_slots.get(slide.slide_layout.part)
-            if layout is None or not _copies_layout(records, layout[1]):
+            part = slide.slide_layout.part
+            layout = layout_slots.get(part)
+            draws = _draws(records)
+            if (
+                layout is None
+                or not pattern.included
+                or not _covers(records, layout[1])
+                or (draws and pattern.kind != layout[0].kind)
+            ):
                 patterns.append(pattern)
                 continue
-            # A copy of its layout is the same design: the slide stands for it
-            # (sample text, notes, position), once; an excluded copy leaves it.
-            if pattern.included and slide.slide_layout.part not in copied:
+            # A slide holding its layout's slots stands for it (sample text,
+            # notes, position) unless its drawing makes it another kind; a later
+            # bare copy of the same layout is dropped.
+            if part not in copied:
                 patterns[patterns.index(layout[0])] = pattern
-            copied.add(slide.slide_layout.part)
-
-        layout_kinds = {p.kind for p in patterns if p.source == "layout" and p.included}
-        for pattern in patterns:
-            if (
-                pattern.source == "slide"
-                and pattern.included
-                and pattern.reusable
-                and pattern.kind in layout_kinds
-            ):
-                pattern.preferred = True
+            elif draws:
+                patterns.append(pattern)
+            copied.add(part)
 
         return TemplateInventory(
             analysis_version=ANALYSIS_VERSION,
@@ -715,7 +715,9 @@ class _Analyzer:
 
     # -- layouts -----------------------------------------------------------------
 
-    def _layout_pattern(self, layout, index: int) -> Tuple[Pattern, frozenset]:
+    def _layout_pattern(
+        self, layout, index: int
+    ) -> Tuple[Pattern, Dict[int, ZoneRole]]:
         records = _records(
             layout.placeholders,
             self.width,
@@ -759,7 +761,11 @@ class _Analyzer:
             pattern.exclusion_reason = "no_placeholder"
         _quote_roles(pattern)
         pattern.reusable = pattern.kind != "other"
-        return pattern, frozenset(rec.ph_idx for rec in slotted)
+        return pattern, {
+            rec.ph_idx: cast(ZoneRole, _placeholder_role(rec))
+            for rec in slotted
+            if rec.ph_idx is not None
+        }
 
     # -- slides --------------------------------------------------------------------
 
@@ -810,6 +816,10 @@ class _Analyzer:
                 title_text = rec.text
             zone = _zone(rec, role, self.width, self.height)
             if zone.key in used_keys:
+                warnings.append(
+                    f"Two placeholders share the index {rec.ph_idx}; the second is "
+                    "addressed by its shape."
+                )
                 zone.key = _shape_key(rec.path)
             used_keys.add(zone.key)
             zones.append(zone)
@@ -1085,19 +1095,35 @@ def _slot_role(rec: _Rec) -> Optional[ZoneRole]:
     return cast(ZoneRole, declared) if declared else role
 
 
-def _copies_layout(records: List[_Rec], layout_slots: frozenset) -> bool:
-    """The slide holds its layout's slots and nothing else drawn over them."""
-    slots = frozenset(
-        rec.ph_idx
-        for rec in records
-        if rec.ph_idx is not None and _placeholder_role(rec) is not None
-    )
-    extra = any(
-        rec.kind in ("chart", "table", "picture", "group")
+def _covers(records: List[_Rec], layout_slots: Dict[int, ZoneRole]) -> bool:
+    """The slide holds every slot of its layout, whatever decoration it draws.
+    A placeholder duplicated on the slide (two with one idx) stands in for a
+    layout slot of the same role the slide lacks."""
+    present: set[int] = set()
+    spare: Counter[str] = Counter()
+    for rec in records:
+        role = _placeholder_role(rec) if rec.ph_idx is not None else None
+        if role is None:
+            continue
+        if rec.ph_idx in present:
+            spare[role] += 1
+        present.add(cast(int, rec.ph_idx))
+    for idx, role in layout_slots.items():
+        if idx in present:
+            continue
+        if not spare[role]:
+            return False
+        spare[role] -= 1
+    return True
+
+
+def _draws(records: List[_Rec]) -> bool:
+    """Anything on the slide besides its placeholders."""
+    return any(
+        (rec.kind in ("chart", "table", "picture", "group") and rec.ph_idx is None)
         or (rec.kind == "text" and rec.ph_idx is None and rec.text)
         for rec in records
     )
-    return slots == layout_slots and not extra
 
 
 def _same_class(a: _Rec, b: _Rec) -> bool:

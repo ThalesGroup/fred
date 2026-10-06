@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 8,
+  "analysis_version": 9,
   "patterns": [
    {
     "id": "slide:256",
@@ -65,7 +65,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -114,7 +113,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -179,7 +177,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": true,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -228,7 +225,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": true,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -293,7 +289,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -390,7 +385,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -455,7 +449,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -622,7 +615,6 @@
     ],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -808,7 +800,6 @@
     ],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -857,7 +848,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -906,7 +896,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -955,7 +944,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -988,7 +976,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -1037,7 +1024,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -1053,7 +1039,6 @@
     "groups": [],
     "included": false,
     "exclusion_reason": "no_placeholder",
-    "preferred": false,
     "reusable": false,
     "labelled_by": "heuristic",
     "warnings": []
@@ -1102,7 +1087,6 @@
     "groups": [],
     "included": false,
     "exclusion_reason": "chart",
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -1135,7 +1119,6 @@
     "groups": [],
     "included": false,
     "exclusion_reason": "table",
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -1286,7 +1269,6 @@
     ],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": true,
     "labelled_by": "heuristic",
     "warnings": []
@@ -1302,7 +1284,6 @@
     "groups": [],
     "included": true,
     "exclusion_reason": null,
-    "preferred": false,
     "reusable": false,
     "labelled_by": "heuristic",
     "warnings": []

@@ -17,6 +17,7 @@ reference corporate template (optional, `PPT_BUILDER_REFERENCE_TEMPLATE`)."""
 
 from __future__ import annotations
 
+import copy
 import io
 import os
 from typing import Any, cast
@@ -213,6 +214,60 @@ def test_a_second_copy_of_one_layout_is_dropped():
     ]
 
 
+L_PICTURE_CAPTION = 8
+
+
+def _picture_slide(presentation, title: str = "Site de Lyon"):
+    slide = presentation.slides.add_slide(presentation.slide_layouts[L_PICTURE_CAPTION])
+    cast(Any, slide.shapes.title).text = title
+    for placeholder in slide.placeholders:
+        if placeholder.placeholder_format.type.name == "BODY":  # type: ignore[union-attr]
+            cast(Any, placeholder).text_frame.text = "Une légende"
+    return slide
+
+
+def test_a_slide_holding_its_layout_slots_stands_for_it_despite_decoration():
+    def decorated(presentation):
+        slide = _picture_slide(presentation)
+        slide.shapes.add_shape(1, Inches(0.2), Inches(0.2), Inches(0.5), Inches(0.5))
+
+    inventory = analyze_template(build_slides([decorated])).inventory
+    assert inventory is not None
+    named = [p for p in inventory.patterns if p.name == "Picture with Caption"]
+    # The empty picture placeholder is a slot, the drawn square decoration.
+    assert [p.source for p in named] == ["slide"]
+    assert any(z.role == "image" for z in named[0].zones)
+
+
+def test_a_drawing_that_makes_another_kind_keeps_the_layout():
+    def agenda_on_title_only(presentation):
+        add_agenda_slide(presentation)
+
+    inventory = analyze_template(build_slides([agenda_on_title_only])).inventory
+    assert inventory is not None
+    assert _slide(inventory, "Agenda").kind == "agenda"
+    assert _layout(inventory, "Title Only").included
+
+
+def test_placeholders_sharing_an_index_get_distinct_keys_and_a_warning():
+    def duplicated(presentation):
+        slide = _picture_slide(presentation)
+        body = next(
+            p
+            for p in slide.placeholders
+            if p.placeholder_format.type.name == "BODY"  # type: ignore[union-attr]
+        )
+        twin = copy.deepcopy(body._element)
+        slide.shapes._spTree.append(twin)
+
+    inventory = analyze_template(build_slides([duplicated])).inventory
+    assert inventory is not None
+    pattern = _slide(inventory, "Site de Lyon")
+    keys = [z.key for z in pattern.zones]
+    assert len(keys) == len(set(keys))
+    assert any("share the index" in w for w in pattern.warnings)
+
+
 def test_the_first_slide_without_body_content_is_the_cover():
     def opening(presentation):
         slide = presentation.slides.add_slide(presentation.slide_layouts[L_TITLE_ONLY])
@@ -228,8 +283,11 @@ def test_the_first_slide_without_body_content_is_the_cover():
 
     inventory = analyze_template(build_slides([opening, opening])).inventory
     assert inventory is not None
-    kinds = [p.kind for p in inventory.patterns if p.source == "slide"]
-    assert kinds[0] == "cover" and kinds[1] != "cover"
+    slides = sorted(
+        (p for p in inventory.patterns if p.source == "slide"),
+        key=lambda p: p.source_index,
+    )
+    assert slides[0].kind == "cover" and slides[1].kind != "cover"
 
 
 def test_a_title_less_quote_takes_its_quote_as_title():
@@ -324,14 +382,7 @@ def test_large_free_picture_is_a_replaceable_image(showcase):
     assert photo.kind == "image_text"
 
 
-def test_example_slide_of_an_existing_kind_is_preferred(showcase):
-    photo = _slide(showcase, "Photo")
-    assert photo.preferred  # the default template has a Picture with Caption layout
-    agenda = _slide(showcase, "Agenda")
-    assert not agenda.preferred
-
-
-def test_decorative_slide_is_never_preferred():
+def test_decorative_slide_is_not_reusable():
     # Used verbatim, a decorative example would otherwise outrank the closing layout.
     def name_blank_layout_merci(presentation):
         presentation.slide_layouts[6]._element.cSld.set("name", "Merci")
@@ -343,7 +394,7 @@ def test_decorative_slide_is_never_preferred():
     merci = _layout(inventory, "Merci")
     assert merci.kind == "closing" and merci.included and merci.reusable
     motif = _slide(inventory, "Motif")
-    assert motif.kind == "other" and not motif.preferred
+    assert motif.kind == "other" and not motif.reusable
 
 
 def test_example_slide_placeholders_inherit_their_font_size(showcase):
@@ -682,3 +733,46 @@ def test_a_box_that_does_not_wrap_is_marked_as_growing():
     zones = [z for p in inventory.patterns for z in p.zones]
     assert [z for z in zones if z.grows], "the no-wrap heading should be marked"
     assert all(z.chars_per_line for z in zones if not z.grows and z.role != "image")
+
+
+@_reference
+def test_reference_template_offers_every_cards_variant_and_icon_cards_win():
+    from fred_capability_ppt_filler.builder.assign import assign
+    from fred_capability_ppt_filler.builder.plan import DeckPlan, PlanItem, SlidePlan
+    from fred_capability_ppt_filler.builder.render import render_deck
+    from fred_capability_ppt_filler.builder.tools import catalogue
+
+    source = open(REFERENCE, "rb").read()  # type: ignore[arg-type]
+    inventory = analyze_template(source).inventory
+    assert inventory is not None
+    # Layouts the deck's own slides hold are gone, so each design is listed once.
+    names = {p.name for p in inventory.patterns if p.source == "layout"}
+    assert not names & {"Images + 3 colonnes de texte", "3 images + message clé"}
+    cards = next(
+        line for line in catalogue(inventory).splitlines() if "- cards:" in line
+    )
+    assert "3 icônes + texte" in cards and "6 icônes + texte" in cards
+    assert cards.count(" | ") >= 4
+    # Short heading + text items, no pictures: the icon cards, not the photo cards.
+    items = [PlanItem(heading="Agilité", text="Décider vite")] * 2
+    cover = SlidePlan(title="Stratégie", subtitle="2027")
+    plan = DeckPlan(
+        slides=[cover, SlidePlan(title="Nos axes", items=items, kind="cards")]
+    )
+    patterns = assign(inventory, plan).patterns
+    assert patterns[1] is not None and patterns[1].label == "3 icônes + texte"
+    deck = Presentation(
+        io.BytesIO(render_deck(source, inventory, plan, patterns, {}).pptx)
+    )
+    slide = deck.slides[1]
+    icons = [s for s in slide.shapes if s.shape_type == 13]  # top-level pictures
+    assert len(icons) == 2  # the dropped card's icon went with it
+    texts = [
+        run
+        for shape in slide.shapes
+        if shape.shape_type == 6
+        for inner in cast(Any, shape).shapes
+        if inner.has_text_frame
+        for run in inner.text_frame.paragraphs[0].runs
+    ]
+    assert any(run.text == "Agilité" and run.font.bold for run in texts)

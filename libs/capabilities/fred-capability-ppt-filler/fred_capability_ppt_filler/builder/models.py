@@ -138,9 +138,6 @@ class Pattern(BaseModel):
     groups: List[RepeatGroup] = []
     included: bool = True
     exclusion_reason: Optional[ExclusionReason] = None
-    # An example slide the designer put in the deck outranks a bare layout of
-    # the same kind.
-    preferred: bool = False
     # False for a one-off slide (decoration, a specific org chart): kept in the
     # inventory but never chosen as an archetype.
     reusable: bool = True

@@ -293,12 +293,5 @@ async def label_inventory(
     )
     if not merged:
         return inventory
-    patterns = [merged.get(p.id) or p.model_copy() for p in inventory.patterns]
-    # Same rule as the analysis: kinds may have moved, so `preferred` may too.
-    layout_kinds = {p.kind for p in patterns if p.source == "layout" and p.included}
-    for pattern in patterns:
-        if pattern.source == "slide":
-            pattern.preferred = (
-                pattern.included and pattern.reusable and pattern.kind in layout_kinds
-            )
+    patterns = [merged.get(p.id) or p for p in inventory.patterns]
     return inventory.model_copy(update={"patterns": patterns})
