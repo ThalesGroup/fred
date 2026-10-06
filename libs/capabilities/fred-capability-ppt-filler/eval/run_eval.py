@@ -282,6 +282,12 @@ class RunResult:
     max_reuse: int = 0
     alternations: int = 0
     avoidable_reuses: int = 0
+    # Tables (design.md D14): given in the plan, put on a table slide, rendered
+    # with the plan's rows and columns, and kept inside the slide.
+    tables_given: int = 0
+    tables_used: int = 0
+    tables_shape_kept: int = 0
+    tables_overflow: int = 0
     leftovers: List[str] = field(default_factory=list)
     removed_by_check: int = 0
     truncated: int = 0
@@ -451,6 +457,32 @@ def _measure(
     deck = next((b for k, b in workspace.files.items() if k.endswith(".pptx")), None)
     if deck is not None:
         run.leftovers = _leftovers(variant, slides, chosen, deck)
+        _tables(run, slides, chosen, deck)
+
+
+def _tables(
+    run: RunResult, slides: List[SlidePlan], chosen: List[Pattern], deck: bytes
+) -> None:
+    presentation = Presentation(io.BytesIO(deck))
+    for plan, pattern, slide in zip(slides, chosen, presentation.slides):
+        if plan.table is None or not plan.table.has_content():
+            continue
+        run.tables_given += 1
+        if pattern.kind != "table":
+            continue
+        run.tables_used += 1
+        frame = next((s for s in slide.shapes if getattr(s, "has_table", False)), None)
+        if frame is None:
+            continue
+        table = cast(Any, frame).table
+        header = 1 if any(plan.table.header) else 0
+        if (len(table.rows), len(table.columns)) == (
+            len(plan.table.rows) + header,
+            plan.table.width,
+        ):
+            run.tables_shape_kept += 1
+        if frame.top + frame.height > (presentation.slide_height or 0):
+            run.tables_overflow += 1
 
 
 def _variety(
@@ -514,8 +546,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
     lines = [
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
         "| 3-in-a-row | distinct/slides | max reuse | A-B-A | avoidable reuses "
-        "| patterns used | leftovers | removed by check | truncated | lost | avg wall s |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| patterns used | tables used/given | table shape kept | table overflow "
+        "| leftovers | removed by check | truncated | lost | avg wall s |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -540,6 +573,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {max((r.max_reuse for r in ok), default=0)} "
             f"| {sum(r.alternations for r in ok)} | {sum(r.avoidable_reuses for r in ok)} "
             f"| {len(across)}/{len(assignable(variant.inventory))} "
+            f"| {sum(r.tables_used for r in ok)}/{sum(r.tables_given for r in ok)} "
+            f"| {sum(r.tables_shape_kept for r in ok)} "
+            f"| {sum(r.tables_overflow for r in ok)} "
             f"| {sum(len(r.leftovers) for r in ok)} "
             f"| {sum(r.removed_by_check for r in ok)} "
             f"| {sum(r.truncated for r in ok)} | {sum(r.lost for r in ok)} "

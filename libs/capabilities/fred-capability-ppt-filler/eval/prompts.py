@@ -65,4 +65,16 @@ PROMPTS: dict[str, str] = {
         "40% women in management target, supplier audit figures (220 audits, 95% compliant), a "
         "quote from the CEO, and the 2030 timeline."
     ),
+    # Tabular content (design.md D14): offers × criteria, a schedule.
+    "offers_table": (
+        "Make a 4-slide deck comparing three cloud offers for our data platform: AWS, Azure "
+        "and OVHcloud. Put the comparison in a table: monthly price (38 k€, 41 k€, 29 k€), SLA "
+        "(99.99%, 99.95%, 99.9%), data location (Frankfurt, Paris, Roubaix), support (24/7, 24/7, "
+        "business hours) and SecNumCloud (no, no, yes). Then give our recommendation."
+    ),
+    "schedule_table": (
+        "Prépare la présentation du plan de formation du premier trimestre 2027 : une slide "
+        "d'introduction, puis le planning sous forme de tableau avec 8 sessions (date, thème, "
+        "formateur, lieu) que tu inventes de façon réaliste, puis une slide sur la logistique."
+    ),
 }
