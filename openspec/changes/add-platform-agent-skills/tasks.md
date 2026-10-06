@@ -1,6 +1,6 @@
 ## 1. Shared startup catalog
 
-- [ ] 1.1 Add optional directory configuration and the bounded read-only startup snapshot/backend in `libs/fred-runtime`; verify path resolution, absent configuration, UTF-8/size bounds, unreadable files, traversal and escaping symlinks with offline tests.
+- [ ] 1.1 Add optional directory configuration and the bounded read-only startup snapshot/backend in `libs/fred-runtime`; verify installed-package and configured-relative path resolution, absent configuration, UTF-8/size bounds, unreadable files, traversal and escaping symlinks with offline tests.
 - [ ] 1.2 Adapt upstream `SkillsMiddleware` public discovery/state hooks, reject duplicate names and carry the catalog through runtime services; verify invalid-entry diagnostics, fixed reads before restart and new metadata/body reads after restart in an existing checkpoint.
 - [ ] 1.3 Render escaped skill metadata and Fred loading guidance inside the shared `<tools>` block; verify unchanged no-skills prompt bytes, reserved-tag escaping, no eager body injection and preserved platform precedence for ReAct and Deep.
 
@@ -25,8 +25,8 @@
 
 ## 5. Distribution and acceptance example
 
-- [ ] 5.1 Add `compte-rendu/SKILL.md` and `references/modele-compte-rendu.md` under the platform skill directory, then include them in `apps/fred-agents` distribution; verify upstream discovery accepts the files and the referenced template resolves from the deployed path.
-- [ ] 5.2 Update pod configuration examples, chart values/templates and regenerated schemas for optional read-only activation; verify chart rendering/schema validation and that unconfigured deployments retain existing behavior.
+- [ ] 5.1 Add `compte-rendu/SKILL.md` and `references/modele-compte-rendu.md` under `libs/fred-runtime/fred_runtime/skills/`, declare the required package data and verify both wheel/source-distribution inclusion and upstream discovery/reference reads from an installed build outside the checkout; no application-owned copy is required.
+- [ ] 5.2 Update pod configuration examples, chart values/templates and regenerated schemas for optional read-only activation; verify chart rendering/schema validation, that `apps/fred-agents` images consume the runtime-packaged skills, and that unconfigured deployments retain existing behavior.
 - [ ] 5.3 Manually validate web invocation and ordinary-request automatic selection with notes containing a decision/action but no deadline, plus a missing-reader case; record actual behavior and any model-following limitation in this checklist or the implementation PR.
 
 ## 6. Verification and close-out

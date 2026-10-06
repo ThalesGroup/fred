@@ -6,7 +6,13 @@ Let users and agents apply platform-owned Markdown workflows through one shared,
 
 ### Requirement: Platform skills are published from a startup snapshot
 
-The deployment SHALL configure an optional skill directory whose immediate skill subdirectories contain `SKILL.md` with a valid unique `name`, a `description` and Markdown instructions. Skill contents and references SHALL be read-only to agents. The pod SHALL publish a validated snapshot at startup and use it for catalog and file reads until restart. Invalid, duplicate, oversized or unreadable skills SHALL be excluded with bounded diagnostics without preventing other skills or the pod from working. The supported first-version catalog size SHALL be a few dozen skills; it SHALL NOT require a separate search service.
+Platform-distributed skills and their reference files SHALL reside under `fred_runtime/skills/` in the `fred-runtime` package and SHALL be included in its wheel and source distribution. The deployment SHALL configure an optional skill directory whose immediate skill subdirectories contain `SKILL.md` with a valid unique `name`, a `description` and Markdown instructions. The packaged directory SHALL be resolvable from an installed runtime outside the repository. Packaging alone SHALL NOT enable skills without configuration. Skill contents and references SHALL be read-only to agents. The pod SHALL publish a validated snapshot at startup and use it for catalog and file reads until restart. Invalid, duplicate, oversized or unreadable skills SHALL be excluded with bounded diagnostics without preventing other skills or the pod from working. The supported first-version catalog size SHALL be a few dozen skills; it SHALL NOT require a separate search service.
+
+#### Scenario: Skills available from an installed runtime distribution
+- **GIVEN** `fred-runtime` is built and installed outside the monorepo checkout
+- **WHEN** a pod is configured to use its packaged skills directory
+- **THEN** the shipped skills and references are discoverable and readable from that distribution
+- **AND** no copy of those files under `apps/fred-agents` is required
 
 #### Scenario: No directory configured
 - **WHEN** a pod starts without skill configuration
@@ -136,7 +142,7 @@ Catalog access, explicit selection and skill tools SHALL use the serving runtime
 
 ### Requirement: The first platform skill produces grounded minutes
 
-The platform SHALL distribute a `compte-rendu` skill with a referenced minutes template. Its instructions SHALL guide the agent to read supplied notes, identify decisions and actions, and report owners or dates as missing when absent. It SHALL work through explicit web invocation and automatic model selection with available document-reading tools.
+The platform SHALL distribute a `compte-rendu` skill with a referenced minutes template under `fred_runtime/skills/compte-rendu/`. Its instructions SHALL guide the agent to read supplied notes, identify decisions and actions, and report owners or dates as missing when absent. It SHALL work through explicit web invocation and automatic model selection with available document-reading tools.
 
 #### Scenario: Notes omit a deadline
 - **GIVEN** notes describe a decision and an assigned action without a deadline

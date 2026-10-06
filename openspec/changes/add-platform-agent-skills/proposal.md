@@ -6,7 +6,7 @@ Tracking: [#2711](https://github.com/ThalesGroup/fred/issues/2711). The develope
 
 ## What Changes
 
-- Discover platform-owned skills from a configurable project directory, shipped or mounted read-only in agent pods. Publish a validated startup snapshot; additions and edits take effect after pod restart. Design for a few dozen skills.
+- Store platform-distributed skills and their references under `libs/fred-runtime/fred_runtime/skills/` and include them as `fred-runtime` package data. Discover them from the configured read-only directory in agent pods. Publish a validated startup snapshot; additions and edits take effect after pod restart. Design for a few dozen skills.
 - Put each valid skill's name and description inside the system prompt's existing `<tools>` block. Every ReAct agent, DeepAgent and Deep child in a deployment with this directory configured can use the same catalog, without per-agent selection.
 - Provide shared tools to load a skill and read its UTF-8 reference files. Reuse DeepAgents `SkillsMiddleware` discovery and state handling, with Fred-specific prompt placement and narrow file access; do not install a general filesystem or shell on ReAct agents.
 - Add autocompleted `/skill <name> <request>` invocation to the web composer. Resolve the selected skill on the server and load it before the first model call.
@@ -27,11 +27,11 @@ None of the current durable specs is modified. The new capability owns the reser
 
 ## Impact
 
-- `libs/fred-runtime`: pod configuration/bootstrap, a shared skill catalog/backend and loading tools, ReAct/Deep middleware assembly, authenticated catalog access, execution/history attribution and offline tests.
+- `libs/fred-runtime`: packaged `fred_runtime/skills/` instructions/references, package-data distribution, pod configuration/bootstrap, a shared skill catalog/backend and loading tools, ReAct/Deep middleware assembly, authenticated catalog access, execution/history attribution and offline tests.
 - `libs/fred-sdk`: additive typed catalog, invocation and load-attribution contracts where required by the existing runtime interfaces.
 - `apps/control-plane-backend`: resolve catalog metadata through the configured runtime source for the selected managed agent, using the existing routing and team authorization boundary; enforce the reserved prompt command in create/update/import paths. No skill files or skill CRUD storage here.
 - `apps/frontend`: generated API clients, composer command hook/menu, managed execution payload and compact activity rendering; English/French help and labels.
-- `apps/fred-agents`, deployment chart values/schemas and images: example skill distribution and optional read-only directory configuration. No new third-party dependency or database migration is planned.
+- `apps/fred-agents`, deployment chart values/schemas and images: consume the skills distributed by `fred-runtime` and configure optional read-only activation; do not own or duplicate the skill files. No new third-party dependency or database migration is planned.
 - Existing runtime/product contracts, prompt assembly guidance, web usage guidance and an English operator migration note describing optional activation and renaming any legacy `skill` prompt command.
 
 ## Non-Goals
