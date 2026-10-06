@@ -697,15 +697,17 @@ def _beam(slides: List[_Slide]) -> List[Pattern]:
 
 
 def _room(fields: List[List[Zone]]) -> Optional[int]:
-    """Chars one entry holds over its fields, each at its tightest zone; None
-    when a field grows with its text."""
-    total = 0
+    """Chars one entry holds over its measured fields, each at its tightest
+    zone; None when none is measured. An unmeasured field adds nothing: read
+    as endless room, it favoured a slide whose only text was a 12-char label."""
+    rooms = []
     for zones in fields:
         bounded = [z for z in zones if not z.grows and z.chars_per_line and z.max_lines]
-        if not bounded:
-            return None
-        total += min((z.chars_per_line or 0) * (z.max_lines or 0) for z in bounded)
-    return total
+        if bounded:
+            rooms.append(
+                min((z.chars_per_line or 0) * (z.max_lines or 0) for z in bounded)
+            )
+    return sum(rooms) if rooms else None
 
 
 @dataclass
@@ -745,7 +747,7 @@ def _holding(pattern: Pattern, entries: int) -> Optional[_Variant]:
 def _advice(pool: List[Pattern], kind: str, shape: Shape) -> Optional[str]:
     """``kind`` and what its favoured slide holds for this content, with the
     size to shorten to when the longest entry would not fit; None if none can.
-    Favoured as the assigner would: no empty picture, room, an example slide."""
+    Favoured as the assigner would: room, no empty picture, an example slide."""
     found = [v for p in pool if p.kind == kind and (v := _holding(p, shape.entries))]
     if not found:
         return None
@@ -753,7 +755,7 @@ def _advice(pool: List[Pattern], kind: str, shape: Shape) -> Optional[str]:
     def short(v: _Variant) -> bool:
         return v.room is not None and v.room < shape.longest
 
-    best = min(found, key=lambda v: (v.holes, short(v), v.layout, -(v.room or 10**6)))
+    best = min(found, key=lambda v: (short(v), v.holes, v.layout, -(v.room or 0)))
     shorten = f", shorten each entry to ≈{best.room} chars" if short(best) else ""
     return f"{kind} holds {best.hint}{shorten}"
 

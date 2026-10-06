@@ -22,6 +22,7 @@ from typing import Any, List
 from builder_decks import EVIDENCE_SLIDES, build_showcase_template, with_item_slides
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import (
+    _advice,
     assign,
     content_shape,
     infer_kinds,
@@ -653,6 +654,26 @@ def test_advice_quotes_the_favoured_variant_and_the_size_to_shorten_to():
         f"{lead}heading ≈20 chars × 4 lines, text ≈20 chars × 4 lines], "
         "shorten each entry to ≈160 chars"
     ]
+
+
+def test_advice_prefers_room_for_the_entries_over_an_unmeasured_field():
+    base = with_item_slides(INVENTORY, kinds=("cards",)).patterns[-1]
+    # Headings unmeasured, texts of 6 chars: no endless room for the heading.
+    tight = base.model_copy(deep=True, update={"id": "slide:951"})
+    for heading, text in tight.groups[0].items:
+        heading.chars_per_line = None
+        text.chars_per_line, text.max_lines = 6, 1
+    # Room for the entries but a picture per item: only a cost, so it wins.
+    pictured = base.model_copy(deep=True, update={"id": "slide:952"})
+    for n, item in enumerate(pictured.groups[0].items):
+        item.append(Zone(key=f"pic{n}", role="image", box=item[0].box))
+    shape = content_shape(
+        SlidePlan(title="T", bullets=["Coût : élevé et durable", "Délai : court"])
+    )
+    assert shape is not None
+    advice = _advice([tight, pictured], "cards", shape)
+    assert advice is not None and advice.startswith("cards holds items max 6 [heading")
+    assert "image" in advice and "shorten" not in advice
 
 
 def test_repeats_are_found_beside_slides_that_fit_nothing():
