@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17 and WP18 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18 and WP19 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -363,6 +363,70 @@ leftovers 0.
   The delivered deck: `[cover, agenda, cards, figures, cards, process, bullets, bullets]`.
 - Model tokens (now recorded): 796k in / 237k out over the 78 runs (no earlier baseline).
 
+## Results: WP19 (variety check setting, capped suggestions)
+
+Run on 2026-10-06/07 after `3b033bdc5` (the later frontend-only commits do not touch the tool
+path), `make eval` with `--variety`, seven processes strictly one after the other, nothing else
+running, no 429; 14 prompts (the WP16 thirteen + `thales_spain_italy`). Same template and
+model for both modes of a pair, so the pairs are head-to-head; one run per cell, so read
+differences of one or two runs as noise. Columns: first call = delivered without any
+repair; tool calls = all build calls of the cell; decks ×3+ = delivered decks with one
+non-structural kind on 3+ slides; max reuse = most uses of one template slide in a deck.
+
+| model | template / mode | variety_check | success | first call | tool calls | variety asks | decks ×3+ | max reuse (mean) | max kind repeat (mean) | distinct/slides | wall s/run | tokens in/out (k) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| small | paintress rules | template_slide | 13/14\* | 4 | 25 | 1 | 9 | 3 (1.46) | 11 (4.23) | 0.93 | 23.7 | 89/29 |
+| small | paintress rules | kind | 12/14\*\* | 3 | 29 | 8 | 7 | 4 (1.58) | 5 (2.83) | 0.93 | 24.6 | 120/37 |
+| small | paintress rules | off | 14/14 | 4 | 29 | 0 | 10 | 3 (1.29) | 11 (4.21) | 0.94 | 23.2 | 111/31 |
+| small | paintress vision | template_slide | 13/14\* | 7 | 23 | 0 | 10 | 3 (1.38) | 10 (4.31) | 0.92 | 22.0 | 82/27 |
+| small | paintress vision | kind | 13/14 | 1 | 32 | 10 | 6 | 3 (1.69) | 8 (2.92) | 0.89 | 26.9 | 124/38 |
+| small | paintress vision | off | 13/14\* | 7 | 20 | 0 | 9 | 3 (1.38) | 9 (4.31) | 0.92 | 19.5 | 64/22 |
+| small | corporate rules | template_slide | 13/14 | 6 | 26 | 2 | 8 | 2 (1.54) | 9 (4.15) | 0.89 | 20.1 | 86/24 |
+| small | corporate rules | kind | 11/14 | 1 | 38 | 9 | 5 | 3 (1.55) | 6 (2.82) | 0.91 | 24.1 | 143/37 |
+| medium | paintress rules | template_slide | 13/14† | 4 | 22 | 2 | 7 | 3 (1.69) | 8 (3.15) | 0.88 | 19.8 | 71/19 |
+| medium | paintress rules | kind | 12/14† | 1 | 25 | 7 | 2 | 3 (1.58) | 3 (1.83) | 0.90 | 19.2 | 90/23 |
+
+\* the one failure is the known harness artifact (an invented image id, no `document_content`
+port). \*\* both failures are that artifact. † `no_tool_call` only: medium writes a plan and asks
+the user to confirm, which a one-turn harness counts as a failure (WP17). The other failures
+are `repairs_exhausted` on fit problems: `paintress/vision/cyber_2027` (kind),
+`corporate/rules/country_comparison` (both modes), `cyber_2027` and `quarterly_review`
+(corporate, kind). The built-in template ran in each process too (`target/eval-wp19-*`), same
+picture: kind 14/14 and 12/14 against template_slide 14/14 and 13/14.
+
+Totals over the four pairs (3 mistral-small, 1 mistral-medium; 56 runs per mode,
+template_slide → kind): success 52 → 48 (without the harness artifact and `no_tool_call`: 52/53
+→ 48/52), first call 21 → 6, tool calls 96 → 124 (+29 %), input tokens 328k → 477k (+45 %),
+variety asks 5 → 34, decks with a kind on 3+ slides 34 → 20; mean worst kind repeat 4.2 → 2.9
+(small) and 3.2 → 1.8 (medium); wall time per run 21.9 → 25.2 s on small (+15 %), unchanged on
+medium.
+
+- **`template_slide` almost never asks (5 asks in 56 runs) and behaves like `off`**: the
+  assigner's reuse cost (D12) already keeps one template slide to 3 uses at most, so the
+  trigger rarely fires. `off` vs `template_slide` on Paintress small: same success (27 vs 26
+  of 28, the difference is the artifact), same first call (11 vs 11), same variety.
+- **`kind` buys variety, at a cost.** Decks with one kind on 3+ slides nearly halve and the
+  worst repeat drops by about 1.5 slides, on every pair; medium in `kind` mode gives the most
+  varied decks of the matrix (2 decks ×3+, worst 3). The cost: first-call success collapses
+  (an asked deck is never a first-call success), 29 % more build calls and 45 % more input
+  tokens (each ask is one more model call carrying the deck), and 3 more failed decks over
+  42 mistral-small runs (all `repairs_exhausted` on fit problems, 2 of them corporate).
+- **Caps hold.** No delivered deck in any mode has 3+ figures slides; the evidence session's
+  over-correction (4 figures slides on the single figures slide) did not recur. 23 of the 52
+  recorded kind asks carry a `suggested` line. Max reuse 4 once (`paintress/rules/kickoff`,
+  kind): 4 slides suggested `cards` (Paintress has 5 cards variants, so within the cap), but
+  only one cards variant held their long text, so the assigner reused it.
+- **The small-model evidence plan** (the live session's first call, rerun through `assign`):
+  the agenda slide is now apart, the bullets count is 2, no ask in either mode; the live
+  third call (4 figures slides) would now get no figures suggestion or option.
+- **Recommendation: keep `template_slide` as the default.** The data does not clearly favour
+  `kind`: it is the better choice for deck variety (and on mistral-medium it costs little:
+  12 vs 13, both failures `no_tool_call`, +3 tool calls), but on mistral-small, the admin
+  default, it trades 3 failed decks in 42, a 3× drop in first-call success and +29 % calls/+45 %
+  tokens for that variety. An author who wants more varied decks can pick `kind`, best with
+  a stronger model. Since `template_slide` is nearly inert, a follow-up could reasonably
+  make `off` and `template_slide` one value; not done (developer's decision).
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -429,6 +493,23 @@ leftovers 0.
 
 ## Checks
 
+- WP19: package `make code-quality` passed; `make test` 394 passed, 4 skipped (3 new in
+  `test_assign.py`: structural slide apart on the small-model plan, figures capped by its
+  variants, suggestions spread across kinds; 2 in `test_build_tool.py`: each mode's ask,
+  default for a stored config without the field and not in `labelling_key`, manifest enum;
+  existing kind-advice tests now pass `variety="kind"` and expect the capped suggestions);
+  with `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 398 passed; on the Paintress
+  deck the reference-bearing files 178 passed. The dumped ppt_builder OpenAPI equals the
+  committed slice (the config model is not in it): no regeneration. Frontend: fr/en labels;
+  `npx tsc --noEmit` clean, prettier clean, vitest on `ppt_builder/`, `src/locales` and
+  `AgentFormModal/` 79 passed; a throwaway render of `CapabilityConfigForm` with the four
+  widget fields and `variety_check` showed the widget once and the select beside it (generic
+  `TuningFieldRenderer` path, option labels from `fields.variety_check.options.*`).
+  `fred-performance-reviewer` on the tool path: no new I/O, no shared state; the setting is
+  read from the turn's config when the tool is built; `_repeats` (budget, spread) 0.4-0.5 ms
+  on a 29-slide Paintress plan inside `assign`, which stays in `asyncio.to_thread`; assign
+  365-372 ms vs 367 ms at WP18 on the same plan and host (median of 7). The LLM-path cost is
+  the mode's: `kind` asks add model calls (+29 % in the table above). No finding.
 - WP18: package `make code-quality` passed; `make test` 389 passed, 4 skipped (2 new in
   `test_assign.py` for the hints and their ranking, 1 for repeats beside problems, 2 in
   `test_build_tool.py`: no ask after a fit repair, ask merged with problems); with
