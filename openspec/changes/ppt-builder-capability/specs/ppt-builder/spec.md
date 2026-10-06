@@ -249,7 +249,7 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 #### Scenario: First deck asked to vary once
 
 - **GIVEN** a conversation whose outputs folder holds no deck yet
-- **WHEN** the assignment uses one template slide that is not a cover, section, agenda or closing three times or more, and the template has an unused variant of its kind or an unused slide of another such kind
+- **WHEN** the variety check is `template_slide` (the default) and the assignment uses one template slide that is not a cover, section, agenda or closing three times or more, and the template has an unused variant of its kind or an unused slide of another such kind
 - **THEN** no deck is written and `needs_revision` names the repeated slides and the alternatives with the content each suits; the next call is built as sent, even when it repeats the same plan
 
 #### Scenario: Later deck keeps the note
@@ -267,14 +267,14 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 #### Scenario: One kind on three slides is a repeat
 
 - **GIVEN** a conversation whose outputs folder holds no deck yet
-- **WHEN** one non-structural kind (for example `bullets`) is used on three slides or more, even on three different template slides
+- **WHEN** the variety check is `kind` and one non-structural kind (for example `bullets`) is used on three slides or more, even on three different template slides
 - **THEN** no deck is written and `needs_revision` names those slides and the kind, once per turn; a resend is built as sent; cover, section, agenda and closing slides never count as a kind repeat
 
 #### Scenario: Alternatives read from the content
 
 - **GIVEN** a kind repeat whose slides hold dated lines on one slide and `Label :` header lines followed by `- ` lines on two others
 - **WHEN** the variety ask is returned
-- **THEN** it names the first slide with `timeline` and the two others with `two_columns` or `cards`, only when the template offers that kind with a slide holding that many entries; the suggestions come from text patterns, without any model call
+- **THEN** it names the first slide with `timeline` and the two others with `two_columns` and `cards` (one kind per slide, spread across kinds), only when the template offers that kind with a slide holding that many entries; the suggestions come from text patterns, without any model call
 
 #### Scenario: Variety asked on the first call only
 
@@ -300,6 +300,24 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **GIVEN** a conversation where a deck was already delivered
 - **WHEN** a new plan uses one non-structural kind on three slides or more
 - **THEN** the deck is built and the success message names the slides, the kind and the content-based alternatives
+
+#### Scenario: Structural slides are never part of a repeat
+
+- **GIVEN** a plan whose agenda slide, too long for the template's agenda slide, is built on a bullets slide, beside two bullets slides
+- **WHEN** the first call of the turn is assessed
+- **THEN** no variety ask is returned: a slide asked (or inferred) as cover, section, agenda or closing, or built on such a template slide, never counts towards a repeat and is never named in an ask
+
+#### Scenario: Suggestions capped by the template's variants
+
+- **GIVEN** a template with a single `figures` variant and a deck that already has one figures slide
+- **WHEN** a variety ask is returned
+- **THEN** neither its suggestions nor its options offer `figures`; a kind is offered only while its distinct variants outnumber the deck's slides of that kind, counting each suggestion of the same answer
+
+#### Scenario: Variety check setting
+
+- **GIVEN** the capability's `variety_check` setting, `template_slide` (default), `kind` or `off`
+- **WHEN** a deck is built on the next turn after the setting changed
+- **THEN** the ask follows the setting without re-analysing the template; `off` never asks; every mode keeps the passive note and the choice guide; an agent saved before the setting existed uses `template_slide`
 
 #### Scenario: Empty item pictures are a cost
 

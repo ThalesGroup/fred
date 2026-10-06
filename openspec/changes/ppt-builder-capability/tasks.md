@@ -1,6 +1,6 @@
 Paths are relative to `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/` unless rooted; tests under `libs/capabilities/fred-capability-ppt-filler/tests/`. Each work package (WP) names the files it owns; a WP edits only its own files.
 
-**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15 → WP16 → WP17 → WP18. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
+**Order:** WP0 → { WP1, WP2, WP6, WP10 } in parallel (WP1.1b needs WP10.0) → { WP3, WP5 } → WP4 → { WP7, WP8 } → WP9 → WP11 → WP12 → { WP13, WP14 } → WP15 → WP16 → WP17 → WP18 → WP19. Q7–Q11 resolved 2026-10-06 (design.md). WP7 is blocked on the developer's `fred_template.pptx`; WP9 runs with the interim built-in source if it has not landed. WP2 lands its model types (task 2.1) first so WP3/WP5 can start against them; WP3 codes against the WP1 port interface and a fake until WP1 merges.
 
 ## Kept from the first iteration (done, still valid)
 
@@ -214,3 +214,14 @@ Owns: `assign.py` (repeats beside problems, content shape lengths, fit hints), `
 - [x] 18.3 Each content-based suggestion carries what the favoured variant holds (items max and item fields, or exactly 2 columns, with sizes from the inventory) and a shorten hint when the slide's longest entry exceeds its room
 - [x] 18.4 Tests: ask only on the first call; no ask after a fit repair; merged ask + problems in one revision; hints carry the inventory's numbers; resend built; later deck note only
 - [x] 18.5 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` sequentially (14 prompts, paintress rules + vision, corporate, builtin) vs WP16 and WP17; `fred-performance-reviewer` on the tool path; `verification.md`
+
+## WP19. Variety check setting, capped suggestions (D18)
+
+Owns: `assign.py` (structural exclusion, grouping by mode, caps, spread), `tools.py` (mode-gated ask), `capability.py` (`variety_check` config + `FieldSpec`), `eval/` (`--variety`), frontend locales fr/en, Help Center fr/en, tests `test_assign.py`, `test_build_tool.py`, capability tests, `verification.md`.
+
+- [ ] 19.1 Structural slides (requested/inferred kind or template slide kind cover/section/agenda/closing) grouped apart, never revisable; the small-model evidence plan (agenda built on a bullets slide + 2 bullets slides) gets no ask
+- [ ] 19.2 Caps: a kind is suggested or offered only while its distinct variants exceed the deck's slides of that kind (shared across one answer's suggestions); one suggested kind per slide, the least suggested so far
+- [ ] 19.3 `variety_check` (`template_slide` default, `kind`, `off`) on `PptBuilderConfig` + select `FieldSpec`; tool asks per mode; passive note kept in every mode; not in `labelling_key`; missing value → default
+- [ ] 19.4 Frontend fr/en title, description, option labels; generic form renders it (checked); Help Center fr/en mentions it; ppt_builder slice regenerated only if the dump changes
+- [ ] 19.5 Tests: one figures variant → at most one figures suggestion; structural slides never suggested; spread across kinds; small-model plan no ask; each mode's behaviour; default for a missing value; setting not in `labelling_key`
+- [ ] 19.6 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `make eval` strictly sequential, final code, 14 prompts: `template_slide` vs `kind` on Paintress rules + vision and corporate rules (`mistral-small`), Paintress rules (`mistral-medium`); `off` on Paintress rules (`mistral-small`); `fred-performance-reviewer` on the tool path; `verification.md` with a recommendation for the default
