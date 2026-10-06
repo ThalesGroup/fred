@@ -317,7 +317,7 @@ class RunResult:
 
 
 def _build_tool(
-    variant: Variant, workspace: MemoryWorkspace, variety: VarietyCheck
+    variant: Variant, workspace: MemoryWorkspace, variety: VarietyCheck, max_uses: int
 ) -> BaseTool:
     """The tool the capability's middleware registers once the analysis is in
     the pod's cache, with the template read from memory."""
@@ -325,7 +325,9 @@ def _build_tool(
         identity=CapabilityIdentity(
             user_id="eval", session_id="eval", agent_instance_id="eval-instance"
         ),
-        config=PptBuilderConfig(template_sha256="eval", variety_check=variety),
+        config=PptBuilderConfig(
+            template_sha256="eval", variety_check=variety, variety_max_uses=max_uses
+        ),
         turn_options=EmptyModel(),
         services=RuntimeServices(workspace_fs=cast(Any, workspace)),
     )
@@ -338,11 +340,15 @@ def _build_tool(
 
 
 async def run_one(
-    variant: Variant, prompt_id: str, profile: Profile, variety: VarietyCheck
+    variant: Variant,
+    prompt_id: str,
+    profile: Profile,
+    variety: VarietyCheck,
+    max_uses: int,
 ) -> RunResult:
     _renders.set([])
     workspace = MemoryWorkspace()
-    tool = _build_tool(variant, workspace, variety)
+    tool = _build_tool(variant, workspace, variety, max_uses)
     model = profile.model.bind_tools([tool])
     messages: List[BaseMessage] = [
         SystemMessage(content=f"{_BASE_PROMPT}\n\n{_BUILD_INSTRUCTIONS}"),
@@ -705,8 +711,10 @@ async def contact_sheet(pdf: bytes, target: Path) -> None:
 # --- main ------------------------------------------------------------------------------
 
 
-def _templates(values: Sequence[str]) -> List[Tuple[str, Optional[Path]]]:
-    found: List[Tuple[str, Optional[Path]]] = [("builtin", None)]
+def _templates(
+    values: Sequence[str], builtin: bool
+) -> List[Tuple[str, Optional[Path]]]:
+    found: List[Tuple[str, Optional[Path]]] = [("builtin", None)] if builtin else []
     for value in values:
         name, _, path = value.rpartition("=")
         found.append((name or Path(path).stem, Path(path)))
@@ -720,8 +728,9 @@ async def main() -> None:
         action="append",
         default=[t for t in os.environ.get("PPT_EVAL_TEMPLATES", "").split(",") if t],
         help="[name=]path.pptx, repeatable (env PPT_EVAL_TEMPLATES, comma-separated). "
-        "The built-in template always runs (its stored rules analysis).",
+        "The built-in template runs too (its stored rules analysis) unless --no-builtin.",
     )
+    parser.add_argument("--no-builtin", action="store_true")
     parser.add_argument("--modes", default="vision,rules")
     parser.add_argument("--prompts", default=",".join(PROMPTS))
     parser.add_argument("--profile", default=os.environ.get("PPT_EVAL_PROFILE"))
@@ -737,6 +746,7 @@ async def main() -> None:
     parser.add_argument(
         "--variety", choices=get_args(VarietyCheck), default="template_slide"
     )
+    parser.add_argument("--max-uses", type=int, choices=range(1, 6), default=2)
     args = parser.parse_args()
 
     rebuild_ui_part_union([PptPreviewPart])
@@ -749,11 +759,11 @@ async def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     print(
         f"agent model {agent.profile_id}, vision model {vision.profile_id}, "
-        f"variety check {args.variety}"
+        f"variety check {args.variety}, max uses {args.max_uses}"
     )
 
     variants: List[Variant] = []
-    for name, path in _templates(args.template):
+    for name, path in _templates(args.template, not args.no_builtin):
         if path is None:
             content, inventory = builtin_template()
             variants.append(Variant(name, "rules", content, inventory, 0.0, {}))
@@ -773,7 +783,9 @@ async def main() -> None:
 
     async def bounded(variant: Variant, prompt_id: str) -> RunResult:
         async with semaphore:
-            result = await run_one(variant, prompt_id, agent, args.variety)
+            result = await run_one(
+                variant, prompt_id, agent, args.variety, args.max_uses
+            )
         print(
             f"{variant.template}/{variant.mode}/{prompt_id}: "
             f"{'ok' if result.success else result.failure} repairs={result.repairs} "
@@ -795,10 +807,18 @@ async def main() -> None:
     (args.out / "summary.md").write_text(summary, encoding="utf-8")
     print(summary)
     if args.contact_sheets:
-        await _sheets(list(results), variants, args.out / "sheets")
+        await _sheets(
+            list(results), variants, args.out / "sheets", args.variety, args.max_uses
+        )
 
 
-async def _sheets(results: List[RunResult], variants: List[Variant], out: Path) -> None:
+async def _sheets(
+    results: List[RunResult],
+    variants: List[Variant],
+    out: Path,
+    variety: VarietyCheck,
+    max_uses: int,
+) -> None:
     out.mkdir(exist_ok=True)
     by_key = {(v.template, v.mode): v for v in variants}
     for result in results:
@@ -806,10 +826,13 @@ async def _sheets(results: List[RunResult], variants: List[Variant], out: Path) 
             continue
         variant = by_key[(result.template, result.mode)]
         workspace = MemoryWorkspace()
-        # A fresh tool's first call: "off", or a variety ask would replace the deck.
-        tool = _build_tool(variant, workspace, "off")
+        # The run's settings, so the assigner picks the same slides; a first
+        # call may be a variety ask, and the resend is built as sent.
+        tool = _build_tool(variant, workspace, variety, max_uses)
         _renders.set([])
         await tool.ainvoke(result.plan)
+        if not workspace.files:
+            await tool.ainvoke(result.plan)
         pdf = next((b for k, b in workspace.files.items() if k.endswith(".pdf")), None)
         if pdf is not None:
             stem = f"{result.template}-{result.mode}-{result.prompt}"
