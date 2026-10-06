@@ -406,6 +406,15 @@
           "title": "Model that reads the slides",
           "description": "Leave the agent's model to use the one it answers with.",
           "agentDefault": "The agent's model"
+        },
+        "variety_check": {
+          "title": "Variety check",
+          "description": "Before the first presentation of a conversation, the agent is asked to vary its slides when the same template slide, or the same type of slide, comes back three times or more.",
+          "options": {
+            "template_slide": "By template slide",
+            "kind": "By slide type",
+            "off": "None"
+          }
         }
       },
       "form": {

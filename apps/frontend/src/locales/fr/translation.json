@@ -406,6 +406,15 @@
           "title": "Modèle qui lit les slides",
           "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
           "agentDefault": "Le modèle de l'agent"
+        },
+        "variety_check": {
+          "title": "Vérification de la variété",
+          "description": "Avant la première présentation d'une conversation, l'agent est invité à varier ses slides quand la même slide du modèle, ou le même type de slide, revient trois fois ou plus.",
+          "options": {
+            "template_slide": "Par slide du modèle",
+            "kind": "Par type de slide",
+            "off": "Aucune"
+          }
         }
       },
       "form": {
