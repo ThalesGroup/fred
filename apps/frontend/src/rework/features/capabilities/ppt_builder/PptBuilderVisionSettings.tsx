@@ -78,7 +78,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
       {useVision && (
         <div className={styles.dependent}>
           <Select
-            size="medium"
+            size="small"
             label={t("capability.ppt_builder.fields.labelling_model.title")}
             options={options}
             value={selected}
