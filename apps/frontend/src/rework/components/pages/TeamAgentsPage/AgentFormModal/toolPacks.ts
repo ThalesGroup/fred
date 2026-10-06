@@ -94,10 +94,6 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         icon: "database",
         titleKey: "rework.teams.formAgent.capabilities.packs.teamResources.title",
         descriptionKey: "rework.teams.formAgent.capabilities.packs.teamResources.description",
-        // The filesystem capability (mcp-knowledge-flow-fs) is deliberately NOT
-        // part of this pack: the /fs runtime boundary is not agent/team-scoped
-        // yet (#2334, AGENT-FILESYSTEM-HARDENING-RFC F1). Do not re-add it here
-        // until that lands.
         includes: [
           { capabilityId: CAP_DOCUMENT_ACCESS, labelKey: "capability.document_access.name" },
           { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },

@@ -311,7 +311,7 @@ class MCPServerRef(BaseModel):
       `fred_sdk.support.builtins` instead of repeating raw string ids
 
     Example:
-    - `MCPServerRef(id="mcp-knowledge-flow-fs")`
+    - `MCPServerRef(id="mcp-knowledge-flow-mcp-tabular")`
     """
 
     id: str = Field(..., validation_alias=AliasChoices("id", "name"))

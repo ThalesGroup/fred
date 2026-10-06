@@ -40,7 +40,7 @@ Capabilities (modular agent features)
 
 MCP server references
 ---------------------
-    from fred_sdk import MCPServerRef, MCP_SERVER_KNOWLEDGE_FLOW_CORPUS
+    from fred_sdk import MCPServerRef, MCP_SERVER_KNOWLEDGE_FLOW_TABULAR
 
 What is NOT exported here (execution engine, lives in fred-runtime):
     - ReActRuntime, GraphRuntime, DeepAgentRuntime  → fred_runtime.react / .graph / .deep
@@ -73,8 +73,6 @@ if TYPE_CHECKING:
     # MCP server references
     # ---------------------------------------------------------------------------
     from fred_sdk.authoring.knowledge_flow_mcp import (
-        MCP_SERVER_KNOWLEDGE_FLOW_CORPUS,
-        MCP_SERVER_KNOWLEDGE_FLOW_FS,
         MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS,
         MCP_SERVER_KNOWLEDGE_FLOW_TABULAR,
@@ -204,8 +202,6 @@ _LAZY: dict[str, str] = {
     "ui_field": "fred_sdk.authoring.api",
     "inspect_agent": "fred_sdk.authoring.inspection",
     # MCP server references
-    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS": "fred_sdk.authoring.knowledge_flow_mcp",
-    "MCP_SERVER_KNOWLEDGE_FLOW_FS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS": "fred_sdk.authoring.knowledge_flow_mcp",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR": "fred_sdk.authoring.knowledge_flow_mcp",
@@ -323,8 +319,6 @@ __all__ = [
     "inspect_agent",
     # MCP server references
     "MCPServerRef",
-    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
-    "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",

@@ -854,54 +854,6 @@
   },
   "mcp": {
     "servers": {
-      "corpus": {
-        "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management.",
-        "name": "Corpus Management",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Document library picker",
-              "description": "Show a document library selector in the chat interface."
-            },
-            "libraries_binding": {
-              "title": "Bind to specific libraries",
-              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
-            },
-            "bound_library_ids": {
-              "title": "Bound document libraries",
-              "description": "Restrict the chat library picker to this preselected set of document libraries."
-            },
-            "documents_selection": {
-              "title": "Document picker",
-              "description": "Show a document selector in the chat interface."
-            },
-            "attach_files": {
-              "title": "File attachments",
-              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-            },
-            "search_policy_enabled": {
-              "title": "Search policy picker in chat",
-              "description": "Allow users to switch the search policy from the chat interface."
-            },
-            "search_policy": {
-              "title": "Default search policy",
-              "description": "Search strategy used when the user has not overridden it."
-            },
-            "search_rag_scope_enabled": {
-              "title": "RAG scope picker in chat",
-              "description": "Allow users to switch the RAG scope from the chat interface."
-            },
-            "search_rag_scope": {
-              "title": "Default RAG scope",
-              "description": "Scope used when the user has not overridden it."
-            }
-          }
-        }
-      },
-      "filesystem": {
-        "description": "Ability to browse all folders and files present in the resources.",
-        "name": "Browse the resource folders"
-      },
       "jira": {
         "description": "Allow your agent to interact with Jira",
         "name": "Jira access"

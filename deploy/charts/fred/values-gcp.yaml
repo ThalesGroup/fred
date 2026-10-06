@@ -143,7 +143,6 @@ applications:
 
       mcp:
         opensearch_ops_enabled: false
-        filesystem_enabled: true
 
     # MINIO_SECRET_KEY is not required on GCS. Keep DB + auth secrets in .env/secret.
     dotenv:

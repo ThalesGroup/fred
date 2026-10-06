@@ -23,13 +23,12 @@ Why this module exists:
   already get a blank-slate ReAct one
 - kept intentionally minimal, matching `DeepAgentRuntime`'s own scope: no
   tool approval, no per-turn tool-call limit (both raise `NotImplementedError`
-  at runtime if set), and no optional filesystem MCP server by default
+  at runtime if set)
 
-Filesystem is deliberately excluded from `default_mcp_servers`:
+The legacy filesystem MCP is retired:
 - `DeepAgentRuntime` supplies the built-in safe filesystem tools against its
   conversation-scoped root workspace and `/.deep/` mount; `execute` remains
-  unavailable. The separate Knowledge Flow filesystem capability is neither
-  required nor selected by this template.
+  unavailable; it does not require a separate filesystem MCP.
 
 How to use it:
 - import `DEEP_ASSISTANT_AGENT` and register it in the pod registry
@@ -79,9 +78,7 @@ class DeepAssistantDefinition(DeepAgentDefinition):
     Key design choices:
     - blank-slate: operators pick tools and write their own prompt, same
       enrollment pattern as the ReAct general assistant
-    - no filesystem MCP server in `default_mcp_servers` (see module
-      docstring); operators who want it can still add it explicitly via the
-      control-plane agent form once they've made that call deliberately
+    - Deep's built-in filesystem tools need no separate filesystem MCP
     - one `prompts.system` field, same as every other blank-slate template
 
     Example:
@@ -115,7 +112,6 @@ class DeepAssistantDefinition(DeepAgentDefinition):
         MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),
         # Removed from the prod defaults (#2429) - uncomment to restore (and
         # re-import the constants from fred_sdk):
-        # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_CORPUS),
         # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS),
         # MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS),
     )
