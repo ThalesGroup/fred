@@ -4,7 +4,7 @@ title: "Explicitly continue unfinished Graph work"
 impact: none
 configuration: none
 configuration_reason: "Runtime and frontend behaviour only; no configuration key, default or chart value changes."
-no_action_reason: "No schema or data migration: detection reads existing checkpoints and continuation admission uses owner-lifetime PostgreSQL or local SQLite locks."
+no_action_reason: "No schema or data migration: continuation uses existing checkpoints and PostgreSQL or local file-backed SQLite locks. Keep one active execution per conversation; an interrupted step may repeat an external effect, so agent authors must ensure idempotency as described in the source note."
 ---
 ## Applicability
 

@@ -2,6 +2,7 @@
 schema: 1
 title: "Package MCP catalogs and retire legacy local MCP tools"
 impact: minor
+after: [2910-remove-unused-task-tray]
 configuration: production
 configuration_reason: "Fred's internal MCP catalog moves into fred-capability-mcp, internal endpoints use service references and instructions use prompt_file. The Helm-managed MCP catalog, legacy document-search and GitHub entries, and inprocess transport are retired."
 ---
@@ -26,7 +27,10 @@ deployment-owned MCP servers; its default `servers: []` leaves the packaged
 servers unchanged. Move third-party entries from the old
 `applications.fred-agents.mcp_catalog` value to
 `applications.fred-agents.mcp_catalog_external`. The old Helm key is no longer
-accepted. Duplicate IDs across installed and external servers fail startup.
+accepted. Mark custom `chat_options.bound_library_ids` fields with
+`scope_private: true` before cross-team agent copies, as explained in the
+[configuration-copy note](capability-config-copy.md). Duplicate IDs across
+installed and external servers fail startup.
 The production image includes a default `models_catalog.yaml`; the Fred chart
 mounts its configured catalog from `applications.fred-agents.models_catalog` at
 the same path. Deployments without this chart can use the image default, mount
@@ -66,7 +70,9 @@ Live remote transport remains in `fred-runtime`.
    old Helm `mcp_catalog` value to `mcp_catalog_external`; remove obsolete local
    MCP entries and prompt references from custom files before updating pods.
 2. Check the control-plane database revision with `alembic current`. If it is
-   before `ba2c3c7fd0c1`, apply the normal `alembic upgrade head`.
+   before `ba2c3c7fd0c1`, use the single coordinated upgrade in the
+   [CGU note](2972-configurable-gcu-versions.md); do not migrate with old readers
+   still running.
    Revision `ba2c3c7fd0c1` removes `mcp-knowledge-flow-mcp-text` and
    `mcp-web-github-readonly`, including both historical `mcp:`-prefixed forms,
    from `selected_capability_ids` and `capability_config`. Unrelated tuning,
@@ -77,14 +83,16 @@ Live remote transport remains in `fred-runtime`.
    backup available, use the same code/image version that originally applied
    this revision to run `alembic downgrade -1`. Its downgrade is a no-op for
    agent tuning and returns to that version's actual predecessor. Then switch
-   to the updated code/image and run `alembic upgrade head`. The revision now
+   to the updated code/image and run the coordinated upgrade with old readers
+   stopped as described in the CGU note. The revision now
    follows `a7e9c2d41063`; older feature builds followed `c4d7e2a91b30`
    or `21e235382895`. Using
    the original version for the downgrade ensures the intervening migrations
    are applied by the subsequent upgrade. Do not use this replay procedure if
    the database is at a later or divergent revision: it would also downgrade
    other migrations.
-3. Deploy the updated pods and chart, then resume traffic. ReAct RAG, Mindmap and
+3. Deploy the updated pods and chart in the coordinated upgrade, then resume traffic
+   and agent writes after validation. ReAct RAG, Mindmap and
    Comparison keep their IDs but default to `document_access`. Stored selections
    that are null/absent still inherit defaults; explicit empty lists remain empty.
 4. Where desired, explicitly select and authorize `document_access` for agents
@@ -105,8 +113,11 @@ policy. Test document search on an authorized agent and a remaining remote MCP.
 
 ## Rollback
 
-Roll back images and chart together and restore affected tuning from the backup
-if needed. Alembic downgrade does not reconstruct removed selections/configuration.
+For a full rollback to v3.1.1, follow the
+[coordinated rollback](2972-configurable-gcu-versions.md), including the CGU
+downgrade guard, before restarting old readers. Roll back images and chart
+together and restore affected tuning from the backup if needed. Alembic
+downgrade does not reconstruct removed selections/configuration.
 Restore literal URLs and inline instructions before using symbolic/file-reference
 catalogs with an older runtime. Do not overwrite newer agent edits during restoration.
 

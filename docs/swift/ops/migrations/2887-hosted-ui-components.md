@@ -7,7 +7,9 @@ configuration_reason: "No configuration keys or defaults change. Deployments usi
 ---
 ## Applicability
 
-Fred deployments upgrading with PR #2890, including the built-in evaluator removal tracked by #2904.
+Fred deployments using built-in evaluations before upgrading to v3.2.0, including
+the evaluator removal tracked by #2904. Deployments not using evaluations need
+no evaluator setup.
 
 ## Prerequisites
 
@@ -35,4 +37,5 @@ Restore the previous Fred frontend image to recover the built-in screens. Keep t
 
 ## Limitations
 
-Publishing the alpha.3 npm package is a separate operation. Its hosted surface is limited to what hosted applications use: `DataTable` without row selection, a single overlay `InlineDrawer`, and `ToastProvider`/`useToast`; `TablePagination` and the direct `Toast` are not exported. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.
+Publishing the frontend npm packages is a separate operation; the final
+candidates in this release are aligned on alpha.4. The UI package's hosted surface is limited to what hosted applications use: `DataTable` without row selection, a single overlay `InlineDrawer`, and `ToastProvider`/`useToast`; `TablePagination` and the direct `Toast` are not exported. The removal does not publish packages, deploy the external evaluator, change evaluation permissions or delete historical evaluations.
