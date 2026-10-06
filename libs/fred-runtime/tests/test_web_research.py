@@ -161,6 +161,8 @@ async def test_erasure_fences_late_begin_and_is_shared_by_new_store(service):
             query="LATE-QUERY",
         )
     assert await other_replica.list(user_id="user", limit=10) == []
+    with pytest.raises(WebResearchError, match="rejected"):
+        await backend.bind(binding()).execute(WebSearchRequest(query="LATE-QUERY"))
     # Other subjects retain independent access.
     await other_replica.begin(
         request_id="other",
