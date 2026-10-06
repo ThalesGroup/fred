@@ -336,6 +336,15 @@ def zone_summary(pattern: Pattern) -> str:
                 field = ITEM_FIELDS.get(zone.role)
                 if field:
                     fields.setdefault(field, []).append(zone)
+        if (
+            "heading" not in fields
+            and "label" not in fields
+            and len(fields.get("text", [])) == group.count
+        ):
+            # The renderer writes the heading in bold atop the text (`_heading_lead`).
+            fields = {
+                ("heading+text" if k == "text" else k): v for k, v in fields.items()
+            }
         shown = ", ".join(
             name + ("" if name == "image" else _limit(zones))
             for name, zones in fields.items()

@@ -566,8 +566,15 @@ def test_items_shown_by_another_group_of_the_slide_are_not_reported():
     steps = _pattern("Process").groups[0]  # number, heading, body
     item = PlanItem(number="1", label="People", heading="Start", text="Kick-off")
     plan = SlidePlan(items=[item])
-    assert _unused_item_fields([figures, steps], plan) == []
-    assert _unused_item_fields([figures], plan) == ["items' heading", "items' text"]
+    assert (
+        _unused_item_fields(
+            [figures, steps], plan, (INVENTORY.slide_width, INVENTORY.slide_height)
+        )
+        == []
+    )
+    assert _unused_item_fields(
+        [figures], plan, (INVENTORY.slide_width, INVENTORY.slide_height)
+    ) == ["items' heading", "items' text"]
 
 
 def test_preview_copy_widens_one_line_text_the_delivered_deck_keeps():
@@ -735,8 +742,8 @@ def test_catalogue_names_columns_when_a_pattern_has_several_bodies():
     line = catalogue(
         TemplateInventory(slide_width=1, slide_height=1, patterns=[columns, contact])
     )
-    assert "two_columns: columns.bullets×2" in line
-    assert "closing: bullets, one per line,×2" in line
+    assert "two_columns: Contact: columns.bullets×2" in line
+    assert "closing: Contact: bullets, one per line,×2" in line
 
 
 def test_catalogue_quotes_no_limit_for_a_box_that_grows_with_its_text():

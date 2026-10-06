@@ -130,7 +130,10 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     description = tools[BUILD_TOOL_NAME].description
     assert "slide:" not in description and "layout:" not in description
     assert "Hidden cover" not in description
-    assert "- process: title" in description
+    process = next(
+        line for line in description.splitlines() if line.startswith("- process: ")
+    )
+    assert ": title" in process  # variant label first, then its zones
     assert "items max 3 [number, heading, text" in description
     assert "≈chars per line × lines" in description
     # The only cover was excluded: no cover kind, and no cover rule announced.

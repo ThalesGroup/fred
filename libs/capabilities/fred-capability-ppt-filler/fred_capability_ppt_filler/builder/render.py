@@ -52,6 +52,7 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
+    PlanItem,
     SlidePlan,
     has_content,
 )
@@ -794,7 +795,34 @@ def _assign_text(
     return out
 
 
-def _unused_item_fields(groups: Sequence[RepeatGroup], plan: SlidePlan) -> List[str]:
+def _lead_lines(item: PlanItem, at: str) -> List[_Line]:
+    """An item's heading in bold, unbulleted, above its text."""
+    lead = _Line(f"**{item.heading}**", heading=True, source=at + "heading")
+    return [lead] + _lines_from_bullets([item.text or ""], at + "text")
+
+
+def _heading_lead(
+    zones: Sequence[Zone], item: PlanItem, at: str, size: Tuple[int, int]
+) -> Optional[Zone]:
+    """The single text zone an item's heading leads when no zone shows it (as a
+    subtitle leads a body); None when another zone shows it or it does not fit."""
+    roles = {z.role for z in zones}
+    if not item.heading or roles & {"heading", "title", "subtitle"}:
+        return None
+    if "label" in roles and not item.label:
+        return None  # the label zone shows the heading
+    bodies = [z for z in zones if z.role in ("body", "caption")]
+    if len(bodies) != 1:
+        return None
+    zone = bodies[0]
+    if not zone.grows and _fit(zone, _lead_lines(item, at), *size)[2]:
+        return None
+    return zone
+
+
+def _unused_item_fields(
+    groups: Sequence[RepeatGroup], plan: SlidePlan, size: Tuple[int, int]
+) -> List[str]:
     """Item fields the plan fills that none of the slide's groups has a zone for
     (every group is fed the same items)."""
     roles = {role for group in groups for role in group.item_zones}
@@ -804,9 +832,17 @@ def _unused_item_fields(groups: Sequence[RepeatGroup], plan: SlidePlan) -> List[
     counting = len(numbers) == len(plan.items) and numbers == [
         f"{n:0{len(numbers[0])}d}" for n in range(1, len(numbers) + 1)
     ]
-    for item in plan.items[: max((g.count for g in groups), default=0)]:
-        heading_shown = bool(roles & {"heading", "title", "subtitle"}) or (
-            "label" in roles and not item.label
+    for index, item in enumerate(
+        plan.items[: max((g.count for g in groups), default=0)]
+    ):
+        heading_shown = (
+            bool(roles & {"heading", "title", "subtitle"})
+            or ("label" in roles and not item.label)
+            or any(
+                _heading_lead(g.items[index], item, "", size) is not None
+                for g in groups
+                if index < g.count
+            )
         )
         checks = (
             ("number", item.number, "number" in roles or counting),
@@ -822,7 +858,7 @@ def _unused_item_fields(groups: Sequence[RepeatGroup], plan: SlidePlan) -> List[
 
 
 def _assign_group(
-    group: RepeatGroup, plan: SlidePlan
+    group: RepeatGroup, plan: SlidePlan, size: Tuple[int, int]
 ) -> Tuple[Dict[str, List[_Line]], Dict[str, Optional[str]], int]:
     """Lines and image ids per item zone key; returns ``(text, images, used items)``."""
     text: Dict[str, List[_Line]] = {}
@@ -833,8 +869,11 @@ def _assign_group(
         zones = group.items[index]
         has_heading = any(z.role == "heading" for z in zones)
         at = f"items[{index}]."
+        lead = _heading_lead(zones, item, at, size)
         for zone in zones:
-            if zone.role == "number":
+            if zone is lead:
+                text[zone.key] = _lead_lines(item, at)
+            elif zone.role == "number":
                 value = item.number or _auto_number(zone.sample, index)
                 text[zone.key] = (
                     _lines_from_bullets([value], at + "number") if value else []
@@ -1051,10 +1090,14 @@ class _Renderer:
             lost.append(f"{len(plan_images) - len(zmap.images)} image(s)")
         if plan.items and not pattern.groups:
             lost.append("items")
-        lost.extend(_unused_item_fields(pattern.groups, plan))
+        lost.extend(
+            _unused_item_fields(pattern.groups, plan, (self.width, self.height))
+        )
 
         for group in pattern.groups:
-            group_text, group_images, used = _assign_group(group, plan)
+            group_text, group_images, used = _assign_group(
+                group, plan, (self.width, self.height)
+            )
             text.update(group_text)
             image_ids.update(group_images)
             if len(plan.items) > group.count:

@@ -505,3 +505,129 @@ def test_a_cover_with_only_a_heading_is_described_as_taking_the_title():
     )
     assert zone_summary(cover) == "title ≈60 chars"
     assert _labels(_inventory(cover), SlidePlan(title="Kick-off")) == ["Cover"]
+
+
+# --- deck-wide variety --------------------------------------------------------------------------
+
+
+def _points(n: int, kind: Any = "bullets") -> SlidePlan:
+    return SlidePlan(title=f"Points {n}", bullets=["a", "b"], kind=kind)
+
+
+def test_a_b_a_b_is_avoided_when_a_third_pattern_fits():
+    three = _inventory(
+        _bullets("slide:1", "A", source="slide"),
+        _bullets("slide:2", "B", source="slide"),
+        _bullets("slide:3", "C", source="slide"),
+    )
+    labels = _labels(three, *(_points(n) for n in range(4)))
+    assert labels[:3] == ["A", "B", "C"]
+    assert labels[3] != labels[1]  # no A B A B: the reuse goes to the oldest slide
+
+
+def test_a_first_reuse_beats_another_kind_but_a_second_does_not():
+    def photo(pid: str, label: str) -> Pattern:
+        pattern = _bullets(pid, label, source="slide")
+        image = Zone(key="pic", role="image", box=Box(x=500, y=200, w=400, h=600))
+        return pattern.model_copy(
+            update={"kind": "image_text", "zones": pattern.zones + [image]}
+        )
+
+    inventory = _inventory(
+        _bullets("slide:1", "Only bullets", source="slide"),
+        _bullets("slide:2", "Two cols", source="slide").model_copy(
+            update={"kind": "two_columns"}
+        ),
+        photo("slide:3", "Photo 1"),
+        photo("slide:4", "Photo 2"),
+    )
+    # Inferred, bullets then two_columns, one _KIND_STEP apart.
+    points = SlidePlan(title="Points", bullets=["a", "b"])
+    shot = SlidePlan(title="Site", bullets=["a"], image="doc")
+    assert _labels(inventory, points, shot, points, shot, points) == [
+        "Only bullets",
+        "Photo 1",
+        "Only bullets",  # first reuse: still cheaper than another kind
+        "Photo 2",
+        "Two cols",  # second reuse: another kind wins
+    ]
+
+
+def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
+    narrow = _bullets("slide:3", "Narrow", source="slide")
+    narrow.zones[1].chars_per_line, narrow.zones[1].max_lines = 2, 1
+    inventory = _inventory(
+        _bullets("slide:1", "A", source="slide"),
+        _bullets("slide:2", "B", source="slide"),
+        narrow,
+        *_cards_inventory().patterns,
+    )
+    slides = [
+        SlidePlan(title=f"P{n}", bullets=["a long enough line"], kind="bullets")
+        for n in range(5)
+    ]
+    assignment = assign(inventory, _plan(*slides))
+    (note,) = [n for n in assignment.notes if "all use" in n]
+    assert note.startswith("Slides 1, 3, 5 all use the template slide 'A'.")
+    # The unused variants of that kind, with their sizes; never another kind's.
+    assert "Narrow: title ≈60 chars; bullets ≈2 chars" in note
+    assert "cards" not in note
+
+
+def test_empty_item_pictures_cost_like_empty_slide_pictures():
+    inventory = _cards_inventory()
+    text = inventory.patterns[0]
+    imaged = text.model_copy(
+        update={
+            "id": "slide:3",
+            "label": "Image cards",
+            "groups": [
+                text.groups[0].model_copy(
+                    update={
+                        "item_zones": ["image", "body"],
+                        "items": [
+                            [
+                                Zone(
+                                    key=f"pic{i}",
+                                    role="image",
+                                    box=Box(x=0, y=0, w=1, h=1),
+                                )
+                            ]
+                            + item
+                            for i, item in enumerate(text.groups[0].items)
+                        ],
+                    }
+                )
+            ],
+        }
+    )
+    plain = SlidePlan(title="Axes", items=[PlanItem(text="Close")] * 3)
+    size = (inventory.slide_width, inventory.slide_height)
+    assert misfit(imaged, plain, size)[1] > misfit(text, plain, size)[1]
+    pictured = SlidePlan(title="Axes", items=[PlanItem(text="Close", image="d")] * 3)
+    assert misfit(imaged, pictured, size)[1] == misfit(text, plain, size)[1]
+    # Without pictures, the icon-like text cards win over the image cards.
+    assert _labels(_inventory(imaged, text), plain) == ["Text cards"]
+
+
+def test_a_heading_and_text_item_fits_a_card_with_one_text_zone():
+    text_cards = _cards_inventory().patterns[0]
+    item = SlidePlan(title="Axes", items=[PlanItem(heading="Near", text="Close")] * 3)
+    size = (_cards_inventory().slide_width, _cards_inventory().slide_height)
+    reasons, cost = misfit(text_cards, item, size)
+    assert reasons == []
+    # A designed heading zone still reads better than a bold lead.
+    titled = _cards_inventory().patterns[1]
+    assert misfit(titled, item, size)[1] < cost
+    assert "heading+text" in zone_summary(text_cards)
+
+
+def test_a_heading_that_does_not_fit_beside_the_text_is_reported():
+    text_cards = _cards_inventory().patterns[0]
+    long_text = "word " * 24  # fits the 26 × 3 zone alone, not under a heading
+    item = SlidePlan(
+        title="Axes", items=[PlanItem(heading="Near", text=long_text.strip())] * 3
+    )
+    size = (_cards_inventory().slide_width, _cards_inventory().slide_height)
+    reasons, _ = misfit(text_cards, item, size)
+    assert any("items' heading" in r.text for r in reasons)

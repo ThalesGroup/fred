@@ -16,8 +16,8 @@
 
 A slide's candidates are the patterns that hold all of its content, of the
 requested kind first, then of the kinds its content suggests, then of any kind
-(each substitution is reported). A second-order Viterbi pass picks one per
-slide under the deck rules. A slide that fits nothing is a problem the model
+(each substitution is reported). A beam search picks one per slide under the
+deck rules, pricing every reuse of a template slide anywhere in the deck. A slide that fits nothing is a problem the model
 must fix, named down to the element (design.md D7, D8).
 """
 
@@ -62,8 +62,14 @@ _IMAGE_HOLE = 4.0  # an empty picture zone is removed, leaving a gap
 _EMPTY_ZONE = 1.5  # an unfilled text zone is swept away
 _UNUSED_ITEM = 0.5
 _SHRUNK = 1.0
+_HEADING_LEAD = 1.0  # a heading in bold atop the text: a heading zone reads better
+# Per earlier use anywhere in the deck: above the fit costs, so an unused slide
+# of the same kind wins, but below _KIND_STEP until the second reuse.
+_REUSE = 8.0
 _REPEAT = 3.0  # the same slide twice in a row
 _TRIPLE = 1000.0  # three in a row: taken only when nothing else fits
+_BEAM = 32
+_VARIETY_NOTE_USES = 3
 
 _MAX_KIND_OPTIONS = 3
 
@@ -250,7 +256,7 @@ def misfit(
                 f"trim to {capacity} items or split them over two slides",
             )
         )
-    lost.extend(_unused_item_fields(pattern.groups, slide))
+    lost.extend(_unused_item_fields(pattern.groups, slide, size))
     held = [w for w in lost if w.startswith("column ")]
     if held:
         most = int(held[0].split()[1]) - 1
@@ -271,7 +277,7 @@ def misfit(
             zone, lines, SLIDE_FIELDS.get(zone.role, "bullets"), size, reasons
         )
     for group in pattern.groups:
-        group_text, _, _ = _assign_group(group, slide)
+        group_text, _, _ = _assign_group(group, slide, size)
         item_zones = {z.key: z for item in group.items for z in item}
         long_items: Dict[str, List[Misfit]] = {}
         for key, lines in group_text.items():
@@ -279,6 +285,7 @@ def misfit(
             what = f"items[].{ITEM_FIELDS.get(zone.role, zone.role)}"
             found: List[Misfit] = []
             cost += _check_zone(zone, lines, what, size, found)
+            cost += _HEADING_LEAD if lines and lines[0].heading else 0.0
             for reason in found:
                 long_items.setdefault(what, []).append(reason)
         # One line per item field: six cards too long are one fix, not six.
@@ -292,6 +299,10 @@ def misfit(
             cost += 0.0 if images else _IMAGE_HOLE
         elif zone.role != "keep" and zone.key not in text:
             cost += _EMPTY_ZONE
+    for group in pattern.groups:
+        for item, zones in zip(slide.items, group.items):
+            holes = sum(1 for z in zones if z.role == "image")
+            cost += 0.0 if item.image else _IMAGE_HOLE * holes
     cost += _UNUSED_ITEM * max(0, capacity - len(slide.items)) if slide.items else 0.0
     if pattern.source == "layout":
         cost += _LAYOUT
@@ -432,41 +443,74 @@ def _substitution(slide: _Slide, chosen: Pattern, offered: set[str]) -> Optional
     )
 
 
-# (candidate at slide i-1, or -1 before the first; candidate at slide i)
-_State = Tuple[int, int]
+@dataclass
+class _Path:
+    cost: float
+    chosen: Tuple[int, ...]  # candidate index per slide so far
+    uses: Dict[str, int]
 
 
-def _viterbi(slides: List[_Slide]) -> List[Pattern]:
-    """Cheapest pattern sequence, penalising repeats; the state is the pair of
-    the last two choices so three in a row can be priced."""
-    best: Dict[_State, float] = {
-        (-1, b): cost for b, (_, cost) in enumerate(slides[0].candidates)
-    }
-    back: List[Dict[_State, _State]] = [{}]
-    for i in range(1, len(slides)):
-        prev, here = slides[i - 1].candidates, slides[i].candidates
-        before = slides[i - 2].candidates if i >= 2 else []
-        nxt: Dict[_State, float] = {}
-        ptr: Dict[_State, _State] = {}
-        for (a, b), total in best.items():
-            for c, (pattern, cost) in enumerate(here):
-                step = total + cost
-                if prev[b][0].id == pattern.id:
-                    step += _REPEAT
-                    if a >= 0 and before[a][0].id == pattern.id:
-                        step += _TRIPLE
-                if step < nxt.get((b, c), float("inf")):
-                    nxt[(b, c)] = step
-                    ptr[(b, c)] = (a, b)
-        best = nxt
-        back.append(ptr)
-    state = min(best, key=lambda s: best[s])
-    chosen = [state[1]]
-    for i in range(len(slides) - 1, 0, -1):
-        state = back[i][state]
-        chosen.append(state[1])
-    chosen.reverse()
-    return [slides[i].candidates[c][0] for i, c in enumerate(chosen)]
+def _beam(slides: List[_Slide]) -> List[Pattern]:
+    """Cheapest pattern sequence under a deck-wide reuse cost. The use counts
+    make the cost non-local, so a bounded beam replaces exact dynamic
+    programming; paths with the same last two choices and uses are merged."""
+    paths = [_Path(0.0, (), {})]
+    for i, slide in enumerate(slides):
+        steps: List[Tuple[float, int, int]] = []
+        for n, path in enumerate(paths):
+            last = slides[i - 1].candidates[path.chosen[-1]][0].id if i >= 1 else None
+            before = slides[i - 2].candidates[path.chosen[-2]][0].id if i >= 2 else None
+            for c, (pattern, cost) in enumerate(slide.candidates):
+                step = path.cost + cost + _REUSE * path.uses.get(pattern.id, 0)
+                if pattern.id == last:
+                    step += _REPEAT + (_TRIPLE if pattern.id == before else 0.0)
+                steps.append((step, n, c))
+        steps.sort()
+        kept: List[_Path] = []
+        seen: set = set()
+        for step, n, c in steps:
+            path = paths[n]
+            pattern_id = slide.candidates[c][0].id
+            uses = dict(path.uses)
+            uses[pattern_id] = uses.get(pattern_id, 0) + 1
+            state = (path.chosen[-1:], c, frozenset(uses.items()))
+            if state in seen:
+                continue
+            seen.add(state)
+            kept.append(_Path(step, path.chosen + (c,), uses))
+            if len(kept) == _BEAM:
+                break
+        paths = kept
+    return [slides[i].candidates[c][0] for i, c in enumerate(paths[0].chosen)]
+
+
+def _variety_notes(
+    slides: List[_Slide], chosen: List[Pattern], pool: List[Pattern]
+) -> List[str]:
+    """A slide used three times or more, with the variants of its kind the deck
+    left unused, so a correction pass can recast one of those slides."""
+    used = {p.id for p in chosen}
+    notes = []
+    for pattern in {p.id: p for p in chosen}.values():
+        at = [s.index for s, p in zip(slides, chosen) if p.id == pattern.id]
+        if len(at) < _VARIETY_NOTE_USES:
+            continue
+        unused = list(
+            dict.fromkeys(
+                f"{p.label}: {zone_summary(p)}"
+                for p in pool
+                if p.kind == pattern.kind and p.id not in used
+            )
+        )
+        note = f"Slides {', '.join(map(str, at))} all use the template slide '{pattern.label}'."
+        if unused:
+            note += (
+                f" Unused '{pattern.kind}' variants, to recast one of them: "
+                + " | ".join(unused)
+                + "."
+            )
+        notes.append(note)
+    return notes
 
 
 def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
@@ -504,7 +548,7 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
     if problems or not slides:
         return Assignment(problems=problems)
 
-    chosen = _viterbi(slides)
+    chosen = _beam(slides)
     patterns: List[Optional[Pattern]] = [None] * len(plan.slides)
     for slide, pattern in zip(slides, chosen):
         patterns[slide.index - 1] = pattern
@@ -519,4 +563,5 @@ def assign(inventory: TemplateInventory, plan: DeckPlan) -> Assignment:
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     ]
+    notes += _variety_notes(slides, chosen, pool)
     return Assignment(patterns=patterns, notes=notes)

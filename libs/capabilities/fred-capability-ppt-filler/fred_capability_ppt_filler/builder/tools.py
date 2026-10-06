@@ -125,28 +125,24 @@ def _error(message: str) -> tuple[str, ToolInvocationResult]:
     )
 
 
-# Variants quoted per kind: enough to show the range without a wall of text.
-_MAX_VARIANTS = 4
-
-
 def offered_kinds(inventory: TemplateInventory) -> List[SlideKind]:
     kinds = {p.kind for p in assignable(inventory)}
     return [k for k in SLIDE_KINDS if k in kinds]
 
 
 def catalogue(inventory: TemplateInventory) -> str:
-    """One line per kind the template offers, with what its slides hold."""
-    variants: Dict[str, List[str]] = {}
+    """One line per kind the template offers, with every distinct variant: its
+    label and what it holds. A hidden variant is one the model never writes for."""
+    variants: Dict[str, Dict[str, str]] = {}
     for pattern in assignable(inventory):
-        summaries = variants.setdefault(pattern.kind, [])
-        summary = zone_summary(pattern)
-        if summary not in summaries:
-            summaries.append(summary)
-    lines = []
-    for kind in offered_kinds(inventory):
-        shown = variants[kind][:_MAX_VARIANTS]
-        lines.append(f"- {kind}: " + " | ".join(shown))
-    return "\n".join(lines)
+        variants.setdefault(pattern.kind, {}).setdefault(
+            zone_summary(pattern), pattern.label
+        )
+    return "\n".join(
+        f"- {kind}: "
+        + " | ".join(f"{label}: {summary}" for summary, label in variants[kind].items())
+        for kind in offered_kinds(inventory)
+    )
 
 
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
@@ -377,8 +373,11 @@ def _description(inventory: TemplateInventory) -> str:
         "slide, what to change: apply it and call again with the whole deck. The result is shown to the "
         "user automatically; never write a download link. To correct a deck, call again once with the "
         "whole amended plan; the new deck replaces the previous one.\n"
-        "Slide kinds of this template, with what each zone holds at full size (≈chars per line × "
-        "lines; items max N; variants separated by |). Write to these sizes:\n"
+        " Vary the content shapes across the deck - items, columns, figures, a quote - rather than "
+        "bullets everywhere: each variant below is a different template slide, and the deck "
+        "looks best when it uses many of them.\n"
+        "Slide kinds of this template, with each variant's name and what each zone holds at full "
+        "size (≈chars per line × lines; items max N; variants separated by |). Write to these sizes:\n"
         + catalogue(inventory)
     )
 
