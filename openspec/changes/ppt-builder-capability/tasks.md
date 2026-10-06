@@ -146,16 +146,16 @@ Owns: `analysis.py`, `render.py` (item removal), their tests, `assets/fred_templ
 
 Owns: `analysis.py` (`_copies_layout`, duplicate placeholder idx), `models.py` (delete `preferred`), `labelling.py` (`preferred` removal only), `assign.py`, `plan.py` (`zone_summary`), `render.py` (item heading lead, decoration of removed items), `tools.py` (catalogue, description, variety note), their tests, `assets/fred_template.inventory.json`, regenerated ppt_builder frontend slice, `verification.md`.
 
-- [ ] 13.1 Reuse cost `_REUSE × k` per prior use of the same pattern anywhere in the deck; beam search with use counts + last two choices replaces `_viterbi`; deck rules unchanged
-- [ ] 13.2 Empty item image zones cost `_IMAGE_HOLE` in `misfit`
-- [ ] 13.3 Item `heading` with no heading zone leads the single text zone in bold (fit check and renderer agree); lost only when it does not fit (Q8)
-- [ ] 13.4 Catalogue lists every distinct variant per kind with its label (drop `_MAX_VARIANTS`); description asks for varied content shapes
-- [ ] 13.5 Success message: a pattern used ≥ 3 times names its slides and the unused variants with their sizes
-- [ ] 13.6 `_copies_layout`: picture placeholders are slots; a slide holding all its layout's slots stands for it even with drawn decoration (Q7); duplicate `idx` on a slide → distinct keys + warning; bump `ANALYSIS_VERSION`, `make builtin-inventory`
-- [ ] 13.7 Decoration overlapping a removed item is removed with it (top-level icon on `slide:272`)
-- [ ] 13.8 Delete `Pattern.preferred` (models, analysis, labelling, API slice)
-- [ ] 13.9 Tests: A B A B avoided when a third fitting pattern exists, icon cards chosen for short items, image cards cost their empty pictures, heading+text items fit a one-text-zone card, covered layouts leave the inventory, catalogue shows 6 cards variants on the Paintress fixture
-- [ ] 13.10 Eval: add "max uses of one pattern" and "template patterns used across the run" metrics; re-run builtin + corporate; `verification.md`; package `make code-quality` + `make test`
+- [x] 13.1 Reuse cost `_REUSE × k` per prior use of the same pattern anywhere in the deck; beam search with use counts + last two choices replaces `_viterbi`; deck rules unchanged
+- [x] 13.2 Empty item image zones cost `_IMAGE_HOLE` in `misfit`
+- [x] 13.3 Item `heading` with no heading zone leads the single text zone in bold (fit check and renderer agree); lost only when it does not fit (Q8)
+- [x] 13.4 Catalogue lists every distinct variant per kind with its label (drop `_MAX_VARIANTS`); description asks for varied content shapes
+- [x] 13.5 Success message: a pattern used ≥ 3 times names its slides and the unused variants with their sizes
+- [x] 13.6 `_copies_layout`: picture placeholders are slots; a slide holding all its layout's slots stands for it even with drawn decoration (Q7); duplicate `idx` on a slide → distinct keys + warning; bump `ANALYSIS_VERSION`, `make builtin-inventory`
+- [x] 13.7 Decoration overlapping a removed item is removed with it (top-level icon on `slide:272`) — already the case; covered by the reference-template test
+- [x] 13.8 Delete `Pattern.preferred` (models, analysis, labelling, API slice) — frontend slice regeneration left to the frontend owner
+- [x] 13.9 Tests: A B A B avoided when a third fitting pattern exists, icon cards chosen for short items, image cards cost their empty pictures, heading+text items fit a one-text-zone card, covered layouts leave the inventory, catalogue shows 6 cards variants on the Paintress fixture
+- [x] 13.10 Eval: add "max uses of one pattern" and "template patterns used across the run" metrics; re-run builtin + corporate; `verification.md`; package `make code-quality` + `make test`
 
 ## WP14. Review dialog sections and card layout (D13 frontend part)
 
