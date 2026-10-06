@@ -6492,3 +6492,15 @@ Teams are the only scope today; the classification is scope-based so that it hol
 future kinds of scope. `FieldSpec` gains the optional `scope_private`. Authoring rule:
 `capabilities/AUTHORING.md` "Scope-private settings". Acceptance:
 `openspec/changes/copy-agent-across-teams/`.
+
+
+### 8.103 Versioned CGU admission requires its control-plane schema (2026-10-06)
+
+When user security and `app.gcu_version` are enabled, runtime SQL initialization
+requires the control-plane-owned `users` and `user_gcu_acceptances` tables.
+A missing table aborts startup with the control-plane migration command;
+autonomous pods with CGU enforcement disabled retain their existing schema
+requirements. Human admission checks per-version acceptance, including a
+previously accepted version that becomes active again. Service and asserted-user
+exemptions remain unchanged. See the
+[CGU migration note](../ops/migrations/2972-configurable-gcu-versions.md).

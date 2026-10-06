@@ -26,9 +26,15 @@ class BaseUserStore(ABC):
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: GcuVersionsType,
+        gcu_version: str | GcuVersionsType,
         session: AsyncSession | None = None,
     ) -> None:
+        pass
+
+    @abstractmethod
+    async def has_accepted_gcu_version(
+        self, user_id: UUID, version: str, session: AsyncSession | None = None
+    ) -> bool:
         pass
 
     @abstractmethod

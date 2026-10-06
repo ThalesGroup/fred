@@ -152,7 +152,7 @@ Several backends share one database, and the shared declarative base
 | Tree (version table)                              | Owns                                                                                                             |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | knowledge-flow (`alembic_version_knowledge_flow`) | its own `Base` tables (`resource`, `kf_task_*`), and on CoreBase: `tag`, `metadata`, `document_labels` |
-| control-plane (`alembic_version_control_plane`)   | its own `Base` tables (`platformbootstrap`, `cp_task_*`, …) except `evaluation_*` (fred-evaluation's tree and database), and on CoreBase: `users`, `session`, `teammetadata` |
+| control-plane (`alembic_version_control_plane`)   | its own `Base` tables (`platformbootstrap`, `cp_task_*`, …) except `evaluation_*` (fred-evaluation's tree and database), and on CoreBase: `users`, `user_gcu_acceptances`, `session`, `teammetadata` |
 | fred-runtime (`alembic_version_runtime`)          | `session_history`                                                                                                |
 
 (`sched_workflow_tasks` is created by knowledge-flow's tree, `0b9a54674eba`,
@@ -177,7 +177,7 @@ is absent from the database).
 Startup applies the same boundary, with one twist: what a process *needs* is
 larger than what its tree *migrates*. Both knowledge-flow entrypoints (API
 lifespan and Temporal worker) verify `REQUIRED_TABLES` — the owned set plus
-the control-plane-owned `users`/`teammetadata` their code queries — via
+the control-plane-owned `users`/`user_gcu_acceptances`/`teammetadata` their code queries — via
 `fred_core.sql.require_tables` and refuse to boot otherwise, exactly like
 fred-runtime does for `session_history`. (Control-plane has no such boot
 guard yet.) The `create_all` over CoreBase knowledge-flow ran instead was the

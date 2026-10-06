@@ -28,7 +28,7 @@ from fred_core import (
     KeycloakUser,
 )
 from fred_core.common import ThreadSafeLRUCache
-from fred_core.users import GcuVersionsType, UserRow
+from fred_core.users import UserRow
 from keycloak import KeycloakAdmin
 from keycloak.exceptions import KeycloakDeleteError, KeycloakGetError, KeycloakPostError
 
@@ -570,4 +570,4 @@ async def update_gcu_validation(
     if cfg.app.gcu_version is None:
         return
 
-    await user_store.update_gcu_version(user_id, GcuVersionsType(cfg.app.gcu_version))
+    await user_store.update_gcu_version(user_id, cfg.app.gcu_version)

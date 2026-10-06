@@ -44,6 +44,7 @@ from knowledge_flow_backend.models.table_ownership import (
 _FOREIGN_TABLES = frozenset(
     {
         "users",
+        "user_gcu_acceptances",
         "session",
         "session_metadata",
         "teammetadata",
@@ -70,9 +71,9 @@ def test_required_set_adds_the_foreign_tables_kfb_reads() -> None:
     by ingestion/metadata code — missing them at boot must fail fast, not
     surface as UndefinedTableError mid-request."""
     assert OWNED_TABLES <= REQUIRED_TABLES
-    assert {"users", "teammetadata"} <= REQUIRED_TABLES
+    assert {"users", "user_gcu_acceptances", "teammetadata"} <= REQUIRED_TABLES
     # Needed-but-foreign is not owned: the Alembic filter must stay strict.
-    assert REQUIRED_TABLES - OWNED_TABLES == {"users", "teammetadata"}
+    assert REQUIRED_TABLES - OWNED_TABLES == {"users", "user_gcu_acceptances", "teammetadata"}
 
 
 def test_autogenerate_on_migrated_database_proposes_nothing() -> None:

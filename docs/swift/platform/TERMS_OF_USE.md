@@ -46,7 +46,7 @@ app:
   address: 0.0.0.0
   port: 8222
   log_level: info
-  gcu_version: V1
+  gcu_version: v1
 ```
 
 Disable it by leaving the field unset or explicitly setting it to `null`.
@@ -81,7 +81,7 @@ The current behavior is:
    authenticated user (also `get_current_user_without_gcu`, so it is writable
    before the stricter gate passes).
 5. secured backend/runtime request paths (`get_current_user`) then check that
-   the persisted accepted version matches the configured active version.
+   a persisted acceptance exists for the configured active version.
 
 > Note: `FrontendBootstrap` still carries a `gcu_version` field, but it is a
 > post-auth informational mirror (used by the control-plane CLI) and must not be
@@ -114,8 +114,26 @@ installation.
 Today, a deployment owner can:
 
 - decide whether the feature is enabled
-- choose the active version string (`V1`, `2026-04`, etc.)
+- choose the active version string (`v1`, `v2`, `2026-04`, etc.)
 - force re-acceptance by changing that version
+
+## Acceptance Per Version
+
+CGU and the team administrator charter keep acceptance per user and version.
+Version identifiers are opaque, case-sensitive strings. Publishing a version
+that a user has never accepted requires acceptance; switching back to an
+already accepted version does not. Repeating acceptance preserves its first
+timestamp.
+
+`GET /control-plane/v1/user` reports the active CGU version in `cguValidated`
+when the user has accepted it, otherwise the latest accepted version or `null`.
+Protected human requests check acceptance of the active version independently.
+CGU reacceptance does not repeat first-acceptance default-team enrollment.
+
+The control-plane migration owns `user_gcu_acceptances` alongside `users` and
+converts legacy `V1` storage to the wire value `v1`, preserving available
+timestamps. Upgrade ordering and guarded rollback are described in the
+[version acceptance migration note](../ops/migrations/2972-configurable-gcu-versions.md).
 
 ## Current Limitation: Terms Text Is Not Yet Configurable
 

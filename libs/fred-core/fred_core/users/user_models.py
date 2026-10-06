@@ -14,8 +14,9 @@
 
 import enum
 from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import BigInteger, DateTime, Enum, Uuid
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
@@ -30,12 +31,20 @@ class UserRow(Base):
     __table_args__ = {"extend_existing": True}
 
     id: Mapped[Uuid] = mapped_column(Uuid, primary_key=True)
-    gcuVersionAccepted: Mapped[GcuVersionsType | None] = mapped_column(
-        Enum(GcuVersionsType, name="gcu_version_type"), nullable=True
-    )
+    gcuVersionAccepted: Mapped[str | None] = mapped_column(Text(), nullable=True)
     gcuAcceptedAt: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     current_resources_storage_size: Mapped[int | None] = mapped_column(
         BigInteger, nullable=False, default=0
     )
+
+
+class UserGcuAcceptanceRow(Base):
+    __tablename__ = "user_gcu_acceptances"
+
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    version: Mapped[str] = mapped_column(Text, primary_key=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -29,7 +29,7 @@ import fred_core.teams.team_metatada_models  # noqa: F401 — registers teammeta
 import fred_core.users.user_models  # noqa: F401 — registers users with CoreBase
 
 # Explicit registration imports: OWNED_TABLES derives its app half from
-# Base.metadata and claims three CoreBase tables by name, so every module
+# Base.metadata and claims its CoreBase tables by name, so every module
 # registering one of those tables must be imported HERE — never rely on
 # package-init side effects (fred_core/__init__ imports) that a later
 # cleanup could make lazy, leaving a claimed table out of the metadata and
@@ -60,7 +60,9 @@ from control_plane_backend.models.base import Base
 
 # CoreBase tables whose migrations this tree owns — explicit names, never
 # derived from CoreBase.metadata (that would claim every backend's tables).
-SHARED_CORE_TABLES: frozenset[str] = frozenset({"users", "session", "teammetadata"})
+SHARED_CORE_TABLES: frozenset[str] = frozenset(
+    {"users", "user_gcu_acceptances", "session", "teammetadata"}
+)
 
 # On control-plane's own Base but migrated by the separate fred-evaluation
 # tree (`alembic_version_evaluation`, its own database) — subtracted

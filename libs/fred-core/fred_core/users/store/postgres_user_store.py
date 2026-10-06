@@ -13,16 +13,18 @@
 # limitations under the License.
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import case, exists, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from fred_core.sql import make_session_factory, use_session
-from fred_core.users.user_models import GcuVersionsType, UserRow
+from fred_core.users.user_models import GcuVersionsType, UserGcuAcceptanceRow, UserRow
 
 from .base_user_store import BaseUserStore
 
@@ -64,25 +66,66 @@ class PostgresUserStore(BaseUserStore):
             result = await s.execute(select(UserRow).where(UserRow.id == user_id))
         return result.scalar_one_or_none()
 
+    async def has_accepted_gcu_version(
+        self, user_id: UUID, version: str, session: AsyncSession | None = None
+    ) -> bool:
+        async with use_session(self._sessions, session) as s:
+            return bool(
+                await s.scalar(
+                    select(
+                        exists().where(
+                            UserGcuAcceptanceRow.user_id == user_id,
+                            UserGcuAcceptanceRow.version == version,
+                        )
+                    )
+                )
+            )
+
     async def update_gcu_version(
         self,
         user_id: UUID,
-        gcu_version: GcuVersionsType,
+        gcu_version: str | GcuVersionsType,
         session: AsyncSession | None = None,
     ) -> None:
+        version = (
+            gcu_version.value
+            if isinstance(gcu_version, GcuVersionsType)
+            else gcu_version
+        )
         async with use_session(self._sessions, session) as s:
-            user = await s.get(UserRow, user_id)
-
-            if user is None:
-                user = UserRow(
-                    id=user_id,
-                    gcuVersionAccepted=gcu_version,
-                    gcuAcceptedAt=datetime.now(),
+            insert = (
+                pg_insert
+                if s.get_bind().dialect.name == "postgresql"
+                else sqlite_insert
+            )
+            await s.execute(
+                insert(UserRow)
+                .values(id=user_id)
+                .on_conflict_do_nothing(index_elements=["id"])
+            )
+            await s.execute(
+                insert(UserGcuAcceptanceRow)
+                .values(
+                    user_id=user_id,
+                    version=version,
+                    accepted_at=datetime.now(timezone.utc),
                 )
-                s.add(user)
-            else:
-                user.gcuVersionAccepted = gcu_version
-                user.gcuAcceptedAt = datetime.now()
+                .on_conflict_do_nothing(index_elements=["user_id", "version"])
+            )
+            accepted_at = await s.scalar(
+                select(UserGcuAcceptanceRow.accepted_at).where(
+                    UserGcuAcceptanceRow.user_id == user_id,
+                    UserGcuAcceptanceRow.version == version,
+                )
+            )
+            await s.execute(
+                update(UserRow)
+                .where(UserRow.id == user_id)
+                .values(
+                    gcuVersionAccepted=version,
+                    gcuAcceptedAt=accepted_at,
+                )
+            )
 
     async def increment_current_storage_size(
         self,

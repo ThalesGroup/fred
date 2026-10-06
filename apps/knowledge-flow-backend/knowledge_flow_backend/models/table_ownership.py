@@ -22,7 +22,7 @@ different questions on a shared database:
   autogenerate and ``alembic check`` never touch tables migrated by
   control-plane or fred-runtime.
 - ``REQUIRED_TABLES`` — what a knowledge-flow process cannot serve without:
-  the owned set plus foreign tables it reads at runtime (``users`` and
+  the owned set plus foreign tables it reads at runtime (``users``, ``user_gcu_acceptances`` and
   ``teammetadata``, both migrated by control-plane's tree but queried by
   ingestion/metadata code). Both entrypoints (``main.py`` and
   ``main_worker.py``) pass it to ``require_tables`` so a deployment that
@@ -62,7 +62,7 @@ OWNED_TABLES: frozenset[str] = frozenset(Base.metadata.tables) | SHARED_CORE_TAB
 # (TeamMetadataStore in ingestion/metadata services). Their migrations belong
 # to control-plane's tree — listing them here only makes the startup guard
 # honest about what this component needs to serve traffic.
-REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "teammetadata"})
+REQUIRED_TABLES: frozenset[str] = OWNED_TABLES | frozenset({"users", "user_gcu_acceptances", "teammetadata"})
 
 # Consumed by alembic/env.py, main.py and main_worker.py — declared so
 # CodeQL's module-local unused-global query sees the export.
