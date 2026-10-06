@@ -62,6 +62,7 @@ from .context import (
     UiPart,
 )
 from .models import AgentDefinition
+from .web_research import WebResearchPort
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -1675,6 +1676,7 @@ class RuntimeServices:
     # Conversation-bound virtual workspace for capability text files.
     # Appended last to preserve positional compatibility.
     conversation_filesystem: ConversationFilesystemPort | None = None
+    web_research: WebResearchPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)
