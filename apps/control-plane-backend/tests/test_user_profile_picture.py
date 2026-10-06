@@ -49,7 +49,6 @@ from starlette.datastructures import Headers
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"png-body"
 _JPEG = b"\xff\xd8\xff" + b"jpeg-body"
-_WEBP = b"RIFF\x00\x00\x00\x00WEBP" + b"webp-body"
 
 
 class _FakeUserStore:

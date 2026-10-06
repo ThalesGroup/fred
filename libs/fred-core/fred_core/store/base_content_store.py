@@ -73,5 +73,3 @@ class ContentStore(Protocol):
 
         Callers can delete a replaced object without checking it still exists.
         """
-
-        ...
