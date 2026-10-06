@@ -1,12 +1,8 @@
-## Purpose
-
-Define configurable Terms of Use versions, durable user acceptance and the admission behavior when deployments require updated terms.
-
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Accept the configured version
 
-The system SHALL accept and persist the configured GCU version as an opaque string, with an acceptance timestamp per user and version. Repeated acceptance SHALL preserve that version's first acceptance timestamp, and acceptances of other versions SHALL remain valid. User details SHALL expose the active version when it has been accepted, otherwise the latest accepted version or null, without a fixed version enumeration.
+The system SHALL accept and persist the configured GCU version as an opaque string in the existing user record, with its acceptance timestamp. Each acceptance SHALL replace the previously stored version and timestamp. User details SHALL expose the stored version or null, without a fixed version enumeration or GCU acceptance history.
 
 #### Scenario: Reaccept a newer version
 - **GIVEN** a user has accepted `v1` and the active configured version is `v2`
@@ -20,7 +16,7 @@ The system SHALL accept and persist the configured GCU version as an opaque stri
 
 ### Requirement: Match the active version for admission
 
-When GCU enforcement is enabled, protected human requests SHALL require an accepted version exactly matching the active configured version. Existing service and asserted-user exemptions SHALL remain unchanged. Unset GCU configuration or disabled security SHALL preserve existing bypass behavior.
+When GCU enforcement is enabled, protected human requests SHALL require the currently stored accepted version exactly matching the active configured version. Existing service and asserted-user exemptions SHALL remain unchanged. Unset GCU configuration or disabled security SHALL preserve existing bypass behavior.
 
 #### Scenario: Old acceptance blocks protected access
 - **GIVEN** a user has accepted `v1` and the active version changes to `v2`
@@ -41,15 +37,15 @@ When GCU enforcement is enabled, protected human requests SHALL require an accep
 - **WHEN** a request qualifies for an existing service or asserted-user GCU exemption, or GCU enforcement is disabled
 - **THEN** the GCU check does not introduce a new acceptance requirement
 
-#### Scenario: Return to a previously accepted version
-- **GIVEN** a user accepted both `v1` and `v2`
+#### Scenario: Return to an overwritten version
+- **GIVEN** a user accepted `v1` and then `v2`, replacing the stored acceptance
 - **WHEN** the active version returns to `v1`
-- **THEN** protected admission succeeds without another acceptance and user details report `v1`
+- **THEN** protected admission fails until `v1` is accepted again and user details still report `v2`
 
-#### Scenario: Repeated acceptance preserves evidence
+#### Scenario: Repeated acceptance replaces the timestamp
 - **GIVEN** a user already accepted the configured version
 - **WHEN** the user accepts that version again
-- **THEN** its first acceptance timestamp and other version acceptances are unchanged
+- **THEN** the stored version remains the same and its timestamp records the latest acceptance
 
 ### Requirement: Preserve existing acceptance during upgrade
 
@@ -66,7 +62,7 @@ Upgrading version storage SHALL preserve legacy `v1` acceptance, null acceptance
 - **THEN** the legacy representation is restored with acceptance timestamps and other user data preserved
 
 #### Scenario: Refuse lossy rollback
-- **GIVEN** a user has accepted `v2` or another version outside the legacy schema
+- **GIVEN** the current stored acceptance is `v2` or another version outside the legacy schema
 - **WHEN** a downgrade is attempted
 - **THEN** it fails before schema or acceptance data is changed
 

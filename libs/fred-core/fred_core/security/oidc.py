@@ -541,8 +541,10 @@ async def _enforce_gcu(
         )
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
 
-    if not await user_store.has_accepted_gcu_version(
-        user_uuid, configuration.app.gcu_version
+    stored_user = await user_store.find_user_by_id(user_uuid)
+    if (
+        stored_user is None
+        or stored_user.gcuVersionAccepted != configuration.app.gcu_version
     ):
         raise HTTPException(status_code=403, detail="user_not_accept_gcu")
     return user

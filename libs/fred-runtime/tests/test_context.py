@@ -444,32 +444,3 @@ async def test_initialize_sql_does_not_create_the_history_schema_itself(
     second.initialize_kpi_writer()
     with pytest.raises(SchemaNotMigratedError):
         await second.initialize_sql()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "security_enabled, version", [(True, "v2"), (False, "v2"), (True, None)]
-)
-async def test_gcu_schema_is_required_only_when_admission_is_enabled(
-    minimal_config, tmp_path, security_enabled, version
-):
-    from fred_core.sql.schema_guard import SchemaNotMigratedError
-
-    config = _sqlite_config(minimal_config, tmp_path)
-    config.security.user.enabled = security_enabled
-    config.app.gcu_version = version
-    _migrate_sqlite(config)
-    container = PodApplicationContext(config)
-    container.initialize_kpi_writer()
-    try:
-        if security_enabled and version is not None:
-            with pytest.raises(SchemaNotMigratedError) as exc:
-                await container.initialize_sql()
-            assert "user_gcu_acceptances" in str(exc.value)
-            assert "apps/control-plane-backend" in str(exc.value)
-            assert container.get_sql_engine() is None
-        else:
-            await container.initialize_sql()
-            assert container.get_sql_engine() is not None
-    finally:
-        await container.shutdown()

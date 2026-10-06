@@ -32,12 +32,6 @@ class BaseUserStore(ABC):
         pass
 
     @abstractmethod
-    async def has_accepted_gcu_version(
-        self, user_id: UUID, version: str, session: AsyncSession | None = None
-    ) -> bool:
-        pass
-
-    @abstractmethod
     async def find_user_by_id(
         self, user_id: UUID, session: AsyncSession | None = None
     ) -> Optional[UserRow]:

@@ -19,8 +19,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from fred_core.users.store.postgres_user_store import PostgresUserStore
-from fred_core.users.user_models import GcuVersionsType, UserGcuAcceptanceRow, UserRow
-from sqlalchemy import select
+from fred_core.users.user_models import GcuVersionsType, UserRow
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -48,9 +47,6 @@ async def store(tmp_path, request):
                 sync,
                 tables=[
                     UserRow.metadata.tables[UserRow.__tablename__],
-                    UserGcuAcceptanceRow.metadata.tables[
-                        UserGcuAcceptanceRow.__tablename__
-                    ],
                 ],
             )
         )
@@ -59,40 +55,37 @@ async def store(tmp_path, request):
 
 
 @pytest.mark.asyncio
-async def test_versions_and_first_timestamps_survive_reacceptance(store):
+async def test_new_versions_replace_acceptance_without_changing_storage(store):
     uid = uuid4()
     await store.increment_current_storage_size(uid, 42)
-    assert not await store.has_accepted_gcu_version(uid, "v1")
+    unaccepted = await store.find_user_by_id(uid)
+    assert unaccepted.gcuVersionAccepted is None
+    assert unaccepted.gcuAcceptedAt is None
     await store.update_gcu_version(uid, GcuVersionsType.V1)
     first = await store.find_user_by_id(uid)
-    await store.update_gcu_version(uid, "v2")
-    assert await store.has_accepted_gcu_version(uid, "v1")
-    assert await store.has_accepted_gcu_version(uid, "v2")
-    assert not await store.has_accepted_gcu_version(uid, "V2")
-    assert not await store.has_accepted_gcu_version(uid, "v3")
+    assert first.gcuVersionAccepted == "v1"
+    for version in ["v2", "2026-10", "v1"]:
+        await store.update_gcu_version(uid, version)
+        updated = await store.find_user_by_id(uid)
+        assert updated.gcuVersionAccepted == version
+        assert updated.gcuAcceptedAt > first.gcuAcceptedAt
+        assert updated.current_resources_storage_size == 42
+        first = updated
     await store.update_gcu_version(uid, "v1")
-    again = await store.find_user_by_id(uid)
-    assert again.gcuVersionAccepted == "v1"
-    assert again.gcuAcceptedAt == first.gcuAcceptedAt
-    assert again.current_resources_storage_size == 42
+    repeated = await store.find_user_by_id(uid)
+    assert repeated.gcuVersionAccepted == "v1"
+    assert repeated.gcuAcceptedAt > first.gcuAcceptedAt
 
 
 @pytest.mark.asyncio
-async def test_concurrent_acceptance_keeps_each_version(store):
+async def test_concurrent_first_acceptance_persists_one_complete_user(store):
     uid = uuid4()
+    versions = ["v1", "v2", "v2", "2026-10"]
     await asyncio.gather(
-        *(
-            store.update_gcu_version(uid, version)
-            for version in ["v1", "v2", "v2", "2026-10"]
-        )
+        *(store.update_gcu_version(uid, version) for version in versions)
     )
-    async with store._sessions() as session:
-        versions = (
-            await session.scalars(
-                select(UserGcuAcceptanceRow.version).where(
-                    UserGcuAcceptanceRow.user_id == uid
-                )
-            )
-        ).all()
-    assert set(versions) == {"v1", "v2", "2026-10"}
-    assert len(versions) == 3
+    user = await store.find_user_by_id(uid)
+    assert user is not None
+    assert user.gcuVersionAccepted in versions
+    assert user.gcuAcceptedAt is not None
+    assert user.current_resources_storage_size == 0

@@ -434,14 +434,8 @@ async def get_user_details(
         user, personal_team_id(user.uid), team_deps
     )
 
-    accepted_version = user_details.gcuVersionAccepted if user_details else None
-    active_version = team_deps.configuration.app.gcu_version
-    if active_version is not None and await user_store.has_accepted_gcu_version(
-        user_uuid, active_version
-    ):
-        accepted_version = active_version
     return UserDetails(
-        cguValidated=accepted_version,
+        cguValidated=user_details.gcuVersionAccepted if user_details else None,
         personalTeam=personal_team,
         currentUser=UserSummary(id=user.uid, username=user.username, email=user.email),
     )

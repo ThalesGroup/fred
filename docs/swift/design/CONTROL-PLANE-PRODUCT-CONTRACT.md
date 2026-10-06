@@ -3941,21 +3941,16 @@ name of the role that governs it. The backend endpoints keep their
 
 ## Versioned terms acceptance (2026-10-06)
 
-CGU acceptance uses opaque, case-sensitive configured strings. One acceptance
-per user and version remains valid if that version becomes active again, as
-for the team administrator charter. `POST /gcu` records the active version
-idempotently, keeping its first timestamp. Control-plane owns the shared
-`user_gcu_acceptances` history table and the latest-version projection on
-`users`; both are updated atomically. First acceptance alone enrolls default
-teams (section 52).
+CGU acceptance uses opaque, case-sensitive configured strings. `POST /gcu`
+replaces the accepted version and timestamp in `users`; no acceptance history
+is kept. First acceptance alone enrolls default teams (section 52).
 
-`GET /user` keeps the `cguValidated` name and returns `string | null`: the
-active version when accepted, otherwise the latest accepted version or null.
-It remains reachable before acceptance. Protected human requests require a
-history entry for the active version; existing service/asserted-user exemptions
-remain in effect. The public frontend configuration remains authoritative for
-the active version. Deployment steps live in the
-[CGU migration note](../ops/migrations/2972-configurable-gcu-versions.md).
+`GET /user` keeps the `cguValidated` name and returns the stored `string | null`.
+It remains reachable before acceptance. Protected human requests require that
+the stored version matches the active configuration, including when returning
+to an older version; existing service/asserted-user exemptions remain in effect.
+The charter retains its independent per-version history. Deployment steps live
+in the [CGU migration note](../ops/migrations/2972-configurable-gcu-versions.md).
 
 ## 52. Contract Notes - default teams for new users (2026-09-14, issue #2649)
 

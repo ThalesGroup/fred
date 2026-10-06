@@ -81,7 +81,7 @@ The current behavior is:
    authenticated user (also `get_current_user_without_gcu`, so it is writable
    before the stricter gate passes).
 5. secured backend/runtime request paths (`get_current_user`) then check that
-   a persisted acceptance exists for the configured active version.
+   the persisted accepted version matches the configured active version.
 
 > Note: `FrontendBootstrap` still carries a `gcu_version` field, but it is a
 > post-auth informational mirror (used by the control-plane CLI) and must not be
@@ -117,22 +117,22 @@ Today, a deployment owner can:
 - choose the active version string (`v1`, `v2`, `2026-04`, etc.)
 - force re-acceptance by changing that version
 
-## Acceptance Per Version
+## Stored Acceptance
 
-CGU and the team administrator charter keep acceptance per user and version.
-Version identifiers are opaque, case-sensitive strings. Publishing a version
-that a user has never accepted requires acceptance; switching back to an
-already accepted version does not. Repeating acceptance preserves its first
-timestamp.
+CGU keeps only the latest accepted version and its timestamp in `users`.
+Version identifiers are opaque, case-sensitive strings. Each acceptance
+replaces both fields. Protected human requests require that the stored version
+matches the active configuration; switching from `v2` back to `v1` requires
+acceptance again if `v2` is currently stored.
 
-`GET /control-plane/v1/user` reports the active CGU version in `cguValidated`
-when the user has accepted it, otherwise the latest accepted version or `null`.
-Protected human requests check acceptance of the active version independently.
-CGU reacceptance does not repeat first-acceptance default-team enrollment.
+`GET /control-plane/v1/user` returns that stored string or `null` in
+`cguValidated`. CGU reacceptance does not repeat first-acceptance default-team
+enrollment. The team administrator charter retains its separate per-version
+acceptance history and authorization policy.
 
-The control-plane migration owns `user_gcu_acceptances` alongside `users` and
-converts legacy `V1` storage to the wire value `v1`, preserving available
-timestamps. Upgrade ordering and guarded rollback are described in the
+The control-plane migration converts legacy `V1` storage to the wire value
+`v1`, preserving available timestamps. Upgrade ordering and guarded rollback
+are described in the
 [version acceptance migration note](../ops/migrations/2972-configurable-gcu-versions.md).
 
 ## Current Limitation: Terms Text Is Not Yet Configurable

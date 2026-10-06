@@ -227,17 +227,6 @@ class PodApplicationContext:
                 migrate_command=_MIGRATE_COMMAND,
                 version_table=_RUNTIME_VERSION_TABLE,
             )
-            if (
-                self.configuration.security.user.enabled
-                and self.configuration.app.gcu_version is not None
-            ):
-                await require_tables(
-                    engine,
-                    ["users", "user_gcu_acceptances"],
-                    component="fred-runtime CGU admission",
-                    migrate_command="make db-upgrade (apps/control-plane-backend)",
-                    version_table="alembic_version_control_plane",
-                )
         except Exception:
             # Same leak-on-failure reasoning as the ping path above.
             await engine.dispose()

@@ -61,6 +61,8 @@ describe("GcuGuard", () => {
     render();
     expect(container.textContent).toBe("Shell");
     state.version = "v1";
+    render();
+    expect(container.textContent).toBe("Accept terms");
     state.accepted = "v1";
     render();
     expect(container.textContent).toBe("Shell");

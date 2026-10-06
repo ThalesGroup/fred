@@ -183,7 +183,7 @@ def create_app() -> FastAPI:
             application_context.get_pg_async_engine(),
             sorted(REQUIRED_TABLES),
             component="knowledge-flow",
-            migrate_command="make db-upgrade (apps/knowledge-flow-backend and apps/control-plane-backend)",
+            migrate_command="make db-upgrade (apps/knowledge-flow-backend)",
             version_table="alembic_version_knowledge_flow",
         )
 

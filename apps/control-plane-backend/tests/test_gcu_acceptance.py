@@ -26,12 +26,12 @@ from fred_core.common import TeamId
 from fred_core.security import oidc
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store.postgres_user_store import PostgresUserStore
-from fred_core.users.user_models import UserGcuAcceptanceRow, UserRow
+from fred_core.users.user_models import UserRow
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.mark.asyncio
-async def test_gcu_version_transition_keeps_previously_accepted_versions(
+async def test_gcu_version_transition_replaces_the_stored_acceptance(
     tmp_path, monkeypatch
 ):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'users.db'}")
@@ -42,9 +42,6 @@ async def test_gcu_version_transition_keeps_previously_accepted_versions(
                     c,
                     tables=[
                         UserRow.metadata.tables[UserRow.__tablename__],
-                        UserGcuAcceptanceRow.metadata.tables[
-                            UserGcuAcceptanceRow.__tablename__
-                        ],
                     ],
                 )
             )
@@ -92,6 +89,9 @@ async def test_gcu_version_transition_keeps_previously_accepted_versions(
             assert (await client.get("/user")).json()["cguValidated"] == "v2"
             assert (await client.get("/protected")).status_code == 200
             configuration.app.gcu_version = "v1"
+            assert (await client.get("/user")).json()["cguValidated"] == "v2"
+            assert (await client.get("/protected")).status_code == 403
+            assert (await client.post("/gcu")).status_code == 200
             assert (await client.get("/user")).json()["cguValidated"] == "v1"
             assert (await client.get("/protected")).status_code == 200
             join.assert_awaited_once()

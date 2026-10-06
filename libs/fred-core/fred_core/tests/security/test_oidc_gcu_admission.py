@@ -41,7 +41,9 @@ _GCU_VERSION = "2026-01"
 
 def _user_store(accepted: str | None = None) -> BaseUserStore:
     store = create_autospec(BaseUserStore, instance=True, spec_set=True)
-    store.has_accepted_gcu_version.return_value = accepted == _GCU_VERSION
+    store.find_user_by_id.return_value = (
+        SimpleNamespace(gcuVersionAccepted=accepted) if accepted is not None else None
+    )
     return store
 
 
@@ -106,7 +108,7 @@ async def test_a_service_passes_without_a_user_record(
     )
 
     assert admitted is service
-    cast(AsyncMock, store.has_accepted_gcu_version).assert_not_awaited()
+    cast(AsyncMock, store.find_user_by_id).assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -148,9 +150,7 @@ async def test_a_human_without_accepted_gcu_is_refused(
 
     assert exc.value.status_code == 403
     assert exc.value.detail == "user_not_accept_gcu"
-    cast(AsyncMock, store.has_accepted_gcu_version).assert_awaited_once_with(
-        UUID(human.uid), _GCU_VERSION
-    )
+    cast(AsyncMock, store.find_user_by_id).assert_awaited_once_with(UUID(human.uid))
 
 
 @pytest.mark.parametrize(
@@ -171,9 +171,7 @@ async def test_a_human_with_accepted_gcu_passes(
     )
 
     assert admitted is human
-    cast(AsyncMock, store.has_accepted_gcu_version).assert_awaited_once_with(
-        UUID(human.uid), _GCU_VERSION
-    )
+    cast(AsyncMock, store.find_user_by_id).assert_awaited_once_with(UUID(human.uid))
 
 
 @pytest.mark.parametrize(
@@ -206,7 +204,7 @@ async def test_an_asserted_person_is_admitted_without_a_record(
     )
 
     assert admitted is asserted
-    cast(AsyncMock, store.has_accepted_gcu_version).assert_not_awaited()
+    cast(AsyncMock, store.find_user_by_id).assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -241,4 +239,4 @@ async def test_disabled_gcu_skips_acceptance_lookup(
         )
         is human
     )
-    cast(AsyncMock, store.has_accepted_gcu_version).assert_not_awaited()
+    cast(AsyncMock, store.find_user_by_id).assert_not_awaited()

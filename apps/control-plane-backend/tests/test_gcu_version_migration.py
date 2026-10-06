@@ -87,8 +87,15 @@ def migrated_database(request):
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    cleanup_path = path.with_name("e6b8d2a41074_keep_gcu_acceptance_in_users.py")
+    cleanup_spec = importlib.util.spec_from_file_location(
+        "gcu_cleanup_migration", cleanup_path
+    )
+    assert cleanup_spec is not None and cleanup_spec.loader is not None
+    cleanup = importlib.util.module_from_spec(cleanup_spec)
+    cleanup_spec.loader.exec_module(cleanup)
     try:
-        yield engine, migration
+        yield engine, migration, cleanup
     finally:
         with engine.begin() as connection:
             connection.execute(sa.text("DROP TABLE IF EXISTS user_gcu_acceptances"))
@@ -112,12 +119,15 @@ def _rows(engine):
 
 
 def test_upgrade_and_downgrade_preserve_legacy_acceptance(migrated_database):
-    engine, migration = migrated_database
+    engine, migration, cleanup = migrated_database
     before = _rows(engine)
     _run(engine, migration, "upgrade")
+    _run(engine, cleanup, "upgrade")
     after = _rows(engine)
     assert [row[1] for row in after] == [None, "v1", "v1"]
     assert [(r[0], r[2], r[3]) for r in after] == [(r[0], r[2], r[3]) for r in before]
+    assert sa.inspect(engine).get_table_names() == ["users"]
+    _run(engine, cleanup, "downgrade")
     with engine.connect() as connection:
         history = connection.execute(
             sa.text("SELECT version, accepted_at FROM user_gcu_acceptances")
@@ -129,25 +139,42 @@ def test_upgrade_and_downgrade_preserve_legacy_acceptance(migrated_database):
     assert _rows(engine) == before
 
 
-@pytest.mark.parametrize("where", ["history", "projection"])
-def test_downgrade_refuses_to_lose_newer_acceptance(migrated_database, where):
-    engine, migration = migrated_database
+def test_applied_history_migration_is_removed_without_changing_current_acceptance(
+    migrated_database,
+):
+    engine, migration, cleanup = migrated_database
     _run(engine, migration, "upgrade")
     with engine.begin() as connection:
-        if where == "history":
-            connection.execute(
-                sa.text(
-                    "INSERT INTO user_gcu_acceptances (user_id, version) SELECT id, 'v2' FROM users WHERE current_resources_storage_size = 42"
-                )
+        connection.execute(
+            sa.text(
+                "UPDATE users SET \"gcuVersionAccepted\" = '2026-10' WHERE current_resources_storage_size = 42"
             )
-        else:
-            connection.execute(
-                sa.text(
-                    "UPDATE users SET \"gcuVersionAccepted\" = 'v2' WHERE current_resources_storage_size = 42"
-                )
+        )
+    before = _rows(engine)
+    _run(engine, cleanup, "upgrade")
+    assert _rows(engine) == before
+    assert sa.inspect(engine).get_table_names() == ["users"]
+    _run(engine, cleanup, "downgrade")
+    with engine.connect() as connection:
+        versions = set(
+            connection.scalars(sa.text("SELECT version FROM user_gcu_acceptances"))
+        )
+    assert versions == {"v1", "2026-10"}
+    assert _rows(engine) == before
+
+
+def test_downgrade_refuses_to_lose_newer_acceptance(migrated_database):
+    engine, migration, cleanup = migrated_database
+    _run(engine, migration, "upgrade")
+    _run(engine, cleanup, "upgrade")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "UPDATE users SET \"gcuVersionAccepted\" = 'v2' WHERE current_resources_storage_size = 42"
             )
+        )
+    _run(engine, cleanup, "downgrade")
     before = _rows(engine)
     with pytest.raises(RuntimeError, match="would be lost"):
         _run(engine, migration, "downgrade")
     assert _rows(engine) == before
-    assert "user_gcu_acceptances" in sa.inspect(engine).get_table_names()
