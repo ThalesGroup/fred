@@ -82,7 +82,7 @@ When a profile picture is replaced, deleted, or its owner's account is deleted, 
 
 ### Requirement: User summaries carry the picture URL
 
-Every user summary that identifies a person to the frontend — the bootstrap's current user, the current-user details endpoint, the batch lookup by ids, and team administrator summaries — SHALL include an optional temporary picture URL when that person has a picture, and SHALL omit it otherwise. Resolving pictures for a batch SHALL read the stored picture keys for all requested people in one storage query and SHALL produce URLs only for people who have a picture. A URL that cannot be produced SHALL be omitted rather than failing the request. A newly uploaded or deleted picture SHALL be reflected in the next summary returned, without waiting for any display-name cache to expire.
+Every user summary that identifies a person to the frontend — the bootstrap's current user, the batch lookup by ids, and team administrator summaries — SHALL include an optional temporary picture URL when that person has a picture, and SHALL omit it otherwise. Resolving pictures for a batch SHALL read the stored picture keys for all requested people in one storage query and SHALL produce URLs only for people who have a picture. A URL that cannot be produced SHALL be omitted rather than failing the request. A newly uploaded or deleted picture SHALL be reflected in the next summary returned, without waiting for any display-name cache to expire.
 
 #### Scenario: Batch lookup with mixed people
 

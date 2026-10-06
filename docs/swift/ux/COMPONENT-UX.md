@@ -5125,6 +5125,24 @@ happened and other executions must have stopped before resuming.
 Choices and explanation are localized in EN/FR. Safe external replay remains the
 agent author's responsibility; a generic confirmation cannot make an unsafe call safe.
 
+### `AvatarUploadCard` and `UserAvatar` image mode (2026-10-06)
+
+**Location:** `shared/molecules/AvatarUploadCard/`, `shared/atoms/UserAvatar/`
+
+**Status:** `Functional`
+
+`AvatarUploadCard` is the team avatar card moved out of `TeamSettingsParameters`:
+title, Import button, hint, 96px square preview, the client-side checks
+(JPEG/PNG/WebP, 5 MB) and the `AvatarCropEditor` mount. A text `error` Delete
+button sits under Import only when the caller passes `onDelete` and an image is
+set; team settings pass none, user settings pass one behind the critical
+`ConfirmationDialog`. Styles are unchanged from the team card.
+
+`UserAvatar` takes an optional `imageUrl`: a round `<img>` with intrinsic size
+and `decoding="async"`, initials when absent or when the image fails to load,
+retried when the URL changes. Used for the nav-rail profile, user settings,
+personal-space header, home team list and team-card / admin-teams admins.
+
 ## Shared hosted-application UI components
 
 The alpha.3 package surface reuses canonical atoms and molecules in place;

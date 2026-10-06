@@ -143,6 +143,29 @@ Export does not carry people, so it has nothing to attach pictures to. Pictures 
 3. Rollback: downgrade the migration. Uploaded picture objects stay in the bucket, unreferenced. The migration note says so.
 4. Migration note `docs/swift/ops/migrations/user-profile-picture.md`, impact `minor`: there is a database migration, and delete permission on the content bucket is recommended.
 
+## Implementation notes (2026-10-06)
+
+Divergences found while implementing, all small:
+
+- **Base moved.** `swift` gained the local user directory (#2862) on the same
+  user files while this change was planned; the unpublished branch was rebased
+  before coding. The migration's parent is therefore `b4e8d2a9c613`.
+- **Local user directory.** There, `delete_user` only suspends the account and
+  returns before `delete_favorites_for_user`, so the picture is kept like the
+  favorites; the identity-provider path deletes it as designed. Local-directory
+  summaries from `get_users_by_ids` get pictures through the same helper.
+- **Ids that are not UUIDs.** Upload answers 400 (`AvatarUploadError`), delete
+  and account deletion are no-ops.
+- **Storage calls off the event loop.** `put_object` and `delete_object` run in
+  `asyncio.to_thread` in the user flow (the team flow is unchanged).
+- **Cache tags.** The upload/delete mutation args do not carry the caller's id,
+  so both invalidate the whole `ControlPlaneUser` tag type (covers `ME` and the
+  caller's id) plus `ControlPlaneTeam LIST`.
+- **`AvatarUploadCard`** takes a `deleteLabel` prop next to `onDelete`.
+- **Spec wording.** The summary requirement no longer lists the current-user
+  details endpoint, matching the decision that `GET /user` stays without the
+  picture.
+
 ## Open Questions
 
 None — `GET /user` stays without the picture and the Help Center section goes in `getting-started/first-steps.md` (developer decisions).

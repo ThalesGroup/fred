@@ -21,6 +21,14 @@ name, at the bottom of the navigation panel) → **Profile** → **Settings**. T
 help centre follows the same choice, and its **FR / EN** switch at the top right
 changes it for the moment.
 
+## Adding a profile picture
+
+In the same place (**profile menu** → **Profile** → **Settings**), the
+**Profile picture** card lets you pick an image (JPEG, PNG or WebP, 5 MB at
+most) and crop it to a square. Your picture then replaces your initials in the
+navigation panel, in your personal space and on the teams you administer. To go
+back to your initials, click **Delete** and confirm.
+
 ## Finding your way around
 
 Three zones:

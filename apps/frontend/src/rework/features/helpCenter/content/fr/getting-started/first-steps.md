@@ -22,6 +22,15 @@ nom, en bas du panneau de navigation) → **Profil** → **Réglages**. Ce centr
 d'aide suit le même choix, et son sélecteur **FR / EN** en haut à droite permet
 d'en changer ponctuellement.
 
+## Ajouter une photo de profil
+
+Au même endroit (**menu profil** → **Profil** → **Réglages**), la carte
+**Photo de profil** vous permet de choisir une image (JPEG, PNG ou WebP, 5 Mo
+maximum) puis de la recadrer en carré. Votre photo remplace alors vos initiales
+dans le panneau de navigation, dans votre espace personnel et sur les équipes
+dont vous êtes administrateur. Pour revenir à vos initiales, cliquez sur
+**Supprimer** et confirmez.
+
 ## Se repérer
 
 Trois zones :

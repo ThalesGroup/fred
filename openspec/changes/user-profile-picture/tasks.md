@@ -42,16 +42,16 @@
 
 ## 7. Docs, Help Center and migration note
 
-- [ ] 7.1 Add fr + en Help Center content explaining how to set and remove a profile picture (a section in the existing `getting-started/first-steps.md`, next to the profile menu → Settings paragraph, in fr and en); verify `helpCenter/content.test.ts` passes.
-- [ ] 7.2 Add a dated numbered entry to `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` (two routes, `UserSummary.avatar_image_url`, self-only rule, object deletion on replace/delete/account deletion, not exported); verify it follows the latest section's format.
-- [ ] 7.3 Write `docs/swift/ops/migrations/user-profile-picture.md` from `MIGRATION-NOTE-TEMPLATE.md`, impact `minor`: Alembic migration on `users`, content-bucket delete permission (`s3:DeleteObject` / `storage.objects.delete`) recommended, rollback leaves orphan objects, user pictures not exported; verify `make migration-check` passes from the repo root.
-- [ ] 7.4 Update `docs/swift/ux/COMPONENT-UX.md` for the new `AvatarUploadCard` molecule and the `UserAvatar` image mode; verify the entry names both components.
+- [x] 7.1 Add fr + en Help Center content explaining how to set and remove a profile picture (a section in the existing `getting-started/first-steps.md`, next to the profile menu → Settings paragraph, in fr and en); verify `helpCenter/content.test.ts` passes.
+- [x] 7.2 Add a dated numbered entry to `docs/swift/design/CONTROL-PLANE-PRODUCT-CONTRACT.md` (two routes, `UserSummary.avatar_image_url`, self-only rule, object deletion on replace/delete/account deletion, not exported); verify it follows the latest section's format.
+- [x] 7.3 Write `docs/swift/ops/migrations/user-profile-picture.md` from `MIGRATION-NOTE-TEMPLATE.md`, impact `minor`: Alembic migration on `users`, content-bucket delete permission (`s3:DeleteObject` / `storage.objects.delete`) recommended, rollback leaves orphan objects, user pictures not exported; verify `make migration-check` passes from the repo root.
+- [x] 7.4 Update `docs/swift/ux/COMPONENT-UX.md` for the new `AvatarUploadCard` molecule and the `UserAvatar` image mode; verify the entry names both components.
 
 ## 8. Verification
 
-- [ ] 8.1 fred-core: `cd libs/fred-core && make test && make code-quality` both green.
-- [ ] 8.2 control-plane: `cd apps/control-plane-backend && make test && make code-quality && make db-check-heads && make db-check-sqlite` all green.
-- [ ] 8.3 Alembic against a real Postgres: `make db-upgrade`, `make db-downgrade`, `make db-upgrade` in `apps/control-plane-backend` succeed and `uv run alembic heads` shows exactly one head.
-- [ ] 8.4 Frontend without wiping a running Vite (warn the developer first; never run through a symlinked worktree `node_modules`): `cd apps/frontend && npx tsc --noEmit && npx prettier --check src && npx eslint src && npx vitest run src/rework/components/shared src/rework/components/pages/UserSettingsPage src/rework/features/helpCenter` all green.
+- [x] 8.1 fred-core: `cd libs/fred-core && make test && make code-quality` both green.
+- [x] 8.2 control-plane: `cd apps/control-plane-backend && make test && make code-quality && make db-check-heads && make db-check-sqlite` all green.
+- [x] 8.3 Alembic against a real Postgres: `make db-upgrade`, `make db-downgrade`, `make db-upgrade` in `apps/control-plane-backend` succeed and `uv run alembic heads` shows exactly one head.
+- [x] 8.4 Frontend without wiping a running Vite (warn the developer first; never run through a symlinked worktree `node_modules`): `cd apps/frontend && npx tsc --noEmit && npx prettier --check src && npx eslint src && npx vitest run src/rework/components/shared src/rework/components/pages/UserSettingsPage src/rework/features/helpCenter` all green.
 - [ ] 8.5 Manual check on a local stack: upload, replace and delete a picture; confirm it appears in the nav rail, settings page, personal-space header, home team list and team-card admins; confirm the old object is gone from MinIO after replace and delete.
-- [ ] 8.6 Record the exact command outputs in the change (verification evidence) before archiving.
+- [x] 8.6 Record the exact command outputs in the change (verification evidence) before archiving.
