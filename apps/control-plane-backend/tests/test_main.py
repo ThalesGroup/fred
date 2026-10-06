@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, cast
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -6005,6 +6006,7 @@ async def test_enrich_teams_with_membership_resolves_banner_and_metadata_fields(
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
@@ -6084,6 +6086,7 @@ async def test_enrich_teams_dedupes_owner_alias_and_canonical_user(
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )
@@ -6419,6 +6422,7 @@ async def test_delete_team_member_runs_in_memory_lifecycle_pass_when_enabled(
         get_purge_queue_store=cast(Any, lambda: fake_queue_store),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=_fake_get_users_by_ids,
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=_fake_search_users,
         run_lifecycle_manager_once_in_memory=_fake_run_lifecycle_manager_once_in_memory,
     )

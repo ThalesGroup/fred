@@ -433,6 +433,7 @@ def _team_deps(engine: AsyncEngine, rebac: _FakeTeamRebac) -> TeamServiceDepende
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=ConversationPolicyCatalog,
         get_users_by_ids=cast(Any, _no_users_by_ids),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=cast(Any, _no_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _i: object()),
     )

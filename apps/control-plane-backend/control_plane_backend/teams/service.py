@@ -1874,7 +1874,9 @@ async def _enrich_teams_with_membership(
     all_admin_ids: set[str] = (
         set().union(*team_admin_ids_map.values()) if team_admin_ids_map else set()
     )
-    user_summaries = await deps.get_users_by_ids(all_admin_ids)
+    user_summaries = await deps.attach_avatar_urls(
+        await deps.get_users_by_ids(all_admin_ids)
+    )
     default_max_storage = deps.configuration.app.default_team_max_resources_storage_size
 
     return [
@@ -2083,7 +2085,9 @@ async def _build_team_with_permissions(
         if UserTeamRelation.TEAM_ADMIN in roles
     }
     member_ids = set(roles_by_user.keys())
-    admin_summaries = await deps.get_users_by_ids(admin_ids)
+    admin_summaries = await deps.attach_avatar_urls(
+        await deps.get_users_by_ids(admin_ids)
+    )
 
     team = _build_team_dto(
         metadata,

@@ -80,19 +80,24 @@ When a profile picture is replaced, deleted, or its owner's account is deleted, 
 - **WHEN** Alice replaces her picture and object storage refuses to delete the previous object
 - **THEN** the request still succeeds, her summary shows the new picture, and a warning is logged without image data or URLs
 
-### Requirement: User summaries carry the picture URL
+### Requirement: User summaries carry the picture URL where it renders
 
-Every user summary that identifies a person to the frontend — the bootstrap's current user, the batch lookup by ids, and team administrator summaries — SHALL include an optional temporary picture URL when that person has a picture, and SHALL omit it otherwise. Resolving pictures for a batch SHALL read the stored picture keys for all requested people in one storage query and SHALL produce URLs only for people who have a picture. A URL that cannot be produced SHALL be omitted rather than failing the request. A newly uploaded or deleted picture SHALL be reflected in the next summary returned, without waiting for any display-name cache to expire.
+The user summaries that render a person's avatar — the bootstrap's current user and team administrator summaries — SHALL include an optional temporary picture URL when that person has a picture, and SHALL omit it otherwise. Summaries that render no picture — team member lists, platform-role holders and the batch lookup by ids — SHALL NOT carry it, so they cost no picture lookup. Resolving pictures for a batch SHALL read the stored picture keys for all requested people in one storage query, SHALL produce URLs only for people who have a picture, and SHALL bound how many URLs are produced at once. A URL that cannot be produced SHALL be omitted rather than failing the request. A newly uploaded or deleted picture SHALL be reflected in the next summary returned, without waiting for any display-name cache to expire.
 
-#### Scenario: Batch lookup with mixed people
+#### Scenario: Team administrators with mixed people
 
-- **WHEN** the frontend resolves ids for Alice (with picture), Bob (without) and an unknown id
-- **THEN** Alice's summary has a picture URL, Bob's and the unknown id's summaries have none, and the response keeps one entry per requested id
+- **WHEN** a team lists Alice (with picture) and Bob (without) as administrators
+- **THEN** Alice's administrator summary has a picture URL and Bob's has none
+
+#### Scenario: Text-only summaries carry no URL
+
+- **WHEN** the frontend resolves Alice's id through the batch lookup, a team member list or the platform-role list
+- **THEN** her summary has no picture URL and no picture key is read
 
 #### Scenario: Picture change is visible immediately
 
-- **WHEN** Alice uploads a picture and the frontend then requests her summary by id
-- **THEN** the summary carries the new picture URL even though her display name was cached moments before
+- **WHEN** Alice uploads a picture and the frontend then reloads the bootstrap or a team where she is an administrator
+- **THEN** her summary carries the new picture URL even though her display name was cached moments before
 
 #### Scenario: URL generation fails
 

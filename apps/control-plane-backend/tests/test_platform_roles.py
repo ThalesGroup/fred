@@ -157,9 +157,6 @@ class _FakeUserDeps:
     def create_keycloak_admin_client(self):
         return KeycloackDisabled()
 
-    def get_content_store(self):
-        return MagicMock()
-
 
 def _user(uid: str) -> KeycloakUser:
     return KeycloakUser(uid=uid, username=uid, roles=[], email=f"{uid}@example.com")

@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import time as time_module
 from typing import Any, Iterable, cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine
@@ -88,6 +88,7 @@ def _fake_deps() -> TeamServiceDependencies:
         get_purge_queue_store=cast(Any, object),
         get_policy_catalog=cast(Any, object),
         get_users_by_ids=cast(Any, _fake_get_users_by_ids),
+        attach_avatar_urls=AsyncMock(side_effect=lambda summaries: summaries),
         search_users=cast(Any, _fake_search_users),
         run_lifecycle_manager_once_in_memory=cast(Any, lambda _input: object()),
     )

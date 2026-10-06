@@ -155,7 +155,6 @@ from control_plane_backend.teams.service import (
 )
 from control_plane_backend.teams.service import list_teams as list_teams_from_service
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
-from control_plane_backend.users.service import attach_avatar_urls
 
 logger = logging.getLogger(__name__)
 
@@ -402,9 +401,8 @@ async def build_frontend_bootstrap(
         ),
         list_teams_from_service(user, deps.team_dependencies),
         _build_permission_summary(user, deps.team_dependencies.rebac),
-        attach_avatar_urls(
-            {user.uid: UserSummary.from_keycloak_user(user)},
-            deps.team_dependencies.get_content_store,
+        deps.team_dependencies.attach_avatar_urls(
+            {user.uid: UserSummary.from_keycloak_user(user)}
         ),
     )
     return FrontendBootstrap(

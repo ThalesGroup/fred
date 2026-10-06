@@ -22,14 +22,14 @@ See proposal.md for motivation and specs/user-profile-picture/spec.md for the be
 **Goals:**
 - One validation path for team and user avatars. Moving the constants out of `teams/service.py` deletes the team-only copy and adds no second one.
 - No orphan user-picture objects in normal operation.
-- Picture URLs added to summaries cost at most one database query per batch, plus one presign per person who actually has a picture.
+- Picture URLs cost at most one database query per batch, plus one presign per person who actually has a picture, and only on summaries that render a picture.
 
 **Non-Goals:**
 - Deleting team avatars, or cleaning up the orphaned team avatar objects left by past replacements.
 - Making GCS presigned URLs cacheable, or changing the presigning strategy (tracked separately in #2394).
 - Pictures for service accounts or for ids that are not UUIDs.
 - Serving pictures through the local filesystem store. Like team avatars, a picture there gets no URL and the initials stay.
-- Showing pictures in member lists, platform-role tables or any text-only place. Those summaries may carry the URL, but no UI change is made there.
+- Showing pictures in member lists, platform-role tables or any text-only place. Those summaries carry no URL, so they cost no presign.
 
 ## Decisions
 
@@ -77,22 +77,18 @@ Alternative considered: a fixed key per user, overwritten on each upload. Reject
 
 Ids that are not UUIDs are skipped before the query.
 
-### 5. Picture URLs are attached outside the display-name cache
+### 5. Picture URLs are attached outside the display-name cache, only where they render
 
-`get_users_by_ids` keeps caching Keycloak names. After the cache and Keycloak step, a single helper attaches `avatar_image_url`:
-1. one `get_avatar_keys` call for the returned ids;
-2. one presign per key, 1 h TTL like team avatars;
+`get_users_by_ids` keeps caching Keycloak names and attaches nothing. A separate helper, `attach_avatar_urls`, attaches `avatar_image_url`:
+1. one `get_avatar_keys` call for the given ids;
+2. one presign per key, 1 h TTL like team avatars, run concurrently with at most 8 in flight (`asyncio.to_thread` under a semaphore), so GCS network calls never block the event loop and a team list with many pictured admins is not signed one after another;
 3. a failed presign leaves the field absent.
 
 Because the URL is never cached with the name, an upload or delete shows up on the very next summary.
 
-Attaching the URL inside `get_users_by_ids` covers `/users/by-ids` and the team admin summaries from one place, rather than repeating it at each call site. Member lists and platform roles also receive the field, which is harmless and additive.
+The helper runs only where a picture renders: the team admin summaries (`_enrich_teams_with_membership` for team lists, `_build_team_with_permissions` for a single team), through `TeamServiceDependencies.attach_avatar_urls`, and the bootstrap's `current_user` for a single id, inside the existing `asyncio.gather`. Member lists, platform-role holders and `GET /users/by-ids` feed text-only views, so they carry no URL and pay no key query or presign.
 
-The bootstrap's `current_user` uses the same helper for a single id. In bootstrap, that read joins the existing `asyncio.gather`.
-
-The presigns for one batch run in a single `asyncio.to_thread` hop, so GCS network calls never block the event loop. MinIO signs locally, and a thread hop per batch rather than per user keeps its overhead negligible.
-
-Alternative considered: storing the URL in the 5-minute cache. Rejected: it would serve a deleted object's URL for up to 5 minutes.
+Alternatives considered: storing the URL in the 5-minute cache, rejected because it would serve a deleted object's URL for up to 5 minutes; attaching inside `get_users_by_ids`, rejected because every member list and platform-role table would then presign pictures it never shows.
 
 ### 6. Routes and authorization
 
@@ -130,7 +126,7 @@ Export does not carry people, so it has nothing to attach pictures to. Pictures 
 
 ## Risks / Trade-offs
 
-- [GCS presign costs two network calls per person with a picture: up to 100 in `/users/by-ids`, and every admin with a picture on each team-list load] → presign only people who have a key, with one thread hop per batch. The cost is the same per object as team avatars today. A cacheable or cheaper GCS strategy belongs to #2394.
+- [GCS presign costs two network calls per person with a picture, for every admin with a picture on each team-list load] → presign only admins and the current user who have a key, at most 8 at a time. The cost is the same per object as team avatars today. A cacheable or cheaper GCS strategy belongs to #2394.
 - [The storage credentials of existing deployments may lack delete permission] → the old-object delete is best effort and logs a warning, so uploads keep working. The migration note asks operators to grant `s3:DeleteObject` / `storage.objects.delete` on the content bucket.
 - [The object delete fails during account deletion, leaving an orphan with no key] → a warning is logged with the user id. Accepted: it is rare, and it is never visible to anyone.
 - [When Keycloak M2M is disabled, `get_users_by_ids` returns nothing, so admin summaries carry no picture] → accepted. It matches the existing fallback, under which names are missing too.
@@ -153,7 +149,7 @@ Divergences found while implementing, all small:
 - **Local user directory.** There, `delete_user` only suspends the account and
   returns before `delete_favorites_for_user`, so the picture is kept like the
   favorites; the identity-provider path deletes it as designed. Local-directory
-  summaries from `get_users_by_ids` get pictures through the same helper.
+  admin summaries get pictures through the same helper.
 - **Ids that are not UUIDs.** Upload answers 400 (`AvatarUploadError`), delete
   and account deletion are no-ops.
 - **Storage calls off the event loop.** `put_object` and `delete_object` run in
@@ -162,6 +158,10 @@ Divergences found while implementing, all small:
   so both invalidate the whole `ControlPlaneUser` tag type (covers `ME` and the
   caller's id) plus `ControlPlaneTeam LIST`.
 - **`AvatarUploadCard`** takes a `deleteLabel` prop next to `onDelete`.
+- **Presign scope narrowed after review.** URLs were first attached inside
+  `get_users_by_ids`, so member lists, platform roles and `/users/by-ids` paid
+  for presigns they never render; §5 now attaches them only for team admins and
+  the bootstrap user, with bounded concurrent presigns.
 - **Spec wording.** The summary requirement no longer lists the current-user
   details endpoint, matching the decision that `GET /user` stays without the
   picture.

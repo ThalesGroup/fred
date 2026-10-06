@@ -18,9 +18,12 @@ on replace/delete/account deletion, and URLs attached outside the name cache."""
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from io import BytesIO
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -32,12 +35,15 @@ from control_plane_backend.common.avatar_image import (
 )
 from control_plane_backend.main import create_app
 from control_plane_backend.teams import api as teams_api
+from control_plane_backend.teams import service as teams_service
 from control_plane_backend.users import api as users_api
 from control_plane_backend.users import service as users_service
 from control_plane_backend.users.dependencies import get_user_service_dependencies
 from control_plane_backend.users.schemas import UserSummary
 from fastapi import FastAPI, UploadFile
 from fred_core import KeycloakUser, get_current_user
+from fred_core.common import TeamId
+from fred_core.teams.metadata_store import TeamMetadata
 from httpx import ASGITransport, AsyncClient
 from starlette.datastructures import Headers
 
@@ -195,8 +201,7 @@ async def test_a_failed_presign_omits_the_url_and_logs_no_url(
 
 
 @pytest.mark.asyncio
-async def test_a_picture_change_is_visible_despite_the_name_cache(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_generic_lookup_carries_no_url_and_names_stay_cached(
     user_store: _FakeUserStore,
     content_store: _FakeContentStore,
 ) -> None:
@@ -216,17 +221,87 @@ async def test_a_picture_change_is_visible_despite_the_name_cache(
         create_keycloak_admin_client=lambda: _Admin(),
         get_content_store=lambda: content_store,
     )
+    user_store.keys[alice] = "users/a/avatar-1.png"
 
-    first = await users_service.get_users_by_ids([alice], cast(Any, deps))
+    plain = await users_service.get_users_by_ids([alice], cast(Any, deps))
     user_store.keys[alice] = "users/a/avatar-2.png"
-    second = await users_service.get_users_by_ids([alice], cast(Any, deps))
+    pictured = await users_service.attach_avatar_urls(
+        await users_service.get_users_by_ids([alice], cast(Any, deps)),
+        lambda: content_store,
+    )
 
+    assert plain[alice].avatar_image_url is None
     assert calls == [alice], "the display name must come from the cache"
-    assert first[alice].avatar_image_url is None
-    assert second[alice].avatar_image_url == (
+    assert pictured[alice].avatar_image_url == (
         "https://objects.test/users/a/avatar-2.png?sig=1"
     )
+    assert user_store.key_reads == 1, "only the attaching call reads keys"
     users_service._USER_SUMMARY_CACHE.delete(alice)
+
+
+@pytest.mark.asyncio
+async def test_presigns_run_concurrently_within_the_bound(
+    user_store: _FakeUserStore,
+) -> None:
+    in_flight = 0
+    peak = 0
+    lock = threading.Lock()
+
+    class _SlowStore(_FakeContentStore):
+        def get_presigned_url(self, key: str, expires=None) -> str:
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            return f"https://objects.test/{key}"
+
+    ids = [str(uuid4()) for _ in range(20)]
+    user_store.keys.update({uid: f"users/{uid}/a.png" for uid in ids})
+    store = _SlowStore()
+
+    result = await users_service.attach_avatar_urls(
+        {uid: UserSummary(id=uid) for uid in ids}, lambda: store
+    )
+
+    assert all(result[uid].avatar_image_url for uid in ids)
+    assert 1 < peak <= users_service._AVATAR_PRESIGN_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_team_admin_summaries_carry_the_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _bulk(_rebac, team_ids, _uid):
+        return {team_ids[0]: {"alice"}}, {team_ids[0]: {"alice", "bob"}}, {}
+
+    monkeypatch.setattr(teams_service, "_bulk_team_membership", _bulk)
+    config = MagicMock()
+    config.app.default_team_max_resources_storage_size = 1
+    attach = AsyncMock(
+        side_effect=lambda found: {
+            uid: s.model_copy(update={"avatar_image_url": f"https://x/{uid}"})
+            for uid, s in found.items()
+        }
+    )
+    deps = SimpleNamespace(
+        configuration=config,
+        get_content_store=MagicMock,
+        get_users_by_ids=AsyncMock(return_value={"alice": UserSummary(id="alice")}),
+        attach_avatar_urls=attach,
+    )
+
+    teams = await teams_service._enrich_teams_with_membership(
+        cast(Any, object()),
+        cast(Any, SimpleNamespace(uid="bob")),
+        [TeamMetadata(id=TeamId("t1"), name="T1")],
+        cast(Any, deps),
+    )
+
+    assert [a.avatar_image_url for a in teams[0].admins or []] == ["https://x/alice"]
+    attach.assert_awaited_once()
 
 
 @pytest.mark.asyncio

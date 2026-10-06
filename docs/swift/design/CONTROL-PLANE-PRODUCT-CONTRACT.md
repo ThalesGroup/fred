@@ -4294,12 +4294,13 @@ the caller and no parameter can name someone else.
 deleted (best effort, warning on failure) on replace, delete and account
 deletion; `ContentStore.delete_object` is idempotent on every backend.
 
-**Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) on the
-bootstrap `current_user`, `GET /users/by-ids` and every summary built by
-`get_users_by_ids` (team admins, members, platform-role holders). Attached after
-the 5-minute display-name cache, so a change shows on the next call. `GET /user`
-does not carry it. Never exported or logged. Full behavior: OpenSpec
-`user-profile-picture`.
+**Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
+where a picture renders: the bootstrap `current_user` and team admin summaries
+(team list and single team). Member lists, platform-role holders,
+`GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
+display-name cache, so a change shows on the next call; presigns of one batch
+run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
+OpenSpec `user-profile-picture`.
 
 ## Knowledge Flow ingestion cancellation — 2026-09-23
 

@@ -61,6 +61,8 @@ _PER_ID_LOOKUP_CONCURRENCY = 10
 
 _USER_SUMMARY_CACHE_TTL_SECONDS = 300
 _AVATAR_URL_TTL = timedelta(hours=1)
+# Bounds threads held by GCS presigns (two network calls each) for one batch.
+_AVATAR_PRESIGN_CONCURRENCY = 8
 _USER_SUMMARY_CACHE: ThreadSafeLRUCache[str, tuple[float, UserSummary]] = (
     ThreadSafeLRUCache(max_size=5000)
 )
@@ -276,19 +278,6 @@ async def get_users_by_ids(
     user_ids: Iterable[str],
     deps: UserServiceDependencies,
 ) -> dict[str, UserSummary]:
-    """Resolve user summaries, then attach profile picture URLs.
-
-    Picture URLs are attached after the display-name cache so an upload or a
-    delete shows up on the very next call.
-    """
-    summaries = await _resolve_user_summaries(user_ids, deps)
-    return await attach_avatar_urls(summaries, deps.get_content_store)
-
-
-async def _resolve_user_summaries(
-    user_ids: Iterable[str],
-    deps: UserServiceDependencies,
-) -> dict[str, UserSummary]:
     """
     Retrieve user summaries for a set of ids with graceful Keycloak fallbacks.
 
@@ -400,21 +389,30 @@ async def _resolve_user_summaries(
     return summaries
 
 
-def _presign_avatar_keys(store: ContentStore, keys: dict[str, str]) -> dict[str, str]:
-    urls: dict[str, str] = {}
-    for user_id, key in keys.items():
-        try:
-            urls[user_id] = store.get_presigned_url(key, expires=_AVATAR_URL_TTL)
-        except NotImplementedError:
-            # Local filesystem storage serves no URLs: initials stay.
-            continue
-        except Exception as exc:
-            logger.warning(
-                "Profile picture URL unavailable for user %s (%s)",
-                user_id,
-                type(exc).__name__,
-            )
-    return urls
+async def _presign_avatar_urls(
+    store: ContentStore, keys: dict[str, str]
+) -> dict[str, str]:
+    semaphore = asyncio.Semaphore(_AVATAR_PRESIGN_CONCURRENCY)
+
+    async def _presign(user_id: str, key: str) -> str | None:
+        async with semaphore:
+            try:
+                return await asyncio.to_thread(
+                    store.get_presigned_url, key, expires=_AVATAR_URL_TTL
+                )
+            except NotImplementedError:
+                # Local filesystem storage serves no URLs: initials stay.
+                return None
+            except Exception as exc:
+                logger.warning(
+                    "Profile picture URL unavailable for user %s (%s)",
+                    user_id,
+                    type(exc).__name__,
+                )
+                return None
+
+    urls = await asyncio.gather(*(_presign(uid, key) for uid, key in keys.items()))
+    return {uid: url for uid, url in zip(keys, urls) if url}
 
 
 async def attach_avatar_urls(
@@ -423,16 +421,15 @@ async def attach_avatar_urls(
 ) -> dict[str, UserSummary]:
     """Return `summaries` with `avatar_image_url` set for people with a picture.
 
-    One key query per batch, one presign per person with a key, all presigns in
-    one thread hop (GCS signs over the network). Cached summaries are copied,
-    never mutated.
+    Call it only where pictures render: one key query per batch, then bounded
+    concurrent presigns (GCS signs over the network). Inputs are never mutated.
     """
     if not summaries:
         return summaries
     keys = await get_user_store().get_avatar_keys(summaries.keys())
     if not keys:
         return summaries
-    urls = await asyncio.to_thread(_presign_avatar_keys, get_content_store(), keys)
+    urls = await _presign_avatar_urls(get_content_store(), keys)
     return {
         user_id: (
             summary.model_copy(update={"avatar_image_url": urls[user_id]})

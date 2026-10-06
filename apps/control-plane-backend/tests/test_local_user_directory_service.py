@@ -52,7 +52,6 @@ async def test_local_user_reads_never_construct_admin(monkeypatch):
         get_identities=AsyncMock(return_value=[raw]),
         find_ids_by_usernames=AsyncMock(return_value={"alice": str(user_id)}),
         identity_exists=AsyncMock(return_value=True),
-        get_avatar_keys=AsyncMock(return_value={}),
     )
     monkeypatch.setattr(service, "get_user_store", lambda: store)
 
