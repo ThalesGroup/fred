@@ -92,7 +92,6 @@ export type Pattern = {
   groups?: RepeatGroup[];
   included?: boolean;
   exclusion_reason?: ("chart" | "table" | "icon_bank" | "no_placeholder" | "unsupported_parts" | "author") | null;
-  preferred?: boolean;
   reusable?: boolean;
   labelled_by?: "heuristic" | "vision";
   warnings?: string[];
