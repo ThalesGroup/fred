@@ -219,7 +219,7 @@ _SCRIPT_MARKERS = (
     # kind of static page a restricted team may legitimately ask for. Refusing it
     # would name constructs the page does not have, and the model would loop.
     re.compile(
-        r"""(?:=|\()\s*["']?\s*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:""",
+        r"""(?:=|\()[\s"']*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:""",
         re.IGNORECASE,
     ),
     # `<svg>`'s scripting vectors and `<iframe srcdoc>` reintroduce execution
@@ -346,10 +346,21 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
             what is or is not allowed.
             """
 
-            # A team that may not run script must not get script STORED either:
-            # refuse, and say why, so the model rewrites the page statically.
-            # Cheaper than the size check below only in the allowed case, so it
-            # comes first in the denied one — both are trivial.
+            size = len(html.encode("utf-8")) + len(css.encode("utf-8"))
+            if size > MAX_ARTIFACT_BYTES:
+                message = (
+                    f"The artifact is too large ({size} bytes). The limit is "
+                    f"{MAX_ARTIFACT_BYTES} bytes ({MAX_ARTIFACT_BYTES // 1024} KB) "
+                    "of HTML + CSS combined. Trim the content and call the tool "
+                    "again."
+                )
+                return (
+                    message,
+                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
+                )
+
+            # Bound untrusted input before scanning it, including for restricted
+            # teams. A long rejected page must not monopolize the event loop.
             if not self._allow_javascript:
                 matched = script_reason(html, css)
                 if matched is not None:
@@ -373,19 +384,6 @@ class _HtmlArtifactMiddleware(AgentMiddleware):
                         message,
                         ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
                     )
-
-            size = len(html.encode("utf-8")) + len(css.encode("utf-8"))
-            if size > MAX_ARTIFACT_BYTES:
-                message = (
-                    f"The artifact is too large ({size} bytes). The limit is "
-                    f"{MAX_ARTIFACT_BYTES} bytes ({MAX_ARTIFACT_BYTES // 1024} KB) "
-                    "of HTML + CSS combined. Trim the content and call the tool "
-                    "again."
-                )
-                return (
-                    message,
-                    ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True),
-                )
 
             # Replace by default: an omitted id means "the page already in the
             # viewer", never "make another one". Only an explicit new_artifact — or

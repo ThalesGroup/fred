@@ -25,6 +25,7 @@ from typing import Any, cast
 
 import pytest
 from fred_capability_html_artifact.capability import (
+    MAX_ARTIFACT_BYTES,
     HtmlArtifactCapability,
     HtmlArtifactPart,
     HtmlArtifactTeamSettings,
@@ -242,6 +243,22 @@ def test_detector_flags_execution_vectors(html: str):
 @pytest.mark.parametrize("html", STATIC_MARKUP)
 def test_detector_leaves_static_markup_alone(html: str):
     assert script_reason(html, "") is None
+
+
+@pytest.mark.asyncio
+async def test_restricted_tool_rejects_oversized_markup_before_scanning(monkeypatch):
+    def unexpected_scan(_html: str, _css: str) -> None:
+        raise AssertionError("oversized markup must not reach the script scanner")
+
+    monkeypatch.setattr(
+        "fred_capability_html_artifact.capability.script_reason", unexpected_scan
+    )
+    content, artifact = await _tool(allow_javascript=False).coroutine(
+        title="Big", html="=" + " " * MAX_ARTIFACT_BYTES
+    )
+
+    assert artifact.is_error is True
+    assert "too large" in content.lower()
 
 
 def test_empty_model_team_settings_is_treated_as_denied():
