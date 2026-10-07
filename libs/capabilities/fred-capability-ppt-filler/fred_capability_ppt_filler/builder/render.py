@@ -187,6 +187,12 @@ class _Line:
     source: str = ""
 
 
+_TEMPLATE_CHANGED = (
+    "The template changed since its analysis: tell the user that the agent's owner must "
+    "save the template again in the agent settings."
+)
+
+
 class RenderError(ValueError):
     """The plan cannot be rendered on this template (the agent's correctable mistake)."""
 
@@ -1152,7 +1158,10 @@ class _Renderer:
                 continue
             pattern = patterns[position - 1]
             if pattern is None:
-                raise RenderError(f"Slide {position} has no assigned pattern.")
+                raise RenderError(
+                    f"slide {position} has no template slide (internal). Call again with "
+                    "the same plan; if it persists, tell the user."
+                )
             rendered += 1
             if pattern.kind == "agenda" and slide_plan.items:
                 announced.append((rendered, len(slide_plan.items)))
@@ -1176,7 +1185,10 @@ class _Renderer:
                 if frame is not None:
                     frame.text = slide_plan.notes or ""
         if rendered == 0:
-            raise RenderError("The plan holds no usable slide.")
+            raise RenderError(
+                "the plan holds no usable slide. Write each entry of `slides` as an "
+                "object with its content and call again."
+            )
         for position, topics in announced:
             remaining = rendered - position
             # Only a wide gap: a deck may well cover five topics in three
@@ -1211,7 +1223,8 @@ class _Renderer:
         if pattern.source == "layout":
             if pattern.source_index >= len(self.layouts):
                 raise RenderError(
-                    f"Layout {pattern.source_index} no longer exists in the template."
+                    f"layout {pattern.source_index} no longer exists in the template. "
+                    + _TEMPLATE_CHANGED
                 )
             return self.prs.slides.add_slide(
                 self.layouts[pattern.source_index]
@@ -1219,7 +1232,10 @@ class _Renderer:
         slide_id = int(pattern.id.split(":", 1)[1])
         source = self.slides_by_id.get(slide_id)
         if source is None:
-            raise RenderError(f"Slide {slide_id} no longer exists in the template.")
+            raise RenderError(
+                f"slide {slide_id} no longer exists in the template. "
+                + _TEMPLATE_CHANGED
+            )
         return _duplicate_slide(self.prs, source), pattern
 
     def _sweep(self, slide, pattern: Pattern, position: int) -> None:
@@ -1727,4 +1743,7 @@ def render_deck(
     try:
         return _Renderer(presentation, inventory, images or {}).render(plan, patterns)
     except ValueError as exc:
-        raise RenderError(str(exc)) from exc
+        raise RenderError(
+            f"the template could not be filled ({exc}). Call again with a simpler plan; "
+            "if it persists, tell the user."
+        ) from exc

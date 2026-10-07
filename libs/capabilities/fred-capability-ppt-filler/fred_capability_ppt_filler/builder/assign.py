@@ -1111,7 +1111,9 @@ def _repeat_note(repeat: Repeat) -> str:
         )
     if repeat.suggested:
         note += " Their content suits: " + "; ".join(repeat.suggested) + "."
-    return note
+    if repeat.unused or repeat.suggested:
+        return note + " To vary them, recast one as above; otherwise nothing to do."
+    return note + " Nothing to do: no other slide of this template suits them."
 
 
 def assign(
@@ -1182,7 +1184,8 @@ def assign(
     ]
     notes += [
         f"Slides {slides[i - 2].index} to {slides[i].index} use the same template slide: "
-        "no other one holds their content."
+        "no other one holds their content. Nothing to do, unless they must look different: "
+        "then give one of them another content shape."
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
     ]

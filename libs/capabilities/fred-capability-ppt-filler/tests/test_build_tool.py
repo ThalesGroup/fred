@@ -300,7 +300,8 @@ async def test_several_builds_of_one_answer_land_on_one_preview(
 @pytest.mark.asyncio
 async def test_empty_plan_is_an_error_the_user_can_read(monkeypatch):
     text, result = await _build(monkeypatch, slides=[{"kind": "bullets"}])
-    assert result.is_error and "no content" in text
+    assert result.is_error and "every slide of the plan is empty" in text
+    assert "and call build_presentation again" in text
     # The text travels in the result so the runtime shows it, not a generic failure.
     assert result.blocks and result.blocks[0].text == text
 
@@ -381,7 +382,9 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
         slides=[COVER, {"title": "Method v2", "kind": "process", "items": steps}]
     )
     (changed,) = json.loads(text[text.index("{") :])["slides"]
-    assert changed["repeated"] == "the slide changed but this problem is still there"
+    assert changed["repeated"] == (
+        "the slide changed but this problem is still there: apply one of the options"
+    )
 
 
 @pytest.mark.asyncio
@@ -736,8 +739,9 @@ def test_the_success_notes_name_what_was_cut_per_slide():
     notes = _build_notes(plan, [report], [])
     assert "Entry 2 of 'slides' was not a slide object" in notes
     assert (
-        "Slide 1: text cut to fit in title; template example text removed: 'Lorem'; "
-        "not placed: subtitle." in notes
+        "Slide 1: text cut to fit in title (shorten it to show it whole); template "
+        "example text removed: 'Lorem' (nothing to do); not placed: subtitle (move it "
+        "to a field this slide shows, or drop it)." in notes
     )
     assert "call again with the whole corrected deck" in notes
     assert _build_notes(DeckPlan.model_validate({"slides": [COVER]}), [], []) == ""

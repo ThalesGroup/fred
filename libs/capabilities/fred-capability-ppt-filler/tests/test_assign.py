@@ -369,6 +369,7 @@ def test_repetition_is_allowed_and_reported_on_a_one_archetype_template():
     assert not assignment.problems
     assert [p.label for p in assignment.patterns if p] == ["Only"] * 4
     assert assignment.notes and "Slides 1 to 3" in assignment.notes[0]
+    assert "Nothing to do, unless they must look different" in assignment.notes[0]
 
 
 def test_invalid_entries_get_no_pattern_and_do_not_shift_the_rules():
@@ -746,6 +747,7 @@ def test_a_slide_used_three_times_is_reported_with_the_unused_variants():
     # The unused variants of that kind, with their sizes; never another kind's.
     assert "Narrow: title ≈60 chars; bullets ≈2 chars" in note
     assert "cards" not in note
+    assert note.endswith("To vary them, recast one as above; otherwise nothing to do.")
 
 
 def test_one_kind_on_five_template_slides_is_a_repeat_with_content_advice():

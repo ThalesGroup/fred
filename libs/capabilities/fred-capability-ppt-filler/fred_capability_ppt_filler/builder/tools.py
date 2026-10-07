@@ -128,9 +128,9 @@ _IMAGE_SUFFIXES = (
 )
 
 _BUSY_MESSAGE = (
-    "The server is busy building other presentations right now. Wait for the other calls to "
-    "finish, then make ONE call with the whole deck. Do not send several build calls at once: "
-    "each builds a separate presentation and they compete for the same slot."
+    "No deck was built: the server is busy building other presentations. Tell the user and "
+    "offer to try again in a moment; then make ONE call with the whole deck, never several "
+    "calls at once."
 )
 
 
@@ -139,7 +139,7 @@ _BUSY_MESSAGE = (
 
 _DUPLICATE = (
     "Ignored: the same build_presentation call is already being built in this answer. "
-    "Wait for its result; do not describe this call as a separate deck."
+    "Nothing to do: use that call's result and do not describe this one as a separate deck."
 )
 
 
@@ -359,7 +359,7 @@ def _needs_revision(
             entry["repeated"] = (
                 "you resent this slide unchanged: apply one of the options"
                 if before[1] == sent
-                else "the slide changed but this problem is still there"
+                else "the slide changed but this problem is still there: apply one of the options"
             )
         current[problem.index] = (problem.problem, sent)
         slides.append(entry)
@@ -369,8 +369,8 @@ def _needs_revision(
     text = " ".join(
         lead
         + [
-            "No deck was built: some slides fit no slide of this template. Fix each slide "
-            "listed under `slides` with one of its options."
+            "No deck was built: some slides cannot be built as sent (see each `problem`). Fix "
+            "each slide listed under `slides` with one of its options."
         ]
     )
     if repeats:
@@ -458,22 +458,26 @@ def _no_history() -> Sequence[BaseMessage]:
 def _issue_line(report: SlideReport) -> str:
     parts = []
     if report.truncated:
-        parts.append("text cut to fit in " + ", ".join(report.truncated))
-    if report.removed:
         parts.append(
-            "template example text removed: "
-            + ", ".join(f"'{t}'" for t in report.removed)
+            f"text cut to fit in {', '.join(report.truncated)} (shorten it to show it whole)"
         )
+    if report.removed:
+        removed = ", ".join(f"'{t}'" for t in report.removed)
+        parts.append(f"template example text removed: {removed} (nothing to do)")
     if report.lost:
-        parts.append("not placed: " + ", ".join(report.lost))
-    parts.extend(report.shrunk)
+        parts.append(
+            f"not placed: {', '.join(report.lost)} (move it to a field this slide shows, "
+            "or drop it)"
+        )
+    parts.extend(f"{s} (nothing to do)" for s in report.shrunk)
     return f"Slide {report.position}: " + "; ".join(parts) + "."
 
 
 def _build_notes(plan: DeckPlan, issues: List[SlideReport], notes: List[str]) -> str:
     """What the agent should know about the deck it just built."""
     lines = [
-        f"Entry {index} of 'slides' was not a slide object and was skipped."
+        f"Entry {index} of 'slides' was not a slide object and was skipped: if it was "
+        "meant as a slide, write it as an object (title, bullets…)."
         for index, slide in enumerate(plan.slides, start=1)
         if slide.invalid_entry is not None
     ]
@@ -531,7 +535,10 @@ def build_list_images_tool(
             e for e in entries if e.document_name.lower().endswith(_IMAGE_SUFFIXES)
         ]
         if not images:
-            return f"The folder '{normalized}' holds no image."
+            return (
+                f"The folder '{normalized}' holds no image. Build the deck without images, "
+                "or ask the user for another folder."
+            )
         return json.dumps(
             [{"document_id": e.document_uid, "name": e.document_name} for e in images]
         )
@@ -660,14 +667,15 @@ def build_builder_tools(
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
             logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", exc)
             return _error(
-                "The slide plan could not be read. Call build_presentation again with 'slides' as a "
-                "list of objects, each with its content (title, bullets, items…)."
+                "No deck was built: the slide plan could not be read. Call build_presentation "
+                "again with 'slides' as a list of objects, each with its content (title, "
+                "bullets, items…)."
             )
 
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
-                "The plan has no content, so nothing was generated. Write the slides (title, bullets, "
-                "items…) and call build_presentation again."
+                "No deck was built: every slide of the plan is empty. Write each slide's "
+                "content (title, bullets, items…) and call build_presentation again."
             )
         image_ids = _image_ids(plan)
         if image_ids and services.document_content is None:
@@ -683,7 +691,8 @@ def build_builder_tools(
             _assign_loadable, inventory, plan, prefetched, variety, max_uses
         )
         unloadable = [
-            f"image '{uid}' is not a usable image document and was left out."
+            f"image '{uid}' is not a usable image document and was left out: use a "
+            "document_id from list_images_in_folder."
             for uid in bad
         ]
         workspace = services.workspace_fs
@@ -711,8 +720,8 @@ def build_builder_tools(
         except Exception:  # noqa: BLE001 - surfaced to the agent
             logger.exception("[PPTBUILD][TOOL] template load FAILED")
             return _error(
-                "The presentation template could not be loaded right now. Tell the user and suggest trying "
-                "again in a moment."
+                "No deck was built: the presentation template could not be loaded right now. "
+                "Tell the user and suggest trying again in a moment."
             )
 
         if not acquire_heavy_job_slot():
@@ -727,13 +736,13 @@ def build_builder_tools(
                 prefetched,
             )
         except RenderError as exc:
-            return _error(f"{exc} Check the plan and call build_presentation again.")
+            return _error(f"No deck was built: {exc}")
         except Exception:  # noqa: BLE001 - wrapped uniformly for the agent
             elapsed = time.monotonic() - started
             logger.exception("[PPTBUILD][TOOL] render FAILED after %.0fs", elapsed)
             return _error(
-                "The presentation could not be built because of an internal problem. Tell the user and "
-                "suggest trying again; if it persists, simplify the plan."
+                "No deck was built because of an internal problem. Tell the user and suggest "
+                "trying again; if it persists, simplify the plan."
             )
         finally:
             release_heavy_job_slot()
@@ -760,8 +769,8 @@ def build_builder_tools(
         except Exception:  # noqa: BLE001 - surfaced to the agent
             logger.exception("[PPTBUILD][TOOL] upload FAILED")
             return _error(
-                "The presentation was built but could not be saved to the conversation files. Tell the "
-                "user and suggest trying again in a moment."
+                "The deck was built but could not be saved to the conversation files, so the "
+                "user cannot get it. Tell the user and suggest trying again in a moment."
             )
 
         notes = _build_notes(
