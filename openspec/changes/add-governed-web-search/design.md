@@ -26,6 +26,8 @@ The existing package has a reusable asynchronous DuckDuckGo/extraction engine wr
 
 10. **Reading long pages.** `fetch_url` returns at most `max_chars_per_page`. `focus` stays the primary way to reach relevant passages anywhere in the page; `offset` continues from the previous result's `next_offset` when the returned text ends just before what is needed. Offsets are positions in the full page, so `focus` and `offset` are mutually exclusive (rejected together) and `next_offset` is only returned for unfocused reads. Each continuation re-downloads the page (bounded by `max_bytes`, not billed by the provider) and adds model tokens, so the tool description makes it a deliberate choice rather than a full-page read.
 
+11. **Admin self-test.** A deterministic, no-LLM graph agent (`fred.github.self_test_web`, non-public) runs a fixed battery of probes through the real per-user port: schema refusals, destinations refused before any connection (loopback, private, metadata, encoded, platform service names), Internet-dependent refusals (DNS to loopback, redirects, binary content), SafeSearch policy, search and page read. The battery is code, never user input. Probes whose third-party endpoint is unreachable are skipped, never passed. The admin Self-test page provisions it, reads its one-line JSON report and deletes it. Like the existing self-test, its template is on the control-plane capability-gate exemption allowlist, since a non-public template can never be granted by an admin.
+
 ## Risks / Trade-offs
 
 - Brave availability, quotas and pricing are commercial prerequisites; no live Brave call is claimed by mocked-transport tests.

@@ -4456,6 +4456,13 @@ security trace until its retention expires, and account deletion never depends o
 a runtime being reachable. Erasure is an explicit runtime administrator call, see
 the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity).
 
+### 2026-10-07 — Web research self-test template (#2980)
+
+`fred.github.self_test_web` joins `fred.github.self_test` on the capability-gate
+exemption allowlist (`_CAPABILITY_GATE_EXEMPT_TEMPLATE_AGENT_IDS`): it is a
+non-public harness template that no admin can grant, provisioned only by the
+platform-admin Self-test page through `include_non_public`.
+
 ### 2026-10-07 — Web research analytics preset (#2980)
 
 `GET /kpi/presets/web_research_summary` (platform admin, team-scopable) returns

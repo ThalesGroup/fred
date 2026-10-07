@@ -39,6 +39,10 @@
 
 - [x] 8.1 Add `offset` to `fetch_url` and `next_offset` to returned pages; tell the model to use `focus` first and `offset` when the end of the text leads into the relevant part.
 
+## 9. Admin web self-test
+
+- [x] 9.1 Add the `fred.github.self_test_web` probe agent, its Self-test page section and scenario, and exempt its template from the capability gate; enable web research in the local developer configuration.
+
 ## Evidence
 
 Previous version: 67 focused tests and root quality gates passed; separate egress HTTPS topology was reviewed against implementation head `289b26e509aae586ae5b4b27fbc09a584cfcaf4a`. This is historical evidence, not verification of the revised transport. Current work reuses issue #2980 and branch `codex/add-governed-web-search`.
@@ -54,3 +58,5 @@ Explicit erasure (2026-10-07): control-plane erasure fan-out, its test and the r
 Engine in the runtime (2026-10-07): engine, providers and their tests moved with `git mv`; runtime no longer imports any capability (dev dependency and uv source removed, `trafilatura`/`httpcore` in the `app` extra, `dev` includes `app`); redundant end-to-end tool test dropped (adapter and tools stay covered separately). Runtime `make code-quality` 0 errors (5 pre-existing warnings in untouched files) and `make test` 1855 passed; proxy integration test passes; capability `make code-quality` and `make test` (5) pass; Fred Agents loads the runtime engine.
 
 Long pages (2026-10-07): `offset`/`next_offset` engine test (three consecutive slices, last one not truncated) and tool-description test; runtime web-research suites 33 passed, capability 6 passed, ruff and basedpyright clean on the touched modules. Not yet observed on a live page.
+
+Admin web self-test (2026-10-07): the full probe battery passes against the live engine in about 8 s (44 probes); fred-agents self-test agent tests 9 passed; control-plane capability-gate tests 21 passed (new exemption test); frontend pipeline and Self-test page tests 100 passed, `tsc` and prettier clean. Developer ran the page end to end locally after the template exemption.

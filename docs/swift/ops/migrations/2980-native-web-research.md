@@ -116,6 +116,15 @@ retries, free tiers and LLM tokens. The section reads a content-free
 `web_research.request` KPI event, so it requires the OpenSearch KPI store and
 counts from the deployment of this version; restarts do not reset it.
 
+In **Administration → Self-test**, run **Web research checks**: a deterministic
+agent (no LLM) probes the deployment through the real port — refused URLs,
+internal, metadata and encoded destinations, redirects, binary content,
+SafeSearch floor, then a working search and page read — and reports each check.
+It fails first when `web_research.enabled` is off. Probes needing an unreachable
+third-party endpoint (httpbin.org, nip.io, example.com) are skipped, not passed;
+in proxy mode they also show whether the proxy enforces the destination policy.
+Each probe leaves a record in the restricted activity log.
+
 Use Fred's existing Prometheus exporter and runtime dashboard: operation counts,
 latency, failure/busy outcomes and activity-sink failures. Load the rules in
 [deploy/web-research/alerts.yaml](../../../../deploy/web-research/alerts.yaml).

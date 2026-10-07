@@ -57,6 +57,11 @@ Fred SHALL execute research internally, directly or through an explicitly config
 - **WHEN** the configured proxy is unavailable
 - **THEN** Fred returns a bounded error without opening a direct Internet connection
 
+#### Scenario: Admin self-test
+- **WHEN** a platform administrator runs the web research self-test
+- **THEN** a deterministic agent exercises the real per-user port with a fixed probe battery and reports each protection as passed, failed or skipped
+- **AND** it fails first, probing nothing, when web research is not enabled or its activity store is not ready
+
 ### Requirement: Attributed, retained search activity
 
 Fred SHALL record each dispatched research request with opaque subject/correlation IDs, query or public URL, timing and outcome. Records SHALL exclude page bodies, snippets and credentials. Access SHALL be restricted to platform operators and records SHALL expire after a configurable 30-day default. Deleting an account SHALL NOT erase its activity, which remains a security trace until expiry; an administrator SHALL be able to erase one user's activity explicitly. A compliant activity sink SHALL be required for enablement.
