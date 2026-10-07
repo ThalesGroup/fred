@@ -27776,12 +27776,6 @@
                               "title": "Enableapplications",
                               "type": "boolean"
                             },
-                            "enableAllResourceSpaces": {
-                              "default": false,
-                              "description": "Show Espace d'\u00e9quipe and Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
-                              "title": "Enableallresourcespaces",
-                              "type": "boolean"
-                            },
                             "enableInformationSystems": {
                               "default": false,
                               "description": "Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",
@@ -30068,12 +30062,6 @@
                               "default": false,
                               "description": "Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled.",
                               "title": "Enableapplications",
-                              "type": "boolean"
-                            },
-                            "enableAllResourceSpaces": {
-                              "default": false,
-                              "description": "Show Espace d'\u00e9quipe and Agents tabs on the Resources page, not just Corpus d'\u00e9quipe.",
-                              "title": "Enableallresourcespaces",
                               "type": "boolean"
                             },
                             "enableInformationSystems": {

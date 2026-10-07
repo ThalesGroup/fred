@@ -1980,7 +1980,6 @@ applications:
             # Deployment-wide kill switch for the integrated Apps surface,
             # catalog/API, and frontend application-service gateway.
             enableApplications: false
-            enableAllResourceSpaces: false
             enableInformationSystems: false
           # Optional deployer-configured upload warning, shown on upload
           # surfaces (document upload drawer, chat attachments). Omit to show

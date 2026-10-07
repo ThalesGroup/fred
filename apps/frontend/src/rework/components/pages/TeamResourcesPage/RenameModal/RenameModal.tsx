@@ -35,11 +35,8 @@ interface RenameModalProps {
 }
 
 /**
- * Single-field "new name" dialog reused for every rename action across the
- * Resources tabs (Corpus folders/documents, Espace perso/partagé/Agents
- * files) — one modal, callers supply the initial name and a submit handler
- * that hits whichever rename endpoint applies (tag PUT, document name PUT,
- * or `/fs/rename`).
+ * Single-field dialog for corpus folder and document renames. The caller
+ * supplies the initial name and the matching submit handler.
  */
 export default function RenameModal({ open, onClose, initialName, onSubmit, lockedSuffix }: RenameModalProps) {
   const { t } = useTranslation();

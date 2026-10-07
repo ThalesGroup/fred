@@ -98,10 +98,6 @@ class FrontendFeatureFlags(BaseModel):
             "the frontend Apps experience stay disabled."
         ),
     )
-    enableAllResourceSpaces: bool = Field(
-        default=False,
-        description="Show Espace d'équipe and Agents tabs on the Resources page, not just Corpus d'équipe.",
-    )
     enableInformationSystems: bool = Field(
         default=False,
         description="Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone.",

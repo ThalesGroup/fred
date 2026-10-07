@@ -2934,8 +2934,6 @@ export type ApplicationList = {
 export type FrontendFeatureFlags = {
   /** Enable Fred's integrated Apps surface deployment-wide. When false, application discovery, application catalog administration, and the frontend Apps experience stay disabled. */
   enableApplications?: boolean;
-  /** Show Espace d'équipe and Agents tabs on the Resources page, not just Corpus d'équipe. */
-  enableAllResourceSpaces?: boolean;
   /** Reserved for the standalone rags-services admin UI; unused now that its temporary in-repo copy is gone. */
   enableInformationSystems?: boolean;
 };

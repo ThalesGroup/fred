@@ -939,7 +939,6 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["team_admin_charter_enabled"] is False
     assert payload["feature_flags"] == {
         "enableApplications": False,
-        "enableAllResourceSpaces": False,
         "enableInformationSystems": False,
     }
     assert "ui_settings" not in payload

@@ -1937,30 +1937,14 @@
       "workspaceTitle": "Files",
       "pageTitle": "Team resources",
       "pageSubtitle": "Manage local resources, manually added to the team",
-      "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
         "resources": "Team corpus",
-        "team": "Shared space",
-        "agents": "Agents",
-        "removedAgent": "Removed agent",
         "indexed": "indexed corpus",
         "private": "private · in {{team}}",
         "privatePersonal": "private · personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
-      },
-      "hints": {
-        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
-        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
-        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
-      },
-      "provenance": {
-        "origins": {
-          "uploaded": "Uploaded",
-          "agent_generated": "Generated",
-          "shared_copy": "Shared"
-        }
       },
       "search": {
         "placeholder": "Search",
@@ -1996,7 +1980,6 @@
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
         "back": "Back to previous folder",
-        "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
         "download": "Download",
