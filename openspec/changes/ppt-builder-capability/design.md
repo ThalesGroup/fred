@@ -265,6 +265,18 @@ Found live (D21's case): an agenda of 9 entries on a template whose agenda slide
 
 Rejected: asking the model to split (a round, and weak models resend the same list, D21's live case); splitting bullets by line count (breaks sub-bullets from their parent); numbering messages on the rendered deck (`changes` and the stored plan would no longer match what the model sent).
 
+### D25. "What was built": a structured summary on the delivered part
+
+Users see the deck and the model's reply, and the reply can paraphrase or omit what the tool reported (a list continued on a second slide, a picture left out, a text cut). Developer-approved: an info button beside the download opens a short, plain account of the deck, taken from the tool.
+
+- **Where.** An optional `summary` on the `ppt_preview` part (`PptPreviewPart`, shared with `ppt_filler`, which never sets it). The part is persisted with the message, so history replay shows the same button; no second store, no new endpoint.
+- **Shape.** A list, one entry per rendered slide, in deck order: `{number, part, parts, title, kind, template, notes}`. `number` is the plan's slide number (D24: both parts of a split list share it), `part`/`parts` mark a split (1/1 otherwise), `title` the title as rendered (with the `(k/n)` marker, inline Markdown stripped, capped at 120 chars), `kind` the template slide's kind, `template` its label. Each note is `{code, count?, kind?}`: `text_shortened`, `content_left_out`, `items_left_out` (count), `image_unusable` (count), `table_left_out`, `table_text_smaller`, `text_overflows`, `left_empty`, `fixed_slide`, `list_continued`, `other_kind` (the requested kind). A 20-slide deck is a few KB.
+- **Codes, not prose.** The agent's notes are English sentences with remedies written for the model ("call again with `changes`…"); a user needs neither the remedy nor English. Codes let the frontend translate (fr/en today) and word them for a non-technical reader, and keep the payload small. Field names (`subtitle`, `bullets`) stay out: they are the model's vocabulary, not the user's.
+- **Truth.** Recorded where the render and the tool act (the same places as the agent's report, D21), per rendered slide rather than per plan number, so a split list's parts each carry their own notes. Pictures that failed to load before the assignment are noted on the slide that named them (its first part). Left out on purpose: removed example text, the agenda gap and repeat notes (hints for the model, nothing the user lost).
+- **Display.** The button shows only when `summary` exists (older parts and `ppt_filler` decks have none).
+
+Rejected: sending the agent's English notes (untranslatable, model-facing); a separate endpoint reading the stored plan (the plan is the model's, not what was rendered, and it changes with the next build).
+
 ## Risks / Trade-offs
 
 - [Vision model mislabels] → the author relabels in the panel; deterministic geometry still bounds what can be filled; eval measures the effect.

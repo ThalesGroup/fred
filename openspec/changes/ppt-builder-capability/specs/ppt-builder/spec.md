@@ -683,6 +683,11 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 - **WHEN** the model sends the same build call twice at the same time
 - **THEN** one deck is built, the copy is answered as ignored without building, and a different plan sent in parallel is built after the first
 
+#### Scenario: What was built
+
+- **WHEN** a deck is delivered with a preview
+- **THEN** the preview part carries, per rendered slide, its plan number, its part of a split list, its title, kind and template slide, and note codes for what was cut, left out, continued or built as another kind, taken from the render and not from the model's reply; the card and pane show an info button opening that account in the user's language, and a `ppt_filler` deck (no summary) shows no button
+
 #### Scenario: Preview unavailable
 
 - **WHEN** PDF conversion fails or is unavailable
