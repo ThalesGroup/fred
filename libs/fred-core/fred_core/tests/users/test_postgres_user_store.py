@@ -19,7 +19,7 @@ from uuid import uuid4
 import pytest
 import pytest_asyncio
 from fred_core.users.store.postgres_user_store import PostgresUserStore
-from fred_core.users.user_models import GcuVersionsType, UserRow
+from fred_core.users.user_models import UserRow
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -62,7 +62,7 @@ async def test_new_versions_replace_acceptance_without_changing_storage(store):
     unaccepted = await store.find_user_by_id(uid)
     assert unaccepted.gcuVersionAccepted is None
     assert unaccepted.gcuAcceptedAt is None
-    await store.update_gcu_version(uid, GcuVersionsType.V1)
+    await store.update_gcu_version(uid, "v1")
     first = await store.find_user_by_id(uid)
     assert first.gcuVersionAccepted == "v1"
     for version in ["v2", "2026-10", "v1"]:
