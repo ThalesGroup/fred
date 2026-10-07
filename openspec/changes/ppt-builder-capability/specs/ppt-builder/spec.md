@@ -678,10 +678,10 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **WHEN** a `changes` call arrives in a conversation where the tool has evaluated no plan
 - **THEN** nothing is built and the result says there is no previous deck to change and to send the whole deck in `slides`
 
-#### Scenario: Same changes resent
+#### Scenario: Corrected resend of refused changes
 
-- **WHEN** the model resends, in the same turn, exactly the `changes` of its previous call (for example after a variety ask that says a resend is built as is)
-- **THEN** the stored result of those changes is built as is, never applied a second time
+- **WHEN** a `changes` call is refused with `needs_revision` and the model resends changes of the same shape (same operations on the same slide numbers and fields), corrected or identical, in the same turn (for example the inserted slide fixed, sent again as an insert, or a resend after a variety ask that says a resend is built as is)
+- **THEN** they are applied to the plan the refused changes were applied to, so nothing is inserted, removed or edited twice
 
 #### Scenario: User asks for a different kind of slide
 
