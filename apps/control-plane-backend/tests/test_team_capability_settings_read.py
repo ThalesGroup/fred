@@ -311,6 +311,26 @@ async def test_admin_route_gates_on_capability_management(monkeypatch):
     assert read.await_count == 0
 
 
+@pytest.mark.asyncio
+async def test_admin_read_resolves_personal_route_alias(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from control_plane_backend.capabilities import api as capability_api
+
+    monkeypatch.setattr(
+        capability_service, "require_can_manage_capability", _noop_gate()
+    )
+    read = AsyncMock(return_value="view")
+    monkeypatch.setattr(capability_service, "read_team_capability_settings", read)
+
+    result = await capability_api.get_admin_team_capability_settings(
+        CAPABILITY_ID, "personal", SimpleNamespace(), _user()
+    )
+
+    assert result == "view"
+    assert read.await_args.kwargs["team_id"] == "personal-u-1"
+
+
 # --- reading back what a disabled team kept ---
 
 
@@ -517,6 +537,26 @@ async def test_a_write_addressed_to_one_personal_space_lands_on_the_class(
         (PERSONAL_SCOPE_SETTINGS_ID, CAPABILITY_ID, {"allow_javascript": True}, "u-1")
     ]
     assert view.team_id == PERSONAL_SCOPE_SETTINGS_ID
+
+
+@pytest.mark.asyncio
+async def test_settings_write_resolves_personal_route_alias(_pod_catalog, monkeypatch):
+    _pod_catalog.append(_entry())
+    store = _SettingsStore(None)
+    monkeypatch.setattr(
+        capability_service, "require_can_manage_capability", _noop_gate()
+    )
+
+    view = await capability_service.write_team_capability_settings(
+        user=_user(),
+        capability_id=CAPABILITY_ID,
+        team_id="personal",
+        settings={"allow_javascript": False},
+        deps=_deps(store, _entry()),
+    )
+
+    assert view.team_id == PERSONAL_SCOPE_SETTINGS_ID
+    assert store.upserts[0][0] == PERSONAL_SCOPE_SETTINGS_ID
 
 
 @pytest.mark.asyncio

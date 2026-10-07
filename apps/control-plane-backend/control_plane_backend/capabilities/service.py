@@ -248,18 +248,15 @@ def _catalog_entry_for_revoke(
 
 def _canonical_team_id_for_entry(
     user: KeycloakUser,
-    entry: CapabilityCatalogEntry,
     team_id: TeamId,
 ) -> TeamId:
-    """Canonicalize reserved team aliases before a projected tuple write.
+    """Canonicalize reserved team aliases before tuple or settings writes.
 
     The alias is a route placeholder for the caller's own space; written
     verbatim it would produce a tuple matching no team and reading back
     enabled forever.
     """
 
-    if not is_projected_product_object(entry):
-        return team_id
     return resolve_system_team_id(user, team_id) or team_id
 
 
@@ -631,7 +628,7 @@ async def write_team_capability_settings(
         raise CapabilityNotFound(
             f"Capability {capability_id!r} has no per-team settings."
         )
-    team_id = settings_scope_id(_canonical_team_id_for_entry(user, entry, team_id))
+    team_id = settings_scope_id(_canonical_team_id_for_entry(user, team_id))
     validated = validate_team_settings(entry.team_settings_fields, settings)
     await deps.get_team_capability_settings_store().upsert(
         team_id=team_id,
@@ -658,7 +655,7 @@ async def enable_team_capability(
     await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry(catalog, capability_id)
-    team_id = _canonical_team_id_for_entry(user, entry, team_id)
+    team_id = _canonical_team_id_for_entry(user, team_id)
     validated = await enable_capability_for_team(
         rebac=rebac,
         settings_store=(
@@ -698,7 +695,7 @@ async def disable_team_capability(
     await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
-    team_id = _canonical_team_id_for_entry(user, entry, team_id)
+    team_id = _canonical_team_id_for_entry(user, team_id)
     suspended = await disable_capability_for_team(
         rebac=rebac,
         settings_store=(
@@ -738,7 +735,7 @@ async def reset_team_capability(
     await _require_can_manage(rebac, user, capability_id, deps=deps)
     catalog = await aggregate_capability_catalog(deps)
     entry = _catalog_entry_for_revoke(catalog, capability_id)
-    team_id = _canonical_team_id_for_entry(user, entry, team_id)
+    team_id = _canonical_team_id_for_entry(user, team_id)
     default_on = await has_enablement_org_relation(
         rebac, enablement_ref(entry), RelationType.DEFAULT_ON
     )

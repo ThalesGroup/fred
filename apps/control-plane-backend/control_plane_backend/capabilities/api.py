@@ -62,6 +62,7 @@ from control_plane_backend.product.dependencies import (
 )
 from control_plane_backend.teams.schemas import TeamPermission
 from control_plane_backend.teams.service import require_team_access
+from control_plane_backend.teams.system import resolve_system_team_id
 
 router = APIRouter(tags=["Capabilities"])
 ProductDependencies = Annotated[
@@ -136,7 +137,9 @@ async def get_admin_team_capability_settings(
             user=user, capability_id=capability_id, deps=deps
         )
         return await capability_service.read_team_capability_settings(
-            capability_id=capability_id, team_id=team_id, deps=deps
+            capability_id=capability_id,
+            team_id=resolve_system_team_id(user, team_id) or team_id,
+            deps=deps,
         )
     except (AuthorizationError, CapabilityNotFound) as exc:
         raise _map_error(exc) from exc
