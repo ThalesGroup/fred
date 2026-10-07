@@ -32,13 +32,13 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     Final,
     Generic,
     List,
     Literal,
-    TYPE_CHECKING,
     Protocol,
     TypeAlias,
     TypeVar,

@@ -4128,7 +4128,7 @@ def _build_capability_save_services(
     model_binding = binding.model_copy(
         update={
             "runtime_context": binding.runtime_context.model_copy(
-                update={"access_token": None}
+                update={"access_token": None}  # nosec B105
             )
         }
     )
