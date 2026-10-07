@@ -13,8 +13,6 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
-import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState, type ReactNode } from "react";
@@ -83,9 +81,9 @@ const STATUS_TOOLTIP_KEY: Record<IncludedCapabilityStatus, string> = {
 
 /**
  * One "capability pack" card for the agent form's Simple capabilities view
- * (#2220), kept compact for small screens: a 32px icon, title/description, an
- * activation switch and an expand button revealing the capabilities the pack
- * bundles, each showing whether the platform admin enabled it for the team.
+ * (#2220), kept compact for small screens: the card body (32px icon, title,
+ * description) is the activation switch, and an end segment expands the
+ * capabilities the pack bundles, each showing whether the admin enabled it.
  */
 export function ToolPackCard({
   pack,
@@ -112,11 +110,17 @@ export function ToolPackCard({
 
   return (
     <li className={styles.card} data-checked={checked}>
-      {/* The <label> is `display: contents`: its children lay out in the header
-          row, so the expand button can sit outside it (a button inside a label
-          would steal the switch's click) while the rest of the row toggles. */}
+      {/* Two click zones with their own hover: the card body is the pack's
+          switch, the end segment expands the included capabilities. */}
       <div className={styles.header}>
-        <label className={styles.toggleArea}>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          className={styles.toggleArea}
+          disabled={disabled}
+          onClick={() => onToggle(!checked)}
+        >
           <span className={styles.icon} aria-hidden>
             <Icon category="outlined" type={pack.icon as IconType} />
           </span>
@@ -133,28 +137,17 @@ export function ToolPackCard({
             </span>
             <span className={styles.description}>{t(pack.descriptionKey)}</span>
           </span>
-          <span className={styles.switch}>
-            <Switch
-              checked={checked}
-              onChange={() => onToggle(!checked)}
-              disabled={disabled}
-              aria-label={t(pack.titleKey)}
-            />
-          </span>
-        </label>
+        </button>
         {hasIncluded && (
-          <Tooltip text={includedLabel}>
-            <IconButton
-              type="button"
-              variant="icon"
-              size="small"
-              className={styles.expand}
-              icon={{ category: "outlined", type: expanded ? "expand_less" : "expand_more" }}
-              aria-label={includedLabel}
-              aria-expanded={expanded}
-              onClick={() => setExpanded((o) => !o)}
-            />
-          </Tooltip>
+          <button
+            type="button"
+            className={styles.expand}
+            aria-label={includedLabel}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((o) => !o)}
+          >
+            <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
+          </button>
         )}
       </div>
 

@@ -79,9 +79,10 @@ describe("ToolPackCard compact header", () => {
     />,
   );
 
-  it("puts the expand button in the header, outside the switch's label", () => {
-    const label = html.slice(html.indexOf("<label"), html.indexOf("</label>"));
-    expect(label).not.toContain("aria-expanded");
+  it("makes the card body the pack switch and keeps the expand zone apart", () => {
+    const body = html.slice(html.indexOf('role="switch"'), html.indexOf("</button>"));
+    expect(html).toContain('aria-checked="false"');
+    expect(body).not.toContain("aria-expanded");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("cap.ppt");
   });

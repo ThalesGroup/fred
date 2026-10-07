@@ -16,8 +16,9 @@
 
 .card {
   display: flex;
+  position: relative;
   flex-direction: column;
-  border-radius: var(--radius-m);
+  border-radius: var(--radius-s);
   background: var(--surface-container);
   overflow: hidden;
   color: var(--on-surface);
@@ -35,25 +36,56 @@
   --pack-icon-bg: var(--primary);
 }
 
-/* Whole header is the click target (padding included), matching CapabilityCard.
-   Compact sizing keeps more packs on a small screen. */
+/* Two click zones side by side, each with its own hover: the body toggles
+   the pack, the end segment expands the included capabilities. */
 .header {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-s);
-  cursor: pointer;
-  padding: var(--spacing-s);
+  align-items: stretch;
   user-select: none;
 }
 
-/* The label's children join the header row; `order` puts the expand button
-   (outside the label) between the text and the switch. */
 .toggleArea {
-  display: contents;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-s);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  padding: var(--spacing-s);
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
-.header:hover {
+.toggleArea:disabled {
+  cursor: default;
+}
+
+.toggleArea:hover:not(:disabled),
+.expand:hover {
   background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
+}
+
+.toggleArea:focus-visible,
+.expand:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.expand {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  border: none;
+  border-left: 1px solid var(--outline-muted);
+  background: transparent;
+  padding: 0 var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font-size: 1.25rem;
 }
 
 .icon {
@@ -92,17 +124,6 @@
 .description {
   color: var(--pack-description-color);
   font: var(--font-body-small);
-}
-
-.expand {
-  flex-shrink: 0;
-  order: 1;
-}
-
-.switch {
-  display: inline-flex;
-  flex-shrink: 0;
-  order: 2;
 }
 
 /* Options reveal: per-pack configuration UI shown between the header and the
