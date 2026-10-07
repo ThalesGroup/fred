@@ -89,6 +89,7 @@ export function PptBuilderVarietySettings({ disabled, configValues, onConfigChan
         <span className={styles.switchDescription}>{t("capability.ppt_builder.fields.variety_check.description")}</span>
       </span>
       <Switch
+        size="small"
         checked={on}
         disabled={disabled}
         aria-label={t("capability.ppt_builder.fields.variety_check.title")}

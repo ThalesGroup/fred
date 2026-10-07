@@ -70,6 +70,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
           </span>
         </span>
         <Switch
+          size="small"
           checked={useVision}
           disabled={disabled || unavailable}
           onChange={(event) => onConfigChange(USE_VISION_KEY, event.target.checked)}
@@ -78,6 +79,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
       {useVision && (
         <Select
           size="small"
+          compact
           ariaLabel={t("capability.ppt_builder.fields.labelling_model.title")}
           options={options}
           value={selected}
