@@ -7185,6 +7185,13 @@ The pod binds it before every capability route. `require_agent_editor(team_id)` 
 as control-plane agent edits). A personal space is open to its owner only. Without
 ReBAC the check is identity-only. An unbound pod returns 503.
 
+The pod's own capability routes apply the same check to the team the request names
+before building any team-scoped service: validate-config (form `team_id`) and
+copy-config (source and target teams) need `CAN_UPDATE_AGENTS`, readiness (body
+`team_id`) needs `CAN_USE_TEAM_AGENTS`, the permission of the control-plane listing
+that calls it. On a secured pod a save or readiness request without `team_id` is
+422. Control-plane forwards the user's token on all three.
+
 Acceptance scenarios: `openspec/changes/ppt-builder-capability/`.
 
 ### 8.119 Capability readiness hook and pod endpoint (2026-10-05)

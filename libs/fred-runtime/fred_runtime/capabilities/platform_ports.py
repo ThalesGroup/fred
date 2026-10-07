@@ -154,6 +154,34 @@ class RoutedCapabilityModelPort(CapabilityModelPort):
             return self._resolved
 
 
+async def require_team_permission(
+    *,
+    user: KeycloakUser | None,
+    enforce: bool,
+    rebac: RebacEngine | None,
+    team_id: str,
+    permission: TeamPermission,
+    denied: str,
+) -> None:
+    """403 unless the caller holds `permission` on the team. A personal space is
+    its owner's only; without ReBAC the check is identity-only; `enforce=False`
+    (security disabled) allows everything."""
+    if not enforce:
+        return
+    if user is None:
+        raise _forbidden(denied)
+    if is_personal_team_ref(team_id):
+        if team_id != personal_team_id(user.uid):
+            raise _forbidden(denied)
+        return
+    if rebac is None or not rebac.enabled:
+        return
+    try:
+        await rebac.check_user_team_permission_or_raise(user, permission, team_id)
+    except AuthorizationError as exc:
+        raise _forbidden(denied) from exc
+
+
 class RebacCapabilityTeamAuthorizer(CapabilityTeamAuthorizer):
     """Agent-editor check on a team, as control-plane applies it to agent edits."""
 
@@ -165,31 +193,21 @@ class RebacCapabilityTeamAuthorizer(CapabilityTeamAuthorizer):
         self._rebac = rebac
 
     async def require_agent_editor(self, team_id: str) -> None:
-        if not self._enforce:
-            return
-        user = self._user
-        if user is None:
-            raise _forbidden()
-        if is_personal_team_ref(team_id):
-            if team_id != personal_team_id(user.uid):
-                raise _forbidden()
-            return
-        rebac = self._rebac
-        if rebac is None or not rebac.enabled:
-            return
-        try:
-            await rebac.check_user_team_permission_or_raise(
-                user, TeamPermission.CAN_UPDATE_AGENTS, team_id
-            )
-        except AuthorizationError as exc:
-            raise _forbidden() from exc
+        await require_team_permission(
+            user=self._user,
+            enforce=self._enforce,
+            rebac=self._rebac,
+            team_id=team_id,
+            permission=TeamPermission.CAN_UPDATE_AGENTS,
+            denied=AGENT_EDITOR_DENIED,
+        )
 
 
-def _forbidden() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="You cannot edit the agents of this team.",
-    )
+AGENT_EDITOR_DENIED = "You cannot edit the agents of this team."
+
+
+def _forbidden(detail: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
 def team_authorizer_binder(*, security_enabled: bool) -> Callable[..., Awaitable[None]]:

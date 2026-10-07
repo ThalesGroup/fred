@@ -200,9 +200,11 @@ from fred_runtime.capabilities.errors import (
     UnknownCapabilityError,
 )
 from fred_runtime.capabilities.platform_ports import (
+    AGENT_EDITOR_DENIED,
     CapabilitySaveRouting,
     RoutedCapabilityModelPort,
     parse_save_routing,
+    require_team_permission,
     team_authorizer_binder,
 )
 from fred_runtime.common.background_tasks import spawn
@@ -5321,6 +5323,30 @@ def _build_agent_router(
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
     _execution_subject = _make_execution_dependency(get_current_user, security_enabled)
 
+    async def _require_team(
+        caller: KeycloakUser | None,
+        team_id: str | None,
+        permission: TeamPermission = TeamPermission.CAN_UPDATE_AGENTS,
+        denied: str = AGENT_EDITOR_DENIED,
+    ) -> None:
+        # Capability routes build team-scoped services (the team's models):
+        # the caller must hold the permission on the team they name.
+        if not team_id:
+            if security_enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Field 'team_id' is required.",
+                )
+            return
+        await require_team_permission(
+            user=caller,
+            enforce=security_enabled,
+            rebac=get_runtime_context().config.rebac_engine,
+            team_id=team_id,
+            permission=permission,
+            denied=denied,
+        )
+
     def _enforce_chat_input_limit(request: RuntimeExecuteRequest) -> None:
         violation = validate_runtime_request(request, max_chat_input_chars)
         if violation is not None:
@@ -5855,6 +5881,8 @@ def _build_agent_router(
         capability = capability_registry.capability(capability_id)
 
         form = await http_request.form()
+        form_team = form.get("team_id")
+        await _require_team(caller, form_team if isinstance(form_team, str) else None)
         raw_config = form.get("config") or "{}"
         if not isinstance(raw_config, str):
             raise HTTPException(
@@ -6012,6 +6040,9 @@ def _build_agent_router(
         """
 
         capability = _installed_capability(http_request, capability_id)
+        # Control-plane requires agent editing in both teams for a copy.
+        await _require_team(caller, body.source_team_id)
+        await _require_team(caller, body.target_team_id)
         try:
             return await prepare_capability_copy(
                 capability,
@@ -6120,6 +6151,13 @@ def _build_agent_router(
         suspension after a save, in its sweep and on an editor's re-check.
         """
 
+        # Any member who lists the team's agents may re-check them.
+        await _require_team(
+            caller,
+            body.team_id,
+            TeamPermission.CAN_USE_TEAM_AGENTS,
+            "You cannot use the agents of this team.",
+        )
         capability_registry = _capability_registry_of(http_request)
         if capability_registry is None:
             return _ReadinessResponse()
