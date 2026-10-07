@@ -157,12 +157,25 @@
   width: min(100%, 36rem);
 }
 
-/* Two short fields side by side; they stack when the form is narrow. */
+/* Name (40%) and Role (60%, usually longer) side by side; they stack when
+   the form is too narrow for both minimum widths. */
 .fieldRow {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-m);
   margin-top: var(--spacing-xs);
+}
+
+.fieldRow > * {
+  min-width: 12rem;
+}
+
+.fieldRow > :first-child {
+  flex: 2 1 0;
+}
+
+.fieldRow > :last-child {
+  flex: 3 1 0;
 }
 
 .sectionContent {
