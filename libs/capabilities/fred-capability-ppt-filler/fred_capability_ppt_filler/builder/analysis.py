@@ -62,8 +62,8 @@ from fred_capability_ppt_filler.builder.models import (
     Zone,
     ZoneRole,
 )
-from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
 from fred_capability_ppt_filler.pptx_archive import open_presentation
+from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.shapes.base import BaseShape

@@ -60,8 +60,8 @@ from fred_capability_ppt_filler.builder.plan import (
 )
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
-from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 from fred_capability_ppt_filler.pptx_archive import open_presentation
+from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
 
 # Smallest font scale the overflow control applies before truncating.
 MIN_FONT_SCALE = 0.7

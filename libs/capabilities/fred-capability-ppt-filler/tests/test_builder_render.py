@@ -50,6 +50,7 @@ from fred_capability_ppt_filler.builder.plan import (
     PlanItem,
     SlidePlan,
 )
+from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.render import (
     MIN_FONT_SCALE,
     RenderError,
@@ -61,7 +62,6 @@ from fred_capability_ppt_filler.builder.render import (
     _write_lines,
     render_deck,
 )
-from fred_capability_ppt_filler.builder.preview import build_patterns_deck
 from fred_capability_ppt_filler.builder.tools import catalogue
 from fred_capability_ppt_filler.images import prepare_picture
 from fred_capability_ppt_filler.traversal import walk_shapes

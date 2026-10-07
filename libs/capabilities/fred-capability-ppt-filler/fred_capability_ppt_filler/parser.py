@@ -37,12 +37,12 @@ from pptx.oxml.ns import qn
 from pptx.presentation import Presentation as PresentationObject
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import (
     KEY_MARKER_PATTERN,
     KEY_PATTERN,
     list_keys_and_table_keys_on_slide,
 )
-from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 # Stable, machine-readable error codes. The frontend maps these to i18n messages; the
 # ``message`` field on each error is an English fallback.

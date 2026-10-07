@@ -79,12 +79,12 @@ from fred_capability_ppt_filler.images import (
     prepare_picture,
 )
 from fred_capability_ppt_filler.parser import apply_kept_notes_to_slide
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 from fred_capability_ppt_filler.traversal import (
     ImageAnchor,
     list_image_anchors_on_slide,
     replace_keys_on_slide,
 )
-from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from fred_capability_ppt_filler.capability import PptFillerConfig
