@@ -2662,10 +2662,6 @@
       },
       "formAgent": {
         "advancedSettings": "Paramètres avancés",
-        "capabilitiesInfo": {
-          "title": "À quoi servent ces capacités ?",
-          "body": "Les capacités sont les outils que votre agent peut utiliser pendant une conversation : rechercher dans vos documents, résumer un fichier, ou encore générer une présentation. Activez uniquement celles dont votre agent a besoin, puis ajustez leurs réglages si nécessaire. Vous pourrez toujours modifier cette sélection après la création de l'agent.\nPour les utiliser, pour la plupart, il suffit de le demander en langage naturel à votre agent (ex : \"Fais un résumé du document attaché à cette conversation.\")."
-        },
         "capabilities": {
           "header": "Activer des capacités pour votre agent",
           "learnMore": "En savoir plus",
