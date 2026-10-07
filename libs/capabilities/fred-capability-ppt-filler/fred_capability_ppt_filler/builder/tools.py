@@ -30,6 +30,7 @@ sees it instead of an opaque failure.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import logging
 import time
@@ -47,6 +48,7 @@ from fred_sdk.contracts.context import (
 )
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
+from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
 
@@ -261,6 +263,48 @@ def _to_plan(validated: Any) -> DeckPlan:
     )
 
 
+def _loads(raw: object) -> bool:
+    """Whether fetched bytes open as an image (header only: cheap)."""
+    if not isinstance(raw, bytes):
+        return False
+    try:
+        with Image.open(io.BytesIO(raw)):
+            return True
+    except (UnidentifiedImageError, OSError, ValueError):
+        return False
+
+
+def _assign_loadable(
+    inventory: TemplateInventory,
+    plan: DeckPlan,
+    prefetched: Dict[str, object],
+    variety: VarietyCheck,
+    max_uses: int,
+) -> Tuple[Assignment, DeckPlan, List[str]]:
+    """Assign with the pictures that load only: an id that does not must not
+    count as filling a framed picture zone, which would then show its frame."""
+    bad = sorted(uid for uid, raw in prefetched.items() if not _loads(raw))
+    if bad:
+        plan = plan.model_copy(
+            update={"slides": [_without(slide, set(bad)) for slide in plan.slides]}
+        )
+    return assign(inventory, plan, variety, max_uses), plan, bad
+
+
+def _without(slide: SlidePlan, bad: set[str]) -> SlidePlan:
+    items = [
+        item.model_copy(update={"image": None}) if item.image in bad else item
+        for item in slide.items
+    ]
+    return slide.model_copy(
+        update={
+            "image": None if slide.image in bad else slide.image,
+            "images": [i for i in slide.images if i not in bad],
+            "items": items,
+        }
+    )
+
+
 def _image_ids(plan: DeckPlan) -> set[str]:
     ids: set[str] = set()
     for slide in plan.slides:
@@ -280,6 +324,7 @@ def _needs_revision(
     plan: DeckPlan,
     previous: _Previous,
     repeats: List[Repeat],
+    lead: List[str],
 ) -> tuple[str, ToolInvocationResult]:
     """The problems, each flagged when the previous call already had it, so the
     model never reads the same message twice without learning what changed;
@@ -301,9 +346,12 @@ def _needs_revision(
     previous.clear()
     previous.update(current)
     payload: Dict[str, Any] = {"status": "needs_revision", "slides": slides}
-    text = (
-        "No deck was built: some slides fit no slide of this template. Fix each slide listed "
-        "under `slides` with one of its options."
+    text = " ".join(
+        lead
+        + [
+            "No deck was built: some slides fit no slide of this template. Fix each slide "
+            "listed under `slides` with one of its options."
+        ]
     )
     if repeats:
         payload["variety"] = _variety(repeats)
@@ -417,10 +465,6 @@ def _build_notes(plan: DeckPlan, issues: List[SlideReport], notes: List[str]) ->
         "\nTo review (if it matters, call again with the whole corrected deck; the new build "
         "replaces this one):\n" + "\n".join(lines)
     )
-
-
-async def _no_images() -> Dict[str, object]:
-    return {}
 
 
 def _prepare_and_render(
@@ -586,8 +630,23 @@ def build_builder_tools(
                 "The plan has no content, so nothing was generated. Write the slides (title, bullets, "
                 "items…) and call build_presentation again."
             )
-        # Before any I/O: a plan that needs revision costs no template fetch.
-        assignment = await asyncio.to_thread(assign, inventory, plan, variety, max_uses)
+        image_ids = _image_ids(plan)
+        if image_ids and services.document_content is None:
+            raise RuntimeError(
+                "ppt_builder: RuntimeServices.document_content is not available on this execution path."
+            )
+        # Pictures before the assignment, the template only after it: a plan
+        # that needs revision costs no template fetch.
+        prefetched = (
+            await _prefetch_image_bytes(image_ids, services) if image_ids else {}
+        )
+        assignment, plan, bad = await asyncio.to_thread(
+            _assign_loadable, inventory, plan, prefetched, variety, max_uses
+        )
+        unloadable = [
+            f"image '{uid}' is not a usable image document and was left out."
+            for uid in bad
+        ]
         workspace = services.workspace_fs
         session_id = identity.session_id
         asking = first and variety != "off"
@@ -596,7 +655,9 @@ def build_builder_tools(
         if repeats and deck_delivered(history()):
             repeats = []
         if assignment.problems:
-            return _needs_revision(assignment, plan, previous_problems, repeats)
+            return _needs_revision(
+                assignment, plan, previous_problems, repeats, unloadable
+            )
         previous_problems.clear()
         if repeats:
             return _variety_revision(repeats, assignment)
@@ -605,21 +666,9 @@ def build_builder_tools(
             raise RuntimeError(
                 "ppt_builder: RuntimeServices.workspace_fs is not available on this execution path."
             )
-        image_ids = _image_ids(plan)
-        if image_ids and services.document_content is None:
-            raise RuntimeError(
-                "ppt_builder: RuntimeServices.document_content is not available on this execution path."
-            )
-
         started = time.monotonic()
-        # The template fetch and the image prefetch are independent I/O.
         try:
-            template_bytes, prefetched = await asyncio.gather(
-                template_bytes_loader(),
-                _prefetch_image_bytes(image_ids, services)
-                if image_ids
-                else _no_images(),
-            )
+            template_bytes = await template_bytes_loader()
         except Exception:  # noqa: BLE001 - surfaced to the agent
             logger.exception("[PPTBUILD][TOOL] template load FAILED")
             return _error(
@@ -679,7 +728,9 @@ def build_builder_tools(
                 "user and suggest trying again in a moment."
             )
 
-        notes = _build_notes(plan, result.report.issues(), assignment.notes)
+        notes = _build_notes(
+            plan, result.report.issues(), unloadable + assignment.notes
+        )
 
         pdf_bytes = await convert_office_bytes_to_pdf(
             result.preview_pptx or result.pptx, suffix=".pptx"

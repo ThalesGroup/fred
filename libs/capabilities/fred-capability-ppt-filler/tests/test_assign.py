@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any, List
 
 from builder_decks import EVIDENCE_SLIDES, build_showcase_template, with_item_slides
+from deck_builders import png_bytes
 from fred_capability_ppt_filler.builder.analysis import analyze_template
 from fred_capability_ppt_filler.builder.assign import (
     _advice,
@@ -45,6 +46,7 @@ from fred_capability_ppt_filler.builder.plan import (
     zone_summary,
 )
 from fred_capability_ppt_filler.builder.render import _assign_text
+from fred_capability_ppt_filler.builder.tools import _assign_loadable
 from pptx.util import Inches
 
 _analysed = analyze_template(build_showcase_template()).inventory
@@ -927,6 +929,41 @@ def test_a_framed_picture_is_chosen_only_with_a_picture():
     (problem,) = assign(_inventory(framed), _plan(plain)).problems
     assert "images: this slide's picture area shows a frame" in problem.problem
     assert "image (required)" in zone_summary(framed)
+
+
+def test_an_image_id_that_does_not_load_leaves_a_framed_picture_empty():
+    """The build tool assigns with the pictures that load: an invalid id named
+    by the plan must not choose a framed slide that will show its frame."""
+    text = _cards_inventory().patterns[0]
+    steps = text.model_copy(
+        update={"id": "slide:4", "label": "Steps", "kind": "process"}
+    )
+    framed = text.model_copy(
+        deep=True, update={"id": "slide:3", "label": "Image cards"}
+    )
+    framed.groups[0].item_zones = ["image", "body"]
+    for i, item in enumerate(framed.groups[0].items):
+        item.insert(
+            0,
+            Zone(key=f"pic{i}", role="image", box=Box(x=0, y=0, w=1, h=1), framed=True),
+        )
+    inventory = _inventory(framed, steps)
+    plan = _plan(
+        SlidePlan(
+            title="Axes",
+            kind="cards",
+            items=[PlanItem(text="Close", image=f"d{i}") for i in range(3)],
+        )
+    )
+    good = png_bytes(4, 4)
+    fetched: dict[str, object] = {"d0": KeyError("d0"), "d1": b"text", "d2": b"<svg"}
+    assignment, kept, bad = _assign_loadable(inventory, plan, fetched, "off", 2)
+    assert bad == ["d0", "d1", "d2"] and not assignment.problems
+    assert [p.label for p in assignment.patterns if p] == ["Steps"]
+    assert [i.image for i in kept.slides[0].items] == [None, None, None]
+    loaded = {f"d{i}": good for i in range(3)}
+    assignment, _, bad = _assign_loadable(inventory, plan, loaded, "off", 2)
+    assert bad == [] and [p.label for p in assignment.patterns if p] == ["Image cards"]
 
 
 def test_a_heading_and_text_item_fits_a_card_with_one_text_zone():
