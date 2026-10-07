@@ -1663,9 +1663,7 @@ Renders agent-produced downloadable artifacts (`LinkPart` ui_parts on the final 
 chips below an assistant reply. The `/fs/download` route is session-authenticated, so a chip click
 runs an **authenticated fetch (live Bearer) → blob → save** via the shared `downloadAuthed` util —
 the same proxy-through-KF mechanism as the Resources file browser. A plain markdown anchor would
-navigate without a token and fail ("No authentication token provided"). Signed share links
-(`/fs/share` token-in-URL) are intentionally **not** used here — reserved for explicit external
-sharing — to avoid credential leakage, link rot, and stale-authorization bypass of live ReBAC.
+navigate without a token and fail ("No authentication token provided").
 
 #### Open UX issues
 
@@ -3779,9 +3777,10 @@ Toggling a capability no longer changes the name's font size
 Active emphasis is now weight + `--primary` color at identical metrics; only
 the config sub-form still expands, which is expected.
 
-### `FilesystemWorkspace` / `AgentsWorkspace` (Resources tabs — Mon espace/Espace d'équipe/Agents)
+### Historical: `FilesystemWorkspace` / `AgentsWorkspace` (removed in #2985)
 
-Expanding an empty folder now shows the same explanatory hint pattern as the
+These Resources tabs were removed in #2985. Previously, expanding an empty
+folder showed the same explanatory hint pattern as the
 corpus workspace (`.hint`, `--on-surface-muted`, body-small) instead of an
 empty dropdown: generic `rework.resources.empty.folder` for folders, dedicated
 `empty.agentFiles` inside an agent's space, and `empty.agents` when no agent
@@ -3819,7 +3818,7 @@ on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
-In the Documents, Filesystem and Agents workspaces the name column is
+In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
 keep their usual width while there is room and are the ones that shrink, truncated,

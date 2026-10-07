@@ -76,7 +76,7 @@ Review private control-plane backend and worker values overlays for `platform.fr
 
 ### Configuration
 
-Keep only `enableApplications`, `enableAllResourceSpaces`, and `enableInformationSystems` under `platform.frontend.feature_flags`. Remove any other keys from both application overlays. The bundled Helm values already contain the supported default-off flags.
+Keep only `enableApplications` and `enableInformationSystems` under `platform.frontend.feature_flags`. Remove any other keys from both application overlays. The bundled Helm values already contain the supported default-off flags.
 
 ### Upgrade
 
@@ -84,7 +84,7 @@ Apply the overlay cleanup and validate the values against the new chart schema b
 
 ### Validation
 
-Confirm chart values validation passes. Check that `/control-plane/v1/frontend/bootstrap` exposes the three supported flags and that the admin Tasks and migration task pages still show task rows, statuses, and acknowledgements.
+Confirm chart values validation passes. Check that `/control-plane/v1/frontend/bootstrap` exposes the two supported flags and that the admin Tasks and migration task pages still show task rows, statuses, and acknowledgements.
 
 ### Rollback
 
@@ -479,6 +479,24 @@ The migration cannot repair malformed tuning, grant replacement capabilities or
 remove historical OpenFGA tuples. Native document search and its shared Knowledge
 Flow client remain supported. MCP `sse`/`websocket` identifiers retain their existing
 configuration support; this change does not implement those connection paths.
+
+## Retire the legacy corpus and general-purpose filesystem surfaces
+
+Impact: **minor** · [MCP and corpus migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-corpus-filesystem-mcp.md) · [file-area migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-mon-espace.md)
+
+Before upgrading, export needed personal or team-shared files, remove the retired
+corpus/filesystem MCP selections and `mcp.filesystem_enabled`, and migrate
+external callers of `/corpus/*`, `artifacts.publish_text`, and
+`resources.fetch_text`. Remove `enableAllResourceSpaces` from private overlays.
+Let in-flight revectorization and vector-repair workflows finish. The separate
+`fred-samples` document-triage sample still targets the retired shared area;
+migrate or decommission it before use with this release.
+
+The Resources page now shows only the corpus. PPT Filler's technical template
+and generated-file transport, `list_document_tree`, corpus and attachment APIs,
+Deep conversation files, Wiki, and writable documents remain available. No
+stored objects are deleted by this cleanup. Follow both source notes for
+validation and coordinated rollback.
 
 ## Store the latest configurable CGU acceptance in users
 

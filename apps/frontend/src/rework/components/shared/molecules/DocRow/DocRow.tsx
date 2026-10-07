@@ -55,7 +55,7 @@ interface DocRowProps {
   onProcess?: () => void;
   /** secondary actions grouped under the "…" overflow menu. */
   moreActions?: DocRowMoreAction[];
-  /** optional provenance chip (e.g. OriginBadge) rendered in the trailing area. */
+  /** Optional trailing content rendered after the document actions. */
   provenanceBadge?: ReactNode;
   /** current search-inclusion state (retrievable flag). Omit when the concept doesn't
    * apply to this row (e.g. a plain filesystem file) — the toggle then renders nothing. */

@@ -177,47 +177,6 @@ class IngestionTaskService:
         )
         return handle
 
-    async def start_revectorize(
-        self,
-        *,
-        user: KeycloakUser,
-        scope: dict,
-        options: dict,
-        task_id: str,
-    ) -> WorkflowHandle:
-        """
-        Start a corpus re-vectorization job (MIGR-07).
-
-        A revectorize job isn't a `FileToProcess` pipeline — scope resolution
-        happens inside the workflow itself — so this doesn't go through
-        `submit_documents`. Only the Temporal backend supports it today.
-        """
-        if not isinstance(self._scheduler, TemporalScheduler):
-            raise NotImplementedError("Corpus revectorization requires the Temporal scheduler backend.")
-
-        payload = {
-            "scope": scope,
-            "options": options,
-            "user": user.model_dump(),
-            "task_id": task_id,
-            "max_parallelism": self._max_parallelism,
-        }
-        return await self._scheduler.start_revectorize(payload=payload, task_id=task_id)
-
-    async def start_repair_vector_metadata(self, *, source_tag: str, task_id: str) -> WorkflowHandle:
-        """
-        Start the vector-metadata repair job ("3a — Réparer uniquement", #2234).
-
-        Deliberately not `start_revectorize`: this never touches vectors, content,
-        or the embedder — see `RepairVectorMetadataWorkflow`'s module docstring.
-        Only the Temporal backend supports it today, same constraint as revectorize.
-        """
-        if not isinstance(self._scheduler, TemporalScheduler):
-            raise NotImplementedError("Vector-metadata repair requires the Temporal scheduler backend.")
-
-        payload = {"source_tag": source_tag, "task_id": task_id}
-        return await self._scheduler.start_repair_vector_metadata(payload=payload, task_id=task_id)
-
     async def store_fast_vectors(self, *, payload: dict) -> dict:
         """
         Store fast-ingest vectors using the configured scheduler backend.

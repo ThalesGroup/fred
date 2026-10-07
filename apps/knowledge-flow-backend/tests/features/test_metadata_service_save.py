@@ -12,19 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""MIGR-07 CSV/cross-team fix — regression guard for
-`MetadataService.save_document_metadata_trusted`.
-
-`save_document_metadata` does more than the per-tag `TagPermission.UPDATE`
-check: it also prunes stale tabular Parquet artifacts, adjusts team storage
-quotas, and updates tag timestamps (`_persist_metadata_and_follow_up`). A
-naive "trusted bypass" that reimplemented the write instead of reusing that
-shared helper could easily drop one of those follow-up steps silently — this
-is exactly the regression this file guards against, by asserting both
-`save_document_metadata` and `save_document_metadata_trusted` route through
-the identical `_persist_metadata_and_follow_up`, and that only the permission
-check differs.
-"""
+"""Permission and persistence checks for metadata saves."""
 
 from datetime import datetime, timezone
 
@@ -56,9 +44,7 @@ def _make_metadata(uid: str, *, tag_ids: list[str]) -> DocumentMetadata:
 
 
 class _RejectingRebac:
-    """Rejects every permission check — simulates a root/platform admin with
-    no per-tag/per-team grant, exactly the caller `save_document_metadata`
-    (the checked path) would incorrectly reject for a cross-team document."""
+    """Reject every per-tag permission check."""
 
     async def check_user_permission_or_raise(self, user, permission, resource_id) -> None:
         raise AuthorizationError(
@@ -77,9 +63,7 @@ def _build_service() -> MetadataService:
 
 @pytest.mark.asyncio
 async def test_save_document_metadata_checked_rejects_a_caller_without_tag_permission():
-    """Sanity/contrast: the ordinary, permission-checked path still enforces
-    `TagPermission.UPDATE` — proving the trusted bypass below is a distinct,
-    narrow addition, not a general weakening of `save_document_metadata`."""
+    """The ordinary save path enforces `TagPermission.UPDATE`."""
     service = _build_service()
     metadata = _make_metadata("doc-1", tag_ids=["tag-other-team"])
 
@@ -88,33 +72,8 @@ async def test_save_document_metadata_checked_rejects_a_caller_without_tag_permi
 
 
 @pytest.mark.asyncio
-async def test_save_document_metadata_trusted_skips_the_permission_check_but_runs_the_same_follow_up():
-    """The load-bearing guarantee: `save_document_metadata_trusted` never
-    calls `check_user_permission_or_raise` (so a root/platform admin with no
-    per-tag grant on a cross-team document still succeeds), but it reaches
-    the exact same `_persist_metadata_and_follow_up` helper as the checked
-    path — so Parquet pruning / storage-quota adjustment / tag-timestamp
-    updates are never silently dropped for the trusted call."""
-    service = _build_service()
-    metadata = _make_metadata("doc-1", tag_ids=["tag-other-team"])
-    calls: list[tuple[object, DocumentMetadata]] = []
-
-    async def _fake_persist_and_follow_up(user, metadata) -> None:
-        calls.append((user, metadata))
-
-    service._persist_metadata_and_follow_up = _fake_persist_and_follow_up
-    caller = object()
-
-    await service.save_document_metadata_trusted(user=caller, metadata=metadata)
-
-    assert calls == [(caller, metadata)]
-
-
-@pytest.mark.asyncio
 async def test_save_document_metadata_checked_also_routes_through_persist_and_follow_up():
-    """Same shared helper, checked path — proves the two public methods are
-    genuinely two thin entry points over one persistence implementation, not
-    two independently-maintained copies that could drift apart."""
+    """A permitted save still runs the shared metadata follow-up path."""
 
     class _PermissiveRebac:
         async def check_user_permission_or_raise(self, user, permission, resource_id) -> None:

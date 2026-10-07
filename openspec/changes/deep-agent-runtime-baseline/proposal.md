@@ -77,12 +77,13 @@ None.
 
 ## Non-goals
 
-- `WorkspaceService`, `FredWorkspaceBackend`, and M2M binding validation — tracked separately under
-  #2328 and #2498, not part of this change.
+- The retired general-purpose `WorkspaceService` / `FredWorkspaceBackend`
+  proposal and M2M binding validation are not part of this change. Any future
+  public file exchange requires a separate design; see #2328.
 - A public, user-visible Workspace. The follow-on
   `add-deep-agent-conversation-filesystem` change supplies a runtime-owned `CompositeBackend` for
   `/scratchpad/` and `/.deep/`; it does not add a public file API or Workspace product surface.
-- The multi-document tender scenario, its rubric, and any deliverable-publication proof — a future
-  slice once #2328/#2498 land, not evidence for this change.
+- The multi-document tender scenario, its rubric, and any deliverable-publication proof —
+  separate future work, not evidence for this change.
 - Advanced planning, sub-agent orchestration, and `GraphRuntime` HITL — out of scope; see `design.md`
   for `GraphRuntime`'s current, unrelated HITL lifecycle.

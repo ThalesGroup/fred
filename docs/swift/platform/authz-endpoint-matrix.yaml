@@ -925,46 +925,6 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/build-toc
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/corpus/capabilities
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/purge-vectors
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/repair-vector-metadata
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/revectorize
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/tasks/get
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/tasks/list
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/corpus/tasks/result
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: PUT
     path: /knowledge-flow/v1/document/metadata/{document_uid}
     review_status: pending_review
@@ -1100,11 +1060,6 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/copy-to-shared/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: DELETE
     path: /knowledge-flow/v1/fs/delete/{path:path}
     review_status: pending_review
@@ -1112,11 +1067,6 @@ operations:
   - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/fs/download/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/edit/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1135,23 +1085,8 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/mkdir/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: GET
     path: /knowledge-flow/v1/fs/page/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/rename/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/fs/share/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
@@ -1160,18 +1095,8 @@ operations:
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow
-    method: GET
-    path: /knowledge-flow/v1/fs/stats/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/fs/upload/{path:path}
-    review_status: pending_review
-    required_permission: pending_review
-  - service: knowledge-flow
-    method: POST
-    path: /knowledge-flow/v1/fs/write/{path:path}
     review_status: pending_review
     required_permission: pending_review
   - service: knowledge-flow

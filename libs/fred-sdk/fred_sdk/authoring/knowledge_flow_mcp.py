@@ -17,8 +17,7 @@ Official Knowledge Flow MCP server references for v2 agent authors.
 
 Why this file exists:
 - built-in Fred tools already use named constants such as `TOOL_REF_KNOWLEDGE_SEARCH`
-- agent authors should not repeat raw MCP server ids such as
-  `"mcp-knowledge-flow-fs"` directly inside profiles
+- agent authors should not repeat raw MCP server ids inside profiles
 - this file exposes the official non-demo Knowledge Flow MCP server ids that
   Fred intentionally supports for agent authors
 
@@ -33,11 +32,9 @@ How to use:
   official Knowledge Flow author-facing constants
 
 Example:
-- `mcp_servers=(MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_FS),)`
+- `mcp_servers=(MCPServerRef(id=MCP_SERVER_KNOWLEDGE_FLOW_TABULAR),)`
 
 Current official Knowledge Flow MCP servers:
-- `MCP_SERVER_KNOWLEDGE_FLOW_FS`: workspace and file operations
-- `MCP_SERVER_KNOWLEDGE_FLOW_CORPUS`: corpus administration operations
 - `MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS`: OpenSearch monitoring operations
 - `MCP_SERVER_KNOWLEDGE_FLOW_TABULAR`: tabular analysis operations
 """
@@ -47,12 +44,6 @@ from __future__ import annotations
 from typing import Final
 
 from ..contracts.models import MCPServerRef
-
-MCP_SERVER_KNOWLEDGE_FLOW_FS: Final[str] = "mcp-knowledge-flow-fs"
-"""Filesystem MCP server id used by Custodian-style agents."""
-
-MCP_SERVER_KNOWLEDGE_FLOW_CORPUS: Final[str] = "mcp-knowledge-flow-corpus"
-"""Corpus-management MCP server id used by Custodian-style agents."""
 
 MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS: Final[str] = (
     "mcp-knowledge-flow-opensearch-ops"
@@ -69,8 +60,6 @@ MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS: Final[str] = (
 
 __all__ = [
     "MCPServerRef",
-    "MCP_SERVER_KNOWLEDGE_FLOW_CORPUS",
-    "MCP_SERVER_KNOWLEDGE_FLOW_FS",
     "MCP_SERVER_KNOWLEDGE_FLOW_OPENSEARCH_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_PROMETHEUS_OPS",
     "MCP_SERVER_KNOWLEDGE_FLOW_TABULAR",

@@ -55,7 +55,6 @@ from ..contracts.models import AgentSettings, ReActAgentDefinition
 from ..contracts.runtime import (
     ChatModelFactoryPort,
     ToolInvokerPort,
-    WorkspaceFsPort,
 )
 
 AuthoredToolHandler = Callable[
@@ -93,8 +92,7 @@ class AuthoredToolRuntimePorts:
 
     Why this exists:
     - Python-authored tools may need the same runtime capabilities as other Fred
-      tools, such as model access, artifact publishing, resource reading, or a
-    fallback tool invoker, or media fetch for packaged assets
+      tools, such as model access, fallback tool invocation, or media fetch for packaged assets
 
     How to use it:
     - runtime bootstrap populates this once when it binds authored handlers
@@ -104,7 +102,6 @@ class AuthoredToolRuntimePorts:
     """
 
     chat_model_factory: ChatModelFactoryPort | None = None
-    workspace_fs: WorkspaceFsPort | None = None
     fallback_tool_invoker: ToolInvokerPort | None = None
     media_fetcher: MediaFetcher | None = None
 

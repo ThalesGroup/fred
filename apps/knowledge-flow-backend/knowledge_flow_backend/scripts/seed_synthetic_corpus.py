@@ -14,8 +14,8 @@
 
 """
 Seed a large synthetic corpus (fake libraries + documents + vectors) for local
-load-testing of repair/audit tooling (e.g. metadata/vector reconciliation scans,
-`/corpus/revectorize`, `MetadataService.audit_stores`).
+load-testing of repair/audit tooling (e.g. metadata/vector reconciliation scans
+and `MetadataService.audit_stores`).
 
 This writes directly to the same Postgres tag/metadata stores, OpenSearch
 vector index, ReBAC engine (OpenFGA), and content store (Minio/S3) the
@@ -116,7 +116,7 @@ def _build_document(tag: Tag, index: int) -> DocumentMetadata:
             modified=now,
             uploaded_by=SEED_UPLOADED_BY,
         ),
-        source=SourceInfo(  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults (only Field(default=...)) as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py) -- same false positive on every SourceInfo(...) call omitting it, e.g. test_repair_vector_metadata_activities.py:75
+        source=SourceInfo(  # type: ignore[reportCallIssue]  # basedpyright doesn't recognize Field(None, ...) positional defaults (only Field(default=...)) as satisfying SourceInfo's synthesized __init__; pull_location genuinely defaults to None (document_structures.py).
             source_type=SourceType.PUSH,
             # "fred" (not a seed-specific marker) on purpose: it's the same source_tag
             # every real manual upload gets (IngestionInput.source_tag default,

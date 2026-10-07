@@ -64,39 +64,6 @@ class UserStorageUploadResult:
     download_url: str | None = None
 
 
-@dataclass(frozen=True)
-class WorkspaceShareLink:
-    """A signed, short-TTL download link for an existing workspace file (`GET /fs/share`)."""
-
-    download_url: str
-    file_name: str
-    size: int | None = None
-    mime: str | None = None
-
-
-@dataclass(frozen=True)
-class UserStorageResourceInfo:
-    """
-    One entry returned by workspace listing endpoints.
-
-    `type` is normalized to either:
-    - `file`
-    - `directory`
-    - `unknown`
-    """
-
-    path: str
-    size: int | None
-    type: str
-    modified: str | None
-
-    def is_file(self) -> bool:
-        return self.type == "file"
-
-    def is_directory(self) -> bool:
-        return self.type == "directory"
-
-
 class KfWorkspaceClient(KfBaseClient):
     """
     Workspace client for non-corpus files.
@@ -313,16 +280,6 @@ class KfWorkspaceClient(KfBaseClient):
             self._fs_path("download", path), access_token
         )
 
-    async def fs_read_text(self, path: str, access_token: str | None = None) -> str:
-        """
-        Read one team-rooted file as raw UTF-8 text.
-
-        Uses the binary download route (not /fs/cat, which renders numbered excerpts) so the
-        content round-trips byte-for-byte before decoding.
-        """
-        blob = await self.fs_download_blob(path, access_token)
-        return blob.bytes.decode("utf-8")
-
     async def fs_upload(
         self,
         path: str,
@@ -344,99 +301,6 @@ class KfWorkspaceClient(KfBaseClient):
             access_token=access_token,
         )
         r.raise_for_status()
-
-    async def fs_list(
-        self, path: str = "/", access_token: str | None = None
-    ) -> list[UserStorageResourceInfo]:
-        """List one team-rooted directory via GET /fs/list?path=..."""
-        r = await self._request_with_token_refresh(
-            "GET",
-            "/fs/list",
-            phase_name="kf_fs_list",
-            params={"path": path},
-            access_token=access_token,
-        )
-        r.raise_for_status()
-        payload = r.json()
-        if not isinstance(payload, list):
-            raise ValueError("Invalid /fs/list response: expected a list.")
-        items: list[UserStorageResourceInfo] = []
-        for raw in payload:
-            parsed = self._parse_user_storage_resource(raw)
-            if parsed is not None:
-                items.append(parsed)
-        return items
-
-    async def fs_share(
-        self, path: str, access_token: str | None = None
-    ) -> WorkspaceShareLink:
-        """Get a signed download link for one team-rooted file via GET /fs/share/{path}."""
-        r = await self._request_with_token_refresh(
-            "GET",
-            self._fs_path("share", path),
-            phase_name="kf_fs_share",
-            access_token=access_token,
-        )
-        r.raise_for_status()
-        payload = r.json()
-        if not isinstance(payload, dict) or "download_url" not in payload:
-            raise ValueError(
-                "Invalid /fs/share response: expected an object with download_url."
-            )
-        return WorkspaceShareLink(
-            download_url=str(payload["download_url"]),
-            file_name=str(payload.get("file_name") or path.rsplit("/", 1)[-1]),
-            size=payload.get("size"),
-            mime=payload.get("mime"),
-        )
-
-    @staticmethod
-    def _normalize_resource_type(value: object) -> str:
-        raw = str(value or "").strip().lower()
-        if not raw:
-            return "unknown"
-        if raw in {"file", "filesystemresourceinfo.file"} or raw.endswith(".file"):
-            return "file"
-        if raw in {
-            "directory",
-            "dir",
-            "filesystemresourceinfo.directory",
-        } or raw.endswith(".directory"):
-            return "directory"
-        return "unknown"
-
-    @classmethod
-    def _parse_user_storage_resource(
-        cls, payload: object
-    ) -> UserStorageResourceInfo | None:
-        if not isinstance(payload, dict):
-            return None
-
-        path = str(payload.get("path") or "").strip()
-        if not path:
-            return None
-
-        size_value = payload.get("size")
-        size: int | None = None
-        if isinstance(size_value, int):
-            size = size_value
-        elif isinstance(size_value, float):
-            size = int(size_value)
-        elif isinstance(size_value, str):
-            try:
-                size = int(size_value)
-            except ValueError:
-                size = None
-
-        modified_value = payload.get("modified")
-        modified = str(modified_value) if modified_value is not None else None
-
-        return UserStorageResourceInfo(
-            path=path,
-            size=size,
-            type=cls._normalize_resource_type(payload.get("type")),
-            modified=modified,
-        )
 
 
 def _coerce_optional_document_uid(value: object) -> str | None:

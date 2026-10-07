@@ -54,7 +54,6 @@ from .context import (
     AgentInvocationResult,
     BoundRuntimeContext,
     ConversationTurn,
-    FsEntry,
     JsonScalar,
     PublishedArtifact,
     ToolInvocationRequest,
@@ -624,53 +623,12 @@ class ToolProviderPort(ABC):
         """Release provider resources."""
 
 
-class WorkspaceFileNotFound(Exception):
-    """Raised by ``WorkspaceFsPort`` when a path does not exist."""
-
-
 class WorkspaceFsPort(ABC):
-    """
-    Path-addressed access to the team-rooted virtual filesystem (FILES-04).
-
-    Why this port exists:
-    - agents read and write files by short, author-relative paths; the team and the acting
-      user are injected from the verified session context, never typed by the agent
-    - this is the single file capability behind ``ctx.read/write/ls/resolve_template``
-
-    Path grammar (implemented by the concrete adapter, not the agent):
-    - a bare/relative path → the acting user's private space
-    - a leading ``shared/`` → the team-shared space
-    - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team
-
-    Implementations must raise ``WorkspaceFileNotFound`` for a missing path so callers such
-    as ``resolve_template`` can fall through to the next candidate.
-    """
+    """Technical output writer used by capabilities such as PPT Filler."""
 
     @abstractmethod
     def bind(self, binding: BoundRuntimeContext) -> None:
-        """Refresh context-scoped filesystem state for the current runtime."""
-
-    @abstractmethod
-    async def read_bytes(self, path: str) -> bytes:
-        """Read one file as raw bytes."""
-
-    @abstractmethod
-    async def read_text(self, path: str) -> str:
-        """Read one file as UTF-8 text."""
-
-    @abstractmethod
-    async def read_user_bytes(self, path: str) -> bytes:
-        """Read one file from the user's Mon espace (``teams/{team}/users/{uid}/...``).
-
-        For the run's acting user only; raise ``WorkspaceFileNotFound`` if missing.
-        """
-
-    @abstractmethod
-    async def read_team_bytes(self, path: str) -> bytes:
-        """Read one file from the team's Espace d'equipe (``teams/{team}/shared/...``).
-
-        Governed by the user's team read access; raise ``WorkspaceFileNotFound`` if missing.
-        """
+        """Refresh the verified team, agent and user context for this run."""
 
     @abstractmethod
     async def write(
@@ -681,25 +639,7 @@ class WorkspaceFsPort(ABC):
         content_type: str | None = None,
         title: str | None = None,
     ) -> PublishedArtifact:
-        """Write one file and return its downloadable description."""
-
-    @abstractmethod
-    async def ls(self, path: str = "") -> list[FsEntry]:
-        """List one directory."""
-
-    @abstractmethod
-    async def delete(self, path: str) -> None:
-        """Delete one file."""
-
-    @abstractmethod
-    async def link_for(self, path: str) -> PublishedArtifact:
-        """
-        Return a downloadable description of an **existing** file — no copy.
-
-        Used to hand a file already in the workspace back to the user as a download link
-        (RFC §7.3). The adapter mints a signed, short-TTL URL; raise
-        ``WorkspaceFileNotFound`` if the path does not exist.
-        """
+        """Write an agent output and return its downloadable description."""
 
 
 class ConversationScratchpadError(Exception):
@@ -987,7 +927,7 @@ class AgentAssetPort(ABC):
 
     Reads are team-membership-gated on the KF side, so ANY user chatting with
     the agent can fetch the asset at tool time; writes require the same team
-    resource-update permission as the team-shared space.
+    resource-update permission.
     """
 
     @abstractmethod

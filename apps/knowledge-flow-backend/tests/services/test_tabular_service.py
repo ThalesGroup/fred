@@ -286,9 +286,6 @@ class _TrackingMetadataStore(BaseMetadataStore):
     async def get_metadata_in_tag(self, tag_id: str, session=None) -> list[DocumentMetadata]:
         return await self._delegate.get_metadata_in_tag(tag_id, session=session)
 
-    async def list_by_source_tag(self, source_tag: str, session=None) -> list[DocumentMetadata]:
-        return await self._delegate.list_by_source_tag(source_tag, session=session)
-
     async def list_by_source_library(self, source_library_id: str, *, limit: int, session=None) -> list[DocumentMetadata]:
         return await self._delegate.list_by_source_library(source_library_id, limit=limit, session=session)
 

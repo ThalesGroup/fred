@@ -12,14 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit tests for the plain-data helper functions in `features/scheduler/workflow.py`.
-
-The `@workflow.defn` classes themselves need a live Temporal (test) environment to
-execute — not used elsewhere in this repo (see `test_temporal_scheduler.py`, which
-only tests the module's plain helper functions) — so MIGR-07's revectorize decision
-logic is kept in a pure, directly-testable helper (`_wf_should_skip_revectorize`),
-mirroring the existing `_wf_*` helpers.
-"""
+"""Unit tests for the plain-data helper functions in `features/scheduler/workflow.py`."""
 
 from __future__ import annotations
 
@@ -28,63 +21,7 @@ from temporalio.exceptions import ActivityError, ApplicationError, CancelledErro
 
 from knowledge_flow_backend.features.scheduler.workflow import (
     _wf_file_terminal_event_args,
-    _wf_final_revectorize_state,
-    _wf_scope_resolution_failed_event_args,
-    _wf_should_skip_revectorize,
 )
-
-
-@pytest.mark.parametrize(
-    ("mode", "force", "chunk_count", "expected"),
-    [
-        # incremental + already vectorized + not forced -> skip
-        ("incremental", False, 3, True),
-        # incremental but no vectors yet -> don't skip, needs (re)embedding
-        ("incremental", False, 0, False),
-        # force always re-embeds, even if already vectorized
-        ("incremental", True, 3, False),
-        # full mode always re-embeds every in-scope doc (RFC §4)
-        ("full", False, 3, False),
-        ("full", True, 3, False),
-        ("full", False, 0, False),
-    ],
-)
-def test_should_skip_revectorize_matches_rfc_scope_semantics(mode, force, chunk_count, expected) -> None:
-    assert _wf_should_skip_revectorize(mode=mode, force=force, chunk_count=chunk_count) is expected
-
-
-def test_final_revectorize_state_is_succeeded_when_nothing_failed() -> None:
-    assert _wf_final_revectorize_state(failed=0, total=5) == ("succeeded", None)
-
-
-def test_final_revectorize_state_is_failed_when_any_document_failed() -> None:
-    """The terminal-status regression this fixes: previously the workflow
-    always emitted `"succeeded"` regardless of `failed`, silently hiding
-    per-document failures (e.g. the cross-team CSV permission gap
-    `output_process_trusted` fixes) behind an apparently clean run."""
-    state, error = _wf_final_revectorize_state(failed=2, total=5)
-    assert state == "failed"
-    assert error == "2 of 5 document(s) failed to re-vectorize"
-
-
-def test_final_revectorize_state_failed_even_when_every_document_failed() -> None:
-    state, error = _wf_final_revectorize_state(failed=5, total=5)
-    assert state == "failed"
-    assert error == "5 of 5 document(s) failed to re-vectorize"
-
-
-def test_scope_resolution_failed_event_args_carries_the_real_exception_text() -> None:
-    """`RevectorizeCorpusWorkflow.run` emits this immediately, with the real error,
-    instead of waiting on the generic stale-task reconcile sweeper's detail-free
-    "Execution failed" (fred_core.tasks.service.TaskService._reconciled_terminal)."""
-    args = _wf_scope_resolution_failed_event_args(RuntimeError("Postgres unavailable"), "task-1")
-    assert args == ["task-1", "failed", "listed", None, "Postgres unavailable", 0, 0, 0, None, None]
-
-
-def test_scope_resolution_failed_event_args_falls_back_when_exception_has_no_message() -> None:
-    args = _wf_scope_resolution_failed_event_args(RuntimeError(), "task-1")
-    assert args[4] == "Failed to resolve revectorize scope"
-
 
 # ── #2315: telling a user cancel apart from a real failure in compensation ────
 

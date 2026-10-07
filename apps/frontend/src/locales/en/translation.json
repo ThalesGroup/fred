@@ -854,54 +854,6 @@
   },
   "mcp": {
     "servers": {
-      "corpus": {
-        "description": "Allow your agent to manage your corpus of documents, with admin tools such as vectorization, cleanup, and metadata management.",
-        "name": "Corpus Management",
-        "fields": {
-          "chat_options": {
-            "libraries_selection": {
-              "title": "Document library picker",
-              "description": "Show a document library selector in the chat interface."
-            },
-            "libraries_binding": {
-              "title": "Bind to specific libraries",
-              "description": "Restrict this agent to a fixed set of document libraries chosen at configuration time."
-            },
-            "bound_library_ids": {
-              "title": "Bound document libraries",
-              "description": "Restrict the chat library picker to this preselected set of document libraries."
-            },
-            "documents_selection": {
-              "title": "Document picker",
-              "description": "Show a document selector in the chat interface."
-            },
-            "attach_files": {
-              "title": "File attachments",
-              "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-            },
-            "search_policy_enabled": {
-              "title": "Search policy picker in chat",
-              "description": "Allow users to switch the search policy from the chat interface."
-            },
-            "search_policy": {
-              "title": "Default search policy",
-              "description": "Search strategy used when the user has not overridden it."
-            },
-            "search_rag_scope_enabled": {
-              "title": "RAG scope picker in chat",
-              "description": "Allow users to switch the RAG scope from the chat interface."
-            },
-            "search_rag_scope": {
-              "title": "Default RAG scope",
-              "description": "Scope used when the user has not overridden it."
-            }
-          }
-        }
-      },
-      "filesystem": {
-        "description": "Ability to browse all folders and files present in the resources.",
-        "name": "Browse the resource folders"
-      },
       "jira": {
         "description": "Allow your agent to interact with Jira",
         "name": "Jira access"
@@ -1985,32 +1937,14 @@
       "workspaceTitle": "Files",
       "pageTitle": "Team resources",
       "pageSubtitle": "Manage local resources, manually added to the team",
-      "rootsAria": "Resource spaces",
       "storageQuota": "Storage",
       "roots": {
         "resources": "Team corpus",
-        "mine": "My space",
-        "team": "Shared space",
-        "agents": "Agents",
-        "removedAgent": "Removed agent",
         "indexed": "indexed corpus",
         "private": "private · in {{team}}",
         "privatePersonal": "private · personal",
         "fileCount": "{{count}} files",
         "empty": "empty"
-      },
-      "hints": {
-        "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
-        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
-        "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
-        "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
-      },
-      "provenance": {
-        "origins": {
-          "uploaded": "Uploaded",
-          "agent_generated": "Generated",
-          "shared_copy": "Shared"
-        }
       },
       "search": {
         "placeholder": "Search",
@@ -2046,7 +1980,6 @@
         "addFile": "Add files",
         "addFileHint": "Select a folder first",
         "back": "Back to previous folder",
-        "copyToTeam": "Copy to Team space",
         "delete": "Delete",
         "deleteDisabledWhileProcessing": "Unavailable while ingestion is pending or running",
         "download": "Download",
@@ -2998,20 +2931,6 @@
           "tags_skipped": "Tags skipped",
           "docs_imported": "Documents imported",
           "docs_skipped": "Documents skipped"
-        }
-      },
-      "repair": {
-        "detailsTitle": "Repair report",
-        "counter": {
-          "metadata_documents": "Documents matching this source_tag",
-          "already_done": "Already marked done",
-          "eligible_with_vectors_and_content": "Vectors and content confirmed",
-          "repaired": "Repaired",
-          "missing_vectors": "Missing vectors (left untouched)",
-          "missing_content": "Missing content (left untouched)",
-          "tabular_excluded": "Tabular documents excluded (sql, out of scope)",
-          "failed_or_running_excluded": "Failed or running (left untouched)",
-          "errors": "Errors"
         }
       }
     },
