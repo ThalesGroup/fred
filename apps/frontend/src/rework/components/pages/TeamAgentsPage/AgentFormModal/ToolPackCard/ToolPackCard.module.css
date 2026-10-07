@@ -24,6 +24,7 @@
   overflow: hidden;
   color: var(--on-surface);
   --pack-bg: var(--surface-container-low);
+  --pack-hover-bg: var(--surface-container);
   --pack-icon-bg: var(--surface-container-high);
   --pack-icon-color: var(--on-surface-retreat);
   --pack-title-color: var(--on-surface);
@@ -34,6 +35,7 @@
    uses for a ticked capability. */
 .card[data-checked="true"] {
   --pack-bg: var(--surface-container);
+  --pack-hover-bg: var(--surface-container-high);
   border-color: color-mix(in srgb, var(--primary) 70%, transparent);
   --pack-title-color: var(--primary);
   --pack-icon-color: var(--on-primary);
@@ -53,6 +55,7 @@
   flex: 1;
   align-items: center;
   gap: var(--spacing-s);
+  transition: background var(--duration-short-4) var(--easing-standard);
   cursor: pointer;
   border: none;
   background: transparent;
@@ -67,9 +70,10 @@
   cursor: default;
 }
 
+/* Hover steps one surface up: the 8% state layer read too strong on a whole card. */
 .toggleArea:hover:not(:disabled),
 .expand:hover {
-  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--pack-bg);
+  background: var(--pack-hover-bg);
 }
 
 .toggleArea:focus-visible,
@@ -83,6 +87,7 @@
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
+  transition: background var(--duration-short-4) var(--easing-standard);
   cursor: pointer;
   border: none;
   background: transparent;

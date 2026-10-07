@@ -16,7 +16,6 @@
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-l);
   margin: 1rem auto;
   border-radius: var(--radius-l);
   background: var(--surface-main);
@@ -30,17 +29,15 @@
   outline: none;
 }
 
-/* Header and body paddings are set apart so a form can tune each one:
-   --settings-modal-header-padding, --settings-modal-body-padding-inline,
-   --settings-modal-body-padding-bottom (all default to spacing-l), and its
-   width with --settings-modal-max-width (default 52rem). */
+/* A form tunes width and paddings via --settings-modal-max-width and
+   --settings-modal-{header-padding,body-padding-inline,body-padding-bottom}. */
 .header {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--spacing-m);
-  padding: var(--settings-modal-header-padding, var(--spacing-l) var(--spacing-l) 0);
+  padding: var(--settings-modal-header-padding, var(--spacing-l));
 }
 
 /* The actions wrap under the title only when both no longer fit side by side
@@ -64,11 +61,12 @@
 
 .actions {
   display: flex;
-  flex-shrink: 0;
+  flex-shrink: 1;
   flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
 }
 
 .content {
@@ -80,7 +78,7 @@
 .footer {
   display: flex;
   justify-content: flex-start;
-  margin-inline: var(--settings-modal-body-padding-inline, var(--spacing-l));
+  margin: var(--spacing-l) var(--settings-modal-body-padding-inline, var(--spacing-l)) 0;
   border-top: 1px solid var(--outline-muted);
   padding-top: var(--spacing-s);
 }

@@ -18,7 +18,7 @@
    (header) and below it (body), tuned independently. */
 .card {
   --settings-modal-max-width: 720px;
-  --settings-modal-header-padding: var(--spacing-l) var(--spacing-l) 0;
+  --settings-modal-header-padding: var(--spacing-l);
   --settings-modal-body-padding-inline: var(--spacing-l);
   --settings-modal-body-padding-bottom: var(--spacing-l);
 }

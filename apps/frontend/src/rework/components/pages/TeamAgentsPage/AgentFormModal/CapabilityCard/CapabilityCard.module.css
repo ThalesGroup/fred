@@ -19,28 +19,28 @@
   overflow: hidden;
   color: var(--on-surface);
   --card-bg: var(--surface-container-low);
+  --card-hover-bg: var(--surface-container);
 }
 
 .card[data-checked="true"] {
   --card-bg: var(--surface-container);
+  --card-hover-bg: var(--surface-container-high);
 }
 
 .header {
   display: flex;
   align-items: center;
   gap: var(--spacing-m);
+  transition: background var(--duration-short-4) var(--easing-standard);
   cursor: pointer;
   background: var(--card-bg);
   padding: var(--spacing-xs) var(--spacing-m);
   user-select: none;
 }
 
+/* Hover steps one surface up, like the Simple pack cards. */
 .header:hover {
-  /* Layers the standard on-surface/8% state tint on top of the header's own
-     card fill, same token used for hover elsewhere
-     (state-on-surface-hover), via a second background layer rather than a
-     plain swap so the base tone still shows through underneath. */
-  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--card-bg);
+  background: var(--card-hover-bg);
 }
 
 .meta {
