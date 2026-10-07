@@ -516,6 +516,11 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 - **WHEN** the model calls the tool again with a corrected plan
 - **THEN** the deck is built from the corrected plan as a whole, replacing any earlier build
 
+#### Scenario: Partial fix after needs_revision
+
+- **WHEN** a call returns `needs_revision` for slides 4 and 9 of a 12-slide plan and the model calls again with only `changes` replacing or editing slides 4 and 9
+- **THEN** the changes are applied to the refused plan, the whole 12-slide plan goes through assignment, fit check, variety rules and render as a full call would, and the other ten slides are exactly those of the refused plan
+
 #### Scenario: Success message invites correction
 
 - **WHEN** a deck is built with kind substitutions, truncations, removed leftovers or lost content
@@ -656,7 +661,27 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 
 ### Requirement: Chat-time corrections are per conversation
 
-The system SHALL let the user correct a deck in chat by regenerating from an amended plan, and SHALL NOT change the agent configuration from a conversation.
+The system SHALL let the user correct a deck in chat by regenerating from an amended plan, and SHALL NOT change the agent configuration from a conversation. `build_presentation` SHALL accept either the whole deck (`slides`) or `changes` (replace, insert after, remove, edit one field) numbered on the last plan it evaluated in this conversation (delivered or refused with `needs_revision`), stored per conversation and agent so any replica and any later turn reads it, and SHALL always render the whole resulting deck through the normal path.
+
+#### Scenario: Later-turn edit keeps untouched slides
+
+- **WHEN** a deck was delivered in an earlier turn and the user asks to put a phone number on the last slide, and the model sends only `changes` editing that slide
+- **THEN** the whole deck is rebuilt from the stored plan with that one change, every other slide of the plan is identical to the delivered plan's, and the result is a normal delivery
+
+#### Scenario: Bad change
+
+- **WHEN** a `changes` call names a slide the previous plan does not have, an unknown operation, a field the slide does not have, or two changes on the same slide
+- **THEN** nothing is built and the result names each bad change, why, and the remedy (`changes[2] (remove): slide 14 does not exist; the previous deck has 12 slides. Use a number from 1 to 12.`), and the stored plan is unchanged
+
+#### Scenario: No previous plan
+
+- **WHEN** a `changes` call arrives in a conversation where the tool has evaluated no plan
+- **THEN** nothing is built and the result says there is no previous deck to change and to send the whole deck in `slides`
+
+#### Scenario: Same changes resent
+
+- **WHEN** the model resends, in the same turn, exactly the `changes` of its previous call (for example after a variety ask that says a resend is built as is)
+- **THEN** the stored result of those changes is built as is, never applied a second time
 
 #### Scenario: User asks for a different kind of slide
 
