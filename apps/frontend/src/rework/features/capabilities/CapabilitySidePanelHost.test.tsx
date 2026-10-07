@@ -50,7 +50,11 @@ vi.mock("./capabilityPanelMemory", () => ({
   wasPanelOpen: (_sessionId: string, panelKey: string) => restore.openPanels.includes(panelKey),
 }));
 
-vi.mock("./sidePanelRegistry", () => ({ sidePanelsForCapabilities: () => state.entries }));
+vi.mock("./index", () => ({ capabilityUiPlugins: [] }));
+vi.mock("./sidePanelRegistry", async (importActual) => ({
+  ...(await importActual<typeof import("./sidePanelRegistry")>()),
+  sidePanelsForCapabilities: () => state.entries,
+}));
 
 vi.mock("@shared/atoms/IconButton/IconButton", () => ({
   default: ({ icon, ...rest }: { icon: { type: string }; "aria-label": string }) => (
@@ -125,6 +129,29 @@ describe("CapabilitySidePanelHost panel drawer", () => {
     state.entries = [entry("demo_echo", "edit_note", undefined, false)];
 
     expect(render("demo_echo:demo_echo_pane")).toContain("data-drawer-title");
+  });
+});
+
+describe("CapabilitySidePanelHost — a widget shared by two capabilities", () => {
+  it("opens the shared entry for the other capability's key, and renames the key to it", () => {
+    state.entries = [{ ...entry("ppt_filler", "slideshow"), widget: "ppt_preview_pane" }];
+    const onActiveKeyChange = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CapabilitySidePanelHost
+          capabilityIds={["ppt_filler", "ppt_builder"]}
+          activeKey="ppt_builder:ppt_preview_pane"
+          onActiveKeyChange={onActiveKeyChange}
+        />,
+      );
+    });
+    expect(container.querySelector('[data-drawer][data-open="true"]')).not.toBeNull();
+    expect(onActiveKeyChange).toHaveBeenCalledWith("ppt_filler:ppt_preview_pane");
+    act(() => root.unmount());
+    container.remove();
   });
 });
 

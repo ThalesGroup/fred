@@ -21,7 +21,8 @@ export const pptBuilderCapability: CapabilityUiPlugin = {
   id: "ppt_builder",
   // The generated deck is delivered as ppt_filler's `ppt_preview` chat part
   // (one owner per kind), so that plugin's renderer draws the card. This one
-  // only declares its own launcher for the same preview pane.
+  // declares the same preview pane for when it is active alone; with both on,
+  // the side-panel registry offers the pane once.
   configWidgets: { ppt_builder_template: PptBuilderConfigForm },
   sidePanels: {
     ppt_preview_pane: {
