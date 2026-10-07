@@ -17,21 +17,22 @@ no commit hashes, no change history. Tracked under GitHub issue #2128.
 
 ## Product model
 
-Four tabs, one shared table shell:
+Three tabs, one shared table shell:
 
 | Tab | Content | Data source |
 | --- | --- | --- |
 | Corpus d'équipe | Ingested, RAG-indexed documents, organized by library (tag) | `DocumentMetadata` via `POST /documents/metadata/browse` |
-| Mon espace | The user's private files inside the team | `/fs` under `teams/{team}/users/{uid}` |
 | Espace d'équipe | Team-shared files; hidden entirely for a personal team | `/fs` under `teams/{team}/shared` |
 | Agents | Per-agent-instance generated files, one virtual folder row per agent | `/fs` under `teams/{team}/agents/{instance}/users/{uid}` |
 
-**Feature flag:** Mon espace/Espace d'équipe/Agents are gated behind
+**Feature flag:** Espace d'équipe/Agents are gated behind
 `enableAllResourceSpaces` (`FrontendFeatureFlags`, `configuration.yaml`, platform-wide,
-default off) — a product-maturity call, not a technical limitation. All three are fully
+default off) — a product-maturity call, not a technical limitation. Both are fully
 built, tested, and reachable via the HTTP `/fs` API regardless of the flag; **the
 flag only hides their tab in the UI**, it is not a backend access control. The actual
 team-scoping gap on that boundary is tracked separately as issue #2113 (Critical).
+The retired `/teams/{team}/users/{uid}` area is rejected by the backend; stored
+objects remain untouched pending a separate retention decision.
 
 See `docs/swift/design/FILESYSTEM.md` for the virtual path layout and the full `/fs`
 route table.
@@ -111,7 +112,7 @@ retrievable costs an optimistic row update + single row/page invalidation.
 - Search is a client-side filter over the current page's already-loaded rows, not a
   library-wide query — a real backend `query`/`sort` contract exists for Corpus
   (`POST /documents/metadata/browse`) but isn't wired to a UI control yet; the other
-  three tabs have no equivalent `/fs` search contract at all. Deferred until real usage
+  two tabs have no equivalent `/fs` search contract at all. Deferred until real usage
   data justifies the backend work.
 - Bulk download zips client-side (every file's blob round-trips through the browser
   before zipping) — fine at today's usage, revisit with a server-side streaming-zip

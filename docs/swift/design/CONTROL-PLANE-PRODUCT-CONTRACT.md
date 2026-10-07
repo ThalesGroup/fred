@@ -720,10 +720,9 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
 ```
 
 The control-plane does not proxy or store binary content. File identity is a path in
-the Knowledge Flow virtual filesystem. Users see four team-scoped roots:
-`Resources`, `Mon espace`, `Espace d'equipe`, and `Agents`. Those map server-side to
-canonical paths such as `/corpus/...`,
-`/teams/{team}/users/{uid}/...`, `/teams/{team}/shared/...`, and
+the Knowledge Flow virtual filesystem. Users see three team-scoped roots:
+`Resources`, `Espace d'equipe`, and `Agents`. Those map server-side to
+canonical paths such as `/corpus/...`, `/teams/{team}/shared/...`, and
 `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...`. The agent uses the Knowledge
 Flow HTTP `/fs` API to read/write those paths through its workspace adapter.
 The control-plane's role is session and instance management only; file

@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Coverage for AgentsWorkspace — step 3 of the "bring ResourceExplorer to the
-// other three tabs" plan (RFC §13.7 FRONT-09.H). Unlike Mon espace/Espace
+// other tabs" plan (RFC §13.7 FRONT-09.H). Unlike Espace
 // d'équipe, Agents is a *single* table whose root is virtual: each agent
 // with files is a folder row at that root, named after the agent (never its
 // uuid), and clicking one swaps in `FilesystemWorkspace` for that agent's

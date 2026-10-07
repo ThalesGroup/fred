@@ -14,10 +14,10 @@
 // limitations under the License.
 
 // Coverage for FilesystemWorkspace — the /fs counterpart of DocumentWorkspace,
-// step 2 of the "bring ResourceExplorer to the other three tabs" plan
+// step 2 of the former multi-tab ResourceExplorer plan
 // (RFC §13.7 FRONT-09.H). Two concerns: (1) write-action gating (issue #1996
 // point A.1 — a Member without CAN_UPDATE_RESOURCES must not see
-// upload/new-folder on "Espace d'équipe" but keeps them on "Mon espace"),
+// upload/new-folder on "Espace d'équipe" but keeps them on agent files),
 // ported from the old TeamFilesystemBrowser.test.tsx's intent but targeting
 // the new toolbar (the old test asserted single-line-row aria-labels that no
 // longer exist); (2) breadcrumb navigation to an intermediate (non-root,
@@ -45,7 +45,7 @@ const LS_DATA: Record<string, { path: string; type: "file" | "directory" }[]> = 
   "teams/nb/shared": [{ path: "CIR", type: "directory" }],
   "teams/nb/shared/CIR": [{ path: "Reports", type: "directory" }],
   "teams/nb/shared/CIR/Reports": [],
-  "teams/nb/users/alice": [{ path: "notes.txt", type: "file" }],
+  "teams/nb/agents/slide-builder/users/alice": [{ path: "notes.txt", type: "file" }],
 };
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
@@ -121,8 +121,8 @@ function folderButton(name: string): HTMLButtonElement {
 }
 
 describe("FilesystemWorkspace write-action gating", () => {
-  it("shows upload/new-folder on a writable root (e.g. Mon espace, default canWrite)", () => {
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+  it("shows upload/new-folder on a writable root (e.g. agent files, default canWrite)", () => {
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.action.newSubfolder"]')).not.toBeNull();
@@ -169,7 +169,7 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
   }
 
   it("hides new-folder/add-file and shows the bulk-delete action once a row is selected", () => {
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     expect(container.querySelector('button[aria-label="rework.resources.action.addFile"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="rework.resources.action.newSubfolder"]')).not.toBeNull();
@@ -185,7 +185,7 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
   });
 
   it("restores new-folder/add-file once the selection is cleared", () => {
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     act(() => {
       rowCheckbox().click();
@@ -202,7 +202,7 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
   });
 
   it("clears the selection and restores new-folder/add-file when the bar's own clear button is clicked", () => {
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     act(() => {
       rowCheckbox().click();
@@ -219,7 +219,7 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
 
   it("zips the selected file(s) when the bulk download button is clicked", () => {
     downloadUtils.downloadManyAsZip.mockClear();
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     act(() => {
       rowCheckbox().click();
@@ -241,7 +241,7 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
           resolveDownload = resolve;
         }),
     );
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     act(() => {
       rowCheckbox().click();
@@ -266,7 +266,7 @@ describe("FilesystemWorkspace toolbar — bulk actions replace create/upload whi
   it("shows an error toast and clears the loading state when the zip download fails", async () => {
     toast.showError.mockClear();
     downloadUtils.downloadManyAsZip.mockRejectedValueOnce(new Error("network down"));
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     act(() => {
       rowCheckbox().click();
@@ -313,7 +313,7 @@ function clickMoreMenuItem(labelKeySuffix: string) {
 describe("FilesystemWorkspace — per-row download (more menu, just under Renommer)", () => {
   it("downloads that file when 'Download' is selected from the more menu", () => {
     downloadUtils.downloadAuthed.mockClear();
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     clickMoreMenuItem("rework.resources.action.download");
 
@@ -322,7 +322,7 @@ describe("FilesystemWorkspace — per-row download (more menu, just under Renomm
   });
 
   it("lists Download right after Rename when canWrite is true", () => {
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace", canWrite: true });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files", canWrite: true });
 
     const moreButton = container.querySelector('button[aria-label="rework.resources.action.more"]');
     click(moreButton);
@@ -338,9 +338,9 @@ describe("FilesystemWorkspace — per-row download (more menu, just under Renomm
 
   it("still offers Download on a read-only file row, even though Rename is hidden (canWrite false)", () => {
     downloadUtils.downloadAuthed.mockClear();
-    // Reuse the "Mon espace" file fixture but force canWrite=false to prove
+    // Reuse the agent-files fixture but force canWrite=false to prove
     // download survives even when every mutating action is stripped out.
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace", canWrite: false });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files", canWrite: false });
 
     const moreButton = container.querySelector('button[aria-label="rework.resources.action.more"]');
     click(moreButton);
@@ -354,14 +354,14 @@ describe("FilesystemWorkspace — per-row download (more menu, just under Renomm
 
 describe("FilesystemWorkspace onNavigateAboveRoot", () => {
   it("is disabled at root when omitted (existing behavior)", () => {
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace" });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files" });
 
     expect(backButton().disabled).toBe(true);
   });
 
   it("is called by the back button at root when provided", () => {
     const onNavigateAboveRoot = vi.fn();
-    render({ root: "teams/nb/users/alice", rootLabel: "Mon espace", onNavigateAboveRoot });
+    render({ root: "teams/nb/agents/slide-builder/users/alice", rootLabel: "Agent files", onNavigateAboveRoot });
 
     expect(backButton().disabled).toBe(false);
     click(backButton());

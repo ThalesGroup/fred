@@ -351,7 +351,7 @@ class ToolContext:
     # ----------------------------------------------------------------- #
     # Team-rooted filesystem (FILES-04) — read/write by author-relative path.
     #
-    # A bare path is private to the current user; a leading ``shared/`` targets
+    # A bare path is private to the running agent; a leading ``shared/`` targets
     # the team-shared space. The team and the acting user are injected from the
     # session context by the runtime — you never type them.
     # ----------------------------------------------------------------- #
@@ -386,22 +386,6 @@ class ToolContext:
             ```
         """
         return await self._workspace_fs().read_bytes(path)
-
-    async def read_user(self, path: str) -> str:
-        """
-        Read one file from **Mon espace** (the run user's private files in this team).
-
-        Bare ``read``/``write`` stay in the agent's own space; this is the explicit way to
-        read the user's own files (e.g. a personal template override). Reads the acting
-        user's space only.
-
-        Example::
-
-            ```python
-            override = await ctx.read_user("templates/brand.pptx")
-            ```
-        """
-        return (await self._workspace_fs().read_user_bytes(path)).decode("utf-8")
 
     async def read_team(self, path: str) -> str:
         """
@@ -460,7 +444,7 @@ class ToolContext:
 
         Use this to hand back a file the user already has in their workspace (e.g. "give me
         my upload as a link"). The link is signed and short-lived; the file stays in the
-        user's space, so an expired link is never a dead end.
+        agent's space, so an expired link does not remove the underlying file.
 
         Example::
 
@@ -487,7 +471,7 @@ class ToolContext:
         """
         Find a named template and return its bytes, checking the most specific first.
 
-        Lookup order: the user's **Mon espace** ``templates/{name}`` (personal override),
+        Lookup order: the agent's own ``templates/{name}``,
         then the team's **Espace d'equipe** ``templates/{name}``. Raises
         ``WorkspaceFileNotFound`` if neither exists; an agent may then fall back to a default
         it ships with its own code. (Run-attachment and bundled-default steps are deferred.)
@@ -500,13 +484,13 @@ class ToolContext:
         """
         fs = self._workspace_fs()
         candidate = f"templates/{name}"
-        for read in (fs.read_user_bytes, fs.read_team_bytes):
+        for read in (fs.read_bytes, fs.read_team_bytes):
             try:
                 return await read(candidate)
             except WorkspaceFileNotFound:
                 continue
         raise WorkspaceFileNotFound(
-            f"No template '{name}' found in your space or the team's shared templates."
+            f"No template '{name}' found in the agent's space or the team's shared templates."
         )
 
     async def fetch_media(self, document_uid: str, file_name: str) -> bytes:

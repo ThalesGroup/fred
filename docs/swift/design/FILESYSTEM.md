@@ -11,9 +11,8 @@ Future hardening and completion work belongs in the filesystem RFCs, not here.
 The product model is deliberately small:
 
 1. **Resources** are read-only corpus content produced by ingestion.
-2. **Mon espace** is the current user's private file area inside the current team.
-3. **Espace d'equipe** is the team-shared writable area.
-4. **Agents** contains files produced or used by each agent instance for the
+2. **Espace d'equipe** is the team-shared writable area.
+3. **Agents** contains files produced or used by each agent instance for the
    current user.
 
 The older `/workspace`, `/agent/<agent-id>`, and `/team/<team-id>` layout is no
@@ -26,7 +25,6 @@ For a user working in team `acme`, the Files UI shows:
 ```text
 acme
 ├── Resources
-├── Mon espace
 ├── Espace d'equipe
 └── Agents
 ```
@@ -36,7 +34,6 @@ The UI labels are product names. The backend paths are implementation details.
 | UI root | Backend area | Writer |
 | --- | --- | --- |
 | Resources | `/corpus/...` | ingestion only |
-| Mon espace | `/teams/{team}/users/{uid}/...` | the owning user |
 | Espace d'equipe | `/teams/{team}/shared/...` | humans with team update permission |
 | Agents | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | the running agent for that user, via runtime adapter |
 | Agent config assets | `/teams/{team}/agents/{agent_instance_id}/config/...` | read: any team member (chat-time asset fetch); write: team update permission — capability upload slots store their binaries here at agent save (#1903, see docs/swift/capabilities/AUTHORING.md) |
@@ -53,7 +50,6 @@ The active virtual filesystem has these top-level areas:
 /
 ├── teams/
 │   └── {team}/
-│       ├── users/{uid}/...
 │       ├── shared/...
 │       └── agents/{agent_instance_id}/
 │           ├── users/{uid}/...
@@ -65,20 +61,6 @@ The active virtual filesystem has these top-level areas:
 
 Unknown top-level areas are rejected. The filesystem service does not implicitly
 map bare paths to `/workspace`.
-
-### `/teams/{team}/users/{uid}`
-
-This is **Mon espace** for one user inside one team.
-
-| Property | Behaviour |
-| --- | --- |
-| Read | allowed only for the authenticated user whose uid appears in the path |
-| Write/delete/mkdir | allowed only for that same user |
-| Team gate | caller must have team `CAN_ACCESS_FILES` (real membership) before entering the team box |
-| Provenance | files derive as `origin=uploaded`, `producer=human`, `created_by={uid}` |
-
-This area is private per user and per team. Another team member cannot list,
-read, or write files under a different uid.
 
 ### `/teams/{team}/shared`
 
@@ -254,12 +236,11 @@ with `/fs`'s current shape — that would be dead detail within one iteration.
 The rework Resources page is the main human surface. It renders:
 
 - Resources through the document/corpus workspace.
-- Mon espace through `/fs` under `teams/{team}/users/{uid}`.
 - Espace d'equipe through `/fs` under `teams/{team}/shared`.
 - Agents through control-plane agent-instance metadata plus `/fs` folders under
   `teams/{team}/agents/{agent_instance_id}/users/{uid}`.
 
-Human users can copy a private file to the team with **Copy to Espace d'equipe**.
+Human users can copy a private agent file to the team with **Copy to Espace d'equipe**.
 The server copies the source into:
 
 ```text
@@ -313,10 +294,9 @@ virtual paths.
 | `ctx.write(path, content)` | write to the running agent's own Agents subtree |
 | `ctx.link_for(path)` | create a short-TTL download link for an existing file |
 | `ctx.ls(path)` | list through the runtime workspace adapter |
-| `ctx.read_user(path)` | read from Mon espace |
 | `ctx.read_team(path)` | read from Espace d'equipe |
 | `ctx.read_resource(path)` | currently deferred; use search/RAG tools for corpus content |
-| `ctx.resolve_template(name)` | authored ToolContext checks Mon espace `templates/{name}` then Espace d'equipe `templates/{name}` |
+| `ctx.resolve_template(name)` | checks the agent's own `templates/{name}` then Espace d'equipe `templates/{name}` |
 
 The runtime forwards requests to Knowledge Flow with the user's access token.
 Path construction is done from runtime context: team id, user id, and
@@ -328,7 +308,6 @@ Provenance is currently path-derived, not stored as separate metadata.
 
 | Path | Derived origin |
 | --- | --- |
-| `/teams/{team}/users/{uid}/...` | `uploaded` |
 | `/teams/{team}/shared/files/...` | `shared_copy` |
 | `/teams/{team}/shared/...` | `uploaded` |
 | `/teams/{team}/agents/{agent_instance_id}/users/{uid}/...` | `agent_generated` |
@@ -355,12 +334,10 @@ These are known as-built limits, not hidden design intent:
    file and download reads bytes before returning the response.
 5. **`read_resource` is deferred.** Corpus raw reads are not exposed through the
    SDK helper yet.
-6. **Some SDK/runtime docstrings still describe the old bare-path behaviour.**
-   The shipped adapter maps bare writes to Agents, not Mon espace.
-7. **Graph runtime template resolution is not fully aligned with ToolContext.**
-   The authored `ToolContext` checks Mon espace then Espace d'equipe; graph
-   runtime still probes bare `templates/{name}` through `read_bytes`, which now
-   means agent space.
+6. **Team-level personal files remain in object storage but are inaccessible.**
+   `/teams/{team}/users/{uid}` is retired; export or retention is a separate
+   operational decision. Agent-owned paths beneath `agents/{agent}/users/{uid}`
+   remain supported.
 
 ## Source Map
 

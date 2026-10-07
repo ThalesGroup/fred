@@ -131,7 +131,7 @@ class McpFilesystemService:
     Routed virtual filesystem for MCP tools.
 
     Areas (unified layout — FILES-04):
-    - `/teams/{team_id}/...` : team box — `users/{uid}`, `shared`, `agents/{id}/users/{uid}`
+    - `/teams/{team_id}/...` : team box — `shared`, `agents/{id}/users/{uid}`
     - `/corpus/...`          : read-only corpus virtual tree
 
     There is no implicit/default area and no legacy alias: an unknown top-level
@@ -557,7 +557,7 @@ class McpFilesystemService:
         Write one writable-area file from raw bytes (binary-safe upload).
 
         Example:
-        - `await write_bytes(user, "/teams/acme/users/u-1/outputs/q3.pptx", deck_bytes)`
+        - `await write_bytes(user, "/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx", deck_bytes)`
         """
 
         try:

@@ -182,7 +182,7 @@ async def test_shared_write_requires_update_resources():
     ]
 
 
-# ── personal-in-team (users) ───────────────────────────────────────────────
+# ── binary access and retired personal area ───────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -213,45 +213,48 @@ async def test_shared_write_bytes_requires_update_resources():
 
 
 @pytest.mark.asyncio
-async def test_write_bytes_rejects_other_uid():
+@pytest.mark.parametrize(
+    "operation,args",
+    [
+        ("list_area", ()),
+        ("stat_area", ()),
+        ("cat_area", ()),
+        ("read_bytes_area", ()),
+        ("write_area", ("text",)),
+        ("write_bytes_area", (b"bytes",)),
+        ("delete_area", ()),
+        ("mkdir_area", ()),
+        ("list_recursive_files_area", ()),
+        ("rename_area", ("new.txt",)),
+    ],
+)
+@pytest.mark.asyncio
+async def test_retired_personal_area_rejects_operations(operation, args):
     scoped_fs, storage, _rebac = _scoped_filesystem()
 
-    with pytest.raises(PermissionError, match="another user's personal space"):
-        await scoped_fs.write_bytes_area(_user(), ("acme", "users", "someone-else", "x.pptx"), b"\x00")
+    with pytest.raises(FileNotFoundError, match="Unsupported team sub-area"):
+        await getattr(scoped_fs, operation)(_user(), ("acme", "users", "u-1", "note.md"), *args)
 
     assert storage.calls == []
 
 
+@pytest.mark.parametrize("segments", [("acme", "users"), ("acme", "users", "u-1")])
 @pytest.mark.asyncio
-async def test_users_area_allows_own_uid():
+async def test_retired_personal_directories_are_not_listed_or_statable(segments):
     scoped_fs, storage, _rebac = _scoped_filesystem()
-
-    content = await scoped_fs.cat_area(_user(), ("acme", "users", "u-1", "note.md"))
-
-    assert content == "hello"
-    assert storage.calls == [
-        ("get_text", (_user(), "users/u-1/note.md"), {"owner_override": "acme", "root_prefix": "teams"}),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_users_area_rejects_other_uid():
-    scoped_fs, storage, _rebac = _scoped_filesystem()
-
-    with pytest.raises(PermissionError, match="another user's personal space"):
-        await scoped_fs.cat_area(_user(), ("acme", "users", "someone-else", "note.md"))
-
-    # Ownership is enforced before any storage access.
+    for operation in (scoped_fs.list_area, scoped_fs.stat_area):
+        with pytest.raises(FileNotFoundError, match="Unsupported team sub-area"):
+            await operation(_user(), segments)
     assert storage.calls == []
 
 
 @pytest.mark.asyncio
-async def test_users_root_lists_only_own_uid():
-    scoped_fs, _storage, _rebac = _scoped_filesystem()
-
-    entries = await scoped_fs.list_area(_user(), ("acme", "users"))
-
-    assert [entry.path for entry in entries] == ["u-1"]
+async def test_retired_personal_area_is_not_searchable():
+    scoped_fs, storage, _rebac = _scoped_filesystem()
+    with pytest.raises(FileNotFoundError, match="Unsupported team sub-area"):
+        await scoped_fs.grep_area(_user(), "note", ("acme", "users"))
+    await scoped_fs.grep_area(_user(), "note", ("acme",))
+    assert all("users/u-1" not in args for _name, args, _kwargs in storage.calls)
 
 
 # ── agent-per-user (agents) ────────────────────────────────────────────────
@@ -467,7 +470,7 @@ async def test_team_box_lists_subareas():
 
     entries = await scoped_fs.list_area(_user(), ("acme",))
 
-    assert [entry.path for entry in entries] == ["users", "shared", "agents"]
+    assert [entry.path for entry in entries] == ["shared", "agents"]
     assert rebac.checks == [(_user(), TeamPermission.CAN_ACCESS_FILES, "acme")]
 
 

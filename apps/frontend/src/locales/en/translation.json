@@ -1941,7 +1941,6 @@
       "storageQuota": "Storage",
       "roots": {
         "resources": "Team corpus",
-        "mine": "My space",
         "team": "Shared space",
         "agents": "Agents",
         "removedAgent": "Removed agent",
@@ -1953,7 +1952,6 @@
       },
       "hints": {
         "resources": "Your team's searchable knowledge base. Create a library (folder) first, then add documents inside it. A file at the top level has no library and won't be indexed.",
-        "mine": "Your private files in this team. Only you can see them. Drafts, templates, anything personal.",
         "team": "Files shared with the whole team. Upload shared templates, or use \"Copy to Team space\" to share one of your files.",
         "agents": "Files your agents created for you, grouped by agent. They stay private to you, and you decide what to copy to the team."
       },

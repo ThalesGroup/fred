@@ -2131,7 +2131,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
     acting user from the verified session context and forwards a full team-rooted path to
     Knowledge Flow over the unified ``/fs`` routes:
 
-    - a bare path        -> ``teams/{team}/users/{uid}/...`` (private to the acting user)
+    - a bare path        -> ``teams/{team}/agents/{agent}/users/{uid}/...``
     - a leading ``shared/`` -> ``teams/{team}/shared/...``    (team-shared)
     - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team (§7.1)
     """
@@ -2202,7 +2202,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
     def _resolve(self, path: str, *, allow_root: bool = False) -> str:
         team = self._session_team()
         # Bare agent paths resolve to the running agent's own per-user space
-        # (FILES-04 / docs/swift/design/FILESYSTEM.md), not Mon espace.
+        # (FILES-04 / docs/swift/design/FILESYSTEM.md).
         agent_root = (
             f"teams/{team}/agents/{self._session_agent_instance_id()}"
             f"/users/{self._session_user()}"
@@ -2241,7 +2241,7 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
         Agents read team-shared files and their own space, but may only *mutate*
         inside their own agents subtree. A path resolving outside it — into
-        ``shared/`` (G3: agents never share), Mon espace, or a sibling agent's
+        ``shared/`` (G3: agents never share) or a sibling agent's
         subtree (G2) — is a hard ``PermissionError`` (FILES-04).
         """
         resolved = self._resolve(path)
@@ -2257,14 +2257,6 @@ class FredWorkspaceFs(WorkspaceFsPort):
         if ".." in parts:
             raise ValueError("Path cannot contain parent path segments")
         return parts
-
-    def _resolve_user(self, path: str) -> str:
-        # Explicit read of the run user's Mon espace (FILES-04) — same
-        # user the agent acts for; KF enforces own-uid ownership. v1 reads the whole
-        # Mon espace; selection-scoping (§7.3) is deferred hardening, like G1b.
-        return f"teams/{self._session_team()}/users/{self._session_user()}/" + "/".join(
-            self._clean_parts(path)
-        )
 
     def _resolve_team(self, path: str) -> str:
         # Explicit read of the team's Espace d'equipe; governed by the user's team read.
@@ -2289,9 +2281,6 @@ class FredWorkspaceFs(WorkspaceFsPort):
 
     async def read_text(self, path: str) -> str:
         return (await self.read_bytes(path)).decode("utf-8")
-
-    async def read_user_bytes(self, path: str) -> bytes:
-        return await self._download(self._resolve_user(path), path)
 
     async def read_team_bytes(self, path: str) -> bytes:
         return await self._download(self._resolve_team(path), path)

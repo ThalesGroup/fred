@@ -41,21 +41,20 @@ import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
 import { ImportPanel } from "@shared/organisms/ImportPanel/ImportPanel.tsx";
 import styles from "./TeamResourcesPage.module.css";
 
-type ResourceRootTab = "resources" | "mine" | "team" | "agents";
+type ResourceRootTab = "resources" | "team" | "agents";
 
 /**
- * Official rework workspace page (FILES-04). A single tree with four differentiated roots:
+ * Official rework workspace page (FILES-04). A single tree with three differentiated roots:
  * - Resources: document ingestion into the searchable corpus. Files must live in a library
  *   (folder/tag) to be indexed, so the root only creates libraries — no top-level upload.
- * - Mon espace: the user's personal-in-team files (teams/{team}/users/{uid}, via /fs)
  * - Espace d'équipe: the team-shared files (teams/{team}/shared, via /fs)
  * - Agents: per-agent generated files (teams/{team}/agents/{instance}/users/{uid}, via /fs)
  *
- * Mon espace/Espace d'équipe/Agents are gated behind the platform-wide
+ * Espace d'équipe/Agents are gated behind the platform-wide
  * `enableAllResourceSpaces` feature flag (`platform.frontend.feature_flags`
  * in `configuration.yaml`, default off) — the team isn't yet confident these
- * three spaces pull their weight next to Corpus d'équipe, so only Corpus is
- * reachable until the flag is turned on. The other three tabs' code stays
+ * two spaces pull their weight next to Corpus d'équipe, so only Corpus is
+ * reachable until the flag is turned on. The other two tabs' code stays
  * fully in place either way; only their entries in the tab switcher are
  * conditional.
  */
@@ -74,7 +73,6 @@ export default function TeamResourcesPage() {
   // The URL may carry the bare "personal" alias, but /fs ReBAC resolves against the
   // canonical personal-<uid> resource id. Canonicalize before building any /fs path.
   const fsTeamId = teamId === "personal" ? personalTeamId(userId) : teamId;
-  const userRoot = `teams/${fsTeamId}/users/${userId}`;
   const sharedRoot = `teams/${fsTeamId}/shared`;
   // `refetch` as well as `data`: the storage-quota meter below reads this team
   // row's `current_resources_storage_size`, but every write to it comes from
@@ -100,7 +98,6 @@ export default function TeamResourcesPage() {
     { value: "resources", label: t("rework.resources.roots.resources") },
     ...(enableAllResourceSpaces
       ? [
-          { value: "mine" as const, label: t("rework.resources.roots.mine") },
           ...(isPersonalTeam ? [] : [{ value: "team" as const, label: t("rework.resources.roots.team") }]),
           { value: "agents" as const, label: t("rework.resources.roots.agents") },
         ]
@@ -121,16 +118,8 @@ export default function TeamResourcesPage() {
     { teamId: fsTeamId },
     { skip: !statsOpen || activeTab !== "resources" },
   );
-  const mineStats = useFilesystemTypeStatsQuery({ path: userRoot }, { skip: !statsOpen || activeTab !== "mine" });
   const teamStats = useFilesystemTypeStatsQuery({ path: sharedRoot }, { skip: !statsOpen || activeTab !== "team" });
-  const activeStats =
-    activeTab === "resources"
-      ? corpusStats
-      : activeTab === "mine"
-        ? mineStats
-        : activeTab === "team"
-          ? teamStats
-          : null;
+  const activeStats = activeTab === "resources" ? corpusStats : activeTab === "team" ? teamStats : null;
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListTagsQuery({
@@ -250,8 +239,6 @@ export default function TeamResourcesPage() {
               }}
             />
           )}
-
-          {activeTab === "mine" && <FilesystemWorkspace root={userRoot} rootLabel={t("rework.resources.roots.mine")} />}
 
           {activeTab === "team" && !isPersonalTeam && (
             <FilesystemWorkspace

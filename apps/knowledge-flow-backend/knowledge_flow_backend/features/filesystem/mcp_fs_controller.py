@@ -41,7 +41,8 @@ class ShareFileResponse(BaseModel):
     A signed, short-TTL download link for an existing workspace file (FILES-04, RFC §7.4).
 
     Returned by `share_file` so an agent can hand a file back to the user as a clickable link.
-    The file also remains in the user's space, so an expired link is never a dead end.
+    The file also remains in its supported agent or shared area, so an expired
+    link does not remove the underlying file.
     """
 
     download_url: str

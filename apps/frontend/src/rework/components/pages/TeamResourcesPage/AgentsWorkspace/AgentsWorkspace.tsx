@@ -61,7 +61,7 @@ interface AgentsWorkspaceProps {
 
 /**
  * The "Agents" root (FILES-04 §3/§4), one unified table (RFC §13.7 FRONT-09.H,
- * step 3 of the "other three tabs" plan). Its root is virtual — not a real
+ * step 3 of the former multi-tab plan). Its root is virtual — not a real
  * `/fs` path — listing the agent instances that have files for the current
  * user, one folder row per agent, labelled by the agent's display name
  * (never the uuid). Clicking one navigates "into" it exactly like any other

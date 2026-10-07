@@ -59,10 +59,10 @@ const CONVENTIONAL_FOLDER_KEY: Record<string, string> = {
   work: "rework.resources.folders.work",
 };
 
-/** Private spaces (Mon espace, an agent's user space) live under `/users/`; only those
+/** An agent's private per-user space lives under `/users/`; only those
  * files can be shared into the team. Files already in Espace d'équipe cannot be re-shared. */
 function isShareableArea(path: string): boolean {
-  return path.includes("/users/");
+  return path.includes("/agents/") && path.includes("/users/");
 }
 
 function fileExtension(name: string): string {
@@ -83,13 +83,12 @@ function sortEntries(entries: FilesystemResourceInfoResult[]): FilesystemResourc
 }
 
 interface FilesystemWorkspaceProps {
-  /** Team-rooted base path for this area, e.g. `teams/{team}/shared` or `teams/{team}/users/{uid}`. */
+  /** Team-rooted base path for this area, e.g. `teams/{team}/shared` or `teams/{team}/agents/{agent}/users/{uid}`. */
   root: string;
-  /** Breadcrumb's own root segment label — the tab's own name ("Mon espace"/
-   * "Espace d'équipe"), since this component is shared by both tabs. */
+  /** Breadcrumb's own root segment label, supplied by the shared or agent workspace. */
   rootLabel: string;
-  /** Whether upload/new-folder/rename/delete actions are shown. Private areas (Mon
-   * espace) are always writable by their owner; only the shared area is gated by
+  /** Whether upload/new-folder/rename/delete actions are shown. Agent files
+   * are writable by their owner; the shared area is gated by
    * CAN_UPDATE_RESOURCES. Defaults to true so existing private-root call sites are
    * unaffected. */
   canWrite?: boolean;

@@ -100,7 +100,7 @@ class FrontendFeatureFlags(BaseModel):
     )
     enableAllResourceSpaces: bool = Field(
         default=False,
-        description="Show Mon espace/Espace d'équipe/Agents tabs on the Resources page, not just Corpus d'équipe.",
+        description="Show Espace d'équipe and Agents tabs on the Resources page, not just Corpus d'équipe.",
     )
     enableInformationSystems: bool = Field(
         default=False,

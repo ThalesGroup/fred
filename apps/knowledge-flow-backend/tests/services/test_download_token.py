@@ -21,7 +21,7 @@ from knowledge_flow_backend.features.filesystem.download_token import (
     verify_download_token,
 )
 
-PATH = "teams/fredlab/users/alice/uploads/report.xlsx"
+PATH = "teams/fredlab/agents/report-writer/users/alice/outputs/report.xlsx"
 UID = "alice"
 T0 = 1_000_000  # fixed "now" so tests never depend on the wall clock
 

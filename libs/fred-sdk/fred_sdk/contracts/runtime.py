@@ -638,7 +638,7 @@ class WorkspaceFsPort(ABC):
     - this is the single file capability behind ``ctx.read/write/ls/resolve_template``
 
     Path grammar (implemented by the concrete adapter, not the agent):
-    - a bare/relative path → the acting user's private space
+    - a bare/relative path → the running agent's per-user space
     - a leading ``shared/`` → the team-shared space
     - an absolute ``/teams/{t}/...`` is accepted only when ``t`` is the session team
 
@@ -657,13 +657,6 @@ class WorkspaceFsPort(ABC):
     @abstractmethod
     async def read_text(self, path: str) -> str:
         """Read one file as UTF-8 text."""
-
-    @abstractmethod
-    async def read_user_bytes(self, path: str) -> bytes:
-        """Read one file from the user's Mon espace (``teams/{team}/users/{uid}/...``).
-
-        For the run's acting user only; raise ``WorkspaceFileNotFound`` if missing.
-        """
 
     @abstractmethod
     async def read_team_bytes(self, path: str) -> bytes:

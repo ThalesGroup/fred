@@ -42,7 +42,7 @@ class ScopedAreaTarget:
     Resolved storage target for one path inside a team box.
 
     Why this exists:
-    - every team sub-area (`users`, `shared`, `agents`) maps onto the same storage
+    - every supported team sub-area (`shared`, `agents`) maps onto the same storage
       primitive with `root_prefix="teams"` and `owner_override=team_id`
     - routing once into a concrete target removes repeated branching
 
@@ -66,7 +66,7 @@ class ScopedAreaFilesystem:
 
     Why this exists:
     - the unified layout (FILES-04) makes the team the confidentiality perimeter: every
-      writable path is `/teams/{team_id}/{users|shared|agents}/...`
+      writable path is `/teams/{team_id}/{shared|agents}/...`
     - one router keeps the public MCP service thin and the permission rules in one place
 
     Permission model (the team box is sealed by ReBAC):
@@ -76,8 +76,7 @@ class ScopedAreaFilesystem:
       file access.
     - **`shared/`:** read needs `CAN_ACCESS_FILES`; write/delete/mkdir need
       `CAN_UPDATE_RESOURCES`
-    - **`users/{uid}/`:** the path uid MUST equal the acting user (personal-in-team)
-    - **`agents/{agent_id}/users/{uid}/`:** same ownership rule as `users/`
+    - **`agents/{agent_id}/users/{uid}/`:** the path uid MUST equal the acting user
     - **`agents/{agent_id}/config/`:** agent-config assets (#1903) — read needs
       `CAN_ACCESS_FILES` (any member chatting with the agent fetches them);
       write/delete need `CAN_UPDATE_RESOURCES`, same as `shared/`
@@ -169,11 +168,6 @@ class ScopedAreaFilesystem:
             if want_write:
                 await self._ensure_team(user, team_id, TeamPermission.CAN_UPDATE_RESOURCES)
             subpath_parts: tuple[str, ...] = (SUBAREA_SHARED, *rest)
-        elif sub == SUBAREA_USERS:
-            if not rest:
-                raise FileNotFoundError(f"/{AREA_TEAMS}/{team_id}/{SUBAREA_USERS} is a directory")
-            self._ensure_own_uid(user, rest[0])
-            subpath_parts = (SUBAREA_USERS, *rest)
         elif sub == SUBAREA_AGENTS:
             # /teams/{team}/agents/{agent_id}/users/{uid}/...   (per-user agent space)
             # /teams/{team}/agents/{agent_id}/config/...        (agent-config assets, #1903)
@@ -216,13 +210,11 @@ class ScopedAreaFilesystem:
         await self._ensure_team(user, team_id, TeamPermission.CAN_ACCESS_FILES)
 
         if len(segments) == 1:
-            return [dir_entry(SUBAREA_USERS), dir_entry(SUBAREA_SHARED), dir_entry(SUBAREA_AGENTS)]
+            return [dir_entry(SUBAREA_SHARED), dir_entry(SUBAREA_AGENTS)]
 
         sub = segments[1]
         rest = segments[2:]
-        # Synthetic intermediate directories that expose only the caller's own spaces.
-        if sub == SUBAREA_USERS and not rest:
-            return [dir_entry(user.uid)]
+        # Synthetic intermediate directories that expose only supported areas.
         if sub == SUBAREA_AGENTS and not rest:
             return [dir_entry(agent_id) for agent_id in await self._list_agent_ids(user, team_id)]
         if sub == SUBAREA_AGENTS and len(rest) == 1:
@@ -257,11 +249,6 @@ class ScopedAreaFilesystem:
         # Synthetic directory levels (not stored objects).
         if sub == SUBAREA_SHARED and not rest:
             return dir_entry(SUBAREA_SHARED)
-        if sub == SUBAREA_USERS and not rest:
-            return dir_entry(SUBAREA_USERS)
-        if sub == SUBAREA_USERS and len(rest) == 1:
-            self._ensure_own_uid(user, rest[0])
-            return dir_entry(rest[0])
         if sub == SUBAREA_AGENTS and not rest:
             return dir_entry(SUBAREA_AGENTS)
         if sub == SUBAREA_AGENTS and len(rest) == 1:
@@ -424,7 +411,7 @@ class ScopedAreaFilesystem:
         Search the `/teams` area and return visible absolute paths.
 
         Crucially, a team-wide or sub-area-wide search only ever descends into scopes the
-        caller may read — `shared/` plus the caller's own `users/{uid}` and per-agent
+        caller may read — `shared/` plus the caller's per-agent
         folders — so another user's personal files are never matched.
         """
         if not segments:
@@ -439,13 +426,11 @@ class ScopedAreaFilesystem:
 
         # Fan out the broad cases into the caller's allowed scopes only.
         if sub is None:
-            scopes: list[tuple[str, ...]] = [(team_id, SUBAREA_SHARED), (team_id, SUBAREA_USERS, user.uid)]
+            scopes: list[tuple[str, ...]] = [(team_id, SUBAREA_SHARED)]
             for agent_id in await self._list_agent_ids(user, team_id):
                 scopes.append((team_id, SUBAREA_AGENTS, agent_id, SUBAREA_USERS, user.uid))
                 scopes.append((team_id, SUBAREA_AGENTS, agent_id, SUBAREA_AGENT_CONFIG))
             return [hit for scope in scopes for hit in await self._grep_scope(user, pattern, scope)]
-        if sub == SUBAREA_USERS and len(segments) == 2:
-            return await self._grep_scope(user, pattern, (team_id, SUBAREA_USERS, user.uid))
         if sub == SUBAREA_AGENTS and len(segments) == 2:
             out: list[str] = []
             for agent_id in await self._list_agent_ids(user, team_id):

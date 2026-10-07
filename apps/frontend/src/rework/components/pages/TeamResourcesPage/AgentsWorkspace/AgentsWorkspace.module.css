@@ -33,7 +33,7 @@
 
 /* Same fixed 18x18 icon box as FilesystemWorkspace/DocumentWorkspace — kept
  * duplicated per workspace rather than shared, matching that established
- * precedent (avoids premature coupling across the three tabs). */
+ * precedent (avoids premature coupling across the remaining tabs). */
 .rowIcon {
   display: inline-flex;
   flex-shrink: 0;

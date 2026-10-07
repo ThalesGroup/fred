@@ -18,7 +18,7 @@ Why this exists:
 - The Files UI shows where each file came from (deposé / généré / partagé). That
   signal is fully derivable from the virtual path area, because the FILES-04
   isolation rules make the path authoritative: only an agent writes its own
-  agents subtree, only the owner writes their Mon espace, ingestion is the sole
+  agents subtree, ingestion is the sole
   writer of the corpus. So v1 derives provenance from the path — no stored
   metadata, no migration (see docs/swift/design/FILESYSTEM.md).
 
@@ -86,7 +86,6 @@ def derive_provenance(virtual_path: str) -> Provenance | None:
     Examples:
     - `/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx`
       -> agent_generated, producer `agent:inst-7`, created_by `u-1`
-    - `/teams/acme/users/u-1/notes.txt` -> uploaded, human, created_by `u-1`
     - `/teams/acme/shared/templates/brand.pptx` -> uploaded, human, created_by None
     - `/corpus/documents/doc-1/preview.md` -> ingested, ingestion, created_by None
     """
@@ -114,12 +113,6 @@ def derive_provenance(virtual_path: str) -> Provenance | None:
                 producer=f"agent:{parts[3]}",
                 created_by=parts[5],
             )
-        return None
-
-    if sub_area == SUBAREA_USERS:
-        # teams/{team}/users/{uid}/...
-        if len(parts) >= 4:
-            return Provenance(origin=ORIGIN_UPLOADED, producer=PRODUCER_HUMAN, created_by=parts[3])
         return None
 
     if sub_area == SUBAREA_SHARED:

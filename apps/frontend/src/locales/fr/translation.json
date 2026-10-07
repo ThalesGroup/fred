@@ -1941,7 +1941,6 @@
       "storageQuota": "Stockage",
       "roots": {
         "resources": "Corpus d'équipe",
-        "mine": "Mon espace",
         "team": "Espace d'équipe",
         "agents": "Agents",
         "removedAgent": "Agent supprimé",
@@ -1953,7 +1952,6 @@
       },
       "hints": {
         "resources": "La base de connaissances de l'équipe, indexée pour la recherche IA. Créez d'abord une bibliothèque (dossier), puis ajoutez les documents à l'intérieur. Un fichier au niveau supérieur n'a pas de bibliothèque et ne sera pas indexé.",
-        "mine": "Vos fichiers privés dans cette équipe. Vous seul·e les voyez. Brouillons, modèles, tout ce qui est personnel.",
         "team": "Fichiers partagés avec toute l'équipe. Déposez des modèles communs, ou utilisez « Copier dans l'espace d'équipe » pour partager un fichier.",
         "agents": "Les fichiers créés pour vous par vos agents, regroupés par agent. Ils restent privés, et c'est vous qui décidez quoi partager avec l'équipe."
       },

@@ -35,12 +35,8 @@ def test_agent_subtree_is_agent_generated():
     assert p.created_by == "u-1"
 
 
-def test_mon_espace_is_uploaded_by_owner():
-    p = derive_provenance("/teams/acme/users/u-1/notes.txt")
-    assert p is not None
-    assert p.origin == ORIGIN_UPLOADED
-    assert p.producer == PRODUCER_HUMAN
-    assert p.created_by == "u-1"
+def test_retired_personal_area_has_no_provenance():
+    assert derive_provenance("/teams/acme/users/u-1/notes.txt") is None
 
 
 def test_shared_is_uploaded_human_unknown_author_in_v1():

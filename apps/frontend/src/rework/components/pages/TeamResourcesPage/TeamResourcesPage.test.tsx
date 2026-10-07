@@ -180,21 +180,21 @@ describe("TeamResourcesPage tab switcher", () => {
 
   it("switches panels when a tab is clicked, never rendering two at once", () => {
     render();
-    expect(tabButtons()).toHaveLength(4); // resources, mine, team, agents
+    expect(tabButtons()).toHaveLength(3); // resources, team, agents
 
-    click(tabButtons()[3]); // agents
+    click(tabButtons()[2]); // agents
     expect(container.querySelector('[data-testid="panel-agents"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="panel-resources"]')).toBeNull();
 
-    click(tabButtons()[1]); // mine
-    expect(container.querySelector('[data-testid="panel-fs"]')?.textContent).toBe("teams/team-1/users/u-1");
+    click(tabButtons()[1]); // team
+    expect(container.querySelector('[data-testid="panel-fs"]')?.textContent).toBe("teams/team-1/shared");
     expect(container.querySelector('[data-testid="panel-agents"]')).toBeNull();
   });
 
   it("hides the Espace partagé tab for a personal team", () => {
     probe.isPersonalTeam = true;
     render();
-    expect(tabButtons()).toHaveLength(3); // no "team" tab
+    expect(tabButtons()).toHaveLength(2); // no "team" tab
   });
 
   it("shows the team storage quota when the team carries a quota", () => {
@@ -209,8 +209,8 @@ describe("TeamResourcesPage tab switcher", () => {
   });
 });
 
-// The team isn't yet confident Mon espace/Espace d'équipe/Agents pull their
-// weight — shipped default is Corpus d'équipe only, with the other three
+// The team isn't yet confident Espace d'équipe/Agents pull their
+// weight — shipped default is Corpus d'équipe only, with the other two
 // gated behind the platform-wide enableAllResourceSpaces flag
 // (configuration.yaml, off by default) so they can be turned back on later
 // without a code change.
@@ -225,11 +225,11 @@ describe("TeamResourcesPage resource spaces feature flag", () => {
     expect(container.querySelector('[data-testid="panel-agents"]')).toBeNull();
   });
 
-  it("shows the full 4-tab switcher when the flag is on", () => {
+  it("shows the full 3-tab switcher when the flag is on", () => {
     probe.enableAllResourceSpaces = true;
     render();
 
-    expect(tabButtons()).toHaveLength(4);
+    expect(tabButtons()).toHaveLength(3);
   });
 
   it("treats a not-yet-loaded bootstrap as off (safe default), not a crash", () => {
@@ -333,14 +333,13 @@ describe("TeamResourcesPage stats toggle", () => {
     render();
     click(statsToggle());
 
-    // "Mon espace" and "Espace partagé" both read /fs stats, on different roots.
     expect(probe.corpusStatsSkip).toBe(false);
     expect(Object.values(probe.fsStatsSkip).every((skipped) => skipped)).toBe(true);
 
     click(tabButtons()[1]);
     expect(probe.corpusStatsSkip).toBe(true);
-    expect(probe.fsStatsSkip["teams/team-1/users/u-1"]).toBe(false);
-    expect(probe.fsStatsSkip["teams/team-1/shared"]).toBe(true);
+    expect(probe.fsStatsSkip["teams/team-1/shared"]).toBe(false);
+    expect(probe.fsStatsSkip["teams/team-1/users/u-1"]).toBeUndefined();
   });
 });
 

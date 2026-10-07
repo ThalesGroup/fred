@@ -231,14 +231,14 @@ async def test_list_stamps_agent_provenance(app_context):
 
 
 @pytest.mark.asyncio
-async def test_list_stamps_mon_espace_provenance(app_context):
+async def test_list_stamps_shared_provenance(app_context):
     service, _scoped_areas, _corpus_area = _service()
 
-    entries = await service.list(_user(), "/teams/acme/users/u-1")
+    entries = await service.list(_user(), "/teams/acme/shared")
 
     assert entries[0].origin == "uploaded"
     assert entries[0].producer == "human"
-    assert entries[0].created_by == "u-1"
+    assert entries[0].created_by is None
 
 
 @pytest.mark.asyncio
@@ -386,7 +386,7 @@ async def test_copy_to_shared_places_file_and_tags_share_copy(app_context):
     # reads back as a share-copy (partagé).
     service, scoped_areas, _corpus_area = _service()
 
-    entry = await service.copy_to_shared(_user(), "/teams/acme/users/u-1/outputs/q3.pptx")
+    entry = await service.copy_to_shared(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx")
 
     writes = [c for c in scoped_areas.calls if c[0] == "write_bytes_area"]
     assert writes[-1][1][1] == ("acme", "shared", "files", "q3.pptx")
@@ -399,7 +399,7 @@ async def test_copy_to_shared_suffixes_on_name_collision(app_context):
     # name is placed as "notes (2).txt" (no-clobber).
     service, scoped_areas, _corpus_area = _service()
 
-    await service.copy_to_shared(_user(), "/teams/acme/users/u-1/notes.txt")
+    await service.copy_to_shared(_user(), "/teams/acme/agents/inst-7/users/u-1/notes.txt")
 
     writes = [c for c in scoped_areas.calls if c[0] == "write_bytes_area"]
     assert writes[-1][1][1] == ("acme", "shared", "files", "notes (2).txt")
@@ -452,11 +452,11 @@ async def test_read_bytes_rejects_corpus_area(app_context):
 async def test_write_bytes_routes_teams_path_to_scoped_area(app_context):
     service, scoped_areas, _corpus_area = _service()
 
-    await service.write_bytes(_user(), "/teams/acme/users/u-1/outputs/q3.pptx", b"\x00\x01")
+    await service.write_bytes(_user(), "/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx", b"\x00\x01")
 
     assert scoped_areas.calls[-1] == (
         "write_bytes_area",
-        (_user(), ("acme", "users", "u-1", "outputs", "q3.pptx"), b"\x00\x01"),
+        (_user(), ("acme", "agents", "inst-7", "users", "u-1", "outputs", "q3.pptx"), b"\x00\x01"),
         {},
     )
 

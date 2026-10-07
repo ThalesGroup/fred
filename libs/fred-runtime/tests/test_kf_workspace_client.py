@@ -227,15 +227,15 @@ async def test_fs_upload_uses_fs_upload_route():
     expected = UserStorageUploadResult(key="k", file_name="d.pptx", size=4)
     with patch.object(client, "_upload_blob", return_value=expected) as m:
         result = await client.fs_upload(
-            "teams/acme/users/u-1/outputs/d.pptx",
+            "teams/acme/agents/report-writer/users/u-1/outputs/d.pptx",
             b"data",
             "d.pptx",
             "application/octet-stream",
         )
     assert result is expected
     m.assert_awaited_once_with(
-        "/fs/upload/teams/acme/users/u-1/outputs/d.pptx",
-        "teams/acme/users/u-1/outputs/d.pptx",
+        "/fs/upload/teams/acme/agents/report-writer/users/u-1/outputs/d.pptx",
+        "teams/acme/agents/report-writer/users/u-1/outputs/d.pptx",
         b"data",
         "d.pptx",
         "application/octet-stream",
@@ -247,9 +247,9 @@ def test_fs_path_percent_encodes_reserved_chars_preserving_separators():
     # truncated, while "/" separators stay literal.
     assert (
         KfWorkspaceClient._fs_path(
-            "download", "teams/acme/users/u-1/outputs/Q3 #1?.txt"
+            "download", "teams/acme/agents/report-writer/users/u-1/outputs/Q3 #1?.txt"
         )
-        == "/fs/download/teams/acme/users/u-1/outputs/Q3%20%231%3F.txt"
+        == "/fs/download/teams/acme/agents/report-writer/users/u-1/outputs/Q3%20%231%3F.txt"
     )
 
 

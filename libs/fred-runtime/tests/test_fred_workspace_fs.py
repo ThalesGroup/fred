@@ -143,19 +143,6 @@ async def test_read_bytes_maps_404_to_not_found():
 
 
 @pytest.mark.asyncio
-async def test_read_user_bytes_resolves_to_mon_espace():
-    # G7: explicit read of the run user's Mon espace.
-    client = _FakeClient()
-    fs = _fs(client)
-    await fs.read_user_bytes("templates/brand.pptx")
-    assert client.calls[-1] == (
-        "download",
-        "teams/acme/users/u-1/templates/brand.pptx",
-        "tok",
-    )
-
-
-@pytest.mark.asyncio
 async def test_read_team_bytes_resolves_to_shared():
     # G7: explicit read of Espace d'equipe.
     client = _FakeClient()

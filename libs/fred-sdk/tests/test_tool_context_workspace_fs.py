@@ -45,10 +45,6 @@ class _FakeWorkspaceFs:
     async def read_text(self, path: str) -> str:
         return (await self.read_bytes(path)).decode("utf-8")
 
-    async def read_user_bytes(self, path: str) -> bytes:
-        # Mon espace key = the relative path (mirrors the adapter's user resolution).
-        return await self.read_bytes(path)
-
     async def read_team_bytes(self, path: str) -> bytes:
         # Espace d'equipe key = shared/ + relative path (mirrors the adapter).
         return await self.read_bytes(f"shared/{path}")
@@ -115,14 +111,6 @@ def test_write_encodes_str_content_as_utf8():
     assert asyncio.run(ctx.read("shared/outputs/note.md")) == "héllo"
 
 
-def test_read_user_reads_mon_espace():
-    fs = _FakeWorkspaceFs()
-    fs.files["notes.txt"] = b"mine"
-    ctx = _ctx(fs)
-
-    assert asyncio.run(ctx.read_user("notes.txt")) == "mine"
-
-
 def test_read_team_reads_shared():
     fs = _FakeWorkspaceFs()
     fs.files["shared/policy.md"] = b"team"
@@ -138,7 +126,7 @@ def test_read_resource_is_deferred_in_v1():
         asyncio.run(ctx.read_resource("doc.md"))
 
 
-def test_resolve_template_checks_user_then_team():
+def test_resolve_template_checks_agent_then_team():
     fs = _FakeWorkspaceFs()
     fs.files["shared/templates/brand.pptx"] = b"TEAM"
     ctx = _ctx(fs)
@@ -146,11 +134,11 @@ def test_resolve_template_checks_user_then_team():
     data = asyncio.run(ctx.resolve_template("brand.pptx"))
 
     assert data == b"TEAM"
-    # user space first (miss), then the team's shared space (hit)
+    # agent space first (miss), then the team's shared space (hit)
     assert fs.reads == ["templates/brand.pptx", "shared/templates/brand.pptx"]
 
 
-def test_resolve_template_prefers_user_override():
+def test_resolve_template_prefers_agent_override():
     fs = _FakeWorkspaceFs()
     fs.files["templates/brand.pptx"] = b"MINE"
     fs.files["shared/templates/brand.pptx"] = b"TEAM"
