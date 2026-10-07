@@ -15,7 +15,7 @@ Review private control-plane backend and worker values overlays for `platform.fr
 
 ## Configuration
 
-Keep only `enableApplications` and `enableInformationSystems` under `platform.frontend.feature_flags`. Remove any other keys, including `enableAllResourceSpaces`, from both application overlays. The bundled Helm values already contain the supported default-off flags.
+Keep only `enableApplications`, `enableAllResourceSpaces`, and `enableInformationSystems` under `platform.frontend.feature_flags`. Remove any other keys from both application overlays. The bundled Helm values already contain the supported default-off flags.
 
 ## Upgrade
 
@@ -23,7 +23,7 @@ Apply the overlay cleanup and validate the values against the new chart schema b
 
 ## Validation
 
-Confirm chart values validation passes. Check that `/control-plane/v1/frontend/bootstrap` exposes the two supported flags and that the admin Tasks and migration task pages still show task rows, statuses, and acknowledgements.
+Confirm chart values validation passes. Check that `/control-plane/v1/frontend/bootstrap` exposes the three supported flags and that the admin Tasks and migration task pages still show task rows, statuses, and acknowledgements.
 
 ## Rollback
 
