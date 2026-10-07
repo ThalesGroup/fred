@@ -630,13 +630,9 @@ def _kept(
     slide: _Slide, candidates: List[Tuple[Pattern, float]]
 ) -> List[Tuple[Pattern, float]]:
     """The template slide the delivered deck showed this slide on, alone, while
-    it still fits there with the same kind: a text change keeps its design."""
-    asked = slide.plan.kind
-    kept = [
-        c
-        for c in candidates
-        if c[0].id == slide.plan.built_on and asked in (None, c[0].kind)
-    ]
+    it is still among the best-ranked kind's fits: a text change keeps its
+    design, a kind the template replaced included."""
+    kept = [c for c in candidates if c[0].id == slide.plan.built_on]
     return kept or candidates
 
 

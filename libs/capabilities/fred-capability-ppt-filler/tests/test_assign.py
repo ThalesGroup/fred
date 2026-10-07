@@ -676,6 +676,21 @@ def test_a_delivered_slide_keeps_its_template_slide_while_it_fits_its_kind():
     assert assign(_offers(), _plan(split)).parts
 
 
+def test_a_substituted_kind_keeps_its_template_slide():
+    """A timeline built on a process slide (no timeline in the template) stays
+    on that process slide when the deck is rebuilt for an unrelated change."""
+    inventory = _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "process", 3, ["number", "heading"]),
+        _items_pattern("slide:3", "process", 3, ["number", "heading"]),
+    )
+    items = [PlanItem(number=str(i), heading=f"Step {i}") for i in range(1, 4)]
+    for built_on in ("slide:2", "slide:3"):
+        slide = SlidePlan(title="Plan", kind="timeline", items=items, built_on=built_on)
+        (pattern,) = assign(inventory, _plan(slide)).patterns
+        assert pattern and pattern.id == built_on
+
+
 def test_delivered_notes_name_the_files_slide_numbers():
     """A list split on slide 2 makes the next slide the file's slide 4."""
     items = [PlanItem(heading=f"H{i}", text="t") for i in range(7)]
