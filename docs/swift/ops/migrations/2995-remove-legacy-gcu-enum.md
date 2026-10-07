@@ -7,7 +7,7 @@ configuration_reason: "The app.gcu_version string, database column and HTTP cont
 ---
 ## Applicability
 
-Fred deployments upgrading from v3.2.0 and Python consumers of the user-store API.
+Running Fred v3.2.0 deployments, new installations and Python consumers of the user-store API. Earlier installations still need the original enum-to-text migration when upgrading through v3.2.0.
 
 ## Prerequisites
 
@@ -19,7 +19,13 @@ No configuration changes are required; existing configured version strings remai
 
 ## Upgrade
 
-If an external Python consumer imports `GcuVersionsType`, remove that import and replace `GcuVersionsType.V1` with `"v1"` or the configured version string. Pass strings to `update_gcu_version`. Repository callers already do this. Deploy Fred normally; no new database migration or special deployment order is required.
+If an external Python consumer imports `GcuVersionsType`, remove that import and replace `GcuVersionsType.V1` with `"v1"` or the configured version string. Pass strings to `update_gcu_version`. Repository callers already do this.
+
+- Running v3.2.0 pods are unaffected until their images are upgraded. For the retirement in this note, normal rolling deployment is sufficient: both versions read and write the same text column, so there is no additional drain, restart order or database revision.
+- New installations use the normal migration chain and configure `app.gcu_version` as a string. Historical enum-to-text conversion remains in that chain and does not import the removed Python class.
+- Upgrades from before v3.2.0 still follow the [original CGU conversion procedure](2972-configurable-gcu-versions.md), including stopping old enum-based readers during schema conversion. This retirement does not relax that earlier requirement.
+
+This change does not require users to accept the terms again. Reacceptance remains tied to a change in the configured version string.
 
 ## Validation
 

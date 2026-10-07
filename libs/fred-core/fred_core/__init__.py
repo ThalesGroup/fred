@@ -196,7 +196,6 @@ from fred_core.teams.metadata_store import (
 from .common import get_config
 from .users import (
     BaseUserStore,
-    GcuVersionsType,
     PostgresUserStore,
     UserRow,
     get_user_store,
@@ -323,7 +322,6 @@ __all__ = [
     "BaseUserStore",
     "PostgresUserStore",
     "UserRow",
-    "GcuVersionsType",
     "get_user_store",
     "get_config",
     # conversion
