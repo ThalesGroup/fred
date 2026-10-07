@@ -21,10 +21,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ProgressBar from "@shared/atoms/ProgressBar/ProgressBar.tsx";
 import { getQueryUiState } from "@core/utils/queryUiState.ts";
-import {
-  useListTagsQuery,
-  useGetTagCorpusTypeStatsQuery,
-} from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
+import { useListTagsQuery, useGetTagCorpusTypeStatsQuery } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { useGetTeamQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { KeyCloakService } from "../../../../security/KeycloakService.ts";
 import { isPersonalTeamId, personalTeamId } from "@shared/utils/teamId.ts";
@@ -55,10 +52,7 @@ export default function TeamResourcesPage() {
   const [statsOpen, setStatsOpen] = useState(false);
   // The corpus query walks every readable library and document; fetch only
   // when the usage panel is open.
-  const corpusStats = useGetTagCorpusTypeStatsQuery(
-    { teamId: fsTeamId },
-    { skip: !statsOpen },
-  );
+  const corpusStats = useGetTagCorpusTypeStatsQuery({ teamId: fsTeamId }, { skip: !statsOpen });
 
   // KF health gate — identical pattern to the old KnowledgeHubPage.
   const { isError, isLoading, isFetching, isUninitialized } = useListTagsQuery({

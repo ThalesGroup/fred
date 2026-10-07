@@ -235,8 +235,6 @@ describe("TeamResourcesPage stats toggle", () => {
     click(statsToggle());
     expect(probe.corpusStatsSkip).toBe(true);
   });
-
-
 });
 
 describe("TeamResourcesPage health gate", () => {
