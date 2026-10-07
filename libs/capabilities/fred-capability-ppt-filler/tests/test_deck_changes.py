@@ -555,37 +555,33 @@ def test_change_slides_do_not_repeat_the_slide_schema():
 
 
 @pytest.mark.asyncio
-async def test_a_split_list_keeps_the_models_plan_as_the_base(
+async def test_a_split_list_is_stored_as_the_delivered_deck(
     monkeypatch, deck_plan_store
 ):
-    """Five steps over two process slides: the stored plan is the one sent, so
-    a later change numbers on it, not on the rendered deck."""
+    """Five steps over two process slides: the stored plan is the deck as
+    delivered, so a later change numbers on the file's slides, and the parts
+    are rebuilt as they are, never split or suffixed again."""
     workspace = FakeWorkspace()
     first = _Turn(monkeypatch, workspace)
     method = {"title": "Method", "kind": "process", "items": _STEPS[:5]}
     deck = [COVER, method, {"title": "Contact", "bullets": ["a"]}]
     text, result = await first.build(slides=deck)
     assert not result.is_error, text
+    assert "Slide 2: its 5 items continue on a second 'process' slide" in text
     (rendered,) = first.rendered
-    assert [s.title for s in rendered.slides] == [
-        "Kick-off",
-        "Method (1/2)",
-        "Method (2/2)",
-        "Contact",
-    ]
+    titles = ["Kick-off", "Method (1/2)", "Method (2/2)", "Contact"]
+    assert [s.title for s in rendered.slides] == titles
     stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
-    assert [s.title for s in stored.slides] == ["Kick-off", "Method", "Contact"]
+    assert _dumps(stored) == _dumps(rendered)
+    assert [s.kind for s in stored.slides[1:3]] == ["process", "process"]
 
     second = _Turn(monkeypatch, workspace)
     text, result = await second.build(
-        changes=[{"op": "edit", "slide": 3, "field": "title", "value": "Contacts"}]
+        changes=[{"op": "edit", "slide": 4, "field": "title", "value": "Contacts"}]
     )
     assert not result.is_error, text
+    assert "continue on" not in text
     (edited,) = second.rendered
-    assert [s.title for s in edited.slides] == [
-        "Kick-off",
-        "Method (1/2)",
-        "Method (2/2)",
-        "Contacts",
-    ]
+    assert [s.title for s in edited.slides] == titles[:3] + ["Contacts"]
     assert [i.number for i in edited.slides[2].items] == ["3", "4"]
+    assert _dumps(edited)[:3] == _dumps(rendered)[:3]

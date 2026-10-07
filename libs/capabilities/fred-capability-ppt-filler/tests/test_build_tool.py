@@ -257,7 +257,7 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     assert tools_mod.deck_delivered(_turn(text))  # a later turn sees it
     # Another call is allowed: it rebuilds the whole deck.
     assert "do not call again" not in text
-    assert "To change it, send only `changes` numbered on this deck's slides" in text
+    assert "send only `changes` numbered on the file's slides (1 to 2" in text
     # Keyed by the deck's name: a model that splits one deck across calls, or
     # retries one, lands on the same key and the reader sees one presentation.
     paths = [w["path"] for w in workspace.writes]
@@ -840,9 +840,9 @@ async def test_a_split_agenda_is_one_agenda_for_the_gap_check(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_notes_after_a_split_name_the_plans_slide_numbers(monkeypatch):
+async def test_notes_after_a_split_name_the_files_slide_numbers(monkeypatch):
     """The process list of slide 2 takes two slides; the agenda after it is
-    still slide 3 in every note."""
+    slide 4 of the file, and every note says so."""
     steps = [{"heading": f"Step {i}", "text": "x"} for i in range(5)]
     method = {"title": "Method", "kind": "process", "items": steps}
     text, result = await _build(
@@ -852,7 +852,7 @@ async def test_notes_after_a_split_name_the_plans_slide_numbers(monkeypatch):
     assert "(5 slides)" in text
     assert "Slide 2: its 5 items continue on a second 'process' slide (3 + 2" in text
     assert (
-        "Slide 3: the agenda announces 4 parts but only 1 slide(s) follow it." in text
+        "Slide 4: the agenda announces 4 parts but only 1 slide(s) follow it." in text
     )
 
 
@@ -875,9 +875,9 @@ async def test_the_delivered_part_summarises_what_was_built(monkeypatch, preview
     assert [(s.number, s.part, s.parts) for s in summary] == [
         (1, 1, 1),
         (2, 1, 2),
-        (2, 2, 2),
-        (3, 1, 1),
+        (3, 2, 2),
         (4, 1, 1),
+        (5, 1, 1),
     ]
     cover, first, second, fallback, picture = summary
     assert (cover.title, cover.kind, cover.notes) == ("Kick-off", "cover", [])

@@ -55,7 +55,7 @@ export interface BuildNote {
   kind?: string | null;
 }
 
-/** One rendered slide; `number` is the plan's, shared by both parts of a split list. */
+/** One rendered slide; `number` is its place in the deck (each part of a split list counts). */
 export interface BuiltSlide {
   number: number;
   part: number;

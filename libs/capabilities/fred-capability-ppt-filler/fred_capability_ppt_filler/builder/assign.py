@@ -198,14 +198,16 @@ class Assignment:
     def deck(
         self, plan: DeckPlan
     ) -> Tuple[DeckPlan, List[Optional[Pattern]], List[int]]:
-        """The plan to render, a split slide as its parts, with each rendered
-        slide's number in ``plan``: messages always name the model's slides."""
+        """The deck as delivered, a split slide as its parts and no entry that
+        is not a slide, with each slide's number in ``plan`` (shared by parts)."""
         slides: List[SlidePlan] = []
         patterns: List[Optional[Pattern]] = []
         numbers: List[int] = []
         for number, (slide, pattern) in enumerate(
             zip(plan.slides, self.patterns), start=1
         ):
+            if slide.invalid_entry is not None:
+                continue
             for part, chosen in self.parts.get(number, [(slide, pattern)]):
                 slides.append(part)
                 patterns.append(chosen)
@@ -777,7 +779,7 @@ def _split(
     return None
 
 
-def _split_note(split: _Split) -> str:
+def _split_note(split: _Split, at: Dict[int, int]) -> str:
     first = split.slides[0]
     sizes = " + ".join(str(_entries(s.plan)) for s in split.slides)
     more = "a second" if len(split.slides) == 2 else f"{len(split.slides) - 1} more"
@@ -794,7 +796,7 @@ def _split_note(split: _Split) -> str:
         why = f"they do not fit one '{split.kind}' slide"
         remedy = "send fewer rows or shorter cells"
     return (
-        f"Slide {first.index}: its {split.entries} {split.what} continue on {more} "
+        f"Slide {at[first.index]}: its {split.entries} {split.what} continue on {more} "
         f"'{split.kind}' slide ({sizes}{header}{marked}): {why}. Nothing to do; to "
         f"keep one slide, {remedy}."
     )
@@ -994,7 +996,7 @@ def _close_options(
 
 
 def _substitution(
-    slide: _Slide, chosen: Pattern, offered: set[str], has_cover: bool
+    slide: _Slide, chosen: Pattern, offered: set[str], has_cover: bool, number: int
 ) -> Optional[str]:
     """What was built instead of the requested kind, why, and the edit that
     would give the requested kind."""
@@ -1002,7 +1004,7 @@ def _substitution(
     # The first slide is the cover by rule, and the description says so.
     if not asked or chosen.kind == asked or (slide.first and chosen.kind == "cover"):
         return None
-    head = f"Slide {slide.index}: built as '{chosen.kind}' instead of '{asked}'"
+    head = f"Slide {number}: built as '{chosen.kind}' instead of '{asked}'"
     why = _why_not(slide, offered)
     if why is not None:
         remedy = (
@@ -1305,15 +1307,15 @@ def _repeats(
     return repeats
 
 
-def _repeat_note(repeat: Repeat) -> str:
+def _repeat_note(repeat: Repeat, at: Dict[int, int]) -> str:
     """The passive note: the slides, the variants of their kind left unused,
     and the kinds their content suits."""
-    at = ", ".join(map(str, repeat.slides))
+    at_text = ", ".join(str(at[n]) for n in repeat.slides)
     if len(repeat.labels) == 1:
-        note = f"Slides {at} all use the template slide '{repeat.labels[0]}'."
+        note = f"Slides {at_text} all use the template slide '{repeat.labels[0]}'."
     else:
         note = (
-            f"Slides {at} are all '{repeat.kind}' slides (template slides "
+            f"Slides {at_text} are all '{repeat.kind}' slides (template slides "
             + ", ".join(f"'{label}'" for label in repeat.labels)
             + ")."
         )
@@ -1328,6 +1330,20 @@ def _repeat_note(repeat: Repeat) -> str:
     if repeat.unused or repeat.suggested:
         return note + " To vary them, recast one as above; otherwise nothing to do."
     return note + " Nothing to do: no other slide of this template suits them."
+
+
+_PART_TITLE = re.compile(r"^(.*) \((\d+)/(\d+)\)$")
+
+
+def _rejoin(slides: List[_Slide]) -> None:
+    """Parts of a list split by an earlier build, now slides of their own in the
+    stored deck: one list again for variety, and never split a second time."""
+    for before, slide in zip(slides, slides[1:]):
+        a = _PART_TITLE.match(before.plan.title or "")
+        b = _PART_TITLE.match(slide.plan.title or "")
+        if a and b and (a[1], a[3]) == (b[1], b[3]) and int(b[2]) == int(a[2]) + 1:
+            before.part, before.parts = int(a[2]), int(a[3])
+            slide.part, slide.parts = int(b[2]), int(b[3])
 
 
 def assign(
@@ -1352,6 +1368,7 @@ def assign(
         _Slide(index, slide, first=n == 0, last=n == len(usable) - 1)
         for n, (index, slide) in enumerate(usable)
     ]
+    _rejoin(slides)
     problems: List[SlideProblem] = []
     splits: Dict[int, _Split] = {}
     for slide in slides:
@@ -1376,7 +1393,11 @@ def assign(
             bool(slide.candidates) and slide.candidates[0][0].kind in slide.tiers[0]
         )
         # Its own kind over two slides before a close kind, before a revision.
-        split = None if own_kind else _split(slide, pool, size, has_cover)
+        split = (
+            None
+            if own_kind or slide.parts > 1
+            else _split(slide, pool, size, has_cover)
+        )
         if split is not None:
             splits[slide.index] = split
         elif not slide.candidates:
@@ -1404,27 +1425,35 @@ def assign(
     patterns: List[Optional[Pattern]] = [None] * len(plan.slides)
     parts: Dict[int, List[Tuple[SlidePlan, Pattern]]] = {}
     for slide, pattern in zip(slides, chosen):
+        if slide.index not in splits:
+            patterns[slide.index - 1] = pattern
+            continue
         if slide.part == 1:
             patterns[slide.index - 1] = pattern
-        if slide.parts > 1:
-            parts.setdefault(slide.index, []).append(
-                (_numbered(slide, pattern), pattern)
-            )
+        # Stored as a slide of its own after delivery: its kind keeps it one.
+        part = _numbered(slide, pattern)
+        parts.setdefault(slide.index, []).append(
+            (part.model_copy(update={"kind": part.kind or pattern.kind}), pattern)
+        )
+    # The deck's own numbers: a split list's parts are slides of their own.
+    at: Dict[int, int] = {}
+    for number, slide in enumerate(slides, start=1):
+        at.setdefault(slide.index, number)
     notes = [
         note
-        for slide, pattern in zip(slides, chosen)
-        if (note := _substitution(slide, pattern, offered, has_cover))
+        for number, (slide, pattern) in enumerate(zip(slides, chosen), start=1)
+        if (note := _substitution(slide, pattern, offered, has_cover, number))
     ]
     notes += [
-        f"Slides {slides[i - 2].index} to {slides[i].index} use the same template slide: "
+        f"Slides {i - 1} to {i + 1} use the same template slide: "
         "no other one holds their content. Nothing to do, unless they must look different: "
         "then give one of them another content shape."
         for i in range(2, len(chosen))
         if chosen[i].id == chosen[i - 1].id == chosen[i - 2].id
         and slides[i].part == slides[i - 1].part == 1
     ]
-    notes += [_split_note(split) for split in splits.values()]
+    notes += [_split_note(split, at) for split in splits.values()]
     found = {s.index: p for s, p in zip(slides, chosen) if s.part == 1}
     repeats = _repeats(slides, found, pool, by_kind, caps)
-    notes += [_repeat_note(r) for r in repeats]
+    notes += [_repeat_note(r, at) for r in repeats]
     return Assignment(patterns=patterns, notes=notes, repeats=repeats, parts=parts)

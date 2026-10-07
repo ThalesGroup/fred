@@ -407,17 +407,18 @@ def _without(slide: SlidePlan, bad: set[str]) -> SlidePlan:
 
 
 def _summary(
-    built: List[BuiltSlide], sent: DeckPlan, bad: List[str]
+    built: List[BuiltSlide], sent: DeckPlan, bad: List[str], numbers: List[int]
 ) -> List[BuiltSlide]:
     """The render's per-slide record, with the pictures that did not load
     before the assignment noted on the first part of the slide naming them."""
     unusable = set(bad)
     noted: set[int] = set()
     for slide in built:
-        if not unusable or slide.number in noted:
+        number = numbers[slide.number - 1]
+        if not unusable or number in noted:
             continue
-        noted.add(slide.number)
-        source = sent.slides[slide.number - 1]
+        noted.add(number)
+        source = sent.slides[number - 1]
         named = [source.image, *source.images, *(i.image for i in source.items)]
         count = len({uid for uid in named if uid in unusable})
         same = next((n for n in slide.notes if n.code == "image_unusable"), None)
@@ -896,11 +897,11 @@ def build_builder_tools(
                 update={"file_name": validated.file_name or changed.file_name}
             )
 
-        async def evaluated() -> None:
-            turn_base[:] = [plan]
+        async def evaluated(stored: DeckPlan) -> None:
+            turn_base[:] = [stored]
             turn_parent[:] = [] if base is None else [base]
             turn_shape[0] = shape
-            await plans.write(plan)
+            await plans.write(stored)
 
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
@@ -934,7 +935,7 @@ def build_builder_tools(
         if repeats and deck_delivered(history()):
             repeats = []
         if assignment.problems:
-            await evaluated()
+            await evaluated(plan)
             return _needs_revision(
                 assignment,
                 plan,
@@ -945,7 +946,7 @@ def build_builder_tools(
             )
         previous_problems.clear()
         if repeats:
-            await evaluated()
+            await evaluated(plan)
             return _variety_revision(repeats, assignment)
 
         if workspace is None:
@@ -964,7 +965,8 @@ def build_builder_tools(
 
         if not acquire_heavy_job_slot():
             return _error(_BUSY_MESSAGE)
-        # Split lists render as their parts; the stored plan stays the model's.
+        # Stored as delivered: a split list's parts become slides of their own,
+        # so the file, the model and later `changes` share one numbering.
         deck, patterns, numbers = assignment.deck(plan)
         try:
             result = await asyncio.to_thread(
@@ -1013,7 +1015,7 @@ def build_builder_tools(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
             )
-        await evaluated()
+        await evaluated(deck)
 
         if result.warnings:
             logger.info("[PPTBUILD][TOOL] render warnings: %s", result.warnings)
@@ -1053,14 +1055,15 @@ def build_builder_tools(
                 # the model chose.
                 file_name=file_name,
                 capability_id=PPT_BUILDER_CAPABILITY_ID,
-                summary=_summary(result.report.built, sent, bad),
+                summary=_summary(result.report.built, sent, bad, numbers),
             )
             return (
                 f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "
                 "in this answer. A preview opens beside the chat and a download button is shown "
                 "automatically; do not write a download link. To change it, send only `changes` numbered "
-                "on this deck's slides; every call rebuilds the whole deck. Describe to the user only "
-                "the slides the deck actually holds." + notes,
+                f"on the file's slides (1 to {result.slide_count}, a list continued on two slides counts "
+                "two); every call rebuilds the whole deck. Describe to the user only the slides the deck "
+                "actually holds." + notes,
                 ToolInvocationResult(
                     tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(part),)
                 ),
@@ -1076,7 +1079,8 @@ def build_builder_tools(
         return (
             f"The presentation '{file_name}' ({result.slide_count} slides) is ready (no preview could be "
             "generated, only the download). A download button is shown automatically; do not write a link. "
-            "To change it, send only `changes` numbered on this deck's slides." + notes,
+            f"To change it, send only `changes` numbered on the file's slides (1 to {result.slide_count})."
+            + notes,
             ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(link),)),
         )
 

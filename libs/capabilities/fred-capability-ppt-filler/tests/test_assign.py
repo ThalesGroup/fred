@@ -635,6 +635,47 @@ def test_a_continuation_stays_on_its_first_parts_slide_even_at_max_one():
     assert first.id == second.id
 
 
+def _offers() -> TemplateInventory:
+    return _inventory(
+        _bullets("layout:1", "Text"),
+        _items_pattern("slide:2", "cards", 4, ["heading", "body"]),
+        _items_pattern("slide:3", "cards", 4, ["heading", "body"]),
+    )
+
+
+def test_a_delivered_split_rebuilds_as_it_was_and_still_counts_once():
+    """The stored deck holds both parts as slides: rebuilt at max one, they are
+    neither split again nor a repeat, and stay on one template slide."""
+    items = [PlanItem(heading=f"H{i}", text="t") for i in range(7)]
+    plan = _plan(
+        SlidePlan(title="Intro", bullets=["a"]),
+        SlidePlan(title="Offers", items=items),
+    )
+    deck, _, numbers = assign(_offers(), plan, "template_slide", 1).deck(plan)
+    assert [s.title for s in deck.slides] == ["Intro", "Offers (1/2)", "Offers (2/2)"]
+    assert numbers == [1, 2, 2] and deck.slides[2].kind == "cards"
+    again = assign(_offers(), deck, "template_slide", 1)
+    assert not again.problems and not again.repeats and not again.parts
+    assert not [n for n in again.notes if "continue on" in n]
+    first, second = again.patterns[1:]
+    assert first and second and first.id == second.id
+
+
+def test_delivered_notes_name_the_files_slide_numbers():
+    """A list split on slide 2 makes the next slide the file's slide 4."""
+    items = [PlanItem(heading=f"H{i}", text="t") for i in range(7)]
+    plan = _plan(
+        SlidePlan(title="Intro", bullets=["a"]),
+        SlidePlan(title="Offers", kind="cards", items=items),
+        SlidePlan(title="Points", bullets=["a", "b"], kind="timeline"),
+    )
+    notes = assign(_offers(), plan).notes
+    assert any(
+        n.startswith("Slide 4: built as 'bullets' instead of 'timeline'") for n in notes
+    )
+    assert any(n.startswith("Slide 2: its 7 items continue on a second") for n in notes)
+
+
 def test_a_split_list_still_counts_once_beside_other_slides_of_its_template_slide():
     cards = _items_pattern("slide:2", "cards", 4, ["heading", "body"])
     inventory = _inventory(_bullets("layout:1", "Text"), cards)

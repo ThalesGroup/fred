@@ -148,7 +148,7 @@ class BuildNote(BaseModel):
 
 
 class BuiltSlide(BaseModel):
-    """One rendered slide as the user sees it; ``number`` is the plan's."""
+    """One rendered slide as the user sees it; ``number`` is its place in the deck."""
 
     number: int
     part: int = 1

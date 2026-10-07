@@ -1156,22 +1156,22 @@ class _Renderer:
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
-        # [number, rendered index of its last part, topics] of each agenda: a deck
-        # announcing more topics than it has slides left is one the agent meant to
-        # write and did not. The parts of a split agenda are one agenda.
+        # [source, rendered index of its last part, topics, number] of each agenda:
+        # a deck announcing more topics than it has slides left is one the agent
+        # meant to write and did not. The parts of a split agenda are one agenda.
         announced: List[List[int]] = []
         parts_of = Counter(numbers or [])
         seen: Counter = Counter()
-        for at, slide_plan in enumerate(plan.slides, start=1):
-            # Messages name the model's slide: a split list's parts share its number.
-            position = numbers[at - 1] if numbers else at
+        for position, slide_plan in enumerate(plan.slides, start=1):
+            # Messages name the deck's slide; a split list's parts share a source.
+            source = numbers[position - 1] if numbers else position
             if slide_plan.invalid_entry is not None:
                 self.warnings.append(
                     f"Entry {position} of 'slides' was not a slide object and was skipped "
                     f"({slide_plan.invalid_entry!r})."
                 )
                 continue
-            pattern = patterns[at - 1]
+            pattern = patterns[position - 1]
             if pattern is None:
                 raise RenderError(
                     f"slide {position} has no template slide (internal). Call again with "
@@ -1179,19 +1179,21 @@ class _Renderer:
                 )
             rendered += 1
             if pattern.kind == "agenda" and slide_plan.items:
-                if announced and announced[-1][0] == position:
+                if announced and announced[-1][0] == source:
                     announced[-1][1] = rendered
                     announced[-1][2] += len(slide_plan.items)
                 else:
-                    announced.append([position, rendered, len(slide_plan.items)])
+                    announced.append(
+                        [source, rendered, len(slide_plan.items), position]
+                    )
             slide, pattern = self._create(pattern)
-            seen[position] += 1
+            seen[source] += 1
             self._record(
                 slide_plan,
                 pattern,
                 position,
-                seen[position],
-                parts_of[position] or 1,
+                seen[source],
+                parts_of[source] or 1,
                 rendered,
             )
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
@@ -1219,7 +1221,7 @@ class _Renderer:
                 "the plan holds no usable slide. Write each entry of `slides` as an "
                 "object with its content and call again."
             )
-        for position, index, topics in announced:
+        for _, index, topics, position in announced:
             remaining = rendered - index
             # Only a wide gap: a deck may well cover five topics in three
             # slides, but not in none.
@@ -1821,7 +1823,8 @@ def render_deck(
 ) -> RenderResult:
     """Render ``plan`` on the template, slide ``i`` on ``patterns[i]`` as
     chosen by :func:`assign.assign` (CPU-bound; call off the event loop).
-    ``numbers`` gives each slide's number in the model's plan, for messages.
+    ``numbers`` gives each slide's number in the sent plan: a split list's parts
+    share it. Messages name the slide's own position in the deck.
 
     Raises :class:`RenderError` for a pattern the template no longer holds;
     anything else propagates.
