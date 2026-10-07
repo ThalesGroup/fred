@@ -96,7 +96,7 @@ TABLE_SLACK_PT = 0.5
 
 
 class TableSpec(BaseModel):
-    """What a template's data table holds, measured at analysis (design.md D14).
+    """What a template's data table holds, measured at analysis.
 
     Heights are in points. A row is never shorter than ``row_pt`` (the
     template's own rows) and the rows together never taller than ``height_pt``.
@@ -147,7 +147,7 @@ class Zone(BaseModel):
     # Set on a `table` zone; its ``max_lines`` are the body lines at full size.
     table: Optional[TableSpec] = None
     # An image zone drawn over a layout or master shape no slide can remove:
-    # left empty, that frame shows, so the zone needs a picture (design.md D20).
+    # left empty, that frame shows, so the zone needs a picture.
     framed: bool = False
 
 

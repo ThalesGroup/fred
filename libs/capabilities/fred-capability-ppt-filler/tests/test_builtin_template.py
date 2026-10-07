@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The built-in template's stored analysis stays current (design.md D9)."""
+"""The built-in template's stored analysis stays current."""
 
 import json
 

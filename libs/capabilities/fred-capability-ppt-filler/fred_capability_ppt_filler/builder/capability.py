@@ -16,9 +16,9 @@
 template, or on the built-in template when the agent has none.
 
 The save never waits on the analysis: it stores the template, records a pending
-analysis row and returns; ``analysis_job`` runs it in the background (design.md
-D4) and ``readiness`` keeps the agent unavailable until it succeeds (D5). The
-preview chat part and side pane are ``ppt_filler``'s (one owner per kind).
+analysis row and returns; ``analysis_job`` runs it in the background and
+``readiness`` keeps the agent unavailable until it succeeds. The preview chat
+part and side pane are ``ppt_filler``'s (one owner per kind).
 """
 
 from __future__ import annotations

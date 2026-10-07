@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Table slides (design.md D14): a data table the template holds is a zone,
+"""Table slides: a data table the template holds is a zone,
 filled from the plan's `table`, rows and columns adapted to the content."""
 
 from __future__ import annotations

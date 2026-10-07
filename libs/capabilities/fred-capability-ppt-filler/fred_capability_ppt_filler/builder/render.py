@@ -1339,10 +1339,8 @@ class _Renderer:
                 continue
             lines = text.get(zone.key, [])
             if not lines:
-                # An empty placeholder is not blank in PowerPoint: it shows its
-                # prompt ("Click to add text") the moment the user opens the
-                # deck to edit it. Dropping it leaves the slide clean, and the
-                # layout can always put it back.
+                # An empty placeholder shows "Click to add text" once the deck
+                # is edited: drop it (the layout can always put it back).
                 if cast(Any, shape).is_placeholder:
                     _remove(placed)
                 else:
@@ -1668,10 +1666,9 @@ class _Renderer:
             bodyPr.set("wrap", "square")
         word_scale = room / (longest_word * _NO_WRAP_MARGIN) if longest_word else 1.0
         if word_scale < (shrunk or 1.0):
-            # A single unbreakable token - an e-mail address, a URL - set the
-            # size for its whole zone and took it down to 7 pt. Below the floor
-            # the token overflows its measured box instead; it still fits the
-            # card, and the text around it stays readable.
+            # One unbreakable token (an e-mail, a URL) must not take its whole
+            # zone down to 7 pt: below the floor it overflows its measured box,
+            # still inside the card, and the text around it stays readable.
             floor = 0.4 if zone.role == "number" else MIN_FONT_SCALE
             shrunk = round(max(floor, word_scale), 2)
         return shrunk, fits

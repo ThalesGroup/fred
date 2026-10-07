@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Opt-in deck-quality evaluation of ``ppt_builder`` (design.md D11).
+"""Opt-in deck-quality evaluation of ``ppt_builder``.
 
 Prompts x templates through the real analysis, labelling (vision or rules),
 the real ``build_presentation`` tool and a real LLM acting as the agent, with
@@ -291,7 +291,7 @@ class RunResult:
     max_kind_repeat: int = 0
     alternations: int = 0
     avoidable_reuses: int = 0
-    # Tables (design.md D14): given in the plan, put on a table slide, rendered
+    # Tables: given in the plan, put on a table slide, rendered
     # with the plan's rows and columns, and kept inside the slide.
     tables_given: int = 0
     tables_used: int = 0

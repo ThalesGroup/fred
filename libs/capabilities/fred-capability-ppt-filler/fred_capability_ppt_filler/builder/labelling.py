@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Vision labelling of example slides (design.md D2): a vision model looks at
+"""Vision labelling of example slides: a vision model looks at
 each slide with its slots numbered and refines the heuristic kind, label,
 reusable flag and slot purposes. Geometry and capacities never change, and
 any failure leaves that slide's heuristic label in place."""
@@ -182,7 +182,8 @@ _BODY_SLOTS = frozenset({"body", "caption"})
 
 
 def kind_fits_slots(kind: SlideKind, pattern: Pattern) -> bool:
-    """Whether the slide's detected slots can carry ``kind`` (design.md D2.3)."""
+    """Whether the slide's detected slots can carry ``kind``: vision proposes,
+    the slots decide, so a misread never makes a slide unfillable."""
     roles = [z.role for z in pattern.zones]
     titles = sum(r in _TITLE_SLOTS for r in roles)
     bodies = sum(r in _BODY_SLOTS for r in roles)

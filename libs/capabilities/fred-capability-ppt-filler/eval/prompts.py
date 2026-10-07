@@ -82,7 +82,7 @@ PROMPTS: dict[str, str] = {
     "thales_spain_italy": (
         "Prépare une présentation exposant les activités de Thales en Espagne et en Italie."
     ),
-    # Tabular content (design.md D14): offers × criteria, a schedule.
+    # Tabular content: offers × criteria, a schedule.
     "offers_table": (
         "Make a 4-slide deck comparing three cloud offers for our data platform: AWS, Azure "
         "and OVHcloud. Put the comparison in a table: monthly price (38 k€, 41 k€, 29 k€), SLA "

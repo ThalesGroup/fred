@@ -21,7 +21,7 @@ every rule below works on those records, never on the XML again.
 On an example slide every text-bearing shape is a slot, except text repeated
 on several slides and date/footer/slide-number fields; roles come from
 placeholder types, repeated groups, geometry and font rank. The slide kind is
-a heuristic the vision pass refines (design.md D2). Optional annotations
+a heuristic the vision pass refines. Optional annotations
 (shape names, ``kind:`` notes) override the corresponding heuristic.
 """
 
@@ -107,7 +107,7 @@ _MAIN_CONTENT_AREA = 0.15
 _ICON_BANK_PICTURES = 20
 # A layout/master shape under this share of the slide is a frame, not a background.
 _FRAME_MAX_AREA = 0.5
-# Loose text shapes read as one row of items (design.md D2.1): per-mille limits
+# Loose text shapes read as one row of items: per-mille limits
 # past which a shape is a column body, and the tolerances of "same size, aligned".
 _ITEM_MAX_W = 350
 _ITEM_MAX_H = 400
@@ -1311,7 +1311,7 @@ def _aligned(upper: List[_Rec], lower: List[_Rec], max_gap: int) -> bool:
 
 def _rows_of_items(recs: List[_Rec]) -> List[List[List[_Rec]]]:
     """Candidate repeat groups among loose text shapes, each a list of items
-    (an item lists its shapes top to bottom). See design.md D2.1."""
+    (an item lists its shapes top to bottom)."""
     rows: List[List[_Rec]] = []
     cells = [r for r in recs if r.box.w <= _ITEM_MAX_W and r.box.h <= _ITEM_MAX_H]
     for rec in sorted(cells, key=lambda r: (r.box.y, r.box.x)):
@@ -1376,7 +1376,7 @@ def _rows_of_items(recs: List[_Rec]) -> List[List[List[_Rec]]]:
 
 def _mark_framed(pattern: Pattern, frames: List[Box]) -> None:
     """An image zone at least half covered by a frame shows that frame when
-    left empty: the fit check then asks for a picture (design.md D20)."""
+    left empty: the fit check then asks for a picture."""
     zones = pattern.zones + [z for g in pattern.groups for i in g.items for z in i]
     for zone in (z for z in zones if z.role == "image"):
         b = zone.box

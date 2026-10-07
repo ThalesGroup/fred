@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Background template analysis (design.md D4). The save records a pending row
+"""Background template analysis. The save records a pending row
 in ``cap_ppt_builder_analysis`` and returns; a job on that replica analyses,
 labels and stores the result, which every replica reads. A lease the job keeps
 alive tells an interrupted job from a slow one."""

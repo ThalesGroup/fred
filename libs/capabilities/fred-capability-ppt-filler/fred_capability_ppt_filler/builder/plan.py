@@ -56,10 +56,9 @@ ITEM_FIELDS: Dict[str, str] = {
     "image": "image",
 }
 
-# The plan comes from a model, and small models get JSON shapes wrong (a bullet
-# list as one string, a number as an int, a stray string in a list). Every
-# model below coerces what it can instead of rejecting the call: a validation
-# error would reach the user as an opaque tool failure.
+# Small models get JSON shapes wrong (a list as one string, a number as an
+# int): every model below coerces what it can, since a validation error would
+# reach the user as an opaque tool failure.
 
 
 def _as_text(value: Any) -> Optional[str]:
@@ -400,7 +399,7 @@ def _limit(zones: Sequence[Zone]) -> str:
 
 
 def _required(zones: Sequence[Zone]) -> str:
-    """A framed picture is chosen only with a picture (design.md D20)."""
+    """A framed picture shows its frame when left empty: it needs a picture."""
     return " (required)" if any(z.framed for z in zones) else ""
 
 
@@ -509,7 +508,7 @@ _SCHEMA_FIELDS = {
 
 
 def field_hints(patterns: Sequence[Pattern]) -> Tuple[Tuple[str, str], ...]:
-    """Per schema field, its room on this template (design.md D20): per kind the
+    """Per schema field, its room on this template: per kind the
     roomiest variant's, so a text within it always has a slide of that kind,
     quoted as the most common room plus the kinds that differ."""
     rooms: Dict[str, Dict[str, Tuple[int, int]]] = {}

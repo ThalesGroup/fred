@@ -171,7 +171,7 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
 
 def test_each_text_field_states_its_room_where_the_model_writes_it():
     """The cover subtitle and figure labels failed most first calls while their
-    sizes sat only in the catalogue (design.md D20)."""
+    sizes sat only in the catalogue."""
     inventory = analyze_template(TEMPLATE).inventory
     assert inventory is not None
     schema = tools_mod._args_schema(inventory)

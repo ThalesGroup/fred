@@ -532,7 +532,7 @@ _GUIDE_KINDS = ("figures", "timeline", "cards", "process", "table")
 
 
 def _guide(kinds: List[SlideKind], variety: VarietyCheck, max_uses: int) -> str:
-    """Which content suits which offered kind, and the author's max (D19)."""
+    """Which content suits which offered kind, and the author's max."""
     pairs = [f"{SHAPE_HINTS[k]} → {k}" for k in _GUIDE_KINDS if k in kinds]
     if "table" in kinds:
         pairs[-1] += ", not restated as columns before it"
@@ -704,11 +704,8 @@ def build_builder_tools(
             if plan.file_name
             else _DEFAULT_FILE_NAME
         )
-        # Keyed by the deck's name, deliberately. A model that splits one deck
-        # across several calls, or retries after a busy answer, then lands on
-        # one key and the reader sees one presentation instead of a card per
-        # fragment. A genuinely different deck gets a different name from the
-        # model, and with it its own key.
+        # Keyed by the deck's name: a deck split over several calls, or retried
+        # after a busy answer, is one presentation, not a card per fragment.
         output_path = (
             f"outputs/{session_id}/{file_name}"
             if session_id

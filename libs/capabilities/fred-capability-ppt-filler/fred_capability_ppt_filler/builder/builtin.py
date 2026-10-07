@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The built-in Fred template used when an agent has none (design.md D9).
+"""The built-in Fred template used when an agent has none.
 
 A designed deck shipped as package data with its stored analysis, so "no
 template" goes through the customer render path. Regenerate the analysis with

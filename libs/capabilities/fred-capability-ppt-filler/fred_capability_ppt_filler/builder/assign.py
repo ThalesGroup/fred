@@ -17,8 +17,9 @@
 A slide's candidates are the patterns that hold all of its content, of the
 requested kind first, then of the kinds its content suggests, then of any kind
 (each substitution is reported). A beam search picks one per slide under the
-deck rules, pricing every reuse of a template slide anywhere in the deck. A slide that fits nothing is a problem the model
-must fix, named down to the element (design.md D7, D8).
+deck rules, pricing every reuse of a template slide anywhere in the deck. A
+slide that fits nothing is a problem the model must fix, named down to the
+element: never a silent fallback.
 """
 
 from __future__ import annotations
@@ -74,14 +75,14 @@ _HEADING_LEAD = 1.0  # a heading in bold atop the text: a heading zone reads bet
 _REUSE = 8.0
 _REPEAT = 3.0  # the same slide twice in a row
 _TRIPLE = 1000.0  # three in a row: taken only when nothing else fits
-# Per content use of a template slide beyond the author's max (design.md D19):
+# Per content use of a template slide beyond the author's max:
 # another variant of the tier wins while one fits.
 _OVER_MAX = 100.0
 _BEAM = 32
 _NOTE_USES = 3  # the passive note when the variety check is off
 # Slides a deck legitimately repeats: never a reason to ask for variety.
 _STRUCTURAL = ("cover", "section", "agenda", "closing")
-# What a variety ask counts (design.md D18): one template slide, one kind, or nothing.
+# What a variety ask counts: one template slide, one kind, or nothing.
 VarietyCheck = Literal["template_slide", "kind", "off"]
 # What each kind suits, in the order alternatives are offered.
 SHAPE_HINTS: Dict[str, str] = {
@@ -223,7 +224,7 @@ def infer_kinds(slide: SlidePlan) -> List[SlideKind]:
     return kinds
 
 
-# Text patterns of a list that another kind would show better (design.md D16).
+# Text patterns of a list that another kind would show better.
 _DATED = re.compile(r"^(?:\w{1,10}\.?\s+)?(?:19|20)\d{2}\b")
 _STEP = re.compile(r"^(?:\d{1,2}\s*[.)]|(?:étape|etape|step|phase)\s*\d)", re.I)
 _LABELLED = re.compile(r"^([^:]{1,40}?)\s*:\s*(.*)$")
@@ -410,7 +411,7 @@ def misfit(
         )
     reasons[:0] = [_no_place(what) for what in lost if what not in held]
 
-    # A framed picture left empty shows its layout's frame (design.md D20).
+    # A framed picture left empty shows its layout's frame.
     empty = _reading_order([z for z in pattern.zones if z.role == "image"])
     framed = any(z.framed for z in empty[len(images) :])
     zones = {z.key: z for z in pattern.zones}
@@ -680,14 +681,14 @@ def _substitution(slide: _Slide, chosen: Pattern, offered: set[str]) -> Optional
 
 
 class _Caps(NamedTuple):
-    """The author's max, raised where the deck forces more (D19)."""
+    """The author's max, raised where the deck forces more."""
 
     slide: int  # uses of one template slide
     kind: int  # slides of one content kind
 
 
 def _content(slide: _Slide, pattern: Optional[Pattern] = None) -> bool:
-    """Counts towards variety: not a cover, section, agenda or closing (D18)."""
+    """Counts towards variety: not a cover, section, agenda or closing."""
     return _wanted(slide) not in _STRUCTURAL and (
         pattern is None or pattern.kind not in _STRUCTURAL
     )
@@ -869,7 +870,7 @@ def _repeats(
     """Template slides (or, ``by_kind``, content kinds) on more slides than
     their cap, or on three slides or more without caps. Structural slides
     count apart; a kind is offered only while the template has more variants
-    of it than the deck already uses (design.md D18, D19)."""
+    of it than the deck already uses."""
     used = {p.id for p in chosen.values()}
     unused = [p for p in pool if p.id not in used]
     variants: Dict[str, set[str]] = {}
@@ -963,7 +964,7 @@ def assign(
 ) -> Assignment:
     """One pattern per slide of ``plan``, or the problems that prevent it;
     ``variety`` says how repeats are grouped (``off`` groups by kind, for the
-    note) and, unless ``off``, ``max_uses`` caps each group (design.md D19)."""
+    note) and, unless ``off``, ``max_uses`` caps each group."""
     pool = assignable(inventory)
     has_cover = any(p.kind == "cover" for p in pool)
     offered = {p.kind for p in pool}
