@@ -124,10 +124,11 @@ Deploy normally. There is no database or Knowledge Flow change and no operator a
 
 ## Reviewer decisions (must be settled in PR review, expected reviewer: dimitri-tombroff)
 
-The PR description asks the reviewer to decide both points. No half-decision is merged: the implementation is adjusted to the answer before merge, and this section records it.
+The PR description asks the reviewer to decide these points. No half-decision is merged: the implementation is adjusted to the answer before merge, and this section records it.
 
 1. **When to remove the deprecated `attachments_only` alias.** It is kept now so nothing breaks (patch). Options: remove it in the next minor release with an announcement in its migration note, or keep it until a named major release. Developer's opinion: do not leave it long.
 2. **Should "Your documents" (`corpus_only`) include attachments when both sources are on?** Today it excludes them, and its label does not say so. Developer's opinion: include attachments. If the reviewer agrees, `corpus_only` on a both-sources agent maps to `(session=True, corpus=True)` minus the general answer, and the label and Help Center wording follow; this changes the per-turn semantics described in D4.
+3. **Raise the `fred-sdk` floor of `fred-capability-document-access` in this PR, or at release preparation?** The capability calls the port with `include_attachments` / `include_team_documents`, which only this release's SDK and runtime accept. Library versions are bumped by release PRs, and the needed SDK version is not published yet, so this PR only states the requirement in the migration note. Developer's opinion: none, defers to the reviewer.
 
 ## Deferred (separate issues)
 

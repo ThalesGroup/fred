@@ -71,5 +71,5 @@
   - a re-saved agent stores only the new keys.
 
   Verify by recording the observations in `verification.md`.
-- [ ] 6.4 In the PR description, ask the reviewer (expected: dimitri-tombroff) the two questions in design.md "Reviewer decisions" (alias removal timing; whether "Your documents" includes attachments), with the developer's opinion on each. Apply the decisions before merge and record them in design.md. Verify that design.md holds no undecided point.
+- [ ] 6.4 In the PR description, ask the reviewer (expected: dimitri-tombroff) the three questions in design.md "Reviewer decisions" (alias removal timing; whether "Your documents" includes attachments; when to raise the capability's `fred-sdk` floor), with the developer's opinion where given. Apply the decisions before merge and record them in design.md. Verify that design.md holds no undecided point.
 - [ ] 6.5 Reconcile the artifacts with the delivered behavior, run `openspec validate split-attachments-and-team-documents --strict`, and archive once merged. Verify that `openspec/specs/document-access-sources/spec.md` exists and the GitHub issue is closed.
