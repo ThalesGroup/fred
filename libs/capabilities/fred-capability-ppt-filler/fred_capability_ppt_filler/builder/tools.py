@@ -35,7 +35,17 @@ import json
 import logging
 import time
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
@@ -277,7 +287,7 @@ def _loads(raw: object) -> bool:
 def _assign_loadable(
     inventory: TemplateInventory,
     plan: DeckPlan,
-    prefetched: Dict[str, object],
+    prefetched: Mapping[str, object],
     variety: VarietyCheck,
     max_uses: int,
 ) -> Tuple[Assignment, DeckPlan, List[str]]:
