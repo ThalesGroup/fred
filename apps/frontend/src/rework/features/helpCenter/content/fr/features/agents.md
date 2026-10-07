@@ -134,7 +134,7 @@ que de diagnostiquer un agent qui en a trop.
 ## Dupliquer, copier, suspendre, supprimer
 
 - **Dupliquer** — repartir d'un agent existant pour en faire une variante dans
-  la même équipe. Tout est repris, y compris ses fichiers comme un modèle
+  la même équipe. Tout est repris, y compris ses fichiers comme un template
   PowerPoint.
 - **Copier dans…** — donner une copie de l'agent à une autre équipe ou à votre
   espace personnel. Voir ci-dessous.
@@ -163,11 +163,11 @@ bibliothèque, un dossier ou des documents choisis. La capacité reste activée,
 mais elle porte désormais sur les ressources de la nouvelle équipe. Un agent
 qui lisait le wiki de son équipe lira celui de l'équipe qui reçoit la copie.
 
-**Ce qui est recréé** : les fichiers de configuration, comme un modèle
+**Ce qui est recréé** : les fichiers de configuration, comme un template
 PowerPoint, sont déposés à nouveau dans la nouvelle équipe, comme si un
-éditeur l'avait fait lui-même. Si le modèle va chercher ses images dans des
+éditeur l'avait fait lui-même. Si le template va chercher ses images dans des
 dossiers que la nouvelle équipe n'a pas, ces champs image restent vides : un
-message vous indique les dossiers à créer, puis le modèle à redéposer.
+message vous indique les dossiers à créer, puis le template à redéposer.
 
 **Ce qui n'est jamais copié** : les conversations et les fichiers produits par
 l'agent.

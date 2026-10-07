@@ -108,17 +108,17 @@ nous venons de parcourir. »
 
 ### Remplir un document PowerPoint
 
-**Ce qu'elle fait** — l'agent remplit un modèle PowerPoint que vous avez
+**Ce qu'elle fait** — l'agent remplit un template PowerPoint que vous avez
 déposé sur l'agent. Chaque emplacement à remplir est un repère placé dans une
 diapositive et décrit dans les commentaires de celle-ci ; un repère peut
 attendre du texte ou une image tirée d'un dossier de ressources.
 
-**Ses limites** — l'agent remplit un modèle, il ne conçoit pas de
-présentation : sans modèle déposé, la capacité ne fonctionne pas. Le modèle est
+**Ses limites** — l'agent remplit un template, il ne conçoit pas de
+présentation : sans template déposé, la capacité ne fonctionne pas. Le template est
 vérifié au dépôt et les erreurs de repérage vous sont signalées. Un agent
-dupliqué ou copié dans une autre équipe emporte son propre exemplaire du modèle.
+dupliqué ou copié dans une autre équipe emporte son propre exemplaire du template.
 
-**Un exemple** — un modèle de revue mensuelle en cinq diapositives, que l'agent
+**Un exemple** — un template de revue mensuelle en cinq diapositives, que l'agent
 remplit chaque mois à partir des documents de la période.
 
 ### Générer une présentation
