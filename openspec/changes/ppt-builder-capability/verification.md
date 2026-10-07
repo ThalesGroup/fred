@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22, WP29, WP31 and WP32 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22, WP29, WP31, WP32 and WP33 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -1148,3 +1148,54 @@ input +21 % from the larger schema and description). The edit turn is where it p
 18 of 19 edit calls as `changes`, 14/14 delivered, 97/104 earlier slides kept identical; small
 delivered every edit in run 3, but sends `changes` for about half of them and rarely for first-deck
 revisions (whole-deck resends stay correct, only costlier and prone to rewording).
+
+## Results: WP33 (an overflowing list continues on a slide of the same kind, D24)
+
+**Live case, deterministic** (Paintress `~/fred-tmp/paintress.pptx`, `template_slide` max 1, no
+model): cover, a `Sommaire` agenda of 9 unnumbered entries (the SOMMAIRE slide holds 8), three
+content slides. Rendered as 6 slides: `Sommaire (1/2)` and `Sommaire (2/2)` both on SOMMAIRE (5 + 4,
+second part numbered `06`…`09`), plan numbers `[1, 2, 2, 3, 4, 5]`, note "Slide 2: its 9 items
+continue on a second 'agenda' slide (5 + 4, titles marked (1/2) and (2/2)): the largest 'agenda'
+slide holds 8. Nothing to do; to keep one slide, send at most 8 items.", and one agenda gap note
+counting the split agenda once ("announces 9 parts but only 3 slide(s) follow it"). Before WP33
+this plan was `needs_revision` (D21) or built on a process slide.
+
+**Benchmark** (`7ed2c87d3` + `405c057ec`, run 2026-10-07, alone, no 429 or quota line): WP32's
+settings (`--no-builtin --modes rules --variety template_slide --max-uses 1`, Paintress, 14 prompts,
+stand-in prompt, `--edit-turn`, `mistral-small`), compared with WP32 small run 3 on the same 11
+prompts (the same script reproduces run 3's figures).
+
+| cell (small, 11 prompts) | success | first call | tool calls | problem slides | tokens in/out (k) |
+|---|---|---|---|---|---|
+| WP32 run 3 | 9/11 | 4 | 19 | 9 | 101/17 |
+| WP33 | 10/11 (1 image id) | 3 | 21 | 9 | 102/13 |
+
+All 14: 12/14 (one invented image id, `training_12` answered without a tool call), first call 3,
+26 calls, 10 problem slides, 125k/18k (run 3: 12/14, 5, 24, 12, 126k/25k). One list split
+(`many_items`: 9 cards over a 6-card slide → 5 + 4, delivered with the note); none of the 14
+prompts sends an agenda over 8. No problem in either run was a count a split would have fixed but
+did not: `quarterly_review`'s 6 figures over a 4-figure slide also had item headings the figures
+slide cannot show, so it stayed `needs_revision` (the split needs each part to fit) with the
+`trim`/`split` options; every other problem is a too-long label or cover subtitle (D22), untouched
+by WP33. Edit turn: 12/12 delivered, first call 9, 15 calls all sent as `changes`, 82/88 earlier
+slides kept identical, 88k/2k (run 3: 12/12, 9, 16 calls, 7 with `changes`, 75/93). Truncated,
+lost, leftovers: 0. Run dir (not committed): `target/eval-wp33-small`.
+
+**Unit evidence:** `test_assign.py` (a 9-entry agenda split 5 + 4 on one template slide before the
+process fallback, the plan untouched, numbers continued `06`…`09` or kept as sent, steps numbered
+from 6 needing no number zone while years still do, an unrequested kind split on its first inferred
+kind, a list its kind holds never split, a text too long never split, bullets never split, the cap:
+17 entries over 8 → close kind or `needs_revision` with the two-slide options, a split list never
+asked for variety in either mode, a continuation kept on its first part's slide at max 1, other
+slides on that template slide still counted); `test_table_slides.py` (22 rows → 11 + 11 with the
+header on each, rendered; 60 rows still `needs_revision`); `test_build_tool.py` (a split agenda
+counted once by the gap check, notes after a split on the plan's numbers); `test_deck_changes.py`
+(the stored base is the plan as sent; a later `changes` numbered on it). Package `make
+code-quality` clean (existing `builder_decks.py` `__all__` warning), `make test` 470 passed,
+5 skipped; with `PPT_BUILDER_REFERENCE_TEMPLATE` on Paintress 475 passed.
+
+**Recommendation: keep.** Turn 1 is at run 3's level within one-run noise (success +1, first call
+−1, calls +2, same problem slides, fewer output tokens), the only split in the benchmark delivered
+a deck that would otherwise have been trimmed or refused, and the live agenda case now builds on
+its own agenda slide in one call. The benchmark rarely exercises overflowing lists; the
+deterministic and unit evidence carry the feature.
