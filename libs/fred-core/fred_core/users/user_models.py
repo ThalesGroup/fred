@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import enum
 from datetime import datetime
 
 from sqlalchemy import (
@@ -30,10 +29,6 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models import Base
-
-
-class GcuVersionsType(enum.Enum):
-    V1 = "v1"
 
 
 class UserRow(Base):
