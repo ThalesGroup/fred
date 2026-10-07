@@ -1,0 +1,76 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+}
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}
+.json {
+  border-radius: var(--radius-ms);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  overflow: auto;
+  color: var(--on-surface);
+  font-family: monospace;
+}
+.children {
+  padding-inline-start: var(--spacing-m);
+}
+.branch {
+  margin-block: var(--spacing-xs);
+}
+.branch summary {
+  cursor: pointer;
+}
+.leaf {
+  padding-block: var(--spacing-xs);
+  overflow-wrap: anywhere;
+}
+.key {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--radius-ms);
+  background: transparent;
+  padding: var(--spacing-xs);
+  color: var(--primary);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.key:hover,
+.key[aria-pressed="true"] {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.key:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.key:disabled {
+  cursor: default;
+  color: var(--on-surface-retreat);
+}
+.claimValue {
+  overflow-wrap: anywhere;
+}
+.explanation {
+  margin-inline-start: var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+.catalog {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--spacing-xs);
+}
+.selection {
+  border-top: 1px solid var(--outline-muted);
+  padding-block-start: var(--spacing-m);
+  overflow-wrap: anywhere;
+}

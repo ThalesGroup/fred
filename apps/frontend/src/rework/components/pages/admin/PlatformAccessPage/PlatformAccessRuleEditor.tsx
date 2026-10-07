@@ -19,6 +19,7 @@ import {
   useSavePlatformPolicyMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
+import PlatformAccessClaimPicker from "./PlatformAccessClaimPicker";
 
 const emptyCondition = (): PlatformAccessCondition => ({
   claim: [""],
@@ -53,6 +54,7 @@ export default function PlatformAccessRuleEditor({
   const [feedback, setFeedback] = useState<string>();
   const [conflict, setConflict] = useState(false);
   const [conditionErrors, setConditionErrors] = useState<Record<number, string>>({});
+  const [picking, setPicking] = useState<number>();
   const [result, setResult] = useState<PlatformAccessPolicyPreview>();
   const locked = disabled || busy;
   const valid =
@@ -192,54 +194,54 @@ export default function PlatformAccessRuleEditor({
       {draft.conditions.map((condition, index) => (
         <fieldset className={styles.condition} key={index} disabled={locked}>
           <legend>{t("rework.platformAccess.rule.condition", { number: index + 1 })}</legend>
-          <Select
-            size="medium"
-            label={t("rework.platformAccess.rule.observedClaim")}
-            disabled={locked}
-            value={JSON.stringify(condition.claim)}
-            placeholder={t("rework.platformAccess.rule.selectClaim")}
-            options={(claims.data ?? []).map((claim) => ({
-              key: JSON.stringify(claim.path),
-              value: JSON.stringify(claim.path),
-              label: JSON.stringify(claim.path),
-              description: claim.types.map((type) => t(`rework.platformAccess.rule.type.${type}`)).join(", "),
-            }))}
-            onChange={(value) => updateCondition(index, { claim: JSON.parse(value) as string[] })}
-          />
-          <div className={styles.path}>
-            {condition.claim.map((key, segment) => (
-              <TextInput
-                key={segment}
-                label={t("rework.platformAccess.rule.pathKey", { number: segment + 1 })}
-                value={key}
-                maxLength={256}
-                disabled={locked}
-                onChange={(event) =>
-                  updateCondition(index, {
-                    claim: condition.claim.map((part, i) => (i === segment ? event.target.value : part)),
-                  })
-                }
-              />
-            ))}
-            <Button
-              color="primary"
-              variant="outlined"
-              size="small"
-              disabled={locked || condition.claim.length >= 16}
-              onClick={() => updateCondition(index, { claim: [...condition.claim, ""] })}
-            >
-              {t("rework.platformAccess.rule.addKey")}
-            </Button>
-            <Button
-              color="primary"
-              variant="outlined"
-              size="small"
-              disabled={locked || condition.claim.length <= 1}
-              onClick={() => updateCondition(index, { claim: condition.claim.slice(0, -1) })}
-            >
-              {t("rework.platformAccess.rule.removeKey")}
-            </Button>
-          </div>
+          <p>
+            {t("rework.platformAccess.picker.selected")}:{" "}
+            <strong>
+              {condition.claim.some(Boolean)
+                ? condition.claim.map((key) => JSON.stringify(key)).join(" > ")
+                : t("rework.platformAccess.rule.selectClaim")}
+            </strong>
+          </p>
+          <Button color="primary" variant="outlined" size="medium" disabled={locked} onClick={() => setPicking(index)}>
+            {t("rework.platformAccess.picker.choose")}
+          </Button>
+          <details>
+            <summary>{t("rework.platformAccess.picker.advanced")}</summary>
+            <div className={styles.path}>
+              {condition.claim.map((key, segment) => (
+                <TextInput
+                  key={segment}
+                  label={t("rework.platformAccess.rule.pathKey", { number: segment + 1 })}
+                  value={key}
+                  maxLength={256}
+                  disabled={locked}
+                  onChange={(event) =>
+                    updateCondition(index, {
+                      claim: condition.claim.map((part, i) => (i === segment ? event.target.value : part)),
+                    })
+                  }
+                />
+              ))}
+              <Button
+                color="primary"
+                variant="outlined"
+                size="small"
+                disabled={locked || condition.claim.length >= 16}
+                onClick={() => updateCondition(index, { claim: [...condition.claim, ""] })}
+              >
+                {t("rework.platformAccess.rule.addKey")}
+              </Button>
+              <Button
+                color="primary"
+                variant="outlined"
+                size="small"
+                disabled={locked || condition.claim.length <= 1}
+                onClick={() => updateCondition(index, { claim: condition.claim.slice(0, -1) })}
+              >
+                {t("rework.platformAccess.rule.removeKey")}
+              </Button>
+            </div>
+          </details>
           <Select
             size="medium"
             label={t("rework.platformAccess.rule.operator")}
@@ -324,6 +326,18 @@ export default function PlatformAccessRuleEditor({
           </Button>
         )}
       </div>
+      {picking !== undefined && draft.conditions[picking] && (
+        <PlatformAccessClaimPicker
+          condition={draft.conditions[picking]}
+          observed={claims.data ?? []}
+          catalogFailed={claims.isError}
+          onClose={() => setPicking(undefined)}
+          onSelect={(update) => {
+            updateCondition(picking, update);
+            setPicking(undefined);
+          }}
+        />
+      )}
       {feedback && <p role="status">{feedback}</p>}
       {result && (
         <div role="status">

@@ -69,6 +69,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
     getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
     listPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGet: { providesTags: ["PlatformAccess"] },
+    getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },
     savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: { invalidatesTags: ["PlatformAccess"] },
     listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: { providesTags: ["PlatformAccess"] },
     previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: { providesTags: ["PlatformAccess"] },
@@ -907,6 +908,8 @@ export const useEnrollFreeTeamMutation =
 
 export const usePlatformAccessClaimsQuery =
   enhancedControlPlaneApi.useListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery;
+export const usePlatformAccessOwnClaimsQuery =
+  enhancedControlPlaneApi.useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery;
 export const usePreviewPlatformPolicyMutation =
   enhancedControlPlaneApi.usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation;
 export const useSavePlatformPolicyMutation =

@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   enroll: vi.fn(() => ({ unwrap: async () => ({ admitted: false }) })),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("react-router-dom", () => ({ useParams: () => ({ token: "opaque-token" }) }));
+vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn(), useParams: () => ({ token: "opaque-token" }) }));
 vi.mock("@shared/molecules/MarkdownRenderer/MarkdownRenderer", () => ({
   MarkdownRenderer: ({ text }: { text: string }) => <p>{text}</p>,
 }));

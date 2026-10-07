@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fred_pod.security.platform_access import PlatformAccessPolicy
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class PlatformAccessState(BaseModel):
@@ -87,6 +87,12 @@ class SetPlatformAccessPolicy(BaseModel):
 class PlatformAccessClaim(BaseModel):
     path: list[str]
     types: list[Literal["string", "string_array"]]
+
+
+class PlatformAccessOwnClaims(BaseModel):
+    claims: dict[str, JsonValue]
+    selectable_paths: list[list[str]]
+    truncated: bool
 
 
 class PlatformAccessPolicyPreview(BaseModel):

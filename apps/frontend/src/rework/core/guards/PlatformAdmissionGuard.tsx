@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { PropsWithChildren, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button";
+import PlatformAccessError from "@components/pages/PlatformAccessPage/PlatformAccessError";
 import GcuPage from "@components/pages/GcuPage/GcuPage";
 import { usePlatformAccessStatusQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { handlePlatformAccessDenial } from "../../../common/platformAccess";
@@ -14,12 +14,11 @@ export default function PlatformAdmissionGuard({ children }: PropsWithChildren) 
   }, [result.data]);
   if (result.isError)
     return (
-      <main>
-        <p role="alert">{t("rework.platformAccess.failed")}</p>
-        <Button color="primary" variant="filled" size="medium" onClick={() => void result.refetch()}>
-          {t("rework.platformAccess.retry")}
-        </Button>
-      </main>
+      <PlatformAccessError
+        title={t("rework.platformAccess.verificationFailed")}
+        message={t("rework.platformAccess.failed")}
+        retry={() => void result.refetch()}
+      />
     );
   if (!result.data || !result.data.admitted) return <p>{t("rework.platformAccess.loading")}</p>;
   if (result.data.cgu_required) return <GcuPage />;

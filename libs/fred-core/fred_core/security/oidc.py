@@ -416,7 +416,9 @@ def _claim_path(payload: Mapping[str, Any], path: Sequence[str]) -> object | Non
     return value
 
 
-def decode_jwt(token: str) -> KeycloakUser:
+def decode_jwt(
+    token: str, *, verified_payload: dict[str, object] | None = None
+) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
         username = getpass.getuser()
@@ -436,7 +438,8 @@ def decode_jwt(token: str) -> KeycloakUser:
             client_id=LOCAL_DEV_CLIENT_ID,
         )
 
-    cached_user = _get_cached_user(token)
+    # The explicit self-session view needs fresh verified values, not a principal cache entry.
+    cached_user = _get_cached_user(token) if verified_payload is None else None
     if cached_user:
         return cached_user
 
@@ -651,6 +654,8 @@ def decode_jwt(token: str) -> KeycloakUser:
 
         user.admission_claims, user.admission_invalid_claims = extract_claims(payload)
     logger.debug("[AUTH] Authenticated principal built")
+    if verified_payload is not None:
+        verified_payload.update(payload)
     _cache_user(token, payload, user)
     return user
 

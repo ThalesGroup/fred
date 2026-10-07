@@ -14,6 +14,7 @@ import {
   useEnrollFreeTeamMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessPage.module.css";
+import PlatformAccessError from "./PlatformAccessError";
 
 export default function FreeEnrollmentPage() {
   const { token = "" } = useParams();
@@ -38,12 +39,21 @@ export default function FreeEnrollmentPage() {
       setFailed(true);
     }
   };
+  if (preview.isError || failed)
+    return (
+      <PlatformAccessError
+        title={t("rework.platformAccess.joinTitle")}
+        message={t(preview.isError ? "rework.platformAccess.invalidLink" : "rework.platformAccess.failed")}
+        retry={() => {
+          setFailed(false);
+          void preview.refetch();
+        }}
+      />
+    );
   return (
     <main className={styles.page}>
       <h1>{t("rework.platformAccess.joinTitle")}</h1>
       {preview.isLoading && <p>{t("rework.platformAccess.loading")}</p>}
-      {preview.isError && <p role="alert">{t("rework.platformAccess.invalidLink")}</p>}
-      {failed && <p role="alert">{t("rework.platformAccess.failed")}</p>}
       {preview.data && (
         <>
           <p>{t("rework.platformAccess.joinTeam", { team: preview.data.team_name })}</p>
@@ -68,11 +78,6 @@ export default function FreeEnrollmentPage() {
             {t("rework.platformAccess.join")}
           </Button>
         </>
-      )}
-      {preview.isError && (
-        <Button color="primary" variant="filled" size="medium" onClick={() => void preview.refetch()}>
-          {t("rework.platformAccess.retry")}
-        </Button>
       )}
       {contactSupportLink && (
         <a href={contactSupportLink} target="_blank" rel="noopener noreferrer">

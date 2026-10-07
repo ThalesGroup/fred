@@ -6,11 +6,12 @@ import { createRoot } from "react-dom/client";
 import { Provider } from "react-redux";
 import { expect, it, vi } from "vitest";
 
-const state = vi.hoisted(() => ({ accepted: false, statusReads: 0 }));
+const state = vi.hoisted(() => ({ accepted: false, statusReads: 0, failed: false }));
 vi.mock("../../../common/dynamicBaseQuery", () => ({
   createDynamicBaseQuery: () => async (request: { url: string; method?: string }) => {
     if (request.url.endsWith("/platform-access/status")) {
       state.statusReads++;
+      if (state.failed) return { error: { status: 503, data: { detail: "platform_access_unavailable" } } };
       return { data: { admitted: true, cgu_required: !state.accepted } };
     }
     if (request.url.endsWith("/gcu")) {
@@ -74,5 +75,44 @@ it("accepting CGU refreshes admission and opens the protected shell outside rout
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());
     host.remove();
     vi.unstubAllGlobals();
+  }
+});
+
+it("renders shared verification failure outside the router and retries without mounting protected content", async () => {
+  state.failed = true;
+  const store = configureStore({
+    reducer: { [enhancedControlPlaneApi.reducerPath]: enhancedControlPlaneApi.reducer },
+    middleware: (getDefault) => getDefault().concat(enhancedControlPlaneApi.middleware),
+  });
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () => {
+      root.render(
+        <Provider store={store}>
+          <PlatformAdmissionGuard>
+            <p>Protected shell</p>
+          </PlatformAdmissionGuard>
+        </Provider>,
+      );
+      await new Promise((done) => setTimeout(done, 20));
+    });
+    expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.verificationFailed");
+    expect(host.textContent).not.toContain("Protected shell");
+    const before = state.statusReads;
+    const retry = [...host.querySelectorAll("button")].find(
+      (node) => node.textContent === "rework.platformAccess.retry",
+    )!;
+    await act(async () => {
+      retry.click();
+      await new Promise((done) => setTimeout(done, 20));
+    });
+    expect(state.statusReads).toBeGreaterThan(before);
+  } finally {
+    state.failed = false;
+    act(() => root.unmount());
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
   }
 });

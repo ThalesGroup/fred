@@ -17,6 +17,13 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
       { path: ["a.b"], types: ["string_array"] },
     ],
   }),
+  usePlatformAccessOwnClaimsQuery: () => ({
+    data: {
+      claims: { profile: { unit: "actual" }, "a.b": ["one", "two", "a.b[2]"], exp: 123, enabled: true },
+      selectable_paths: [["profile", "unit"], ["a.b"]],
+      truncated: false,
+    },
+  }),
   usePreviewPlatformPolicyMutation: () => [hooks.preview],
   useSavePlatformPolicyMutation: () => [hooks.save],
 }));
@@ -172,4 +179,75 @@ it("ignores an in-flight preview when its clean rule is replaced", async () => {
   await act(async () => resolve({ matched: false, admitted: true, conditions: ["missing"] }));
   expect(input("value").value).toBe("remote");
   expect(host.textContent).not.toContain("rework.platformAccess.rule.result.missing");
+});
+
+it("selects real session keys into a draft without saving or interpreting literal dots", async () => {
+  render();
+  const choose = [...host.querySelectorAll("button")].find(
+    (node) => node.textContent === "rework.platformAccess.picker.choose",
+  )!;
+  act(() => choose.click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const key = [...dialog.querySelectorAll("button")].find((node) => node.textContent === '\"a.b\"')!;
+  act(() => key.click());
+  expect(hooks.save).not.toHaveBeenCalled();
+  const confirm = [...dialog.querySelectorAll("button")].find(
+    (node) => node.textContent === "rework.platformAccess.picker.useField",
+  )!;
+  act(() => confirm.click());
+  await act(async () => button("test").click());
+  expect(hooks.preview.mock.calls[0][0].platformAccessPolicy.conditions[0]).toMatchObject({
+    claim: ["a.b"],
+    value: "accepted",
+  });
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+});
+it("copies one current array element explicitly and keeps unsupported keys disabled", async () => {
+  render();
+  act(() =>
+    [...host.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.choose")!
+      .click(),
+  );
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const find = (label: string) => [...dialog.querySelectorAll("button")].find((node) => node.textContent === label)!;
+  expect(find('"exp"').disabled).toBe(true);
+  expect(find('"enabled"').disabled).toBe(true);
+  act(() => find('"a.b"').click());
+  act(() => find('"two"').click());
+  act(() => find("rework.platformAccess.picker.useField").click());
+  expect(input("value").value).toBe("two");
+  expect(hooks.save).not.toHaveBeenCalled();
+});
+
+it("keeps Enter on a JSON branch from implicitly confirming a selected field", () => {
+  render();
+  act(() =>
+    [...host.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.choose")!
+      .click(),
+  );
+  const dialog = document.querySelector('[role="dialog"]')!;
+  act(() => [...dialog.querySelectorAll("button")].find((node) => node.textContent === '\"a.b\"')!.click());
+  const summary = dialog.querySelector("summary")!;
+  act(() => summary.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(hooks.save).not.toHaveBeenCalled();
+});
+
+it("reuses a current value as a literal when the condition uses regex", () => {
+  state.policy!.conditions[0].operator = "regex";
+  render();
+  act(() =>
+    [...host.querySelectorAll("button")]
+      .find((node) => node.textContent === "rework.platformAccess.picker.choose")!
+      .click(),
+  );
+  const dialog = document.querySelector('[role="dialog"]')!;
+  const find = (label: string) => [...dialog.querySelectorAll("button")].find((node) => node.textContent === label)!;
+  act(() => find('"a.b"').click());
+  act(() => find('"a.b[2]"').click());
+  act(() => find("rework.platformAccess.picker.useField").click());
+  expect(input("regex").value).toBe("a\\.b\\[2\\]");
+  expect(hooks.save).not.toHaveBeenCalled();
 });

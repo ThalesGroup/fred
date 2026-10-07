@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 import asyncio
 import hashlib
+import json
 import secrets
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -15,11 +16,12 @@ from fred_core.security.platform_access.models import (
     PlatformAccessSettingsRow,
     PlatformAccessUserRow,
 )
-from fred_core.security.platform_access.rules import evaluate
+from fred_core.security.platform_access.rules import evaluate, extract_claims
 from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from fred_pod.security.platform_access import PlatformAccessPolicy
 from fred_pod.security.structure import KeycloakUser, is_service_agent
+from pydantic import JsonValue
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ from control_plane_backend.platform_access.schemas import (
     AdmissionSource,
     FreeEnrollmentPreview,
     PlatformAccessClaim,
+    PlatformAccessOwnClaims,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
     PlatformAccessStatus,
@@ -354,15 +357,80 @@ async def claim_catalog(access: PlatformAccess) -> list[PlatformAccessClaim]:
     ]
 
 
-async def preview_policy(
-    access: PlatformAccess, actor: KeycloakUser, policy: PlatformAccessPolicy
-) -> PlatformAccessPolicyPreview:
+def require_own_credential(actor: KeycloakUser) -> None:
     if (
         not isinstance(actor, KeycloakUser)
         or actor.service_account
         or is_service_agent(actor)
     ):
         raise HTTPException(403, "requires_own_credential")
+
+
+def own_claims(payload: dict[str, object]) -> PlatformAccessOwnClaims:
+    visited, budget = 0, 60_000
+    truncated = False
+
+    def project(value: object, depth: int) -> tuple[bool, JsonValue]:
+        nonlocal visited, budget, truncated
+        if visited >= 1024 or depth > 16 or budget <= 0:
+            truncated = True
+            return False, None
+        visited += 1
+        budget -= 2
+        if isinstance(value, dict):
+            result: dict[str, JsonValue] = {}
+            for key, child in value.items():
+                if visited >= 1024 or budget <= 0:
+                    truncated = True
+                    break
+                if not isinstance(key, str) or len(key) > 256:
+                    truncated = True
+                    continue
+                cost = len(json.dumps(key, ensure_ascii=True)) + 2
+                if cost > budget:
+                    truncated = True
+                    break
+                budget -= cost
+                included, projected = project(child, depth + 1)
+                if included:
+                    result[key] = projected
+            return True, result
+        if isinstance(value, list):
+            if len(value) > 32:
+                truncated = True
+                return False, None
+            items: list[JsonValue] = []
+            for child in value:
+                included, projected = project(child, depth + 1)
+                if not included:
+                    return False, None
+                items.append(projected)
+            return True, items
+        if value is None or isinstance(value, (str, bool, int, float)):
+            cost = len(json.dumps(value, ensure_ascii=True)) + 1
+            if (isinstance(value, str) and len(value) > 1024) or cost > budget:
+                truncated = True
+                return False, None
+            budget -= cost
+            return True, cast(JsonValue, value)
+        truncated = True
+        return False, None
+
+    _, projected = project(payload, 0)
+    claims = cast(dict[str, JsonValue], projected)
+    facts, _ = extract_claims(claims)
+    original, _ = extract_claims(payload)
+    return PlatformAccessOwnClaims(
+        claims=claims,
+        selectable_paths=[json.loads(key) for key in facts if key in original],
+        truncated=truncated,
+    )
+
+
+async def preview_policy(
+    access: PlatformAccess, actor: KeycloakUser, policy: PlatformAccessPolicy
+) -> PlatformAccessPolicyPreview:
+    require_own_credential(actor)
     async with access.store.read() as session:
         await access.state(session)
         result = await asyncio.to_thread(

@@ -60,6 +60,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/access/claims` }),
     }),
+    getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: build.query<
+      GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse,
+      GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/own-claims` }),
+    }),
     previewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPost: build.mutation<
       PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse,
       PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg
@@ -1798,6 +1804,9 @@ export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiA
 export type ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessClaim[];
 export type ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiArg = void;
+export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessOwnClaims;
+export type GetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetApiArg = void;
 export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse =
   /** status 200 Successful Response */ PlatformAccessPolicyPreview;
 export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg = {
@@ -3000,6 +3009,14 @@ export type SetPlatformFiltering = {
 export type PlatformAccessClaim = {
   path: string[];
   types: ("string" | "string_array")[];
+};
+export type JsonValue = any;
+export type PlatformAccessOwnClaims = {
+  claims: {
+    [key: string]: JsonValue;
+  };
+  selectable_paths: string[][];
+  truncated: boolean;
 };
 export type PlatformAccessPolicyPreview = {
   matched: boolean;
@@ -4737,6 +4754,8 @@ export const {
   useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
   useListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery,
   useLazyListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery,
+  useGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
+  useLazyGetPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGetQuery,
   usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation,
   useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation,
   useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,

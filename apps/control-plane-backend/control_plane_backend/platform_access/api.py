@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fred_core import get_current_user
 from fred_core.logs.audit_log import emit_audit_log
-from fred_core.security.oidc import get_own_user_for_platform_access
+from fred_core.security.oidc import (
+    decode_jwt,
+    get_own_user_for_platform_access,
+    oauth2_scheme,
+)
 from fred_core.security.platform_access.access_control import (
     PlatformAccess,
     get_platform_access,
@@ -25,6 +30,7 @@ from control_plane_backend.platform_access.schemas import (
     FreeEnrollmentPreview,
     GrantPlatformAccessUsers,
     PlatformAccessClaim,
+    PlatformAccessOwnClaims,
     PlatformAccessPolicyPreview,
     PlatformAccessState,
     PlatformAccessStatus,
@@ -81,6 +87,26 @@ async def list_platform_access_claims(
     access: Access, user: Admin
 ) -> list[PlatformAccessClaim]:
     return await service.claim_catalog(access)
+
+
+@router.get("/admin/platform/access/own-claims", response_model=PlatformAccessOwnClaims)
+async def get_platform_access_own_claims(
+    access: Access,
+    user: Admin,
+    response: Response,
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+) -> PlatformAccessOwnClaims:
+    service.require_own_credential(user)
+    if not token:
+        raise HTTPException(401, "requires_own_credential")
+    await access.state()
+    payload: dict[str, object] = {}
+    verified = await asyncio.to_thread(decode_jwt, token, verified_payload=payload)
+    service.require_own_credential(verified)
+    if verified.uid != user.uid:
+        raise HTTPException(403, "requires_own_credential")
+    response.headers["Cache-Control"] = "no-store"
+    return service.own_claims(payload)
 
 
 @router.post(

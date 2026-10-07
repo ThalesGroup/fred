@@ -971,3 +971,77 @@ async def test_actual_full_member_removal_with_multiple_roles_revokes_other_read
     assert not await other_reader.admitted(member)
     assert not await access.admitted(delegated)
     assert await access.store.exception(UUID(member.uid)) is None
+
+
+def test_own_claim_projection_preserves_exact_values_and_supported_paths():
+    result = service.own_claims(
+        {
+            "profile": {"unit": "actual"},
+            "a.b": ["one", "two"],
+            "exp": 123,
+            "enabled": True,
+            "__proto__": "literal",
+        }
+    )
+    assert result.claims["profile"] == {"unit": "actual"}
+    assert result.claims["exp"] == 123 and result.claims["enabled"] is True
+    assert ["profile", "unit"] in result.selectable_paths
+    assert ["a.b"] in result.selectable_paths and [
+        "__proto__"
+    ] in result.selectable_paths
+    assert ["exp"] not in result.selectable_paths
+    assert not result.truncated
+
+
+def test_own_claim_projection_is_bounded_and_omitted_fields_unselectable():
+    import json
+
+    payload: dict[str, object] = {f"field-{i}": "x" * 1024 for i in range(2000)}
+    payload.update({"large": "x" * 1025, "array": ["x"] * 33})
+    result = service.own_claims(payload)
+    assert result.truncated
+    assert len(json.dumps(result.claims, ensure_ascii=True)) < 65536
+    assert "large" not in result.claims and "array" not in result.claims
+    assert all(path[0] in result.claims for path in result.selectable_paths)
+
+
+@pytest.mark.asyncio
+async def test_own_claim_endpoint_requires_admin_own_verified_human_and_disables_caching(
+    access, monkeypatch
+):
+    actor = user()
+
+    def decode(token, *, verified_payload):
+        assert token == "test-token"
+        verified_payload.update({"profile": {"unit": "actual"}, "exp": 123})
+        return actor
+
+    monkeypatch.setattr(api, "decode_jwt", decode)
+    app = FastAPI()
+    app.include_router(api.router)
+    app.dependency_overrides[get_platform_access] = lambda: access
+    app.dependency_overrides[api.get_current_user] = lambda: actor
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"Authorization": "Bearer test-token"},
+    ) as client:
+        response = await client.get("/admin/platform/access/own-claims")
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["claims"]["profile"]["unit"] == "actual"
+        access.rebac.admin = False
+        response = await client.get("/admin/platform/access/own-claims")
+        assert response.status_code == 403
+        access.rebac.admin = True
+        actor.service_account = True
+        response = await client.get("/admin/platform/access/own-claims")
+        assert response.status_code == 403
+        assert "actual" not in response.text
+        actor.service_account = False
+        app.dependency_overrides[api.get_current_user] = lambda: SimpleNamespace(
+            uid=actor.uid, roles=[]
+        )
+        response = await client.get("/admin/platform/access/own-claims")
+        assert response.status_code == 403
+        assert "actual" not in response.text

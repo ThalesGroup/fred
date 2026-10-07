@@ -3342,7 +3342,26 @@
         "invalidRegex": "Invalid regular expression. Check its syntax.",
         "invalidCondition": "Invalid condition. Check its keys and value.",
         "delegatedHint": "Changing a claim path may refuse delegated requests until the user makes a new direct request. Independent exceptions and teams remain valid."
-      }
+      },
+      "picker": {
+        "choose": "Choose from my JWT",
+        "title": "Choose a claim",
+        "own": "My JWT claims",
+        "observed": "Other observed claims",
+        "ownHint": "This is the verified access-token payload of your current session. Click a text or text-list key to select it.",
+        "observedHint": "Names and types observed in verified user tokens. A claim may be absent from your session; other users' values are never shown.",
+        "search": "Search claim keys",
+        "unsupported": "This value cannot be filtered as text.",
+        "truncated": "Some values were omitted because the token exceeds display limits. Unavailable fields cannot be selected.",
+        "empty": "No claims to display. You can enter a path in Advanced.",
+        "failed": "Could not read your verified session claims.",
+        "selected": "Selected field",
+        "copyHint": "Optionally click one current value to use it as the filter value.",
+        "copied": "Value to copy into the draft",
+        "useField": "Use this field",
+        "advanced": "Advanced: enter the exact path manually"
+      },
+      "verificationFailed": "Access verification unavailable"
     }
   },
   "runtime": {

@@ -10,7 +10,15 @@
 }
 .actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
   gap: var(--spacing-s);
+}
+.support {
+  padding: var(--spacing-s);
+  color: var(--primary);
+  font: var(--font-label-large);
 }
 .legal {
   border: 1px solid var(--outline-muted);

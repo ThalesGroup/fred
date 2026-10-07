@@ -729,3 +729,26 @@ def test_service_accounts_only_refuses_a_persons_token_from_an_unlisted_client(
         )
         assert user.service_account is False
         assert delegation.is_delegation_caller(user) is False
+
+
+def test_explicit_payload_view_bypasses_principal_cache_and_stays_verified(
+    _rsa_keypair, monkeypatch
+):
+    private, _ = _rsa_keypair
+    token = _token(
+        private, iss=_REALM, aud=_CLIENT, profile={"unit": "real"}, enabled=True
+    )
+    monkeypatch.setattr(oidc, "_get_cached_user", lambda token: None)
+    actor = oidc.decode_jwt(token)
+    monkeypatch.setattr(oidc, "_get_cached_user", lambda token: actor)
+    payload = {}
+    result = oidc.decode_jwt(token, verified_payload=payload)
+    assert result.uid == actor.uid
+    assert payload["profile"] == {"unit": "real"}
+    assert payload["enabled"] is True
+    assert "profile" not in result.model_dump()
+    bad = _token(private, iss="https://untrusted.example.test", aud=_CLIENT)
+    rejected = {}
+    with pytest.raises(HTTPException):
+        oidc.decode_jwt(bad, verified_payload=rejected)
+    assert rejected == {}
