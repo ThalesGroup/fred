@@ -35,6 +35,11 @@ _OP_ALIASES = {
     "modify": "edit",
 }
 _SLIDES_ALIASES = ("with", "new_slides", "new_slide", "content")
+# Slide fields (and their aliases) a model may write in the change itself.
+_SLIDE_KEYS = frozenset(
+    ("title", "subtitle", "bullets", "columns", "items", "image", "images", "table")
+    + ("notes", "kind", "body", "text", "pattern", "type")
+)
 
 
 class ChangeError(ValueError):
@@ -43,6 +48,17 @@ class ChangeError(ValueError):
     def __init__(self, problems: List[str]) -> None:
         super().__init__("\n".join(problems))
         self.problems = problems
+
+
+def _unknown(key: str, op: Any) -> str:
+    if key in _SLIDE_KEYS and op == "edit":
+        return f"'{key}' is a slide field: write it as `field` '{key}' with its `value`"
+    if key in _SLIDE_KEYS:
+        return f"'{key}' is a slide field, which {op or 'this change'} does not take: drop it"
+    return (
+        f"unknown key '{key}': a change takes op, slide, after, slides, field and value; "
+        "drop it"
+    )
 
 
 def _number(value: Any) -> Optional[int]:
@@ -114,6 +130,19 @@ class SlideChange(BaseModel):
         known |= {"value", *_SLIDES_ALIASES}
         if "has_value" in data:  # a validated change dumped and read again
             return {k: v for k, v in data.items() if k in cls.model_fields}
+        # A new slide written in the change itself, not under `slides`.
+        flat = {k: v for k, v in data.items() if k in _SLIDE_KEYS}
+        unknown = [_unknown(k, op) for k in data if k not in known | set(flat)]
+        if flat and op in ("replace", "insert"):
+            if slides in (None, [], {}):
+                slides = [flat]
+            else:
+                unknown.append(
+                    f"{', '.join(flat)} sent beside `slides`: it is unclear which new slide "
+                    "they belong to; put them inside that slide's entry of `slides`"
+                )
+        elif flat:
+            unknown += [_unknown(k, op) for k in flat]
         raw = {
             k: str(n)[:20]
             for k, n in (("slide", slide), ("after", data.get("after")))
@@ -127,7 +156,7 @@ class SlideChange(BaseModel):
             "field": data.get("field") if isinstance(data.get("field"), str) else None,
             "value": data.get("value"),
             "has_value": "value" in data,
-            "unknown": [f"unknown key '{k}'" for k in data if k not in known],
+            "unknown": unknown,
             "raw_numbers": raw,
         }
 

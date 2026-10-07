@@ -176,7 +176,39 @@ def test_every_bad_change_is_reported_with_its_remedy():
         "changes[4] (edit): edit needs `field`, e.g. 'title' or 'items[2].label'.",
         "changes[4] (edit): edit needs `value`: the new text, list or object (null removes).",
         "changes[5] (edit): `slide` 'last' is not a number: give the slide's number.",
-        "changes[6] (remove): unknown key 'colour'.",
+        "changes[6] (remove): unknown key 'colour': a change takes op, slide, after, "
+        "slides, field and value; drop it.",
+    ]
+
+
+def test_a_new_slide_written_in_the_change_itself_is_read_as_its_slide():
+    """Live: the model sent `kind`, `title` and `items` beside `op`."""
+    items = [{"heading": "SIRDE", "text": "Radars"}]
+    flat = {"op": "replace", "slide": 2, "kind": "cards", "title": "Projets"}
+    plan = apply_changes(BASE, [SlideChange.model_validate({**flat, "items": items})])
+    replaced = plan.slides[1]
+    assert (replaced.kind, replaced.title) == ("cards", "Projets")
+    assert replaced.items[0].heading == "SIRDE" and not replaced.ignored_fields
+    inserted = SlideChange.model_validate(
+        {"op": "insert", "after": 0, "title": "Intro", "body": "Hello"}
+    )
+    assert [(s.title, s.bullets) for s in inserted.slides] == [("Intro", ["Hello"])]
+
+
+def test_slide_fields_beside_slides_or_on_another_op_say_where_they_go():
+    problems = _problems(
+        {"op": "replace", "slide": 2, "title": "A", "slides": [{"title": "B"}]},
+        {"op": "edit", "slide": 2, "title": "C"},
+        {"op": "remove", "slide": 3, "title": "D"},
+    )
+    assert problems == [
+        "changes[0] (replace): title sent beside `slides`: it is unclear which new slide "
+        "they belong to; put them inside that slide's entry of `slides`.",
+        "changes[1] (edit): 'title' is a slide field: write it as `field` 'title' with its "
+        "`value`.",
+        "changes[1] (edit): edit needs `field`, e.g. 'title' or 'items[2].label'.",
+        "changes[1] (edit): edit needs `value`: the new text, list or object (null removes).",
+        "changes[2] (remove): 'title' is a slide field, which remove does not take: drop it.",
     ]
 
 
@@ -267,6 +299,21 @@ async def test_a_partial_fix_after_needs_revision_rebuilds_the_whole_deck(monkey
     ]
     deck = Presentation(io.BytesIO(workspace.writes[-1]["content"]))
     assert len(deck.slides) == 4
+
+
+@pytest.mark.asyncio
+async def test_a_flattened_replace_is_built_as_its_slide(monkeypatch, deck_plan_store):
+    workspace = FakeWorkspace()
+    turn = _Turn(monkeypatch, workspace)
+    deck = [COVER, {"title": "Agenda", "bullets": ["One", "Two"]}, {"title": "Contact"}]
+    text, result = await turn.build(slides=deck)
+    assert not result.is_error, text
+    text, result = await _Turn(monkeypatch, workspace).build(
+        changes=[{"op": "replace", "slide": 2, "title": "Plan", "bullets": ["A", "B"]}]
+    )
+    assert not result.is_error, text
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    assert (stored.slides[1].title, stored.slides[1].bullets) == ("Plan", ["A", "B"])
 
 
 @pytest.mark.asyncio
