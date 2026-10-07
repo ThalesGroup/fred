@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22 and WP29 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22, WP29 and WP31 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -634,6 +634,22 @@ are 0 in all four cells. Run dirs (not committed): `target/eval-wp29-{small,medi
   warning only), `make test` 433 passed, 5 skipped.
 - **Recommendation: keep.** Clear gain on mistral-small (the admin default) on first-call success,
   calls, fit problems and variety, neutral on mistral-medium, no rendering regression.
+
+## Results: WP31 (review fixes from live use)
+
+Unit evidence only, no eval rerun (both fixes are deterministic):
+
+- 31.1 `test_an_other_slide_given_a_kind_in_the_review_is_assigned`: a slide analysed
+  `other` (`reusable: false`) yields `needs_revision`; with a `bullets` override it is
+  assigned; re-kinded `other`, or a one-off given its own analysed kind, it stays unused.
+- 31.2 `test_a_forced_cover_misfit_reads_once_without_a_close_kind_lead` asserts
+  "the first slide is always the template's cover; closest fit, a 'cover' slide: title
+  is 400 chars; …" (was "cover; ; closest close kind, closest fit, a 'cover' slide");
+  `test_a_close_kind_misfit_names_why_and_the_close_kind_once` asserts "this template has
+  no 'timeline' slide; closest close kind, a 'bullets' slide: …".
+- Package `make code-quality` passed; `make test` 436 passed, 5 skipped.
+- Not proven: the live review dialog round trip (the frontend already sends the kind
+  override; no schema change).
 
 ## Targets (WP11)
 

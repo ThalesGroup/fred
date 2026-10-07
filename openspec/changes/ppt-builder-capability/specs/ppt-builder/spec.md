@@ -257,6 +257,11 @@ The system SHALL let the author review the analysis — a thumbnail, label and k
 - **WHEN** an author excludes a pattern or changes its kind
 - **THEN** the assignment never uses an excluded pattern and treats a re-kinded pattern as its new kind
 
+#### Scenario: Other slide re-kinded in the review
+
+- **WHEN** the analysis read a slide as `other` (never chosen) and the author changes its kind to a real kind
+- **THEN** the assignment uses the slide as that kind, as a `kind:` note in the template would; re-kinded back to `other`, it is unused again
+
 #### Scenario: Example slides and layouts shown apart
 
 - **WHEN** the author opens the review

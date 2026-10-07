@@ -342,3 +342,11 @@ Owns: Help Center `guides/prepare-powerpoint-template.md` (fr + en), `PptBuilder
 
 - [x] 30.1 Help Center page "Préparer son template PowerPoint" / "Prepare your PowerPoint template" in `guides`, written from the analysis rules (example slides before layouts, one slide per design, the `SlideKind` list, `kind:`/`label:` notes, kind names and shape-name roles, repeat groups, measured room, picture zones and framed pictures, data tables, exclusion reasons, review, re-analysis), with a do/avoid table; linked from the capabilities page and the guides index
 - [x] 30.2 A discreet "How to prepare your template?" link at the end of the template card opens the page in the Help Center language matching the app, in a new tab. Tests: the link's text, target and language; the page exists in both languages
+
+## WP31. Review fixes from live use
+
+Owns: `overrides.py`, `assign.py` (problem text), `design.md` D10/D21, delta spec, Help Center guide (one passage), tests, `verification.md`.
+
+- [x] 31.1 A kind override to a real kind makes an `other` slide usable: `apply_overrides` sets `reusable` from the new kind when it differs from the analysed one (the author's choice wins over the one-off verdict, as a `kind:` note does; `other` stays unused; exclusion still applies). The guide's "Check the result" passage says so (fr + en). Test: an `other` slide re-kinded `bullets` is assigned; back to `other`, or the analysed kind repeated on a one-off, it stays unused
+- [x] 31.2 `needs_revision` text joins each part once: a forced cover no longer takes the close-kind lead (seen in eval: "cover; ; closest close kind, closest fit, a 'cover' slide"); the lead is `closest fit` or `<why>; closest close kind`. Tests: exact text for a cover-forced misfit and a close-kind misfit
+- [x] 31.3 Package `make code-quality` + `make test`; `verification.md`
