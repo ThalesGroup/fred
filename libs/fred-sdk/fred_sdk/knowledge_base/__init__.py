@@ -20,6 +20,7 @@ into a Fred deployment by its own image:
 
     from fred_sdk.knowledge_base import (
         DocumentPublisher,
+        FieldSpec,
         KnowledgeBase,
         KnowledgeBaseRunContext,
         KnowledgeBaseSyncResult,
@@ -45,9 +46,13 @@ into a Fred deployment by its own image:
 
 That image then exposes two commands: `publish` posts the declaration at
 deployment time, `run` serves runs. Configuration is declared with the same
-`FieldSpec` vocabulary the rest of the SDK uses — import it from
-`fred_sdk.contracts.models`.
+`FieldSpec` vocabulary the rest of the SDK uses; it is re-exported here, with
+`UIHints` and `TuningValue`, so a Knowledge Base needs this one package.
 """
+
+# The form vocabulary agents use too, re-exported so an author imports from one
+# place. Same objects, not copies: `fred_sdk.contracts.models` keeps working.
+from fred_sdk.contracts.models import FieldSpec, TuningValue, UIHints
 
 from fred_sdk.knowledge_base.configuration import MissingPodConfiguration
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
@@ -94,6 +99,7 @@ __all__ = [
     "DocumentPublisher",
     "DocumentRetractError",
     "DocumentWaitTimeout",
+    "FieldSpec",
     "KnowledgeBase",
     "KnowledgeBaseDeclaration",
     "KnowledgeBaseDeclarationError",
@@ -104,6 +110,8 @@ __all__ = [
     "KnowledgeFlowNotConfigured",
     "MissingPodConfiguration",
     "SynchronizeHandler",
+    "TuningValue",
+    "UIHints",
     "knowledge_base_main",
     "publish_knowledge_base",
     "run_knowledge_base",

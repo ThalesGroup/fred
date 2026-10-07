@@ -21,6 +21,9 @@ the SDK already holds every one of these values.
   workflow engine's deployment keys, which that package deliberately never
   exposes. With `for_run` a handler no longer needs it; a pod that extends its
   configuration keeps importing it from `fred_sdk.knowledge_base.configuration`.
+- `FieldSpec`, `UIHints` and `TuningValue` are re-exported from
+  `fred_sdk.knowledge_base`, so a Knowledge Base needs one package; the shared
+  `fred_sdk.contracts.models` path keeps working.
 - The constructor keeps working unchanged; nothing breaks.
 - Samples, the SDK README and the Knowledge Base blog post use `for_run`.
 

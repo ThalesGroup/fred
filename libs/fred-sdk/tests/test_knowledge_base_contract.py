@@ -974,3 +974,12 @@ def test_the_platform_zone_stays_out_of_the_author_facing_exports() -> None:
     """It is Fred's vocabulary, and task 1.5's surface assertion depends on it."""
     assert "platform_fields" not in kb_module.__all__
     assert not any("cadence" in name.lower() for name in kb_module.__all__)
+
+
+def test_a_knowledge_base_needs_one_package_for_its_form() -> None:
+    """The form vocabulary is the SDK's shared one, re-exported, never copied."""
+    from fred_sdk.contracts import models
+
+    assert kb_module.FieldSpec is models.FieldSpec
+    assert kb_module.UIHints is models.UIHints
+    assert kb_module.TuningValue is models.TuningValue

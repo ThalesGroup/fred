@@ -10,3 +10,9 @@
 - [x] 2.1 Use `for_run` in the SDK README and the three `fred-samples` Knowledge Bases and `webdav-knowledge-base`; verify each sample's test suite against the branch SDK
 - [x] 2.2 Update both examples of the Knowledge Base blog post, re-run their type check and smoke test, and rebuild the site with drafts
 - [x] 2.3 Run `openspec validate simplify-knowledge-base-document-access --strict`
+
+## 3. One package for authors
+
+- [x] 3.1 Re-export `FieldSpec`, `UIHints` and `TuningValue` from `fred_sdk.knowledge_base`; verify an identity test and the engine-terms guard
+- [x] 3.2 Import them from `fred_sdk.knowledge_base` in the README, the samples and the blog post; verify sample suites, the blog type check and the site build
+

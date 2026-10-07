@@ -335,9 +335,8 @@ workload identity and a cadence; the handler owns discovery, replay-safe writes 
 explicit retractions — Fred never infers a deletion from absence.
 
 ```python
-from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.knowledge_base import (
-    DocumentPublisher, KnowledgeBase, KnowledgeBaseRunContext,
+    DocumentPublisher, FieldSpec, KnowledgeBase, KnowledgeBaseRunContext,
     KnowledgeBaseRunOutcome, KnowledgeBaseSyncResult, knowledge_base_main,
 )
 

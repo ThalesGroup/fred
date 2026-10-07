@@ -44,3 +44,16 @@ the default source of its own deployment.
 #### Scenario: Explicit source tag kept
 - **WHEN** a client constructed with `source_tag="archive"` publishes a document
 - **THEN** the write carries `source_tag=archive`
+
+### Requirement: One package for the authoring surface
+
+Everything a Knowledge Base author writes against — the declaration, the run
+context and result, the document client, and the form vocabulary used to
+declare configuration fields — SHALL be importable from the Knowledge Base
+package. The form vocabulary SHALL be the same types the rest of the SDK uses,
+not copies, and its original import path SHALL keep working.
+
+#### Scenario: A complete Knowledge Base with one import statement
+- **WHEN** an author declares fields with placeholders and reads typed configuration values
+- **THEN** `FieldSpec`, `UIHints` and `TuningValue` come from the Knowledge Base package, and are identical to those of the shared contracts module
+
