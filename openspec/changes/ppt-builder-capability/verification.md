@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22, WP29 and WP31 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21, WP22, WP29, WP31 and WP32 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -1052,3 +1052,99 @@ Unit evidence only, no eval rerun (both fixes are deterministic):
   last run in WP1/WP10/WP8, and WP9 does not touch them).
 - `fred-performance-reviewer` on the tool path and the background job: findings
   are listed in the WP9 report; fix 3 above is the one applied.
+
+## Results: WP32 (changes against the previous plan, D23)
+
+Run on 2026-10-07, strictly one eval process at a time, no 429 or quota line in any log. WP29's
+options (`eval/run_eval.py --no-builtin --modes rules --variety template_slide --max-uses 1`,
+Paintress `~/fred-tmp/paintress.pptx`, 14 prompts, stand-in agent prompt) plus `--edit-turn`: after
+a delivered deck, a second user turn asks for a change (`eval/prompts.py` `EDITS`: an inserted
+key-figures slide, a contact on the last slide, a removal, a title), served by a new tool instance
+on the same conversation and base-plan store, as on another pod. Turn-1 tokens are counted apart
+from the edit turn's. Three small runs, each after a fix the previous one found:
+
+- run 1 (`dba8dd868`): the first implementation;
+- run 2 (`8480e3814`): corrected resend applied to its own base, `slides: null` read, change slides
+  out of the schema;
+- run 3 (`7a0460d05`): slide fields named in the change-slides description.
+
+**Turn 1, like for like.** WP29's small cell lost `country_comparison`, `process_onboarding` and
+`training_12` to the eval's invented-image-id artifact (no `document_content` port), so small is
+compared on the other 11 prompts; the WP32 runs lost some to the same artifact too (run 2:
+`training_12`; run 3: `esg_report`, `options_comparison`), counted as failures below.
+
+| cell (small, 11 prompts) | success | first call | tool calls | problem slides | tokens in/out (k) | decks ×3+ |
+|---|---|---|---|---|---|---|
+| WP29 words | 11/11 | 4 | 22 | 10 | 92/18 | 5 |
+| WP32 run 1 | 11/11 | 3 | 21 | 10 | 122/12 | 6 |
+| WP32 run 2 | 9/11 (2 outline asked, no tool call) | 4 | 16 | 6 | 78/11 | 4 |
+| WP32 run 3 | 9/11 (2 image id) | 4 | 19 | 9 | 101/17 | 4 |
+
+All 14 prompts, small: run 1 14/14, first call 3, 30 calls, 18 problem slides, 191k/23k; run 2
+11/14, 5, 20, 7, 96k/17k; run 3 12/14, 5, 24, 12, 127k/25k. Revision calls sent as `changes`:
+8/16, 5/9, 0/11.
+
+| cell (medium, 14 prompts) | success | first call | tool calls | problem slides | tokens in/out (k) | decks ×3+ | slides (mean) |
+|---|---|---|---|---|---|---|---|
+| WP29 words | 14/14 | 5 | 24 | 5 | 92/14 | 8 | 7.7 |
+| WP32 (`7a0460d05`) | 14/14 | 5 | 24 | 7 | 111/13 | 8 | 7.4 |
+
+Medium revision calls sent as `changes`: 5/10. Truncated, lost, leftovers: 0 in every cell.
+
+**Edit turn.**
+
+| cell | edits delivered | first call | calls | calls with `changes` | earlier slides kept identical |
+|---|---|---|---|---|---|
+| small run 1 | 9/14 | 7 | 26 | 23 | 60/68 |
+| small run 2 | 10/11 | 8 | 17 | 11 | 55/65 |
+| small run 3 | 12/12 | 9 | 16 | 7 | 75/93 |
+| medium | 14/14 | 11 | 19 | 18 | 97/104 |
+
+- Run 1's five failed edits found two bugs, fixed before run 2: three refused inserts resent
+  corrected as `insert` and stacked one more copy per call (now: same shape → applied to the
+  refused call's own base), two `slides: null` beside `changes` refused by validation (now read).
+  Run 2's one failure (item fields written at slide level in inserted slides) led to run 3's
+  field list in the change-slides description.
+- Run 1's input tokens (+33 % like for like) came from the schema: LangChain inlines `$ref`s, so
+  change slides typed as the hinted slide model repeated the whole slide schema (converted
+  schema 10 146 chars against ≈5 k); plain objects with a field list bring it to 5 965 chars.
+  The remaining ≈+1 k chars (≈300 tokens per call) is the likely part of medium's +21 % input.
+- An edit sent as `changes` costs 60–260 output tokens (medium 60–226, small 62–77) against
+  260–2 336 for a whole-deck resend, and keeps every untouched slide byte-identical; whole-deck
+  resends reworded some (small run 3: schedule 1/3 kept, training 10/15, quarterly 6/8).
+- An out-of-range number is self-correcting: in a smoke run, small had sent 5 of the 9 slides it
+  described; its `edit slide 9` got "the previous deck has 5 slides", and it resent the whole deck.
+
+Run dirs (not committed): `target/eval-wp32-{small,small-2,small-3,medium}`.
+
+**Unit evidence:** `tests/test_deck_changes.py` (20 tests): every operation numbered on the base,
+inserts after one slide in order, edit paths (field, element, append, null removes, table cell),
+every error text and conflict, small-model shapes and the dumped-change round trip, partial fix
+after `needs_revision` rebuilt whole, later-turn edit in a new tool instance keeping the other
+slides identical, numbers of a revision on the new plan, corrected and identical resends never
+applied twice, a variety ask then the same changes built once, no base / both modes / bad changes
+building nothing with the base unchanged, an error after evaluation keeping the base, a failed
+write still delivering, the base shared through the real SQL table, null `slides` and one change
+object, the schema-size guard. Package `make code-quality` clean (existing `builder_decks.py`
+`__all__` warning), `make test` 455 passed, 5 skipped; fred-agents `make test` 121 passed, 6 xfailed;
+`q8c2e3b4d5f6` single head, SQLite upgrade, `alembic check`, downgrade.
+
+**Performance review** (turn path, `fred-performance-reviewer` checklist): no blocking finding. The
+base-plan upsert (`deck_plans.py`) is async SQLAlchemy, once per evaluated build call, skipped when
+the plan is unchanged; the read happens only on a `changes` call without a plan of the turn in
+memory. Both share the pod's 5-connection, 30 s pool with the analysis store: low risk since builds
+are rare against model calls; exhaustion under an analysis-refresh burst would need a load test.
+No statement timeout of their own, as the analysis store. `apply_changes` runs inline on decks of
+≤ ~30 slides (well under 1 ms). No new metric, client or module state; the turn's base lives in the
+tool instance, the shared one in Postgres (replica-safe).
+
+**Known gap:** `cap_ppt_builder_deck_plan` rows are never deleted with their conversation (a few KB
+each; no deletion hook reaches a capability); per-instance capability data cleanup is tracked by
+GitHub issue #2990.
+
+**Recommendation: keep.** Turn 1 is unchanged within one-run noise on both models (small: first
+call and success at WP29's level, problem slides ≤; medium: same success, first call and calls,
+input +21 % from the larger schema and description). The edit turn is where it pays: medium sent
+18 of 19 edit calls as `changes`, 14/14 delivered, 97/104 earlier slides kept identical; small
+delivered every edit in run 3, but sends `changes` for about half of them and rarely for first-deck
+revisions (whole-deck resends stay correct, only costlier and prone to rewording).

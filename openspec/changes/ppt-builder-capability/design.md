@@ -246,7 +246,7 @@ Two needs, one mechanism. (a) A `needs_revision` naming two slides of twelve mad
 - **Schema cost.** Change slides are plain objects in the schema (`written as in slides`), validated as slides in code: typed as the slide model, LangChain inlined the whole slide schema under `changes` and the tool schema went from ≈5 k to ≈10 k chars on every model call (+33 % input tokens in the eval). `slides: null` beside `changes` and one change sent as an object are read, not refused by validation.
 - **Everything else unchanged on the resulting plan**: first call of the turn (D17), `deck_delivered` from history (D15), misfit closest-fit counting (D17), the duplicate-parallel-call guard keyed on the arguments (WP27), the repeated-problem flag (D8, by the new plan's slide numbers), success prefixes. Messages use the resulting plan's numbering; `needs_revision` ends "call build_presentation again with only `changes` for these slides (numbers as listed), or the whole deck in `slides`"; a delivery says to change it later with `changes`.
 - **Description and working rules.** Both modes in a few lines: a new deck → `slides`; a fix after `needs_revision` or a change the user asks for → `changes`, which keeps the other slides exactly as they are. The fragment's "regenerate the whole deck" goes.
-- **Known gap.** Rows are never deleted (no session-deletion hook reaches a capability); one row per conversation with this agent, a few KB.
+- **Known gap.** Rows are never deleted (no session-deletion hook reaches a capability); one row per conversation with this agent, a few KB. Per-instance data cleanup is tracked by issue #2990.
 
 ## Risks / Trade-offs
 
