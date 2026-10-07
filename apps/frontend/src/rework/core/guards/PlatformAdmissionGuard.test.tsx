@@ -99,6 +99,7 @@ it("renders shared verification failure outside the router and retries without m
       await new Promise((done) => setTimeout(done, 20));
     });
     expect(host.querySelector("h1")?.textContent).toBe("rework.platformAccess.verificationFailed");
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("rework.platformAccess.failed");
     expect(host.textContent).not.toContain("Protected shell");
     const before = state.statusReads;
     const retry = [...host.querySelectorAll("button")].find(

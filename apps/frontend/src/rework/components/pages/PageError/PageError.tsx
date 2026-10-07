@@ -42,7 +42,9 @@ export const PageError = ({ title = "Page Not Found", message = "Resource not fo
         <Icon category="outlined" type="error" filled />
       </span>
       <h1 className={styles.title}>{title}</h1>
-      <span className={styles.message}>{message}</span>
+      <span className={styles.message} role="alert">
+        {message}
+      </span>
       {actions ?? <DefaultErrorAction />}
     </div>
   );
