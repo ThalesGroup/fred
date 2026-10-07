@@ -75,6 +75,9 @@ JOB_TIMEOUT_SECONDS = 20 * 60
 # 60 s turn default: without a PDF there are no thumbnails and no vision labels.
 PATTERNS_PDF_TIMEOUT_SECONDS = 300.0
 _SLOT_POLL_SECONDS = 1.0
+# Background work takes at most this many of the pod's heavy-job slots: a burst
+# of refreshes (a version bump) must not leave the turns' builds busy.
+MAX_BACKGROUND_SLOTS = 2
 # An outdated inventory is served from memory, re-read after this long: its
 # refresh may land on another pod, or never (a failed one, no vision port).
 OUTDATED_RECHECK_SECONDS = 60.0
@@ -513,6 +516,7 @@ _inventories: ThreadSafeLRUCache[
 # label with vision; elsewhere a re-run labels by rules (marked heuristic).
 _ports: ThreadSafeLRUCache[str, CapabilityModelPort] = ThreadSafeLRUCache(max_size=256)
 _running: set[asyncio.Task[None]] = set()
+_background_slots = 0
 # Template bytes by sha are immutable too; only a few, they are large.
 _templates: ThreadSafeLRUCache[str, bytes] = ThreadSafeLRUCache(max_size=4)
 
@@ -601,8 +605,10 @@ class AnalysisFailed(Exception):
 async def _cpu(fn: Callable[..., Any], *args: Any) -> Any:
     # A background job waits for a heavy-job slot instead of failing fast:
     # nobody waits on it, and its lease stays alive meanwhile.
-    while not acquire_heavy_job_slot():
+    global _background_slots
+    while _background_slots >= MAX_BACKGROUND_SLOTS or not acquire_heavy_job_slot():
         await asyncio.sleep(_SLOT_POLL_SECONDS)
+    _background_slots += 1
     work = asyncio.ensure_future(asyncio.to_thread(fn, *args))
     # A cancelled job's thread runs on: the slot is freed when it really ends.
     work.add_done_callback(_thread_ended)
@@ -610,6 +616,8 @@ async def _cpu(fn: Callable[..., Any], *args: Any) -> Any:
 
 
 def _thread_ended(work: asyncio.Future[Any]) -> None:
+    global _background_slots
+    _background_slots -= 1
     release_heavy_job_slot()
     if not work.cancelled():
         work.exception()  # retrieved: an abandoned thread's error is not re-logged

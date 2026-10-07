@@ -525,3 +525,26 @@ async def test_a_cancelled_job_keeps_its_slot_until_its_thread_ends():
             break
         await asyncio.sleep(0.01)
     assert concurrency._active_jobs == 0
+
+
+@pytest.mark.asyncio
+async def test_background_work_leaves_heavy_slots_to_the_turns(monkeypatch):
+    """Many refreshes at once (a version bump) take at most two of the four
+    heavy-job slots, so a turn's build is never answered busy because of them."""
+    monkeypatch.setattr(analysis_job, "_SLOT_POLL_SECONDS", 0.01)
+    release = threading.Event()
+    jobs = [asyncio.ensure_future(analysis_job._cpu(release.wait, 5)) for _ in range(4)]
+    for _ in range(20):
+        await asyncio.sleep(0.01)
+    assert concurrency._active_jobs == analysis_job.MAX_BACKGROUND_SLOTS == 2
+    turns = [concurrency.acquire_heavy_job_slot() for _ in range(2)]
+    assert turns == [True, True]
+    for _ in turns:
+        concurrency.release_heavy_job_slot()
+    release.set()
+    await asyncio.gather(*jobs)
+    for _ in range(500):
+        if concurrency._active_jobs == 0:
+            break
+        await asyncio.sleep(0.01)
+    assert concurrency._active_jobs == 0 and analysis_job._background_slots == 0
