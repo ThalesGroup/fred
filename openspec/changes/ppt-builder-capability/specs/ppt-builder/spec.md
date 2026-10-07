@@ -313,6 +313,7 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 - **WHEN** a list of 9 items is split over two slides
 - **THEN** items numbered by the model keep their numbers (6 to 9 on the second slide), and items without numbers on a slide that shows numbers continue the count (06 to 09) instead of restarting at 01
+- **AND** that count is set at render, never stored: when a later change removes an item from the first part, the second part is numbered on from the first part's new count
 
 #### Scenario: Variety not triggered by a split list
 
@@ -405,6 +406,13 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **GIVEN** a conversation whose history holds no delivered deck yet
 - **WHEN** the first `build_presentation` call of the turn has a fit problem and no kind repeat, and the corrected second call repeats one kind on three slides
 - **THEN** the second call is built, with the repetition only reported in the success message: no variety ask after a fit repair
+- **AND** a first call refused before its plan is evaluated (unreadable, every slide empty, bad changes) does not use up the turn's ask: the corrected call is still asked
+
+#### Scenario: A change to a delivered deck is never asked to vary
+
+- **GIVEN** a delivered deck, and a later turn whose history no longer shows that delivery (trimmed)
+- **WHEN** the model sends `changes` that make one template slide repeat
+- **THEN** the deck is built with the repetition only reported in the success message: a `changes` call always has a delivered deck as its base
 
 #### Scenario: Variety ask merged with fit problems
 
@@ -702,7 +710,7 @@ The system SHALL write the generated deck to the conversation's agent workspace,
 
 ### Requirement: Chat-time corrections are per conversation
 
-The system SHALL let the user correct a deck in chat by regenerating from an amended plan, and SHALL NOT change the agent configuration from a conversation. `build_presentation` SHALL accept either the whole deck (`slides`) or `changes` (replace, insert after, remove, edit one field) numbered on the last plan it evaluated in this conversation (delivered or refused with `needs_revision`), stored per conversation and agent so any replica and any later turn reads it, and SHALL always render the whole resulting deck through the normal path.
+The system SHALL let the user correct a deck in chat by regenerating from an amended plan, and SHALL NOT change the agent configuration from a conversation. `build_presentation` SHALL accept either the whole deck (`slides`) or `changes` (replace, insert after, remove, edit one field) numbered on the last deck it delivered in this conversation, stored per conversation and agent so any replica and any later turn reads it (within a turn, on the plan it last refused with `needs_revision`, never stored), and SHALL always render the whole resulting deck through the normal path.
 
 #### Scenario: Later-turn edit keeps untouched slides
 
@@ -714,6 +722,8 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **GIVEN** a delivered deck whose closing slide was built on one of two closing template slides
 - **WHEN** a `changes` call replaces it with a closing slide whose text differs and that still fits that template slide
 - **THEN** the rebuilt closing slide is on the same template slide; a replacement of another kind, or one that no longer fits there, is assigned as any slide
+- **AND** a slide whose requested kind the template replaced (a timeline built on one of two process slides) stays on that template slide when an unrelated change rebuilds the deck
+- **AND** a template slide pin written by the model itself (`built_on`, `asked_design`, `asked_from` in a sent slide) is ignored: only delivery and `like` set it
 - **AND** the tool description tells the model to change text inside a slide with `edit`, which keeps the slide's design, and to use `replace` for a different slide
 
 #### Scenario: Same design as another slide
@@ -730,7 +740,7 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **GIVEN** a deck delivered with bullets slides 5, 6 and 7 on three template slides and a process list split over slides 2 and 3
 - **WHEN** the model reads the success text
 - **THEN** one `Designs:` line names, per file slide number, the template slide's label as the review shows it (`2 'Process' Â· 3 'Process'`, three different names for slides 5 to 7), never a template id, and says that different names look different and that `like` gives slide N the design of slide M
-- **AND** two included template slides sharing a label read as distinct names (`'Free text'`, `'Free text #2'`), and a label longer than 28 chars is cut
+- **AND** two included template slides sharing a label read as distinct names (`'Free text'`, `'Free text #2'`), and a label longer than 28 chars is cut, two labels cut to the same text being numbered the same way
 
 #### Scenario: Changes that change nothing
 
@@ -751,13 +761,20 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 #### Scenario: No previous plan
 
-- **WHEN** a `changes` call arrives in a conversation where the tool has evaluated no plan
+- **WHEN** a `changes` call arrives in a conversation where the tool has delivered no deck and this turn has evaluated no plan
 - **THEN** nothing is built and the result says there is no previous deck to change and to send the whole deck in `slides`
 
 #### Scenario: Corrected resend of refused changes
 
 - **WHEN** a `changes` call is refused with `needs_revision` and the model resends changes of the same shape (same operations on the same slide numbers and fields), corrected or identical, in the same turn (for example the inserted slide fixed, sent again as an insert, or a resend after a variety ask that says a resend is built as is)
 - **THEN** they are applied to the plan the refused changes were applied to, so nothing is inserted, removed or edited twice
+- **AND** once a deck is delivered, changes of the same shape sent again are a new change to that deck (a second insert after slide 2 adds a slide beside the first)
+
+#### Scenario: A refused plan is never the next turn's base
+
+- **GIVEN** a delivered deck
+- **WHEN** a `changes` call is refused with `needs_revision` (or a variety ask) and the turn ends
+- **THEN** the stored base is still the delivered deck, so the next turn's `changes` number on the file the user has
 
 #### Scenario: User asks for a different kind of slide
 

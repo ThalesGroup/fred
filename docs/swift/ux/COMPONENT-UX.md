@@ -1235,10 +1235,11 @@ only, the stored value is left as is.
 
 **Status:** `Functional`
 
-An `info` `IconButton` (`size="medium"`, default `on-surface-retreat`, tooltip
-and accessible name "What was built", `aria-haspopup="dialog"`) placed just
-before the `.pptx` download, on the `ppt_preview` chat card and in the preview
-pane header. Rendered only when the part carries a `summary` (ppt_builder
+An `info` `IconButton` (`size="small"` like the download and close buttons,
+default `on-surface-retreat`, tooltip and accessible name "What was built",
+`aria-haspopup="dialog"`) placed just before the `.pptx` download, on the
+`ppt_preview` chat card and in the preview pane header; info, download and
+close sit in one group with no gap between them. Rendered only when the part carries a `summary` (ppt_builder
 decks); ppt_filler decks and older parts show nothing. It opens the central
 `Dialog` (`maxWidth` 480, single "Close" action): a Body Medium line "This
 presentation has N slides.", then an ordered list, one row per slide separated

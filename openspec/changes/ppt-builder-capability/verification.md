@@ -1325,3 +1325,33 @@ applies to the success text.
 Not covered: a live re-run of the session with a real model (whether it now answers "same layout"
 with `like`); the `#2` suffix is shown to the model only, so the review and summary dialog still
 show two identical labels for those template slides.
+
+## Results: WP38 (review fixes)
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| A refused plan became the next turn's base | Only a delivered deck is written to `cap_ppt_builder_deck_plan`; a refused plan stays the turn's in-memory base | `test_a_refused_plan_is_never_the_next_turns_base`, `test_the_same_changes_resent_are_never_applied_twice` (store empty) |
+| Corrected-resend rule fired after a delivery | A delivery clears the parent and shape | `test_the_same_changes_after_a_delivery_are_a_new_change` (insert A, insert B: both present) |
+| Model could set hidden fields | `_sent` drops `HIDDEN_FIELDS` from every sent slide | `test_design_fields_sent_by_the_model_are_ignored` |
+| Pin ignored after a kind substitution | `_kept` keeps the pin whenever it is among the best-ranked kind's fits | `test_a_substituted_kind_keeps_its_template_slide` |
+| One cut name for two designs | Duplicates counted on the shown label | `test_a_long_design_name_is_cut` |
+| Variety ask re-fired with a trimmed history | Never asked when the call has a base | `test_a_change_to_a_delivered_deck_is_never_asked_to_vary` |
+| Continuation numbers frozen in the stored deck | Numbered at render from `Assignment.starts` | `test_a_continuation_is_numbered_at_render_from_its_first_part`, `test_items_without_numbers_continue_the_count_on_the_second_slide` |
+| A malformed call used up the variety ask | `called` set after the assignment | `test_a_malformed_first_call_does_not_use_up_the_variety_ask` |
+| `RenderResult.warnings` only fed a log line | Deleted; render tests read `DeckReport` through `_issue_line` | `tests/test_builder_render.py` (`_findings`) |
+| Info button larger than its neighbours, gap between them | `size="small"`; gapless `.tools` group in card and pane headers | `DeckSummaryButton.test.tsx` (`btn-small`) |
+
+The new tests for findings 2, 3, 4 and 9 were also run against the code before their fix and failed there.
+
+Commands (package root `libs/capabilities/fred-capability-ppt-filler`):
+`.venv/bin/pytest -q tests/test_build_tool.py tests/test_deck_changes.py tests/test_assign.py`:
+144 passed. `make code-quality` clean (existing `builder_decks.py` `__all__` warning).
+`make test`: 496 passed, 5 skipped (490 before WP38).
+
+Frontend (`apps/frontend`, node from fnm, no make target): `npx tsc --noEmit -p .` clean;
+`npx prettier --check` on the six touched files clean; `npx eslint` on the three touched `.tsx`
+clean; `npx vitest run src/rework/features/capabilities/ppt_filler`: 7 files, 49 tests passed.
+
+Not covered: a live re-run with a real model; the gapless header group (CSS) has no automated
+check; a refused plan from before this change still in the table can be read as a base once (it
+is not `delivered`, so the "nothing changed" check skips it).

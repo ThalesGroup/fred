@@ -410,3 +410,20 @@ Owns: `tools.py` (delivered text), `design.md` D23, delta spec, tests, `verifica
 - [x] 37.2 Package `make code-quality` + `make test`; `verification.md`
 - Not covered: a live re-run of the session
 
+
+## WP38. Review fixes: stored base, resend rule, hidden fields, design pin, numbering
+
+Owns: `tools.py` (stored base, resend state, hidden fields, designs line, variety ask timing), `changes.py`, `plan.py` (`HIDDEN_FIELDS`), `assign.py` (`_kept`, `Assignment.starts`, `_rejoin`), `render.py` (continuation numbering, `RenderResult.warnings` deleted), `deck_plans.py` (docstring), frontend `DeckSummaryButton.tsx`, `PptPreviewCardRenderer`, `PptPreviewPane`, `COMPONENT-UX.md`, `design.md` D15/D17/D23/D24 and the message rule, delta spec, tests, `verification.md`.
+
+- [x] 38.1 Only a delivered deck is stored as the next turn's base; a refused plan (`needs_revision`, variety ask) stays the turn's in-memory base. Tests: a refused change leaves the store as delivered and the next turn changes the delivered deck; resent changes never applied twice, nothing stored
+- [x] 38.2 A delivery clears the corrected-resend state: the same changes sent after a delivered deck are a new change. Test: two inserts of one shape in one turn, both delivered, both in the deck
+- [x] 38.3 `built_on`, `asked_design`, `asked_from` are dropped from every sent slide (`slides` and change slides). Test: a model-written pin on a section template slide ignored in `slides` and in a `replace`, stored pin is the chosen one
+- [x] 38.4 The design pin holds whenever the template slide is among the best-ranked kind's fits, a substituted kind included. Test: a timeline built on either of two process slides stays on it
+- [x] 38.5 The `Designs:` line numbers duplicates on the shown (cut) label. Test: two long labels cut to the same text read `…` and `… #2`
+- [x] 38.6 A `changes` call (always on a delivered base) is never asked to vary, even with a trimmed history. Test: a later-turn insert making a template slide repeat is built with the note only
+- [x] 38.7 A continuation is numbered at render from `Assignment.starts` (a delivered split included); generated numbers are never stored. Tests: unnumbered steps split 3 + 2 render `1 2 3` / `4 5`, store no number, and render `1 2` / `3 4` after a later change removes a step from part 1; assignment `starts` before and after
+- [x] 38.8 The turn's variety ask is used only once a plan is evaluated. Test: an empty first call, then a repeated deck, still asked
+- [x] 38.9 `RenderResult.warnings` deleted (it only fed a log line; every finding is in `DeckReport`). Render tests read the report as the agent does
+- [x] 38.10 Frontend: the summary info button is `size="small"` like download and close; info, download and close sit in a gapless group (card and pane headers). Test: the button's small size class; `COMPONENT-UX.md` updated
+- [x] 38.11 Package `make code-quality` + `make test`; frontend `tsc`, `prettier`, `eslint`, `vitest` on the touched files; `verification.md`; `openspec validate`
+- Not covered: a live re-run with a real model; the gapless header has no automated check (CSS only)
