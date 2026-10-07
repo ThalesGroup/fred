@@ -167,22 +167,24 @@ export function PptPreviewPane({ onClose }: CapabilitySidePanelProps) {
           <Icon category="outlined" type="slideshow" />
           <span className={styles.title}>{current?.title || untitled}</span>
         </div>
-        <DeckSummaryButton summary={current?.summary} />
-        {current?.pptx_download_url && (
-          <PptxDownloadButton href={current.pptx_download_url} fileName={current.file_name} />
-        )}
-        <IconButton
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: "close" }}
-          aria-label="Close panel"
-          // Blur first: closing flips aria-hidden on the drawer, which the browser
-          // blocks while a descendant still holds focus (InlineDrawer does the same).
-          onClick={(e) => {
-            e.currentTarget.blur();
-            onClose();
-          }}
-        />
+        <div className={styles.tools}>
+          <DeckSummaryButton summary={current?.summary} />
+          {current?.pptx_download_url && (
+            <PptxDownloadButton href={current.pptx_download_url} fileName={current.file_name} />
+          )}
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "close" }}
+            aria-label="Close panel"
+            // Blur first: closing flips aria-hidden on the drawer, which the browser
+            // blocks while a descendant still holds focus (InlineDrawer does the same).
+            onClick={(e) => {
+              e.currentTarget.blur();
+              onClose();
+            }}
+          />
+        </div>
       </div>
 
       <div className={styles.body} ref={contentRef}>

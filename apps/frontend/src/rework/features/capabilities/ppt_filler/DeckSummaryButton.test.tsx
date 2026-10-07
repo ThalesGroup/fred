@@ -104,6 +104,8 @@ describe("DeckSummaryButton", () => {
     const button = container.querySelector("button")!;
     expect(button.getAttribute("aria-label")).toBe("What was built");
     expect(button.getAttribute("aria-haspopup")).toBe("dialog");
+    // The size of the download and close buttons it sits beside.
+    expect(button.className).toMatch(/btn-small/);
 
     const dialog = open(container);
     expect(dialog.textContent).toContain("What was built");

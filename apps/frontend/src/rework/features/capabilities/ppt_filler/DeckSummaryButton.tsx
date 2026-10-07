@@ -66,7 +66,7 @@ export default function DeckSummaryButton({ summary }: { summary?: BuiltSlide[] 
       <Tooltip text={label}>
         <IconButton
           variant="icon"
-          size="medium"
+          size="small"
           icon={{ category: "outlined", type: "info" }}
           onClick={() => setOpen(true)}
           aria-label={label}

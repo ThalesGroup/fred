@@ -31,6 +31,14 @@
   padding: var(--spacing-2xs) var(--spacing-s);
 }
 
+/* Info, download and close sit side by side, as one toolbar. */
+.tools {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+}
+
 .titleGroup {
   display: flex;
   flex: 1;

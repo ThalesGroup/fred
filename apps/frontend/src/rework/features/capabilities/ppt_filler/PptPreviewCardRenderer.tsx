@@ -93,10 +93,12 @@ export function PptPreviewCardRenderer({ part }: UiPartRendererProps) {
         <span className={styles.title} title={title}>
           {title}
         </span>
-        <DeckSummaryButton summary={preview.summary} />
-        {preview.pptx_download_url && (
-          <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
-        )}
+        <div className={styles.tools}>
+          <DeckSummaryButton summary={preview.summary} />
+          {preview.pptx_download_url && (
+            <PptxDownloadButton href={preview.pptx_download_url} fileName={preview.file_name} />
+          )}
+        </div>
       </div>
       <div className={styles.actions}>
         <Button
