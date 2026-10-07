@@ -89,3 +89,16 @@ reviewed scope. Live browser validation, PostgreSQL concurrency and load/p99
 campaigns were not run. PostgreSQL FOR UPDATE compilation and capture/insert
 transaction identity were checked; SQLite does not establish live PostgreSQL
 lock behavior. Already admitted turns remain outside scope.
+
+
+Playwright follow-up (2026-10-07): 7 browser scenarios passed against code HEAD
+`c66d907cdefa040d4610999d880686089f4a8a02`, using the full PR frontend, local
+OIDC login and synthetic API fixtures. Verified the live draft, same-client
+simulated deletion/invalidation, preserved history/draft, reload, computed name
+strikethrough with an unchanged title, hover/keyboard status, dark grouped list
+and restored live composer/send. No uncaught page errors, unexpected requests,
+deleted-agent preparation requests or execution requests occurred. Four reviewed
+captures are in `docs/swift/ux/screenshots/deleted-agent-read-only/` and embedded
+in the PR. This closes the browser-rendering gap for these frontend scenarios;
+production-backend deletion, database migration/concurrency and LLM execution
+were not exercised by this browser campaign.
