@@ -1,7 +1,9 @@
 # Native web research
 
 Installing this package registers `web_research` through `fred.capabilities`.
-The runtime executes search and extraction internally using the typed SDK port.
+This package holds only the two tools and their citations; like every other
+capability it calls the typed SDK port (`ctx.services.web_research`). The engine
+and search providers are runtime services in `fred_runtime/app/web_research_*.py`.
 Deployment configuration and user identity stay outside model arguments.
 
 Enable `web_research.enabled` and start Fred normally: no extra process, MCP

@@ -32,7 +32,7 @@ async def service(monkeypatch):
     async def resolve(host, port):
         return "8.8.8.8"
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", resolve)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", resolve)
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
         await connection.run_sync(WebResearchActivityBase.metadata.create_all)
@@ -161,33 +161,6 @@ async def test_busy_call_is_recorded_without_dispatch(service):
         await backend.bind(binding()).execute(WebSearchRequest(query="query"))
     rows = await backend.store.list(user_id="user", limit=10)
     assert rows[0].outcome == "failed" and rows[0].error_code == "busy"
-
-
-@pytest.mark.asyncio
-async def test_native_tool_calls_internal_engine(service):
-    from fred_capability_web_research.capability import WebResearchCapability
-    from fred_sdk.contracts.capability import (
-        CapabilityContext,
-        CapabilityIdentity,
-        EmptyModel,
-    )
-    from fred_sdk.contracts.runtime import RuntimeServices
-
-    backend, _ = service
-    tools = WebResearchCapability().tools(
-        CapabilityContext(
-            identity=CapabilityIdentity(user_id="user"),
-            config=EmptyModel(),
-            turn_options=EmptyModel(),
-            services=RuntimeServices(web_research=backend.bind(binding())),
-        )
-    )
-    result = await next(tool for tool in tools if tool.name == "web_search").ainvoke(
-        {"query": "PRIVATE-QUERY"}
-    )
-    assert "PAGE-CONTENT" in str(result)
-    rows = await backend.store.list(user_id="user", limit=10)
-    assert len(rows) == 1 and rows[0].outcome == "succeeded"
 
 
 @pytest.mark.asyncio

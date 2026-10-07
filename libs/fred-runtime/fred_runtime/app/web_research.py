@@ -22,11 +22,11 @@ from fred_sdk.contracts.web_research import (
 from prometheus_client import Counter, Histogram
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from fred_runtime.runtime_context import get_runtime_context_or_none
 from fred_runtime.app.web_research_activity import (
     WebResearchActivityStore,
     activity_url,
 )
+from fred_runtime.runtime_context import get_runtime_context_or_none
 
 logger = logging.getLogger(__name__)
 REQUESTS = Counter(
@@ -61,7 +61,7 @@ class WebResearchService:
             raise RuntimeError(
                 "Web research activity requires SQL statement logging to be disabled."
             )
-        from fred_capability_web_research.research import create_engine
+        from fred_runtime.app.web_research_engine import create_engine
 
         self.config = config
         self.service_name = service_name

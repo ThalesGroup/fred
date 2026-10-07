@@ -29,7 +29,7 @@ from fred_sdk.contracts.web_research import (
 )
 from httpcore._backends.auto import AutoBackend
 
-from fred_capability_web_research.providers import SearchProvider, build_provider
+from fred_runtime.app.web_research_providers import SearchProvider, build_provider
 
 logger = logging.getLogger(__name__)
 

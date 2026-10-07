@@ -4,7 +4,7 @@ import asyncio
 
 import httpx
 import pytest
-from fred_capability_web_research.research import (
+from fred_runtime.app.web_research_engine import (
     PublicNetworkBackend,
     is_public,
 )
@@ -57,9 +57,9 @@ async def test_tcp_connect_uses_only_vetted_address_and_preserves_hostname_above
         assert host == "8.8.8.8"
         return object()
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", resolve)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", resolve)
     monkeypatch.setattr(
-        "fred_capability_web_research.research.AutoBackend.connect_tcp", connect
+        "fred_runtime.app.web_research_engine.AutoBackend.connect_tcp", connect
     )
     await PublicNetworkBackend().connect_tcp("example.com", 443)
     assert calls == [("example.com", 443)]
@@ -67,7 +67,7 @@ async def test_tcp_connect_uses_only_vetted_address_and_preserves_hostname_above
 
 @pytest.mark.asyncio
 async def test_mixed_dns_record_is_rejected_before_connection(monkeypatch):
-    from fred_capability_web_research.research import resolve_public
+    from fred_runtime.app.web_research_engine import resolve_public
 
     async def addresses(*args, **kwargs):
         return [(2, 1, 6, "", ("8.8.8.8", 443)), (2, 1, 6, "", ("10.0.0.1", 443))]
@@ -79,13 +79,13 @@ async def test_mixed_dns_record_is_rejected_before_connection(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_safesearch_floor_in_internal_engine(monkeypatch):
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import WebSearchRequest
 
     async def resolve(host, port):
         return "8.8.8.8"
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", resolve)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", resolve)
     provider = Provider()
     async with httpx.AsyncClient() as client:
         engine = ResearchEngine(
@@ -100,7 +100,7 @@ async def test_safesearch_floor_in_internal_engine(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_redirects_are_checked_and_binary_responses_rejected(monkeypatch):
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     calls = []
@@ -122,7 +122,7 @@ async def test_redirects_are_checked_and_binary_responses_rejected(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_text_fetch_is_bounded_and_focus_selects_passages():
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     def respond(request):
@@ -146,8 +146,8 @@ async def test_text_fetch_is_bounded_and_focus_selects_passages():
 async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
     from urllib.parse import parse_qs
 
-    from fred_capability_web_research.providers import DuckDuckGoProvider
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
+    from fred_runtime.app.web_research_providers import DuckDuckGoProvider
     from fred_sdk.contracts.web_research import WebSearchRequest
 
     def respond(request):
@@ -173,7 +173,7 @@ async def test_provider_uses_guarded_client_and_actual_safesearch_parameter():
 
 @pytest.mark.asyncio
 async def test_cookies_not_forwarded_across_users_or_redirects():
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     calls = []
@@ -206,7 +206,7 @@ async def test_cookies_not_forwarded_across_users_or_redirects():
 
 @pytest.mark.asyncio
 async def test_binary_and_encoded_responses_fail_closed():
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     for headers in [
@@ -229,7 +229,7 @@ async def test_binary_and_encoded_responses_fail_closed():
 
 @pytest.mark.asyncio
 async def test_valid_unicode_arguments_need_no_wire_serialization():
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import FetchRequest
 
     async with httpx.AsyncClient(
@@ -251,7 +251,7 @@ async def test_valid_unicode_arguments_need_no_wire_serialization():
 
 
 def test_deployment_ceilings_bound_every_operation():
-    from fred_capability_web_research.research import ResearchEngine
+    from fred_runtime.app.web_research_engine import ResearchEngine
     from fred_sdk.contracts.web_research import (
         FetchRequest,
         WebSearchRequest,

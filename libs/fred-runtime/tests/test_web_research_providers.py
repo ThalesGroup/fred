@@ -6,13 +6,13 @@ import json
 
 import httpx
 import pytest
-from fred_capability_web_research.providers import (
+from fred_runtime.app.web_research_engine import ResearchEngine, create_engine
+from fred_runtime.app.web_research_providers import (
     BraveProvider,
     DuckDuckGoProvider,
     FixtureProvider,
     build_provider,
 )
-from fred_capability_web_research.research import ResearchEngine, create_engine
 from fred_sdk.contracts.web_research import (
     WebResearchDeploymentConfig,
     WebResearchError,
@@ -154,7 +154,7 @@ async def test_fixture_search_needs_no_network(monkeypatch):
     async def no_dns(host, port):
         raise AssertionError("fixture results must not trigger DNS")
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", no_dns)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", no_dns)
     config = WebResearchDeploymentConfig(enabled=True, provider="fixture")
     engine = ResearchEngine(config, FixtureProvider.load(None), httpx.AsyncClient())
     result = await engine.execute(WebSearchRequest(query="anything", max_results=2))

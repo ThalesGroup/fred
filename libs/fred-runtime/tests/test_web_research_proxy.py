@@ -7,7 +7,7 @@ import subprocess
 
 import httpx
 import pytest
-from fred_capability_web_research.research import ProxyTransport, create_engine
+from fred_runtime.app.web_research_engine import ProxyTransport, create_engine
 from fred_sdk.contracts.web_research import (
     FetchRequest,
     WebResearchDeploymentConfig,
@@ -27,7 +27,7 @@ async def test_proxy_preflight_refuses_private_target_before_transport(monkeypat
         called = True
         raise AssertionError("must not dispatch")
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", reject)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", reject)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", send)
     async with ProxyTransport(proxy="http://127.0.0.1:3128") as transport:
         with pytest.raises(WebResearchError, match="unsafe_destination"):
@@ -85,7 +85,7 @@ async def test_actual_https_proxy_trust_routing_and_credentials(tmp_path, monkey
         assert host == "example.com"
         return "8.8.8.8"
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", public)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", public)
     monkeypatch.setenv("TEST_PROXY_AUTH", "fred:synthetic-password")
     server = await asyncio.start_server(proxy, "127.0.0.1", 0, ssl=tls)
     port = server.sockets[0].getsockname()[1]
@@ -130,7 +130,7 @@ async def test_unavailable_proxy_never_connects_direct(monkeypatch):
         destinations.append((host, port))
         raise httpx.ConnectError("proxy down")
 
-    monkeypatch.setattr("fred_capability_web_research.research.resolve_public", public)
+    monkeypatch.setattr("fred_runtime.app.web_research_engine.resolve_public", public)
     monkeypatch.setattr(AutoBackend, "connect_tcp", failed)
     engine = create_engine(
         WebResearchDeploymentConfig(enabled=True, proxy_url="http://proxy.dmz:3128")
