@@ -56,7 +56,7 @@ def _fake_readiness(
 
     seen: list[str | None] = []
 
-    async def _fake(*, base_url: str, instance, authorization, timeout=5.0):
+    async def _fake(*, base_url: str, instance, authorization, **_: Any):
         seen.append(authorization)
         return verdict
 
@@ -149,7 +149,9 @@ async def test_fetch_sends_stored_slices_and_folds_results(
     record = _record_with_selection()
 
     verdict = await service._fetch_capability_readiness(
-        base_url="http://runtime-a/pod/v1", instance=record, authorization=None
+        base_url="http://runtime-a/pod/v1",
+        instance=record,
+        authorization=None,
     )
 
     assert verdict == ReadinessVerdict(ready=False, capability_ids=("demo_echo",))
@@ -164,11 +166,27 @@ async def test_fetch_sends_stored_slices_and_folds_results(
 
 
 @pytest.mark.asyncio
-async def test_fetch_from_an_older_pod_gives_no_verdict(
+async def test_fetch_from_an_older_pod_reads_as_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def _fake_post(self, url, *args, **kwargs):  # noqa: ANN001
         return httpx.Response(404, request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", _fake_post)
+
+    verdict = await service._fetch_capability_readiness(
+        base_url="http://runtime-a/pod/v1",
+        instance=_record_with_selection(),
+        authorization=None,
+    )
+
+    assert verdict == _READY
+
+
+@pytest.mark.asyncio
+async def test_fetch_error_gives_no_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _fake_post(self, url, *args, **kwargs):  # noqa: ANN001
+        return httpx.Response(503, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx.AsyncClient, "post", _fake_post)
 
@@ -362,7 +380,7 @@ async def test_listing_rechecks_at_most_ten_instances_concurrently(
     app, _ = _setup(monkeypatch, records=records)
     calls: list[str] = []
 
-    async def _fake(*, base_url: str, instance, authorization, timeout):
+    async def _fake(*, base_url: str, instance, authorization, timeout, **_: Any):
         calls.append(instance.agent_instance_id)
         await asyncio.sleep(0.3)
         return None
@@ -381,3 +399,139 @@ async def test_listing_rechecks_at_most_ten_instances_concurrently(
     assert len(calls) == 10
     # Ten 0.3 s checks in parallel, not 3 s in sequence.
     assert elapsed < 1.5
+
+
+# --- review fixes: conditional writes, save settlement, listing ---------------
+
+
+class _CountingStore(_FakeAgentInstanceStore):
+    def __init__(self, records) -> None:
+        super().__init__(records)
+        self.writes: list[str | None] = []
+
+    async def set_suspension(self, *args: Any, **kwargs: Any):
+        self.writes.append(kwargs.get("reason"))
+        return await super().set_suspension(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_ready_verdict_never_clears_a_reason_written_meanwhile() -> None:
+    import copy
+
+    stored = _record_with_selection()
+    stored.suspension_reason = SuspensionReason.CAPABILITY_ACCESS_REVOKED.value
+    store = _FakeAgentInstanceStore([stored])
+    # Read before a revocation landed, during the slow pod call.
+    seen = copy.copy(stored)
+    seen.suspension_reason = SuspensionReason.CAPABILITY_PENDING.value
+
+    reason = await reconcile_instance_readiness(
+        instance=seen, store=store, verdict=_READY
+    )
+
+    assert reason is None
+    assert stored.suspension_reason == "capability_access_revoked"
+
+
+@pytest.mark.asyncio
+async def test_agent_instance_store_suspension_write_is_compare_and_set(
+    tmp_path,
+) -> None:
+    from control_plane_backend.agent_instances.store import AgentInstanceStore
+    from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'cas.db'}")
+    async with engine.begin() as connection:
+        await connection.run_sync(AgentInstanceRow.metadata.create_all)
+    store = AgentInstanceStore(engine=engine)
+    record = await store.create(_record_with_selection())
+    team_id = record.team_id
+    instance_id = record.agent_instance_id
+    before = (await store.get(instance_id)).updated_at  # type: ignore[union-attr]
+
+    await store.set_suspension(
+        instance_id, team_id, reason="capability_pending", expected_reason=None
+    )
+    # A stale "pending" read must not clear the revocation written since.
+    await store.set_suspension(instance_id, team_id, reason="capability_access_revoked")
+    after = await store.set_suspension(
+        instance_id, team_id, reason=None, expected_reason="capability_pending"
+    )
+
+    assert after is not None
+    assert after.suspension_reason == "capability_access_revoked"
+    assert after.updated_at == before
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_save_with_no_verdict_keeps_the_agent_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, store = _setup(monkeypatch, records=[_record_with_selection()])
+    _fake_pod_validate(monkeypatch)
+    _fake_readiness(monkeypatch, None)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"capability_ids": ["demo_echo"]},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["suspension_reason"] == "capability_pending"
+    assert store._records[0].suspension_reason == "capability_pending"
+    assert store._records[0].suspension_detail is None
+
+
+@pytest.mark.asyncio
+async def test_save_moves_an_earlier_reason_to_pending_in_one_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _record_with_selection()
+    record.suspension_reason = SuspensionReason.CAPABILITY_CONFIG_INVALID.value
+    app, _ = _setup(monkeypatch, records=[record])
+    store = _CountingStore([record])
+    from test_main import _patch_store
+
+    _patch_store(monkeypatch, store)
+    _fake_pod_validate(monkeypatch)
+    _fake_readiness(monkeypatch, _PENDING)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"capability_ids": ["demo_echo"]},
+        )
+
+    assert resp.status_code == 200
+    assert store._records[0].suspension_reason == "capability_pending"
+    # No clear-then-suspend: the agent never reads as available in between.
+    assert store.writes == ["capability_pending"]
+
+
+@pytest.mark.asyncio
+async def test_save_answered_ready_clears_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = _record_with_selection()
+    record.suspension_reason = SuspensionReason.CAPABILITY_PENDING.value
+    app, store = _setup(monkeypatch, records=[record])
+    _fake_pod_validate(monkeypatch)
+    _fake_readiness(monkeypatch, _READY)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.patch(
+            "/control-plane/v1/teams/personal/agent-instances/instance-1",
+            json={"capability_ids": ["demo_echo"]},
+        )
+
+    assert resp.status_code == 200
+    assert store._records[0].suspension_reason is None

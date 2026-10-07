@@ -60,7 +60,7 @@ from test_main import (
 )
 
 # Offline: saves and sweeps must not call a pod for capability readiness.
-pytestmark = pytest.mark.usefixtures("no_pod_readiness")
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
 
 
 @pytest.fixture(autouse=True)

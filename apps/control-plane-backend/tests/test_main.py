@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from control_plane_backend.agent_instances.store import (
+    ANY_REASON,
     AgentInstanceRecord,
     AgentInstanceStore,
 )
@@ -98,7 +99,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # Offline: saves and sweeps must not call a pod for capability readiness.
-pytestmark = pytest.mark.usefixtures("no_pod_readiness")
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
 
 
 @pytest.fixture(autouse=True)
@@ -270,6 +271,7 @@ class _FakeAgentInstanceStore:
         *,
         reason: str | None,
         detail: str | None = None,
+        expected_reason: Any = ANY_REASON,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -281,8 +283,9 @@ class _FakeAgentInstanceStore:
         )
         if record is None:
             return None
-        record.suspension_reason = reason
-        record.suspension_detail = detail
+        if expected_reason is ANY_REASON or record.suspension_reason == expected_reason:
+            record.suspension_reason = reason
+            record.suspension_detail = detail
         return record
 
     async def delete(

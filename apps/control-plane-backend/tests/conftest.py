@@ -100,15 +100,16 @@ def isolated_database_path() -> pathlib.Path:
 
 
 @pytest.fixture
-def no_pod_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The pod readiness call answers "no verdict", as an unreachable pod would:
-    saves and sweeps then leave the suspension state as it is, offline."""
+def pods_report_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The pod readiness call answers "every capability ready", offline: saves
+    then lift earlier suspensions and never call a pod for readiness."""
+    from control_plane_backend.agent_instances.suspension import ReadinessVerdict
     from control_plane_backend.product import service
 
-    async def _no_verdict(**_: object) -> None:
-        return None
+    async def _ready(**_: object) -> ReadinessVerdict:
+        return ReadinessVerdict(ready=True)
 
-    monkeypatch.setattr(service, "_fetch_capability_readiness", _no_verdict)
+    monkeypatch.setattr(service, "_fetch_capability_readiness", _ready)
 
 
 @pytest.fixture(scope="session")

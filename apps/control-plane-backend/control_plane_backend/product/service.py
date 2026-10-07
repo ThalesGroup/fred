@@ -82,10 +82,10 @@ from control_plane_backend.agent_instances.suspension import (
     SliceInvalid,
     SuspensionReason,
     aggregate_readiness,
-    clear_suspension,
     reconcile_instance_config_health,
     reconcile_instance_readiness,
     reconcile_instance_suspension,
+    settle_readiness_after_save,
 )
 from control_plane_backend.capabilities.authz import (
     can_team_use_capability,
@@ -2453,8 +2453,8 @@ async def _fetch_capability_readiness(
 ) -> ReadinessVerdict | None:
     """
     Ask the instance's pod whether its saved capability slices are ready.
-    None means no verdict (pod unreachable, or an older pod without the
-    route): the caller leaves the suspension state as it is.
+    An older pod without the route (404) has no capability to wait for, so
+    it reads as ready. None means no verdict (unreachable, timeout, error).
     """
 
     items = [
@@ -2478,6 +2478,8 @@ async def _fetch_capability_readiness(
         async with asyncio.timeout(timeout):
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(url, json=body, headers=headers)
+        if response.status_code == 404:
+            return ReadinessVerdict(ready=True)
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError, TimeoutError) as exc:
@@ -2494,16 +2496,13 @@ async def _fetch_capability_readiness(
     return aggregate_readiness([r for r in results if isinstance(r, dict)])
 
 
-async def apply_capability_readiness(
+async def _readiness_verdict(
     deps: ProductServiceDependencies,
     record: AgentInstanceRecord,
     *,
     authorization: str | None,
-    timeout: float = 5.0,
-) -> AgentInstanceRecord:
-    """Set or clear `capability_pending` on one instance from its pod's
-    readiness verdict and return the current record."""
-
+    timeout: float,
+) -> ReadinessVerdict | None:
     source = next(
         (
             s
@@ -2513,12 +2512,27 @@ async def apply_capability_readiness(
         None,
     )
     if source is None:
-        return record
-    verdict = await _fetch_capability_readiness(
+        return None
+    return await _fetch_capability_readiness(
         base_url=source.base_url,
         instance=record,
         authorization=authorization,
         timeout=timeout,
+    )
+
+
+async def apply_capability_readiness(
+    deps: ProductServiceDependencies,
+    record: AgentInstanceRecord,
+    *,
+    authorization: str | None,
+    timeout: float = 5.0,
+) -> AgentInstanceRecord:
+    """Set or clear `capability_pending` on one instance from its pod's
+    readiness verdict and return the current record; no verdict keeps it."""
+
+    verdict = await _readiness_verdict(
+        deps, record, authorization=authorization, timeout=timeout
     )
     if verdict is None:
         return record
@@ -2527,6 +2541,26 @@ async def apply_capability_readiness(
         instance=record, store=store, verdict=verdict, kpi_writer=deps.get_kpi_writer()
     )
     return await store.get(record.agent_instance_id) or record
+
+
+async def settle_capability_save(
+    deps: ProductServiceDependencies,
+    record: AgentInstanceRecord,
+    *,
+    authorization: str | None,
+) -> AgentInstanceRecord:
+    """After a save or copy that validated its capability slices, write the
+    one suspension state readiness leads to (see
+    `settle_readiness_after_save`) and return the current record."""
+
+    verdict = await _readiness_verdict(
+        deps, record, authorization=authorization, timeout=5.0
+    )
+    store = deps.get_agent_instance_store()
+    updated = await settle_readiness_after_save(
+        instance=record, store=store, verdict=verdict, kpi_writer=deps.get_kpi_writer()
+    )
+    return updated or record
 
 
 async def recheck_agent_instance_readiness(
@@ -3127,9 +3161,7 @@ async def enroll_agent_instance(
         )
     except AgentNameAlreadyExistsError as exc:
         raise agent_name_conflict(team_id, request.display_name) from exc
-    created = await apply_capability_readiness(
-        deps, created, authorization=authorization
-    )
+    created = await settle_capability_save(deps, created, authorization=authorization)
     emit_agent_created_kpi(created, user=user, deps=deps)
     return _record_to_summary(created)
 
@@ -3375,30 +3407,13 @@ async def update_agent_instance(
     except AgentNameAlreadyExistsError as exc:
         raise agent_name_conflict(team_id, exc.display_name) from exc
     # A save that re-validated every ACTIVE capability slice through the pod
-    # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
-    # Reaching here means `_apply_capability_selection` accepted the selection
-    # (unknown/unavailable ids already 422'd; every active slice round-tripped),
-    # so the broken state the agent was suspended for is resolved. Untick +
-    # re-save therefore clears both availability and config-invalid suspensions.
+    # resolves any earlier suspension (RFC §3.9); readiness then decides, in
+    # one write, whether the agent is available or `capability_pending`.
     if (
         updated is not None
-        and updated.suspension_reason is not None
         and {"capability_ids", "capability_config_values"} & tuning_fields_set
     ):
-        cleared = await clear_suspension(
-            store, updated, kpi_writer=deps.get_kpi_writer()
-        )
-        updated = cleared if cleared is not None else updated
-    # The clear above must not make a still-preparing capability available.
-    if (
-        updated is not None
-        and {
-            "capability_ids",
-            "capability_config_values",
-        }
-        & tuning_fields_set
-    ):
-        updated = await apply_capability_readiness(
+        updated = await settle_capability_save(
             deps, updated, authorization=authorization
         )
     if updated is not None:

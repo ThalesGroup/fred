@@ -4902,16 +4902,23 @@ with `capability_pending` to carry the failure message. The existing suspension
 guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
 pickers, recents and search).
 
-Control-plane asks the pod after an enrol, after a save touching capabilities (so
-the save's own suspension clear never makes a preparing agent available), in
-`run_capability_reconciliation_sweep` after availability and config health, and on
+Control-plane asks the pod after an enrol and after a save touching
+capabilities, in `run_capability_reconciliation_sweep` after availability and config
+health, and on
 `POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
 (`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
 `GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances,
 concurrently, with the caller's token and a 2 s bound (the sweep has no production
-host). Every other
-reason outranks `capability_pending`; the readiness check alone sets and clears it.
-No answer (pod unreachable, or an older pod without the route) changes nothing.
+host). Readiness verdicts alone set and clear `capability_pending`; every other
+reason outranks it. An older pod without the route (404) reads as ready.
+
+After an enrol or a capability save, the instance gets one suspension write: none
+when the pod answers ready (the save resolves any earlier reason), else
+`capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
+`capability_pending` without detail, lifted by the next listing, re-check or sweep
+that gets an answer. Elsewhere, no answer changes nothing. Readiness writes are
+compare-and-set on the reason read before the pod call, so they never overwrite a
+suspension written meanwhile.
 
 **Save-time routing.** The pod `validate-config` call carries query parameters
 `template_agent_id`, `chat_default_profile_id` and `agent_profile_overrides` (JSON,
