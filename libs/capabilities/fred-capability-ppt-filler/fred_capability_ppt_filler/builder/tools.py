@@ -992,8 +992,9 @@ def build_builder_tools(
         session_id = identity.session_id
         asking = first and variety != "off"
         repeats = [r for r in assignment.repeats if r.revisable] if asking else []
-        # Read only when an ask would follow: the usual call adds no work.
-        if repeats and deck_delivered(history()):
+        # `changes` change a deck the conversation has, even when the history
+        # sent to the model no longer shows it; read only when an ask would follow.
+        if repeats and (base is not None or deck_delivered(history())):
             repeats = []
         if assignment.problems:
             refused(plan)

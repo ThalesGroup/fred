@@ -467,17 +467,17 @@ async def test_a_refused_plan_is_never_the_next_turns_base(
 
 
 @pytest.mark.asyncio
-async def test_a_first_call_variety_ask_then_the_same_changes(monkeypatch):
+async def test_a_change_to_a_delivered_deck_is_never_asked_to_vary(monkeypatch):
+    """The later turn's history no longer shows the delivered deck (trimmed):
+    its stored base still says the conversation has one, so only the note."""
     workspace = FakeWorkspace()
     first = _Turn(monkeypatch, workspace)
     await first.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
     second = _Turn(monkeypatch, workspace)
     add = [{"op": "insert", "after": 2, "slides": _REPEATED[1:]}]
     text, result = await second.build(changes=add)
-    assert result.is_error and '"variety"' in text
-    assert "send the same call again: it will be built as is" in text
-    text, result = await second.build(changes=add)
     assert not result.is_error, text
+    assert "all use the template slide 'Process'" in text
     assert len(second.rendered[-1].slides) == 2 + len(_REPEATED) - 1
 
 
