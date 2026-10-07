@@ -380,3 +380,51 @@ async def test_a_vision_analysis_is_refreshed_only_where_its_model_port_is(
     assert jobs == [port]
     record = await store.get(INSTANCE)
     assert record is not None and record.analysis_version == ANALYSIS_VERSION
+
+
+class _CountingStore(SqlAnalysisStore):
+    def __init__(self, maker) -> None:
+        super().__init__(maker)
+        self.reads = 0
+
+    async def get(self, instance_id, *, with_inventory=True):
+        self.reads += 1
+        return await super().get(instance_id, with_inventory=with_inventory)
+
+
+@pytest.mark.asyncio
+async def test_an_outdated_inventory_whose_refresh_never_lands_is_served_from_memory(
+    analysis_db, monkeypatch
+):
+    """A failed refresh (attempts spent) never lands: turns must not each pay a
+    row read and a JSON parse, yet the row is re-read now and then."""
+    stored, jobs = await _outdated(analysis_db, monkeypatch)
+    await age_row(analysis_db, INSTANCE, attempts=MAX_ATTEMPTS)
+    store = _CountingStore(analysis_db)
+    key = stored.labelling_key()
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    assert analysis_job.cached_inventory(INSTANCE, SHA, key) is not None
+    assert store.reads == 1 and jobs == []
+
+    monkeypatch.setattr(analysis_job, "OUTDATED_RECHECK_SECONDS", 0.0)
+    analysis_job.clear_caches()
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    assert store.reads == 3  # due for a re-read on every call now
+
+
+@pytest.mark.asyncio
+async def test_a_refresh_that_lands_here_replaces_the_cached_outdated_inventory(
+    analysis_db, monkeypatch
+):
+    stored, jobs = await _outdated(analysis_db, monkeypatch)
+    store = get_analysis_store()
+    key = stored.labelling_key()
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    await drain()
+    assert len(jobs) == 1
+    assert analysis_job.cached_inventory(INSTANCE, SHA, key) is None
+    assert await ready_inventory(store, INSTANCE, SHA, key) is not None
+    record = await store.get(INSTANCE)
+    assert record is not None and not record.outdated()

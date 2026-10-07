@@ -75,6 +75,9 @@ JOB_TIMEOUT_SECONDS = 20 * 60
 # 60 s turn default: without a PDF there are no thumbnails and no vision labels.
 PATTERNS_PDF_TIMEOUT_SECONDS = 300.0
 _SLOT_POLL_SECONDS = 1.0
+# An outdated inventory is served from memory, re-read after this long: its
+# refresh may land on another pod, or never (a failed one, no vision port).
+OUTDATED_RECHECK_SECONDS = 60.0
 
 RULES_KEY = "rules"
 _AGENT_DEFAULT = "agent-default"
@@ -494,10 +497,11 @@ def clear_store_provider() -> None:
 
 # --- Pod-local memory: never a result that only this pod knows ---------------------
 
-# A succeeded row is immutable for its key, so caching it is replica-safe.
-_inventories: ThreadSafeLRUCache[Tuple[str, str, str], TemplateInventory] = (
-    ThreadSafeLRUCache(max_size=64)
-)
+# A current succeeded row is immutable for its key, so caching it is
+# replica-safe; an outdated one carries the monotonic time to re-read it.
+_inventories: ThreadSafeLRUCache[
+    Tuple[str, str, str], Tuple[TemplateInventory, Optional[float]]
+] = ThreadSafeLRUCache(max_size=64)
 # The last save's model port per instance, so a re-run started on this pod can
 # label with vision; elsewhere a re-run labels by rules (marked heuristic).
 _ports: ThreadSafeLRUCache[str, CapabilityModelPort] = ThreadSafeLRUCache(max_size=256)
@@ -514,13 +518,28 @@ def remember_port(instance_id: str, port: Optional[CapabilityModelPort]) -> None
 def cached_inventory(
     instance_id: str, sha: str, key: str
 ) -> Optional[TemplateInventory]:
-    return _inventories.get((instance_id, sha, key))
+    entry = _inventories.get((instance_id, sha, key))
+    if entry is None or (entry[1] is not None and time.monotonic() >= entry[1]):
+        return None
+    return entry[0]
 
 
 def remember_inventory(
-    instance_id: str, sha: str, key: str, inventory: TemplateInventory
+    instance_id: str,
+    sha: str,
+    key: str,
+    inventory: TemplateInventory,
+    *,
+    outdated: bool = False,
 ) -> None:
-    _inventories.set((instance_id, sha, key), inventory)
+    recheck = time.monotonic() + OUTDATED_RECHECK_SECONDS if outdated else None
+    _inventories.set((instance_id, sha, key), (inventory, recheck))
+
+
+def _forget_inventories(instance_id: str) -> None:
+    for cache_key in _inventories.keys():
+        if cache_key[0] == instance_id:
+            _inventories.delete(cache_key)
 
 
 def clear_caches() -> None:
@@ -549,19 +568,19 @@ async def ready_inventory(
     store: AnalysisStore, instance_id: str, sha: str, key: str
 ) -> Optional[TemplateInventory]:
     """The succeeded analysis for this exact template and labelling, or None.
-    An outdated one is still served, uncached until its refresh lands."""
-    cache_key = (instance_id, sha, key)
-    cached = _inventories.get(cache_key)
+    An outdated one is still served, and re-read now and then for its refresh."""
+    cached = cached_inventory(instance_id, sha, key)
     if cached is not None:
         return cached
     record = await store.get(instance_id)
     if record is None or not record.matches(sha, key):
         return None
     inventory = record.inventory()
-    if inventory is not None and record.outdated():
+    if inventory is None:
+        return None
+    if record.outdated():
         await _refresh_quietly(store, record)
-    elif inventory is not None:
-        _inventories.set(cache_key, inventory)
+    remember_inventory(instance_id, sha, key, inventory, outdated=record.outdated())
     return inventory
 
 
@@ -657,6 +676,7 @@ async def run_analysis(
         if not work.done():
             work.cancel()
     if await store.finish(instance_id, job_id, inventory, pdf):
+        _forget_inventories(instance_id)
         logger.info(
             "Template analysis of %s done in %.0fs",
             instance_id,
