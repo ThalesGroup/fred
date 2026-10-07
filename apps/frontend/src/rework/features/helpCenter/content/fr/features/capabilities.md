@@ -136,13 +136,14 @@ devient tout seul quand la lecture est terminée, et vous pouvez fermer la
 fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
 diapositive trouvée, avec son nom et son type : renommez une diapositive,
 changez son type ou mettez-la de côté. Rien n'est obligatoire.
-Pour préparer un template que l'agent comprend bien, voir
-[Préparer son template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
+Pour préparer un modèle que l'agent comprend bien, voir
+[Préparer son modèle PowerPoint](/help/fr/guides/prepare-powerpoint-template).
 
-**Utiliser un modèle de vision** — quand un modèle capable de lire les images
-est disponible, il regarde chaque diapositive du modèle pour la nommer et
-comprendre à quoi elle sert. Vous pouvez choisir le modèle qui s'en charge, ou
-garder celui de l'agent. Sans un tel modèle, l'interrupteur est verrouillé et
+**Utiliser un modèle de vision** — quand un modèle d'IA capable de lire les
+images est disponible, il regarde chaque diapositive du modèle de présentation
+pour la nommer et comprendre à quoi elle sert. Vous pouvez choisir le modèle
+d'IA qui s'en charge, ou garder celui de l'agent. Sans un tel modèle d'IA,
+l'interrupteur est verrouillé et
 les diapositives sont nommées par des règles : cela fonctionne, mais les noms
 sont moins précis.
 

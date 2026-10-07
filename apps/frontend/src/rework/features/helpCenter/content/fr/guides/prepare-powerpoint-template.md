@@ -1,27 +1,28 @@
 ---
-title: Préparer son template PowerPoint
+title: Préparer son modèle PowerPoint
 order: 30
-description: Ce qui fait un bon template pour la génération de présentations, et comment le faire comprendre à l'agent.
+description: Ce qui fait un bon modèle pour la génération de présentations, et comment le faire comprendre à l'agent.
 icon: slideshow
 ---
 
-# Préparer son template PowerPoint
+# Préparer son modèle PowerPoint
 
-Cette page s'adresse à ceux qui conçoivent le template d'une équipe et à ceux
-qui le déposent sur un agent (capacité **Générer une présentation**, voir
+Cette page s'adresse à ceux qui conçoivent le modèle de présentation d'une
+équipe et à ceux qui le déposent sur un agent (capacité **Générer une
+présentation**, voir
 [Les capacités](/help/fr/features/capabilities)).
 
-L'agent ne dessine rien : il **copie les diapositives de votre template** et
+L'agent ne dessine rien : il **copie les diapositives de votre modèle** et
 remplace leur texte. La qualité des présentations dépend donc directement du
-template. Les règles ci-dessous suivent ce que la lecture du template fait
+modèle. Les règles ci-dessous suivent ce que la lecture du modèle fait
 réellement.
 
-## Comment le template est lu
+## Comment le modèle est lu
 
-Après l'enregistrement de l'agent, le template est lu une fois, en arrière-plan.
-Pour chaque diapositive, cette lecture repère les zones à remplir, mesure la
-place qu'offre chacune et reconnaît à quoi sert la diapositive (son **type** :
-couverture, sommaire, cartes…).
+Après l'enregistrement de l'agent, le modèle de présentation est lu une fois,
+en arrière-plan. Pour chaque diapositive, cette lecture repère les zones à
+remplir, mesure la place qu'offre chacune et reconnaît à quoi sert la
+diapositive (son **type** : couverture, sommaire, cartes…).
 
 - **Les diapositives d'exemple d'abord.** Les diapositives du fichier sont ce
   que l'agent réutilise, avec toute leur décoration. Les **masques** ne servent
@@ -99,7 +100,7 @@ quand ils sont construits à l'identique.
   pas comme un élément.
 - **Prévoyez le nombre maximal d'éléments** : l'agent retire ceux qui sont en
   trop et recentre les autres, il n'en ajoute jamais.
-- Les icônes restent celles du template ; une icône part avec son élément.
+- Les icônes restent celles du modèle ; une icône part avec son élément.
 
 ## Laisser de la place au texte
 
@@ -161,10 +162,10 @@ l'agent à choisir), changer son type, la mettre de côté ou la reprendre. La
 mention **Nommée par des règles** signale une diapositive que le modèle de
 vision n'a pas lue.
 
-## Après une modification du template
+## Après une modification du modèle
 
-Déposez le fichier modifié et enregistrez l'agent : le template est relu en
-entier, et l'agent reste indisponible pendant la lecture. Redéposer le même
+Déposez le fichier modifié et enregistrez l'agent : le modèle de présentation
+est relu en entier, et l'agent reste indisponible pendant la lecture. Redéposer le même
 fichier garde la lecture précédente. Activer ou couper le modèle de vision, ou
 en changer, relance aussi la lecture. Les corrections faites dans **Vérifier
 les slides** ne sont gardées que pour les diapositives toujours présentes ;

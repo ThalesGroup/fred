@@ -399,13 +399,13 @@
         },
         "use_vision": {
           "title": "Utiliser un modèle de vision",
-          "description": "Un modèle capable de lire les images regarde chaque slide du modèle pour la nommer et comprendre à quoi elle sert.",
-          "unavailable": "Aucun modèle capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
+          "description": "Un modèle d'IA capable de lire les images regarde chaque slide du modèle de présentation pour la nommer et comprendre à quoi elle sert.",
+          "unavailable": "Aucun modèle d'IA capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
         },
         "labelling_model": {
-          "title": "Modèle qui lit les slides",
+          "title": "Modèle d'IA qui lit les slides",
           "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
-          "agentDefault": "Le modèle de l'agent"
+          "agentDefault": "Le modèle d'IA de l'agent"
         },
         "variety_check": {
           "title": "Forcer de la variété",
@@ -430,7 +430,7 @@
         "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
         "summaryBuiltin": "Modèle intégré : {{patterns}} slides prêtes à l'emploi.",
         "review": "Vérifier les slides",
-        "templateGuide": "Comment préparer son template ?",
+        "templateGuide": "Comment préparer son modèle ?",
         "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce modèle et seront abandonnées au prochain enregistrement."
       },
       "analysis": {
@@ -440,7 +440,7 @@
         "failed": "Le modèle n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas.",
         "interrupted": "La lecture du modèle a été interrompue. L'agent reste indisponible jusqu'à une nouvelle lecture.",
         "outdated": "Ce modèle a été lu avec une version plus ancienne. Relancez la lecture pour profiter des dernières améliorations.",
-        "outdatedVision": "Ce modèle a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire avec son modèle de vision et profiter des dernières améliorations.",
+        "outdatedVision": "Ce modèle de présentation a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire avec son modèle de vision et profiter des dernières améliorations.",
         "rerun": "Relancer l'analyse"
       },
       "review": {
