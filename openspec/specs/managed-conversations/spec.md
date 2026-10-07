@@ -25,7 +25,28 @@ Deleting a managed agent SHALL preserve its existing conversation metadata and r
 
 ### Requirement: Deleted-agent conversations are read-only for execution
 
-A conversation whose managed agent has been deleted SHALL append the exact `(deleted)` suffix to its agent label in the chat header and sidebar and display a localized explanation that the agent was deleted and the conversation is read-only. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
+A conversation whose managed agent has been deleted SHALL preserve its recorded agent display name, strike through only that name in the chat header and sidebar, provide an accessible deleted/read-only description with a tooltip on hover and keyboard focus, and display a localized explanation that the agent was deleted and the conversation is read-only. Its composer SHALL remain visible and disabled with a localized read-only placeholder. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
+
+#### Scenario: Preserve a renamed agent after deletion and reload
+
+- **GIVEN** an agent renamed after its conversation was created
+- **WHEN** the agent is deleted and the user reloads the conversation list and conversation
+- **THEN** the latest name remains visible with strikethrough in the sidebar and conversation header
+- **AND** the conversation title remains readable and the composer is visibly disabled
+- **AND** hovering or focusing the entry explains that the agent was deleted and the conversation is read-only
+
+#### Scenario: Creation races agent deletion
+
+- **WHEN** conversation creation races its managed agent's deletion
+- **THEN** a committed conversation retains consistent agent metadata and the latest name after deletion
+- **OR** creation is refused without inserting an orphan row
+
+#### Scenario: Legacy conversation without a recoverable agent name
+
+- **GIVEN** a conversation whose agent was deleted before name snapshots were introduced
+- **WHEN** the conversation opens
+- **THEN** a localized generic agent label carries the same deleted and read-only indications
+- **AND** history still loads through the recorded runtime when available
 
 #### Scenario: Submit through the composer or a command
 

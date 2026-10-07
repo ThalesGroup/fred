@@ -8,13 +8,13 @@ See [proposal.md](proposal.md) for the problem and scope. `useSessionHistory.ts`
 
 **Goals:** Reuse persisted runtime routing and the existing detail route; establish one typed conversation state consumed by history and every chat execution entry point; keep message reads at the runtime and preserve ownership checks.
 
-**Non-Goals:** No soft deletion, agent tombstones, stored display-name snapshots, replacement-agent selection, guessed runtime discovery or migration. No termination of a turn already admitted before deletion, and no broader session-authority redesign from issue #2770. Title management and whole-conversation deletion retain their existing meaning; read-only applies to execution and its context.
+**Non-Goals:** No soft deletion, agent tombstones, replacement-agent selection or guessed runtime discovery. No termination of a turn already admitted before deletion, and no broader session-authority redesign from issue #2770. Title management and whole-conversation deletion retain their existing meaning; read-only applies to execution and its context.
 
 ## Decisions
 
 ### 1. Extend the existing session-detail response
 
-Introduce `SessionDetails` extending `SessionListItem` with `agent_deleted: bool` and `messages_url: str | None`. Use it only on `GET /teams/{team_id}/sessions/{session_id}`; list/create/update responses keep their lightweight shape. `agent_deleted` is true only when a non-null stored instance id cannot be resolved within the recorded team. A session without an instance is not evidence of deletion.
+Introduce `SessionDetails` extending `SessionListItem` with `agent_deleted: bool` and `messages_url: str | None`. Use it only on `GET /teams/{team_id}/sessions/{session_id}`; list/create/update responses keep their lightweight shape with an additive nullable `agent_display_name` snapshot. Details prefer the live instance name when it exists. `agent_deleted` is true only when a non-null stored instance id cannot be resolved within the recorded team. A session without an instance is not evidence of deletion.
 
 Resolve `messages_url` from the session's captured `source_runtime_id` and configured ingress prefix. When that snapshot is null, use its surviving instance as the compatibility fallback. Return a null URL if routing cannot be resolved from existing records/configuration; the frontend shows unavailable history explicitly. Do not call the runtime catalog or expose `base_url`, `source_runtime_id`, tuning or execution context. Add owner validation before returning the detail response; retain the runtime's independent owner filter.
 
@@ -28,9 +28,9 @@ Give `useSessionHistory` the current session's generated details and concrete hi
 
 ### 3. Gate every execution entry point
 
-Consume one read-only state in `ManagedChatPage`, `useManagedChat`, `ConversationThread` and the attachment drawer. Disable or omit the composer and its command/voice/file-drop/paste actions, retry and new-conversation actions, context/library/document selectors and persisted attachment removal. Add guards to the hook callbacks for send/commands, HITL single/batch/skip and Graph continuation/restart, so an indirect caller cannot bypass disabled UI. Avoid eager composer/model preparation for a confirmed deleted instance.
+Consume one read-only state in `ManagedChatPage`, `useManagedChat`, `ConversationThread` and the attachment drawer. Disable the visible composer and disable or omit its command/voice/file-drop/paste actions, retry and new-conversation actions, context/library/document selectors and persisted attachment removal. Add guards to the hook callbacks for send/commands, HITL single/batch/skip and Graph continuation/restart, so an indirect caller cannot bypass disabled UI. Avoid eager composer/model preparation for a confirmed deleted instance.
 
-Keep unanswered historical HITL prompts visible as frozen cards, including the trailing prompt currently reserved for the live interaction. Keep interrupted-execution details readable without recovery buttons. Existing source/trace reads and attachment downloads remain available. Add localized English/French notices and append the exact `(deleted)` suffix to the agent label in the chat header and sidebar. Reuse an available name and the existing generic agent label when no name survives deletion; no display-name migration is introduced. Do not redesign the layout or styles beyond the notice and state wiring.
+Keep unanswered historical HITL prompts visible as frozen cards, including the trailing prompt currently reserved for the live interaction. Keep interrupted-execution details readable without recovery buttons. Existing source/trace reads and attachment downloads remain available. Add localized English/French notices and strike through only the agent name in the chat header and sidebar, including grouped headers. Keep the conversation title and navigation readable. Provide an accessible deleted/read-only description and tooltip on hover and keyboard focus. Keep the composer visible and natively disabled with a localized read-only placeholder and disabled surface/text tokens. Preserve any draft without allowing submission.
 
 ### 4. Refresh availability using existing query tags
 
@@ -39,6 +39,12 @@ Make the session-detail query provide its session tag and the linked `ControlPla
 ### 5. Keep one lifecycle spec and existing interaction contracts
 
 The new `managed-conversations` capability covers durable history and the conversation's ability to execute. Existing agent-question and interrupted-execution specifications govern interactions when execution is available; frozen history offers no resume after deletion. Reuse the existing product-contract session section and component-UX chat section for boundary notes and links, instead of adding another RFC or status document.
+
+### 6. Capture the name in existing session metadata
+
+Add nullable `agent_display_name` to `session_metadata` and its list/detail projections. Capture the live runtime and name from a locked instance row in the same transaction as session insertion. Refuse creation with 404 when deletion wins or the instance belongs to another team. Before deleting an instance, lock it and snapshot its latest name into its team's sessions in the same database transaction as deletion. This preserves renamed agents without retaining a separate tombstone. Snapshot updates must not advance conversation activity timestamps. The sidebar prefers the live catalog name, then the snapshot; details prefer a live name, then the snapshot. Inactive-conversation previews use the same fallback. Group sidebar entries by instance identity so two agents sharing a name remain distinct.
+
+Use one migration to add the column and backfill names for agents still present. Names for instances deleted before the migration cannot be reconstructed and keep the localized generic fallback. Storing the name on the conversation fits its existing lifecycle and erasure, unlike a new agent archive or frontend-only cache.
 
 ## Risks / Trade-offs
 
@@ -50,11 +56,15 @@ The new `managed-conversations` capability covers durable history and the conver
 
 ## Migration Plan
 
-No schema, permission-model or configuration changes. Deploy the paired Control Plane/frontend release normally. The detail response is additive for old clients; new frontend code requires the new response for deleted-agent history. Roll back the paired application release normally; history/session data is preserved and the old UI's deletion defect returns. The migration note initially covers planning-only files and must be reconciled with the actual implementation before readiness.
+Apply the single Control Plane Alembic migration before deploying the paired backend/frontend release. The nullable name field is additive for older clients. It backfills only still-present agents; already deleted names remain unavailable. Application rollback can retain the column and snapshots. A schema downgrade drops only the name snapshot after rolling back the application; history and session identities remain intact. No configuration or permission-model change is required.
 
 The initial local-session creation handoff remains executable while its metadata
-POST settles, and known failed local creations retain their existing same-id
-retry. This exemption ends on a successful detail response or navigation away;
-later saved-session visits require confirmed metadata. A runtime HTTP refusal
+POST settles. Its temporary exemption ends on navigation away; known failed local
+creations retain their existing same-id retry until creation or a detail read
+confirms the saved row. A confirmed detail read also recovers a lost POST response,
+without allowing subsequent saved-session visits to bypass availability checks.
+Failed context writes remain blocking until a context write succeeds for that
+session, even if a later creation retry fails or the saved row is confirmed.
+A runtime HTTP refusal
 before admission rolls back the optimistic turn and restores the draft, then
 refetches availability without inferring deletion from the refusal itself.
