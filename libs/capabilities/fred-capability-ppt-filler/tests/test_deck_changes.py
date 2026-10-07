@@ -1031,3 +1031,25 @@ def test_a_kind_edit_keeps_what_the_same_call_sets_and_what_the_kind_holds():
     same = [SlideChange.model_validate({**_TO_TWO_COLUMNS[0], "value": "bullets"})]
     plan = apply_changes(base, same, unplaced)
     assert plan.slides[1].bullets == _PERSPECTIVES["bullets"]
+
+
+@pytest.mark.asyncio
+async def test_a_drop_option_gives_its_exact_change(monkeypatch, deck_plan_store):
+    workspace = FakeWorkspace()
+    two = {**_PERSPECTIVES, "kind": "two_columns", "columns": _COUNTRIES}
+    turn = _Turn(monkeypatch, workspace)
+    text, result = await turn.build(slides=[COVER, two])
+    (problem,) = _payload(text)["slides"]
+    # A whole deck is fixed in `slides`: the option stays in words.
+    assert "drop bullets" in problem["options"]
+    text, result = await turn.build(slides=[COVER, _PERSPECTIVES])
+    assert not result.is_error, text
+    columns = {"op": "edit", "field": "columns", "slide": 2, "value": _COUNTRIES}
+    text, result = await turn.build(changes=[columns])
+    (problem,) = _payload(text)["slides"]
+    drop = {"op": "edit", "slide": 2, "field": "bullets", "value": []}
+    assert f"drop bullets: {json.dumps(drop)}" in problem["options"]
+    # The op as given clears the field, and the deck builds.
+    text, result = await turn.build(changes=[columns, drop])
+    assert not result.is_error, text
+    assert turn.rendered[-1].slides[1].bullets == []

@@ -80,6 +80,7 @@ from fred_capability_ppt_filler.builder.assign import (
     unplaced,
 )
 from fred_capability_ppt_filler.builder.changes import (
+    CLEARABLE,
     ChangeError,
     SlideChange,
     apply_changes,
@@ -482,6 +483,17 @@ def _image_ids(plan: DeckPlan) -> set[str]:
 
 # Per slide index: (problem, the slide as sent) of the previous needs_revision.
 _Previous = Dict[int, Tuple[str, str]]
+_LIST_FIELDS = ("bullets", "columns", "items", "images")
+
+
+def _drop_op(option: str, number: int) -> str:
+    """A "drop X" option for a whole slide field, with the exact `changes` op
+    that does it: models never guessed how to clear a field."""
+    name = option.removeprefix("drop ")
+    if not option.startswith("drop ") or name not in CLEARABLE:
+        return option
+    value = "[]" if name in _LIST_FIELDS else "null"
+    return f'{option}: {{"op": "edit", "slide": {number}, "field": "{name}", "value": {value}}}'
 
 
 def _cleared_lines(
@@ -517,6 +529,8 @@ def _needs_revision(
     for problem in assignment.problems:
         sent = plan.slides[problem.index - 1].model_dump_json()
         entry = problem.as_dict()
+        if from_changes:
+            entry["options"] = [_drop_op(o, problem.index) for o in problem.options]
         before = previous.get(problem.index) or by_sent.get(sent)
         if before is not None and before[0] == problem.problem:
             entry["repeated"] = (
