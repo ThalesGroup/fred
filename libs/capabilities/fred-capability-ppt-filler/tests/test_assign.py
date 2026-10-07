@@ -556,10 +556,24 @@ def test_an_agenda_one_entry_too_long_continues_on_a_second_agenda_slide():
 
 
 def test_items_without_numbers_continue_the_count_on_the_second_slide():
+    """Numbered at render from ``starts``: the stored parts carry no number of
+    their own, so a later change to part 1 renumbers part 2."""
     plan = _plan(SlidePlan(title="Intro", bullets=["a"]), _sommaire(9, numbered=False))
-    deck, _, _ = assign(_agenda_inventory(), plan).deck(plan)
-    assert [i.number for i in deck.slides[1].items] == [None] * 5
-    assert [i.number for i in deck.slides[2].items] == ["06", "07", "08", "09"]
+    assignment = assign(_agenda_inventory(), plan)
+    deck, _, _ = assignment.deck(plan)
+    assert [i.number for i in deck.slides[2].items] == [None] * 4
+    assert assignment.starts == [0, 0, 5]
+    # Rebuilt from the stored parts: the continuation still starts after part 1.
+    shorter = deck.model_copy(
+        update={
+            "slides": [
+                deck.slides[0],
+                deck.slides[1].model_copy(update={"items": deck.slides[1].items[1:]}),
+                deck.slides[2],
+            ]
+        }
+    )
+    assert assign(_agenda_inventory(), shorter).starts == [0, 0, 4]
 
 
 def test_steps_numbered_from_six_need_no_number_zone_on_a_continuation():

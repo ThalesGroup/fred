@@ -44,6 +44,7 @@ from fred_sdk.contracts.runtime import RuntimeServices
 from port_fakes import FakeWorkspace
 from pptx import Presentation
 from test_build_tool import _REPEATED, COVER, _configured, _ctx, _no_pdf, _tools
+from test_builder_render import _texts
 
 BASE = DeckPlan.model_validate(
     {
@@ -254,9 +255,9 @@ class _Turn:
         self.rendered: List[DeckPlan] = []
         real = tools_mod.render_deck
 
-        def recording(template, inventory, plan, patterns, images, numbers=None):
+        def recording(template, inventory, plan, patterns, *rest):
             self.rendered.append(plan)
-            return real(template, inventory, plan, patterns, images, numbers)
+            return real(template, inventory, plan, patterns, *rest)
 
         monkeypatch.setattr(tools_mod, "render_deck", recording)
         monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
@@ -362,9 +363,9 @@ async def test_a_text_replace_keeps_the_replaced_slides_design(
     used: List[Any] = []
     real = tools_mod.render_deck
 
-    def recording(template, inventory, plan, patterns, images, numbers=None):
+    def recording(template, inventory, plan, patterns, *rest):
         used.append([p.id for p in patterns])
-        return real(template, inventory, plan, patterns, images, numbers)
+        return real(template, inventory, plan, patterns, *rest)
 
     monkeypatch.setattr(tools_mod, "render_deck", recording)
     replace = {
@@ -692,6 +693,32 @@ async def test_a_split_list_is_stored_as_the_delivered_deck(
     assert _dumps(edited)[:3] == _dumps(rendered)[:3]
 
 
+@pytest.mark.asyncio
+async def test_a_continuation_is_numbered_at_render_from_its_first_part(
+    monkeypatch, deck_plan_store
+):
+    """Steps sent without numbers: the stored parts carry none, so removing a
+    step from part 1 on a later turn renumbers part 2."""
+    workspace = FakeWorkspace()
+
+    def numbers(slide: int) -> List[str]:
+        deck = Presentation(io.BytesIO(workspace.writes[-1]["content"]))
+        return [t for t in _texts(deck.slides[slide - 1]) if t.isdigit()]
+
+    steps = [{"heading": f"Step {i}", "text": "x"} for i in range(5)]
+    method = {"title": "Method", "kind": "process", "items": steps}
+    text, result = await _Turn(monkeypatch, workspace).build(slides=[COVER, method])
+    assert not result.is_error, text
+    assert (numbers(2), numbers(3)) == (["1", "2", "3"], ["4", "5"])
+    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
+    assert [i.number for i in stored.slides[2].items] == [None, None]
+    text, result = await _Turn(monkeypatch, workspace).build(
+        changes=[{"op": "edit", "slide": 2, "field": "items[0]", "value": None}]
+    )
+    assert not result.is_error, text
+    assert (numbers(2), numbers(3)) == (["1", "2"], ["3", "4"])
+
+
 # --- `like`: the design of another slide -------------------------------------------------
 
 PINNED = DeckPlan(
@@ -773,9 +800,9 @@ async def _delivered_patterns(monkeypatch, workspace, **kwargs) -> tuple:
     used: List[List[str]] = []
     real = tools_mod.render_deck
 
-    def recording(template, inventory, plan, patterns, images, numbers=None):
+    def recording(template, inventory, plan, patterns, *rest):
         used.append([p.id for p in patterns])
-        return real(template, inventory, plan, patterns, images, numbers)
+        return real(template, inventory, plan, patterns, *rest)
 
     turn = _Turn(monkeypatch, workspace)
     monkeypatch.setattr(tools_mod, "render_deck", recording)

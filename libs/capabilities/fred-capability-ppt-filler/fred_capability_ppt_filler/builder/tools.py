@@ -668,6 +668,7 @@ def _prepare_and_render(
     patterns: List[Any],
     prefetched: Dict[str, object],
     numbers: Optional[List[int]] = None,
+    starts: Optional[List[int]] = None,
 ):
     """Picture validation/transcoding and the render, together in one worker
     thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU.
@@ -680,7 +681,9 @@ def _prepare_and_render(
             images[document_id] = prepare_picture(raw)  # type: ignore[arg-type]
         except NotAnImageError:
             continue
-    return render_deck(template_bytes, inventory, plan, patterns, images, numbers)
+    return render_deck(
+        template_bytes, inventory, plan, patterns, images, numbers, starts
+    )
 
 
 # --- the base of a `changes` call ----------------------------------------------------------
@@ -1055,6 +1058,7 @@ def build_builder_tools(
                 patterns,
                 prefetched,
                 numbers,
+                assignment.starts,
             )
         except RenderError as exc:
             return _error(f"No deck was built: {exc}")

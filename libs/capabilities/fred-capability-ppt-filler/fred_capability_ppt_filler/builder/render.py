@@ -1057,9 +1057,10 @@ def _unused_item_fields(
 
 
 def _assign_group(
-    group: RepeatGroup, plan: SlidePlan, size: Tuple[int, int]
+    group: RepeatGroup, plan: SlidePlan, size: Tuple[int, int], start: int = 0
 ) -> Tuple[Dict[str, List[_Line]], Dict[str, Optional[str]], int]:
-    """Lines and image ids per item zone key; returns ``(text, images, used items)``."""
+    """Lines and image ids per item zone key; returns ``(text, images, used items)``.
+    ``start`` is the entries before a list's continuation: its count goes on."""
     text: Dict[str, List[_Line]] = {}
     images: Dict[str, Optional[str]] = {}
     used = min(len(plan.items), group.count)
@@ -1073,7 +1074,7 @@ def _assign_group(
             if zone is lead:
                 text[zone.key] = _lead_lines(item, at)
             elif zone.role == "number":
-                value = item.number or _auto_number(zone.sample, index)
+                value = item.number or _auto_number(zone.sample, start + index)
                 text[zone.key] = (
                     _lines_from_bullets([value], at + "number") if value else []
                 )
@@ -1153,6 +1154,7 @@ class _Renderer:
         plan: DeckPlan,
         patterns: Sequence[Optional[Pattern]],
         numbers: Optional[Sequence[int]] = None,
+        starts: Optional[Sequence[int]] = None,
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
@@ -1198,7 +1200,8 @@ class _Renderer:
             )
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
             if pattern.reusable and pattern.fillable and has_content(slide_plan):
-                self._fill(slide, pattern, slide_plan, position)
+                start = starts[position - 1] if starts else 0
+                self._fill(slide, pattern, slide_plan, position, start)
                 if pattern.source == "slide":
                     self._sweep(slide, pattern, position)
             elif has_content(slide_plan) and not _only_names_the_slide(
@@ -1339,7 +1342,9 @@ class _Renderer:
                 f"replaced was removed: {quoted}."
             )
 
-    def _fill(self, slide, pattern: Pattern, plan: SlidePlan, position: int) -> None:
+    def _fill(
+        self, slide, pattern: Pattern, plan: SlidePlan, position: int, start: int = 0
+    ) -> None:
         index = _shape_index(slide)
         report = self.report.slide(position)
         lost: List[str] = []
@@ -1366,7 +1371,7 @@ class _Renderer:
 
         for group in pattern.groups:
             group_text, group_images, used = _assign_group(
-                group, plan, (self.width, self.height)
+                group, plan, (self.width, self.height), start
             )
             text.update(group_text)
             image_ids.update(group_images)
@@ -1820,11 +1825,13 @@ def render_deck(
     patterns: Sequence[Optional[Pattern]],
     images: Optional[Mapping[str, PreparedImage]] = None,
     numbers: Optional[Sequence[int]] = None,
+    starts: Optional[Sequence[int]] = None,
 ) -> RenderResult:
     """Render ``plan`` on the template, slide ``i`` on ``patterns[i]`` as
     chosen by :func:`assign.assign` (CPU-bound; call off the event loop).
     ``numbers`` gives each slide's number in the sent plan: a split list's parts
-    share it. Messages name the slide's own position in the deck.
+    share it. Messages name the slide's own position in the deck. ``starts``
+    (``Assignment.starts``) numbers a list's continuation on from its first part.
 
     Raises :class:`RenderError` for a pattern the template no longer holds;
     anything else propagates.
@@ -1832,7 +1839,7 @@ def render_deck(
     presentation = open_presentation(template_bytes)
     try:
         return _Renderer(presentation, inventory, images or {}).render(
-            plan, patterns, numbers
+            plan, patterns, numbers, starts
         )
     except ValueError as exc:
         raise RenderError(

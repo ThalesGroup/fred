@@ -56,7 +56,6 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.builder.render import (
     _assign_group,
     _assign_text,
-    _auto_number,
     _fit,
     _Line,
     _only_names_the_slide,
@@ -194,6 +193,9 @@ class Assignment:
     repeats: List[Repeat] = field(default_factory=list)
     # Per 1-based plan index of a split slide: its parts and their patterns.
     parts: Dict[int, List[Tuple[SlidePlan, Pattern]]] = field(default_factory=dict)
+    # Aligned with the deck's slides: the entries before a list's continuation,
+    # so the render numbers it on from its first part (never stored).
+    starts: List[int] = field(default_factory=list)
 
     def deck(
         self, plan: DeckPlan
@@ -865,33 +867,6 @@ def _split_note(split: _Split, at: Dict[int, int]) -> str:
     )
 
 
-def _numbered(slide: _Slide, pattern: Pattern) -> SlidePlan:
-    """A continuation's items without numbers carry on the count of its first
-    part, in the template's style, instead of restarting at 01."""
-    plan = slide.plan
-    if slide.part == 1 or not plan.items or any(i.number for i in plan.items):
-        return plan
-    sample = next(
-        (
-            z.sample
-            for g in pattern.groups
-            for item in g.items[:1]
-            for z in item
-            if z.role == "number"
-        ),
-        None,
-    )
-    if sample is None:
-        return plan
-    items = [
-        item.model_copy(
-            update={"number": _auto_number(sample, slide.start + n) or None}
-        )
-        for n, item in enumerate(plan.items)
-    ]
-    return plan.model_copy(update={"items": items})
-
-
 def _own(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, List[Misfit]]]:
     """Patterns the position allows, of a kind the slide's tiers rank."""
     kinds = {k for tier in slide.tiers for k in tier}
@@ -1408,6 +1383,7 @@ def _rejoin(slides: List[_Slide]) -> None:
         if a and b and (a[1], a[3]) == (b[1], b[3]) and int(b[2]) == int(a[2]) + 1:
             before.part, before.parts = int(a[2]), int(a[3])
             slide.part, slide.parts = int(b[2]), int(b[3])
+            slide.start = before.start + _entries(before.plan)
 
 
 def assign(
@@ -1500,9 +1476,9 @@ def assign(
         if slide.part == 1:
             patterns[slide.index - 1] = pattern
         # Stored as a slide of its own after delivery: its kind keeps it one.
-        part = _numbered(slide, pattern)
+        kind = slide.plan.kind or pattern.kind
         parts.setdefault(slide.index, []).append(
-            (part.model_copy(update={"kind": part.kind or pattern.kind}), pattern)
+            (slide.plan.model_copy(update={"kind": kind}), pattern)
         )
     # The deck's own numbers: a split list's parts are slides of their own.
     at: Dict[int, int] = {}
@@ -1525,4 +1501,10 @@ def assign(
     found = {s.index: p for s, p in zip(slides, chosen) if s.part == 1}
     repeats = _repeats(slides, found, pool, by_kind, caps)
     notes += [_repeat_note(r, at) for r in repeats]
-    return Assignment(patterns=patterns, notes=notes, repeats=repeats, parts=parts)
+    return Assignment(
+        patterns=patterns,
+        notes=notes,
+        repeats=repeats,
+        parts=parts,
+        starts=[s.start for s in slides],
+    )
