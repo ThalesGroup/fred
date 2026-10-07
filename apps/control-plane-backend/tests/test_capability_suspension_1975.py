@@ -52,6 +52,9 @@ from test_capability_selection_1974 import (
 )
 from test_main import _FakeAgentInstanceStore, _make_record
 
+# Offline: saves and sweeps must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("no_pod_readiness")
+
 
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:

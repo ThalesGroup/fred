@@ -99,6 +99,18 @@ def isolated_database_path() -> pathlib.Path:
     return _run_database_path()
 
 
+@pytest.fixture
+def no_pod_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The pod readiness call answers "no verdict", as an unreachable pod would:
+    saves and sweeps then leave the suspension state as it is, offline."""
+    from control_plane_backend.product import service
+
+    async def _no_verdict(**_: object) -> None:
+        return None
+
+    monkeypatch.setattr(service, "_fetch_capability_readiness", _no_verdict)
+
+
 @pytest.fixture(scope="session")
 def isolated_config_path() -> pathlib.Path:
     """A test configuration whose storage paths stay under the run root.

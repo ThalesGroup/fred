@@ -97,6 +97,9 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+# Offline: saves and sweeps must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("no_pod_readiness")
+
 
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
