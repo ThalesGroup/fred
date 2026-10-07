@@ -311,6 +311,7 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     shown = next(t for t in update["tools"] if t.name == BUILD_TOOL_NAME)
     assert "- process:" in shown.description
     assert "optionally its kind" in update["system_message"].content
+    assert "Build directly" in update["system_message"].content
 
     # The registered tool executes with the template's tool, from validated args.
     monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
