@@ -71,6 +71,8 @@ from fred_sdk.contracts.context import (
     LinkKind,
     LinkPart,
     PublishedArtifact,
+    ToolContentBlock,
+    ToolContentKind,
     ToolInvocationResult,
     UiPart,
 )
@@ -124,9 +126,24 @@ _BUSY_MESSAGE = (
 
 
 def _tool_error(message: str) -> tuple[str, ToolInvocationResult]:
-    """The `generate_pptx` tool's uniform error-return shape."""
+    """The `generate_pptx` tool's uniform error-return shape. `blocks` repeats
+    the message: the runtime surfaces a failed call from the artifact, and an
+    empty one degrades to a generic "step failed" text for the user."""
 
-    return message, ToolInvocationResult(tool_ref=_TOOL_REF, is_error=True)
+    return message, ToolInvocationResult(
+        tool_ref=_TOOL_REF,
+        is_error=True,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+    )
+
+
+def _warnings_note(warnings: Sequence[str]) -> str:
+    """Tell the agent which fields or shapes the build dropped, so it can
+    mention them."""
+
+    if not warnings:
+        return ""
+    return " Some elements could not be placed and were left out: " + " ".join(warnings)
 
 
 class PptxGeneratorConfig(BaseModel):
@@ -584,6 +601,7 @@ class PptxGeneratorCapability(
                 # 3. Build the deck entirely off the event loop: one worker call
                 # owns the Presentation object end to end (python-pptx /
                 # matplotlib are synchronous, CPU-bound).
+                build_warnings: list[str] = []
                 try:
                     deck_bytes = await asyncio.to_thread(
                         build_deck,
@@ -592,6 +610,7 @@ class PptxGeneratorCapability(
                         template_bytes=template_bytes,
                         image_bytes_by_ref=image_bytes_by_ref,
                         theme=theme,
+                        warnings=build_warnings,
                     )
                 except ValueError as exc:
                     # A structural mistake the agent can correct (unknown
@@ -707,7 +726,7 @@ class PptxGeneratorCapability(
                     "generated. A preview opens beside the chat and a "
                     "download button is shown automatically; do not write a "
                     "download link yourself."
-                )
+                ) + _warnings_note(build_warnings)
                 return message, artifact
 
             # Preview unavailable -> fall back to the download chip and say so.
@@ -728,7 +747,7 @@ class PptxGeneratorCapability(
                 "(the preview could not be generated, so only the download "
                 "is available). A download button is shown to the user "
                 "automatically; do not write a download link yourself."
-            )
+            ) + _warnings_note(build_warnings)
             return message, artifact
 
         generate_pptx = StructuredTool.from_function(

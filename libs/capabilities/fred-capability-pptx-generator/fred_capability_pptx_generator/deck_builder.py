@@ -94,7 +94,7 @@ _TABLE_COLUMN_WIDTH_FLOOR_FRACTION = 0.1
 # Shape/content overlap guard: a decorative or diagram shape whose box
 # overlaps an already-placed content shape (title, bullets, table, chart,
 # picture) by more than this fraction of the SMALLER of the two areas is
-# rejected — the concrete, observed failure was a labeled badge shape
+# dropped (with a warning) — the concrete, observed failure was a labeled badge shape
 # dropped squarely on top of running bullet text, both illegible. A small
 # grazing overlap (an accent shape lightly touching a content edge) is still
 # allowed; a shape covering a meaningful chunk of text is not. A shape
@@ -265,6 +265,7 @@ def build(
     template_bytes: bytes | None,
     image_bytes_by_ref: Mapping[str, bytes],
     theme: ThemeSpec | None = None,
+    warnings: list[str] | None = None,
 ) -> bytes:
     """Build the complete deck and return its `.pptx` bytes.
 
@@ -275,7 +276,10 @@ def build(
     (RFC §11.2), fetched through the same map. Raises `ValueError` for any
     structural problem (an unresolved `image_ref`, an oversized table, a
     malformed chart, too many shapes) with a message aimed at the calling
-    agent, so it can correct its next call.
+    agent, so it can correct its next call. An optional field the chosen
+    template slide has no zone for, or a shape overlapping body content, is
+    dropped instead, with a note appended to `warnings`: one misfit
+    decoration should not cost the whole deck.
     """
 
     presentation = (
@@ -314,6 +318,7 @@ def build(
             layouts_by_name=layouts_by_name,
             template_source_slides=template_source_slides,
             badge_ordinal=next_badge_ordinal,
+            warnings=warnings if warnings is not None else [],
         )
         if used_badge_ordinal:
             next_badge_ordinal += 1
@@ -397,6 +402,7 @@ def _build_slide(
     preset: ThemePresetDef | None = None,
     accent_theme: ThemeSpec | None = None,
     badge_ordinal: int = 1,
+    warnings: list[str],
 ) -> bool:
     """Build one slide. Returns whether this slide consumed `badge_ordinal`
     (RFC §13 amendment) — the caller only advances its counter when it did."""
@@ -536,6 +542,7 @@ def _build_slide(
             index=index,
             image_bytes_by_ref=image_bytes_by_ref,
             body_style=body_style,
+            warnings=warnings,
         )
     else:
         raise ValueError(f"slide {index}: unknown slide kind '{spec.kind}'")
@@ -574,6 +581,7 @@ def _build_slide(
                 shape_spec,
                 index=index,
                 occupied_boxes=occupied_boxes,
+                warnings=warnings,
             )
 
     return section_header_badge is not None
@@ -1572,7 +1580,7 @@ def _occupied_content_boxes(presentation, slide) -> list[_Box]:
     too, or every new shape would spuriously "overlap" it. Snapshotted once,
     before any of `spec.shapes` is added, so decorative shapes may still
     overlap EACH OTHER (a deliberate design choice, e.g. layered accents) —
-    only overlap with actual body content is rejected (RFC §12, the "risk
+    only overlap with actual body content drops a shape (RFC §12, the "risk
     badges dropped on bullet text" bug)."""
 
     slide_area = presentation.slide_width * presentation.slide_height
@@ -1595,20 +1603,26 @@ def _occupied_content_boxes(presentation, slide) -> list[_Box]:
 
 
 def _add_shape(
-    presentation, slide, spec: ShapeSpec, *, index: int, occupied_boxes: Sequence[_Box]
+    presentation,
+    slide,
+    spec: ShapeSpec,
+    *,
+    index: int,
+    occupied_boxes: Sequence[_Box],
+    warnings: list[str],
 ) -> None:
     box = _fractional_box_to_emu(presentation, spec)
-    for occupied in occupied_boxes:
-        if _significantly_overlaps(box, occupied):
-            raise ValueError(
-                f"slide {index}: a '{spec.shape_type}' shape at "
-                f"left={spec.left}, top={spec.top}, width={spec.width}, "
-                f"height={spec.height} overlaps the slide's own body content "
-                "(text, table, chart, or image) — move it into a margin or "
-                "corner instead, or remove it. If several labels are needed, "
-                "put each one in its own shape's 'text' field instead of "
-                "separate bullets."
-            )
+    # Dropped, not raised: drawing it would bury the text, failing would cost
+    # the whole deck for one misplaced decoration.
+    if any(_significantly_overlaps(box, occupied) for occupied in occupied_boxes):
+        warnings.append(
+            f"slide {index}: a '{spec.shape_type}' shape at "
+            f"left={spec.left}, top={spec.top}, width={spec.width}, "
+            f"height={spec.height} overlapped the slide's own body content "
+            "(text, table, chart, or image) and was left out — place shapes "
+            "in a margin or corner, or on a slide without body content."
+        )
+        return
     left, top, width, height = box
 
     if spec.shape_type == "line":
@@ -1684,10 +1698,12 @@ def _apply_table_font_size(
     size = Pt(size_pt)
     for row_index in range(n_rows):
         for col_index in range(n_cols):
-            paragraph = pptx_table.cell(row_index, col_index).text_frame.paragraphs[0]
-            paragraph.font.size = size
-            for run in paragraph.runs:
-                run.font.size = size
+            # Every paragraph: a '\n' in the cell text starts a new one.
+            text_frame = pptx_table.cell(row_index, col_index).text_frame
+            for paragraph in text_frame.paragraphs:
+                paragraph.font.size = size
+                for run in paragraph.runs:
+                    run.font.size = size
 
 
 def _place_table(slide, box: _Box, table: TableSpec | None, *, index: int) -> None:
@@ -2026,6 +2042,7 @@ def _build_columns(
     index: int,
     image_bytes_by_ref: Mapping[str, bytes],
     body_style: TextStyle | None = None,
+    warnings: list[str],
 ) -> None:
     columns = spec.columns or []
     if not columns:
@@ -2045,6 +2062,7 @@ def _build_columns(
             index=index,
             image_bytes_by_ref=image_bytes_by_ref,
             body_style=body_style,
+            warnings=warnings,
         )
         return
 
@@ -2054,22 +2072,13 @@ def _build_columns(
             f"has {len(layout.zones)} columns but {len(columns)} were given — "
             "pass at most that many, or pick another template slide."
         )
+    where = f"slide {index}: template_slide_index {spec.template_slide_index}"
     if spec.image_ref and layout.main_frame is None:
-        raise ValueError(
-            f"slide {index}: template_slide_index {spec.template_slide_index} "
-            "has no main picture frame for 'image_ref' — leave it unset or "
-            "pick a template slide with an image."
-        )
+        warnings.append(f"{where} has no main picture frame, 'image_ref' ignored.")
     if spec.group_label and layout.label is None:
-        raise ValueError(
-            f"slide {index}: template_slide_index {spec.template_slide_index} "
-            "has no label zone for 'group_label' — leave it unset."
-        )
+        warnings.append(f"{where} has no label zone, 'group_label' ignored.")
     if any(c.icon_ref for c in columns) and not any(z.icon for z in layout.zones):
-        raise ValueError(
-            f"slide {index}: template_slide_index {spec.template_slide_index} "
-            "has no icon frames for 'icon_ref' — leave it unset."
-        )
+        warnings.append(f"{where} has no icon frames, 'icon_ref' ignored.")
 
     for column, zone in zip(columns, layout.zones):
         # One zone with one text level is a caption: a heading plus bullets
@@ -2133,14 +2142,15 @@ def _build_generic_columns(
     index: int,
     image_bytes_by_ref: Mapping[str, bytes],
     body_style: TextStyle | None = None,
+    warnings: list[str],
 ) -> None:
     """No column layout to reuse: split the content area into equal columns,
     with the subtitle as an intro line above them."""
 
     if spec.image_ref:
-        raise ValueError(
-            f"slide {index}: 'image_ref' on a 'columns' slide needs a template "
-            "slide with a main picture frame — leave it unset here."
+        warnings.append(
+            f"slide {index}: a 'columns' slide without a template picture "
+            "frame cannot show 'image_ref', ignored."
         )
     columns = spec.columns or []
     left, top, width, height = _take_content_box(presentation, slide)

@@ -81,12 +81,13 @@ def _open(deck_bytes: bytes) -> PresentationType:
     return Presentation(io.BytesIO(deck_bytes))
 
 
-def _build(slides, *, template_bytes=None, image_bytes_by_ref=None):
+def _build(slides, *, template_bytes=None, image_bytes_by_ref=None, warnings=None):
     return deck_builder.build(
         "Deck",
         slides,
         template_bytes=template_bytes,
         image_bytes_by_ref=image_bytes_by_ref or {},
+        warnings=warnings,
     )
 
 
@@ -731,9 +732,9 @@ def test_shape_invalid_hex_color_raises():
 # ---------------------------------------------------------------------------
 
 
-def test_shape_overlapping_bullet_text_raises():
-    # Reproduces the reported bug directly: a small labeled diamond centered
-    # over the bullets content box.
+def test_shape_overlapping_bullet_text_is_dropped_with_warning():
+    # A small labeled diamond centered over the bullets content box: the
+    # deck still builds, without the shape, and the agent is told why.
     badge = ShapeSpec(
         shape_type="diamond",
         left=0.35,
@@ -751,8 +752,47 @@ def test_shape_overlapping_bullet_text_raises():
             shapes=[badge],
         )
     ]
-    with pytest.raises(ValueError, match="overlaps the slide's own body content"):
-        _build(slides)
+    warnings: list[str] = []
+    prs = _open(_build(slides, warnings=warnings))
+
+    texts = [
+        cast(Any, shape).text_frame.text
+        for shape in prs.slides[0].shapes
+        if shape.has_text_frame
+    ]
+    assert "Sécurité" not in texts
+    assert len(warnings) == 1
+    assert "'diamond' shape" in warnings[0]
+    assert "overlapped the slide's own body content" in warnings[0]
+
+
+def test_only_the_overlapping_shape_is_dropped():
+    # A corner accent next to the overlapping badge must survive.
+    badge = ShapeSpec(
+        shape_type="diamond", left=0.35, top=0.4, width=0.15, height=0.15, text="Badge"
+    )
+    corner = ShapeSpec(
+        shape_type="oval", left=0.8, top=0.02, width=0.18, height=0.15, text="Coin"
+    )
+    slides = [
+        SlideSpec(
+            kind="bullets",
+            title="Les risques majeurs",
+            bullets=[BulletItem(text="Sécurité des données")],
+            shapes=[badge, corner],
+        )
+    ]
+    warnings: list[str] = []
+    prs = _open(_build(slides, warnings=warnings))
+
+    texts = [
+        cast(Any, shape).text_frame.text
+        for shape in prs.slides[0].shapes
+        if shape.has_text_frame
+    ]
+    assert "Coin" in texts
+    assert "Badge" not in texts
+    assert len(warnings) == 1
 
 
 def test_shape_overlapping_only_the_title_does_not_raise():
@@ -1207,6 +1247,18 @@ def test_table_font_size_tiers_at_boundaries(n_data_rows, expected_pt):
     graphic_frame = cast(Any, next(shape for shape in slide.shapes if shape.has_table))
     header_paragraph = graphic_frame.table.cell(0, 0).text_frame.paragraphs[0]
     assert header_paragraph.font.size == Pt(expected_pt)
+
+
+def test_table_font_size_applies_to_every_line_of_a_multiline_cell():
+    table = TableSpec(headers=["Famille"], rows=[["Génération\n(NxT, DCL)"]])
+    slides = [SlideSpec(kind="table", title="T", table=table)]
+    slide = _open(_build(slides)).slides[0]
+
+    graphic_frame = cast(Any, next(shape for shape in slide.shapes if shape.has_table))
+    paragraphs = graphic_frame.table.cell(1, 0).text_frame.paragraphs
+    assert [p.text for p in paragraphs] == ["Génération", "(NxT, DCL)"]
+    assert {p.font.size for p in paragraphs} == {Pt(16.0)}
+    assert {r.font.size for p in paragraphs for r in p.runs} == {Pt(16.0)}
 
 
 def test_table_column_width_is_proportional_to_content_length():
@@ -2194,10 +2246,32 @@ def test_columns_group_label_fills_the_template_label_zone():
     }
 
 
-def test_columns_group_label_without_a_label_zone_raises():
+def test_columns_group_label_without_a_label_zone_is_dropped_with_a_warning():
     template_bytes = _template_bytes(_add_comparison_slide)
-    with pytest.raises(ValueError, match="no label zone"):
-        _build(_two_columns(group_label="X"), template_bytes=template_bytes)
+    warnings: list[str] = []
+    deck = _build(
+        _two_columns(group_label="X"), template_bytes=template_bytes, warnings=warnings
+    )
+
+    assert "X" not in _column_texts(_open(deck).slides[0]).values()
+    assert len(warnings) == 1 and "'group_label' ignored" in warnings[0]
+
+
+def test_columns_image_ref_without_a_main_picture_frame_is_dropped_with_a_warning():
+    template_bytes = _template_bytes(_add_comparison_slide)
+    warnings: list[str] = []
+    deck = _build(
+        _two_columns(image_ref="doc-1"),
+        template_bytes=template_bytes,
+        image_bytes_by_ref={"doc-1": _png_bytes()},
+        warnings=warnings,
+    )
+
+    slide = _open(deck).slides[0]
+    assert _column_texts(slide) == {1: "Left", 2: "l1", 3: "Right", 4: "r1"}
+    assert not [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert len(warnings) == 1
+    assert warnings[0].startswith("slide 1:") and "'image_ref' ignored" in warnings[0]
 
 
 def test_caption_columns_reject_a_heading_with_bullets():
@@ -2256,7 +2330,7 @@ def test_columns_reject_more_columns_than_the_template_has():
         _build(slides, template_bytes=template_bytes)
 
 
-def test_columns_reject_icon_ref_without_icon_frames():
+def test_columns_drop_icon_ref_without_icon_frames():
     template_bytes = _template_bytes(_add_comparison_slide)
     slides = [
         SlideSpec(
@@ -2266,12 +2340,17 @@ def test_columns_reject_icon_ref_without_icon_frames():
             template_slide_index=0,
         )
     ]
-    with pytest.raises(ValueError, match="no icon frames"):
-        _build(
-            slides,
-            template_bytes=template_bytes,
-            image_bytes_by_ref={"doc-1": _png_bytes()},
-        )
+    warnings: list[str] = []
+    deck = _build(
+        slides,
+        template_bytes=template_bytes,
+        image_bytes_by_ref={"doc-1": _png_bytes()},
+        warnings=warnings,
+    )
+
+    slide = _open(deck).slides[0]
+    assert not [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert len(warnings) == 1 and "'icon_ref' ignored" in warnings[0]
 
 
 def test_columns_without_template_split_the_content_area():
@@ -2295,6 +2374,23 @@ def test_columns_without_template_split_the_content_area():
     ]
     lefts = [b.left for b in boxes]
     assert lefts == sorted(lefts) and len(set(lefts)) == 3
+
+
+def test_columns_without_template_drop_image_ref_with_a_warning():
+    slides = [
+        SlideSpec(
+            kind="columns",
+            title="T",
+            columns=[ColumnSpec(heading="A"), ColumnSpec(heading="B")],
+            image_ref="doc-1",
+        )
+    ]
+    warnings: list[str] = []
+    deck = _build(slides, image_bytes_by_ref={"doc-1": _png_bytes()}, warnings=warnings)
+
+    slide = _open(deck).slides[0]
+    assert not [s for s in slide.shapes if s.shape_type == MSO_SHAPE_TYPE.PICTURE]
+    assert len(warnings) == 1 and "'image_ref', ignored" in warnings[0]
 
 
 def test_columns_requires_columns():

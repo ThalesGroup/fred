@@ -467,6 +467,26 @@ async def test_generate_pptx_fetches_column_icons(no_pdf) -> None:
     assert artifact.is_error is False
 
 
+@pytest.mark.asyncio
+async def test_generate_pptx_reports_fields_dropped_by_the_build(no_pdf) -> None:
+    document_content = _FakeDocumentContent({"doc-1": _png_bytes()})
+    cap = PptxGeneratorCapability()
+    ctx = _ctx(
+        cap,
+        services=RuntimeServices(
+            workspace_fs=_FakeWorkspaceFs(), document_content=document_content
+        ),
+    )
+    tool = cap.tools(ctx)[0]
+    columns = [ColumnSpec(heading="A"), ColumnSpec(heading="B")]
+    slide = SlideSpec(kind="columns", title="T", columns=columns, image_ref="doc-1")
+
+    content, artifact = await cast(Any, tool).coroutine(title="Deck", slides=[slide])
+
+    assert artifact.is_error is False
+    assert "left out: slide 1:" in content
+
+
 # ---------------------------------------------------------------------------
 # generate_pptx — error paths
 # ---------------------------------------------------------------------------
@@ -482,6 +502,8 @@ async def test_generate_pptx_rejects_empty_slides(no_pdf) -> None:
 
     assert artifact.is_error is True
     assert "NOT generated" in content
+    # The runtime shows a failed call from the artifact, not from `content`.
+    assert [b.text for b in artifact.blocks] == [content]
 
 
 @pytest.mark.asyncio
