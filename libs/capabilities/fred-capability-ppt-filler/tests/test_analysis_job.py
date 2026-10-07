@@ -548,3 +548,15 @@ async def test_background_work_leaves_heavy_slots_to_the_turns(monkeypatch):
             break
         await asyncio.sleep(0.01)
     assert concurrency._active_jobs == 0 and analysis_job._background_slots == 0
+
+
+@pytest.mark.asyncio
+async def test_a_rebuilt_row_returns_the_sha_of_the_file_it_analysed(analysis_db):
+    """The client's sha names a file the asset no longer holds: the saved
+    config names the analysed one, so readiness can match it."""
+    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
+    stale = PptBuilderConfig(template_sha256="0" * 64, use_vision=False)
+    stored = await _save(stale, assets=assets)
+    assert stored.template_sha256 == SHA
+    await drain()
+    assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"

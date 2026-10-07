@@ -544,8 +544,10 @@ class PptBuilderCapability(
         record = await store.get(instance)
         key = config.labelling_key()
         if record is None or record.template_sha256 != config.template_sha256:
-            await self._start_from_assets(config, ctx)
-        elif self._needs_rerun(record, key, ctx.services.capability_model is not None):
+            # The stored file is what gets analysed, whatever sha the client sent.
+            sha = await self._start_from_assets(config, ctx)
+            return config.model_copy(update={"template_sha256": sha})
+        if self._needs_rerun(record, key, ctx.services.capability_model is not None):
             analysis_job.remember_port(instance, ctx.services.capability_model)
             await restart_from_stored(store, record, labelling_key=key)
         else:
@@ -606,7 +608,7 @@ class PptBuilderCapability(
 
     async def _start_from_assets(
         self, config: PptBuilderConfig, ctx: SaveContext
-    ) -> None:
+    ) -> str:
         assets = ctx.services.agent_assets
         if assets is None:
             raise RuntimeError(
@@ -618,7 +620,7 @@ class PptBuilderCapability(
             raise ValueError(
                 "The stored template could not be read; upload it again."
             ) from exc
-        await self._launch(config, content, ctx)
+        return await self._launch(config, content, ctx)
 
     @staticmethod
     async def _launch(
