@@ -6533,6 +6533,8 @@ share the standard authorization and tool audit paths across ReAct, Deep and
 Graph. A pod-owned internal engine shares its outbound HTTP pool for direct
 public access or an explicitly configured forward proxy. No additional Fred
 service runs in the DMZ; the operator owns proxy/network enforcement. The runtime
-owns the restricted SQL activity sink.
+owns the restricted SQL activity sink, the engine and the search providers
+(`fred_runtime/app/web_research_*.py`, deps in the `app` extra); the capability
+package holds only the tools, and the runtime imports no capability package.
 The deployment is default-off. See the [activity contract](../platform/OBSERVABILITY-AND-AUDIT.md#restricted-web-research-activity)
 and [migration guide](../ops/migrations/2980-native-web-research.md).
