@@ -117,9 +117,18 @@
   },
   "capability": {
     "document_access": {
-      "name": "Search team resources",
-      "description": "Ability to search for information in the team's resources.",
+      "name": "Documents",
+      "description": "What the agent can read and search: attachments, team documents, or both.",
+      "noSourceError": "Turn on attachments or team documents, or turn off this capability.",
       "fields": {
+        "attachments": {
+          "title": "Attachments",
+          "description": "Paperclip in the chat and search in the attached files."
+        },
+        "team_documents": {
+          "title": "Team documents",
+          "description": "Search in the team's documents."
+        },
         "show_library_selection": {
           "title": "Document library picker",
           "description": "Show a document library selector in the chat interface."
@@ -135,14 +144,6 @@
         "show_document_selection": {
           "title": "Document picker",
           "description": "Show a document selector in the chat interface."
-        },
-        "show_attach_files_control": {
-          "title": "File attachments",
-          "description": "Allow users to attach files (PDF, images, text) to their messages in the chat interface."
-        },
-        "search_attachments_only": {
-          "title": "Search in attachments only",
-          "description": "Restrict the agent's document search to the files attached to the conversation — the corpus is never searched."
         },
         "default_top_k": {
           "title": "Default results",
@@ -2688,9 +2689,13 @@
           "actionsIntegrationEmpty": "No capability in this section yet.",
           "notSupported": "This agent does not support capability selection.",
           "packs": {
-            "teamResources": {
-              "title": "Access to team resources",
-              "description": "Lets the agent use team resources and files attached to conversations."
+            "attachments": {
+              "title": "Attachments",
+              "description": "Lets users attach files to the conversation for the agent to read, summarize and query."
+            },
+            "teamDocuments": {
+              "title": "Team documents",
+              "description": "Lets the agent search the team's documents."
             },
             "teamWiki": {
               "title": "Access to the team wiki",

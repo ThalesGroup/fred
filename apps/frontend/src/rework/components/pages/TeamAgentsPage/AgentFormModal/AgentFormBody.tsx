@@ -33,12 +33,12 @@ import { TuningFieldRenderer } from "./TuningFieldRenderer.tsx";
 import { CapabilitiesInfoBanner } from "./CapabilitiesInfoBanner/CapabilitiesInfoBanner.tsx";
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard/CapabilityCard.tsx";
 import { SimpleCapabilitiesView } from "./SimpleCapabilitiesView/SimpleCapabilitiesView.tsx";
-import { applyResourceSearchScope, type CapabilitySelectionState } from "./toolPackLogic.ts";
+import { documentAccessHasNoSource, type CapabilitySelectionState } from "./toolPackLogic.ts";
 import {
   CAP_DOCUMENT_ACCESS,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
-  DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY,
+  DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
 import { PptFillerPackOptions } from "../../../../features/capabilities/ppt_filler/PptFillerPackOptions.tsx";
@@ -278,24 +278,12 @@ export function AgentFormBody({
   // capability config/asset state the Advanced view writes, so the two stay in
   // sync. Only offered when the team can actually use the backing capability.
   const renderPackOptions = (pack: ToolPack) => {
-    // Keep folder scoping available when the full resource bundle is on.
-    if (pack.resourceBundle && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
+    // Library binding only narrows the team documents, so only that pack offers it.
+    if (pack.documentSource === DOC_ACCESS_TEAM_DOCUMENTS && availableCapabilityIds.has(CAP_DOCUMENT_ACCESS)) {
       return (
         <DocumentAccessPackOptions
           configValues={capabilityConfigValues[CAP_DOCUMENT_ACCESS] ?? {}}
-          onConfigChange={(key, value) => {
-            if (key === DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY) {
-              onCapabilitySelectionReplace(
-                applyResourceSearchScope(
-                  Boolean(value),
-                  { selectedCapabilityIds, capabilityConfigValues, reasoningEnabled },
-                  availableCapabilityIds,
-                ),
-              );
-            } else {
-              onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value);
-            }
-          }}
+          onConfigChange={(key, value) => onCapabilityConfigChange(CAP_DOCUMENT_ACCESS, key, value)}
           teamId={teamId}
           disabled={isSubmitting}
         />
@@ -495,23 +483,31 @@ export function AgentFormBody({
                           subForm={
                             checked &&
                             configFields.length > 0 && (
-                              <CapabilityConfigForm
-                                capability={capability}
-                                configFields={configFields}
-                                configValues={capabilityConfigValues[capability.id] ?? {}}
-                                disabled={isSubmitting}
-                                teamId={teamId}
-                                agentInstanceId={editInstance?.agent_instance_id}
-                                agentDisplayName={editInstance?.display_name}
-                                assetFiles={capabilityAssetFiles[capability.id] ?? {}}
-                                onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
-                                onAssetFileChange={(slotKey, file) =>
-                                  onCapabilityAssetFileChange(capability.id, slotKey, file)
-                                }
-                                onBlockingErrorChange={(message) =>
-                                  onCapabilityBlockingErrorChange(capability.id, message)
-                                }
-                              />
+                              <>
+                                <CapabilityConfigForm
+                                  capability={capability}
+                                  configFields={configFields}
+                                  configValues={capabilityConfigValues[capability.id] ?? {}}
+                                  disabled={isSubmitting}
+                                  teamId={teamId}
+                                  agentInstanceId={editInstance?.agent_instance_id}
+                                  agentDisplayName={editInstance?.display_name}
+                                  assetFiles={capabilityAssetFiles[capability.id] ?? {}}
+                                  onConfigChange={(key, val) => onCapabilityConfigChange(capability.id, key, val)}
+                                  onAssetFileChange={(slotKey, file) =>
+                                    onCapabilityAssetFileChange(capability.id, slotKey, file)
+                                  }
+                                  onBlockingErrorChange={(message) =>
+                                    onCapabilityBlockingErrorChange(capability.id, message)
+                                  }
+                                />
+                                {capability.id === CAP_DOCUMENT_ACCESS &&
+                                  documentAccessHasNoSource(capabilityConfigValues[capability.id]) && (
+                                    <p className={styles.capabilityBlockingError} role="alert">
+                                      {t("capability.document_access.noSourceError")}
+                                    </p>
+                                  )}
+                              </>
                             )
                           }
                         />

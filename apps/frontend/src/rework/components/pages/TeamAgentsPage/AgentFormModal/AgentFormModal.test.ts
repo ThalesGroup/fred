@@ -22,6 +22,7 @@ import {
   defaultCapabilitySelection,
   defaultReasoningSelection,
   extractCapabilityConfigValues,
+  isCapabilityBlocked,
 } from "./AgentFormModal";
 
 function makeCapabilityTemplate(capabilityIds: string[]): AgentTemplateSummary {
@@ -206,11 +207,11 @@ describe("buildAgentFormSubmitPayload", () => {
     const cases = [
       {
         ids: ["document_access", "document_summarize"],
-        config: { search_attachments_only: true, show_attach_files_control: true },
+        config: { attachments: true, team_documents: false },
       },
       {
         ids: ["document_access", "document_similarity", "mcp-knowledge-flow-mcp-tabular"],
-        config: { search_attachments_only: false, show_attach_files_control: false },
+        config: { attachments: false, team_documents: true },
       },
     ];
 
@@ -303,5 +304,37 @@ describe("extractCapabilityConfigValues", () => {
 
   it("returns an empty object when no capability config is stored", () => {
     expect(extractCapabilityConfigValues(undefined)).toEqual({});
+  });
+
+  it("reads legacy document access keys as the two sources", () => {
+    const stored: ManagedAgentInstanceSummary["capability_config"] = {
+      document_access: {
+        schema_version: "0.1.0",
+        config: { show_attach_files_control: true, search_attachments_only: true, bind_libraries: false },
+      },
+      other: { schema_version: "1", config: { search_attachments_only: true } },
+    };
+
+    expect(extractCapabilityConfigValues(stored)).toEqual({
+      document_access: { attachments: true, team_documents: false, bind_libraries: false },
+      other: { search_attachments_only: true },
+    });
+  });
+});
+
+describe("isCapabilityBlocked", () => {
+  const form = (selectedCapabilityIds: string[], config: Record<string, unknown>) => ({
+    ...EMPTY_CAPABILITY_STATE,
+    selectedCapabilityIds,
+    capabilityConfigValues: { document_access: config },
+  });
+
+  it("blocks Save while selected document access has both sources off", () => {
+    expect(isCapabilityBlocked(form(["document_access"], { attachments: false, team_documents: false }))).toBe(true);
+  });
+
+  it("does not block once a source is on or the capability is deselected", () => {
+    expect(isCapabilityBlocked(form(["document_access"], { attachments: false, team_documents: true }))).toBe(false);
+    expect(isCapabilityBlocked(form([], { attachments: false, team_documents: false }))).toBe(false);
   });
 });

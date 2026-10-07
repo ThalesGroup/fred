@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /** Simple-view packs map user-facing switches to the agent's capability selection.
- * The resource pack enables corpus access and conversation attachments together.
+ * The two document packs each turn on one `document_access` source.
  */
 
 /** Reasoning is a form field (`reasoningEnabled`), not a `CapabilityManifest`
@@ -44,8 +44,8 @@ export interface ToolPack {
   includes: ToolPackIncludedCapability[];
   /** Capability ids selected by this pack when available to the team. */
   enablesCapabilityIds: string[];
-  /** The resource pack also configures document access for both sources. */
-  resourceBundle?: true;
+  /** The `document_access` source this pack turns on. */
+  documentSource?: DocumentSource;
 }
 
 export interface ToolPackSection {
@@ -63,25 +63,41 @@ export interface ToolPackSection {
 export const CAP_DOCUMENT_ACCESS = "document_access";
 export const CAP_DOCUMENT_SUMMARIZE = "document_summarize";
 // A corpus search mode, not a reading tool: Knowledge Flow runs it over the
-// corpus targets and never the conversation's attachments. It also needs a uid
-// source, which this pack's document_access provides.
+// corpus targets and never the conversation's attachments, so only the Team
+// documents pack grants it.
 export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 // CSV and Excel attachments expose SQL datasets through tabular tools.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_HTML_ARTIFACT = "html_artifact";
-// The resource pack grants both reading tools; Advanced keeps separate toggles.
+// Both document packs grant the reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
 export const CAP_DOCUMENT_EXTRACT = "document_extract";
 export const CAP_TEAM_WIKI = "team_wiki";
 
-/** `document_access` option keys used by the resource pack. */
-export const DOC_ACCESS_SEARCH_ATTACHMENTS_ONLY = "search_attachments_only";
-export const DOC_ACCESS_SHOW_ATTACH_FILES_CONTROL = "show_attach_files_control";
+/** `document_access` source keys, one per document pack. */
+export const DOC_ACCESS_ATTACHMENTS = "attachments";
+export const DOC_ACCESS_TEAM_DOCUMENTS = "team_documents";
+export type DocumentSource = typeof DOC_ACCESS_ATTACHMENTS | typeof DOC_ACCESS_TEAM_DOCUMENTS;
 
-const PACK_TEAM_RESOURCES = "team_resources";
 const PACK_TEAM_WIKI = "team_wiki";
+
+const SHARED_DOCUMENT_INCLUDES: ToolPackIncludedCapability[] = [
+  { capabilityId: CAP_DOCUMENT_ACCESS, labelKey: "capability.document_access.name" },
+  { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },
+  { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
+];
+const READING_INCLUDES: ToolPackIncludedCapability[] = [
+  { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
+  { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
+];
+const SIMILARITY_INCLUDE: ToolPackIncludedCapability = {
+  capabilityId: CAP_DOCUMENT_SIMILARITY,
+  labelKey: "capability.document_similarity.name",
+};
+const ATTACHMENTS_INCLUDES = [...SHARED_DOCUMENT_INCLUDES, ...READING_INCLUDES];
+const TEAM_DOCUMENTS_INCLUDES = [...SHARED_DOCUMENT_INCLUDES, SIMILARITY_INCLUDE, ...READING_INCLUDES];
 
 export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
   {
@@ -89,28 +105,24 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
     titleKey: "rework.teams.formAgent.capabilities.sections.dataKnowledge",
     packs: [
       {
-        id: PACK_TEAM_RESOURCES,
+        id: DOC_ACCESS_ATTACHMENTS,
+        kind: "capabilities",
+        icon: "attach_file",
+        titleKey: "rework.teams.formAgent.capabilities.packs.attachments.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.attachments.description",
+        includes: ATTACHMENTS_INCLUDES,
+        enablesCapabilityIds: ATTACHMENTS_INCLUDES.map((entry) => entry.capabilityId),
+        documentSource: DOC_ACCESS_ATTACHMENTS,
+      },
+      {
+        id: DOC_ACCESS_TEAM_DOCUMENTS,
         kind: "capabilities",
         icon: "database",
-        titleKey: "rework.teams.formAgent.capabilities.packs.teamResources.title",
-        descriptionKey: "rework.teams.formAgent.capabilities.packs.teamResources.description",
-        includes: [
-          { capabilityId: CAP_DOCUMENT_ACCESS, labelKey: "capability.document_access.name" },
-          { capabilityId: CAP_TABULAR, labelKey: "mcp.servers.tabular.name" },
-          { capabilityId: CAP_DOCUMENT_SUMMARIZE, labelKey: "capability.document_summarize.name" },
-          { capabilityId: CAP_DOCUMENT_SIMILARITY, labelKey: "capability.document_similarity.name" },
-          { capabilityId: CAP_DOCUMENT_VERBATIM, labelKey: "capability.document_verbatim.name" },
-          { capabilityId: CAP_DOCUMENT_EXTRACT, labelKey: "capability.document_extract.name" },
-        ],
-        enablesCapabilityIds: [
-          CAP_DOCUMENT_ACCESS,
-          CAP_TABULAR,
-          CAP_DOCUMENT_SUMMARIZE,
-          CAP_DOCUMENT_SIMILARITY,
-          CAP_DOCUMENT_VERBATIM,
-          CAP_DOCUMENT_EXTRACT,
-        ],
-        resourceBundle: true,
+        titleKey: "rework.teams.formAgent.capabilities.packs.teamDocuments.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.teamDocuments.description",
+        includes: TEAM_DOCUMENTS_INCLUDES,
+        enablesCapabilityIds: TEAM_DOCUMENTS_INCLUDES.map((entry) => entry.capabilityId),
+        documentSource: DOC_ACCESS_TEAM_DOCUMENTS,
       },
       {
         // Same icon as the wiki's own entry in the team navigation panel, so the

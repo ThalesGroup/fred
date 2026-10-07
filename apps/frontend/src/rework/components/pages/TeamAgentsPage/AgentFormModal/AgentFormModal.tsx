@@ -24,6 +24,8 @@ import type {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
+import { documentAccessHasNoSource, normalizeDocumentAccessConfig } from "./toolPackLogic.ts";
+import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 
 export type AgentFormPayload = {
@@ -206,16 +208,29 @@ export function buildAgentFormSubmitPayload(
 /**
  * Unwraps the persisted per-capability `{schema_version, config}` envelopes into
  * the flat `{ [capabilityId]: config }` shape the edit form renders and mutates.
+ * Legacy `document_access` keys are read as its two sources.
  */
 export function extractCapabilityConfigValues(
   storedConfig: ManagedAgentInstanceSummary["capability_config"],
 ): Record<string, Record<string, unknown>> {
   if (!storedConfig) return {};
   return Object.fromEntries(
-    Object.entries(storedConfig).map(([id, envelope]) => [
-      id,
-      (envelope as { config?: Record<string, unknown> })?.config ?? {},
-    ]),
+    Object.entries(storedConfig).map(([id, envelope]) => {
+      const config = (envelope as { config?: Record<string, unknown> })?.config ?? {};
+      return [id, id === CAP_DOCUMENT_ACCESS ? normalizeDocumentAccessConfig(config) : config];
+    }),
+  );
+}
+
+/** Save-blocking problems: those reported by config widgets, plus a document
+ *  access left with no source. Only ACTIVE capabilities count. */
+export function isCapabilityBlocked(
+  form: Pick<FormState, "selectedCapabilityIds" | "capabilityConfigValues" | "capabilityBlockingErrors">,
+): boolean {
+  return form.selectedCapabilityIds.some(
+    (id) =>
+      !!form.capabilityBlockingErrors[id] ||
+      (id === CAP_DOCUMENT_ACCESS && documentAccessHasNoSource(form.capabilityConfigValues[id])),
   );
 }
 
@@ -371,7 +386,7 @@ export default function AgentFormModal({
   );
   // A capability config widget may block the save (e.g. ppt_filler while its
   // mandatory template is missing, #1903) — only ACTIVE capabilities count.
-  const capabilityBlocked = form.selectedCapabilityIds.some((id) => !!form.capabilityBlockingErrors[id]);
+  const capabilityBlocked = isCapabilityBlocked(form);
   const isFormValid =
     !!form.templateId &&
     !!form.displayName.trim() &&

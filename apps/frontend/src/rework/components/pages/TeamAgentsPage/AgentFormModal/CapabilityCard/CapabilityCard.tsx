@@ -100,9 +100,19 @@ export function CapabilityConfigForm({
 }) {
   const { t } = useTranslation();
   const effectiveValues = Object.fromEntries(configFields.map((f) => [f.key, configValues[f.key] ?? f.default]));
-  const visibleFields = configFields.filter(
-    (f) => !f.ui?.hide && (!f.ui?.visible_when || Boolean(effectiveValues[f.ui.visible_when])),
-  );
+  // A gate hidden by its own gate hides its dependants too (a stored
+  // `bind_libraries` must not show the picker while team documents is off).
+  const fieldsByKey = new Map(configFields.map((f) => [f.key, f]));
+  const isVisible = (field: (typeof configFields)[number], depth = 0): boolean => {
+    if (field.ui?.hide) return false;
+    const gate = field.ui?.visible_when;
+    if (!gate) return true;
+    const gateField = fieldsByKey.get(gate);
+    return (
+      Boolean(effectiveValues[gate]) && (!gateField || depth > configFields.length || isVisible(gateField, depth + 1))
+    );
+  };
+  const visibleFields = configFields.filter((f) => isVisible(f));
   const mainFields = visibleFields.filter((f) => !f.ui?.advanced);
   const advancedFields = visibleFields.filter((f) => f.ui?.advanced);
 

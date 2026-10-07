@@ -117,9 +117,18 @@
   },
   "capability": {
     "document_access": {
-      "name": "Rechercher dans les ressources",
-      "description": "Capacité de rechercher une information dans les ressources de l'équipe.",
+      "name": "Documents",
+      "description": "Ce que l'agent peut lire et rechercher : les pièces jointes, les documents de l'équipe, ou les deux.",
+      "noSourceError": "Activez les pièces jointes ou les documents de l'équipe, ou désactivez cette capacité.",
       "fields": {
+        "attachments": {
+          "title": "Pièces jointes",
+          "description": "Trombone dans le chat et recherche dans les fichiers joints."
+        },
+        "team_documents": {
+          "title": "Documents de l'équipe",
+          "description": "Recherche dans les documents de l'équipe."
+        },
         "show_library_selection": {
           "title": "Sélecteur de bibliothèque de documents",
           "description": "Afficher un sélecteur de bibliothèque de documents dans l'interface de discussion."
@@ -135,14 +144,6 @@
         "show_document_selection": {
           "title": "Sélecteur de document",
           "description": "Afficher un sélecteur de document dans l'interface de discussion."
-        },
-        "show_attach_files_control": {
-          "title": "Pièces jointes",
-          "description": "Permettre aux utilisateurs de joindre des fichiers (PDF, images, texte) à leurs messages dans l'interface de discussion."
-        },
-        "search_attachments_only": {
-          "title": "Rechercher uniquement dans les pièces jointes",
-          "description": "Restreindre la recherche documentaire de l'agent aux fichiers joints à la conversation — le corpus n'est jamais interrogé."
         },
         "default_top_k": {
           "title": "Résultats par défaut",
@@ -2688,9 +2689,13 @@
           "actionsIntegrationEmpty": "Aucune capacité dans cette section pour le moment.",
           "notSupported": "Cet agent ne prend pas en charge la sélection de capacités.",
           "packs": {
-            "teamResources": {
-              "title": "Accès aux ressources de l'équipe",
-              "description": "Permet à l'agent d'exploiter les ressources de l'équipe et les pièces jointes des conversations."
+            "attachments": {
+              "title": "Pièces jointes",
+              "description": "Permet de joindre des fichiers à la conversation, que l'agent peut lire, résumer et interroger."
+            },
+            "teamDocuments": {
+              "title": "Documents de l'équipe",
+              "description": "Permet à l'agent de rechercher dans les documents de l'équipe."
             },
             "teamWiki": {
               "title": "Accès au Wiki de l'équipe",
