@@ -481,11 +481,49 @@ async def test_a_first_call_with_fit_problems_carries_the_variety_ask(monkeypatc
     payload = json.loads(text[text.index("{") :])
     assert [p["slide"] for p in payload["slides"]] == [6]
     (repeat,) = payload["variety"]
-    assert repeat["slides"] == [2, 3, 4, 5]
+    # The slide to fix counts on its closest fit, the same process slide.
+    assert repeat["slides"] == [2, 3, 4, 5, 6]
     assert "the next deck that fits is built as is" in text
     # Fixed, kinds unchanged: one round was enough, the deck is built.
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
+
+
+def _labelled_steps(n: int, label: bool = True) -> dict:
+    steps = _steps(n)
+    if label:
+        steps["items"] = [{**i, "label": "note"} for i in steps["items"]]
+    return steps
+
+
+@pytest.mark.asyncio
+async def test_slides_to_fix_that_repeat_are_asked_to_vary_in_the_same_round(
+    monkeypatch,
+):
+    """The live call: both repeated slides had a fit problem, so the first
+    answer named no repeat and the repaired deck broke the max of 1."""
+    workspace = FakeWorkspace()
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured()
+    config = config.model_copy(update={"variety_max_uses": 1})
+    build = _tools(_ctx(config, assets=assets, workspace=workspace))[BUILD_TOOL_NAME]
+    text, result = await build.coroutine(
+        slides=[COVER, _labelled_steps(1), _labelled_steps(2)]
+    )
+    assert result.is_error and workspace.writes == []
+    payload = json.loads(text[text.index("{") :])
+    assert [p["slide"] for p in payload["slides"]] == [2, 3]
+    assert all(
+        "closest fit, a 'process' slide" in p["problem"] for p in payload["slides"]
+    )
+    (repeat,) = payload["variety"]
+    assert repeat["slides"] == [2, 3] and repeat["at_most"] == 1
+    assert "several slides would look the same" in text
+    # Fixed, kinds unchanged: built as is, the repeat only noted.
+    fixed = [COVER, _labelled_steps(1, False), _labelled_steps(2, False)]
+    text, result = await build.coroutine(slides=fixed)
+    assert not result.is_error, text
+    assert "Slides 2, 3 all use the template slide 'Process'" in text
 
 
 class _Request:

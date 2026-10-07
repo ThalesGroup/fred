@@ -306,3 +306,9 @@ Owns: control-plane `agent_instances/` + `product/service.py` + `product/agent_c
 - [x] 25.8 Small fixes: (a) `capability_team_authorizer` loaded lazily so fred-sdk has no module-level fastapi import (same public path); (b) k3d values flag Mistral Medium/Small `supports_vision`, note says roll fred-agents first; (c) AUTHORING.md reformatting reverted; (d) `(#1975, …)` dropped from the rewritten `set_suspension` docstring; (e) `model_profile` stock-widget claim removed, clients regenerated, D3 and 1.1b/8.1c corrected; (f) tests: readiness-check permission wiring, copy + readiness, save + no verdict
 - [x] 25.9 Verification: `make code-quality` + `make test` in fred-sdk, fred-runtime, control-plane, ppt-filler, fred-agents; frontend tsc + full vitest; single Alembic head; `fred-performance-reviewer` on 25.3, 25.4, 25.6
 
+## WP26. Variety ask counts misfit slides by their closest fit (D17)
+
+Owns: `assign.py` (closest fit, repeat count, options), `tools.py` (ask wording), `design.md` D17/D18/D19, delta spec, tests, `verification.md`.
+
+- [x] 26.1 Variety ask counts misfit slides by their closest fit: on a call with fit problems, a slide that fits nothing is placed for the repeat count on its closest fit or a variant of that kind with no other problem (same caps, structural and revisable rules), so the ask joins its fit problems in the same round; still first call only, never a round of its own. Options and suggestions skip template slides sharing its fit problem (group options: shared by every slide of the group). Tests: repeated slides that each have a fit problem → `slides` and `variety` together, fixed plan with kinds unchanged built with the note; a timeline lacking the same label zone not offered; the existing merged-ask tests now count the slide to fix
+- [x] 26.2 Package `make code-quality` + `make test`; `verification.md` (with the PowerPoint check of 24.1)

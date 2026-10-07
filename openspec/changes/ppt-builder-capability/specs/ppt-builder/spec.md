@@ -361,6 +361,14 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** the first call of the turn has slides that fit nothing and, among the slides that fit, one kind on three slides or more
 - **THEN** one `needs_revision` lists the fit problems and the variety block together, and the next call is built once it fits, whatever its kinds
 
+#### Scenario: Slides to fix that repeat are asked in the same round
+
+- **GIVEN** a conversation whose history holds no delivered deck yet and a variety check that is not `off`
+- **WHEN** the first call of the turn has slides that fit nothing and whose closest fits, counted with the slides that fit, put one template slide (or kind) over its cap
+- **THEN** the `needs_revision` lists those slides under `slides` with their fit problems and under `variety` as a repeat, in the same round
+- **AND** no option or suggestion for them names a template slide that has the same fit problem
+- **AND** when the next call fixes the fit problems with the kinds unchanged, the deck is built as is, the repeat only noted
+
 #### Scenario: Suggestions state what the slide holds
 
 - **WHEN** the variety ask suggests a kind for a slide from its content

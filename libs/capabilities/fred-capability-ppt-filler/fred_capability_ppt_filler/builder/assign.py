@@ -557,6 +557,8 @@ class _Slide:
     # Every assignable pattern, with its misfit reasons and cost.
     checked: List[Tuple[Pattern, List[Misfit], float]] = field(default_factory=list)
     candidates: List[Tuple[Pattern, float]] = field(default_factory=list)
+    # A slide that fits nothing: the pattern closest to holding it, its misfits.
+    closest: Optional[Tuple[Pattern, List[Misfit]]] = None
 
 
 def _allowed(pattern: Pattern, slide: _Slide, has_cover: bool) -> bool:
@@ -594,24 +596,76 @@ def _candidates(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
     return []
 
 
-def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
-    """The closest pattern's misfits, named down to the element, with fixes."""
+def _own(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, List[Misfit]]]:
+    """Patterns the position allows, of a kind the slide's tiers rank."""
+    kinds = {k for tier in slide.tiers for k in tier}
+    return [
+        (p, r)
+        for p, r, _ in slide.checked
+        if p.kind in kinds and _allowed(p, slide, has_cover)
+    ]
+
+
+def _tableless(slide: _Slide) -> bool:
+    table = slide.plan.table
+    return (
+        table is not None
+        and table.has_content()
+        and not any(z.role == "table" for p, _, _ in slide.checked for z in p.zones)
+    )
+
+
+def _closest(slide: _Slide, has_cover: bool) -> Optional[Tuple[Pattern, List[Misfit]]]:
+    """The kind closest to the content, then fewest problems, then the roomiest;
+    None when no slide can take the position or a table must be rewritten."""
     # The asked and the inferred kinds rank together: the advice should be about
     # the shape the content has, not about an unrelated kind that happens to fit.
     rank = {k: 0 for tier in slide.tiers[:-1] for k in tier}
     rank.update({k: 1 for k in slide.tiers[-1]})
-    own = [
-        (p, r)
-        for p, r, _ in slide.checked
-        if p.kind in rank and _allowed(p, slide, has_cover)
+    own = _own(slide, has_cover)
+    if not own or _tableless(slide):
+        return None
+    return min(
+        own,
+        key=lambda pr: (
+            rank[pr[0].kind],
+            len(pr[1]),
+            -sum((z.chars_per_line or 0) * (z.max_lines or 0) for z in pr[0].zones),
+        ),
+    )
+
+
+def _once_fixed(slide: _Slide, has_cover: bool) -> List[Tuple[Pattern, float]]:
+    """Where a misfit slide lands once its closest fit's problems are fixed: that
+    pattern, and the variants of its kind with no other problem."""
+    if slide.closest is None:
+        return []
+    closest, reasons = slide.closest
+    fixed = {r.text for r in reasons}
+    return [
+        (p, 0.0)
+        for p, found, _ in slide.checked
+        if p.kind == closest.kind
+        and _allowed(p, slide, has_cover)
+        and {r.text for r in found} <= fixed
     ]
+
+
+def _same_problem(slide: _Slide) -> set[str]:
+    """Patterns sharing one of a misfit slide's problems: never offered to vary it."""
+    if slide.closest is None:
+        return set()
+    texts = {r.text for r in slide.closest[1]}
+    return {
+        p.id for p, found, _ in slide.checked if any(r.text in texts for r in found)
+    }
+
+
+def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
+    """The closest pattern's misfits, named down to the element, with fixes."""
+    own = _own(slide, has_cover)
     options: List[str] = []
-    table = slide.plan.table
-    if (
-        table is not None
-        and table.has_content()
-        and not any(z.role == "table" for p, _, _ in slide.checked for z in p.zones)
-    ):
+    if _tableless(slide):
         return SlideProblem(
             slide.index,
             "table: this template has no table slide",
@@ -621,18 +675,10 @@ def _problem(slide: _Slide, has_cover: bool) -> SlideProblem:
             ],
             slide.plan.kind,
         )
-    if not own:
+    if slide.closest is None:
         problem = "this template has no slide that can take this position"
     else:
-        # The kind closest to the content, then fewest problems, then the roomiest.
-        closest, reasons = min(
-            own,
-            key=lambda pr: (
-                rank[pr[0].kind],
-                len(pr[1]),
-                -sum((z.chars_per_line or 0) * (z.max_lines or 0) for z in pr[0].zones),
-            ),
-        )
+        closest, reasons = slide.closest
         problem = f"closest fit, a '{closest.kind}' slide: " + "; ".join(
             r.text for r in reasons
         )
@@ -838,10 +884,12 @@ def _suggested(
         shape = content_shape(slide.plan)
         if shape is None:
             continue
+        blocked = _same_problem(slide)
+        holds = [p for p in pool if p.id not in blocked]
         options = [
             (k, a)
             for k in shape.kinds
-            if k != kind and budget.get(k, 0) > 0 and (a := _advice(pool, k, shape))
+            if k != kind and budget.get(k, 0) > 0 and (a := _advice(holds, k, shape))
         ]
         if not options:
             continue
@@ -902,7 +950,10 @@ def _repeats(
         if len(group) <= at_most:
             continue
         reused = len({p.id for _, p in group}) < len(group)
-        same = [f"{p.label}: {zone_summary(p)}" for p in unused if p.kind == kind]
+        # Left out: a variant that has the fit problem of every slide of the group.
+        blocked = set.intersection(*(_same_problem(s) for s, _ in group))
+        offer = [p for p in unused if p.id not in blocked]
+        same = [f"{p.label}: {zone_summary(p)}" for p in offer if p.kind == kind]
         suggested = (
             []
             if structural
@@ -915,7 +966,7 @@ def _repeats(
             and other not in _STRUCTURAL
             and other != kind
             and budget.get(other, 0) > 0
-            for p in [next((q for q in unused if q.kind == other), None)]
+            for p in [next((q for q in offer if q.kind == other), None)]
             if p is not None
         ]
         repeats.append(
@@ -998,15 +1049,17 @@ def assign(
         slide.checked = [(p, *misfit(p, slide.plan, size)) for p in pool]
         slide.candidates = _candidates(slide, has_cover)
         if not slide.candidates:
+            slide.closest = _closest(slide, has_cover)
             problems.append(_problem(slide, has_cover))
+            # Counted for variety where it lands once fixed: the ask joins this round.
+            slide.candidates = _once_fixed(slide, has_cover)
     if not slides:
         return Assignment(problems=problems)
     by_kind = variety != "template_slide"
     caps = None if variety == "off" else _caps(slides, pool, max_uses)
     if problems:
-        # Repeats among the slides that fit, so a variety ask can join the problems.
-        fitting = [s for s in slides if s.candidates]
-        found = {s.index: p for s, p in zip(fitting, _beam(fitting, caps))}
+        placed = [s for s in slides if s.candidates]
+        found = {s.index: p for s, p in zip(placed, _beam(placed, caps))}
         return Assignment(
             problems=problems, repeats=_repeats(slides, found, pool, by_kind, caps)
         )

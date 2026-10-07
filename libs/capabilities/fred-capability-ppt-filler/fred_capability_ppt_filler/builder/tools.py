@@ -365,9 +365,8 @@ def _needs_revision(
     )
     if repeats:
         payload["variety"] = _variety(repeats)
-        text += (
-            " Also, several other slides would look the same: "
-            + _VARIETY_ASK.format(restated="")
+        text += " Also, several slides would look the same: " + _VARIETY_ASK.format(
+            restated=""
         )
     text += " Then call build_presentation again with the WHOLE deck."
     if repeats:

@@ -743,7 +743,31 @@ def test_repeats_are_found_beside_slides_that_fit_nothing():
     assert [p.index for p in assignment.problems] == [4]
     assert assignment.patterns == []
     (repeat,) = assignment.repeats
-    assert repeat.kind == "bullets" and repeat.slides == [1, 2, 3]
+    # The slide that fits nothing counts on its closest fit, the same 'A'.
+    assert repeat.kind == "bullets" and repeat.slides == [1, 2, 3, 4]
+
+
+def test_slides_that_fit_nothing_repeat_on_their_closest_fit():
+    """The live Paintress call: a label on the items of two cards slides, max 1.
+    The repeat is asked with the fit problems, not left to the repaired deck."""
+    inventory = with_item_slides(INVENTORY, kinds=("cards", "timeline"))
+    labelled = [
+        {"heading": "Coût", "text": "bas", "label": "x"},
+        {"heading": "Délai", "text": "court", "label": "y"},
+    ]
+    cards = [
+        {"title": f"Atouts {n}", "kind": "cards", "items": labelled} for n in (1, 2)
+    ]
+    slides = [COVER, cards[0], {"title": "P", "bullets": ["a", "b"]}, cards[1]]
+    assignment = assign(inventory, _plan(*slides), "template_slide", 1)
+    assert [p.index for p in assignment.problems] == [2, 4]
+    assert all("closest fit, a 'cards' slide" in p.problem for p in assignment.problems)
+    (repeat,) = assignment.repeats
+    assert repeat.slides == [2, 4] and repeat.labels == ["Synthetic cards"]
+    assert repeat.revisable
+    # The timeline slide has no place for a label either: never offered.
+    assert not any(o.startswith("'timeline'") for o in repeat.others)
+    assert any(o.startswith("'figures'") for o in repeat.others)
 
 
 def test_content_shapes_are_read_from_text_patterns():
