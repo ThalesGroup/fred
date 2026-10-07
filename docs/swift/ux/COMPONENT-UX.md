@@ -5181,9 +5181,15 @@ permissions remain available; no evaluation data is removed.
 ### Conversations after agent deletion (2026-10-07)
 
 A saved conversation remains navigable after its managed agent is deleted. Its
-agent label carries the exact `(deleted)` suffix in the header and sidebar,
-with a localized notice explaining that the conversation is read-only. If a
-name is no longer available, the label uses the existing generic agent fallback.
+preserved agent name is struck through in the header and sidebar, including
+grouped headers. The conversation title stays readable. Hovering or focusing the
+entry explains "Agent deleted - read-only conversation"; a durable accessible
+description carries the same state. The localized notice remains visible. Names
+are snapshotted in session metadata before deletion, including renamed agents.
+Legacy names already lost use the existing localized generic agent fallback.
+The composer stays visible and natively disabled with a read-only placeholder,
+matching disabled surface/text tokens and no active elevation. Existing drafts
+remain visible but cannot be submitted.
 History loads independently of execution preparation. Missing routing or a failed
 history request shows an unavailable notice while retaining already cached text.
 

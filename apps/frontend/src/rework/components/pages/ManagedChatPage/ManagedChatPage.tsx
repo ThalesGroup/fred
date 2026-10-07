@@ -579,8 +579,8 @@ export default function ManagedChatPage() {
       onChange={chat.setInput}
       onSend={commands.submit}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
-      placeholder={t("chatbot.composerPlaceholder")}
-      accessibleDescription={t("chatbot.composerPlaceholder")}
+      placeholder={t(chat.isReadOnly ? "chatbot.readOnlyComposerPlaceholder" : "chatbot.composerPlaceholder")}
+      accessibleDescription={t(chat.isReadOnly ? "chatbot.deletedAgentReadOnly" : "chatbot.composerPlaceholder")}
       commandTrigger={commands.trigger}
       aboveFieldSlot={!chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} /> : undefined}
       disabled={composerControlsDisabled}
@@ -728,7 +728,20 @@ export default function ManagedChatPage() {
                         </span>
                       </div>
                     )}
-                    <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+                    {chat.isReadOnly ? (
+                      <Tooltip text={t("chatbot.deletedAgentTooltip")}>
+                        <span
+                          className={styles.topBarAgentName}
+                          data-agent-deleted="true"
+                          tabIndex={0}
+                          aria-label={`${chat.agentDisplayName} - ${t("chatbot.deletedAgentTooltip")}`}
+                        >
+                          {chat.agentDisplayName}
+                        </span>
+                      </Tooltip>
+                    ) : (
+                      <div className={styles.topBarAgentName}>{chat.agentDisplayName}</div>
+                    )}
                   </div>
                   <div className={styles.topBarRight}>
                     {conversationTokens.total_tokens > 0 && (

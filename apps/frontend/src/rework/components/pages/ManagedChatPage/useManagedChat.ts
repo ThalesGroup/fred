@@ -95,6 +95,8 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   const executionDisabledRef = useRef(false);
   const locallyCreatedSessionIdRef = useRef<string | null>(null);
   const sessionCreateFailedIdRef = useRef<Set<string>>(new Set());
+  const confirmedSessionIdsRef = useRef<Set<string>>(new Set());
+  const failedContextWriteIdsRef = useRef<Set<string>>(new Set());
   // `text`/`command` are what went on the wire, so a Restart re-sends the same turn.
   const submittedDraftRef = useRef<{
     sessionId: string;
@@ -252,7 +254,6 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     { skip: !teamId },
   );
   const agentInstance = agentInstances?.find((i) => i.agent_instance_id === agentInstanceId);
-  const baseAgentDisplayName = agentInstance?.display_name ?? "Agent";
   // Capabilities active in this session — drives the capability side-panel slot
   // (#1979, RFC §9 item 3). The host resolves each id against the plugin index.
   const capabilityIds = agentInstance?.selected_capability_ids ?? [];
@@ -265,8 +266,17 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     (locallyCreatedSessionIdRef.current === sessionId || sessionCreateFailedIdRef.current.has(sessionId));
   const { sessionData, isReadOnly, executionDisabled, sessionUnavailable, refetchSession } =
     useConversationAvailability(teamId, agentInstanceId, sessionId, locallyCreatingSession);
+  const agentDisplayName =
+    (isReadOnly ? sessionData?.agent_display_name : (agentInstance?.display_name ?? sessionData?.agent_display_name)) ??
+    t("rework.sidebar.chatList.unknownAgent");
   executionDisabledRef.current = executionDisabled;
-  if (sessionData) locallyCreatedSessionIdRef.current = null;
+  if (sessionData) {
+    locallyCreatedSessionIdRef.current = null;
+    if (sessionId) {
+      confirmedSessionIdsRef.current.add(sessionId);
+      sessionCreateFailedIdRef.current.delete(sessionId);
+    }
+  }
   const refetchSessionRef = useRef(refetchSession);
   refetchSessionRef.current = refetchSession;
 
@@ -300,31 +310,28 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [setSearchParams],
   );
 
-  // Serialized per-session write queue for critical session writes (row
-  // creation POST, context-prompt PATCH). These must never race: two
-  // concurrent PATCHes for the same session can have their HTTP responses
-  // land out of order, letting an OLDER selection silently overwrite a
-  // NEWER one server-side. Each session's writes are chained onto a per-sid
-  // "tail" promise — write N+1's actual network call does not start until
-  // write N has fully settled (success or failure) — so responses are
-  // always received in send order, and two writes for the same sid are
-  // never in flight together. Writes for DIFFERENT sessions use different
-  // tails and never block or contaminate each other. A tail promise NEVER
-  // rejects (a failure is converted to `{ok:false}` and reported via that
-  // write's own `onError`) so a failure never stops the NEXT write in the
-  // chain from being attempted, and nothing here can become an unhandled
-  // rejection.
-  const writeTailsRef = useRef<Map<string, Promise<{ ok: boolean }>>>(new Map());
+  // Serialize creation and context writes per session so older requests cannot
+  // overwrite newer intent. Failed writes settle normally so retries can run.
+  const writeTailsRef = useRef<Map<string, Promise<{ ok: boolean; sessionCreation?: boolean }>>>(new Map());
 
   const enqueueSessionWrite = useCallback(
-    (sid: string, action: () => Promise<unknown>, onError: (error: unknown) => void): Promise<{ ok: boolean }> => {
+    (
+      sid: string,
+      action: () => Promise<unknown>,
+      onError: (error: unknown) => void,
+      sessionCreation = false,
+    ): Promise<{ ok: boolean; sessionCreation?: boolean }> => {
       const previousTail = writeTailsRef.current.get(sid) ?? Promise.resolve({ ok: true });
-      const nextTail: Promise<{ ok: boolean }> = previousTail
+      const nextTail: Promise<{ ok: boolean; sessionCreation?: boolean }> = previousTail
         .then(() => action())
-        .then(() => ({ ok: true }))
+        .then(() => {
+          if (!sessionCreation) failedContextWriteIdsRef.current.delete(sid);
+          return { ok: true, sessionCreation };
+        })
         .catch((error: unknown) => {
+          if (!sessionCreation) failedContextWriteIdsRef.current.add(sid);
           onError(error);
-          return { ok: false };
+          return { ok: false, sessionCreation };
         });
       writeTailsRef.current.set(sid, nextTail);
       return nextTail;
@@ -332,36 +339,21 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
     [],
   );
 
-  // Every sid bound to the URL whose creation POST is known to have failed
-  // (and hasn't since succeeded). `bindSessionId` runs eagerly, before the
-  // POST settles, so on retry `sessionId` already equals this sid — without
-  // this, a retry would see "session already bound" and skip re-creating the
-  // row entirely, then send against a session that was never actually
-  // persisted. Keyed by sid (not a single scalar, matching `writeTailsRef`'s
-  // per-sid keying) — different sessions can each be creating concurrently
-  // (e.g. two "new conversation" starts in quick succession), and a single
-  // shared slot would let one session's failure silently overwrite another's:
-  // the forgotten session's own write tail stays permanently failed, but
-  // `needsCreate` would no longer recognize it, so it can never be retried.
-
-  // Stability loop, not a single snapshot await: `Promise.all` over a
-  // point-in-time collection can miss a write enqueued WHILE the flush is
-  // already awaiting — send() could then reach prepare-execution before
-  // that write commits. This re-reads the session's tail after every await
-  // and keeps waiting as long as a newer tail keeps replacing the one just
-  // observed. Returns the outcome of the LAST write actually enqueued for
-  // this session: an earlier failure superseded by a later success must not
-  // block send (mirrors the generation guard in setContextPrompts below —
-  // the most recent user intent, not write history, decides the outcome).
+  // Re-read after each await so writes queued during a flush also settle before
+  // sending. Creation confirmation cannot clear an unresolved context failure.
   const flushSessionWrites = useCallback(async (sid: string | null): Promise<boolean> => {
     if (!sid) return true;
     let ok = true;
-    let observedTail: Promise<{ ok: boolean }> | undefined;
+    let observedTail: Promise<{ ok: boolean; sessionCreation?: boolean }> | undefined;
     for (;;) {
       const currentTail = writeTailsRef.current.get(sid);
       if (!currentTail || currentTail === observedTail) return ok;
       observedTail = currentTail;
-      ok = (await currentTail).ok;
+      const result = await currentTail;
+      // A confirmed row recovers a lost creation response, not failed context writes.
+      ok =
+        !failedContextWriteIdsRef.current.has(sid) &&
+        (result.ok || Boolean(result.sessionCreation && confirmedSessionIdsRef.current.has(sid)));
     }
   }, []);
 
@@ -619,9 +611,10 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
             createSessionRequest: { session_id: sid, agent_instance_id: agentInstanceId, title },
           }).unwrap(),
         (error) => {
-          sessionCreateFailedIdRef.current.add(sid);
+          if (!confirmedSessionIdsRef.current.has(sid)) sessionCreateFailedIdRef.current.add(sid);
           notifySessionSaveFailed(error);
         },
+        true,
       ).then((result) => {
         if (result.ok) {
           sessionCreateFailedIdRef.current.delete(sid);
@@ -1239,7 +1232,7 @@ export function useManagedChat({ teamId, agentInstanceId }: UseManagedChatParams
   return {
     sessionId,
     sessionTitle,
-    agentDisplayName: isReadOnly ? `${baseAgentDisplayName} (deleted)` : baseAgentDisplayName,
+    agentDisplayName,
     isReadOnly,
     executionDisabled,
     sessionUnavailable,

@@ -34,6 +34,7 @@
   cursor: pointer;
   border-radius: var(--radius-xs);
   padding: var(--spacing-2xs) var(--spacing-xs);
+  width: 100%;
   min-height: 2.5rem;
   color: var(--on-surface);
   text-decoration: none;
@@ -125,4 +126,19 @@
   padding-right: var(--spacing-xs);
   padding-left: var(--spacing-xl);
   color: var(--error);
+}
+
+.agentName[data-agent-deleted="true"] {
+  color: var(--on-surface-muted);
+  text-decoration: line-through;
+}
+
+.accessibleStatus {
+  position: absolute;
+  clip-path: inset(50%);
+  margin: -1px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
 }

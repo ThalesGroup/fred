@@ -74,12 +74,12 @@ export default function ChatList({ teamId }: ChatListProps) {
     agentInstances?.map((instance) => [instance.agent_instance_id, instance.display_name]),
   );
 
-  const agentName = (id: string) => {
-    const name = agentNameByInstanceId.get(id) ?? t("rework.sidebar.chatList.unknownAgent");
-    return agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id)
-      ? `${name} (deleted)`
-      : name;
-  };
+  const agentName = (session: Session) =>
+    agentNameByInstanceId.get(session.agent_instance_id!) ??
+    session.agent_display_name ??
+    t("rework.sidebar.chatList.unknownAgent");
+  const agentDeleted = (id: string) =>
+    Boolean(agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id));
 
   const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
 
@@ -122,7 +122,8 @@ export default function ChatList({ teamId }: ChatListProps) {
         sessionId={session.session_id}
         href={href}
         label={label}
-        agentName={showAgentName ? agentName(session.agent_instance_id) : undefined}
+        agentName={showAgentName ? agentName(session) : undefined}
+        agentDeleted={agentDeleted(session.agent_instance_id)}
         dateLabel={formatSessionDate(session.updated_at)}
         onDelete={handleDelete(session.session_id, session.agent_instance_id, href, label)}
       />
@@ -133,12 +134,12 @@ export default function ChatList({ teamId }: ChatListProps) {
     ? Array.from(
         managedSessions
           .reduce((byAgent, session) => {
-            const name = agentName(session.agent_instance_id);
-            (byAgent.get(name) ?? byAgent.set(name, []).get(name)!).push(session);
+            const id = session.agent_instance_id;
+            (byAgent.get(id) ?? byAgent.set(id, []).get(id)!).push(session);
             return byAgent;
           }, new Map<string, (Session & { agent_instance_id: string })[]>())
           .entries(),
-      ).sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+      ).sort(([, a], [, b]) => agentName(a[0]).localeCompare(agentName(b[0]), undefined, { sensitivity: "base" }))
     : null;
 
   return (
@@ -161,10 +162,14 @@ export default function ChatList({ teamId }: ChatListProps) {
         {isLoading && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.loading")}</div>}
         {isEmpty && <div className={styles.chatListPlaceholder}>{t("rework.sidebar.chatList.emptyManaged")}</div>}
         {groups
-          ? groups.map(([agentName, groupSessions]) => (
-              <div key={agentName}>
-                <div className={styles.groupHeader} title={agentName}>
-                  {agentName}
+          ? groups.map(([agentId, groupSessions]) => (
+              <div key={agentId}>
+                <div
+                  className={styles.groupHeader}
+                  data-agent-deleted={agentDeleted(agentId)}
+                  title={agentName(groupSessions[0])}
+                >
+                  {agentName(groupSessions[0])}
                 </div>
                 {groupSessions.map((session) => renderItem(session, false))}
               </div>

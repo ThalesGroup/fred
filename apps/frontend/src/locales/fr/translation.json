@@ -600,6 +600,8 @@
       "categoryLabel": "Catégorie"
     },
     "deletedAgentReadOnly": "Cet agent a été supprimé. Cette conversation est en lecture seule.",
+    "readOnlyComposerPlaceholder": "Conversation en lecture seule",
+    "deletedAgentTooltip": "Agent supprimé - conversation en lecture seule",
     "historyUnavailable": "L’historique de la conversation est indisponible. Réessayez plus tard."
   },
   "comingSoon": {

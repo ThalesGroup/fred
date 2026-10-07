@@ -70,3 +70,8 @@
   font: var(--font-body-medium);
   text-align: center;
 }
+
+.groupHeader[data-agent-deleted="true"] {
+  color: var(--on-surface-muted);
+  text-decoration: line-through;
+}

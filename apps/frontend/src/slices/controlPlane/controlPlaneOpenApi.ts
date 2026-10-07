@@ -3558,6 +3558,8 @@ export type SessionListItem = {
   session_id: string;
   team_id: string;
   agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
   title?: string | null;
   /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
   context_prompt_ids?: string[];
@@ -3595,6 +3597,8 @@ export type SessionDetails = {
   session_id: string;
   team_id: string;
   agent_instance_id?: string | null;
+  /** Agent display name retained after deletion; legacy rows may have no snapshot. */
+  agent_display_name?: string | null;
   title?: string | null;
   /** Ordered prompt-library ids attached to this session as chat context (personal/team prompt UUIDs or 'default:{category}'). Empty when none are attached. Concatenated in order as conversation context at execution time. */
   context_prompt_ids?: string[];

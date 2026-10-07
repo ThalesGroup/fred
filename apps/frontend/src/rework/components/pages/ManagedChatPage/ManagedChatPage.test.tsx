@@ -49,6 +49,8 @@ let chatValue: Record<string, unknown>;
 vi.mock("./useManagedChat", () => ({ useManagedChat: () => chatValue }));
 vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
   RichInputField: (props: {
+    placeholder?: string;
+    accessibleDescription?: string;
     sendDisabled?: boolean;
     disabled?: boolean;
     characterCount?: number;
@@ -57,6 +59,8 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", () => ({
   }) => (
     <div
       data-testid="composer"
+      data-placeholder={props.placeholder}
+      data-description={props.accessibleDescription}
       data-send-disabled={props.sendDisabled}
       data-composer-disabled={props.disabled}
       data-character-count={props.characterCount}
@@ -373,16 +377,20 @@ describe("ManagedChatPage agent todo panel", () => {
 });
 
 describe("ManagedChatPage deleted agent", () => {
-  it("shows the deleted label and notice, freezes the thread, and disables composer controls", () => {
+  it("strikes the preserved name, explains read-only mode, freezes the thread and visibly disables the composer", () => {
     chatValue = {
       ...baseChatValue([]),
       executionDisabled: true,
       isReadOnly: true,
-      agentDisplayName: "Agent (deleted)",
+      agentDisplayName: "Preserved assistant",
       isHistorySettled: true,
     };
     const html = renderToStaticMarkup(<ManagedChatPage />);
-    expect(html).toContain("Agent (deleted)");
+    expect(html).toContain("Preserved assistant");
+    expect(html).not.toContain("(deleted)");
+    expect(html).toContain('data-agent-deleted="true"');
+    expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
+    expect(html).toContain('data-description="chatbot.deletedAgentReadOnly"');
     expect(html).toContain("chatbot.deletedAgentReadOnly");
     expect(html).toContain('data-composer-disabled="true"');
     expect(html).toContain('data-send-disabled="true"');

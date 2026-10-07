@@ -1,0 +1,87 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ChatListItem } from "./ChatListItem";
+
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => (key === "chatbot.deletedAgentTooltip" ? "Agent deleted - read-only conversation" : key),
+  }),
+}));
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+describe("ChatListItem deleted agent presentation", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+  function show(deleted: boolean, name: string | undefined = "Preserved assistant") {
+    act(() =>
+      root.render(
+        <MemoryRouter>
+          <ChatListItem
+            sessionId="saved"
+            href="/conversation?session=saved"
+            label="Conversation title"
+            agentName={name}
+            agentDeleted={deleted}
+            dateLabel="07/10/26 - 15:00"
+            onDelete={vi.fn()}
+          />
+        </MemoryRouter>,
+      ),
+    );
+  }
+  it("marks only the preserved agent name and announces the status without changing navigation", () => {
+    show(true);
+    const link = container.querySelector("a")!;
+    const name = container.querySelector('[data-agent-deleted="true"]')!;
+    expect(name.textContent).toBe("Preserved assistant");
+    expect(link.getAttribute("href")).toBe("/conversation?session=saved");
+    expect(link.textContent).toContain("Conversation title");
+    expect(link.textContent).not.toContain("(deleted)");
+    const statusId = link.getAttribute("aria-describedby")!.split(" ")[0];
+    expect(document.getElementById(statusId)?.textContent).toBe("Agent deleted - read-only conversation");
+  });
+  it("shows the deletion explanation on keyboard focus and hover, including grouped entries", () => {
+    show(true, undefined);
+    const link = container.querySelector("a")!;
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      link.focus();
+    });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Agent deleted - read-only conversation");
+    act(() => link.blur());
+    act(() => link.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Agent deleted - read-only conversation");
+  });
+  it("keeps live agent names and entries free of deletion status", () => {
+    show(false);
+    expect(container.querySelector('[data-agent-deleted="true"]')).toBeNull();
+    expect(container.querySelector("a")?.getAttribute("aria-describedby")).toBeNull();
+    expect(container.textContent).not.toContain("read-only");
+  });
+});

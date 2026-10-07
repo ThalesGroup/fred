@@ -188,7 +188,9 @@ let registerSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 let patchSessionImpl: (args: unknown) => Promise<unknown> = async () => ({});
 const registerSessionCalls: unknown[] = [];
 const patchSessionCalls: unknown[] = [];
-let sessionData: { context_prompt_ids?: string[]; title?: string; agent_deleted?: boolean } | undefined;
+let sessionData:
+  | { context_prompt_ids?: string[]; title?: string; agent_deleted?: boolean; agent_display_name?: string | null }
+  | undefined;
 let sessionQueryUnresolved = false;
 const refetchSessionMock = vi.fn();
 // True only for the regression test below modeling RTK Query's data/
@@ -689,6 +691,7 @@ describe("useManagedChat — session write reliability", () => {
 
   it("retries session creation for the same bound sid after a prior failure, without double-sending", async () => {
     mount();
+    sessionQueryUnresolved = true;
     registerSessionImpl = async () => {
       throw new Error("transient failure");
     };
@@ -723,6 +726,7 @@ describe("useManagedChat — session write reliability", () => {
     // making it unsendable forever. Fixed by keying it per sid, like
     // writeTailsRef.
     mount();
+    sessionQueryUnresolved = true;
     registerSessionImpl = async () => {
       throw new Error("transient failure");
     };
@@ -2299,10 +2303,10 @@ describe("useManagedChat — session write reliability", () => {
     act(() => latest.setInput("draft to preserve"));
     const retainedSend = latest.handleSend;
     const retainedUpload = latest.handleAddAttachments;
-    sessionData = { agent_deleted: true, title: "Preserved title" };
+    sessionData = { agent_deleted: true, agent_display_name: "Preserved assistant", title: "Preserved title" };
     rerender();
     expect(latest.isReadOnly).toBe(true);
-    expect(latest.agentDisplayName).toBe("Agent (deleted)");
+    expect(latest.agentDisplayName).toBe("Preserved assistant");
     const prepCalls = prepareChatControlsMock.mock.calls.length;
     const writes = patchSessionCalls.length;
     await act(async () => {
@@ -2396,6 +2400,34 @@ describe("useManagedChat — session write reliability", () => {
     expect(sendMock).toHaveBeenCalledOnce();
   });
 
+  it("ends a failed-create exemption once current details confirm the saved session", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    registerSessionImpl = async () => {
+      throw new Error("POST response lost after commit");
+    };
+    act(() => latest.setInput("preserved draft"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    const created = latest.sessionId!;
+    sessionQueryUnresolved = false;
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(registerSessionCalls).toHaveLength(1);
+    expect(sendMock).toHaveBeenCalledOnce();
+    act(() => capturedSetSearchParams?.(new URLSearchParams("session=other")));
+    sessionQueryUnresolved = true;
+    act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${created}`)));
+    expect(latest.executionDisabled).toBe(true);
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
+  });
+
   it("limits the local creation exemption to its first handoff and blocks a later unresolved visit", async () => {
     mount();
     sessionQueryUnresolved = true;
@@ -2410,6 +2442,42 @@ describe("useManagedChat — session write reliability", () => {
     act(() => capturedSetSearchParams?.(new URLSearchParams(`session=${created}`)));
     expect(latest.executionDisabled).toBe(true);
     expect(latest.isReadOnly).toBe(false);
+  });
+
+  it("keeps a failed context write blocked through confirmed creation retries until the context saves", async () => {
+    mount();
+    sessionQueryUnresolved = true;
+    registerSessionImpl = async () => {
+      throw new Error("POST response lost or duplicate");
+    };
+    act(() => latest.setInput("draft"));
+    await act(async () => {
+      await latest.handleSend();
+    });
+    patchSessionImpl = async () => {
+      throw new Error("context save failed");
+    };
+    act(() => latest.setContextPrompts(["uncommitted"]));
+    await flush(latest.sessionId);
+    expect(latest.contextPromptIds).toEqual([]);
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    sessionQueryUnresolved = false;
+    sessionData = { context_prompt_ids: [] };
+    rerender();
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).not.toHaveBeenCalled();
+    patchSessionImpl = async () => ({});
+    act(() => latest.setContextPrompts(["committed"]));
+    await flush(latest.sessionId);
+    await act(async () => {
+      await latest.handleSend();
+    });
+    expect(sendMock).toHaveBeenCalledOnce();
   });
 
   it("does not interpret unresolved session metadata as a deleted agent", async () => {

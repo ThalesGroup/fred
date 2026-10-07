@@ -438,3 +438,8 @@
   color: var(--on-surface);
   font-size: 14px;
 }
+
+.topBarAgentName[data-agent-deleted="true"] {
+  color: var(--on-surface-muted);
+  text-decoration: line-through;
+}

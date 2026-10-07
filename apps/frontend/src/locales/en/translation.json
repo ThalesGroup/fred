@@ -600,6 +600,8 @@
       "categoryLabel": "Category"
     },
     "deletedAgentReadOnly": "This agent has been deleted. This conversation is read-only.",
+    "readOnlyComposerPlaceholder": "Read-only conversation",
+    "deletedAgentTooltip": "Agent deleted - read-only conversation",
     "historyUnavailable": "Conversation history is unavailable. Please try again later."
   },
   "comingSoon": {
