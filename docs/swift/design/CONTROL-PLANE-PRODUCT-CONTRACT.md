@@ -4397,6 +4397,8 @@ Public `/frontend/config` includes `platform_access_enabled`, indicating admissi
 
 `/admin/platform/access` exposes persisted filtering and versioned all/any rules under `CAN_MANAGE_PLATFORM`. `claims` exposes bounded observed human claim paths/types; `policy-preview` tests the actor's own verified human token without saving or observing draft-only values; `policy` saves with an expected revision, conflict detection and the active-filter actor safeguard. Its `users`, `teams`, `t0-preview` and `t0-import` subresources manage individual exceptions, team flags and an explicit one-time existing-user snapshot. Only the dedicated enrollment-link mutation returns a plaintext token; database and ordinary projections contain no reusable link.
 
+`GET /admin/platform/access/own-claims` (2026-10-07) returns a bounded JSON projection and exact selectable paths from the acting administrator's freshly verified own human access token. It rejects workload/delegated credentials and disables HTTP caching. The payload is transient: it is not added to principal serialization, SQL evidence or audit logs. The observed `claims` catalog remains names/types only.
+
 The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [migration note](../ops/migrations/2965-platform-access-planning.md).
 
 Platform admission administration also accepts an atomic manual grant of one to
