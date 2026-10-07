@@ -27,6 +27,7 @@ from builder_decks import (
     FOOTER,
     L_BLANK,
     L_CONTENT,
+    L_PICTURE,
     L_TITLE,
     L_TITLE_ONLY,
     add_agenda_slide,
@@ -51,6 +52,7 @@ from fred_capability_ppt_filler.builder.lexicon import (
 from fred_capability_ppt_filler.builder.models import Box, TemplateInventory
 from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.oxml.ns import qn
 from pptx.util import Inches
@@ -380,6 +382,34 @@ def test_large_free_picture_is_a_replaceable_image(showcase):
     photo = _slide(showcase, "Photo")
     assert [z.role for z in photo.zones] == ["title", "image"]
     assert photo.kind == "image_text"
+
+
+def test_a_picture_over_a_layout_shape_is_framed():
+    """A layout band under the picture shows when the picture is left empty;
+    a full-slide background is no frame."""
+
+    def picture_slide(presentation, band: bool):
+        layout = presentation.slide_layouts[L_PICTURE]
+        slide = presentation.slides.add_slide(layout)
+        cast(Any, slide.shapes.title).text = "Une photo"
+        slide.placeholders[2].text_frame.text = "Légende"
+        picture = slide.placeholders[1]
+        box = (
+            (picture.left, picture.top, picture.width, picture.height)
+            if band
+            else (0, 0, presentation.slide_width, presentation.slide_height)
+        )
+        shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, *box)
+        layout.shapes._spTree.append(shape._element)  # moved to the layout
+
+    for band in (True, False):
+        inventory = analyze_template(
+            build_slides([lambda p, band=band: picture_slide(p, band)])
+        ).inventory
+        assert inventory is not None
+        pattern = next(p for p in inventory.patterns if p.source == "slide")
+        (image,) = [z for z in pattern.zones if z.role == "image"]
+        assert image.framed is band
 
 
 def test_decorative_slide_is_not_reusable():

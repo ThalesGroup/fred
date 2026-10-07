@@ -105,6 +105,8 @@ _REPLACEABLE_PICTURE_AREA = 0.25
 # A chart/table covering this share of the slide is the slide's content.
 _MAIN_CONTENT_AREA = 0.15
 _ICON_BANK_PICTURES = 20
+# A layout/master shape under this share of the slide is a frame, not a background.
+_FRAME_MAX_AREA = 0.5
 # Loose text shapes read as one row of items (design.md D2.1): per-mille limits
 # past which a shape is a column body, and the tolerances of "same size, aligned".
 _ITEM_MAX_W = 350
@@ -166,7 +168,7 @@ _TITLE_PLACEHOLDERS = ("TITLE", "CENTER_TITLE", "VERTICAL_TITLE")
 
 # Bumped whenever the rules below change what an inventory holds, so agents
 # saved with an older analysis are recomputed from their stored template.
-ANALYSIS_VERSION = 10
+ANALYSIS_VERSION = 11
 
 
 def theme_fonts(presentation) -> Tuple[Optional[str], Optional[str]]:
@@ -732,6 +734,25 @@ class _Analyzer:
         self.shared_texts: set[str] = set()
         self.theme = theme_fonts(presentation)
         self.default_pt = _default_text_pt(presentation)
+        self._frames: Dict[Any, List[Box]] = {}
+
+    def frames(self, layout) -> List[Box]:
+        """Shapes every slide on ``layout`` shows and none can remove: the
+        layout's and (unless it hides them) the master's drawn shapes without
+        text, backgrounds aside."""
+        if layout.part not in self._frames:
+            shapes = list(layout.shapes)
+            if layout._element.get("showMasterSp") != "0":
+                shapes += list(layout.slide_master.shapes)
+            self._frames[layout.part] = [
+                rec.box
+                for rec in _records(shapes, self.width, self.height)
+                if rec.ph_idx is None
+                and not rec.text
+                and rec.kind != "group"
+                and rec.area < _FRAME_MAX_AREA
+            ]
+        return self._frames[layout.part]
 
     # -- entry -----------------------------------------------------------------
 
@@ -859,6 +880,7 @@ class _Analyzer:
             pattern.included = False
             pattern.exclusion_reason = "no_placeholder"
         _quote_roles(pattern)
+        _mark_framed(pattern, self.frames(layout))
         pattern.reusable = pattern.kind != "other"
         return pattern, {
             rec.ph_idx: cast(ZoneRole, _placeholder_role(rec))
@@ -996,6 +1018,8 @@ class _Analyzer:
             if declared in SLIDE_KINDS:
                 pattern.kind = cast(SlideKind, declared)
         _quote_roles(pattern)
+        if slide._element.get("showMasterSp") != "0":
+            _mark_framed(pattern, self.frames(slide.slide_layout))
         pattern.reusable = pattern.kind != "other"
         return pattern
 
@@ -1348,6 +1372,20 @@ def _rows_of_items(recs: List[_Rec]) -> List[List[List[_Rec]]]:
             [[row[i] for row in chain] for chain in grid for i in range(width)]
         )
     return found
+
+
+def _mark_framed(pattern: Pattern, frames: List[Box]) -> None:
+    """An image zone at least half covered by a frame shows that frame when
+    left empty: the fit check then asks for a picture (design.md D20)."""
+    zones = pattern.zones + [z for g in pattern.groups for i in g.items for z in i]
+    for zone in (z for z in zones if z.role == "image"):
+        b = zone.box
+        for f in frames:
+            w = min(b.x + b.w, f.x + f.w) - max(b.x, f.x)
+            h = min(b.y + b.h, f.y + f.h) - max(b.y, f.y)
+            if w > 0 and h > 0 and w * h * 2 >= b.w * b.h:
+                zone.framed = True
+                break
 
 
 def _quote_roles(pattern: Pattern) -> None:

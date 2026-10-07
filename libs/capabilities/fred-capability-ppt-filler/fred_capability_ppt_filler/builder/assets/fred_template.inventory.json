@@ -3,7 +3,7 @@
  "inventory": {
   "slide_width": 12192000,
   "slide_height": 6858000,
-  "analysis_version": 10,
+  "analysis_version": 11,
   "patterns": [
    {
     "id": "slide:256",
@@ -28,7 +28,8 @@
       "max_lines": 2,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:104",
@@ -45,7 +46,8 @@
       "max_lines": 2,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:105",
@@ -62,7 +64,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -95,7 +98,8 @@
       "max_lines": 2,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:102",
@@ -112,7 +116,8 @@
       "max_lines": 9,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -145,7 +150,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:104",
@@ -162,7 +168,8 @@
       "max_lines": 2,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:105",
@@ -179,7 +186,8 @@
       "max_lines": 2,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -212,7 +220,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:101",
@@ -229,7 +238,8 @@
       "max_lines": 10,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -262,7 +272,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:101",
@@ -279,7 +290,8 @@
       "max_lines": 11,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:102",
@@ -296,7 +308,8 @@
       "max_lines": 11,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -329,7 +342,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:103",
@@ -346,7 +360,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:104",
@@ -363,7 +378,8 @@
       "max_lines": 8,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:105",
@@ -380,7 +396,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:106",
@@ -397,7 +414,8 @@
       "max_lines": 8,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -430,7 +448,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:101",
@@ -447,7 +466,8 @@
       "max_lines": 11,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:103",
@@ -464,7 +484,8 @@
       "max_lines": null,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": true
      }
     ],
     "groups": [],
@@ -497,7 +518,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:110",
@@ -514,7 +536,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [
@@ -542,7 +565,8 @@
          "max_lines": 1,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:103",
@@ -559,7 +583,8 @@
          "max_lines": 4,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -578,7 +603,8 @@
          "max_lines": 1,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:106",
@@ -595,7 +621,8 @@
          "max_lines": 4,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -614,7 +641,8 @@
          "max_lines": 1,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:109",
@@ -631,7 +659,8 @@
          "max_lines": 4,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ]
       ],
@@ -671,7 +700,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [
@@ -699,7 +729,8 @@
          "max_lines": 2,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:105",
@@ -716,7 +747,8 @@
          "max_lines": 6,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -735,7 +767,8 @@
          "max_lines": 2,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:110",
@@ -752,7 +785,8 @@
          "max_lines": 6,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -771,7 +805,8 @@
          "max_lines": 2,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:115",
@@ -788,7 +823,8 @@
          "max_lines": 6,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -807,7 +843,8 @@
          "max_lines": 2,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "ph:120",
@@ -824,7 +861,8 @@
          "max_lines": 6,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ]
       ],
@@ -865,7 +903,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:103",
@@ -882,7 +921,8 @@
       "max_lines": 9,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -915,7 +955,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:101",
@@ -932,7 +973,8 @@
       "max_lines": 7,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -965,7 +1007,8 @@
       "max_lines": 4,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:102",
@@ -982,7 +1025,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -1015,7 +1059,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -1048,7 +1093,8 @@
       "max_lines": 2,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:104",
@@ -1065,7 +1111,8 @@
       "max_lines": 4,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -1113,7 +1160,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      },
      {
       "key": "ph:103",
@@ -1130,7 +1178,8 @@
       "max_lines": 9,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -1163,7 +1212,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [],
@@ -1196,7 +1246,8 @@
       "max_lines": 1,
       "grows": false,
       "purpose": null,
-      "table": null
+      "table": null,
+      "framed": false
      }
     ],
     "groups": [
@@ -1224,7 +1275,8 @@
          "max_lines": 1,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "sp:5",
@@ -1241,7 +1293,8 @@
          "max_lines": 5,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -1260,7 +1313,8 @@
          "max_lines": 1,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "sp:8",
@@ -1277,7 +1331,8 @@
          "max_lines": 5,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ],
        [
@@ -1296,7 +1351,8 @@
          "max_lines": 1,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         },
         {
          "key": "sp:11",
@@ -1313,7 +1369,8 @@
          "max_lines": 5,
          "grows": false,
          "purpose": null,
-         "table": null
+         "table": null,
+         "framed": false
         }
        ]
       ],

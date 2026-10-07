@@ -703,6 +703,59 @@ def test_reference_template_renders_a_full_deck():
     assert len(result.pptx) < len(template) * 1.1
 
 
+@pytest.mark.skipif(
+    not REFERENCE or not os.path.exists(REFERENCE or ""),
+    reason="reference template not provided",
+)
+def test_reference_image_cards_need_their_pictures():
+    """The live 'Nos quatre priorités' slide, cards without pictures, showed the
+    layout's grey band where the removed pictures were."""
+    template = open(REFERENCE, "rb").read()  # type: ignore[arg-type]
+    inventory = analyze_template(template).inventory
+    assert inventory is not None
+    image_cards = next(
+        p for p in inventory.patterns if p.label == "3 colonnes d’image + texte"
+    )
+    pictures = [z for z in image_cards.groups[0].items[0] if z.role == "image"]
+    assert pictures and all(z.framed for z in pictures)
+    priorities = SlidePlan(
+        title="Nos quatre priorités stratégiques",
+        kind="cards",
+        items=[
+            PlanItem(
+                heading="Protection", text="Renforcer les infrastructures critiques"
+            ),
+            PlanItem(
+                heading="Sensibilisation",
+                text="Former les équipes aux bonnes pratiques",
+            ),
+            PlanItem(
+                heading="Innovation", text="Solutions avancées (IA, automatisation)"
+            ),
+        ],
+    )
+    cover = SlidePlan(title="Stratégie Cybersécurité 2027", subtitle="Comité")
+    plan = DeckPlan(slides=[cover, priorities])
+    chosen = assign(inventory, plan).patterns[1]
+    assert chosen is not None and chosen.id != image_cards.id
+    pictured = priorities.model_copy(
+        update={
+            "items": [
+                i.model_copy(update={"image": f"d{n}"})
+                for n, i in enumerate(priorities.items)
+            ]
+        }
+    )
+    plan = DeckPlan(slides=[cover, pictured])
+    assignment = assign(inventory, plan)
+    assert assignment.patterns[1] is not None
+    assert assignment.patterns[1].id == image_cards.id
+    images = {f"d{n}": prepare_picture(png_bytes()) for n in range(3)}
+    result = render_deck(template, inventory, plan, assignment.patterns, images)
+    slide = Presentation(io.BytesIO(result.pptx)).slides[1]
+    assert len(slide._element.findall(f".//{qn('p:blipFill')}")) == 3
+
+
 # --- the room quoted to the agent is the room the renderer enforces ---
 
 

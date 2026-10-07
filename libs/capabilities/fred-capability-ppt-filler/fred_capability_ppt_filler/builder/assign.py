@@ -54,6 +54,7 @@ from fred_capability_ppt_filler.builder.render import (
     _fit,
     _Line,
     _only_names_the_slide,
+    _reading_order,
     _unused_item_fields,
     fit_table,
     zone_capacity,
@@ -409,6 +410,9 @@ def misfit(
         )
     reasons[:0] = [_no_place(what) for what in lost if what not in held]
 
+    # A framed picture left empty shows its layout's frame (design.md D20).
+    empty = _reading_order([z for z in pattern.zones if z.role == "image"])
+    framed = any(z.framed for z in empty[len(images) :])
     zones = {z.key: z for z in pattern.zones}
     for key, lines in text.items():
         zone = zones[key]
@@ -416,7 +420,12 @@ def misfit(
             zone, lines, SLIDE_FIELDS.get(zone.role, "bullets"), size, reasons
         )
     for group in pattern.groups:
-        group_text, _, _ = _assign_group(group, slide, size)
+        group_text, pictures, used = _assign_group(group, slide, size)
+        framed |= any(
+            z.framed and not pictures.get(z.key)
+            for item in group.items[:used]
+            for z in item
+        )
         item_zones = {z.key: z for item in group.items for z in item}
         long_items: Dict[str, List[Misfit]] = {}
         for key, lines in group_text.items():
@@ -430,6 +439,13 @@ def misfit(
         # One line per item field: six cards too long are one fix, not six.
         for what, found in long_items.items():
             reasons.append(found[0] if len(found) == 1 else _many(found))
+    if framed:
+        reasons.append(
+            Misfit(
+                "images: this slide's picture area shows a frame when left empty",
+                "give a picture from list_images_in_folder for each, or use another kind",
+            )
+        )
     if reasons:
         return reasons, 0.0
 

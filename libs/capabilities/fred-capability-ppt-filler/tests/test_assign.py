@@ -897,6 +897,38 @@ def test_empty_item_pictures_cost_like_empty_slide_pictures():
     assert _labels(_inventory(imaged, text), plain) == ["Text cards"]
 
 
+def test_a_framed_picture_is_chosen_only_with_a_picture():
+    """Paintress '3 colonnes d'image + texte': its layout draws a band under the
+    pictures, so a card left without one shows a grey band."""
+    text = _cards_inventory().patterns[0]
+    steps = text.model_copy(
+        update={"id": "slide:4", "label": "Steps", "kind": "process"}
+    )
+    framed = text.model_copy(
+        deep=True,
+        update={"id": "slide:3", "label": "Image cards"},
+    )
+    group = framed.groups[0]
+    group.item_zones = ["image", "body"]
+    for i, item in enumerate(group.items):
+        item.insert(
+            0,
+            Zone(key=f"pic{i}", role="image", box=Box(x=0, y=0, w=1, h=1), framed=True),
+        )
+    plain = SlidePlan(title="Axes", kind="cards", items=[PlanItem(text="Close")] * 3)
+    pictured = plain.model_copy(
+        update={"items": [PlanItem(text="Close", image=f"d{i}") for i in range(3)]}
+    )
+    assert _labels(_inventory(framed, steps), plain) == ["Steps"]
+    assert _labels(_inventory(framed, steps), pictured) == ["Image cards"]
+    # Only the items used need a picture: the others leave with their items.
+    two = pictured.model_copy(update={"items": pictured.items[:2]})
+    assert _labels(_inventory(framed, steps), two) == ["Image cards"]
+    (problem,) = assign(_inventory(framed), _plan(plain)).problems
+    assert "images: this slide's picture area shows a frame" in problem.problem
+    assert "image (required)" in zone_summary(framed)
+
+
 def test_a_heading_and_text_item_fits_a_card_with_one_text_zone():
     text_cards = _cards_inventory().patterns[0]
     item = SlidePlan(title="Axes", items=[PlanItem(heading="Near", text="Close")] * 3)

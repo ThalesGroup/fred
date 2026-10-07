@@ -393,6 +393,11 @@ def _limit(zones: Sequence[Zone]) -> str:
     return " " + capacity_text(tightest.chars_per_line or 1, tightest.max_lines or 1)
 
 
+def _required(zones: Sequence[Zone]) -> str:
+    """A framed picture is chosen only with a picture (design.md D20)."""
+    return " (required)" if any(z.framed for z in zones) else ""
+
+
 def table_summary(zone: Zone) -> str:
     spec = zone.table
     if spec is None:
@@ -426,7 +431,7 @@ def group_summary(group: RepeatGroup) -> str:
         # The renderer writes the heading in bold atop the text (`_heading_lead`).
         fields = {("heading+text" if k == "text" else k): v for k, v in fields.items()}
     shown = ", ".join(
-        name + ("" if name == "image" else _limit(zones))
+        name + (_required(zones) if name == "image" else _limit(zones))
         for name, zones in fields.items()
     )
     # "max", not "×N": told `items×8`, an agent pads a five-point agenda.
@@ -467,9 +472,9 @@ def zone_summary(pattern: Pattern) -> str:
             )
         count = f"×{len(same)}" if len(same) > 1 else ""
         parts.append(f"{field}{count}{_limit(same)}")
-    images = sum(1 for z in pattern.zones if z.role == "image")
+    images = [z for z in pattern.zones if z.role == "image"]
     if images:
-        parts.append(f"images×{images}")
+        parts.append(f"images×{len(images)}{_required(images)}")
     parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
     parts.extend(group_summary(g) for g in pattern.groups)
     return "; ".join(parts) or "no editable zone"

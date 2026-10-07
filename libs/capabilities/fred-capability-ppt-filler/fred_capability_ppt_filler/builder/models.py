@@ -145,6 +145,9 @@ class Zone(BaseModel):
     purpose: Optional[str] = None
     # Set on a `table` zone; its ``max_lines`` are the body lines at full size.
     table: Optional[TableSpec] = None
+    # An image zone drawn over a layout or master shape no slide can remove:
+    # left empty, that frame shows, so the zone needs a picture (design.md D20).
+    framed: bool = False
 
 
 class RepeatGroup(BaseModel):
