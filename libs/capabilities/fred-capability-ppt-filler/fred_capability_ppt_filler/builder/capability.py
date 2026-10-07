@@ -63,6 +63,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
     AnalysisRecord,
     AnalysisRow,
     AnalysisStatusResponse,
+    analysed_template,
     analysis_readiness,
     get_analysis_store,
     labelling_key,
@@ -372,12 +373,10 @@ class _PptBuilderMiddleware(AgentMiddleware):
         return self._history
 
     async def _load_template(self) -> bytes:
-        assets = self._ctx.services.agent_assets
-        if assets is None:
-            raise RuntimeError(
-                "ppt_builder: RuntimeServices.agent_assets is not available on this execution path."
-            )
-        return await assets.fetch(PPT_BUILDER_TEMPLATE_KEY)
+        # The analysed bytes, not the asset: a save rewrites the asset first.
+        if self._sha is None or not self._instance:
+            raise LookupError("ppt_builder: no analysed template on this turn.")
+        return await analysed_template(self._instance, self._sha)
 
     async def _resolve(self) -> Optional[List[BaseTool]]:
         if self._resolved is not None or self._sha is None:

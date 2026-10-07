@@ -112,6 +112,7 @@ def _configured(
     analysis_job.remember_inventory(
         "inst-7", "sha-test", config.labelling_key(), inventory
     )
+    analysis_job.remember_template("sha-test", TEMPLATE)
     assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
     return config, assets
 

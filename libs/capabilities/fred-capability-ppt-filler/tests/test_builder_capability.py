@@ -354,8 +354,8 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
 ):
     stored = await _analysed()
     analysis_job.clear_caches()  # a pod that has not read it yet
-    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: TEMPLATE})
-    middleware = _middleware(_turn_ctx(stored, assets))
+    # The template comes from the analysis row, never from the asset.
+    middleware = _middleware(_turn_ctx(stored, FakeAssets()))
     deferred = next(t for t in middleware.tools if t.name == BUILD_TOOL_NAME)
     assert "still being analysed" in deferred.description
 
@@ -399,6 +399,35 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     again = _middleware(_turn_ctx(stored, FakeAssets()))
     built = next(t for t in again.tools if t.name == BUILD_TOOL_NAME)
     assert "- process:" in built.description
+
+
+@pytest.mark.asyncio
+async def test_a_turn_never_renders_a_template_other_than_the_analysed_one(
+    analysis_db, monkeypatch
+):
+    """A save stores a new template before its config commits: a turn still on
+    the old config refuses instead of rendering the new bytes."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    stored = await _analysed()
+    plan = {"slides": [{"title": "Kick-off"}, {"title": "Plan", "bullets": ["a"]}]}
+    newer = builtin_template()[0]  # a valid deck: rendering it would succeed
+    record = await get_analysis_store().get("inst-7")
+    inventory = record.inventory() if record else None
+    assert inventory is not None
+    await get_analysis_store().start(
+        instance_id="inst-7",
+        team_id="team-42",
+        saved_by="u-1",
+        template_sha256="sha-of-a-newer-upload",
+        labelling_key="rules",
+        template=newer,
+    )
+    analysis_job.clear_caches()
+    analysis_job.remember_inventory("inst-7", SHA, "rules", inventory)
+    assets = FakeAssets({PPT_BUILDER_TEMPLATE_KEY: newer})
+    tools = {t.name: t for t in _middleware(_turn_ctx(stored, assets)).tools}
+    text, result = await tools[BUILD_TOOL_NAME].coroutine(**plan)
+    assert result.is_error and "could not be loaded" in text
 
 
 # --- routes ---------------------------------------------------------------------------------

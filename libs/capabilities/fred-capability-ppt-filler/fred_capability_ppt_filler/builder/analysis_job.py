@@ -213,7 +213,10 @@ class AnalysisStore(ABC):
     ) -> Optional[AnalysisRecord]: ...
 
     @abstractmethod
-    async def template(self, instance_id: str) -> Optional[bytes]: ...
+    async def template(
+        self, instance_id: str, *, sha: Optional[str] = None
+    ) -> Optional[bytes]:
+        """The stored template; with ``sha``, only while the row is that template's."""
 
     @abstractmethod
     async def patterns_pdf(self, instance_id: str) -> Optional[bytes]: ...
@@ -306,16 +309,21 @@ class SqlAnalysisStore(AnalysisStore):
             inventory_json=found[11] if with_inventory else None,
         )
 
-    async def _scalar(self, column: Any, instance_id: str) -> Any:
+    async def _scalar(self, column: Any, instance_id: str, *where: Any) -> Any:
         async with self._sessionmaker() as session:
             return (
                 await session.execute(
-                    select(column).where(AnalysisRow.agent_instance_id == instance_id)
+                    select(column).where(
+                        AnalysisRow.agent_instance_id == instance_id, *where
+                    )
                 )
             ).scalar_one_or_none()
 
-    async def template(self, instance_id: str) -> Optional[bytes]:
-        return await self._scalar(AnalysisRow.template_pptx, instance_id)
+    async def template(
+        self, instance_id: str, *, sha: Optional[str] = None
+    ) -> Optional[bytes]:
+        where = [] if sha is None else [AnalysisRow.template_sha256 == sha]
+        return await self._scalar(AnalysisRow.template_pptx, instance_id, *where)
 
     async def patterns_pdf(self, instance_id: str) -> Optional[bytes]:
         return await self._scalar(AnalysisRow.patterns_pdf, instance_id)
@@ -494,6 +502,8 @@ _inventories: ThreadSafeLRUCache[Tuple[str, str, str], TemplateInventory] = (
 # label with vision; elsewhere a re-run labels by rules (marked heuristic).
 _ports: ThreadSafeLRUCache[str, CapabilityModelPort] = ThreadSafeLRUCache(max_size=256)
 _running: set[asyncio.Task[None]] = set()
+# Template bytes by sha are immutable too; only a few, they are large.
+_templates: ThreadSafeLRUCache[str, bytes] = ThreadSafeLRUCache(max_size=4)
 
 
 def remember_port(instance_id: str, port: Optional[CapabilityModelPort]) -> None:
@@ -516,6 +526,23 @@ def remember_inventory(
 def clear_caches() -> None:
     _inventories.clear()
     _ports.clear()
+    _templates.clear()
+
+
+def remember_template(sha: str, content: bytes) -> None:
+    _templates.set(sha, content)
+
+
+async def analysed_template(instance_id: str, sha: str) -> bytes:
+    """The template the analysis of ``sha`` was made on, never a newer upload
+    that replaced it (the row's sha and bytes are written together)."""
+    content = _templates.get(sha)
+    if content is None:
+        content = await get_analysis_store().template(instance_id, sha=sha)
+        if content is None:
+            raise LookupError(f"{instance_id} no longer stores template {sha}.")
+        _templates.set(sha, content)
+    return content
 
 
 async def ready_inventory(
