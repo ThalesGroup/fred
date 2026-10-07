@@ -312,6 +312,11 @@ class RunResult:
     # Model tokens over the run, for cost comparisons between models.
     input_tokens: int = 0
     output_tokens: int = 0
+    # The answer the user reads after delivery; its tokens stay out of the build's.
+    reply: Optional[str] = None
+    reply_output_tokens: int = 0
+    # The model called the tool again instead of answering (a wasted rebuild).
+    reply_tool_call: bool = False
     attempts: List[Attempt] = field(default_factory=list)
     plan: Optional[Dict[str, Any]] = None
 
@@ -399,6 +404,7 @@ async def run_one(
                 )
             if status == "delivered":
                 run.success = True
+                await _reply(run, model, messages)
                 break
         run.repairs = max(0, tool_rounds - 1)
         if not run.success:
@@ -412,6 +418,18 @@ async def run_one(
     if run.success and last_args is not None:
         _measure(run, variant, last_args, workspace, _renders.get(), variety, max_uses)
     return run
+
+
+async def _reply(run: RunResult, model: Any, messages: List[BaseMessage]) -> None:
+    try:
+        answer = await model.ainvoke(messages)
+    except Exception as exc:  # noqa: BLE001 - the deck is delivered either way
+        run.reply = f"exception: {type(exc).__name__}"
+        return
+    assert isinstance(answer, AIMessage)
+    run.reply = _text(answer)
+    run.reply_tool_call = bool(answer.tool_calls)
+    run.reply_output_tokens = (answer.usage_metadata or {}).get("output_tokens", 0)
 
 
 def _text(message: AIMessage) -> str:
@@ -634,8 +652,8 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
         "| template | mode | runs | success | first call | avg repairs | cover once@1 "
         "| 3-in-a-row | distinct/slides | max reuse | max kind repeat (max / mean) | A-B-A | avoidable reuses "
         "| patterns used | tables used/given | table shape kept | table overflow "
-        "| leftovers | removed by check | truncated | lost | variety asks | avg wall s | tokens in / out (k) |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| leftovers | removed by check | truncated | lost | variety asks | avg wall s | tokens in / out (k) | reply chars (mean) | tool call instead of reply |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for variant in variants:
         runs = [
@@ -671,7 +689,9 @@ def _summary(results: List[RunResult], variants: List[Variant]) -> str:
             f"| {sum(r.variety_asks for r in runs)} "
             f"| {mean([r.wall_seconds for r in runs])} "
             f"| {sum(r.input_tokens for r in runs) / 1000:.0f} / "
-            f"{sum(r.output_tokens for r in runs) / 1000:.0f} |"
+            f"{sum(r.output_tokens for r in runs) / 1000:.0f} "
+            f"| {mean([float(len(r.reply)) for r in ok if r.reply and not r.reply_tool_call])} "
+            f"| {sum(r.reply_tool_call for r in ok)} |"
         )
     lines += [
         "",
