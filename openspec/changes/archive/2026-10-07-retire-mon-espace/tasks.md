@@ -16,5 +16,5 @@
 ## 4. Reconcile documentation and verify the lot
 
 - [x] 4.1 Update current filesystem, resource dashboard, and authoring documentation while leaving historical RFCs/archives as history; verify active docs describe the supported roots and retained object policy.
-- [ ] 4.2 Run affected frontend, Knowledge Flow, SDK, and runtime checks plus root code quality, then review the full branch diff against its target branch and record findings and dispositions in the PR or task response.
-- [ ] 4.3 Reconcile this change's artifacts with the implementation, validate and sync its delta spec, and archive the change; verify OpenSpec reports completion.
+- [x] 4.2 Run affected frontend, Knowledge Flow, SDK, and runtime checks plus root code quality, then review the full branch diff against its target branch and record findings and dispositions in the PR or task response.
+- [x] 4.3 Reconcile this change's artifacts with the implementation, validate and sync its delta spec, and archive the change; verify OpenSpec reports completion.
