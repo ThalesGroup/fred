@@ -389,3 +389,68 @@ coverage needs reliable deployment discovery and is optional follow-up scope.
 Browser renewal telemetry remains a separate gap. Before implementation, confirm
 the deployment's query endpoint, read credentials and component labels; test
 permissions, multi-replica aggregation, restarts and missing/stale data.
+
+## LLM streaming incident diagnosis
+
+The shared ReAct/Deep model middleware, including native Deep children, emits
+`llm_call_started` and `llm_call_completed` diagnostic records. Their generated
+`llm_call_id` links one invocation across logs and spans. A failed invocation's
+safe snapshot also appears in `execution_error.llm_failures`, alongside the
+existing support `error_ref`. Exception causes/groups are bounded; a truncation
+flag means the list is incomplete. No prompt, answer, tool value or raw exception
+message is added. Upstream `x-request-id` and `apim-request-id` are restricted to
+128 ASCII identifier characters and omitted when delegation is enabled.
+
+To investigate in OpenSearch Dashboards (field prefix depends on ingestion):
+
+1. Search `extra.error_ref: "<support-reference>"`; read `extra.llm_failures`.
+2. Search `extra.llm_call_id: "<call-id>"` for that invocation's start/end.
+   Native model/parent run IDs help distinguish concurrent child branches; absent
+   ancestry is unknown. Each Fred retry attempt has its own call ID.
+3. Compare effective settings, model, pod/service and dependency versions with a
+   successful run. `llm_model_configuration`, `llm_client_versions` and `[NET]`
+   initialization/mismatch logs describe the wrapper and shared pool. Settings
+   are allow-listed; do not enable generic HTTP body/header debug logging.
+4. Where present and permitted, give the upstream request ID and incident time
+   to gateway/provider operators. HTTP 200 only proves headers were received;
+   the body may still stall or terminate early.
+
+The runtime Grafana dashboard uses these additive metrics (dots become
+underscores in Prometheus):
+
+| Metric | Meaning |
+|---|---|
+| `llm.calls_total` | Terminal invocations by model, `llm_role` (root/child), status and bounded error code |
+| `llm.active_calls` | Instantaneous active invocations per process/model/role; sum across replicas, never across time |
+| `llm.first_chunk_ms` | Time from the observed invocation start to its first LangChain chunk callback |
+| `llm.max_chunk_gap_ms` | Largest interval between observed callbacks; absent with fewer than two callbacks |
+| `llm.terminal_silence_ms` | Time since the last callback at termination; absent if no callback occurred |
+| `llm.call_latency_ms` | Existing total invocation latency signal, still emitted on success/error/cancellation |
+
+Operational labels exclude all call/run/provider IDs and user/session/team
+identity. The new timing histograms have finite buckets through 30 minutes;
+missing observations remain missing, not zero. Diagnostic records also contain
+request message/tool/character counts, available provider usage, elapsed time,
+response-header arrival time/status and bounded timeout attributes.
+
+`observed_chunks` counts callbacks, including empty, tool and reasoning deltas
+and library-generated final markers. It is neither a token count nor a count of
+network packets. `sdk_chunks_received` is a separate exception-provided count.
+`stream_idle_timeout` identifies the chunk watchdog; `read_timeout`,
+`connect_timeout`, `write_timeout`, `pool_timeout`, `remote_protocol_error`,
+`connection_error`, `rate_limited`, `provider_http_error`, `cancelled` and
+`unknown` distinguish other outcomes. An internal read cancellation caused by a
+chunk watchdog is reported as a timeout, not as a user cancellation.
+
+Compare the elapsed lifetime and terminal silence with gateway policies. A
+repeatable total lifetime suggests an absolute deadline; repeatable silence
+suggests an idle limit. Neither proves attribution. Correlate with existing
+`event_loop_lag_ms`, CPU and memory signals: a delayed local event loop can also
+delay observations. The sampler can miss short stalls. Callback timing does not
+observe raw keepalives or SDK-filtered events.
+
+Coverage is the shared ReAct/Deep model boundary, not all provider billing:
+independent Deep summarization calls, arbitrary capability-internal LLM calls
+and Graph paths outside that middleware are excluded. Abrupt process death may
+leave a start without a terminal record. Telemetry is best-effort through existing
+sinks. This instrumentation does not change timeout, retry or concurrency policy.

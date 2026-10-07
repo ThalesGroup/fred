@@ -23,7 +23,7 @@ Provide a support-reference-to-failed-call path and enough chronology to priorit
 
 ### One call-local collector at the existing boundary
 
-Extend `TracingKpiMiddleware`, using a supported LangChain callback attached to a call-local model binding and a per-call state object. Never mutate the cached/shared model callback list or keep mutable progress on the middleware instance. Compose existing callbacks. Derive root/child role from runtime assembly and retain the native run/parent relationship where available; missing ancestry is explicitly unknown, never guessed from a shared agent id.
+Extend `TracingKpiMiddleware`, using a supported LangChain callback attached to a call-local Runnable configuration and a per-call state object. Never mutate the cached/shared model callback list or keep mutable progress on the middleware instance. Compose existing callbacks and run the handler in the copied configuration context; keep the model itself intact, including stateful custom models. Derive root/child role from runtime assembly and retain the native run/parent relationship where available; missing ancestry is explicitly unknown, never guessed from a shared agent id.
 
 Use monotonic clocks and constant-space counters: first/last callback time, observed chunk count, maximum gap and terminal silence. Count empty/tool/reasoning callbacks as progress; do not inspect or retain their content. Callbacks update memory only: no log or KPI per chunk and no worker dispatch per token. Do not monkey-patch LangChain's private iterator. Consequently name these measurements `observed_chunks`, not wire chunks or token counts. Preserve the SDK's separate `chunks_received` when the exception provides it.
 
