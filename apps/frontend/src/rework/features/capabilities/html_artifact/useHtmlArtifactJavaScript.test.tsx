@@ -108,6 +108,21 @@ describe("HTML artifact JavaScript posture", () => {
     expect(container.textContent).toBe("false");
   });
 
+  it("does not reuse a grant when a closed artifact is reopened", async () => {
+    const pending: Array<(value: unknown) => void> = [];
+    query.refetch = () => ({ unwrap: () => new Promise((resolve) => pending.push(resolve)) });
+
+    render("artifact-a:v1");
+    await act(async () => pending.shift()!({ settings: { allow_javascript: true } }));
+    expect(container.textContent).toBe("true");
+
+    render("");
+    render("artifact-a:v1");
+    expect(container.textContent).toBe("false");
+    await act(async () => pending.shift()!({ settings: { allow_javascript: false } }));
+    expect(container.textContent).toBe("false");
+  });
+
   it("forces a new read for an HTML export and denies errors", async () => {
     act(() => root.render(<CheckProbe />));
     freshAnswer = false;

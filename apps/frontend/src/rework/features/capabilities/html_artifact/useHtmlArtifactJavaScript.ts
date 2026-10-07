@@ -49,13 +49,20 @@ export function useHtmlArtifactJavaScriptAllowed(displayKey = ""): boolean {
   // the pane selects a new artifact, demand a fresh read before displaying it.
   const [verifiedDisplay, setVerifiedDisplay] = useState<string | null>(null);
   const identity = `${teamId ?? ""}:${displayKey}`;
+  const [renderedIdentity, setRenderedIdentity] = useState(identity);
+  if (renderedIdentity !== identity) {
+    // Reset during render, before React can commit a frame using an old grant.
+    // An effect would be too late when a closed artifact is reopened.
+    setRenderedIdentity(identity);
+    setVerifiedDisplay(null);
+  }
   useEffect(() => {
     if (!teamId || !displayKey) return;
     let active = true;
     void refetch()
       .unwrap()
       .then((result) => {
-        if (active && result.settings?.allow_javascript === true) setVerifiedDisplay(identity);
+        if (active) setVerifiedDisplay(result.settings?.allow_javascript === true ? identity : null);
       })
       .catch(() => {
         // A failed refresh leaves the current display unverified.
