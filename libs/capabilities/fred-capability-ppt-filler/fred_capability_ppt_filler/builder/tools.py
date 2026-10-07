@@ -56,7 +56,7 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from PIL import Image, UnidentifiedImageError
 from pydantic import (
@@ -551,14 +551,32 @@ def _variety_revision(
 _DELIVERED = ("Delivered: '", "The presentation '")
 
 
+def _text_of(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    blocks = content if isinstance(content, list) else []
+    return "".join(
+        b if isinstance(b, str) else str(b.get("text") or "")
+        for b in blocks
+        if isinstance(b, (str, dict))
+    )
+
+
 def deck_delivered(history: Sequence[BaseMessage]) -> bool:
     """Whether this conversation already holds a deck: an earlier
-    build_presentation result in the messages the model was sent delivered one."""
+    build_presentation result in the messages the model was sent delivered one.
+    Matched by its call id: the platform strips message names before the model call."""
+    calls = {
+        call.get("id")
+        for m in history
+        if isinstance(m, AIMessage)
+        for call in m.tool_calls
+        if call.get("name") == BUILD_TOOL_NAME
+    }
     return any(
         isinstance(m, ToolMessage)
-        and m.name == BUILD_TOOL_NAME
-        and isinstance(m.content, str)
-        and m.content.startswith(_DELIVERED)
+        and (m.name == BUILD_TOOL_NAME or m.tool_call_id in calls)
+        and _text_of(m.content).startswith(_DELIVERED)
         for m in history
     )
 

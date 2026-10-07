@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import itertools
 import json
 from typing import Any, cast
 
@@ -587,12 +588,28 @@ async def _later_turn(
     return {t.name: cast(Any, t) for t in middleware.tools}[BUILD_TOOL_NAME]
 
 
+_CALLS = itertools.count(1)
+
+
 def _turn(text: str, name: str = BUILD_TOOL_NAME) -> list:
-    call = {"id": "call-1", "name": name, "args": {}}
+    call = {"id": f"call-{next(_CALLS)}", "name": name, "args": {}}
     return [
         HumanMessage(content="Make me a deck"),
         AIMessage(content="", tool_calls=[call]),
-        ToolMessage(content=text, tool_call_id="call-1", name=name),
+        ToolMessage(content=text, tool_call_id=call["id"], name=name),
+    ]
+
+
+def _rehydrated(history: list) -> list:
+    """What a capability middleware is sent on a later turn: the platform's
+    checkpoint hygiene strips every message name; content may come as blocks."""
+    return [
+        m.model_copy(
+            update={"name": None, "content": [{"type": "text", "text": m.content}]}
+            if isinstance(m, ToolMessage)
+            else {"name": None}
+        )
+        for m in history
     ]
 
 
@@ -605,6 +622,23 @@ async def test_a_deck_after_the_first_one_only_gets_the_note(monkeypatch):
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
     assert "all use the template slide 'Process'" in text
+
+
+@pytest.mark.asyncio
+async def test_a_deck_delivered_in_an_earlier_turn_is_seen_with_names_stripped(
+    monkeypatch,
+):
+    """Live: the variety ask came back on turn 3 for slides delivered on turn 1,
+    because the model call's tool messages carry no name."""
+    delivered, result = await _build(monkeypatch, slides=[COVER])
+    assert not result.is_error
+    history = _rehydrated(_turn(delivered))
+    assert tools_mod.deck_delivered(history)
+    build = await _later_turn(monkeypatch, history)
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert not result.is_error, text
+    # Another tool's delivery-like text, names stripped, still delivers nothing.
+    assert not tools_mod.deck_delivered(_rehydrated(_turn(delivered, "other")))
 
 
 @pytest.mark.asyncio
