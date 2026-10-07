@@ -392,3 +392,12 @@ Owns: `tools.py` (`deck_delivered`, stored deck, delivery text, description), `a
 - [x] 35.4 Flattened `changes`: a `replace`/`insert` with slide fields and no `slides` reads them as its one slide; slide fields beside `slides`, or on an `edit`/`remove`, and unknown keys get what/why/remedy messages. Tests: the live shape (`kind`, `title`, `items`) and an aliased insert read; each mixed case's exact message; a flattened replace delivered and stored through the tool
 - [x] 35.5 Package `make code-quality` + `make test`; `verification.md`
 - Not in scope: undo/revert of earlier plans; the streamed "Vo\nici" glitch
+
+## WP36. Live-session fixes: "same design as slide N", changes that change nothing
+
+Owns: `changes.py` (`like` edit field, `unchanged`), `plan.py` (`asked_design`, `asked_from`, `DeckPlan.delivered`), `assign.py` (asked design alone, out of variety), `tools.py` (description, no-change answer, stored deck flags), `design.md` D23, delta spec, tests, `verification.md`.
+
+- [x] 36.1 `{op: "edit", slide: N, field: "like", value: M}`: slide N takes slide M's delivered template slide (base plan's `built_on`, whatever the call changes on M; first new slide of a replaced N; kind cleared unless set by the call); offered alone and out of variety asks; `needs_revision` with slide M's design, the misfit or kind, and the remedy; bad references as change errors; description and `changes` schema text name `like`. Tests: the live reproduction (bullets slides 5 and 7 on different template slides, `like` makes them share, stored pin, hidden fields cleared), items on a bullets design and a conflicting kind as revisions, every bad reference's message, resolution against the base and on a replaced slide, five slides asked on one design at max 1 with no repeat
+- [x] 36.2 Changes that leave a delivered deck's content and template slides as they are build nothing and return a "nothing changed" error with why and the remedies; a plan stored by `needs_revision` is never treated so. Tests: the live no-op (kind + same bullets), an identical replace, a `like` on the design already held; no render, write or store; a new file name still builds
+- [x] 36.3 Package `make code-quality` + `make test`; `verification.md`
+- Not covered: a live re-run of the session

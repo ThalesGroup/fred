@@ -716,6 +716,21 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 - **THEN** the rebuilt closing slide is on the same template slide; a replacement of another kind, or one that no longer fits there, is assigned as any slide
 - **AND** the tool description tells the model to change text inside a slide with `edit`, which keeps the slide's design, and to use `replace` for a different slide
 
+#### Scenario: Same design as another slide
+
+- **GIVEN** a delivered deck whose bullets slides 5 and 7 were spread over two template slides by the variety rules
+- **WHEN** the user asks for slide 7 with the same layout as slide 5 and the model sends `{op: "edit", slide: 7, field: "like", value: 5}`
+- **THEN** slide 7 is rebuilt on the template slide slide 5 has in the delivered file (read from the stored deck, whatever the same call changes on slide 5), counted for nobody's variety ask, and the stored deck pins it there as any slide
+- **AND** content that does not fit that template slide, or a kind it does not hold, builds nothing and `needs_revision` names slide 5's design, what does not fit (or the kind it holds) and the remedy (shorten, reshape, set that kind, or drop the `like`)
+- **AND** a `like` with no slide number, a number out of range, the slide itself, a slide removed by the same call, a second `like` on one slide, or a slide not yet in a delivered deck builds nothing, with what, why and the remedy
+- **AND** the tool description tells the model to use `like` when the user wants the layout or design of another slide
+
+#### Scenario: Changes that change nothing
+
+- **GIVEN** a delivered deck
+- **WHEN** a `changes` call leaves every slide's content and template slide as they are and keeps the file name (for example slide 7's current kind and bullets sent again, a replacement identical to the slide, or a `like` naming the design the slide already has)
+- **THEN** nothing is built or stored and the result, an error like every non-delivery, says nothing changed, why (the values sent are the current ones), not to tell the user it was changed, and the remedy (`edit` with the new text, `like` for another slide's design)
+
 #### Scenario: New slide written in the change itself
 
 - **WHEN** a `replace` or `insert` change carries slide fields (`title`, `items`, `kind`…) beside `op` and no `slides`

@@ -1265,3 +1265,36 @@ variant kept on a text replace, a `quote` replacement reassigned),
 Not covered: a live re-run of the session's three turns; the frontend `types.ts` change is a doc
 comment only (no frontend check run). A rebuilt stored split reports its parts as 1/1 in the
 summary (no `list_continued` note on later builds).
+
+## Results: WP36 ("same design as slide N", changes that change nothing)
+
+Found in live session `a854d9b3-…`: bullets slides 4–7, the variety spreading put slide 5 on
+template slide `slide:260` and slide 7 on `layout:18`. Asked "for slide 7, use the same layout as
+slide 5", the model sent `edit` slide 7 `kind` = `bullets` and `edit` slide 7 `bullets` = the same
+bullets: a no-op; the pin kept `layout:18`, the tool answered "Delivered" and the model told the
+user it was done.
+
+**Unit evidence** (`tests/test_deck_changes.py`):
+`test_like_gives_a_slide_the_design_of_another` (the reproduction on the showcase template: slides
+5 and 7 delivered on different template slides, `like` 5 rebuilds slide 7 on slide 5's, the stored
+deck pins both on it, hidden fields cleared), `test_a_design_the_slide_cannot_take_is_a_revision`
+(items on a bullets design: `needs_revision` "the slide does not fit slide 5's design…", the misfit
+option and "or drop the `like` change"; a `quote` kind set in the same call: "holds 'bullets'
+content, but the slide asks for kind 'quote'"), `test_bad_like_references_say_why_and_what_to_send`
+(not a number, out of range, itself, removed target, second `like`, a plan never delivered),
+`test_like_asks_for_the_referenced_slides_delivered_design` (resolved against the base when the
+referenced slide is replaced in the same call; `like` shorthand; on a replaced slide; kind kept
+when the call sets it), `test_a_design_asked_for_is_never_a_variety_ask` (five slides asked on one
+design at max 1: all on it, no repeat), `test_changes_that_leave_the_deck_as_is_build_nothing`
+(the session's exact no-op, an identical replace, a `like` on the design already held: error
+"No deck was built: nothing changed", no render, write or store; a new file name still builds).
+`test_change_slides_do_not_repeat_the_slide_schema` still holds the `changes` schema under 1600
+chars with the `like` text.
+
+`.venv/bin/pytest -q tests/test_build_tool.py tests/test_deck_changes.py tests/test_assign.py`:
+135 passed. Package `make code-quality` clean (existing `builder_decks.py` `__all__` warning),
+`make test` 487 passed, 5 skipped (481 before WP36).
+
+Not covered: a live re-run of the session with a real model (whether it picks `like` from the
+description); a `like` on a slide whose referenced design was removed from the template after
+delivery is handled (`needs_revision`) but untested.
