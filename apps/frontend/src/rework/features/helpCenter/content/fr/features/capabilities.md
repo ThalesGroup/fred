@@ -65,8 +65,8 @@ textuelles.
 En mode **Simple**, désactiver un pack conserve ce que l'autre utilise encore ;
 désactiver les deux retire la capacité **Documents**. En mode **Avancé**, la
 carte **Documents** commence par les interrupteurs **Pièces jointes** et
-**Documents de l'équipe** : gardez-en au moins un activé, ou désactivez la
-carte. Les agents existants conservent leurs réglages tant que vous ne les
+**Documents de l'équipe** : si vous désactivez les deux, la carte se
+désactive. Les agents existants conservent leurs réglages tant que vous ne les
 modifiez pas.
 
 ### Accès au Wiki de l'équipe
@@ -147,15 +147,10 @@ recherche simple, davantage sur une analyse en plusieurs étapes.
 **Un exemple** — comparer deux offres sur une dizaine de critères et justifier
 un classement.
 
-## Actions et intégration
-
-Cette section de l'onglet **Capacités** est prévue pour les capacités qui
-agissent sur des systèmes extérieurs à la plateforme. Elle est vide aujourd'hui.
-
 ## En dehors des packs
 
-La vue **Simple** présente des packs : des ensembles cohérents, activés d'une
-seule bascule. La vue **Avancé** peut faire apparaître des capacités qui
+La vue **Simple** présente des packs : des ensembles cohérents, activés d'un
+clic sur leur carte. La vue **Avancé** peut faire apparaître des capacités qui
 n'appartiennent à aucun pack — notamment des capacités d'administration
 réservées à des agents d'exploitation. Elles obéissent à la même règle que les
 autres : votre équipe ne les voit que si l'administrateur les lui a ouvertes.

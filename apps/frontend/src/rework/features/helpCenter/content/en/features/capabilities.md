@@ -62,7 +62,7 @@ files; the document reading tools are meant for text attachments.
 In **Simple**, turning off one pack keeps what the other one still uses;
 turning off both removes the **Documents** capability. In **Advanced**, the
 **Documents** card starts with the **Attachments** and **Team documents**
-switches: keep at least one on, or turn the card off. Existing agents keep
+switches: turning off both turns the card off. Existing agents keep
 their settings until you change them.
 
 ### Access to the team wiki
@@ -139,15 +139,10 @@ lookup, more to a multi-step analysis.
 **An example** — comparing two offers across a dozen criteria and justifying a
 ranking.
 
-## Actions and integration
-
-This section of the **Capabilities** tab is meant for capabilities acting on
-systems outside the platform. It is empty today.
-
 ## Outside the packs
 
-The **Simple** view presents packs: coherent sets, enabled with a single
-toggle. The **Advanced** view may reveal capabilities belonging to no pack —
+The **Simple** view presents packs: coherent sets, enabled with one
+click on their card. The **Advanced** view may reveal capabilities belonging to no pack —
 notably administration capabilities reserved for operations agents. They follow
 the same rule as the others: your team only sees them if the administrator
 opened them to it.

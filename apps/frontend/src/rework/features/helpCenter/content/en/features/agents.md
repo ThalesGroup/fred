@@ -39,7 +39,7 @@ deck, produce a web page, take the time to reason step by step…
 Two ways to choose, via the **Advanced** switch at the top of the tab:
 
 - **Simple** (the default, and the recommended one) — you tick **packs**: sets
-  that naturally belong together. One toggle turns on what is needed.
+  that naturally belong together. One click on the card turns on what is needed.
 - **Advanced** — you enable each function one by one, with its options.
 
 Simple mode covers ordinary needs. Advanced mode remains available at any

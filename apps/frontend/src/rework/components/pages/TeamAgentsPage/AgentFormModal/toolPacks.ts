@@ -53,8 +53,6 @@ export interface ToolPackSection {
   id: string;
   titleKey: string;
   packs: ToolPack[];
-  /** When true, the section renders an empty-state placeholder (no packs yet). */
-  emptyState?: boolean;
 }
 
 // --- Backend capability ids these packs map onto (verified against the runtime
@@ -100,6 +98,21 @@ const ATTACHMENTS_INCLUDES = [...SHARED_DOCUMENT_INCLUDES, ...READING_INCLUDES];
 const TEAM_DOCUMENTS_INCLUDES = [...SHARED_DOCUMENT_INCLUDES, SIMILARITY_INCLUDE, ...READING_INCLUDES];
 
 export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
+  {
+    id: "intelligence_orchestration",
+    titleKey: "rework.teams.formAgent.capabilities.sections.intelligenceOrchestration",
+    packs: [
+      {
+        id: "reasoning",
+        kind: "reasoning",
+        icon: "neurology",
+        titleKey: "rework.teams.formAgent.capabilities.packs.reasoning.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.reasoning.description",
+        includes: [],
+        enablesCapabilityIds: [],
+      },
+    ],
+  },
   {
     id: "data_knowledge",
     titleKey: "rework.teams.formAgent.capabilities.sections.dataKnowledge",
@@ -169,26 +182,5 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         enablesCapabilityIds: [CAP_HTML_ARTIFACT],
       },
     ],
-  },
-  {
-    id: "intelligence_orchestration",
-    titleKey: "rework.teams.formAgent.capabilities.sections.intelligenceOrchestration",
-    packs: [
-      {
-        id: "reasoning",
-        kind: "reasoning",
-        icon: "neurology",
-        titleKey: "rework.teams.formAgent.capabilities.packs.reasoning.title",
-        descriptionKey: "rework.teams.formAgent.capabilities.packs.reasoning.description",
-        includes: [],
-        enablesCapabilityIds: [],
-      },
-    ],
-  },
-  {
-    id: "actions_integration",
-    titleKey: "rework.teams.formAgent.capabilities.sections.actionsIntegration",
-    packs: [],
-    emptyState: true,
   },
 ];

@@ -48,6 +48,8 @@ type TuningFieldRendererProps = {
    * forced open, false = write-from-scratch. Omit to fall back to local state. */
   pickerExplicit?: boolean | null;
   onPickerExplicitChange?: (value: boolean | null) => void;
+  /** Size of a boolean field's switch; capability cards use "small". */
+  switchSize?: "small" | "medium";
 };
 
 export function TuningFieldRenderer({
@@ -60,6 +62,7 @@ export function TuningFieldRenderer({
   allValues,
   pickerExplicit: pickerExplicitProp,
   onPickerExplicitChange,
+  switchSize,
 }: TuningFieldRendererProps) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language.split("-")[0];
@@ -136,6 +139,7 @@ export function TuningFieldRenderer({
     return (
       <div className={styles.field}>
         <SwitchRow
+          size={switchSize}
           label={fieldTitle}
           description={fieldDescription ?? ""}
           checked={Boolean(fieldValue)}

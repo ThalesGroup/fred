@@ -18,19 +18,23 @@
   display: flex;
   position: relative;
   flex-direction: column;
+  border: 0.5px solid transparent;
   border-radius: var(--radius-s);
-  background: var(--surface-container);
+  background: var(--pack-bg);
   overflow: hidden;
   color: var(--on-surface);
+  --pack-bg: var(--surface-container-low);
   --pack-icon-bg: var(--surface-container-high);
   --pack-icon-color: var(--on-surface-retreat);
   --pack-title-color: var(--on-surface);
   --pack-description-color: var(--on-surface-retreat);
 }
 
-/* Active pack: title + icon pick up the primary role, same cue CapabilityCard
+/* Active pack: border, title and icon pick up the primary role, same cue CapabilityCard
    uses for a ticked capability. */
 .card[data-checked="true"] {
+  --pack-bg: var(--surface-container);
+  border-color: color-mix(in srgb, var(--primary) 70%, transparent);
   --pack-title-color: var(--primary);
   --pack-icon-color: var(--on-primary);
   --pack-icon-bg: var(--primary);
@@ -65,7 +69,7 @@
 
 .toggleArea:hover:not(:disabled),
 .expand:hover {
-  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
+  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--pack-bg);
 }
 
 .toggleArea:focus-visible,
@@ -81,7 +85,6 @@
   align-items: center;
   cursor: pointer;
   border: none;
-  border-left: 1px solid var(--outline-muted);
   background: transparent;
   padding: 0 var(--spacing-s);
   color: var(--on-surface-retreat);

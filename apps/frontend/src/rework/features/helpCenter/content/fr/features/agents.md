@@ -42,8 +42,8 @@ temps de raisonner par étapes…
 Deux façons de choisir, via l'interrupteur **Avancé** en haut de l'onglet :
 
 - **Simple** (par défaut, et recommandé) — vous cochez des **packs** : des
-  ensembles qui vont naturellement ensemble. Une bascule active tout ce qu'il
-  faut.
+  ensembles qui vont naturellement ensemble. Un clic sur la carte active tout
+  ce qu'il faut.
 - **Avancé** — vous activez chaque fonction une par une, avec ses options.
 
 Le mode Simple couvre les usages courants. Le mode Avancé reste accessible à

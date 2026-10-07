@@ -42,13 +42,13 @@ interface CapabilityCardProps {
  */
 export function CapabilityCard({ name, description, checked, disabled, onToggle, subForm }: CapabilityCardProps) {
   return (
-    <li className={styles.card}>
+    <li className={styles.card} data-checked={checked}>
       {/* The whole header is the click target, padding included — <label>
           wrapping the Switch as a descendant (same pattern as SwitchRow), not
           a plain <div> whose padding sits outside a smaller inner <label>'s
           box and swallows clicks near the card's edges. */}
       <label className={styles.header}>
-        <Switch checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
+        <Switch size="small" checked={checked} onChange={onToggle} disabled={disabled} aria-label={name} />
         <div className={styles.meta}>
           <span className={`${styles.name} ${checked ? styles.nameActive : ""}`}>{name}</span>
           {description && <span className={styles.description}>{description}</span>}
@@ -156,6 +156,7 @@ export function CapabilityConfigForm({
               disabled={disabled}
               teamId={teamId}
               allValues={effectiveValues}
+              switchSize="small"
             />
           </div>
         </Fragment>

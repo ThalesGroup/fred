@@ -18,6 +18,7 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
+  withReasoning,
   buildAgentFormSubmitPayload,
   defaultCapabilitySelection,
   defaultReasoningSelection,
@@ -317,6 +318,23 @@ describe("extractCapabilityConfigValues", () => {
     expect(extractCapabilityConfigValues(stored)).toEqual({
       document_access: { attachments: true, team_documents: false, bind_libraries: false },
       other: { search_attachments_only: true },
+    });
+  });
+});
+
+describe("withReasoning", () => {
+  it("turns reasoning on by default when reasoning is turned on", () => {
+    expect(withReasoning({ reasoningEnabled: false, reasoningDefaultOn: false }, true)).toEqual({
+      reasoningEnabled: true,
+      reasoningDefaultOn: true,
+    });
+  });
+
+  it("keeps the member's default choice otherwise", () => {
+    expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: false }, true).reasoningDefaultOn).toBe(false);
+    expect(withReasoning({ reasoningEnabled: true, reasoningDefaultOn: true }, false)).toEqual({
+      reasoningEnabled: false,
+      reasoningDefaultOn: true,
     });
   });
 });

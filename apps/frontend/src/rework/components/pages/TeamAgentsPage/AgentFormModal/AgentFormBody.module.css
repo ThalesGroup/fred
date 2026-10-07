@@ -91,6 +91,26 @@
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-m);
+  padding: 0 var(--spacing-s);
+}
+
+.capabilitiesTitleGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-xs) var(--spacing-m);
+  min-width: 0;
+}
+
+/* Same look as the PowerPoint Filler "learn more" link. */
+.learnMoreLink {
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.learnMoreLink:hover {
+  text-decoration: underline;
 }
 
 .capabilitiesTitle {
@@ -111,8 +131,38 @@
   user-select: none;
 }
 
+/* A divider across the whole modal card runs behind the centered tab group,
+   at mid-height; it bleeds into the card's body padding (SettingsModal). */
 .tabStrip {
   display: flex;
+  position: relative;
+  justify-content: center;
+}
+
+.tabStrip::before {
+  position: absolute;
+  top: 50%;
+  right: calc(-1 * var(--settings-modal-body-padding-inline, var(--spacing-l)));
+  left: calc(-1 * var(--settings-modal-body-padding-inline, var(--spacing-l)));
+  background: color-mix(in srgb, var(--outline-muted) 50%, transparent);
+  height: 1px;
+  content: "";
+}
+
+/* Masks the divider under the group, with a little air on each side. */
+.tabGroup {
+  position: relative;
+  background: var(--surface-main);
+  padding: 0 var(--spacing-s);
+  width: min(100%, 36rem);
+}
+
+/* Two short fields side by side; they stack when the form is narrow. */
+.fieldRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--spacing-m);
+  margin-top: var(--spacing-xs);
 }
 
 .sectionContent {

@@ -1,0 +1,24 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Agent form card: its max width, and its paddings above the tab divider
+   (header) and below it (body), tuned independently. */
+.card {
+  --settings-modal-max-width: 720px;
+  --settings-modal-header-padding: var(--spacing-l) var(--spacing-l) 0;
+  --settings-modal-body-padding-inline: var(--spacing-l);
+  --settings-modal-body-padding-bottom: var(--spacing-l);
+}
