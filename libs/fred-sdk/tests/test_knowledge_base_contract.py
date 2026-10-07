@@ -35,6 +35,7 @@ from fred_sdk.knowledge_base import (
     KnowledgeBaseDeclaration,
     KnowledgeBaseDeclarationError,
     KnowledgeBaseIssue,
+    KnowledgeBaseReconciliation,
     KnowledgeBaseRunContext,
     KnowledgeBaseRunOutcome,
     KnowledgeBaseSyncResult,
@@ -136,7 +137,8 @@ def test_one_async_handler_is_accepted_and_returned_unchanged() -> None:
         context: KnowledgeBaseRunContext,
     ) -> KnowledgeBaseSyncResult:
         return KnowledgeBaseSyncResult(
-            outcome=KnowledgeBaseRunOutcome.succeeded, reconciliation_complete=True
+            outcome=KnowledgeBaseRunOutcome.succeeded,
+            reconciliation=KnowledgeBaseReconciliation.complete,
         )
 
     assert kb.resolve_handler() is synchronize
@@ -149,7 +151,8 @@ def test_second_handler_is_rejected() -> None:
     @kb.synchronize
     async def first(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResult:
         return KnowledgeBaseSyncResult(
-            outcome=KnowledgeBaseRunOutcome.succeeded, reconciliation_complete=True
+            outcome=KnowledgeBaseRunOutcome.succeeded,
+            reconciliation=KnowledgeBaseReconciliation.complete,
         )
 
     with pytest.raises(KnowledgeBaseDeclarationError, match="already declares"):
@@ -159,7 +162,8 @@ def test_second_handler_is_rejected() -> None:
             context: KnowledgeBaseRunContext,
         ) -> KnowledgeBaseSyncResult:
             return KnowledgeBaseSyncResult(
-                outcome=KnowledgeBaseRunOutcome.succeeded, reconciliation_complete=True
+                outcome=KnowledgeBaseRunOutcome.succeeded,
+                reconciliation=KnowledgeBaseReconciliation.complete,
             )
 
 
@@ -171,7 +175,8 @@ def test_synchronous_handler_is_rejected() -> None:
         @kb.synchronize  # type: ignore[arg-type]
         def not_async(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResult:
             return KnowledgeBaseSyncResult(
-                outcome=KnowledgeBaseRunOutcome.succeeded, reconciliation_complete=True
+                outcome=KnowledgeBaseRunOutcome.succeeded,
+                reconciliation=KnowledgeBaseReconciliation.complete,
             )
 
 
@@ -205,7 +210,7 @@ def test_run_context_is_json_safe_and_carries_identifiers() -> None:
 def test_negative_counters_are_rejected(counter: str) -> None:
     payload: dict[str, Any] = {
         "outcome": KnowledgeBaseRunOutcome.succeeded,
-        "reconciliation_complete": True,
+        "reconciliation": "complete",
         counter: -1,
     }
     with pytest.raises(ValidationError):
@@ -215,7 +220,7 @@ def test_negative_counters_are_rejected(counter: str) -> None:
 def test_oversized_summary_is_truncated_not_rejected() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.failed,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         summary="x" * (MAX_SUMMARY_CHARS + 500),
     )
     assert len(result.summary) == MAX_SUMMARY_CHARS
@@ -228,7 +233,7 @@ def test_oversized_issue_lists_and_messages_are_truncated() -> None:
     ]
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.failed,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         warnings=issues,
         errors=issues,
     )
@@ -241,7 +246,7 @@ def test_json_safe_metrics_round_trip() -> None:
     metrics = {"pages": 12, "bytes": 3.5, "sources": ["a", "b"], "ok": True}
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         metrics=metrics,
     )
     dumped = result.model_dump(mode="json")
@@ -252,7 +257,7 @@ def test_non_json_safe_metrics_are_rejected() -> None:
     with pytest.raises(ValidationError, match="JSON-safe"):
         KnowledgeBaseSyncResult(
             outcome=KnowledgeBaseRunOutcome.succeeded,
-            reconciliation_complete=True,
+            reconciliation=KnowledgeBaseReconciliation.complete,
             metrics={"when": object()},
         )
 
@@ -293,7 +298,8 @@ def test_declaration_payload_carries_no_handler_and_no_runtime_state() -> None:
         context: KnowledgeBaseRunContext,
     ) -> KnowledgeBaseSyncResult:
         return KnowledgeBaseSyncResult(
-            outcome=KnowledgeBaseRunOutcome.succeeded, reconciliation_complete=True
+            outcome=KnowledgeBaseRunOutcome.succeeded,
+            reconciliation=KnowledgeBaseReconciliation.complete,
         )
 
     payload = KnowledgeBaseDeclaration.of(kb).model_dump(mode="json")
@@ -480,7 +486,8 @@ def test_resolved_handler_is_accepted_by_asyncio_run_without_a_cast() -> None:
         context: KnowledgeBaseRunContext,
     ) -> KnowledgeBaseSyncResult:
         return KnowledgeBaseSyncResult(
-            outcome=KnowledgeBaseRunOutcome.succeeded, reconciliation_complete=True
+            outcome=KnowledgeBaseRunOutcome.succeeded,
+            reconciliation=KnowledgeBaseReconciliation.complete,
         )
 
     context = KnowledgeBaseRunContext(
@@ -497,37 +504,63 @@ def test_resolved_handler_is_accepted_by_asyncio_run_without_a_cast() -> None:
     assert get_origin(origin) is Coroutine
 
 
-def test_reconciliation_completeness_is_required_and_independent_of_outcome() -> None:
-    with pytest.raises(ValidationError, match="reconciliation_complete"):
+def test_reconciliation_is_required_and_independent_of_outcome() -> None:
+    with pytest.raises(ValidationError, match="reconciliation"):
         KnowledgeBaseSyncResult(outcome=KnowledgeBaseRunOutcome.succeeded)  # type: ignore[call-arg]
 
     bounded = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=False,
+        reconciliation=KnowledgeBaseReconciliation.partial,
         discovered=10,
     )
     assert bounded.outcome is KnowledgeBaseRunOutcome.succeeded
-    assert bounded.reconciliation_complete is False
+    assert bounded.reconciliation is KnowledgeBaseReconciliation.partial
+
+
+def test_an_up_to_date_run_wrote_nothing() -> None:
+    """Nothing to do is a fact operators read; a write beside it would lie."""
+    quiet = KnowledgeBaseSyncResult(
+        outcome=KnowledgeBaseRunOutcome.succeeded,
+        reconciliation=KnowledgeBaseReconciliation.up_to_date,
+        summary="up to date at 4f2a9c1e",
+    )
+    assert quiet.model_dump(mode="json")["reconciliation"] == "up_to_date"
+
+    for lie in (
+        {"updated": 1},
+        {"created": 1},
+        {"removed": 1},
+        {"errors": [KnowledgeBaseIssue(code="read_failed")]},
+        {"outcome": KnowledgeBaseRunOutcome.failed},
+    ):
+        with pytest.raises(ValidationError, match="up_to_date"):
+            KnowledgeBaseSyncResult(
+                **{
+                    "outcome": KnowledgeBaseRunOutcome.succeeded,
+                    "reconciliation": KnowledgeBaseReconciliation.up_to_date,
+                    **lie,
+                }
+            )
 
 
 def test_removed_is_a_report_of_executed_retractions() -> None:
     """A partial pass may still have retracted on an explicit tombstone."""
     partial = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=False,
+        reconciliation=KnowledgeBaseReconciliation.partial,
         removed=2,
     )
     assert partial.removed == 2
-    assert partial.reconciliation_complete is False
+    assert partial.reconciliation is KnowledgeBaseReconciliation.partial
     dumped = partial.model_dump(mode="json")
     assert dumped["removed"] == 2
-    assert dumped["reconciliation_complete"] is False
+    assert dumped["reconciliation"] == "partial"
 
 
 def test_content_truncated_is_serialized_and_false_when_nothing_was_cut() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         summary="short",
         warnings=[KnowledgeBaseIssue(code="w", message="brief")],
     )
@@ -538,7 +571,7 @@ def test_content_truncated_is_serialized_and_false_when_nothing_was_cut() -> Non
 def test_content_truncated_reports_a_clipped_summary() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         summary="x" * (MAX_SUMMARY_CHARS + 1),
     )
     assert result.content_truncated is True
@@ -548,7 +581,7 @@ def test_content_truncated_reports_a_clipped_summary() -> None:
 def test_content_truncated_reports_a_clipped_issue_message() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.failed,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         errors=[
             KnowledgeBaseIssue(code="e", message="m" * (MAX_ISSUE_MESSAGE_CHARS + 1))
         ],
@@ -559,7 +592,7 @@ def test_content_truncated_reports_a_clipped_issue_message() -> None:
 def test_content_truncated_reports_a_dropped_issue_beyond_the_cap() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.failed,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         warnings=[KnowledgeBaseIssue(code="w") for _ in range(MAX_ISSUES + 1)],
     )
     assert len(result.warnings) == MAX_ISSUES
@@ -569,7 +602,7 @@ def test_content_truncated_reports_a_dropped_issue_beyond_the_cap() -> None:
 def test_content_truncated_cannot_be_forced_false_by_the_caller() -> None:
     payload: dict[str, Any] = {
         "outcome": KnowledgeBaseRunOutcome.succeeded,
-        "reconciliation_complete": True,
+        "reconciliation": "complete",
         "summary": "x" * (MAX_SUMMARY_CHARS + 1),
         "content_truncated": False,
     }
@@ -587,7 +620,7 @@ def test_issue_subject_is_optional_generic_and_bounded() -> None:
     # thing that gets recorded.
     reported = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         warnings=[
             KnowledgeBaseIssue(code="w", subject="s" * (MAX_ISSUE_SUBJECT_CHARS + 10))
         ],
@@ -626,7 +659,7 @@ def test_published_payload_is_compact_and_carries_no_client_binding() -> None:
 def test_content_exactly_at_its_bound_is_not_reported_as_truncated() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         summary="x" * MAX_SUMMARY_CHARS,
         warnings=[
             KnowledgeBaseIssue(
@@ -666,7 +699,7 @@ def test_content_exactly_at_its_bound_is_not_reported_as_truncated() -> None:
 def test_content_one_over_its_bound_is_reported_as_truncated(over: dict) -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         **over,
     )
     assert result.content_truncated is True
@@ -675,7 +708,7 @@ def test_content_one_over_its_bound_is_reported_as_truncated(over: dict) -> None
 def test_content_one_under_its_bound_is_untouched() -> None:
     result = KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         summary="x" * (MAX_SUMMARY_CHARS - 1),
     )
     assert result.content_truncated is False

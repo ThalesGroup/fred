@@ -91,9 +91,10 @@ ask the source what changed since) rather than keeping a ledger of its own.
 **Silence is not a removal.** Fred never deletes a document because a caller
 stopped mentioning it. Removal is addressed explicitly, through the document
 boundary. An absence in a source proves a deletion only after a complete,
-authoritative inventory — which is exactly what a run's
-`reconciliation_complete` flag states — whereas an explicit tombstone stays
-actionable during a partial pass.
+authoritative inventory — which is exactly what a run's `reconciliation` set
+to `complete` states — whereas an explicit tombstone stays actionable during a
+`partial` pass. A run that proves nothing changed (an unchanged revision)
+reports `up_to_date` and writes nothing.
 
 **A write is accepted, then ingested like any upload.** The reply is an
 acceptance and a task, never an outcome; the pod follows the task and reads
@@ -231,7 +232,7 @@ operational record is currently wrong about Knowledge Bases.
 
 **Fred imposes a result vocabulary on every author.** `KnowledgeBaseSyncResult`
 requires `discovered / created / updated / removed / unchanged` and a
-reconciliation flag. This forces every author to translate their business into
+reconciliation kind. This forces every author to translate their business into
 terms that are not theirs, to produce numbers Fred cannot verify and does not
 act on. It is the clearest violation of §3 still standing in the SDK.
 

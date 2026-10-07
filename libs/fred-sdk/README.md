@@ -336,8 +336,9 @@ explicit retractions — Fred never infers a deletion from absence.
 
 ```python
 from fred_sdk.knowledge_base import (
-    DocumentPublisher, FieldSpec, KnowledgeBase, KnowledgeBaseRunContext,
-    KnowledgeBaseRunOutcome, KnowledgeBaseSyncResult, knowledge_base_main,
+    DocumentPublisher, FieldSpec, KnowledgeBase, KnowledgeBaseReconciliation,
+    KnowledgeBaseRunContext, KnowledgeBaseRunOutcome, KnowledgeBaseSyncResult,
+    knowledge_base_main,
 )
 
 kb = KnowledgeBase(
@@ -362,7 +363,7 @@ async def synchronize(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResu
     return KnowledgeBaseSyncResult(
         outcome=KnowledgeBaseRunOutcome.succeeded if outcome.succeeded
         else KnowledgeBaseRunOutcome.failed,
-        reconciliation_complete=True,
+        reconciliation=KnowledgeBaseReconciliation.complete,
         discovered=1,
         created=int(handle.created),
         updated=int(not handle.created),
@@ -371,6 +372,11 @@ async def synchronize(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResu
 if __name__ == "__main__":
     raise SystemExit(knowledge_base_main(kb))  # the `publish` and `run` commands
 ```
+
+`reconciliation` says what the run may conclude from an absence: `complete`
+(it listed the whole source, so what is gone was removed), `partial` (a bounded
+or incremental pass — act only on explicit deletions) or `up_to_date` (it proved
+nothing changed and wrote nothing; refused next to any write).
 
 `DocumentPublisher.for_run(context)` opens the run's library as the pod, with
 the configuration the pod started with; a pod that keeps its own store gets

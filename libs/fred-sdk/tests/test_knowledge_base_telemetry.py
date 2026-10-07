@@ -32,6 +32,7 @@ from fred_sdk.knowledge_base import KnowledgeBase, telemetry
 from fred_sdk.knowledge_base.configuration import PodConfiguration
 from fred_sdk.knowledge_base.models import (
     KnowledgeBaseIssue,
+    KnowledgeBaseReconciliation,
     KnowledgeBaseRunOutcome,
     KnowledgeBaseSyncResult,
 )
@@ -60,7 +61,7 @@ def _result(**fields: Any) -> KnowledgeBaseSyncResult:
     return KnowledgeBaseSyncResult(
         **{
             "outcome": KnowledgeBaseRunOutcome.succeeded,
-            "reconciliation_complete": True,
+            "reconciliation": "complete",
             **fields,
         }
     )
@@ -116,7 +117,7 @@ def test_a_reported_failure_and_a_partial_pass_are_their_own_series(kb):
     with telemetry.observing_run() as run:
         run.result = _result(
             outcome=KnowledgeBaseRunOutcome.failed,
-            reconciliation_complete=False,
+            reconciliation=KnowledgeBaseReconciliation.partial,
             errors=[KnowledgeBaseIssue(code="source_unavailable")],
         )
 

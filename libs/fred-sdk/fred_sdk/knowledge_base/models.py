@@ -52,13 +52,35 @@ def _clip(value: str, bound: int) -> tuple[str, bool]:
 class KnowledgeBaseRunOutcome(StrEnum):
     """Terminal outcome of one synchronization run.
 
-    Orthogonal to `KnowledgeBaseSyncResult.reconciliation_complete`: a run can
+    Orthogonal to `KnowledgeBaseSyncResult.reconciliation`: a run can
     succeed having deliberately covered only part of its source.
     """
 
     succeeded = "succeeded"
     failed = "failed"
     cancelled = "cancelled"
+
+
+class KnowledgeBaseReconciliation(StrEnum):
+    """How much of its source one run reconciled with the library.
+
+    What a run may conclude from an absence depends on it, and operators read
+    it on every run (the `reconciliation` metric label).
+    """
+
+    complete = "complete"
+    """The source was observed exhaustively and authoritatively: an item absent
+    from it was really removed."""
+
+    partial = "partial"
+    """A valid but bounded pass — paging cut short, a filter, a budget, an
+    incremental pass. An absence proves nothing; only explicit deletions (a
+    tombstone, a diff) may be acted on."""
+
+    up_to_date = "up_to_date"
+    """Established without enumerating the source that the library already
+    matches a previously complete state — an unchanged revision or version.
+    Nothing was written or removed."""
 
 
 class KnowledgeBaseIssue(BaseModel):
@@ -115,17 +137,17 @@ class KnowledgeBaseSyncResult(BaseModel):
     through the document boundary. It is a report, never an instruction: Fred
     does not delete anything by reading this number. An absence in a source
     proves a deletion only after a complete, authoritative inventory — which is
-    exactly what `reconciliation_complete` states — whereas an explicit
+    exactly what `reconciliation` set to `complete` states — whereas an explicit
     tombstone stays actionable even during a partial pass.
     """
 
     outcome: KnowledgeBaseRunOutcome
-    reconciliation_complete: bool = Field(
+    reconciliation: KnowledgeBaseReconciliation = Field(
         description=(
-            "True only when this run observed the source exhaustively and "
-            "authoritatively. False marks a valid but bounded pass — paging cut "
-            "short, a filter applied, a budget reached — after which an absence "
-            "proves nothing about deletion."
+            "How much of the source this run reconciled: `complete` (observed "
+            "exhaustively — an absence proves a deletion), `partial` (a bounded "
+            "or incremental pass — an absence proves nothing) or `up_to_date` "
+            "(the library already matched the source; nothing written)."
         ),
     )
     summary: str = ""
@@ -147,6 +169,23 @@ class KnowledgeBaseSyncResult(BaseModel):
     )
 
     _truncated: bool = PrivateAttr(default=False)
+
+    @model_validator(mode="after")
+    def _up_to_date_wrote_nothing(self) -> "KnowledgeBaseSyncResult":
+        # "Nothing to do" next to a write would tell operators the library was
+        # untouched when it was not; refused rather than silently reclassified.
+        if self.reconciliation is KnowledgeBaseReconciliation.up_to_date and (
+            self.outcome is not KnowledgeBaseRunOutcome.succeeded
+            or self.created
+            or self.updated
+            or self.removed
+            or self.errors
+        ):
+            raise ValueError(
+                "reconciliation 'up_to_date' means the run succeeded and wrote, "
+                "removed and failed nothing; report 'complete' or 'partial'"
+            )
+        return self
 
     @model_validator(mode="after")
     def _bound_free_form_content(self) -> "KnowledgeBaseSyncResult":

@@ -123,8 +123,9 @@ The pod SHALL measure every run attempt with these series:
 
 `outcome` SHALL be one of `succeeded`, `failed`, `cancelled` (as reported by
 the handler), `error` (the handler or the SDK raised) or `interrupted` (the
-worker stopped or Fred withdrew the run). `reconciliation` SHALL be `complete`
-or `partial` when the handler reported, `none` otherwise. `stage` SHALL be
+worker stopped or Fred withdrew the run). `reconciliation` SHALL be the run's
+reported reconciliation (`complete`, `partial` or `up_to_date`, see *Run
+reconciliation*) when the handler reported, `none` otherwise. `stage` SHALL be
 `context` (fetching the run context), `declare` (declaring the library
 synchronized) or `handler`. `exception_type` SHALL be the raised error's type
 name, without its message. Each attempt SHALL be counted exactly once, and its
@@ -134,6 +135,10 @@ duration SHALL span from the start of the context fetch to the attempt's end.
 - **WHEN** a handler returns outcome `succeeded` with an incomplete reconciliation
 - **THEN** `fred_kb_runs_total{outcome="succeeded",reconciliation="partial"}` increases by one
 
+#### Scenario: Nothing to do
+- **WHEN** a handler reports that its library already matched the source
+- **THEN** `fred_kb_runs_total{outcome="succeeded",reconciliation="up_to_date"}` increases by one
+
 #### Scenario: Handler raises
 - **WHEN** the handler raises
 - **THEN** `fred_kb_runs_total{outcome="error",reconciliation="none"}` and `fred_kb_run_errors_total{stage="handler"}` each increase by one and the error still propagates to the workflow engine
@@ -141,6 +146,30 @@ duration SHALL span from the start of the context fetch to the attempt's end.
 #### Scenario: Worker stopped mid-run
 - **WHEN** a run is cancelled by the worker shutting down
 - **THEN** it is counted with `outcome="interrupted"` and not in `fred_kb_run_errors_total`
+
+### Requirement: Run reconciliation
+
+Every reported run result SHALL state how much of its source it reconciled,
+as exactly one of:
+- `complete` — the run observed the source exhaustively and authoritatively;
+  an item absent from it was really removed.
+- `partial` — a valid but bounded pass (paging cut short, a filter, a budget,
+  or an incremental pass); an absence proves nothing, only explicit deletions
+  may be acted on.
+- `up_to_date` — the run established, without enumerating the source, that the
+  library already matches a previously complete state (an unchanged revision
+  or version); it wrote and removed nothing.
+
+A result reporting `up_to_date` SHALL be refused unless its outcome is
+`succeeded` and it reports no created, updated or removed item and no error.
+
+#### Scenario: Unchanged source
+- **WHEN** a Git handler finds its recorded revision equal to the branch head
+- **THEN** it reports `up_to_date` and writes nothing
+
+#### Scenario: Up to date with writes is refused
+- **WHEN** a result reports `up_to_date` together with one updated item
+- **THEN** the result is rejected as invalid
 
 ### Requirement: Item and issue series
 

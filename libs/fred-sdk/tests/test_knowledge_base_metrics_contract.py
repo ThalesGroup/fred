@@ -33,6 +33,7 @@ import pytest
 from fred_sdk.knowledge_base import KnowledgeBase, telemetry
 from fred_sdk.knowledge_base.models import (
     KnowledgeBaseIssue,
+    KnowledgeBaseReconciliation,
     KnowledgeBaseRunOutcome,
     KnowledgeBaseSyncResult,
 )
@@ -56,7 +57,7 @@ OPERATIONS = {
 # Closed value sets; `status` is checked by pattern instead.
 CLOSED = {
     "outcome": {"succeeded", "failed", "cancelled", "error", "interrupted"},
-    "reconciliation": {"complete", "partial", "none"},
+    "reconciliation": {"complete", "partial", "up_to_date", "none"},
     "stage": {"context", "declare", "handler"},
     "change": {"discovered", "created", "updated", "removed", "unchanged"},
     "severity": {"warning", "error"},
@@ -134,7 +135,7 @@ def _drive_every_path() -> None:
     with telemetry.observing_run() as run:
         run.result = KnowledgeBaseSyncResult(
             outcome=KnowledgeBaseRunOutcome.succeeded,
-            reconciliation_complete=True,
+            reconciliation=KnowledgeBaseReconciliation.complete,
             discovered=5,
             created=1,
             updated=1,
@@ -143,10 +144,15 @@ def _drive_every_path() -> None:
             warnings=[issue],
             errors=[issue],
         )
+    with telemetry.observing_run() as run:
+        run.result = KnowledgeBaseSyncResult(
+            outcome=KnowledgeBaseRunOutcome.succeeded,
+            reconciliation=KnowledgeBaseReconciliation.up_to_date,
+        )
     for outcome in (KnowledgeBaseRunOutcome.failed, KnowledgeBaseRunOutcome.cancelled):
         with telemetry.observing_run() as run:
             run.result = KnowledgeBaseSyncResult(
-                outcome=outcome, reconciliation_complete=False
+                outcome=outcome, reconciliation=KnowledgeBaseReconciliation.partial
             )
     for stage in ("context", "declare", "handler"):
         with pytest.raises(RuntimeError):
@@ -217,7 +223,15 @@ def test_every_closed_value_the_paths_reach_is_seen(bound):
             for label, value in sample.items():
                 seen.setdefault(label, set()).add(value)
 
-    for label in ("outcome", "stage", "change", "severity", "target", "state"):
+    for label in (
+        "outcome",
+        "reconciliation",
+        "stage",
+        "change",
+        "severity",
+        "target",
+        "state",
+    ):
         assert seen[label] == CLOSED[label], label
     assert seen["operation"] == CLOSED["operation"]
     assert {"2xx", "5xx", "transport_error", "error"} <= seen["status"]

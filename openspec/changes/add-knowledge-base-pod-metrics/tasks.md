@@ -26,3 +26,9 @@
 
 - [ ] 5.1 Rebuild `webdav-knowledge-base` against this SDK, run one synchronization locally with metrics bound, and confirm `curl :9000/metrics` and `curl :9001/metrics` show the spec's series with `service` and `knowledge_base`, and that a log line's `service` matches; record the excerpt in the PR
 - [x] 5.2 Run `openspec validate add-knowledge-base-pod-metrics --strict` and the `fred-pod`, `fred-sdk` and `fred-runtime` test suites; all pass
+
+## 6. Three-valued reconciliation (D11)
+
+- [x] 6.1 Replace `reconciliation_complete` with `reconciliation: KnowledgeBaseReconciliation` (`complete`, `partial`, `up_to_date`) and refuse `up_to_date` with writes, errors or a non-succeeded outcome; verify model tests
+- [x] 6.2 Report the value as the `reconciliation` label and reach `up_to_date` in the contract test; verify the telemetry and contract suites
+- [x] 6.3 Migrate the README, KNOWLEDGE-BASE.md, the migration note, the three samples, `webdav-knowledge-base` and the blog post; verify every sample suite, the blog type check and smoke test, and the site build

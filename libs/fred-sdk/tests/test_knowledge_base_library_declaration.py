@@ -170,6 +170,7 @@ def test_the_declaration_is_sent_before_the_handler_runs(monkeypatch):
     from fred_sdk.knowledge_base.client import ControlPlaneClient
     from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
     from fred_sdk.knowledge_base.models import (
+        KnowledgeBaseReconciliation,
         KnowledgeBaseRunContext,
         KnowledgeBaseRunOutcome,
         KnowledgeBaseSyncResult,
@@ -191,7 +192,7 @@ def test_the_declaration_is_sent_before_the_handler_runs(monkeypatch):
         order.append("handler")
         return KnowledgeBaseSyncResult(
             outcome=KnowledgeBaseRunOutcome.succeeded,
-            reconciliation_complete=True,
+            reconciliation=KnowledgeBaseReconciliation.complete,
             summary="done",
         )
 

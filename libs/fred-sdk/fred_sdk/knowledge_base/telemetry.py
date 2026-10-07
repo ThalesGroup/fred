@@ -97,7 +97,8 @@ class _Instruments:
             "fred_kb_runs",
             "Synchronization runs served, one per attempt. `outcome` is what the "
             "handler reported, `error` when it or the SDK raised, `interrupted` "
-            "when the worker was stopped mid-run.",
+            "when the worker was stopped mid-run. `reconciliation` is the run's "
+            "own: complete, partial or up_to_date, none when it did not report.",
             [*kb, "outcome", "reconciliation"],
         )
         self.run_duration = Histogram(
@@ -239,9 +240,7 @@ def observing_run() -> Iterator[RunObservation]:
         yield observation
         if observation.result is not None:
             outcome = observation.result.outcome.value
-            reconciliation = (
-                "complete" if observation.result.reconciliation_complete else "partial"
-            )
+            reconciliation = observation.result.reconciliation.value
             _count_result(instruments, kb, observation.result)
     except asyncio.CancelledError:
         # The worker stopping, or Fred withdrawing the run: neither is the

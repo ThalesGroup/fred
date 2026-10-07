@@ -102,6 +102,16 @@ keeps local work readable. Note, out of scope: native backends' console
 output is text without `service` — only their store handler writes it — a
 divergence for a separate change.
 
+**D11. Reconciliation is three-valued in the result itself.** A boolean
+`reconciliation_complete` could not say "nothing to do": an incremental source
+whose revision did not move had to answer `False`, so a perfectly synchronized
+Knowledge Base read as one doing partial passes on most runs. The result now
+carries `reconciliation: complete | partial | up_to_date`, and the metric label
+reports it as is. **BREAKING** for Knowledge Base code (the field is renamed);
+Fred's applications never read it — only the run outcome reaches the workflow.
+Alternative rejected: keeping the boolean and adding an `up_to_date` flag, two
+fields whose combinations would need rules an enum makes impossible.
+
 ## Risks / Trade-offs
 
 - [The spec and the Python code drift] → a contract test asserts every series

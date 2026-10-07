@@ -26,6 +26,12 @@ slug such as `webdav-kb`, chosen per deployment, the key agent pods already use.
 A pod rebuilt on 4.4.2 without it exits at startup naming the key. It becomes
 the `service` label of every series and the `service` field of every log line.
 
+**Breaking for Knowledge Base code:** `KnowledgeBaseSyncResult.reconciliation_complete`
+(a boolean) is replaced by `reconciliation` (`complete`, `partial` or
+`up_to_date`, `KnowledgeBaseReconciliation`). `True` becomes `complete`, `False`
+becomes `partial`; a run that proves its source unchanged reports `up_to_date`.
+Fred's applications never read this field.
+
 Optional, under `observability`: `kpi.prometheus` (`fred_kb_*` series, port 9000),
 `temporal.prometheus` (`temporal_*` series from the workflow engine, port 9001)
 and `logs.format` (`json`, the default, or `text`). Both endpoints default to
