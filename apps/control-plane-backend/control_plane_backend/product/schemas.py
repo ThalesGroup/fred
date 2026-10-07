@@ -513,6 +513,10 @@ class SessionListItem(BaseModel):
     session_id: str
     team_id: TeamId
     agent_instance_id: str | None = None
+    agent_display_name: str | None = Field(
+        default=None,
+        description="Agent display name retained after deletion; legacy rows may have no snapshot.",
+    )
     title: str | None = None
     context_prompt_ids: list[str] = Field(
         default_factory=list,
@@ -538,9 +542,7 @@ class SessionDetails(SessionListItem):
 
 
 class InactiveSessionItem(BaseModel):
-    """One of the caller's conversations that has gone quiet — home dashboard
-    cleanup tool (#2298). Carries the resolved agent display name (unlike the
-    sidebar `SessionListItem`) so the cleanup list needs no extra lookup."""
+    """Inactive conversation with its current or preserved agent display name."""
 
     session_id: str
     team_id: TeamId

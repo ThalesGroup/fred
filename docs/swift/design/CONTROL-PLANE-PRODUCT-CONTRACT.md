@@ -530,7 +530,7 @@ Freeze session metadata as a control-plane contract separate from runtime histor
 - `SessionPreferences`
 - `UpdateSessionPreferencesRequest`
 
-`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `context_prompt_ids` (ordered chat-context prompts — see §13).
+`SessionListItem` may include: `session_id`, `team_id`, `title`, `updated_at`, `created_at`, `agent_instance_id`, `agent_display_name`, `context_prompt_ids` (ordered chat-context prompts - see §13).
 
 `SessionAttachmentSummary` is the dedicated persisted attachment projection for the
 managed chat drawer. Freeze it as:
@@ -557,6 +557,16 @@ The single-session GET returns `SessionDetails`, extending `SessionListItem`
 with `agent_deleted` and optional `messages_url`. Team membership and session
 ownership are both required; unknown, foreign-team and foreign-owner IDs return
 404. List, create and update responses retain `SessionListItem`.
+
+`agent_display_name` is a nullable session snapshot captured at creation and
+refreshed to the latest instance name atomically at deletion, without advancing
+conversation activity dates. Session details prefer the live name while the agent
+exists; list consumers prefer the live catalog name and fall back to this snapshot.
+Creation captures routing and name in the insertion transaction using the same
+instance lock as deletion; a missing or foreign-team instance returns 404 without
+inserting a session. Inactive-conversation previews retain the name too. One
+migration backfills names from still-present agents; names deleted before that
+migration remain unavailable.
 
 History routing uses the session's captured runtime ID, with the current live
 instance as a fallback only for legacy sessions without that snapshot. The URL

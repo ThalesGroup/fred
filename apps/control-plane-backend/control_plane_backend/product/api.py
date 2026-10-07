@@ -98,6 +98,7 @@ from control_plane_backend.product.service import (
     EnrollmentError,
     ExecutionPreparationError,
     PromptRequestError,
+    SessionAgentUnavailableError,
     SessionAlreadyExistsError,
     SessionAttachmentRequestError,
     build_frontend_bootstrap,
@@ -1668,7 +1669,7 @@ async def post_team_session(
     Called by the frontend after generating a session_id (before or just after
     the first SSE turn). Does not affect runtime execution or history.
 
-    Returns 409 if the session_id already exists.
+    Returns 409 if the session_id already exists, or 404 if its agent is gone.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
@@ -1680,6 +1681,8 @@ async def post_team_session(
         )
     except SessionAlreadyExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except SessionAgentUnavailableError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get(

@@ -48,6 +48,8 @@ async def get_session(
     )
     details = SessionDetails.model_validate(record, from_attributes=True)
     details.agent_deleted = record.agent_instance_id is not None and instance is None
+    if instance is not None:
+        details.agent_display_name = instance.display_name
     # The captured runtime survives agent deletion; a live binding only fills
     # the gap for sessions created before runtime snapshots were recorded.
     runtime_id = record.source_runtime_id or (

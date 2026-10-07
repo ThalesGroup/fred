@@ -147,6 +147,7 @@ from control_plane_backend.sessions.erasure_tasks import (
     schedule_erasure_task,
 )
 from control_plane_backend.sessions.store import (
+    SessionMetadataAgentMissingError,
     SessionMetadataAlreadyExistsError,
     SessionMetadataRecord,
 )
@@ -2428,6 +2429,10 @@ class SessionAlreadyExistsError(Exception):
         self.session_id = session_id
 
 
+class SessionAgentUnavailableError(Exception):
+    """Raised when a new conversation's managed agent no longer exists."""
+
+
 class SessionAttachmentRequestError(Exception):
     """Raised when a session attachment CRUD operation cannot be completed."""
 
@@ -4363,28 +4368,21 @@ async def create_session(
     Example:
     - `item = await create_session(user, team_id, request, deps)`
     """
-    source_runtime_id: str | None = None
-    if request.agent_instance_id is not None:
-        # Capture the instance's source_runtime_id now, while it is certainly
-        # live, so a later agent-instance deletion can never strand erasure's
-        # runtime resolution for this session (issue #2089, RFC §7).
-        instance = await deps.get_agent_instance_store().get_for_team(
-            request.agent_instance_id, team_id
-        )
-        if instance is not None:
-            source_runtime_id = instance.source_runtime_id
     record = SessionMetadataRecord(
         session_id=request.session_id,
         team_id=team_id,
         agent_instance_id=request.agent_instance_id,
-        source_runtime_id=source_runtime_id,
         user_id=user.uid,
         title=request.title,
     )
     try:
-        created = await deps.get_session_metadata_store().create(record)
+        created = await deps.get_session_metadata_store().create(
+            record, capture_agent_snapshot=True
+        )
     except SessionMetadataAlreadyExistsError as exc:
         raise SessionAlreadyExistsError(request.session_id) from exc
+    except SessionMetadataAgentMissingError as exc:
+        raise SessionAgentUnavailableError("Unknown agent instance.") from exc
     try:
         deps.get_kpi_writer().count(
             "session.created_total",
@@ -4482,7 +4480,9 @@ async def list_inactive_sessions(
                 team_id=team_id,
                 title=s.title,
                 agent_name=(
-                    name_by_id.get(s.agent_instance_id) if s.agent_instance_id else None
+                    name_by_id.get(s.agent_instance_id, s.agent_display_name)
+                    if s.agent_instance_id
+                    else None
                 ),
                 updated_at=s.updated_at,
             )
@@ -5000,6 +5000,7 @@ def _record_to_item(record: SessionMetadataRecord) -> SessionListItem:
         session_id=record.session_id,
         team_id=record.team_id,
         agent_instance_id=record.agent_instance_id,
+        agent_display_name=record.agent_display_name,
         title=record.title,
         context_prompt_ids=record.context_prompt_ids,
         created_at=record.created_at,

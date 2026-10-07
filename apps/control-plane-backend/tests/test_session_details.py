@@ -38,6 +38,7 @@ def session_record(
     agent_instance_id: str | None = "agent-1",
     user_id: str = "alice",
     source_runtime_id: str | None = "runtime-1",
+    agent_display_name: str | None = "Preserved assistant",
 ) -> SessionMetadataRecord:
     return SessionMetadataRecord(
         session_id=session_id,
@@ -46,6 +47,7 @@ def session_record(
         user_id=user_id,
         title="History",
         source_runtime_id=source_runtime_id,
+        agent_display_name=agent_display_name,
     )
 
 
@@ -104,6 +106,7 @@ async def test_deleted_agent_keeps_the_captured_history_route() -> None:
     assert details.agent_deleted is True
     assert details.messages_url == "/runtime/agents/sessions/session-1/messages"
     assert details.title == "History"
+    assert details.agent_display_name == "Preserved assistant"
     assert "source_runtime_id" not in details.model_dump()
     assert "internal" not in details.model_dump_json()
     agents.get_for_team.assert_awaited_once_with("agent-1", TeamId("team-1"))
@@ -123,6 +126,7 @@ async def test_existing_agent_status_does_not_gate_history(
         team_id=TeamId("team-1"), session_id="session-1", user_id="alice", deps=deps
     )
     assert details is not None and details.agent_deleted is False
+    assert details.agent_display_name == "Assistant"
     assert details.messages_url == "/runtime/agents/sessions/session-1/messages"
 
 
@@ -158,6 +162,7 @@ async def test_unroutable_runtime_is_distinct_from_agent_deletion(
         team_id=TeamId("team-1"), session_id="session-1", user_id="alice", deps=deps
     )
     assert details is not None and details.agent_deleted is False
+    assert details.agent_display_name == "Assistant"
     assert details.messages_url is None
 
 
@@ -182,11 +187,14 @@ async def test_history_url_encodes_the_session_path_segment() -> None:
 
 @pytest.mark.asyncio
 async def test_no_agent_identity_is_not_a_deleted_agent() -> None:
-    deps, agents = dependencies(session_record(agent_instance_id=None), None)
+    deps, agents = dependencies(
+        session_record(agent_instance_id=None, agent_display_name=None), None
+    )
     details = await get_session(
         team_id=TeamId("team-1"), session_id="session-1", user_id="alice", deps=deps
     )
     assert details is not None and details.agent_deleted is False
+    assert details.agent_display_name is None
     agents.get_for_team.assert_not_awaited()
 
 
