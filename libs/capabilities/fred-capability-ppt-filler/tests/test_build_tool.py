@@ -516,6 +516,14 @@ async def test_an_outputs_folder_never_written_means_a_first_deck():
 
 
 @pytest.mark.asyncio
+async def test_a_workspace_without_listing_counts_as_delivered():
+    class WriteOnly:
+        pass
+
+    assert await tools_mod._deck_delivered(cast(Any, WriteOnly()), "s")
+
+
+@pytest.mark.asyncio
 async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
     monkeypatch,
 ):

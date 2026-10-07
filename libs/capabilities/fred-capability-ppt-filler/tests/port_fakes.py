@@ -22,9 +22,10 @@ network, no real Knowledge Flow, no ApplicationContext.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from fred_sdk.contracts.context import FsEntry, PublishedArtifact
+from fred_sdk.contracts.context import PublishedArtifact
 from fred_sdk.contracts.runtime import (
     AgentAssetPort,
     DocumentContentPort,
@@ -33,6 +34,15 @@ from fred_sdk.contracts.runtime import (
     FolderDocumentEntry,
     WorkspaceFsPort,
 )
+
+
+@dataclass(frozen=True)
+class FsEntry:
+    """One listed path, as the outputs-folder check reads it."""
+
+    path: str
+    size: Optional[int] = None
+    is_dir: bool = False
 
 
 class FakeAssets(AgentAssetPort):

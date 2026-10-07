@@ -45,7 +45,7 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.runtime import WorkspaceFileNotFound, WorkspaceFsPort
+from fred_sdk.contracts.runtime import WorkspaceFsPort
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
@@ -373,18 +373,23 @@ async def _deck_delivered(
 ) -> bool:
     """Whether this conversation already holds a deck: every build is written to
     its outputs folder. Unknown counts as delivered, so it never adds a loop."""
+    # The SDK port is write-only now: without a listing, unknown means delivered.
+    ls = getattr(workspace, "ls", None)
+    if ls is None:
+        return True
     folder = f"outputs/{session_id}" if session_id else "outputs"
     try:
-        entries = await workspace.ls(folder)
-    except WorkspaceFileNotFound:
-        return False
+        entries = await ls(folder)
     except Exception as exc:  # noqa: BLE001 - the passive note still reports it
         # The HTTP adapter answers a folder never written as a 404.
         if getattr(getattr(exc, "response", None), "status_code", None) == 404:
             return False
         logger.warning("[PPTBUILD][TOOL] outputs listing failed", exc_info=True)
         return True
-    return any(e.path.lower().endswith(".pptx") and not e.is_dir for e in entries)
+    return any(
+        e.path.lower().endswith(".pptx") and not getattr(e, "is_dir", False)
+        for e in entries
+    )
 
 
 def _issue_line(report: SlideReport) -> str:

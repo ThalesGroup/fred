@@ -65,7 +65,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     EmptyModel,
 )
-from fred_sdk.contracts.context import FsEntry, PublishedArtifact
+from fred_sdk.contracts.context import PublishedArtifact
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -223,6 +223,15 @@ async def analyse(
 
 
 # --- the agent loop --------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class FsEntry:
+    """One listed path, as the outputs-folder check reads it."""
+
+    path: str
+    size: Optional[int] = None
+    is_dir: bool = False
 
 
 class MemoryWorkspace:
