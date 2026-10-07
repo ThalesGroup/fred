@@ -17,6 +17,23 @@
 }
 .row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: var(--spacing-s);
+}
+
+.condition {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  padding: var(--spacing-m);
+  min-width: 0;
+}
+.path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
   gap: var(--spacing-s);
 }

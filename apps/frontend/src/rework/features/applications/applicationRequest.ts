@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { KeyCloakService } from "../../../security/KeycloakService.ts";
 import type { FredApplicationRequest } from "./applicationHost.ts";
 import { applicationServiceUrl } from "./applicationPath.ts";
@@ -61,6 +62,7 @@ export function createApplicationRequest(
 
     await dependencies.ensureFreshToken(30);
     const response = await request();
+    await handlePlatformAccessResponse(response);
     if (response.status !== 401) return response;
 
     // A 401 here is usually the application service's own entitlement decision,
@@ -70,6 +72,8 @@ export function createApplicationRequest(
       dependencies.logout();
       return response;
     }
-    return request();
+    const retried = await request();
+    await handlePlatformAccessResponse(retried);
+    return retried;
   };
 }

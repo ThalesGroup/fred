@@ -3238,9 +3238,14 @@
       "infoLabel": "Ce que fait une copie"
     },
     "platformAccess": {
+      "bulkHint": "Sélectionnez jusqu'à 100 utilisateurs Fred, même sur plusieurs recherches ou pages, pour ajouter des exceptions manuelles indépendantes. L'autorisation d'une équipe suit ses membres actuels ; quitter l'équipe retire cette source.",
+      "allowSelected": "Autoriser les utilisateurs sélectionnés ({{count}})",
+      "clearSelection": "Effacer la sélection",
+      "select": "Sélectionner",
+      "selectUser": "Sélectionner {{user}}",
       "title": "Accès plateforme",
       "description": "Contrôlez l'accès avec l'attribut d'identité configuré, les exceptions individuelles et l'appartenance aux équipes.",
-      "disabled": "Le contrôle des accès est désactivé dans la configuration du déploiement.",
+      "disabled": "L'administration des accès nécessite une instance Fred authentifiée avec une autorisation effective.",
       "filter": "Activer le filtrage",
       "t0Hint": "Importez une fois les utilisateurs existants avant d'activer le filtrage. Les entrées individuelles restent supprimables.",
       "t0Preview": "{{count}} utilisateurs à importer ; {{matching}} attributs actuellement acceptés.",
@@ -3281,7 +3286,63 @@
         "team": "Équipe autorisée",
         "free": "Équipe Free"
       },
-      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation."
+      "actorLockout": "Accordez-vous d'abord une autre source d'accès avant d'activer le filtrage ou de retirer votre dernière autorisation.",
+      "rule": {
+        "title": "Règle d'accès",
+        "hint": "Les utilisateurs qui satisfont cette règle peuvent accéder à la plateforme. Les exceptions individuelles et les équipes autorisées restent indépendantes.",
+        "discoveryHint": "Ces noms ont été observés dans des tokens humains vérifiés. La liste ne décrit pas tout le fournisseur d'identité ; certains utilisateurs peuvent ne pas avoir un claim.",
+        "claimsFailed": "La découverte des claims est indisponible. Vous pouvez saisir un chemin manuellement.",
+        "combination": "Combiner les conditions",
+        "all": "Toutes les conditions (ET)",
+        "any": "Au moins une condition (OU)",
+        "condition": "Condition {{number}}",
+        "observedClaim": "Claim observé",
+        "selectClaim": "Choisir un claim ou saisir ses clés ci-dessous",
+        "pathKey": "Clé du chemin {{number}}",
+        "addKey": "Ajouter une clé imbriquée",
+        "removeKey": "Retirer la dernière clé",
+        "operator": "Comparaison",
+        "value": "Valeur",
+        "regex": "Expression régulière",
+        "regexHint": "Avancé : l'expression doit correspondre à toute la valeur. Un claim absent, vide ou incompatible échoue toujours, même avec une comparaison négative.",
+        "caseSensitive": "Sensible à la casse",
+        "caseSensitiveCondition": "Sensible à la casse pour la condition {{number}}",
+        "removeCondition": "Retirer la condition",
+        "addCondition": "Ajouter une condition",
+        "test": "Tester avec mon token",
+        "save": "Enregistrer la règle",
+        "reload": "Abandonner le brouillon et recharger",
+        "saved": "Règle enregistrée. Elle s'applique aux prochaines requêtes.",
+        "conflict": "Un autre administrateur a enregistré une règle plus récente. Votre brouillon est conservé. Abandonnez-le et rechargez avant d'enregistrer à nouveau.",
+        "actorLockout": "Cette règle retirerait votre dernière autorisation d'accès. Conservez une règle qui vous accepte ou ajoutez-vous d'abord une exception indépendante.",
+        "invalidOrFailed": "Impossible de valider ou d'enregistrer la règle. Vérifiez les clés, les valeurs et les expressions régulières, puis réessayez.",
+        "required": "Enregistrez une règle d'accès avant d'activer le filtrage.",
+        "ruleMatches": "Votre token satisfait la règle proposée.",
+        "ruleDoesNotMatch": "Votre token ne satisfait pas la règle proposée.",
+        "admitted": "Avec le filtrage actif, vous seriez autorisé, en tenant compte des exceptions et des équipes.",
+        "denied": "Avec le filtrage actif, votre accès serait refusé.",
+        "type": {
+          "string": "Texte",
+          "string_array": "Liste de textes"
+        },
+        "operatorLabel": {
+          "contains": "Contient",
+          "not_contains": "Ne contient pas",
+          "equals": "Est égal à",
+          "not_equals": "Est différent de",
+          "regex": "Expression régulière (avancé)"
+        },
+        "result": {
+          "matched": "La condition est satisfaite.",
+          "not_matching": "La condition n'est pas satisfaite.",
+          "missing": "Ce claim est absent de votre token.",
+          "incompatible": "Ce claim est vide, trop volumineux ou de type incompatible.",
+          "timeout": "L'expression régulière a dépassé son délai maximal."
+        },
+        "invalidRegex": "Expression régulière invalide. Vérifiez sa syntaxe.",
+        "invalidCondition": "Condition invalide. Vérifiez ses clés et sa valeur.",
+        "delegatedHint": "Changer un chemin de claim peut refuser les requêtes déléguées jusqu'à une nouvelle requête directe de l'utilisateur. Les exceptions et les équipes restent valides."
+      }
     }
   },
   "runtime": {

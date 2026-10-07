@@ -23,7 +23,7 @@
 
 import JSZip from "jszip";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { downloadManyAsZip } from "./downloadUtils.tsx";
+import { downloadManyAsZip, fetchAuthedBlob } from "./downloadUtils.tsx";
 
 let createdUrls: Blob[] = [];
 let clickedDownloads: string[] = [];
@@ -114,4 +114,15 @@ describe("downloadManyAsZip", () => {
     expect(await zip.file("notes.txt")!.async("string")).toBe("first");
     expect(await zip.file("notes (2).txt")!.async("string")).toBe("second");
   });
+});
+
+it("clears protected state and redirects on admission denial from a download", async () => {
+  const { platformAccessDenied } = await import("../common/platformAccess");
+  const clear = vi.fn();
+  window.addEventListener(platformAccessDenied, clear, { once: true });
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(JSON.stringify({ detail: "platform_access_denied" }), { status: 403 }),
+  );
+  await expect(fetchAuthedBlob("/knowledge-flow/v1/fs/download/file")).rejects.toThrow("Download failed (403)");
+  expect(clear).toHaveBeenCalledOnce();
 });

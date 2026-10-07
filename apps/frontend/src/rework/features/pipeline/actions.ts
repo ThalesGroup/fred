@@ -94,6 +94,7 @@ export async function awaitIngestion(taskId: string, signal: AbortSignal): Promi
     headers: { Authorization: `Bearer ${await bearer()}`, Accept: "text/event-stream" },
     signal,
   });
+  await handlePlatformAccessResponse(response);
   if (!response.ok || !response.body) throw new Error(`ingestion task ${taskId}: HTTP ${response.status}`);
   for await (const event of parseSseFrames(response.body)) {
     const state = event.state;

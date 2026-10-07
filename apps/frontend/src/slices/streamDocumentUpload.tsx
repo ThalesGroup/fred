@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { handlePlatformAccessResponse } from "../common/platformAccess";
 import { KeyCloakService } from "../security/KeycloakService";
 
 export interface ScheduledTask {
@@ -91,6 +92,7 @@ export async function streamUploadOrProcessDocument(
     body: formData,
   });
 
+  await handlePlatformAccessResponse(response);
   if (!response.ok || !response.body) {
     // The checks that run before the stream opens — storage quota, permissions
     // — answer with an ordinary error and put their explanation in the body.

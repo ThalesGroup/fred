@@ -34,7 +34,6 @@ export interface UserAuthConfig {
 /** Final merged app config used by the UI before runtime bootstrap completes. */
 export interface AppConfig {
   platform_access_enabled: boolean;
-  supportLink: string | null;
   frontend_basename: string;
   feature_flags: Record<string, boolean>;
   properties: Record<string, string>;
@@ -93,7 +92,7 @@ export const loadConfig = async () => {
 
   const base = (await res.json()) as RawAppConfig;
 
-  const { user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled, supportLink } =
+  const { user_auth, gcu_version, root_bootstrap_required, ui_themes, platform_access_enabled } =
     await loadPublicConfig();
 
   config = {
@@ -102,7 +101,6 @@ export const loadConfig = async () => {
     properties: base.properties ?? {},
     user_auth,
     platform_access_enabled,
-    supportLink,
     gcu_version,
     root_bootstrap_required,
     ui_themes,
@@ -142,10 +140,7 @@ export const loadConfig = async () => {
  *   `/config.json`, since the control-plane is required to run the app
  */
 const loadPublicConfig = async (): Promise<
-  Pick<
-    AppConfig,
-    "user_auth" | "gcu_version" | "root_bootstrap_required" | "ui_themes" | "platform_access_enabled" | "supportLink"
-  >
+  Pick<AppConfig, "user_auth" | "gcu_version" | "root_bootstrap_required" | "ui_themes" | "platform_access_enabled">
 > => {
   const res = await fetch(FRONTEND_CONFIG_URL);
   if (!res.ok) {
@@ -164,7 +159,6 @@ const loadPublicConfig = async (): Promise<
       roles_claim: payload.user_auth.roles_claim ?? null,
     },
     platform_access_enabled: payload.platform_access_enabled ?? false,
-    supportLink: payload.supportLink ?? null,
     gcu_version: payload.gcu_version ?? null,
     // Rolling-compatibility fallback only: a control-plane deployed before
     // `root_bootstrap_required` existed omits the field, so this re-derives

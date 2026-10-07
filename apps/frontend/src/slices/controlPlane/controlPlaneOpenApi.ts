@@ -54,6 +54,32 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.setPlatformFiltering,
       }),
     }),
+    listPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGet: build.query<
+      ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiResponse,
+      ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/access/claims` }),
+    }),
+    previewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPost: build.mutation<
+      PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse,
+      PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/policy-preview`,
+        method: "POST",
+        body: queryArg.platformAccessPolicy,
+      }),
+    }),
+    savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: build.mutation<
+      SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiResponse,
+      SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/policy`,
+        method: "PUT",
+        body: queryArg.setPlatformAccessPolicy,
+      }),
+    }),
     listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: build.query<
       ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse,
       ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg
@@ -65,6 +91,16 @@ const injectedRtkApi = api.injectEndpoints({
           limit: queryArg.limit,
           query: queryArg.query,
         },
+      }),
+    }),
+    grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: build.mutation<
+      GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse,
+      GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/access/users`,
+        method: "POST",
+        body: queryArg.grantPlatformAccessUsers,
       }),
     }),
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: build.mutation<
@@ -1759,12 +1795,29 @@ export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiR
 export type SetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchApiArg = {
   setPlatformFiltering: SetPlatformFiltering;
 };
+export type ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiResponse =
+  /** status 200 Successful Response */ PlatformAccessClaim[];
+export type ListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetApiArg = void;
+export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiResponse =
+  /** status 200 Successful Response */ PlatformAccessPolicyPreview;
+export type PreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostApiArg = {
+  platformAccessPolicy: PlatformAccessPolicy;
+};
+export type SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiResponse =
+  /** status 200 Successful Response */ PlatformAccessState;
+export type SavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutApiArg = {
+  setPlatformAccessPolicy: SetPlatformAccessPolicy;
+};
 export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiResponse =
   /** status 200 Successful Response */ PlatformAccessUsersPage;
 export type ListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetApiArg = {
   offset?: number;
   limit?: number;
   query?: string;
+};
+export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiResponse = unknown;
+export type GrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostApiArg = {
+  grantPlatformAccessUsers: GrantPlatformAccessUsers;
 };
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiResponse = unknown;
 export type GrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutApiArg = {
@@ -2925,12 +2978,37 @@ export type LifecycleManagerInput = {
   dry_run?: boolean;
   batch_size?: number;
 };
+export type PlatformAccessCondition = {
+  claim: string[];
+  operator: "equals" | "not_equals" | "contains" | "not_contains" | "regex";
+  value: string;
+  case_sensitive?: boolean;
+};
+export type PlatformAccessPolicy = {
+  combination?: "all" | "any";
+  conditions: PlatformAccessCondition[];
+};
 export type PlatformAccessState = {
   filtering_enabled: boolean;
   t0_completed_at: string | null;
+  policy: PlatformAccessPolicy | null;
+  revision: number;
 };
 export type SetPlatformFiltering = {
   filtering_enabled: boolean;
+};
+export type PlatformAccessClaim = {
+  path: string[];
+  types: ("string" | "string_array")[];
+};
+export type PlatformAccessPolicyPreview = {
+  matched: boolean;
+  admitted: boolean;
+  conditions: ("matched" | "not_matching" | "missing" | "incompatible" | "timeout")[];
+};
+export type SetPlatformAccessPolicy = {
+  expected_revision: number;
+  policy: PlatformAccessPolicy;
 };
 export type AdmissionSource = {
   kind: "attribute" | "manual" | "t0" | "team" | "free";
@@ -2948,6 +3026,9 @@ export type PlatformAccessUser = {
 export type PlatformAccessUsersPage = {
   items: PlatformAccessUser[];
   total: number;
+};
+export type GrantPlatformAccessUsers = {
+  user_ids: string[];
 };
 export type PlatformT0Preview = {
   candidates: number;
@@ -3200,7 +3281,6 @@ export type FrontendUiThemes = {
 };
 export type FrontendConfig = {
   platform_access_enabled?: boolean;
-  supportLink?: string | null;
   user_auth: FrontendUserAuthConfig;
   gcu_version?: string | null;
   /** Whether POST /bootstrap/platform-admin (AUTHZ-07) has ever succeeded on this deployment. True once the durable PlatformBootstrapStore marker is set, permanently — never re-derived from live OpenFGA state, so removing every platform_admin relation later does not flip this back to False (same rationale as BootstrapAlreadyCompletedError). Not sensitive: it reveals only 'has anyone ever bootstrapped this instance', never who, never the secret, never any identity — safe on this public/unauthenticated surface, same as gcu_version. */
@@ -4655,8 +4735,13 @@ export const {
   useGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
   useLazyGetPlatformAccessStateControlPlaneV1AdminPlatformAccessGetQuery,
   useSetPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatchMutation,
+  useListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery,
+  useLazyListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery,
+  usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation,
+  useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation,
   useListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
   useLazyListPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGetQuery,
+  useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation,
   useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation,
   useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation,
   usePreviewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGetQuery,

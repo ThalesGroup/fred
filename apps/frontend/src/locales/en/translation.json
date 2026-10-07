@@ -3238,9 +3238,14 @@
       "infoLabel": "What a copy does"
     },
     "platformAccess": {
+      "bulkHint": "Select up to 100 Fred users across searches or pages to add independent manual exceptions. Team authorization follows current membership; leaving the team removes that source.",
+      "allowSelected": "Allow selected users ({{count}})",
+      "clearSelection": "Clear selection",
+      "select": "Select",
+      "selectUser": "Select {{user}}",
       "title": "Platform access",
       "description": "Control admission using the configured identity attribute, individual exceptions and team membership.",
-      "disabled": "Platform access control is disabled in deployment configuration.",
+      "disabled": "Platform access administration requires authenticated Fred with enforced authorization.",
       "filter": "Enable filtering",
       "t0Hint": "Import existing users once before activating filtering. Individual entries can be removed afterward.",
       "t0Preview": "{{count}} users to import; {{matching}} current attribute matches.",
@@ -3281,7 +3286,63 @@
         "team": "Authorized team",
         "free": "Free team"
       },
-      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization."
+      "actorLockout": "First grant yourself another admission source before enabling filtering or removing your last authorization.",
+      "rule": {
+        "title": "Admission rule",
+        "hint": "Users matching this rule can enter the platform. Individual exceptions and authorized teams remain independent.",
+        "discoveryHint": "These names were observed in verified human tokens. This is not the complete identity-provider schema; some users may lack a claim.",
+        "claimsFailed": "Claim discovery is unavailable. You can enter a path manually.",
+        "combination": "Combine conditions",
+        "all": "All conditions (AND)",
+        "any": "At least one condition (OR)",
+        "condition": "Condition {{number}}",
+        "observedClaim": "Observed claim",
+        "selectClaim": "Choose a claim or enter its keys below",
+        "pathKey": "Path key {{number}}",
+        "addKey": "Add nested key",
+        "removeKey": "Remove last key",
+        "operator": "Comparison",
+        "value": "Value",
+        "regex": "Regular expression",
+        "regexHint": "Advanced: matches the whole value. Missing, empty or incompatible claims always fail, including negative comparisons.",
+        "caseSensitive": "Case sensitive",
+        "caseSensitiveCondition": "Case sensitive for condition {{number}}",
+        "removeCondition": "Remove condition",
+        "addCondition": "Add condition",
+        "test": "Test with my token",
+        "save": "Save rule",
+        "reload": "Discard draft and reload",
+        "saved": "Rule saved. It applies to subsequent requests.",
+        "conflict": "Another administrator saved a newer rule. Your draft is preserved. Discard it and reload before saving again.",
+        "actorLockout": "This rule would remove your last admission source. Keep a matching rule or grant yourself an independent exception first.",
+        "invalidOrFailed": "The rule could not be validated or saved. Check the claim keys, values and regular expressions, then try again.",
+        "required": "Save an admission rule before activating filtering.",
+        "ruleMatches": "Your token matches the draft rule.",
+        "ruleDoesNotMatch": "Your token does not match the draft rule.",
+        "admitted": "With filtering active, you would be admitted, including independent exceptions and teams.",
+        "denied": "With filtering active, you would be refused.",
+        "type": {
+          "string": "Text",
+          "string_array": "List of text"
+        },
+        "operatorLabel": {
+          "contains": "Contains",
+          "not_contains": "Does not contain",
+          "equals": "Equals",
+          "not_equals": "Does not equal",
+          "regex": "Regular expression (advanced)"
+        },
+        "result": {
+          "matched": "Condition matches.",
+          "not_matching": "Condition does not match.",
+          "missing": "This claim is missing from your token.",
+          "incompatible": "This claim is empty, too large or has an incompatible type.",
+          "timeout": "Regular expression exceeded its time budget."
+        },
+        "invalidRegex": "Invalid regular expression. Check its syntax.",
+        "invalidCondition": "Invalid condition. Check its keys and value.",
+        "delegatedHint": "Changing a claim path may refuse delegated requests until the user makes a new direct request. Independent exceptions and teams remain valid."
+      }
     }
   },
   "runtime": {

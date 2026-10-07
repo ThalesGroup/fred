@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { useMemo } from "react";
-import { getGcuVersion, getProperty, getRootBootstrapRequired, getConfig } from "../common/config";
+import { getGcuVersion, getProperty, getRootBootstrapRequired } from "../common/config";
 
 export interface FrontendProperties {
   agentIconName: string;
@@ -55,7 +55,7 @@ export function useFrontendProperties(): FrontendProperties {
       agentIconName: getProperty("agentIconName") || "person",
       agentsNicknamePlural: getProperty("agentsNicknamePlural") || "Agents",
       agentsNicknameSingular: getProperty("agentsNicknameSingular") || "Agent",
-      contactSupportLink: getConfig()?.supportLink || getProperty("contactSupportLink") || "",
+      contactSupportLink: getProperty("contactSupportLink") || "",
       defaultPersonalAvatarFile: getProperty("defaultPersonalAvatarFile") || "",
       defaultTeamAvatarFile: getProperty("defaultTeamAvatarFile") || "",
       faviconName: getProperty("faviconName") || "fred",

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import Button from "@shared/atoms/Button/Button";
+import Checkbox from "@shared/atoms/Checkbox/Checkbox";
 import Switch from "@shared/atoms/Switch/Switch";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
@@ -17,11 +18,13 @@ import {
   usePlatformAccessTeamsQuery,
   useSetPlatformFilteringMutation,
   useGrantPlatformUserMutation,
+  useGrantPlatformUsersMutation,
   useRevokePlatformUserMutation,
   useImportPlatformT0Mutation,
   useSetPlatformTeamMutation,
   useGeneratePlatformLinkMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import PlatformAccessRuleEditor from "./PlatformAccessRuleEditor";
 import styles from "./PlatformAccessPage.module.css";
 
 export default function PlatformAccessPage() {
@@ -30,6 +33,7 @@ export default function PlatformAccessPage() {
   const enabled = getConfig()?.platform_access_enabled ?? false;
   const [offset, setOffset] = useState(0);
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string>();
   const state = usePlatformAccessStateQuery(undefined, { skip: !enabled });
@@ -38,6 +42,7 @@ export default function PlatformAccessPage() {
   const teams = usePlatformAccessTeamsQuery(undefined, { skip: !enabled });
   const [filter] = useSetPlatformFilteringMutation();
   const [grant] = useGrantPlatformUserMutation();
+  const [grantUsers] = useGrantPlatformUsersMutation();
   const [revoke] = useRevokePlatformUserMutation();
   const [importT0] = useImportPlatformT0Mutation();
   const [setTeam] = useSetPlatformTeamMutation();
@@ -52,7 +57,9 @@ export default function PlatformAccessPage() {
         summary: t(
           detail === "platform_access_actor_lockout"
             ? "rework.platformAccess.actorLockout"
-            : "rework.platformAccess.failed",
+            : detail === "platform_access_policy_required"
+              ? "rework.platformAccess.rule.required"
+              : "rework.platformAccess.failed",
         ),
       });
     } finally {
@@ -70,6 +77,13 @@ export default function PlatformAccessPage() {
         <>
           {(state.isError || users.isError || teams.isError || t0.isError) && (
             <p role="alert">{t("rework.platformAccess.failed")}</p>
+          )}
+          {state.data && (
+            <PlatformAccessRuleEditor
+              state={state.data}
+              disabled={locked}
+              reload={async () => (await state.refetch()).data}
+            />
           )}
           <section className={styles.section}>
             <label className={styles.row}>
@@ -107,11 +121,60 @@ export default function PlatformAccessPage() {
                 setOffset(0);
               }}
             />
+            <p>{t("rework.platformAccess.bulkHint")}</p>
+            <div className={styles.row}>
+              <Button
+                color="primary"
+                variant="filled"
+                size="medium"
+                disabled={locked || selected.length === 0}
+                onClick={() =>
+                  void run(async () => {
+                    await grantUsers({ grantPlatformAccessUsers: { user_ids: selected } }).unwrap();
+                    setSelected([]);
+                  })
+                }
+              >
+                {t("rework.platformAccess.allowSelected", { count: selected.length })}
+              </Button>
+              <Button
+                color="primary"
+                variant="outlined"
+                size="medium"
+                disabled={locked || selected.length === 0}
+                onClick={() => setSelected([])}
+              >
+                {t("rework.platformAccess.clearSelection")}
+              </Button>
+            </div>
             <DataTable
               data={users.data?.items ?? []}
               rowKey={(user) => user.user_id}
               serverPagination={{ offset, limit: 25, totalCount: users.data?.total ?? 0, onOffsetChange: setOffset }}
               columns={[
+                {
+                  label: t("rework.platformAccess.select"),
+                  size: "0.5fr",
+                  cellRenderer: (user) => (
+                    <Checkbox
+                      aria-label={t("rework.platformAccess.selectUser", { user: user.username || user.user_id })}
+                      checked={selected.includes(user.user_id)}
+                      disabled={
+                        locked || users.isFetching || (selected.length >= 100 && !selected.includes(user.user_id))
+                      }
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setSelected((current) =>
+                          checked
+                            ? current.includes(user.user_id) || current.length >= 100
+                              ? current
+                              : [...current, user.user_id]
+                            : current.filter((id) => id !== user.user_id),
+                        );
+                      }}
+                    />
+                  ),
+                },
                 {
                   label: t("rework.platformAccess.user"),
                   size: "2fr",
@@ -130,7 +193,7 @@ export default function PlatformAccessPage() {
                     user.sources.map((source, index) => (
                       <div key={index}>
                         {t(`rework.platformAccess.source.${source.kind}`)}
-                        {source.team_name ? `: ${source.team_name}` : ""}
+                        {source.team_id ? `: ${source.team_name || source.team_id} (${source.team_id})` : ""}
                       </div>
                     )),
                 },

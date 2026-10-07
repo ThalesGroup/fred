@@ -68,12 +68,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
   endpoints: {
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
     getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
+    listPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGet: { providesTags: ["PlatformAccess"] },
+    savePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPut: { invalidatesTags: ["PlatformAccess"] },
     listPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersGet: { providesTags: ["PlatformAccess"] },
     previewPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0PreviewGet: { providesTags: ["PlatformAccess"] },
     listPlatformAccessTeamsControlPlaneV1AdminPlatformAccessTeamsGet: { providesTags: ["PlatformAccess"] },
     getPlatformAccessStatusControlPlaneV1PlatformAccessStatusGet: { providesTags: ["PlatformAccess"] },
     previewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGet: { providesTags: ["PlatformAccess"] },
     setPlatformAccessFilteringControlPlaneV1AdminPlatformAccessPatch: { invalidatesTags: ["PlatformAccess"] },
+    grantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPost: { invalidatesTags: ["PlatformAccess"] },
     grantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPut: { invalidatesTags: ["PlatformAccess"] },
     revokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDelete: { invalidatesTags: ["PlatformAccess"] },
     importPlatformAccessT0ControlPlaneV1AdminPlatformAccessT0ImportPost: { invalidatesTags: ["PlatformAccess"] },
@@ -82,7 +85,9 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: ["PlatformAccess"],
     },
     acceptFreeEnrollmentCguControlPlaneV1PlatformAccessFreeTokenGcuPost: { invalidatesTags: ["PlatformAccess"] },
-    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: { invalidatesTags: ["PlatformAccess"] },
+    enrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPost: {
+      invalidatesTags: ["PlatformAccess", "ControlPlaneTeam", "ControlPlaneTeamMember"],
+    },
 
     // Platform announcements. Both reads share one LIST tag: an admin mutation
     // must refresh the admin table AND the banner stack behind it, since the
@@ -389,6 +394,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     // refresh with the caller now a member.
     joinTeamControlPlaneV1TeamsTeamIdJoinPost: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneTeam", id: "LIST" },
       ],
@@ -423,12 +429,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     addTeamMemberControlPlaneV1TeamsTeamIdMembersPost: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
       ],
     },
     grantTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesPost: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -436,6 +444,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     revokeTeamMemberRoleControlPlaneV1TeamsTeamIdMembersUserIdRolesRelationDelete: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -443,6 +452,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     removeTeamMemberControlPlaneV1TeamsTeamIdMembersUserIdDelete: {
       invalidatesTags: (_, __, arg) => [
+        "PlatformAccess",
         { type: "ControlPlaneTeamMember", id: `${arg.teamId}-${arg.userId}` },
         { type: "ControlPlaneTeamMember", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
@@ -862,6 +872,9 @@ export const usePlatformAccessTeamsQuery =
 export const usePlatformAccessStatusQuery =
   enhancedControlPlaneApi.useGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery;
 
+export const useLazyPlatformAccessStatusQuery =
+  enhancedControlPlaneApi.useLazyGetPlatformAccessStatusControlPlaneV1PlatformAccessStatusGetQuery;
+
 export const useFreeEnrollmentPreviewQuery =
   enhancedControlPlaneApi.usePreviewFreeEnrollmentControlPlaneV1PlatformAccessFreeTokenGetQuery;
 
@@ -870,6 +883,9 @@ export const useSetPlatformFilteringMutation =
 
 export const useGrantPlatformUserMutation =
   enhancedControlPlaneApi.useGrantPlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdPutMutation;
+
+export const useGrantPlatformUsersMutation =
+  enhancedControlPlaneApi.useGrantPlatformAccessUsersControlPlaneV1AdminPlatformAccessUsersPostMutation;
 
 export const useRevokePlatformUserMutation =
   enhancedControlPlaneApi.useRevokePlatformAccessUserControlPlaneV1AdminPlatformAccessUsersUserIdDeleteMutation;
@@ -888,3 +904,10 @@ export const useAcceptFreeCguMutation =
 
 export const useEnrollFreeTeamMutation =
   enhancedControlPlaneApi.useEnrollFreeTeamControlPlaneV1PlatformAccessFreeTokenEnrollPostMutation;
+
+export const usePlatformAccessClaimsQuery =
+  enhancedControlPlaneApi.useListPlatformAccessClaimsControlPlaneV1AdminPlatformAccessClaimsGetQuery;
+export const usePreviewPlatformPolicyMutation =
+  enhancedControlPlaneApi.usePreviewPlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPreviewPostMutation;
+export const useSavePlatformPolicyMutation =
+  enhancedControlPlaneApi.useSavePlatformAccessPolicyControlPlaneV1AdminPlatformAccessPolicyPutMutation;
