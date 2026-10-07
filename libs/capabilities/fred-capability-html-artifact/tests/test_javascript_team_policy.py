@@ -51,6 +51,12 @@ SCRIPT_MARKUP = [
     pytest.param('<body onload="go()"><p>x</p></body>', id="inline-handler-onload"),
     pytest.param('<a href="javascript:alert(1)">x</a>', id="javascript-url"),
     pytest.param('<a href="java\tscript:alert(1)">x</a>', id="javascript-url-split"),
+    pytest.param(
+        '<a href="java&#115;cript:alert(1)">x</a>', id="javascript-url-entity"
+    ),
+    pytest.param(
+        '<a href="javascript&colon;alert(1)">x</a>', id="javascript-colon-entity"
+    ),
     pytest.param('<iframe srcdoc="<script>x</script>"></iframe>', id="nested-frame"),
 ]
 
@@ -66,6 +72,9 @@ STATIC_MARKUP = [
     pytest.param("<h2>JavaScript: the basics</h2>", id="prose-javascript-colon"),
     pytest.param("<h2>JavaScript : les bases</h2>", id="prose-javascript-spaced"),
     pytest.param("<p>See javascript: URLs below.</p>", id="prose-javascript-url-word"),
+    pytest.param(
+        "<pre>&lt;a href=java&#115;cript:example&gt;</pre>", id="escaped-url-tutorial"
+    ),
 ]
 
 # `javascript:` in a value position, which must still be refused.

@@ -39,6 +39,7 @@ import logging
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
+from html.parser import HTMLParser
 from typing import Literal, cast
 
 from fred_sdk.contracts.capability import (
@@ -228,6 +229,25 @@ _SCRIPT_MARKERS = (
 )
 
 
+class _ScriptUrlParser(HTMLParser):
+    """Detect URL attributes after HTML entity decoding, as a browser would."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.found = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if any(
+            name in {"href", "xlink:href", "formaction"}
+            and value is not None
+            and re.match(
+                r"^\s*j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t\s*:", value, re.IGNORECASE
+            )
+            for name, value in attrs
+        ):
+            self.found = True
+
+
 def script_reason(html: str, css: str) -> str | None:
     """Why this page would execute script, or None when it is static.
 
@@ -238,6 +258,11 @@ def script_reason(html: str, css: str) -> str | None:
     for pattern in _SCRIPT_MARKERS:
         if pattern.search(html) or pattern.search(css):
             return pattern.pattern
+    if "&" in html:
+        parser = _ScriptUrlParser()
+        parser.feed(html)
+        if parser.found:
+            return "decoded javascript: URL"
     return None
 
 
