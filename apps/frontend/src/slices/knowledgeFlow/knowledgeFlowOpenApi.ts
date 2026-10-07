@@ -982,33 +982,10 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    writeFile: build.mutation<WriteFileApiResponse, WriteFileApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/write/${queryArg.path}`,
-        method: "POST",
-        body: queryArg.bodyWriteFile,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
     deleteFile: build.mutation<DeleteFileApiResponse, DeleteFileApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/delete/${queryArg.path}`,
         method: "DELETE",
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    copyToShared: build.mutation<CopyToSharedApiResponse, CopyToSharedApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/copy-to-shared/${queryArg.path}`,
-        method: "POST",
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1031,29 +1008,6 @@ const injectedRtkApi = api.injectEndpoints({
     downloadFile: build.query<DownloadFileApiResponse, DownloadFileApiArg>({
       query: (queryArg) => ({
         url: `/knowledge-flow/v1/fs/download/${queryArg.path}`,
-        params: {
-          token: queryArg.token,
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    shareFile: build.query<ShareFileApiResponse, ShareFileApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/share/${queryArg.path}`,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    editFile: build.mutation<EditFileApiResponse, EditFileApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/edit/${queryArg.path}`,
-        method: "POST",
-        body: queryArg.editFileRequest,
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1079,39 +1033,6 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           pattern: queryArg.pattern,
           path: queryArg.path,
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    mkdir: build.mutation<MkdirApiResponse, MkdirApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/mkdir/${queryArg.path}`,
-        method: "POST",
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    rename: build.mutation<RenameApiResponse, RenameApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/rename/${queryArg.path}`,
-        method: "POST",
-        body: queryArg.bodyRename,
-        params: {
-          person: queryArg.person,
-          run: queryArg.run,
-          agent: queryArg.agent,
-        },
-      }),
-    }),
-    filesystemTypeStats: build.query<FilesystemTypeStatsApiResponse, FilesystemTypeStatsApiArg>({
-      query: (queryArg) => ({
-        url: `/knowledge-flow/v1/fs/stats/${queryArg.path}`,
-        params: {
           person: queryArg.person,
           run: queryArg.run,
           agent: queryArg.agent,
@@ -2206,23 +2127,8 @@ export type ReadFilePageApiArg = {
   run?: string | null;
   agent?: string | null;
 };
-export type WriteFileApiResponse = /** status 200 Successful Response */ any;
-export type WriteFileApiArg = {
-  path: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  bodyWriteFile: BodyWriteFile;
-};
 export type DeleteFileApiResponse = /** status 200 Successful Response */ any;
 export type DeleteFileApiArg = {
-  path: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type CopyToSharedApiResponse = /** status 200 Successful Response */ any;
-export type CopyToSharedApiArg = {
   path: string;
   person?: string | null;
   run?: string | null;
@@ -2239,26 +2145,9 @@ export type UploadFileApiArg = {
 export type DownloadFileApiResponse = /** status 200 Successful Response */ any;
 export type DownloadFileApiArg = {
   path: string;
-  /** Optional signed link token (see share_file). */
-  token?: string | null;
   person?: string | null;
   run?: string | null;
   agent?: string | null;
-};
-export type ShareFileApiResponse = /** status 200 Successful Response */ ShareFileResponse;
-export type ShareFileApiArg = {
-  path: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type EditFileApiResponse = /** status 200 Successful Response */ any;
-export type EditFileApiArg = {
-  path: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  editFileRequest: EditFileRequest;
 };
 export type GlobApiResponse = /** status 200 Successful Response */ any;
 export type GlobApiArg = {
@@ -2272,28 +2161,6 @@ export type GrepApiResponse = /** status 200 Successful Response */ any;
 export type GrepApiArg = {
   pattern: string;
   path?: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type MkdirApiResponse = /** status 200 Successful Response */ any;
-export type MkdirApiArg = {
-  path: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-};
-export type RenameApiResponse = /** status 200 Successful Response */ FilesystemResourceInfoResult;
-export type RenameApiArg = {
-  path: string;
-  person?: string | null;
-  run?: string | null;
-  agent?: string | null;
-  bodyRename: BodyRename;
-};
-export type FilesystemTypeStatsApiResponse = /** status 200 Successful Response */ ResourceTypeStatsResponse;
-export type FilesystemTypeStatsApiArg = {
-  path: string;
   person?: string | null;
   run?: string | null;
   agent?: string | null;
@@ -3350,37 +3217,9 @@ export type FileReadPage = {
   next_offset: number | null;
   truncated: boolean;
 };
-export type BodyWriteFile = {
-  data: string;
-};
 export type BodyUploadFile = {
   /** Binary payload */
   file: string;
-};
-export type ShareFileResponse = {
-  download_url: string;
-  file_name: string;
-  size?: number | null;
-  mime?: string | null;
-};
-export type EditFileRequest = {
-  old_string: string;
-  new_string: string;
-  replace_all?: boolean;
-};
-export type FilesystemResourceInfoResult = {
-  path: string;
-  size: number | null;
-  type: "file" | "directory";
-  modified: string | null;
-  origin?: string | null;
-  producer?: string | null;
-  created_by?: string | null;
-  created?: string | null;
-  modified_by?: string | null;
-};
-export type BodyRename = {
-  new_name: string;
 };
 export type TabularDocumentListTableResponse = {
   query_alias: string;
@@ -3675,23 +3514,14 @@ export const {
   useLazyReadFileQuery,
   useReadFilePageQuery,
   useLazyReadFilePageQuery,
-  useWriteFileMutation,
   useDeleteFileMutation,
-  useCopyToSharedMutation,
   useUploadFileMutation,
   useDownloadFileQuery,
   useLazyDownloadFileQuery,
-  useShareFileQuery,
-  useLazyShareFileQuery,
-  useEditFileMutation,
   useGlobQuery,
   useLazyGlobQuery,
   useGrepQuery,
   useLazyGrepQuery,
-  useMkdirMutation,
-  useRenameMutation,
-  useFilesystemTypeStatsQuery,
-  useLazyFilesystemTypeStatsQuery,
   useListTabularDocumentsQuery,
   useLazyListTabularDocumentsQuery,
   useDescribeTabularDocumentsQuery,

@@ -138,78 +138,13 @@ def _scoped_filesystem() -> tuple[ScopedAreaFilesystem, _ScopedStorageStub, _Reb
     )
 
 
-# ── shared sub-area ────────────────────────────────────────────────────────
-
-
+# The retired team-shared area must never reach storage.
 @pytest.mark.asyncio
-async def test_shared_list_routes_to_team_storage():
-    scoped_fs, storage, rebac = _scoped_filesystem()
-
-    entries = await scoped_fs.list_area(_user(), ("acme", "shared", "reports"))
-
-    assert [entry.path for entry in entries] == ["notes.txt"]
-    # Box-entry gate: membership (CAN_ACCESS_FILES) is checked before storage access.
-    assert rebac.checks == [(_user(), TeamPermission.CAN_ACCESS_FILES, "acme")]
-    assert storage.calls == [("list", (_user(), "shared/reports"), {"owner_override": "acme", "root_prefix": "teams"})]
-
-
-@pytest.mark.asyncio
-async def test_shared_read_checks_membership_only():
-    scoped_fs, storage, rebac = _scoped_filesystem()
-
-    content = await scoped_fs.cat_area(_user(), ("acme", "shared", "templates", "deck.md"))
-
-    assert content == "hello"
-    assert rebac.checks == [(_user(), TeamPermission.CAN_ACCESS_FILES, "acme")]
-    assert storage.calls == [
-        ("get_text", (_user(), "shared/templates/deck.md"), {"owner_override": "acme", "root_prefix": "teams"}),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_shared_write_requires_update_resources():
-    scoped_fs, storage, rebac = _scoped_filesystem()
-
-    await scoped_fs.write_area(_user(), ("acme", "shared", "outputs", "report.md"), "hello")
-
-    # Membership first (box entry), then the stronger write permission for the shared space.
-    assert rebac.checks == [
-        (_user(), TeamPermission.CAN_ACCESS_FILES, "acme"),
-        (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
-    ]
-    assert storage.calls == [
-        ("put", (_user(), "shared/outputs/report.md", "hello"), {"owner_override": "acme", "root_prefix": "teams"}),
-    ]
-
-
-# ── binary access and retired personal area ───────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_shared_read_bytes_routes_to_storage():
+async def test_shared_area_is_rejected_before_storage():
     scoped_fs, storage, _rebac = _scoped_filesystem()
-
-    data = await scoped_fs.read_bytes_area(_user(), ("acme", "shared", "templates", "deck.pptx"))
-
-    assert data == b"\x89PNG"
-    assert storage.calls == [
-        ("get_bytes", (_user(), "shared/templates/deck.pptx"), {"owner_override": "acme", "root_prefix": "teams"}),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_shared_write_bytes_requires_update_resources():
-    scoped_fs, storage, rebac = _scoped_filesystem()
-
-    await scoped_fs.write_bytes_area(_user(), ("acme", "shared", "outputs", "deck.pptx"), b"\x00\x01")
-
-    assert rebac.checks == [
-        (_user(), TeamPermission.CAN_ACCESS_FILES, "acme"),
-        (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
-    ]
-    assert storage.calls == [
-        ("put", (_user(), "shared/outputs/deck.pptx", b"\x00\x01"), {"owner_override": "acme", "root_prefix": "teams"}),
-    ]
+    with pytest.raises(FileNotFoundError, match="Unsupported team sub-area"):
+        await scoped_fs.read_bytes_area(_user(), ("acme", "shared", "deck.pptx"))
+    assert storage.calls == []
 
 
 @pytest.mark.asyncio
@@ -220,12 +155,8 @@ async def test_shared_write_bytes_requires_update_resources():
         ("stat_area", ()),
         ("cat_area", ()),
         ("read_bytes_area", ()),
-        ("write_area", ("text",)),
         ("write_bytes_area", (b"bytes",)),
         ("delete_area", ()),
-        ("mkdir_area", ()),
-        ("list_recursive_files_area", ()),
-        ("rename_area", ("new.txt",)),
     ],
 )
 @pytest.mark.asyncio
@@ -264,12 +195,12 @@ async def test_retired_personal_area_is_not_searchable():
 async def test_agent_user_path_routes_to_storage():
     scoped_fs, storage, _rebac = _scoped_filesystem()
 
-    await scoped_fs.write_area(_user(), ("acme", "agents", "slide-builder", "users", "u-1", "draft.pptx"), "x")
+    await scoped_fs.write_bytes_area(_user(), ("acme", "agents", "slide-builder", "users", "u-1", "draft.pptx"), b"x")
 
     assert storage.calls == [
         (
             "put",
-            (_user(), "agents/slide-builder/users/u-1/draft.pptx", "x"),
+            (_user(), "agents/slide-builder/users/u-1/draft.pptx", b"x"),
             {"owner_override": "acme", "root_prefix": "teams"},
         ),
     ]
@@ -325,10 +256,10 @@ async def test_agent_config_read_bytes_routes_to_storage():
 async def test_agent_config_write_requires_update_resources():
     scoped_fs, storage, rebac = _scoped_filesystem()
 
-    await scoped_fs.write_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"), "x")
+    await scoped_fs.write_bytes_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"), b"x")
 
     # Membership first (box entry), then the stronger write permission — same
-    # rule as shared/: agent-config assets are a team-owned, admin-managed area.
+    # Agent-config assets are a team-owned, admin-managed area.
     assert rebac.checks == [
         (_user(), TeamPermission.CAN_ACCESS_FILES, "acme"),
         (_user(), TeamPermission.CAN_UPDATE_RESOURCES, "acme"),
@@ -336,7 +267,7 @@ async def test_agent_config_write_requires_update_resources():
     assert storage.calls == [
         (
             "put",
-            (_user(), "agents/slide-builder/config/template.pptx", "x"),
+            (_user(), "agents/slide-builder/config/template.pptx", b"x"),
             {"owner_override": "acme", "root_prefix": "teams"},
         ),
     ]
@@ -348,7 +279,7 @@ async def test_agent_config_write_denied_without_update_resources():
     scoped_fs.rebac = _DenyUpdateRebac()
 
     with pytest.raises(PermissionError, match="update denied"):
-        await scoped_fs.write_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"), "x")
+        await scoped_fs.write_bytes_area(_user(), ("acme", "agents", "slide-builder", "config", "template.pptx"), b"x")
 
     # The write permission is enforced before any storage mutation.
     assert storage.calls == []
@@ -440,20 +371,6 @@ async def test_agent_users_other_uid_still_rejected():
 
 
 @pytest.mark.asyncio
-async def test_grep_returns_team_visible_absolute_paths():
-    scoped_fs, storage, _rebac = _scoped_filesystem()
-
-    matches = await scoped_fs.grep_area(_user(), "todo", ("acme", "shared", "notes"))
-
-    assert matches == ["/teams/acme/notes.txt"]
-    assert storage.calls[-1] == (
-        "grep",
-        (_user(), "todo", "shared/notes"),
-        {"owner_override": "acme", "root_prefix": "teams"},
-    )
-
-
-@pytest.mark.asyncio
 async def test_teams_root_lists_only_readable_team_ids():
     scoped_fs, _storage, rebac = _scoped_filesystem()
     rebac.team_ids = ["team-2", "team-1"]
@@ -470,7 +387,7 @@ async def test_team_box_lists_subareas():
 
     entries = await scoped_fs.list_area(_user(), ("acme",))
 
-    assert [entry.path for entry in entries] == ["shared", "agents"]
+    assert [entry.path for entry in entries] == ["agents"]
     assert rebac.checks == [(_user(), TeamPermission.CAN_ACCESS_FILES, "acme")]
 
 
@@ -479,7 +396,7 @@ async def test_rejects_unsupported_sub_area():
     scoped_fs, _storage, _rebac = _scoped_filesystem()
 
     with pytest.raises(FileNotFoundError, match="Unsupported team sub-area"):
-        await scoped_fs.cat_area(_user(), ("acme", "bogus", "x"))
+        await scoped_fs.cat_area(_user(), ("acme", "bogus", b"x"))
 
 
 # ── membership-only filesystem access ──────────────────────────────────────
@@ -501,28 +418,6 @@ async def test_teams_root_hides_teams_visible_only_through_public():
 
 
 @pytest.mark.asyncio
-async def test_public_only_team_shared_listing_is_denied():
-    scoped_fs, storage, _rebac = _scoped_filesystem()
-    scoped_fs.rebac = _PublicOnlyRebac()
-
-    with pytest.raises(PermissionError, match="can_access_files denied"):
-        await scoped_fs.list_area(_user(), ("someone-elses-team", "shared"))
-
-    assert storage.calls == []
-
-
-@pytest.mark.asyncio
-async def test_public_only_team_shared_read_is_denied():
-    scoped_fs, storage, _rebac = _scoped_filesystem()
-    scoped_fs.rebac = _PublicOnlyRebac()
-
-    with pytest.raises(PermissionError, match="can_access_files denied"):
-        await scoped_fs.cat_area(_user(), ("someone-elses-team", "shared", "secret.md"))
-
-    assert storage.calls == []
-
-
-@pytest.mark.asyncio
 async def test_public_only_team_grep_is_denied():
     scoped_fs, storage, _rebac = _scoped_filesystem()
     scoped_fs.rebac = _PublicOnlyRebac()
@@ -539,10 +434,10 @@ async def test_member_team_stays_reachable():
     rebac.team_ids = ["acme"]
 
     entries = await scoped_fs.list_area(_user(), ())
-    content = await scoped_fs.cat_area(_user(), ("acme", "shared", "notes.md"))
+    content = await scoped_fs.cat_area(_user(), ("acme", "agents", "slide-builder", "users", "u-1", "notes.md"))
 
     assert [entry.path for entry in entries] == ["acme"]
     assert content == "hello"
     assert storage.calls == [
-        ("get_text", (_user(), "shared/notes.md"), {"owner_override": "acme", "root_prefix": "teams"}),
+        ("get_text", (_user(), "agents/slide-builder/users/u-1/notes.md"), {"owner_override": "acme", "root_prefix": "teams"}),
     ]

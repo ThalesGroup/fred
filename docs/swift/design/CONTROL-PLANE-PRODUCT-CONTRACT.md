@@ -719,27 +719,19 @@ POST /knowledge-flow/v1/storage/user/upload   (knowledge-flow-backend, existing 
   Response: { download_url, key, file_name, size, … }
 ```
 
-The control-plane does not proxy or store binary content. File identity is a path in
-the Knowledge Flow virtual filesystem. Users see three team-scoped roots:
-`Resources`, `Espace d'equipe`, and `Agents`. Those map server-side to
-canonical paths such as `/corpus/...`, `/teams/{team}/shared/...`, and
-`/teams/{team}/agents/{agent_instance_id}/users/{uid}/...`. The agent uses the Knowledge
-Flow HTTP `/fs` API to read/write those paths through its workspace adapter.
-The control-plane's role is session and instance management only; file
-storage is `knowledge-flow-backend`'s responsibility.
-
-This boundary is intentionally simple so that future skills can treat files as a
-basic filesystem capability rather than a special control-plane feature. A skill
-should only need to know the path model and the HTTP filesystem primitives; it should
-not need to learn a second storage abstraction owned by control-plane.
+The control-plane does not proxy or store binary content. Users browse corpus
+documents in Resources; conversation attachments use their existing document
+path. Knowledge Flow retains technical `/fs` paths for capability configuration
+assets and generated PPT outputs under
+`/teams/{team}/agents/{agent_instance_id}/...`. The runtime writes PPT outputs
+through `workspace_fs.write` and returns a Knowledge Flow download link. The
+control-plane manages sessions and agent instances, not file bytes.
 
 Implementation note: the system must stay compatible with open-source storage stacks
 without hard-coding MinIO, OpenSearch, or any other specific vendor service into the
 contract. Browser-facing download references remain Fred/Knowledge Flow links represented
 as `LinkPart`; storage-provider URLs and credentials are implementation details.
 
-Attachment metadata (filename, size, MIME type) may appear in `SessionListItem`
-as display-only fields once CHAT-04 (attachment picker) is implemented.
 See `docs/swift/design/FILESYSTEM.md`.
 
 ---

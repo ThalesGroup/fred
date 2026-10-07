@@ -12,27 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Path-derived provenance for the agent filesystem (FILES-04 G4).
-
-Why this exists:
-- The Files UI shows where each file came from (deposé / généré / partagé). That
-  signal is fully derivable from the virtual path area, because the FILES-04
-  isolation rules make the path authoritative: only an agent writes its own
-  agents subtree, ingestion is the sole
-  writer of the corpus. So v1 derives provenance from the path — no stored
-  metadata, no migration (see docs/swift/design/FILESYSTEM.md).
-
-What is NOT derivable from the path alone:
-- Inside `shared/` (Espace d'equipe), a directly-uploaded team file and a
-  human share-copy are indistinguishable by path. In v1 there are no share-copies
-  yet (G5 is not implemented), so `shared/` derives as `uploaded`. When G5 lands
-  it stamps `shared_copy` + `shared_by`/`shared_at` on the one write it controls,
-  refining this default.
-- The uploader of a `shared/` file (no uid segment in the path) — left None.
-
-Provenance is computed server-side from the authorized path; it is never taken
-from client input.
-"""
+"""Path-derived provenance for corpus files and agent-generated outputs."""
 
 from __future__ import annotations
 
@@ -42,25 +22,16 @@ from knowledge_flow_backend.features.filesystem.virtual_fs_contract import (
     AREA_CORPUS,
     AREA_TEAMS,
     SUBAREA_AGENTS,
-    SUBAREA_SHARED,
     SUBAREA_USERS,
     normalize_virtual_path,
 )
 
 # `origin` values (FILES-04).
-ORIGIN_UPLOADED = "uploaded"
 ORIGIN_AGENT_GENERATED = "agent_generated"
-ORIGIN_SHARED_COPY = "shared_copy"
 ORIGIN_INGESTED = "ingested"
-ORIGIN_SYSTEM = "system"
 
 # `producer` values.
-PRODUCER_HUMAN = "human"
 PRODUCER_INGESTION = "ingestion"
-
-# Sub-folder of Espace d'equipe where human share-by-copy lands (G5, RFC §9). Files
-# here are share-copies (partagé); other shared files are direct uploads (deposé).
-SHARED_COPY_SUBDIR = "files"
 
 
 @dataclass(frozen=True)
@@ -69,7 +40,7 @@ class Provenance:
 
     `created_at` is intentionally absent: v1 has no in-place editing of agent
     outputs (RFC §6), so a file's `modified` timestamp is its creation time and
-    the FsEntry already carries it. Add `created_at` only if editing lands.
+    the response already carries it. Add `created_at` only if editing lands.
     """
 
     origin: str
@@ -86,7 +57,6 @@ def derive_provenance(virtual_path: str) -> Provenance | None:
     Examples:
     - `/teams/acme/agents/inst-7/users/u-1/outputs/q3.pptx`
       -> agent_generated, producer `agent:inst-7`, created_by `u-1`
-    - `/teams/acme/shared/templates/brand.pptx` -> uploaded, human, created_by None
     - `/corpus/documents/doc-1/preview.md` -> ingested, ingestion, created_by None
     """
     normalized = normalize_virtual_path(virtual_path)
@@ -114,12 +84,5 @@ def derive_provenance(virtual_path: str) -> Provenance | None:
                 created_by=parts[5],
             )
         return None
-
-    if sub_area == SUBAREA_SHARED:
-        # teams/{team}/shared/files/... is the human share-copy destination (G5) →
-        # partagé; everything else under shared/ is a direct upload → deposé.
-        if len(parts) >= 5 and parts[3] == SHARED_COPY_SUBDIR:
-            return Provenance(origin=ORIGIN_SHARED_COPY, producer=PRODUCER_HUMAN, created_by=None)
-        return Provenance(origin=ORIGIN_UPLOADED, producer=PRODUCER_HUMAN, created_by=None)
 
     return None

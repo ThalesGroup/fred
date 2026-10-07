@@ -1663,9 +1663,7 @@ Renders agent-produced downloadable artifacts (`LinkPart` ui_parts on the final 
 chips below an assistant reply. The `/fs/download` route is session-authenticated, so a chip click
 runs an **authenticated fetch (live Bearer) → blob → save** via the shared `downloadAuthed` util —
 the same proxy-through-KF mechanism as the Resources file browser. A plain markdown anchor would
-navigate without a token and fail ("No authentication token provided"). Signed share links
-(`/fs/share` token-in-URL) are intentionally **not** used here — reserved for explicit external
-sharing — to avoid credential leakage, link rot, and stale-authorization bypass of live ReBAC.
+navigate without a token and fail ("No authentication token provided").
 
 #### Open UX issues
 
