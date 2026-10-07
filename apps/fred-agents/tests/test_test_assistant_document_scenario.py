@@ -81,7 +81,9 @@ class _FakeDocumentSearchPort(DocumentSearchPort):
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
-        attachments_only: bool = False,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
+        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         return DocumentSearchResult(
             hits=(

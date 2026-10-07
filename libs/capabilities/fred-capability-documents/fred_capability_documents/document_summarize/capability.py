@@ -19,7 +19,7 @@ Why this module exists:
 - `summarize_document` used to be bundled inside `document_access`, but its
   invocation is decided purely by the LLM from the tool docstring — there is
   no query-shaped config condition (unlike `list_document_tree`'s
-  `attachments_only`) that tells the runtime when the tool should even exist
+  `team_documents`) that tells the runtime when the tool should even exist
   for an agent. This capability is its own admin-gated, per-agent opt-in (an
   agent selecting `document_access` does NOT get this tool for free) — the
   admission control that governs it today.

@@ -121,7 +121,9 @@ class _FakePort(DocumentSearchPort):
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
-        attachments_only: bool = False,
+        include_attachments: bool = True,
+        include_team_documents: bool = True,
+        attachments_only: bool | None = None,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
@@ -130,7 +132,8 @@ class _FakePort(DocumentSearchPort):
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
-                "attachments_only": attachments_only,
+                "include_attachments": include_attachments,
+                "include_team_documents": include_team_documents,
             }
         )
         if self._error is not None:
@@ -270,6 +273,71 @@ def test_double_registration_trips_boot_invariant() -> None:
 # ---------------------------------------------------------------------------
 
 
+LEGACY_SOURCES = [
+    # (stored legacy keys, expected (attachments, team_documents))
+    ({"show_attach_files_control": False}, (False, True)),
+    (
+        {"show_attach_files_control": False, "search_attachments_only": True},
+        (False, True),
+    ),
+    (
+        {"show_attach_files_control": True, "search_attachments_only": True},
+        (True, False),
+    ),
+    (
+        {"show_attach_files_control": True, "search_attachments_only": False},
+        (True, True),
+    ),
+    ({"show_attach_files_control": True}, (True, True)),
+    # An absent paperclip key counts as on, which was its default.
+    ({"search_attachments_only": True}, (True, False)),
+    ({}, (True, True)),
+]
+
+
+@pytest.mark.parametrize("stored,expected", LEGACY_SOURCES)
+def test_legacy_keys_map_onto_the_two_sources(
+    stored: dict[str, Any], expected: tuple[bool, bool]
+) -> None:
+    config = DocumentAccessConfig.model_validate(stored)
+    assert (config.attachments, config.team_documents) == expected
+    dumped = config.model_dump()
+    assert "show_attach_files_control" not in dumped
+    assert "search_attachments_only" not in dumped
+
+
+def test_new_source_keys_win_over_leftover_legacy_keys() -> None:
+    config = DocumentAccessConfig.model_validate(
+        {"team_documents": False, "search_attachments_only": False}
+    )
+    assert (config.attachments, config.team_documents) == (True, False)
+    config = DocumentAccessConfig.model_validate(
+        {"attachments": True, "show_attach_files_control": False}
+    )
+    assert (config.attachments, config.team_documents) == (True, True)
+
+
+def test_both_sources_off_is_rejected() -> None:
+    with pytest.raises(ValueError, match="at least one source"):
+        DocumentAccessConfig.model_validate(
+            {"attachments": False, "team_documents": False}
+        )
+
+
+def test_manifest_puts_sources_first_and_gates_corpus_fields() -> None:
+    fields = {f.key: f for f in DocumentAccessCapability.manifest.config_fields}
+    keys = list(fields)
+    assert keys[:2] == ["attachments", "team_documents"]
+    assert fields["attachments"].ui is not None
+    assert fields["attachments"].ui.group == "sources"
+    for key in ("show_library_selection", "bind_libraries", "show_document_selection"):
+        ui = fields[key].ui
+        assert ui is not None and ui.visible_when == "team_documents"
+    library_ui = fields["library_tag_ids"].ui
+    assert library_ui is not None and library_ui.visible_when == "bind_libraries"
+    assert not {"show_attach_files_control", "search_attachments_only"} & set(keys)
+
+
 def _widgets(controls) -> list[str]:
     return [c.widget for c in controls]
 
@@ -321,7 +389,7 @@ def test_chat_controls_each_toggle_hides_its_widget() -> None:
         {
             "show_library_selection": False,
             "show_document_selection": False,
-            "show_attach_files_control": False,
+            "attachments": False,
             "show_search_policy_control": False,
             "show_rag_scope_control": False,
         }
@@ -609,12 +677,11 @@ async def test_scoping_precedence_end_to_end(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_attachments_only_pins_search_to_the_session_scope(
+async def test_team_documents_off_pins_search_to_the_session_scope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """`search_attachments_only`: the capability forwards the flag through the
-    port, and the adapter searches the session scope only (attached files),
-    never the corpus — regardless of the turn's RAG scope default."""
+    """Team documents off: the adapter searches the session scope only
+    (attached files), never the corpus, and no scope picker is offered."""
 
     captured: dict[str, Any] = {}
 
@@ -632,7 +699,7 @@ async def test_attachments_only_pins_search_to_the_session_scope(
         cap,
         identity=_identity(),
         services=RuntimeServices(document_search=adapter),
-        config={"search_attachments_only": True},
+        config={"team_documents": False},
     )
     await _invoke_tool(cap, ctx)
 
@@ -640,29 +707,85 @@ async def test_attachments_only_pins_search_to_the_session_scope(
     assert call["include_session_scope"] is True
     assert call["include_corpus_scope"] is False
 
-    # And the scope-picker chat control is dropped (scope is pinned).
-    widgets = [
-        c.widget
-        for c in cap.chat_controls(DocumentAccessConfig(search_attachments_only=True))
-    ]
+    widgets = _widgets(cap.chat_controls(DocumentAccessConfig(team_documents=False)))
     assert "document_scope" not in widgets
     assert "attach_files" in widgets
 
-    # Inert without attachments: the flag must not strand an agent whose
-    # attach button is disabled — the picker returns and the search is normal.
-    no_attach = DocumentAccessConfig(
-        search_attachments_only=True, show_attach_files_control=False
-    )
-    assert "document_scope" in [c.widget for c in cap.chat_controls(no_attach)]
+
+@pytest.mark.asyncio
+async def test_team_documents_only_never_reaches_attachments() -> None:
+    cap = DocumentAccessCapability()
     port = _FakePort(hits=(_hit("d1"),))
     ctx = build_capability_context(
         cap,
         identity=_identity(),
         services=RuntimeServices(document_search=port),
-        config={"search_attachments_only": True, "show_attach_files_control": False},
+        config={"attachments": False},
     )
     await _invoke_tool(cap, ctx)
-    assert port.calls[0]["attachments_only"] is False
+
+    assert port.calls[0]["include_attachments"] is False
+    assert port.calls[0]["include_team_documents"] is True
+    widgets = _widgets(cap.chat_controls(DocumentAccessConfig(attachments=False)))
+    assert "attach_files" not in widgets
+    assert "document_scope" in widgets
+
+
+@pytest.mark.asyncio
+async def test_stored_binding_is_inert_without_team_documents() -> None:
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(_hit("d1"),))
+    stored = {
+        "team_documents": False,
+        "bind_libraries": True,
+        "library_tag_ids": ["A"],
+    }
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config=stored,
+    )
+    await _invoke_tool(cap, ctx)
+
+    assert port.calls[0]["library_tag_ids"] is None
+    config = DocumentAccessConfig.model_validate(stored)
+    assert "document_scope" not in _widgets(cap.chat_controls(config))
+    # Kept in storage for when team documents is turned back on.
+    assert config.model_dump()["library_tag_ids"] == ["A"]
+
+
+def _rag_params(config: DocumentAccessConfig) -> dict[str, Any]:
+    control = next(
+        c
+        for c in DocumentAccessCapability().chat_controls(config)
+        if c.widget == "rag_scope"
+    )
+    assert control.params is not None
+    return control.params.model_dump()
+
+
+def test_rag_scope_offers_every_choice_with_team_documents() -> None:
+    params = _rag_params(DocumentAccessConfig(default_rag_scope="corpus_only"))
+    assert params["options"] is None
+    assert params["default"] == "corpus_only"
+
+
+def test_rag_scope_hides_your_documents_without_team_documents() -> None:
+    params = _rag_params(DocumentAccessConfig(team_documents=False))
+    assert params["options"] == ["hybrid", "general_only"]
+    assert params["default"] == "hybrid"
+
+
+def test_rag_scope_impossible_default_falls_back_to_hybrid() -> None:
+    params = _rag_params(
+        DocumentAccessConfig(team_documents=False, default_rag_scope="corpus_only")
+    )
+    assert params["default"] == "hybrid"
+    kept = _rag_params(
+        DocumentAccessConfig(team_documents=False, default_rag_scope="general_only")
+    )
+    assert kept["default"] == "general_only"
 
 
 @pytest.mark.asyncio
@@ -747,27 +870,24 @@ def test_both_tools_registered_by_default() -> None:
     }
 
 
-def test_attachments_only_drops_the_tree_tool() -> None:
-    """In attachments-only mode the corpus is out of scope by definition, and
-    Swift has no session-attachment enumeration yet — the listing tool would
-    always show things the agent cannot search."""
+def test_team_documents_off_drops_the_tree_tool() -> None:
+    """Without team documents the corpus is out of scope, and there is no
+    session-attachment enumeration yet, so the listing tool is not registered."""
 
     cap = DocumentAccessCapability()
     ctx = build_capability_context(
         cap,
         identity=_identity(),
         services=_full_services(),
-        config={"search_attachments_only": True},
+        config={"team_documents": False},
     )
-    assert "list_document_tree" not in _capability_tools(cap, ctx)
+    assert list(_capability_tools(cap, ctx)) == ["search_documents_using_vectorization"]
 
-    # Inert without attachments (same rule as the search pinning): the tree
-    # listing returns when the attach control is off.
     ctx = build_capability_context(
         cap,
         identity=_identity(),
         services=_full_services(),
-        config={"search_attachments_only": True, "show_attach_files_control": False},
+        config={"attachments": False},
     )
     assert "list_document_tree" in _capability_tools(cap, ctx)
 

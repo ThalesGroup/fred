@@ -35,10 +35,8 @@ What this capability ships (and deliberately does NOT):
   are independently selectable — this capability does not depend on it.
 - still deferred: the tree's trailing "Session attachments" section — a
   pod-reachable session-attachment enumeration does not exist yet
-  (attachments are only a *search* scope today, `attachments_only=True`).
-  The tree tool therefore lists the corpus only, and is not registered at all
-  in attachments-only mode (`search_attachments_only`), where the corpus is
-  out of the agent's scope by definition.
+  (attachments are only a *search* scope today). The tree tool therefore lists
+  the corpus only, and is registered only while `team_documents` is on.
 
 Identifier hygiene (hard rule): document uids and tag ids are internal working
 identifiers for the agent's own tool calls (scope filters, cross-capability
@@ -253,8 +251,9 @@ class DocumentAccessConfig(BaseModel):
     tool); `document_uids` NARROWS to specific documents. An empty list means
     "no capability-side narrowing at this level" (the session binding still
     bounds it). `default_top_k` and `search_policy` set retrieval defaults;
-    the `show_*` toggles pick which computed chat controls the composer shows
-    (attach files, library/document scope, search policy, RAG scope). When
+    `attachments` and `team_documents` are the two document sources (at least
+    one must stay on); the `show_*` toggles pick which computed chat controls
+    the composer shows (library/document scope, search policy, RAG scope). When
     the search-policy picker is shown, `search_policy` acts as the picker's
     DEFAULT and the per-turn choice (RuntimeContext) wins at search time;
     when hidden, it is enforced as-is. `min_source_score_ratio` bounds what's
@@ -272,15 +271,10 @@ class DocumentAccessConfig(BaseModel):
     bind_libraries: ScopePrivate[bool] = False
     show_library_selection: bool = True
     show_document_selection: bool = True
-    show_attach_files_control: bool = True
-    # Restrict search to the conversation's attached files, never the corpus.
-    # Enforced pod-side: the tool passes `attachments_only=True` to the
-    # DocumentSearchPort, whose adapter searches the session scope only
-    # (include_corpus_scope=False); the scope-picker chat control is dropped.
-    # Only meaningful while attachments are enabled: the field is gated on
-    # `show_attach_files_control` in the form AND inert without it (a stored
-    # True must not strand an agent that can no longer receive attachments).
-    search_attachments_only: bool = False
+    # Sources: `attachments` drives the paperclip and the session search scope,
+    # `team_documents` the corpus scope, the scope pickers and the tree tool.
+    attachments: bool = True
+    team_documents: bool = True
     show_search_policy_control: bool = True
     show_rag_scope_control: bool = True
     default_rag_scope: str | None = None
@@ -298,12 +292,18 @@ class DocumentAccessConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _upgrade_legacy_slices(cls, data: object) -> object:
-        """Slices stored before the split-toggle surface revalidate without
-        behavior change: the single scope toggle maps onto the split
-        library/document toggles, and a pre-`bind_libraries` library scope
-        stays binding."""
+        """Older slices revalidate without behavior change: the single scope
+        toggle maps onto the split library/document toggles, a pre-`bind_libraries`
+        library scope stays binding, and the paperclip/attachments-only pair maps
+        onto the two sources (legacy keys are dropped so they never round-trip)."""
 
         if isinstance(data, dict):
+            data = dict(data)
+            paperclip = data.pop("show_attach_files_control", True)
+            only_attached = data.pop("search_attachments_only", False)
+            if "attachments" not in data and "team_documents" not in data:
+                data["attachments"] = bool(paperclip)
+                data["team_documents"] = not (paperclip and only_attached)
             if (
                 "show_document_scope_control" in data
                 and "show_library_selection" not in data
@@ -315,6 +315,15 @@ class DocumentAccessConfig(BaseModel):
             if "bind_libraries" not in data and data.get("library_tag_ids"):
                 data["bind_libraries"] = True
         return data
+
+    @model_validator(mode="after")
+    def _require_a_source(self) -> DocumentAccessConfig:
+        if not (self.attachments or self.team_documents):
+            raise ValueError(
+                "document_access needs at least one source: attachments or "
+                "team_documents."
+            )
+        return self
 
 
 class DocumentAccessTurnOptions(BaseModel):
@@ -355,15 +364,31 @@ class DocumentAccessCapability(
         icon="find_in_page",
         config_fields=[
             FieldSpec(
+                key="attachments",
+                type="boolean",
+                title="capability.document_access.fields.attachments.title",
+                description="capability.document_access.fields.attachments.description",
+                default=True,
+                # `ui.group` drives the form's visual sections: the renderer
+                # draws a thin divider whenever the group changes between two
+                # consecutive visible fields.
+                ui=UIHints(group="sources"),
+            ),
+            FieldSpec(
+                key="team_documents",
+                type="boolean",
+                title="capability.document_access.fields.team_documents.title",
+                description="capability.document_access.fields.team_documents.description",
+                default=True,
+                ui=UIHints(group="sources"),
+            ),
+            FieldSpec(
                 key="show_library_selection",
                 type="boolean",
                 title="capability.document_access.fields.show_library_selection.title",
                 description="capability.document_access.fields.show_library_selection.description",
                 default=True,
-                # `ui.group` drives the form's visual sections: the renderer
-                # draws a thin divider whenever the group changes between two
-                # consecutive visible fields.
-                ui=UIHints(group="scope"),
+                ui=UIHints(group="scope", visible_when="team_documents"),
             ),
             FieldSpec(
                 key="bind_libraries",
@@ -371,7 +396,7 @@ class DocumentAccessCapability(
                 title="capability.document_access.fields.bind_libraries.title",
                 description="capability.document_access.fields.bind_libraries.description",
                 default=False,
-                ui=UIHints(group="scope"),
+                ui=UIHints(group="scope", visible_when="team_documents"),
             ),
             FieldSpec(
                 key="library_tag_ids",
@@ -393,23 +418,7 @@ class DocumentAccessCapability(
                 title="capability.document_access.fields.show_document_selection.title",
                 description="capability.document_access.fields.show_document_selection.description",
                 default=True,
-                ui=UIHints(group="scope"),
-            ),
-            FieldSpec(
-                key="show_attach_files_control",
-                type="boolean",
-                title="capability.document_access.fields.show_attach_files_control.title",
-                description="capability.document_access.fields.show_attach_files_control.description",
-                default=True,
-                ui=UIHints(group="scope"),
-            ),
-            FieldSpec(
-                key="search_attachments_only",
-                type="boolean",
-                title="capability.document_access.fields.search_attachments_only.title",
-                description="capability.document_access.fields.search_attachments_only.description",
-                default=False,
-                ui=UIHints(group="scope", visible_when="show_attach_files_control"),
+                ui=UIHints(group="scope", visible_when="team_documents"),
             ),
             FieldSpec(
                 key="default_top_k",
@@ -482,18 +491,21 @@ class DocumentAccessCapability(
         """
 
         controls: list[ChatControlSpec] = []
-        if config.show_attach_files_control:
+        if config.attachments:
             controls.append(ChatControlSpec(widget="attach_files"))
         # Same visibility algebra as the legacy MCP tool: binding replaces the
         # free library picker with a read-only pinned list; the document picker
-        # is independent. Attachments-only pins the whole scope to the
-        # conversation's attached files, so no scope picker at all.
-        bound = (config.library_tag_ids or None) if config.bind_libraries else None
-        show_libraries = (not config.bind_libraries) and config.show_library_selection
-        show_documents = config.show_document_selection
-        if config.search_attachments_only and config.show_attach_files_control:
-            show_libraries = show_documents = False
-            bound = None
+        # is independent. Without team documents there is no corpus to scope.
+        corpus = config.team_documents
+        bound = (
+            (config.library_tag_ids or None)
+            if corpus and config.bind_libraries
+            else None
+        )
+        show_libraries = (
+            corpus and not config.bind_libraries and config.show_library_selection
+        )
+        show_documents = corpus and config.show_document_selection
         if show_libraries or show_documents or bound:
             controls.append(
                 ChatControlSpec(
@@ -517,13 +529,16 @@ class DocumentAccessCapability(
                 )
             )
         if config.show_rag_scope_control:
+            # "Your documents" (corpus_only) returns nothing without team
+            # documents, so it is not offered and an impossible default falls back.
+            offered = [s for s in _RAG_SCOPES if corpus or s != "corpus_only"]
+            default = config.default_rag_scope
             controls.append(
                 ChatControlSpec(
                     widget="rag_scope",
-                    params=(
-                        RagScopeControlParams(default=config.default_rag_scope)  # type: ignore[arg-type]
-                        if config.default_rag_scope in _RAG_SCOPES
-                        else RagScopeControlParams()
+                    params=RagScopeControlParams(
+                        default=default if default in offered else "hybrid",  # type: ignore[arg-type]
+                        options=None if corpus else offered,  # type: ignore[arg-type]
                     ),
                 )
             )
@@ -573,7 +588,9 @@ class DocumentAccessCapability(
         # semantics as the legacy tool (the tree's value is kept but inert
         # when unbound).
         bound_library_ids = (
-            (config.library_tag_ids or None) if config.bind_libraries else None
+            (config.library_tag_ids or None)
+            if config.team_documents and config.bind_libraries
+            else None
         )
         scoped_library_tag_ids = narrow_scope_ids(
             bound_library_ids, turn.library_tag_ids
@@ -590,9 +607,6 @@ class DocumentAccessCapability(
             None if config.show_search_policy_control else config.search_policy
         )
         min_source_score_ratio = config.min_source_score_ratio
-        attachments_only = (
-            config.search_attachments_only and config.show_attach_files_control
-        )
 
         @tool(
             "search_documents_using_vectorization",
@@ -637,10 +651,8 @@ class DocumentAccessCapability(
                     library_tag_ids=scoped_library_tag_ids,
                     document_uids=scoped_document_uids,
                     search_policy=search_policy,
-                    attachments_only=(
-                        config.search_attachments_only
-                        and config.show_attach_files_control
-                    ),
+                    include_attachments=config.attachments,
+                    include_team_documents=config.team_documents,
                 )
             except Exception as exc:
                 run_stop = unwrap_run_stop_error(exc)
@@ -760,10 +772,8 @@ class DocumentAccessCapability(
             return result.tree, artifact
 
         tools: list[BaseTool] = [search_documents_using_vectorization]
-        # The corpus tree is meaningless in attachments-only mode (the corpus
-        # is out of the agent's scope by definition), and there is no
-        # session-attachment enumeration yet (see module docstring) — so the
-        # listing tool is dropped rather than registered-but-empty.
-        if not attachments_only:
+        # The tree lists the corpus only (no session-attachment enumeration yet,
+        # see module docstring), so it is dropped rather than registered-but-empty.
+        if config.team_documents:
             tools.append(list_document_tree)
         return tools
