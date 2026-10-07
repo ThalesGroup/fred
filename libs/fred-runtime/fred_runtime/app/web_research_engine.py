@@ -70,6 +70,16 @@ async def resolve_public(host: str, port: int) -> str:
     return addresses[0]
 
 
+def check_literal(host: str) -> None:
+    """Refuse a non-public IP literal without DNS; names are left to the proxy."""
+    try:
+        address = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return
+    if not is_public(str(address)):
+        raise WebResearchError("unsafe_destination")
+
+
 class PublicNetworkBackend(AutoBackend):
     async def connect_tcp(
         self,
@@ -160,7 +170,10 @@ class ResearchEngine:
                 async def public(page: WebPage) -> bool:
                     try:
                         host = httpx.URL(page.url).host
-                        await resolve_public(host, httpx.URL(page.url).port or 443)
+                        if self.config.proxy_url:
+                            check_literal(host)
+                        else:
+                            await resolve_public(host, httpx.URL(page.url).port or 443)
                         return True
                     except WebResearchError:
                         return False
@@ -314,17 +327,15 @@ def select_passages(content: str, focus: str, count: int) -> str:
 
 
 class ProxyTransport(httpx.AsyncHTTPTransport):
-    """Preflight public destinations; the forward proxy enforces final DNS policy."""
+    """Check only IP literals locally, without DNS: the proxy resolves names and
+    MUST refuse private, non-global and metadata destinations."""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         try:
             FetchArguments(url=str(request.url))
         except ValueError:
             raise WebResearchError("unsafe_destination") from None
-        await resolve_public(
-            request.url.host,
-            request.url.port or (443 if request.url.scheme == "https" else 80),
-        )
+        check_literal(request.url.host)
         return await super().handle_async_request(request)
 
 

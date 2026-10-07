@@ -74,10 +74,10 @@ TLS interception and client certificates are not configured by this feature.
 The operator owns the proxy deployment, firewall, DNS and monitoring. In proxy
 mode, permit the Fred host only proxy connectivity for research egress. The proxy
 MUST reject private/non-global and metadata destinations at connection time,
-including mixed IPv4/IPv6 records, DNS rebinding and redirects. Fred preflights
-public destination DNS locally but cannot pin the remote proxy's connection;
-local checks are not a substitute for this proxy policy. Fred therefore also
-needs public DNS resolution in this mode. Test these controls on the actual DMZ.
+including mixed IPv4/IPv6 records, DNS rebinding and redirects. Fred resolves no
+names in this mode, so the Fred host needs no external DNS: it refuses only
+non-public IP literals locally and forwards names to the proxy, which therefore
+carries name-based SSRF protection. Test these controls on the actual DMZ.
 No Fred-specific API or service executable belongs on the proxy host.
 
 ## Limitations
