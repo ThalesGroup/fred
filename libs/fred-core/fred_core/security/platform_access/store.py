@@ -195,7 +195,6 @@ class PlatformAccessStore:
             else set()
         )
         projection = {key: user.admission_claims.get(key) for key in sorted(selected)}
-        path = hashlib.sha256(json.dumps(sorted(selected)).encode()).hexdigest()
         row = await self.user(uid)
         issued = user.admission_issued_at
         if row is not None and row.admission_issued_at is not None:

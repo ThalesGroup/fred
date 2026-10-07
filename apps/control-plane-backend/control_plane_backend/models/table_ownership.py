@@ -24,6 +24,8 @@ control-plane's autogenerate propose creating knowledge-flow's tables.
 
 from __future__ import annotations
 
+# Register admission tables on CoreBase before Alembic inspects ownership.
+# codeql[py/unused-import]
 import fred_core.security.platform_access.models  # noqa: F401
 import fred_core.session.stores.session_models  # noqa: F401 — registers session with CoreBase
 import fred_core.teams.team_metatada_models  # noqa: F401 — registers teammetadata with CoreBase

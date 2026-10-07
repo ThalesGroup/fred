@@ -191,7 +191,8 @@ async def test_free_link_rotation_revocation_and_private_enrollment(access, vers
     ).cgu_required
     assert (await service.preview_link(access, newcomer, token, "next")).cgu_required
     await service.set_filtering(access, actor, True)
-    assert (await service.enroll(access, newcomer, token, version)).admitted
+    enrolled = await service.enroll(access, newcomer, token, version)
+    assert enrolled.admitted
     assert access.rebac.writes[0].relation == RelationType.TEAM_MEMBER
     await service.enroll(access, newcomer, token, version)
     assert len(access.rebac.writes) == 1
@@ -258,7 +259,7 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
     app = FastAPI()
     app.include_router(api.router)
     app.dependency_overrides[get_platform_access] = lambda: access
-    app.dependency_overrides[api.get_current_user] = lambda: user()
+    app.dependency_overrides[api.get_current_user] = user
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
@@ -268,36 +269,32 @@ async def test_admin_endpoints_reject_nonplatform_admins(access):
             "/admin/platform/access/teams",
             "/admin/platform/access/t0-preview",
         ):
-            assert (await client.get(path)).status_code == 403
-        assert (
-            await client.post("/admin/platform/access/t0-import")
-        ).status_code == 403
-        assert (
-            await client.patch(
-                "/admin/platform/access", json={"filtering_enabled": True}
-            )
-        ).status_code == 403
+            response = await client.get(path)
+            assert response.status_code == 403
+        response = await client.post("/admin/platform/access/t0-import")
+        assert response.status_code == 403
+        response = await client.patch(
+            "/admin/platform/access", json={"filtering_enabled": True}
+        )
+        assert response.status_code == 403
         target = str(uuid4())
-        assert (
-            await client.post(
-                "/admin/platform/access/users", json={"user_ids": [target]}
-            )
-        ).status_code == 403
-        assert (
-            await client.put(f"/admin/platform/access/users/{target}")
-        ).status_code == 403
-        assert (
-            await client.delete(f"/admin/platform/access/users/{target}")
-        ).status_code == 403
-        assert (
-            await client.patch(
-                "/admin/platform/access/teams/demo",
-                json={"allowed": True, "free": True},
-            )
-        ).status_code == 403
-        assert (
-            await client.post("/admin/platform/access/teams/demo/enrollment-link")
-        ).status_code == 403
+        response = await client.post(
+            "/admin/platform/access/users", json={"user_ids": [target]}
+        )
+        assert response.status_code == 403
+        response = await client.put(f"/admin/platform/access/users/{target}")
+        assert response.status_code == 403
+        response = await client.delete(f"/admin/platform/access/users/{target}")
+        assert response.status_code == 403
+        response = await client.patch(
+            "/admin/platform/access/teams/demo",
+            json={"allowed": True, "free": True},
+        )
+        assert response.status_code == 403
+        response = await client.post(
+            "/admin/platform/access/teams/demo/enrollment-link"
+        )
+        assert response.status_code == 403
     assert not (await access.state()).filtering_enabled
 
 
@@ -441,7 +438,7 @@ async def test_pg_link_disabled_before_locked_enrollment_refuses(pg_access):
         await asyncio.sleep(0.05)
         assert not enrolling.done()
     with pytest.raises(HTTPException):
-        await enrolling
+        await asyncio.wait_for(enrolling, timeout=10)
     assert pg_access.rebac.writes == []
 
 
@@ -585,43 +582,37 @@ async def test_rule_endpoints_permissions_validation_and_names_only(access):
         assert catalog.status_code == 200
         assert all(set(item) == {"path", "types"} for item in catalog.json())
         assert "accepted" not in catalog.text
-        assert (
-            await client.post(
-                "/admin/platform/access/policy-preview", json=draft().model_dump()
-            )
-        ).json()["matched"]
+        response = await client.post(
+            "/admin/platform/access/policy-preview", json=draft().model_dump()
+        )
+        assert response.json()["matched"]
         saved = await client.put(
             "/admin/platform/access/policy",
             json={"expected_revision": 1, "policy": draft().model_dump()},
         )
         assert saved.json()["revision"] == 2
-        assert (
-            await client.put(
-                "/admin/platform/access/policy",
-                json={"expected_revision": 1, "policy": draft().model_dump()},
-            )
-        ).status_code == 409
-        assert (
-            await client.post(
-                "/admin/platform/access/policy-preview",
-                json={
-                    "conditions": [{"claim": ["x"], "operator": "regex", "value": "["}]
-                },
-            )
-        ).status_code == 422
+        response = await client.put(
+            "/admin/platform/access/policy",
+            json={"expected_revision": 1, "policy": draft().model_dump()},
+        )
+        assert response.status_code == 409
+        response = await client.post(
+            "/admin/platform/access/policy-preview",
+            json={"conditions": [{"claim": ["x"], "operator": "regex", "value": "["}]},
+        )
+        assert response.status_code == 422
         access.rebac.admin = False
-        assert (await client.get("/admin/platform/access/claims")).status_code == 403
-        assert (
-            await client.post(
-                "/admin/platform/access/policy-preview", json=draft().model_dump()
-            )
-        ).status_code == 403
-        assert (
-            await client.put(
-                "/admin/platform/access/policy",
-                json={"expected_revision": 2, "policy": draft().model_dump()},
-            )
-        ).status_code == 403
+        response = await client.get("/admin/platform/access/claims")
+        assert response.status_code == 403
+        response = await client.post(
+            "/admin/platform/access/policy-preview", json=draft().model_dump()
+        )
+        assert response.status_code == 403
+        response = await client.put(
+            "/admin/platform/access/policy",
+            json={"expected_revision": 2, "policy": draft().model_dump()},
+        )
+        assert response.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -689,12 +680,14 @@ async def test_pg_t0_matching_does_not_hold_policy_lock(pg_access, monkeypatch):
 
     def blocked_match(row, policy):
         entered.set()
-        assert release.wait(timeout=4)
+        released = release.wait(timeout=4)
+        assert released
         return original(row, policy)
 
     monkeypatch.setattr(pg_access, "observed_match", blocked_match)
     preview = asyncio.create_task(service.t0(pg_access))
-    assert await asyncio.to_thread(entered.wait, 2)
+    entered_in_time = await asyncio.to_thread(entered.wait, 2)
+    assert entered_in_time
     try:
         changed = await asyncio.wait_for(
             service.save_policy(pg_access, actor, draft("accepted", ["attribute"]), 1),
@@ -703,7 +696,7 @@ async def test_pg_t0_matching_does_not_hold_policy_lock(pg_access, monkeypatch):
         assert changed.revision == 2
     finally:
         release.set()
-        await preview
+        await asyncio.wait_for(preview, timeout=10)
 
 
 @pytest.mark.asyncio
@@ -721,12 +714,14 @@ async def test_completed_t0_retry_reports_completion_despite_concurrent_rule_edi
 
     def blocked_match(row, policy):
         entered.set()
-        assert release.wait(timeout=4)
+        released = release.wait(timeout=4)
+        assert released
         return original(row, policy)
 
     monkeypatch.setattr(access, "observed_match", blocked_match)
     retry = asyncio.create_task(service.t0(access, actor))
-    assert await asyncio.to_thread(entered.wait, 2)
+    entered_in_time = await asyncio.to_thread(entered.wait, 2)
+    assert entered_in_time
     try:
         await service.save_policy(access, actor, draft("accepted"), 1)
     finally:
@@ -749,7 +744,8 @@ async def test_pg_live_policy_and_free_journey_with_cached_human_facts(pg_access
     assert not await second.admitted(newcomer)
     token = await service.generate_link(pg_access, "demo")
     await service.accept_cgu(pg_access, newcomer, token, "v2", "v2")
-    assert (await service.enroll(pg_access, newcomer, token, "v2")).admitted
+    enrolled = await service.enroll(pg_access, newcomer, token, "v2")
+    assert enrolled.admitted
     assert await second.admitted(cast(Principal, SimpleNamespace(uid=newcomer.uid)))
     await service.set_team(pg_access, actor, "demo", False, False)
     assert not await second.admitted(newcomer)
@@ -825,24 +821,21 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
         for payload in ([], [first.uid] * 101, ["invalid"]):
-            assert (
-                await client.post(
-                    "/admin/platform/access/users", json={"user_ids": payload}
-                )
-            ).status_code == 422
-        assert (
-            await client.post(
-                "/admin/platform/access/users",
-                json={"user_ids": [first.uid, str(uuid4())]},
+            response = await client.post(
+                "/admin/platform/access/users", json={"user_ids": payload}
             )
-        ).status_code == 404
+            assert response.status_code == 422
+        response = await client.post(
+            "/admin/platform/access/users",
+            json={"user_ids": [first.uid, str(uuid4())]},
+        )
+        assert response.status_code == 404
         assert await access.store.exception(UUID(first.uid)) is None
-        assert (
-            await client.post(
-                "/admin/platform/access/users",
-                json={"user_ids": [first.uid, second.uid]},
-            )
-        ).status_code == 204
+        response = await client.post(
+            "/admin/platform/access/users",
+            json={"user_ids": [first.uid, second.uid]},
+        )
+        assert response.status_code == 204
         assert (
             gate.call_args.kwargs["consistency_token"]
             == access.rebac.HIGHER_CONSISTENCY
@@ -850,11 +843,10 @@ async def test_bulk_endpoint_bounds_unknown_users_and_fresh_admin_permission(acc
         gate.side_effect = HTTPException(403, "forbidden")
         third = user()
         await access.observe(third)
-        assert (
-            await client.post(
-                "/admin/platform/access/users", json={"user_ids": [third.uid]}
-            )
-        ).status_code == 403
+        response = await client.post(
+            "/admin/platform/access/users", json={"user_ids": [third.uid]}
+        )
+        assert response.status_code == 403
         assert await access.store.exception(UUID(third.uid)) is None
 
 
