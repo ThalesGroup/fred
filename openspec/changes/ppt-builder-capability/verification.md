@@ -1355,3 +1355,20 @@ clean; `npx vitest run src/rework/features/capabilities/ppt_filler`: 7 files, 49
 Not covered: a live re-run with a real model; the gapless header group (CSS) has no automated
 check; a refused plan from before this change still in the table can be read as a base once (it
 is not `delivered`, so the "nothing changed" check skips it).
+
+## Results: WP39 (live-session fixes: kind edit, drop options, identical resends)
+
+Session `b9e7ec4d`: slide 10 (`bullets`) edited to `two_columns` with columns, its bullets left; twelve `needs_revision` (`drop bullets`), mostly identical calls; the thirteenth blocked by the turn's tool-call cap (12) and shown as the runtime's generic failure.
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| A kind edit kept fields the new kind cannot show | Cleared unless the call sets them; noted in the result | `test_a_kind_edit_clears_the_fields_the_new_kind_cannot_hold` (the session's three edits), `test_a_kind_edit_keeps_what_the_same_call_sets_and_what_the_kind_holds` |
+| `drop bullets` gave no way to drop | The exact `edit` in `changes` mode | `test_a_drop_option_gives_its_exact_change` |
+| The same refused call resent until the cap | Answered without evaluation, `replace` suggested | `test_a_call_identical_to_a_refused_one_is_not_evaluated_again` |
+
+Commands (package root `libs/capabilities/fred-capability-ppt-filler`): `make code-quality`
+clean (existing `builder_decks.py` `__all__` warning); `make test`: 500 passed, 5 skipped
+(496 before WP39). `openspec validate ppt-builder-capability` valid.
+
+Not covered: a live re-run with a real model; the runtime's cap message (no runtime change).
+

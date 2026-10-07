@@ -766,9 +766,29 @@ The system SHALL let the user correct a deck in chat by regenerating from an ame
 
 #### Scenario: Corrected resend of refused changes
 
-- **WHEN** a `changes` call is refused with `needs_revision` and the model resends changes of the same shape (same operations on the same slide numbers and fields), corrected or identical, in the same turn (for example the inserted slide fixed, sent again as an insert, or a resend after a variety ask that says a resend is built as is)
+- **WHEN** a `changes` call is refused with `needs_revision` and the model resends changes of the same shape (same operations on the same slide numbers and fields), corrected, in the same turn (for example the inserted slide fixed, sent again as an insert, or a resend after a variety ask that says a resend is built as is)
 - **THEN** they are applied to the plan the refused changes were applied to, so nothing is inserted, removed or edited twice
 - **AND** once a deck is delivered, changes of the same shape sent again are a new change to that deck (a second insert after slide 2 adds a slide beside the first)
+
+#### Scenario: A kind edit clears what the new kind cannot hold
+
+- **GIVEN** a delivered deck whose slide 10 is a `bullets` slide
+- **WHEN** a `changes` call edits slide 10's `kind` to `two_columns`, its `title` and its `columns`, and leaves its bullets
+- **THEN** the bullets are cleared, since no `two_columns` slide of the template shows them beside columns, the title and notes stay, and the deck is built
+- **AND** the result says slide 10's bullets were cleared and why
+- **AND** a field the same call sets is never cleared, and an edit to the kind the slide already has clears nothing
+
+#### Scenario: A drop option gives its exact change
+
+- **WHEN** a `changes` call is refused and an option asks to drop a whole slide field (`drop bullets`)
+- **THEN** the option carries the change that does it, numbered as listed (`drop bullets: {"op": "edit", "slide": 10, "field": "bullets", "value": []}`), and that change clears the field
+- **AND** a refused `slides` call keeps the option in words
+
+#### Scenario: A call identical to one already refused
+
+- **GIVEN** a call refused with `needs_revision` for fit problems in this turn
+- **WHEN** the model sends the identical call again (same arguments, same base plan) before any deck is delivered
+- **THEN** it is not evaluated again: the result says it is the same call as one already refused, restates the problems briefly, and suggests sending each listed slide whole with `replace` or dropping the change (leaving the slide out for a `slides` call)
 
 #### Scenario: A refused plan is never the next turn's base
 

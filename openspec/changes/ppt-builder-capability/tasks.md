@@ -427,3 +427,14 @@ Owns: `tools.py` (stored base, resend state, hidden fields, designs line, variet
 - [x] 38.10 Frontend: the summary info button is `size="small"` like download and close; info, download and close sit in a gapless group (card and pane headers). Test: the button's small size class; `COMPONENT-UX.md` updated
 - [x] 38.11 Package `make code-quality` + `make test`; frontend `tsc`, `prettier`, `eslint`, `vitest` on the touched files; `verification.md`; `openspec validate`
 - Not covered: a live re-run with a real model; the gapless header has no automated check (CSS only)
+
+## WP39. Live-session fixes: a kind edit's leftovers, actionable drops, identical resends
+
+Owns: `changes.py` (`CLEARABLE`, kind-edit clearing), `assign.py` (`unplaced`), `tools.py` (cleared notes, drop ops, refused-call guard), `design.md` D23 and the message rule, delta spec, tests, `verification.md`.
+
+- [x] 39.1 An `edit` that changes a slide's kind clears the fields no template slide of that kind has a place for beside the rest, unless the same call sets them; the delivery notes or the `needs_revision` lead say what was cleared. Tests: the live session's three edits (kind, title, columns) build a two_columns slide without its bullets and the note; a field the call sets and a same-kind edit clear nothing
+- [x] 39.2 In `changes` mode a `drop <field>` option carries its exact `edit` (`[]` for a list, null otherwise); `slides` mode keeps the words. Tests: both modes' option text; the given change clears the field and the deck builds
+- [x] 39.3 A call identical to one refused with fit problems this turn, on the same base, is answered without evaluation (same call, the problems, `replace` or drop the change). Tests: no second assignment in either mode, the message, a `replace` then builds; the resent-unchanged flag and the never-applied-twice tests now resend with another `file_name`
+- [x] 39.4 Package `make code-quality` + `make test`; `verification.md`; `openspec validate`
+- Not in scope: the runtime's handling of the per-turn tool-call cap (reported to the developer, no runtime change)
+- Not covered: a live re-run of the session
