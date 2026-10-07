@@ -126,7 +126,9 @@ export function usePptBuilderAnalysis({
     { instanceId: agentInstanceId ?? "" },
     { skip: !routed || !agentInstanceId || !templateSha, pollingInterval },
   );
-  const status = statusQuery.isError ? undefined : statusQuery.data;
+  // A failed poll keeps the last answer (RTK keeps `data`): one network blip must
+  // neither hide the analysis nor stop the polling of one in progress.
+  const status = statusQuery.data;
   const phase = analysisPhase({ stagedFile, templateSha, status });
   const usesBuiltin = phase === "builtin";
   const { data: builtin } = useGetPptBuilderBuiltinQuery(undefined, { skip: !usesBuiltin || !routed });
