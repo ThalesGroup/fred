@@ -741,10 +741,13 @@ def _problem(slide: _Slide, has_cover: bool, offered: set[str]) -> SlideProblem:
         options.append("merge this content into another slide, or remove it")
     else:
         closest, reasons = slide.closest
-        lead = ""
-        if close is not None and closest.kind != asked:
-            lead = f"{_why_not(slide, offered) or ''}; closest close kind, "
-        problem = f"{lead}closest fit, a '{closest.kind}' slide: " + "; ".join(
+        # A forced cover is not a close kind: the cover prefix below says why.
+        forced = slide.first and has_cover
+        lead = "closest fit"
+        if close is not None and closest.kind != asked and not forced:
+            why = _why_not(slide, offered)
+            lead = f"{why}; closest close kind" if why else "closest close kind"
+        problem = f"{lead}, a '{closest.kind}' slide: " + "; ".join(
             r.text for r in reasons
         )
         # With a requested kind, the count that matters is its own slides'.

@@ -533,6 +533,29 @@ def test_a_text_too_long_everywhere_names_the_element_and_its_measured_limit():
     assert any(o.startswith("keep bullets within") for o in problem.options)
 
 
+def test_a_forced_cover_misfit_reads_once_without_a_close_kind_lead():
+    slide = SlidePlan(title="T" * 400, kind="bullets", bullets=["a"])
+    (problem,) = assign(INVENTORY, _plan(slide)).problems
+    assert problem.problem == (
+        "the first slide is always the template's cover; closest fit, a 'cover' "
+        "slide: title is 400 chars; this zone holds ≤8 words (≈29 chars × 2 lines)"
+    )
+
+
+def test_a_close_kind_misfit_names_why_and_the_close_kind_once():
+    slide = SlidePlan(
+        title="Detail", kind="timeline", bullets=["short", "word " * 199 + "word"]
+    )
+    (problem,) = assign(
+        _inventory(_bullets("layout:1", "Plain")), _plan(slide)
+    ).problems
+    assert problem.problem == (
+        "this template has no 'timeline' slide; closest close kind, a 'bullets' "
+        "slide: bullets: 2 entries, 1004 chars; this zone holds ≤40 words "
+        "(≈37 chars × 8 lines) (longest: bullets[1], 999 chars)"
+    )
+
+
 def test_a_room_is_quoted_as_words_then_its_measured_chars():
     """One rule for every template: 7 chars per word, words never span lines."""
     assert capacity_text(12, 1) == "1 word (≈12 chars)"
