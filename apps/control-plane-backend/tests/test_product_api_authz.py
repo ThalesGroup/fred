@@ -209,7 +209,8 @@ async def test_get_agent_instances_requires_can_use_team_agents(
     monkeypatch.setattr(product_api, "attach_marketplace_states", AsyncMock())
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
-    await product_api.get_team_agent_instances(TeamId("t"), deps, _user())
+    request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.get_team_agent_instances(TeamId("t"), deps, request, _user())
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [
