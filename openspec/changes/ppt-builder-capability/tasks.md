@@ -237,3 +237,15 @@ Owns: `assign.py` (caps, over-max cost, ask threshold), `tools.py` (`at_most`, g
 - [x] 20.5 Tests: max 1 spreads a kind's slides over distinct variants; requested kind kept when only one variant; cap raised when the deck forces it; ask fires at max+1 per mode; guide sentences; default for a stored config without the field
 - [x] 20.6 Frontend row (switch, two small selects, fr/en), generic select labels removed, Help Center fr/en; vitest (off → "off", on → last mode, max writes `variety_max_uses`, labels); tsc/prettier/eslint; slice regenerated only if the dump changes
 - [x] 20.7 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `fred-performance-reviewer` on the tool path; targeted eval, strictly sequential (6 cells: small Paintress rules template_slide ×2/×1, kind ×2/×1; medium Paintress rules kind ×1, template_slide ×1), one contact sheet per cell for `thales_spain_italy`; `verification.md` with a recommendation for the V1 beta defaults
+
+## WP21. Limits in the schema, build directly, framed pictures, agent prompt eval (D20)
+
+Owns: `plan.py` (field rooms beside `zone_summary`), `tools.py` (schema hints, cache key), `capability.py` (`_BUILD_INSTRUCTIONS`), `models.py` + `analysis.py` (`Zone.framed`, `ANALYSIS_VERSION` 11), `assign.py` (framed picture misfit), built-in inventory, `eval/` (`--agent-prompt`, `agent_prompts/agent_prompt_fr.txt`, metrics on the rendered assignment), tests, `verification.md`.
+
+- [ ] 21.1 Schema field descriptions carry the template's room per field (largest variant per kind, common value + differing kinds, cover exact); no `maxLength`; schema cached by kinds + hints; schema/description size and build time per turn measured
+- [ ] 21.2 `_BUILD_INSTRUCTIONS`: build directly; ask to validate an outline only when the user asked or the subject is unknown
+- [ ] 21.3 Analysis flags image zones framed by an unremovable layout/master shape (`Zone.framed`); `ANALYSIS_VERSION` 11; built-in inventory regenerated; slice regenerated only if the dump changes
+- [ ] 21.4 Fit check: an empty framed picture (slide zone or used item) is a misfit; catalogue quotes `(required)`
+- [ ] 21.5 Tests: field hints (common room, differing kinds, cover); framed misfit and fallback to another kind; Paintress/corporate reference: `slide:266`/`slide:267` framed, the 'Nos quatre priorités' slide not built on them without images, built on one with images
+- [ ] 21.6 Eval: `--agent-prompt`; the French candidate prompt committed; variety metrics measured on the assignment the tool rendered (same variety and max)
+- [ ] 21.7 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `fred-performance-reviewer` on the tool path; eval strictly sequential, Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1: small/medium × stand-in/optimized prompt; contact sheets for `cyber_2027` and `thales_spain_italy`; `verification.md` with fit problems by field vs WP20 cell 2 and a recommendation on the suggested prompt

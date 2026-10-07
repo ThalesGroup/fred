@@ -349,6 +349,19 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a slide's items carry no images and both a card pattern with item pictures and one without fit
 - **THEN** the pattern without pictures is chosen
 
+#### Scenario: A picture framed by its layout needs a picture
+
+- **GIVEN** a template slide whose picture zones sit on a shape of its layout or master (not a placeholder, no text, under half the slide), such as Paintress "3 colonnes d'image + texte" over its layout's grey band
+- **WHEN** a slide asking for that slide's kind carries no picture for a framed zone (or for a used item's framed zone)
+- **THEN** that template slide is not a candidate: the slide is built on another variant or kind, or, when nothing else holds it, `needs_revision` names the missing picture; the catalogue quotes those pictures as required
+- **AND** with a picture for each framed zone it is a candidate as before
+
+#### Scenario: Field limits in the tool schema
+
+- **WHEN** the tool schema is built for a template
+- **THEN** each text field's description states its room from the inventory: per kind, the largest variant's room for that field (the catalogue's measure), as the most common value across kinds plus the kinds that differ, the cover's own room included
+- **AND** no field carries a hard `maxLength`, so an over-long text still reaches the tool and gets `needs_revision`
+
 #### Scenario: Item heading without a heading zone
 
 - **GIVEN** items with a heading and a text, and a list whose items have a single text zone
@@ -359,6 +372,20 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 - **WHEN** a card slide with icons is filled and some cards are removed
 - **THEN** the remaining cards keep the template's icons and the removed cards' icons leave with them
+
+### Requirement: The agent builds directly
+
+The system SHALL instruct the agent to write the plan and call `build_presentation` in the same answer, and to ask the user to validate an outline only when the user asked for it or the request does not say what the presentation is about.
+
+#### Scenario: Request with a subject
+
+- **WHEN** the user asks for a presentation on a stated subject without asking to see the plan first
+- **THEN** the agent's working rules tell it to build the deck in that answer rather than propose an outline and ask for confirmation
+
+#### Scenario: User asks to validate the plan
+
+- **WHEN** the user asks to see or validate the outline first, or gives no subject
+- **THEN** the working rules allow the agent to ask before building
 
 ### Requirement: No silent fallback
 
