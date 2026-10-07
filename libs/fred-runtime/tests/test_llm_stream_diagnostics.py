@@ -56,6 +56,19 @@ async def stream_server(mode: str):
             requests.append(body)
             selected = mode
             delta: dict[str, Any] = {"role": "assistant", "content": "synthetic-answer"}
+            if mode == "tool_fragments":
+                delta = {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "index": 0,
+                            "id": "call",
+                            "type": "function",
+                            "function": {"name": "write", "arguments": '{"text":"'},
+                        }
+                    ],
+                }
+                selected = "success"
             if mode == "deep":
                 messages = body["messages"]
                 last = messages[-1]
@@ -107,6 +120,30 @@ async def stream_server(mode: str):
                     "choices": [{"index": 0, "delta": delta, "finish_reason": None}],
                 }
             )
+            if mode == "tool_fragments":
+                for fragment in ("x" * 20000, '"}'):
+                    await event(
+                        {
+                            "id": "synthetic",
+                            "object": "chat.completion.chunk",
+                            "created": 0,
+                            "model": "test-model",
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "tool_calls": [
+                                            {
+                                                "index": 0,
+                                                "function": {"arguments": fragment},
+                                            }
+                                        ]
+                                    },
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                    )
             first_sent.set()
             if selected == "stall":
                 await asyncio.sleep(2)
@@ -471,3 +508,24 @@ async def test_explicit_stream_selection(disabled, tools, stream_kw, expected):
     )
     settings = {} if stream_kw is None else {"stream": stream_kw}
     assert streaming_selection(model, settings, has_tools=tools) is expected
+
+
+async def test_guarded_tool_fragments_through_real_stream_and_middleware(monkeypatch):
+    from fred_core.model.tool_call_chunks import install_tool_fragment_guard
+    from langchain_core.messages import ai
+
+    monkeypatch.setattr(ai, "parse_partial_json", getattr(ai, "parse_partial_json"))
+    install_tool_fragment_guard()
+    async with stream_server("tool_fragments") as (model, requests, _):
+        response = await invoke(model, middleware())
+        message = response.result[0]
+        assert message.tool_calls == [
+            {
+                "name": "write",
+                "args": {"text": "x" * 20000},
+                "id": "call",
+                "type": "tool_call",
+            }
+        ]
+        assert message.invalid_tool_calls == []
+        assert len(requests) == 1

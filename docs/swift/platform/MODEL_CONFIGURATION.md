@@ -392,3 +392,13 @@ Use [LLM incident diagnosis](OBSERVABILITY-AND-AUDIT.md#llm-streaming-incident-d
 to compare effective settings, streaming progress and process pressure before
 changing deadlines or adding retries. Replaying a partially completed agent turn
 can repeat tool effects; the diagnostic change adds no such replay.
+
+
+The factory installs a narrow compatibility guard for LangChain's eager tool-call
+fragment parsing. It skips JSON repair when a fragment cannot start an object;
+raw fragments and final argument reconstruction remain intact. The guard targets
+LangChain's internal `AIMessageChunk` parser reference, leaving its public JSON
+utility unchanged. Recheck the equivalence/stream tests on dependency upgrades
+and remove the guard when upstream resolves this cost. Object-prefixed malformed
+fragments and large valid JSON still use upstream parsing and can consume CPU;
+this is not a general event-loop latency bound.

@@ -266,6 +266,9 @@ def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
 
 
 def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+    from fred_core.model.tool_call_chunks import install_tool_fragment_guard
+
+    install_tool_fragment_guard()
     model = _create_model(cfg)
     with suppress(Exception):
         log_model_settings(
