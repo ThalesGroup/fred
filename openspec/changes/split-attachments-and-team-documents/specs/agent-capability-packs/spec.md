@@ -57,8 +57,6 @@ The active "Team documents" pack SHALL offer the library binding switch and fold
 - **WHEN** only "Attachments" is on in the Simple view
 - **THEN** no library binding option is shown
 
-## MODIFIED Requirements
-
 ### Requirement: Document reading is granted by the document-access packs
 
 The Simple view SHALL NOT offer a standalone pack whose only purpose is to enable verbatim document reading and exhaustive extraction. Verbatim reading, exhaustive extraction, summarization and tabular access SHALL instead be granted by the two document packs, "Attachments" and "Team documents". Each of these capabilities SHALL be selected when either pack is turned on and is available to the team. Each SHALL be withdrawn only when both packs are off.
@@ -107,25 +105,11 @@ Each pack SHALL display, in its expandable list of included capabilities, the ba
 - **WHEN** a pack grants a capability that the platform administrator has not enabled for the team
 - **THEN** that capability is shown as unavailable in the pack's list, and switching the pack on does not enable it
 
-### Requirement: Similarity search stays scoped to the team corpus
-
-Similarity search SHALL be granted only by the "Team documents" pack. The Simple view SHALL NOT grant it through the "Attachments" pack, because similarity search does not cover the files attached to a conversation. Turning off "Team documents" SHALL withdraw similarity search even while "Attachments" stays on.
-
-#### Scenario: Attachments-only agent does not get similarity search
-
-- **WHEN** a member switches on "Attachments" while "Team documents" is off
-- **THEN** similarity search is not enabled on that agent
-
-#### Scenario: Turning off team documents withdraws similarity
-
-- **WHEN** both packs are on and a member switches off "Team documents"
-- **THEN** similarity search is withdrawn and the shared capabilities remain enabled
-
 ### Requirement: Pack state reflects the stored capability selection
 
 A pack's on/off state SHALL be derived from the agent's stored capability selection rather than held separately, so the Simple and Advanced views cannot disagree. A document pack SHALL be on when document access is selected and the pack's own source is on. Each source SHALL be read after the legacy compatibility mapping of the `document-access-sources` capability is applied. A document pack's state SHALL NOT depend on the capabilities it shares with the other pack. Toggling a pack SHALL leave every capability the pack does not grant untouched.
 
-#### Scenario: Clearing document access in the Advanced view turns both packs off
+#### Scenario: Clearing document access in the Advanced view turns the packs off
 
 - **WHEN** a member clears the document-access capability in the Advanced view and returns to the Simple view
 - **THEN** both document packs are shown as off
@@ -144,6 +128,22 @@ A pack's on/off state SHALL be derived from the agent's stored capability select
 
 - **WHEN** a member switches a pack on or off
 - **THEN** capabilities granted by no pack, or granted only by other packs that remain on, keep their previous state
+
+## MODIFIED Requirements
+
+### Requirement: Similarity search stays scoped to the team corpus
+
+Similarity search SHALL be granted only by the "Team documents" pack. The Simple view SHALL NOT grant it through the "Attachments" pack, because similarity search does not cover the files attached to a conversation. Turning off "Team documents" SHALL withdraw similarity search even while "Attachments" stays on.
+
+#### Scenario: Attachments-only agent does not get similarity search
+
+- **WHEN** a member switches on "Attachments" while "Team documents" is off
+- **THEN** similarity search is not enabled on that agent
+
+#### Scenario: Turning off team documents withdraws similarity
+
+- **WHEN** both packs are on and a member switches off "Team documents"
+- **THEN** similarity search is withdrawn and the shared capabilities remain enabled
 
 ### Requirement: Advanced document choices stay independent
 
@@ -164,6 +164,21 @@ Advanced SHALL let a member select document access and switch each source withou
 - **WHEN** the form opens or saves an unrelated edit to an agent whose legacy configuration had the paperclip off
 - **THEN** attachments stay off, team documents stay on, and the selected capabilities remain unchanged
 
+#### Scenario: Disable attachments in Advanced
+
+- **WHEN** a member keeps "Team documents" on but turns off "Attachments" on the Advanced document access card
+- **THEN** attachments stay off after saving and on later edits, and the Simple "Attachments" pack reads off
+
+#### Scenario: Existing attachment-only agent keeps its selection
+
+- **WHEN** the form opens an agent stored in the former attachments-only mode
+- **THEN** its selected capabilities remain unchanged, "Attachments" reads on and "Team documents" reads off
+
+#### Scenario: Explicit Simple activation replaces a partial selection
+
+- **WHEN** a member turns on a document pack in Simple while the agent has only a partial Advanced or legacy selection
+- **THEN** the pack's available members are selected and its source is turned on
+
 ## REMOVED Requirements
 
 ### Requirement: One Simple pack grants the resource and attachment bundle
@@ -177,3 +192,21 @@ Advanced SHALL let a member select document access and switch each source withou
 **Reason**: The negative "Search in attachments only" switch is replaced by turning off the "Team documents" pack.
 
 **Migration**: An agent stored with `search_attachments_only` on reads with "Attachments" on and "Team documents" off. The next save writes `attachments=true, team_documents=false`.
+
+### Requirement: Document reading is granted by the Team resources pack
+
+**Reason**: The single "Team resources" pack is split into "Attachments" and "Team documents".
+
+**Migration**: Use "Document reading is granted by the document-access packs".
+
+### Requirement: Each pack lists the capabilities it grants
+
+**Reason**: Its scenarios name the retired "Team resources" pack.
+
+**Migration**: Use "A pack lists the capabilities it grants".
+
+### Requirement: Pack state follows the stored capability selection
+
+**Reason**: Each document pack's state now comes from document access plus its own source.
+
+**Migration**: Use "Pack state reflects the stored capability selection".

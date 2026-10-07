@@ -1,8 +1,9 @@
 ## 0. Prerequisites (before any implementation)
 
 - [x] 0.1 Create the GitHub issue for this change, linked to the active milestone, and reference #2837 and #2732. Replace "TBD" in proposal.md. Verify with `gh issue view <n>`.
-- [ ] 0.2 In this same PR (developer-confirmed), archive `retire-document-reading-pack` (its open task 5.4). Then archive `merge-attachments-into-team-resources` (its open task 4.6: reconcile its one-pack requirements against the first archive). Do this in separate commits that contain no code. Verify that `openspec/specs/agent-capability-packs/spec.md` exists and that `openspec list` no longer shows either change.
-- [ ] 0.3 Re-check this change's `agent-capability-packs` MODIFIED/REMOVED headers against the archived spec, and copy each modified requirement in full. Verify that `openspec validate split-attachments-and-team-documents --strict` passes without the "Archive would refuse this delta" notice.
+- [x] 0.2 In this same PR (developer-confirmed), archive `retire-document-reading-pack` (its open task 5.4). Then archive `merge-attachments-into-team-resources` (its open task 4.6: reconcile its one-pack requirements against the first archive). Do this in separate commits that contain no code. Verify that `openspec/specs/agent-capability-packs/spec.md` exists and that `openspec list` no longer shows either change.
+- [x] 0.3 Re-check this change's `agent-capability-packs` MODIFIED/REMOVED headers against the archived spec, and copy each modified requirement in full. Verify that `openspec validate split-attachments-and-team-documents --strict` passes without the "Archive would refuse this delta" notice.
+  - Done: archive refuses a MODIFIED block that drops a scenario, so the three requirements whose scenarios were renamed after the merge archive are REMOVED and re-ADDED under their original names; "Advanced document choices stay independent" keeps the three merge-era scenarios, rewritten for two packs.
 
 ## 1. Backend: document_access config and compatibility
 
