@@ -128,6 +128,8 @@ template is then read in the background: meanwhile the agent shows
 the reading is done, and you can close the window in the meantime. Then
 **Review slides** shows each slide found, with its name and kind: rename a
 slide, change its kind, or set it aside. Nothing is mandatory.
+To prepare a template the agent understands well, see
+[Prepare your PowerPoint template](/help/en/guides/prepare-powerpoint-template).
 
 **Use a vision model** — when a model that can read images is available, it
 looks at each template slide to name it and understand what it is for. You

@@ -136,6 +136,8 @@ devient tout seul quand la lecture est terminée, et vous pouvez fermer la
 fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
 diapositive trouvée, avec son nom et son type : renommez une diapositive,
 changez son type ou mettez-la de côté. Rien n'est obligatoire.
+Pour préparer un template que l'agent comprend bien, voir
+[Préparer son template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
 
 **Utiliser un modèle de vision** — quand un modèle capable de lire les images
 est disponible, il regarde chaque diapositive du modèle pour la nommer et
