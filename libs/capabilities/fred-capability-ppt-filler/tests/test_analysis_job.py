@@ -560,3 +560,17 @@ async def test_a_rebuilt_row_returns_the_sha_of_the_file_it_analysed(analysis_db
     assert stored.template_sha256 == SHA
     await drain()
     assert (await PptBuilderCapability().readiness(stored, IDENTITY)).state == "ready"
+
+
+@pytest.mark.asyncio
+async def test_uploading_the_same_file_again_keeps_its_analysis(analysis_db):
+    stored = await _save(PptBuilderConfig(use_vision=False), _uploads())
+    await drain()
+    store = get_analysis_store()
+    before = await store.get(INSTANCE)
+    assert before is not None and before.status == "succeeded"
+    again = await _save(stored, _uploads())
+    assert again.template_sha256 == SHA
+    after = await store.get(INSTANCE)
+    assert after is not None and after.status == "succeeded"
+    assert after.job_id == before.job_id

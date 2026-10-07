@@ -635,6 +635,14 @@ class PptBuilderCapability(
         sha = hashlib.sha256(content).hexdigest()
         key = config.labelling_key()
         store = get_analysis_store()
+        current = await store.get(instance, with_inventory=False)
+        if (
+            current is not None
+            and current.status == "succeeded"
+            and not current.outdated()
+            and (current.template_sha256, current.labelling_key) == (sha, key)
+        ):
+            return sha  # the same file again: its analysis stands
         job_id = await store.start(
             instance_id=instance,
             team_id=team,
