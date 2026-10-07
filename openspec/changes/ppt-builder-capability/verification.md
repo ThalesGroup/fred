@@ -1199,3 +1199,33 @@ code-quality` clean (existing `builder_decks.py` `__all__` warning), `make test`
 a deck that would otherwise have been trimmed or refused, and the live agenda case now builds on
 its own agenda slide in one call. The benchmark rarely exercises overflowing lists; the
 deterministic and unit evidence carry the feature.
+
+## Results: WP34 ("What was built" beside the deck download, D25)
+
+**Payload.** `PptPreviewPart.summary` (optional, `None` on `ppt_filler` parts): one entry per
+rendered slide, `{number, part, parts, title, kind, template, notes: [{code, count?, kind?}]}`.
+Recorded by the renderer as it builds each slide (`DeckReport.built`) and completed by the tool
+with the pictures dropped before the assignment (`_summary`); nothing comes from the model's
+reply. A 20-slide deck with one note per slide serialises to about 4.4 KB.
+
+**Backend unit evidence:** `test_builder_render.py::test_the_user_summary_records_each_rendered_slide_and_what_changed`
+(a cut text → `text_shortened`, title with inline Markdown stripped, template label; a picture
+missing at render → `image_unusable` 1; items over the group → `items_left_out` 2);
+`test_build_tool.py::test_the_delivered_part_summarises_what_was_built` (cover, a 6-entry agenda
+split over two agenda slides → `(2, 1, 2)` and `(2, 2, 2)` titled `Agenda (1/2)` / `Agenda (2/2)`,
+each with `list_continued`; a `timeline` slide built as `bullets` → `other_kind` with `timeline`;
+a text document given as a picture → `image_unusable` 1 on its slide; no English prose in the
+dumped summary; a `ppt_filler`-style part has `summary is None`). Package `make code-quality`
+clean (existing `builder_decks.py` `__all__` warning), `make test` 472 passed, 5 skipped.
+
+**Frontend evidence:** `DeckSummaryButton.test.tsx` with the real fr/en locale files (no button
+without a summary or with an empty one; accessible name and `aria-haspopup`; the dialog lists the
+4 slides with kind labels, the continuation wording on each part, the template label for an
+untitled slide, `other_kind` with both kind labels, a plural count; an unknown code skipped;
+French strings; every backend code has a wording in both locales);
+`PptPreviewCardRenderer.test.tsx` (the card offers the button only with a summary).
+`npx vitest run src/rework/features/capabilities/` 32 files, 276 passed; Help Center tests 18
+passed; `npx tsc --noEmit -p .` clean; `prettier --check` and `eslint` clean on the touched files.
+History replay: the summary is a field of the persisted part, read by the same card on replay.
+
+Not covered: a manual check in the running app (the dialog was exercised in happy-dom only).
