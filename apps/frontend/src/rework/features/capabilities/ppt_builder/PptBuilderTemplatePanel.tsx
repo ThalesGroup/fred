@@ -52,7 +52,7 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
 
   return (
     <div className={styles.root}>
-      <div className={styles.template}>
+      <div className={`${styles.settingCard} ${styles.template}`}>
         <div className={styles.uploadRow}>
           <input
             ref={fileInputRef}
