@@ -248,7 +248,7 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 #### Scenario: First deck asked to vary once
 
-- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **GIVEN** a conversation whose history holds no delivered deck yet
 - **WHEN** the variety check is `template_slide` (the default) and the assignment uses one template slide that is not a cover, section, agenda or closing three times or more, and the template has an unused variant of its kind or an unused slide of another such kind
 - **THEN** no deck is written and `needs_revision` names the repeated slides and the alternatives with the content each suits; the next call is built as sent, even when it repeats the same plan
 
@@ -258,6 +258,13 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a new plan uses one template slide three times or more
 - **THEN** the deck is built and the repetition is only reported in the success message
 
+#### Scenario: First deck read from the conversation history
+
+- **GIVEN** the messages sent to the model in the current turn
+- **WHEN** they hold an earlier `build_presentation` result that delivered a deck
+- **THEN** the conversation has a deck and no variety ask is returned
+- **AND** when its only `build_presentation` results are `needs_revision` or errors, the conversation still has no deck and the first call of the turn may ask
+
 #### Scenario: Choice guide in the description
 
 - **WHEN** the tool description is built
@@ -266,7 +273,7 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 #### Scenario: One kind on three slides is a repeat
 
-- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **GIVEN** a conversation whose history holds no delivered deck yet
 - **WHEN** the variety check is `kind` and one non-structural kind (for example `bullets`) is used on three slides or more, even on three different template slides
 - **THEN** no deck is written and `needs_revision` names those slides and the kind, once per turn; a resend is built as sent; cover, section, agenda and closing slides never count as a kind repeat
 
@@ -278,13 +285,13 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 
 #### Scenario: Variety asked on the first call only
 
-- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **GIVEN** a conversation whose history holds no delivered deck yet
 - **WHEN** the first `build_presentation` call of the turn has a fit problem and no kind repeat, and the corrected second call repeats one kind on three slides
 - **THEN** the second call is built, with the repetition only reported in the success message: no variety ask after a fit repair
 
 #### Scenario: Variety ask merged with fit problems
 
-- **GIVEN** a conversation whose outputs folder holds no deck yet
+- **GIVEN** a conversation whose history holds no delivered deck yet
 - **WHEN** the first call of the turn has slides that fit nothing and, among the slides that fit, one kind on three slides or more
 - **THEN** one `needs_revision` lists the fit problems and the variety block together, and the next call is built once it fits, whatever its kinds
 

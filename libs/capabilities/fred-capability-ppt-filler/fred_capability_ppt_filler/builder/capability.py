@@ -27,7 +27,7 @@ import asyncio
 import hashlib
 import io
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Annotated, Any, List, Optional, get_args
 
@@ -55,7 +55,7 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pptx import Presentation
 from pydantic import BaseModel, Field, model_validator
@@ -322,6 +322,8 @@ class _PptBuilderMiddleware(AgentMiddleware):
         self._fragment = _BUILD_INSTRUCTIONS
         self._resolved: Optional[List[BaseTool]] = None
         self._refusal = _ANALYSING_MESSAGE
+        # The last model call's messages: the build tool reads whether a deck was delivered.
+        self._history: Sequence[BaseMessage] = ()
         config = ctx.config
         identity = ctx.identity
         self._sha = config.template_sha256
@@ -335,7 +337,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
                 return builtin_bytes
 
             effective, _ = apply_overrides(builtin_inventory, config.overrides)
-            self.tools = build_builder_tools(ctx, load_builtin, effective)
+            self.tools = build_builder_tools(
+                ctx, load_builtin, effective, self._messages
+            )
             self._resolved = self.tools
             return
         cached = (
@@ -345,7 +349,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
         )
         if cached is not None:  # the usual turn: no DB read, no indirection
             effective, _ = apply_overrides(cached, config.overrides)
-            self.tools = build_builder_tools(ctx, self._load_template, effective)
+            self.tools = build_builder_tools(
+                ctx, self._load_template, effective, self._messages
+            )
             self._resolved = self.tools
             return
 
@@ -361,6 +367,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
             response_format="content_and_artifact",
         )
         self.tools = [deferred, build_list_images_tool(ctx)]
+
+    def _messages(self) -> Sequence[BaseMessage]:
+        return self._history
 
     async def _load_template(self) -> bytes:
         assets = self._ctx.services.agent_assets
@@ -391,7 +400,9 @@ class _PptBuilderMiddleware(AgentMiddleware):
             logger.warning("Template analysis unreadable", exc_info=True)
             return None
         effective, _ = apply_overrides(inventory, self._ctx.config.overrides)
-        self._resolved = build_builder_tools(self._ctx, self._load_template, effective)
+        self._resolved = build_builder_tools(
+            self._ctx, self._load_template, effective, self._messages
+        )
         return self._resolved
 
     async def _deferred_build(self, **kwargs: object) -> Any:
@@ -408,6 +419,7 @@ class _PptBuilderMiddleware(AgentMiddleware):
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
+        self._history = request.messages
         base = request.system_prompt or ""
         merged = f"{base}\n\n{self._fragment}" if base else self._fragment
         update: dict[str, Any] = {"system_message": SystemMessage(content=merged)}

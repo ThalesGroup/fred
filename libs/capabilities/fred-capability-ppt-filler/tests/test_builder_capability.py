@@ -358,6 +358,7 @@ async def test_a_succeeded_analysis_gives_the_model_the_templates_catalogue(
     class _Request:
         system_prompt = "base"
         tools = middleware.tools
+        messages: list = []
 
         def override(self, **update):
             seen.append(update)

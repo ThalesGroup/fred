@@ -258,3 +258,9 @@ Owns: `eval/` (`agent_prompts/agent_prompt_short_fr.txt`, the reply after delive
 - [x] 22.2 Eval records the model's answer after delivery (`reply`, `reply_output_tokens`, `reply_tool_call`), its tokens kept out of the build's; summary columns for reply length and rebuilds after delivery
 - [x] 22.3 Eval strictly sequential, WP21 settings (Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1): E small + short prompt, F medium + short prompt; replies after delivery replayed on A–F's delivered runs for a like-for-like comparison; `verification.md` with the comparison and the recommendation
 - [x] 22.4 Variety default recorded: `template_slide`, `variety_max_uses` 2 (developer decision, no code change)
+
+## WP23. Review fixes: first deck from the history, outdated analysis refresh, D19 caps
+
+Owns: `tools.py` + `capability.py` (first-deck signal), `analysis_job.py` + `capability.py` (outdated analysis refresh), `design.md` D15/D4/D5/D19/D20, delta spec, tests, `verification.md`.
+
+- [x] 23.1 First deck of the conversation read from the history the model was sent (an earlier `build_presentation` delivery), not from an outputs-folder listing the write-only `WorkspaceFsPort` no longer offers; the listing path, its fakes (`FsEntry`, `ls`) and fallback deleted. Tests: first deck asks; a delivered deck in the history gets the note only and the plan is built as sent; a history of `needs_revision`/errors/another tool's text is still a first deck; both success texts count

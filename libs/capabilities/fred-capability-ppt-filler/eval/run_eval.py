@@ -225,17 +225,8 @@ async def analyse(
 # --- the agent loop --------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class FsEntry:
-    """One listed path, as the outputs-folder check reads it."""
-
-    path: str
-    size: Optional[int] = None
-    is_dir: bool = False
-
-
 class MemoryWorkspace:
-    """The write and list halves of the workspace port, kept in memory."""
+    """The write half of the workspace port, kept in memory."""
 
     def __init__(self) -> None:
         self.files: Dict[str, bytes] = {}
@@ -251,10 +242,6 @@ class MemoryWorkspace:
             document_uid=path,
             mime=None,
         )
-
-    async def ls(self, path: str = "") -> List[FsEntry]:
-        prefix = path.rstrip("/") + "/"
-        return [FsEntry(path=k) for k in self.files if k.startswith(prefix)]
 
 
 _renders: contextvars.ContextVar[List[RenderResult]] = contextvars.ContextVar("renders")

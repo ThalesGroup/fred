@@ -48,6 +48,7 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from port_fakes import FakeAssets, FakeDocs, FakeFolders, FakeWorkspace
 from pptx import Presentation
 
@@ -243,6 +244,7 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     # The card opens this capability's pane: an agent may not have ppt_filler.
     assert part.capability_id == "ppt_builder"
     assert "2 slides" in text
+    assert tools_mod.deck_delivered(_turn(text))  # a later turn sees it
     # Another call is allowed: it rebuilds the whole deck.
     assert "do not call again" not in text and "COMPLETE list" in text
     # Keyed by the deck's name: a model that splits one deck across calls, or
@@ -485,42 +487,73 @@ async def test_a_first_call_with_fit_problems_carries_the_variety_ask(monkeypatc
     assert not result.is_error, text
 
 
+class _Request:
+    system_prompt = ""
+
+    def __init__(self, messages: list, tools: list) -> None:
+        self.messages, self.tools = messages, tools
+
+    def override(self, **_update: Any) -> "_Request":
+        return self
+
+
+async def _later_turn(
+    monkeypatch, history: list, extend=None, variety="template_slide"
+):
+    """A new turn's build tool, after the model call that was sent ``history``."""
+    monkeypatch.setattr(tools_mod, "convert_office_bytes_to_pdf", _no_pdf)
+    config, assets = _configured(extend, variety)
+    (middleware,) = PptBuilderCapability().middleware(_ctx(config, assets=assets))
+    middleware = cast(Any, middleware)
+
+    async def _handler(request):
+        return request
+
+    await middleware.awrap_model_call(_Request(history, middleware.tools), _handler)
+    return {t.name: cast(Any, t) for t in middleware.tools}[BUILD_TOOL_NAME]
+
+
+def _turn(text: str, name: str = BUILD_TOOL_NAME) -> list:
+    call = {"id": "call-1", "name": name, "args": {}}
+    return [
+        HumanMessage(content="Make me a deck"),
+        AIMessage(content="", tool_calls=[call]),
+        ToolMessage(content=text, tool_call_id="call-1", name=name),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_a_deck_after_the_first_one_only_gets_the_note(monkeypatch):
-    """A later turn (a new tool instance) sees the delivered deck in the
-    conversation's outputs folder: the user may have asked for these slides."""
-    workspace = FakeWorkspace()
-    await _build(monkeypatch, workspace=workspace, slides=[COVER])
-    assert workspace.writes
-    text, result = await _build(monkeypatch, workspace=workspace, slides=_REPEATED)
+    """A delivered deck in the history: the user may have asked for these slides."""
+    delivered, result = await _build(monkeypatch, slides=[COVER])
+    assert not result.is_error
+    build = await _later_turn(monkeypatch, _turn(delivered))
+    text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
     assert "all use the template slide 'Process'" in text
 
 
 @pytest.mark.asyncio
-async def test_an_outputs_folder_never_written_means_a_first_deck():
-    class Missing(Exception):
-        response = type("R", (), {"status_code": 404})()
-
-    class Listing(FakeWorkspace):
-        def __init__(self, error: Exception) -> None:
-            super().__init__()
-            self.error = error
-
-        async def ls(self, path: str = "") -> list:
-            raise self.error
-
-    assert not await tools_mod._deck_delivered(Listing(Missing()), "s")
-    # Any other failure counts as delivered: never an extra revision.
-    assert await tools_mod._deck_delivered(Listing(RuntimeError("down")), "s")
+async def test_a_history_without_a_delivered_deck_is_still_a_first_deck(monkeypatch):
+    asked, _ = await _build(monkeypatch, slides=_REPEATED)
+    assert '"variety": [' in asked
+    unread, _ = await _build(monkeypatch, slides=[{"kind": "bullets"}])
+    # A needs_revision, an error, or another tool's text never delivered a deck.
+    history = _turn(asked) + _turn(unread) + _turn("Delivered: 'x.pptx'", "other")
+    build = await _later_turn(monkeypatch, history)
+    text, result = await build.coroutine(slides=_REPEATED)
+    assert result.is_error and '"variety": [' in text
 
 
-@pytest.mark.asyncio
-async def test_a_workspace_without_listing_counts_as_delivered():
-    class WriteOnly:
-        pass
-
-    assert await tools_mod._deck_delivered(cast(Any, WriteOnly()), "s")
+def test_both_success_texts_count_as_a_delivered_deck():
+    assert tools_mod.deck_delivered(_turn("Delivered: 'a.pptx', 3 slides."))
+    assert tools_mod.deck_delivered(
+        _turn("The presentation 'a.pptx' (3 slides) is ready")
+    )
+    assert not tools_mod.deck_delivered(
+        _turn("The presentation template could not be loaded right now.")
+    )
+    assert not tools_mod.deck_delivered([])
 
 
 @pytest.mark.asyncio
@@ -549,15 +582,11 @@ async def test_one_kind_on_different_slides_is_asked_once_with_content_advice(
 
 @pytest.mark.asyncio
 async def test_a_later_deck_repeating_a_kind_only_gets_the_note(monkeypatch):
-    workspace = FakeWorkspace()
-    await _build(monkeypatch, workspace=workspace, slides=[COVER])
-    text, result = await _build(
-        monkeypatch,
-        workspace=workspace,
-        extend=with_item_slides,
-        variety="kind",
-        slides=EVIDENCE_SLIDES,
+    delivered, _ = await _build(monkeypatch, slides=[COVER])
+    build = await _later_turn(
+        monkeypatch, _turn(delivered), extend=with_item_slides, variety="kind"
     )
+    text, result = await build.coroutine(slides=EVIDENCE_SLIDES)
     assert not result.is_error, text
     assert "are all 'bullets' slides" in text
     assert "slide 7 (dated items) → timeline holds items max 6" in text

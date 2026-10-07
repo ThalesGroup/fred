@@ -240,7 +240,7 @@ leftovers 0; tables 9/9 used and shape kept on Paintress.
   reuse 2 in every deck, no columns slide restating a table.
 - First-deck detection: `workspace_fs.ls("outputs/{session_id}")`, listed only when a
   revision would follow; a 404 (folder never written) is "no deck yet", any other error
-  "delivered" (`02151b36a`, found by the performance review).
+  "delivered" (`02151b36a`, found by the performance review). Replaced by the history check in WP23.
 - Tool description (chars): builtin 3 385 → 3 404, Paintress 4 499 → 4 629, corporate
   4 349 → 4 406 (≈ +5 to +35 tokens per model call).
 
@@ -653,6 +653,14 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP23.1 (first deck from the history): package `make code-quality` passed; `make test` 405
+  passed, 5 skipped. `test_build_tool.py`: the two listing tests deleted with `_deck_delivered`
+  and the `FsEntry`/`ls` fakes (tests and eval); new: a delivered deck's real text in the
+  history → no ask, the repeated plan built with the note (template slide and kind modes); a
+  history of a real `needs_revision`, a real error and another tool's "Delivered" text → still
+  asked; both success texts (preview, download only) count, a template-load error does not;
+  the preview build's own text is recognised. The first-deck ask now fires in production
+  again (it never did since the port lost `ls`); not proven against a live pod transcript.
 - WP21: package `make code-quality` passed; `make test` 400 passed, 5 skipped (new: framed
   picture misfit and fallback in `test_assign.py`, framed vs background in
   `test_builder_analysis.py`, field rooms in the schema in `test_build_tool.py`, "Build directly" in

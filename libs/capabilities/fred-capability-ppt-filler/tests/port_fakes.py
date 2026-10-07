@@ -22,7 +22,6 @@ network, no real Knowledge Flow, no ApplicationContext.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from fred_sdk.contracts.context import PublishedArtifact
@@ -34,15 +33,6 @@ from fred_sdk.contracts.runtime import (
     FolderDocumentEntry,
     WorkspaceFsPort,
 )
-
-
-@dataclass(frozen=True)
-class FsEntry:
-    """One listed path, as the outputs-folder check reads it."""
-
-    path: str
-    size: Optional[int] = None
-    is_dir: bool = False
 
 
 class FakeAssets(AgentAssetPort):
@@ -85,7 +75,7 @@ class FakeAssets(AgentAssetPort):
 class FakeWorkspace(WorkspaceFsPort):
     """``WorkspaceFsPort`` whose ``write`` records bytes and mints a durable href.
 
-    ``write`` and ``ls`` are functional (the tools' workspace needs); every other
+    ``write`` is functional (the tools' workspace needs); every other
     abstract method raises so an accidental use is loud, not silent.
     """
 
@@ -129,15 +119,6 @@ class FakeWorkspace(WorkspaceFsPort):
             document_uid=f"uid-{path}",
             mime=content_type,
         )
-
-    async def ls(self, path: str = "") -> list:
-        """The files written under ``path``: a later build sees the earlier deck."""
-        prefix = path.rstrip("/") + "/"
-        return [
-            FsEntry(path=w["path"], size=len(w["content"]))
-            for w in self.writes
-            if w["path"].startswith(prefix)
-        ]
 
     async def delete(self, path: str) -> None:  # pragma: no cover
         raise NotImplementedError

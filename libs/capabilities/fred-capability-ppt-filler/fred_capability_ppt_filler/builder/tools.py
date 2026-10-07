@@ -34,7 +34,7 @@ import json
 import logging
 import time
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from fred_core import convert_office_bytes_to_pdf
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
@@ -45,7 +45,7 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.runtime import WorkspaceFsPort
+from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.json_schema import SkipJsonSchema
@@ -368,28 +368,24 @@ def _variety_revision(
     )
 
 
-async def _deck_delivered(
-    workspace: WorkspaceFsPort, session_id: Optional[str]
-) -> bool:
-    """Whether this conversation already holds a deck: every build is written to
-    its outputs folder. Unknown counts as delivered, so it never adds a loop."""
-    # The SDK port is write-only now: without a listing, unknown means delivered.
-    ls = getattr(workspace, "ls", None)
-    if ls is None:
-        return True
-    folder = f"outputs/{session_id}" if session_id else "outputs"
-    try:
-        entries = await ls(folder)
-    except Exception as exc:  # noqa: BLE001 - the passive note still reports it
-        # The HTTP adapter answers a folder never written as a 404.
-        if getattr(getattr(exc, "response", None), "status_code", None) == 404:
-            return False
-        logger.warning("[PPTBUILD][TOOL] outputs listing failed", exc_info=True)
-        return True
+# The two success texts below start so; a needs_revision or an error never does.
+_DELIVERED = ("Delivered: '", "The presentation '")
+
+
+def deck_delivered(history: Sequence[BaseMessage]) -> bool:
+    """Whether this conversation already holds a deck: an earlier
+    build_presentation result in the messages the model was sent delivered one."""
     return any(
-        e.path.lower().endswith(".pptx") and not getattr(e, "is_dir", False)
-        for e in entries
+        isinstance(m, ToolMessage)
+        and m.name == BUILD_TOOL_NAME
+        and isinstance(m.content, str)
+        and m.content.startswith(_DELIVERED)
+        for m in history
     )
+
+
+def _no_history() -> Sequence[BaseMessage]:
+    return ()
 
 
 def _issue_line(report: SlideReport) -> str:
@@ -556,11 +552,13 @@ def build_builder_tools(
     ctx: "CapabilityContext[PptBuilderConfig, EmptyModel]",
     template_bytes_loader,
     inventory: TemplateInventory,
+    history: Callable[[], Sequence[BaseMessage]] = _no_history,
 ) -> list[BaseTool]:
     """The build tool bound to one turn's context and effective inventory.
 
     ``template_bytes_loader`` is an async callable returning the template
-    bytes (the stored asset, or the built-in template).
+    bytes (the stored asset, or the built-in template); ``history`` returns the
+    messages of the model call that asked for the tool.
     """
     services = ctx.services
     identity = ctx.identity
@@ -594,10 +592,8 @@ def build_builder_tools(
         session_id = identity.session_id
         asking = first and variety != "off"
         repeats = [r for r in assignment.repeats if r.revisable] if asking else []
-        # Listed only when an ask would follow: the usual call adds no I/O.
-        if repeats and (
-            workspace is None or await _deck_delivered(workspace, session_id)
-        ):
+        # Read only when an ask would follow: the usual call adds no work.
+        if repeats and deck_delivered(history()):
             repeats = []
         if assignment.problems:
             return _needs_revision(assignment, plan, previous_problems, repeats)
