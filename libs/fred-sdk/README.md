@@ -340,7 +340,6 @@ from fred_sdk.knowledge_base import (
     DocumentPublisher, KnowledgeBase, KnowledgeBaseRunContext,
     KnowledgeBaseRunOutcome, KnowledgeBaseSyncResult, knowledge_base_main,
 )
-from fred_sdk.knowledge_base.configuration import PodConfiguration
 
 kb = KnowledgeBase(
     id="acme.notes.hello",
@@ -356,9 +355,7 @@ kb = KnowledgeBase(
 @kb.synchronize
 async def synchronize(context: KnowledgeBaseRunContext) -> KnowledgeBaseSyncResult:
     text = str(context.configuration.get("greeting") or "Hello")
-    async with DocumentPublisher(
-        PodConfiguration.load(), library_id=context.library_id, source_tag="fred"
-    ) as publisher:
+    async with DocumentPublisher.for_run(context) as publisher:  # this run's library
         handle = await publisher.publish(
             relative_path="hello.md", content=f"# {text}".encode(), version=text
         )
@@ -376,7 +373,9 @@ if __name__ == "__main__":
     raise SystemExit(knowledge_base_main(kb))  # the `publish` and `run` commands
 ```
 
-`DocumentPublisher` is the shortcut for writing: a write is accepted at once and
+`DocumentPublisher.for_run(context)` opens the run's library as the pod, with
+the configuration the pod started with; a pod that keeps its own store gets
+`KnowledgeFlowNotConfigured` instead. It is the shortcut for writing: a write is accepted at once and
 ingested by Fred afterwards, `wait` follows it to its end, and `documents()`
 reads back what the library holds so a run can reconcile against it. A source
 that can say what changed since a version (a Git revision) keeps that version in

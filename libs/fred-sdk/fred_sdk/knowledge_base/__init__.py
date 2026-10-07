@@ -19,6 +19,7 @@ A Knowledge Base is declared, given one synchronization handler, and published
 into a Fred deployment by its own image:
 
     from fred_sdk.knowledge_base import (
+        DocumentPublisher,
         KnowledgeBase,
         KnowledgeBaseRunContext,
         KnowledgeBaseSyncResult,
@@ -37,7 +38,8 @@ into a Fred deployment by its own image:
     async def synchronize(
         context: KnowledgeBaseRunContext,
     ) -> KnowledgeBaseSyncResult:
-        ...
+        async with DocumentPublisher.for_run(context) as library:
+            ...
 
     raise SystemExit(knowledge_base_main(kb))
 
@@ -56,6 +58,7 @@ from fred_sdk.knowledge_base.documents import (
     DocumentPublishError,
     DocumentRetractError,
     DocumentWaitTimeout,
+    KnowledgeFlowNotConfigured,
 )
 from fred_sdk.knowledge_base.entrypoints import (
     knowledge_base_main,
@@ -98,6 +101,7 @@ __all__ = [
     "KnowledgeBaseRunContext",
     "KnowledgeBaseRunOutcome",
     "KnowledgeBaseSyncResult",
+    "KnowledgeFlowNotConfigured",
     "MissingPodConfiguration",
     "SynchronizeHandler",
     "knowledge_base_main",

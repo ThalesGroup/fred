@@ -29,7 +29,10 @@ import logging
 from collections.abc import Sequence
 
 from fred_sdk.knowledge_base.client import ControlPlaneClient
-from fred_sdk.knowledge_base.configuration import PodConfiguration
+from fred_sdk.knowledge_base.configuration import (
+    PodConfiguration,
+    bind_active_configuration,
+)
 from fred_sdk.knowledge_base.declaration import KnowledgeBaseDeclaration
 from fred_sdk.knowledge_base.knowledge_base import KnowledgeBase
 from fred_sdk.knowledge_base.logs import configure_logging
@@ -38,8 +41,9 @@ logger = logging.getLogger(__name__)
 
 
 def _load(knowledge_base: KnowledgeBase) -> PodConfiguration:
-    """Read the configuration, then log as the pod it names from here on."""
+    """Read the configuration once: log as the pod it names, and hand it to runs."""
     configuration = PodConfiguration.load()
+    bind_active_configuration(configuration)
     configure_logging(
         service=configuration.runtime_id,
         knowledge_base=knowledge_base.id,

@@ -28,14 +28,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
 from pydantic import BaseModel
 
 from fred_sdk.knowledge_base import telemetry
-from fred_sdk.knowledge_base.configuration import PodConfiguration
+from fred_sdk.knowledge_base.configuration import (
+    PodConfiguration,
+    active_configuration,
+)
+
+if TYPE_CHECKING:
+    from fred_sdk.knowledge_base.models import KnowledgeBaseRunContext
 
 logger = logging.getLogger(__name__)
 
@@ -179,29 +185,50 @@ async def declare_library_synchronized(
         )
 
 
+class KnowledgeFlowNotConfigured(ValueError):
+    """This pod keeps its own store: it has no Knowledge Flow to write into."""
+
+
 class DocumentPublisher:
-    """Writes into one library, and reads back what it holds, as the pod itself."""
+    """Writes into one library, and reads back what it holds, as the pod itself.
+
+    A handler opens one with `DocumentPublisher.for_run(context)`; the
+    constructor is for tests and for code that is not serving a run.
+    """
 
     def __init__(
         self,
         configuration: PodConfiguration,
         *,
         library_id: str,
-        source_tag: str,
+        source_tag: str | None = None,
     ) -> None:
         if not configuration.knowledge_flow_url:
-            raise ValueError(
+            raise KnowledgeFlowNotConfigured(
                 "This pod has no Knowledge Flow URL: set "
                 "knowledge_base.knowledge_flow_url in its configuration.yaml, "
                 "or keep your own store and do not use DocumentPublisher."
             )
         self._base_url = configuration.knowledge_flow_url
         self._library_id = library_id
+        # None leaves the choice to Knowledge Flow, whose deployment owns the
+        # vocabulary of document sources and defaults it.
         self._source_tag = source_tag
         self._tokens = configuration.token_provider
         self._client = httpx.AsyncClient(
             timeout=_TIMEOUT, auth=M2MBearerAuth(self._tokens)
         )
+
+    @classmethod
+    def for_run(cls, context: KnowledgeBaseRunContext) -> "DocumentPublisher":
+        """A publisher for this run's library, as this pod.
+
+        Everything else it needs the SDK already holds: the configuration the
+        pod started with, and the library Fred gave this run. Raises
+        `KnowledgeFlowNotConfigured` for a pod that keeps its own store, and
+        `MissingPodConfiguration` outside a configured pod.
+        """
+        return cls(active_configuration(), library_id=context.library_id)
 
     async def publish(
         self,
@@ -235,7 +262,7 @@ class DocumentPublisher:
             data={
                 "path": relative_path,
                 "source_key": relative_path,
-                "source_tag": self._source_tag,
+                **({"source_tag": self._source_tag} if self._source_tag else {}),
                 "profile": profile,
                 **({"document_version": version} if version else {}),
             },

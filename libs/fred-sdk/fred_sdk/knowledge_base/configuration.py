@@ -251,3 +251,32 @@ class PodConfiguration(BaseModel):
                 f"No Knowledge Base configuration: {error}. Set $CONFIG_FILE, "
                 "or put one at ./config/configuration.yaml."
             ) from error
+
+
+# The configuration this process runs with, once known. A pod's configuration is
+# a ConfigMap mounted at start, so it lives exactly as long as the process.
+_active: PodConfiguration | None = None
+
+
+def bind_active_configuration(configuration: PodConfiguration) -> None:
+    """Record the configuration the entrypoint loaded, for every later run."""
+    global _active
+    _active = configuration
+
+
+def active_configuration() -> PodConfiguration:
+    """The configuration this process runs with, loaded once if nobody bound it.
+
+    Raises `MissingPodConfiguration` when there is none, so a developer tool can
+    still fall back to working without Fred.
+    """
+    global _active
+    if _active is None:
+        _active = PodConfiguration.load()
+    return _active
+
+
+def _reset_active_configuration() -> None:
+    """Forget the bound configuration. For tests only."""
+    global _active
+    _active = None
