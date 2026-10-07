@@ -59,7 +59,7 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
   }
 
   return (
-    <div className={styles.vision}>
+    <div className={`${styles.settingCard} ${styles.vision}`}>
       <label className={styles.switchRow}>
         <span className={styles.switchText}>
           <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.use_vision.title")}</span>
@@ -76,17 +76,14 @@ export function PptBuilderVisionSettings({ disabled, configValues, onConfigChang
         />
       </label>
       {useVision && (
-        <div className={styles.dependent}>
-          <Select
-            size="small"
-            label={t("capability.ppt_builder.fields.labelling_model.title")}
-            options={options}
-            value={selected}
-            disabled={disabled}
-            onChange={(value) => onConfigChange(LABELLING_MODEL_KEY, value === AGENT_DEFAULT ? null : value)}
-          />
-          <p className={styles.hint}>{t("capability.ppt_builder.fields.labelling_model.description")}</p>
-        </div>
+        <Select
+          size="small"
+          ariaLabel={t("capability.ppt_builder.fields.labelling_model.title")}
+          options={options}
+          value={selected}
+          disabled={disabled}
+          onChange={(value) => onConfigChange(LABELLING_MODEL_KEY, value === AGENT_DEFAULT ? null : value)}
+        />
       )}
     </div>
   );

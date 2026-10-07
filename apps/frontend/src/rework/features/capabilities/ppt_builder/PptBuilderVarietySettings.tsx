@@ -54,7 +54,7 @@ export function PptBuilderVarietySettings({ disabled, configValues, onConfigChan
 
   // A div, not a label: a click on a select must not toggle the switch.
   return (
-    <div className={styles.varietyRow}>
+    <div className={`${styles.settingCard} ${styles.varietyRow}`}>
       <span className={styles.switchText}>
         <span className={styles.sentence}>
           <span className={styles.switchLabel}>{t("capability.ppt_builder.fields.variety_check.title")}</span>

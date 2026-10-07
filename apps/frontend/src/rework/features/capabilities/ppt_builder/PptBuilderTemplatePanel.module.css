@@ -64,6 +64,13 @@
   font: var(--font-body-small);
 }
 
+/* Each setting sits in its own outlined frame, no fill. */
+.settingCard {
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
 .vision {
   display: flex;
   flex-direction: column;
@@ -122,15 +129,4 @@
 
 .maxSelect {
   flex: 0 0 4.5rem;
-}
-
-/* The selector only exists under its toggle: the same indent as the form's
-   other dependent fields. */
-.dependent {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2xs);
-  margin-left: var(--spacing-2xs);
-  border-left: 2px solid var(--outline-muted);
-  padding-left: var(--spacing-m);
 }
