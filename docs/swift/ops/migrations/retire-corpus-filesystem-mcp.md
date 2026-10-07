@@ -17,11 +17,11 @@ Identify scripts or dashboards calling `/corpus/*`, including revectorization an
 
 ## Configuration
 
-Remove `mcp.filesystem_enabled` from custom Knowledge Flow configuration and Helm values overlays. The remaining filesystem read limits still configure the direct HTTP `/fs` API.
+Remove `mcp.filesystem_enabled` from custom Knowledge Flow configuration and Helm values overlays. The remaining filesystem read limits still configure retained HTTP `/fs` reads, including the virtual corpus view.
 
 ## Upgrade
 
-Deploy the updated agent pod catalog, Knowledge Flow API and Temporal workers, and frontend together. The retired MCP endpoints and SDK constants and all `/corpus/*` maintenance routes are unavailable after upgrade. Direct HTTP `/fs`, `/documents/tree`, and ordinary ingestion routes remain available.
+Deploy the updated agent pod catalog, Knowledge Flow API and Temporal workers, and frontend together. The retired MCP endpoints and SDK constants and all `/corpus/*` maintenance routes are unavailable after upgrade. The retained virtual-corpus reads and technical PPT binary upload/download/delete routes under `/fs`, `/documents/tree`, and ordinary ingestion routes remain available. See the [file-area migration](retire-mon-espace.md) for the other retired `/fs` operations.
 
 Historical vector-metadata repair tasks remain in task storage. Their dedicated result counters remain in the stored task record, but the current task API omits them and Task Activity no longer displays the repair report. Export those task records before upgrade if the counters are needed operationally.
 
@@ -35,4 +35,4 @@ Roll back the agent pod catalog, Knowledge Flow API and workers, and frontend to
 
 ## Limitations
 
-Saved agent selections naming a retired MCP must be updated before those agents can use their configured tools. The retired maintenance operations have no replacement endpoint in this change. This change does not remove the direct HTTP `/fs` API.
+Saved agent selections naming a retired MCP must be updated before those agents can use their configured tools. The retired maintenance operations have no replacement endpoint in this change. Direct HTTP `/fs` retains virtual-corpus reads and technical agent-path reads plus the PPT binary transport after the general-purpose file-area retirement; it no longer serves the retired personal or team-shared paths.

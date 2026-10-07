@@ -2,7 +2,7 @@
 
 ## Current scope
 
-The Resources page shows the searchable team corpus. Corpus documents and conversation attachments use their existing document APIs; the `/corpus` virtual view is read-only. The earlier team-shared Files UI and agent-files browser are retired.
+The Resources page shows the searchable team corpus. Corpus documents and conversation attachments use their existing ingestion, metadata, search, and download APIs; the `/corpus` virtual view is read-only. The earlier team-shared Files UI and agent-files browser are retired.
 
 Knowledge Flow still serves technical agent paths needed for capability assets and generated outputs:
 

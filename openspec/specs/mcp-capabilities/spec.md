@@ -186,7 +186,7 @@ be removed without adding a remote replacement.
 
 ### Requirement: Retired Knowledge Flow MCP servers
 
-Fred's packaged MCP catalog and Knowledge Flow deployment SHALL NOT expose the legacy `mcp-knowledge-flow-corpus` or `mcp-knowledge-flow-fs` servers. Knowledge Flow SHALL NOT expose the legacy corpus-manager HTTP routes under `/corpus/`. Fred SHALL continue to expose supported MCP servers, the independent `/documents/tree` API, and the authenticated HTTP filesystem API used by non-MCP consumers.
+Fred's packaged MCP catalog and Knowledge Flow deployment SHALL NOT expose the legacy `mcp-knowledge-flow-corpus` or `mcp-knowledge-flow-fs` servers. Knowledge Flow SHALL NOT expose the legacy corpus-manager HTTP routes under `/corpus/`. Fred SHALL continue to expose supported MCP servers, the independent `/documents/tree` API, the read-only virtual corpus view, and authenticated HTTP `/fs` routes retained for technical agent files, including PPT Filler's binary transport.
 
 #### Scenario: Default agent catalog
 - **WHEN** an agent pod loads the packaged MCP catalog

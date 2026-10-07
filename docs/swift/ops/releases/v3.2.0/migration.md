@@ -480,6 +480,24 @@ remove historical OpenFGA tuples. Native document search and its shared Knowledg
 Flow client remain supported. MCP `sse`/`websocket` identifiers retain their existing
 configuration support; this change does not implement those connection paths.
 
+## Retire the legacy corpus and general-purpose filesystem surfaces
+
+Impact: **major** · [MCP and corpus migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-corpus-filesystem-mcp.md) · [file-area migration](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/retire-mon-espace.md)
+
+Before upgrading, export needed personal or team-shared files, remove the retired
+corpus/filesystem MCP selections and `mcp.filesystem_enabled`, and migrate
+external callers of `/corpus/*`, `artifacts.publish_text`, and
+`resources.fetch_text`. Remove `enableAllResourceSpaces` from private overlays.
+Let in-flight revectorization and vector-repair workflows finish. The separate
+`fred-samples` document-triage sample still targets the retired shared area;
+migrate or decommission it before use with this release.
+
+The Resources page now shows only the corpus. PPT Filler's technical template
+and generated-file transport, `list_document_tree`, corpus and attachment APIs,
+Deep conversation files, Wiki, and writable documents remain available. No
+stored objects are deleted by this cleanup. Follow both source notes for
+validation and coordinated rollback.
+
 ## Store the latest configurable CGU acceptance in users
 
 Impact: **minor** · [Source](https://github.com/ThalesGroup/fred/blob/code/v3.2.0/docs/swift/ops/migrations/2972-configurable-gcu-versions.md)

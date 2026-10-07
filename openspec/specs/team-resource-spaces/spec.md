@@ -2,39 +2,43 @@
 
 ## Purpose
 
-Defines the filesystem areas visible in Team Resources and available to agent authoring after the unused team-level personal area is retired.
+Defines the current Team Resources surface and the boundary between corpus documents and technical agent files.
 
 ## Requirements
 
-### Requirement: Team Resources exposes supported roots
-The Team Resources page SHALL expose the corpus root and, when resource spaces are enabled, the team-shared root for non-personal teams and the agent files root. It SHALL NOT expose a “Mon espace” root or issue personal-area filesystem requests.
+### Requirement: Team Resources exposes the corpus
 
-#### Scenario: Resource spaces enabled for a team
-- **WHEN** a user opens Team Resources for a non-personal team with resource spaces enabled
-- **THEN** the available roots are the corpus, team-shared files, and agent files, without “Mon espace”
+The Team Resources page SHALL expose the searchable team corpus. It SHALL NOT expose general-purpose personal, team-shared, or agent-files roots.
 
-#### Scenario: Resource spaces disabled
-- **WHEN** a user opens Team Resources with resource spaces disabled
-- **THEN** only the corpus root is available
+#### Scenario: Open Team Resources
 
-### Requirement: Team-level personal filesystem path is retired
-The filesystem API SHALL NOT list or accept operations on `/teams/{team_id}/users` or its descendants. It SHALL continue to support `/teams/{team_id}/shared` and `/teams/{team_id}/agents/{agent_id}/users/{uid}` subject to their existing authorization rules. Retirement SHALL NOT delete previously stored personal-area objects.
+- **WHEN** a user opens Team Resources for a team
+- **THEN** the corpus workspace is available without personal, team-shared, or agent-files tabs
 
-#### Scenario: Personal path request
-- **WHEN** an authorized team member requests listing, metadata, content, search, or mutation under `/teams/{team_id}/users`
-- **THEN** the filesystem API rejects the unsupported area without reading or changing its stored objects
+### Requirement: Retired general-purpose areas are unavailable
 
-#### Scenario: Agent-owned files remain accessible
-- **WHEN** an authorized user accesses `/teams/{team_id}/agents/{agent_id}/users/{uid}` for their own uid
-- **THEN** the existing agent file operations remain available
+The Knowledge Flow filesystem API SHALL reject the retired `/teams/{team_id}/users` and `/teams/{team_id}/shared` areas before accessing storage. Retirement SHALL NOT delete previously stored objects in those areas.
 
-### Requirement: Template lookup uses supported areas
-Agent authoring SHALL resolve a named workspace template from the agent's own `templates/` directory first and the team-shared `templates/` directory second. It SHALL NOT use the retired team-level personal area as a fallback.
+#### Scenario: Request a retired area
 
-#### Scenario: Agent template overrides shared template
-- **WHEN** the same named template exists in the agent's own files and team-shared files
-- **THEN** template lookup returns the agent's own file
+- **WHEN** a caller lists, reads, or mutates a path in either retired area
+- **THEN** the request is rejected without reading or changing stored objects
 
-#### Scenario: Only shared template exists
-- **WHEN** the named template is absent from the agent's own files and present in team-shared files
-- **THEN** template lookup returns the shared file
+### Requirement: Technical agent files remain available
+
+Knowledge Flow SHALL retain authenticated binary upload, download, and delete operations for agent configuration assets and generated outputs under `/teams/{team_id}/agents/{agent_instance_id}/`. PPT Filler SHALL continue to load its per-instance template and publish downloadable presentations through these paths.
+
+#### Scenario: Fill a presentation
+
+- **GIVEN** an agent instance has a stored PPT Filler template
+- **WHEN** the capability produces a presentation for a conversation
+- **THEN** the template can be read and the generated presentation can be downloaded through the retained technical storage path
+
+### Requirement: Corpus access remains separate
+
+The corpus and conversation attachments SHALL continue to use their existing ingestion, metadata, search, and download APIs. The `/corpus` virtual filesystem view SHALL remain read-only, and `list_document_tree` SHALL continue to list authorized indexed documents.
+
+#### Scenario: Agent lists corpus documents
+
+- **WHEN** an authorized agent invokes `list_document_tree`
+- **THEN** it receives the indexed documents permitted by the document-access contract
