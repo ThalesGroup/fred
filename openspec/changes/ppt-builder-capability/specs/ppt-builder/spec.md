@@ -514,6 +514,11 @@ The system SHALL NOT substitute an unfitting pattern for a slide. When a slide f
 - **WHEN** either tool returns a text to the model (a problem, a note, an error, a variety ask, a delivery)
 - **THEN** the text states what happened, why, and one concrete remedy, or says there is nothing to do; a result that builds nothing starts "No deck was built", and the delivery prefixes and the duplicate "Ignored:" prefix stay unchanged
 
+#### Scenario: Renderer findings reach the model
+
+- **WHEN** the render finds something the after-check report does not carry (an agenda announcing more parts than slides follow it, a one-line heading that runs into the text below, an items slide given no items, content sent to a fixed slide, a table it cannot fit)
+- **THEN** the delivery's "To review" notes hold one line for it with its remedy (`Slide 2: the agenda announces 6 parts but only 2 slide(s) follow it. Add the missing slides or remove those parts from the agenda; otherwise nothing to do.`), after the unchanged success prefix; findings the report already names stay in the logs only
+
 ### Requirement: Rendering only fills the template
 
 The system SHALL build each slide by instantiating a layout or duplicating an example slide and filling its slots; it SHALL never draw shapes the template does not hold, and the original example slides SHALL never appear in the output.

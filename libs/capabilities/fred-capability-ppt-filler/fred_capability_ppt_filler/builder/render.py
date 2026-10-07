@@ -86,7 +86,7 @@ PreparedImage = Tuple[bytes, int, int]
 @dataclass
 class RenderResult:
     pptx: bytes
-    # Human-readable notes for the agent: truncations, unfilled images.
+    # Everything the render found, for the logs; the agent reads `report`.
     warnings: List[str] = field(default_factory=list)
     slide_count: int = 0
     # The same deck adjusted for the PDF preview only (see `_widen_no_wrap_text`).
@@ -1146,9 +1146,9 @@ class _Renderer:
     ) -> RenderResult:
         original_ids = list(self.slides_by_id)
         rendered = 0
-        # (position, topics) of each agenda: a deck that announces more topics
-        # than it has slides left is one the agent meant to write and did not.
-        announced: List[Tuple[int, int]] = []
+        # (position, rendered index, topics) of each agenda: a deck announcing more
+        # topics than it has slides left is one the agent meant to write and did not.
+        announced: List[Tuple[int, int, int]] = []
         for position, slide_plan in enumerate(plan.slides, start=1):
             if slide_plan.invalid_entry is not None:
                 self.warnings.append(
@@ -1164,7 +1164,7 @@ class _Renderer:
                 )
             rendered += 1
             if pattern.kind == "agenda" and slide_plan.items:
-                announced.append((rendered, len(slide_plan.items)))
+                announced.append((position, rendered, len(slide_plan.items)))
             slide, pattern = self._create(pattern)
             # Nothing to say on it (a "Thank you" slide): keep the template's text.
             if pattern.reusable and pattern.fillable and has_content(slide_plan):
@@ -1174,9 +1174,10 @@ class _Renderer:
             elif has_content(slide_plan) and not _only_names_the_slide(
                 slide_plan, pattern
             ):
-                self.warnings.append(
-                    f"Slide {position}: '{pattern.label}' is a fixed slide used as is; the content "
-                    "given for it was ignored (nothing to do unless that content matters)."
+                self._tell(
+                    f"Slide {position}: '{pattern.label}' is a fixed slide shown as is, so its "
+                    "content was left out. If it matters, move it to another slide; otherwise "
+                    "nothing to do."
                 )
             # A copied notes slide keeps its formatting, never the template's
             # own notes (author guidance, `intent:` annotations).
@@ -1189,15 +1190,15 @@ class _Renderer:
                 "the plan holds no usable slide. Write each entry of `slides` as an "
                 "object with its content and call again."
             )
-        for position, topics in announced:
-            remaining = rendered - position
+        for position, index, topics in announced:
+            remaining = rendered - index
             # Only a wide gap: a deck may well cover five topics in three
             # slides, but not in none.
             if topics >= 3 and remaining * 2 < topics:
-                self.warnings.append(
-                    f"Slide {position} announces {topics} topics but only {remaining} slide(s) follow it. "
-                    "The deck holds what was sent, not what was planned: if slides are missing, call again "
-                    "with the complete list."
+                self._tell(
+                    f"Slide {position}: the agenda announces {topics} parts but only {remaining} "
+                    "slide(s) follow it. Add the missing slides or remove those parts from the "
+                    "agenda; otherwise nothing to do."
                 )
         _remove_slides(self.prs, original_ids)
         buffer = io.BytesIO()
@@ -1217,6 +1218,11 @@ class _Renderer:
             preview_pptx=preview.getvalue(),
             report=self.report,
         )
+
+    def _tell(self, note: str) -> None:
+        """A finding the after-check report does not carry: logged and sent to the agent."""
+        self.warnings.append(note)
+        self.report.notes.append(note)
 
     def _create(self, pattern: Pattern) -> Tuple[Any, Pattern]:
         """The slide, and the pattern whose zones address its actual shapes."""
@@ -1310,9 +1316,10 @@ class _Renderer:
             elif dropped:
                 # Nothing was kept, so nothing anchors the decoration: sweeping
                 # by overlap here takes the slide's own background with it.
-                self.warnings.append(
-                    f"Slide {position}: '{pattern.label}' shows its content as items, "
-                    f"and the plan gave none; use `items` (up to {group.count}) for it."
+                self._tell(
+                    f"Slide {position}: '{pattern.label}' shows its content as items and none "
+                    f"were given, so it stays empty. Give that content as `items` (up to "
+                    f"{group.count})."
                 )
             for placed in (p for item in dropped for p in item):
                 _remove(placed)
@@ -1393,9 +1400,9 @@ class _Renderer:
                 (shape, zone, 1.0 if scale is None else scale)
             )
             if one_line_room is not None:
-                self.warnings.append(
-                    f"Slide {position}: the {zone.role} '{lines[0].text}' of '{pattern.label}' does not fit "
-                    f"on one line and runs into the text below; keep it under {one_line_room} characters."
+                self._tell(
+                    f"Slide {position}: the {zone.role} '{lines[0].text}' is too long for one line "
+                    f"and runs into the text below. Shorten it to under {one_line_room} characters."
                 )
             if truncated:
                 report.truncated.append(zone.role)
@@ -1458,8 +1465,12 @@ class _Renderer:
         report = self.report.slide(position)
         fit = fit_table(zone, table)
         if fit.problem is not None:
-            report.lost.append("table")
-            self.warnings.append(f"Slide {position}: {fit.problem[0]}; table left out.")
+            # Its own line: "not placed: table" would name the wrong remedy.
+            self._tell(
+                f"Slide {position}: the table was left out "
+                f"({fit.problem[0].removeprefix('table: ')}). To show it, "
+                f"{fit.problem[1]}."
+            )
             return
         frame = cast(Any, placed.shape)
         removed = fill_table(frame, zone, fit)

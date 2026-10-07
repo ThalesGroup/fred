@@ -747,6 +747,25 @@ def test_the_success_notes_name_what_was_cut_per_slide():
     assert _build_notes(DeckPlan.model_validate({"slides": [COVER]}), [], []) == ""
 
 
+@pytest.mark.asyncio
+async def test_a_renderer_finding_reaches_the_model_in_the_review_notes(monkeypatch):
+    """An agenda announcing parts the deck never covers was only logged; the
+    model now reads it, with its remedy, after the unchanged success prefix."""
+    agenda = {
+        "title": "Agenda",
+        "kind": "agenda",
+        "items": [{"heading": f"Part {i}"} for i in range(4)],
+    }
+    text, result = await _build(monkeypatch, slides=[COVER, agenda])
+    assert not result.is_error, text
+    assert tools_mod.deck_delivered(_turn(text))
+    review = text[text.index("\nTo review") :]
+    assert (
+        "Slide 2: the agenda announces 4 parts but only 0 slide(s) follow it. Add the "
+        "missing slides or remove those parts from the agenda; otherwise nothing to do."
+    ) in review
+
+
 # --- images -----------------------------------------------------------------------------------
 
 

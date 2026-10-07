@@ -773,8 +773,12 @@ def build_builder_tools(
                 "user cannot get it. Tell the user and suggest trying again in a moment."
             )
 
+        if result.warnings:
+            logger.info("[PPTBUILD][TOOL] render warnings: %s", result.warnings)
         notes = _build_notes(
-            plan, result.report.issues(), unloadable + assignment.notes
+            plan,
+            result.report.issues(),
+            result.report.notes + unloadable + assignment.notes,
         )
 
         pdf_bytes = await convert_office_bytes_to_pdf(

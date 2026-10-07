@@ -51,6 +51,8 @@ class SlideReport:
 @dataclass
 class DeckReport:
     slides: Dict[int, SlideReport] = field(default_factory=dict)
+    # Other findings for the agent, each a full line with its remedy.
+    notes: List[str] = field(default_factory=list)
 
     def slide(self, position: int) -> SlideReport:
         return self.slides.setdefault(position, SlideReport(position))

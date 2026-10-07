@@ -410,7 +410,10 @@ def test_content_the_pattern_cannot_show_is_reported():
     warnings = " ".join(result.warnings)
     assert "Slide 1: 'Title Only' has no place for bullets" in warnings
     assert "Slide 2: 'Key figures' has no place for items' text" in warnings
-    assert "Slide 3: 'Motif' is a fixed slide used as is" in warnings
+    assert result.report.notes == [
+        "Slide 3: 'Motif' is a fixed slide shown as is, so its content was left out. "
+        "If it matters, move it to another slide; otherwise nothing to do."
+    ]
     assert (
         "Slide 4:" not in warnings
     )  # a fixed slide named by its own title lost nothing
@@ -450,8 +453,11 @@ def test_one_line_heading_shrinks_then_asks_to_be_shortened():
             ],
         )
     )
-    long_heading = [w for w in result.warnings if "does not fit on one line" in w]
-    assert len(long_heading) == 1 and "A heading far too long" in long_heading[0]
+    (long_heading,) = [n for n in result.report.notes if "one line" in n]
+    assert long_heading.startswith(
+        "Slide 1: the heading 'A heading far too long for its one line' is too long for "
+        "one line and runs into the text below. Shorten it to under "
+    )
 
     # A label with nothing under it may take a second line.
     figures, _ = _render(
@@ -879,7 +885,10 @@ def test_a_group_pattern_given_no_items_keeps_the_slide_design():
     kpi = _pattern("Key figures")
     result, deck = _render(_on(kpi, title="KPIs", bullets=["Stray"]))
     assert _title(deck.slides[0]) == "KPIs"
-    assert any("gave none" in w for w in result.warnings)
+    assert result.report.notes == [
+        "Slide 1: 'Key figures' shows its content as items and none were given, so it "
+        "stays empty. Give that content as `items` (up to 4)."
+    ]
     # The icons drawn beside the cards are gone with them, the title stays.
     assert _texts(deck.slides[0]) == ["KPIs"]
 
@@ -1171,7 +1180,10 @@ def test_an_agenda_announcing_more_than_the_deck_holds_is_reported():
             items=[PlanItem(heading=f"Topic {i}") for i in range(4)],
         ),
     )
-    assert [w for w in result.warnings if "announces 4 topics" in w]
+    assert result.report.notes == [
+        "Slide 2: the agenda announces 4 parts but only 0 slide(s) follow it. Add the "
+        "missing slides or remove those parts from the agenda; otherwise nothing to do."
+    ]
 
 
 def test_an_agenda_matched_by_the_deck_is_not_reported():
@@ -1186,7 +1198,7 @@ def test_an_agenda_matched_by_the_deck_is_not_reported():
         for t in ("One", "Two")
     ]
     result, _ = _render(*slides)
-    assert not [w for w in result.warnings if "announces" in w]
+    assert not [n for n in result.report.notes if "announces" in n]
 
 
 # --- duplication fidelity and after-render check ---------------------------------

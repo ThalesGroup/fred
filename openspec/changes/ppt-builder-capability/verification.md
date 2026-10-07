@@ -669,6 +669,16 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
   touched: the closest fit was already computed for the problem text; the stand-in
   candidates add one beam pass entry per slide to fix, on a call that builds nothing.
   Not proven: the live mistral-small session re-run.
+- WP28.4 (renderer findings forwarded, 2026-10-07): package `make code-quality` passed
+  (basedpyright 0 errors, the 1 warning in `tests/builder_decks.py` untouched); `make test`
+  431 passed, 5 skipped. New: `test_a_renderer_finding_reaches_the_model_in_the_review_notes`
+  (showcase template, cover + 4-part agenda → delivered, `deck_delivered`
+  true, the agenda line under "To review"), `test_a_table_the_render_cannot_fit_is_a_note_with_its_remedy`
+  (6 columns forced on the 5-column table → the measured note, no `not placed: table`).
+  Changed: the agenda, one-line, no-items and fixed-slide render tests assert the exact
+  note text on `report.notes`. No LLM call, I/O or shared state touched (strings on the
+  render worker, one log line per build). Not proven: a live small-model session acting
+  on the forwarded agenda note.
 - WP28 (close-kind fallback and actionable messages, 2026-10-07): package `make code-quality`
   passed (basedpyright 0 errors, the 1 warning in `tests/builder_decks.py` untouched);
   `make test` 429 passed, 5 skipped. New: `test_an_agenda_too_long_is_never_built_on_an_unrelated_kind`

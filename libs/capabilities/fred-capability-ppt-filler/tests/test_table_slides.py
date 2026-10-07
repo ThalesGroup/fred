@@ -239,3 +239,16 @@ def test_cells_keep_the_template_style_and_bold(template, inventory):
     _, frame = _render(template, inventory, table)
     run = frame.table.cell(1, 1).text_frame.paragraphs[0].runs[0]
     assert run.text == "Forte" and run.font.bold
+
+
+def test_a_table_the_render_cannot_fit_is_a_note_with_its_remedy(template, inventory):
+    """The fit check stops this first; should one slip through, the agent hears
+    the measured cause, not a generic "not placed"."""
+    patterns = assign(inventory, _deck(SlidePlan(title="T", table=_table(2)))).patterns
+    plan = _deck(SlidePlan(title="T", table=_table(2, cols=6)))
+    result = render_deck(template, inventory, plan, patterns)
+    assert result.report.notes == [
+        "Slide 2: the table was left out (6 columns given, max 5). To show it, keep at "
+        "most 5 columns or split the table over two slides."
+    ]
+    assert result.report.issues() == []
