@@ -152,7 +152,8 @@ usable.
 
 **Review slides** shows the slides kept, the layouts and the slides set aside.
 You can rename a slide (its name helps the agent choose), change its kind, set
-it aside or bring it back. The **Named by rules** mark flags a slide the vision
+it aside or bring it back. Giving another kind to an Other slide lets the agent
+use it, as a `kind:` note does. The **Named by rules** mark flags a slide the vision
 model did not read.
 
 ## After changing the template

@@ -157,8 +157,9 @@ devient alors utilisable.
 
 **Vérifier les slides** présente les diapositives retenues, les masques et les
 diapositives mises de côté. Vous pouvez renommer une diapositive (son nom aide
-l'agent à choisir), changer son type, la mettre de côté ou la reprendre. La
-mention **Nommée par des règles** signale une diapositive que le modèle de
+l'agent à choisir), changer son type, la mettre de côté ou la reprendre. Donner
+un autre type à une diapositive Autre permet à l'agent de s'en servir, comme
+une note `kind:`. La mention **Nommée par des règles** signale une diapositive que le modèle de
 vision n'a pas lue.
 
 ## Après une modification du template
