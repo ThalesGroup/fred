@@ -22,10 +22,12 @@ import logging
 import os
 import threading
 from collections.abc import AsyncGenerator, Generator
+from contextlib import suppress
 from typing import Any, Dict, Iterable, Optional, Protocol, Sequence, Type, cast
 
 import httpx
 from fred_core.common import ModelConfiguration
+from fred_core.model.diagnostics import effective_model_settings, log_model_settings
 from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
 from langchain_core.embeddings import Embeddings as LCEmbeddings
@@ -182,27 +184,10 @@ def _patch_vertex_maas_auth(model: Any) -> None:
 # Logging hygiene
 # ---------------------------------------------------------------------------
 
-_REDACT_SUBSTRINGS = ("key", "token", "secret", "password", "authorization")
-
-
-def _redact_settings(d: Dict[str, Any]) -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    for k, v in (d or {}).items():
-        lk = k.lower()
-        if any(s in lk for s in _REDACT_SUBSTRINGS):
-            out[k] = "***REDACTED***"
-        else:
-            out[k] = v
-    return out
-
 
 def _info_provider(cfg: ModelConfiguration, settings: Dict[str, Any]) -> None:
-    logger.info(
-        "[MODEL] Provider=%s Name=%s Settings=%s",
-        cfg.provider,
-        cfg.name,
-        _redact_settings(settings),
-    )
+    # Settings may contain custom headers and signed URLs; never dump them.
+    logger.info("[MODEL] Provider=%s Name=%s", cfg.provider, cfg.name)
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +266,17 @@ def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
 
 
 def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+    model = _create_model(cfg)
+    with suppress(Exception):
+        log_model_settings(
+            str(cfg.provider) if cfg else "unknown",
+            str(cfg.name) if cfg else "unknown",
+            tuple(effective_model_settings(model).items()),
+        )
+    return model
+
+
+def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     if cfg is None:
         raise ValueError("Model configuration is None")
     if not cfg.provider:

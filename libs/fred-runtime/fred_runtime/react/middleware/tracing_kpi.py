@@ -16,19 +16,35 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
-from typing import cast
+from contextlib import suppress
 
 from fred_core.kpi import BaseKPIWriter, KPIActor
+from fred_core.kpi.kpi_writer_structures import Dims, MetricNames
+from fred_core.model.diagnostics import active_model_http, effective_model_settings
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.runnables.config import (
+    ensure_config,
+    merge_configs,
+    set_config_context,
+)
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
+from fred_runtime.runtime_support.llm_diagnostics import (
+    LlmObservation,
+    LlmProgressCallback,
+    Scalar,
+    attach_failure,
+    change_active,
+    classify_error,
+    streaming_selection,
+)
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
 from fred_runtime.runtime_support.trace_payloads import (
     final_assistant_message,
@@ -48,22 +64,7 @@ logger = logging.getLogger(__name__)
 
 
 class TracingKpiMiddleware(AgentMiddleware):
-    """
-    Model-call span, latency KPI, and call/response logs (legacy `_wrap`).
-
-    Why this exists:
-    - Fred tracing tags each model call with a `v2.react.model` span (model
-      name) nested under the active agent span; KPI records
-      `llm.call_latency_ms`; `[LLM][CALL]`/`[LLM][RESPONSE]` logs describe the
-      exact request/response
-    - this middleware is the INNERMOST `wrap_model_call` of the platform frame
-      so span/KPI/log measure the bare model call, exactly as the legacy
-      `reasoner` node wrapped only `model.ainvoke(...)`
-
-    How to use:
-    - always part of the frame; span/KPI are no-ops when tracer/kpi are None,
-      the logs are emitted unconditionally (legacy behavior)
-    """
+    """Measure the shared model boundary without capturing streaming content."""
 
     def __init__(
         self,
@@ -71,104 +72,204 @@ class TracingKpiMiddleware(AgentMiddleware):
         tracer: TracerPort | None,
         kpi: BaseKPIWriter | None,
         binding: BoundRuntimeContext,
+        role: str = "root",
     ) -> None:
         super().__init__()
         self._tracer = tracer
         self._kpi = kpi
         self._binding = binding
+        self._role = "child" if role == "child" else "root"
 
     async def awrap_model_call(
         self,
         request: ModelRequest,
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
-        model_name = extract_model_name_from_object(request.model)
-        self._log_model_call(request)
-
-        span = None
-        if self._tracer is not None:
-            attributes: dict[str, object] = {}
-            if model_name is not None:
-                attributes["model_name"] = model_name
-            from ..react_tracing import active_agent_span
-
-            span = self._tracer.start_span(
-                name=TRACE_MODEL_SPAN_NAME,
-                context=self._binding.portable_context,
-                attributes=cast(dict[str, str | int | float | bool | None], attributes),
-                parent=active_agent_span.get(),
-            )
-            # Serializing a full transcript is real work on the per-turn hot
-            # path, so it happens only when a backend will actually store it.
-            # `tools` is part of that payload: it is a sibling field of the same
-            # request, it carries the argument schemas the model generates tool
-            # calls against, and it exists in no other channel — a trace without
-            # it looks complete while hiding a large share of what was sent.
-            if self._tracer.captures_content:
-                span.set_io(
-                    input=serialize_model_request(
-                        list(request.messages),
-                        system_prompt=request.system_prompt,
-                        tools=request.tools,
-                    )
-                )
-            # Sizes are measurement, not content (§7), so they are recorded even
-            # with capture off — the one volume signal available in production.
-            #
-            # Attributes, NOT `usage_details`: Langfuse renders every usage key
-            # under one "TOKENS" unit and sums the ones it does not recognize
-            # into an "Other usage" line. Three character counts became a single
-            # 119 778 shown beside "Input usage 32 155", reading as extra tokens.
-            # The token totals stayed correct — the display did not. Metadata has
-            # no unit and no aggregation, so each count stands on its own.
-            for key, value in model_request_char_sizes(
-                list(request.messages),
-                system_prompt=request.system_prompt,
-                tools=request.tools,
-            ).items():
-                span.set_attribute(key, value)
-
-        kpi_dims: dict[str, str | None] = {
-            "agent_id": self._binding.portable_context.agent_name
-            or self._binding.portable_context.agent_id,
-        }
-        if model_name is not None:
-            kpi_dims["model_name"] = model_name
-
-        kpi_ctx = (
-            self._kpi.timer(
-                "llm.call_latency_ms", dims=kpi_dims, actor=KPIActor(type="system")
-            )
-            if self._kpi is not None
-            else None
+        model_name = extract_model_name_from_object(request.model) or "unknown"
+        sizes: dict[str, int] = {}
+        settings = effective_model_settings(request.model)
+        streaming = streaming_selection(
+            request.model, request.model_settings, has_tools=bool(request.tools)
         )
-        # Use the timer as a sync context manager (allowed inside async
-        # functions). _TimerImpl.__exit__ receives exc_type so
-        # status=error/cancelled is set automatically on failure.
-        with kpi_ctx if kpi_ctx is not None else nullcontext():
-            try:
-                response = await handler(request)
-                if span is not None:
-                    span.set_attribute("status", "ok")
-                    response_model_name = extract_model_name_from_model_response(
-                        response
+        observation = LlmObservation(
+            model=model_name,
+            role=self._role,
+            streaming=streaming,
+        )
+        observation.http.allow_request_ids = not delegation_enabled()
+        token = active_model_http.set(observation.http)
+        span: SpanPort | None = None
+        outcome = "ok"
+        error_fields: dict[str, Scalar] = {"error_code": "none"}
+        response_fields: dict[str, Scalar] = {}
+        response_model_name: str | None = None
+        dims: Dims = {"model_name": model_name, "llm_role": self._role}
+        active = change_active(model_name, self._role, 1)
+        try:
+            with suppress(Exception):
+                sizes = model_request_char_sizes(
+                    request.messages,
+                    system_prompt=request.system_prompt,
+                    tools=request.tools,
+                )
+                logger.info(
+                    "event=llm_call_started llm_call_id=%s model=%s role=%s settings=%s sizes=%s",
+                    observation.call_id,
+                    model_name,
+                    self._role,
+                    settings,
+                    sizes,
+                    extra={
+                        "llm_call_id": observation.call_id,
+                        "model_name": model_name,
+                        "llm_role": self._role,
+                        **sizes,
+                        "message_count": len(request.messages),
+                        "tool_count": len(request.tools),
+                    },
+                )
+                self._log_model_call(request)
+            if self._kpi is not None:
+                with suppress(Exception):
+                    self._kpi.gauge(
+                        MetricNames.LLM_ACTIVE_CALLS,
+                        active,
+                        dims=dims,
+                        actor=KPIActor(type="system"),
                     )
-                    if response_model_name is not None:
-                        span.set_attribute("model_name", response_model_name)
+            if self._tracer is not None:
+                with suppress(Exception):
+                    from ..react_tracing import active_agent_span
+
+                    span = self._tracer.start_span(
+                        name=TRACE_MODEL_SPAN_NAME,
+                        context=self._binding.portable_context,
+                        attributes={
+                            "model_name": model_name,
+                            "llm_call_id": observation.call_id,
+                            "llm_role": self._role,
+                        },
+                        parent=active_agent_span.get(),
+                    )
+                    for key, value in sizes.items():
+                        span.set_attribute(key, value)
+                    if self._tracer.captures_content:
+                        span.set_io(
+                            input=serialize_model_request(
+                                list(request.messages),
+                                system_prompt=request.system_prompt,
+                                tools=request.tools,
+                            )
+                        )
+            config = merge_configs(
+                ensure_config(), {"callbacks": [LlmProgressCallback(observation)]}
+            )
+
+            async def invoke_model() -> ModelResponse:
+                return await handler(request)
+
+            with set_config_context(config) as context:
+                response = await asyncio.create_task(invoke_model(), context=context)
+            with suppress(Exception):
+                if span is not None:
+                    response_model_name = (
+                        extract_model_name_from_model_response(response) or model_name
+                    )
+                    span.set_attribute("model_name", response_model_name)
                     self._record_model_response(
-                        span,
-                        response,
-                        model_name=response_model_name or model_name,
+                        span, response, model_name=response_model_name
                     )
                 self._log_model_response(response)
-                return response
-            except Exception:
-                if span is not None:
-                    span.set_attribute("status", "error")
-                raise
-            finally:
-                if span is not None:
+                message = final_assistant_message(response.result)
+                if message is not None:
+                    _, usage, reason = runtime_metadata_from_message(message)
+                    response_fields["usage_available"] = usage is not None
+                    if usage is not None:
+                        for key in ("input_tokens", "output_tokens", "total_tokens"):
+                            if key in usage:
+                                response_fields[key] = usage[key]
+                    if reason is not None:
+                        response_fields["finish_reason"] = str(reason)
+            return response
+        except BaseException as exc:
+            outcome = (
+                "cancelled" if isinstance(exc, asyncio.CancelledError) else "error"
+            )
+            error_fields = classify_error(exc)
+            if error_fields["error_code"] == "stream_idle_timeout":
+                observation.streaming = True
+            with suppress(Exception):
+                attach_failure(
+                    exc, {**observation.fields(), "status": outcome, **error_fields}
+                )
+            raise
+        finally:
+            active_model_http.reset(token)
+            active = change_active(model_name, self._role, -1)
+            fields = {
+                **observation.fields(),
+                **response_fields,
+                "status": outcome,
+                **error_fields,
+            }
+            with suppress(Exception):
+                logger.log(
+                    logging.WARNING if outcome == "error" else logging.INFO,
+                    "event=llm_call_completed diagnostics=%s",
+                    fields,
+                    extra=fields,
+                )
+            if span is not None:
+                with suppress(Exception):
+                    for key, value in fields.items():
+                        if key == "model_name" and response_model_name is not None:
+                            value = response_model_name
+                        span.set_attribute(key, value)
+                with suppress(Exception):
                     span.end()
+            if self._kpi is not None:
+                actor = KPIActor(type="system")
+                with suppress(Exception):
+                    self._kpi.gauge(
+                        MetricNames.LLM_ACTIVE_CALLS, active, dims=dims, actor=actor
+                    )
+                terminal_dims: Dims = {
+                    **dims,
+                    "status": outcome,
+                    "error_code": str(error_fields["error_code"]),
+                }
+                with suppress(Exception):
+                    self._kpi.count(
+                        MetricNames.LLM_CALLS, 1, dims=terminal_dims, actor=actor
+                    )
+                measurements: dict[str, float] = {
+                    "call_latency_ms": float(fields["elapsed_ms"] or 0)
+                }
+                for name in (
+                    "first_chunk_ms",
+                    "max_chunk_gap_ms",
+                    "terminal_silence_ms",
+                ):
+                    if name in fields:
+                        measurements[name] = float(fields[name] or 0)
+                for name, value in measurements.items():
+                    metric_dims = terminal_dims
+                    if name == "call_latency_ms":
+                        metric_dims = {
+                            "model_name": model_name,
+                            "status": outcome,
+                            "agent_id": self._binding.portable_context.agent_name
+                            or self._binding.portable_context.agent_id,
+                        }
+                    with suppress(Exception):
+                        self._kpi.emit(
+                            name=f"llm.{name}",
+                            type="timer",
+                            value=value,
+                            unit="ms",
+                            dims=metric_dims,
+                            actor=actor,
+                        )
 
     def _record_model_response(
         self,
