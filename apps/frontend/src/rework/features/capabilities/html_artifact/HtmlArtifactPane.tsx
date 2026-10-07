@@ -126,12 +126,8 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   // been withdrawn, so it would otherwise just look broken.
   const scriptSuppressed = carriesScript && !allowJavaScript;
 
-  // Double-buffer the Preview so a zoom / markup change never flashes the iframe's
-  // blank white background: the newly composed document loads into the HIDDEN back
-  // buffer and is revealed only once it has painted (onLoad); the front buffer keeps
-  // the previous frame visible until then. Each iframe keeps a STABLE key, so only
-  // the back one ever reloads — an iframe cannot be re-zoomed without a reload
-  // (sandboxed, no allow-scripts), so this hides that reload instead of avoiding it.
+  // Double-buffer only inert pages: a hidden old frame must not keep running
+  // script after its artifact is closed or its team's right is withdrawn.
   const [buffers, setBuffers] = useState<[string, string]>(["", ""]);
   const [front, setFront] = useState<0 | 1>(0);
   // What each buffer has actually painted. Switching back to an already-seen
@@ -144,6 +140,7 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
+    if (allowJavaScript) return;
     const action = nextBufferAction(composed, buffers, paintedRef.current, front);
     if (action.kind === "flip") {
       setFront(action.to);
@@ -159,7 +156,7 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
         return next;
       });
     }
-  }, [composed, front, buffers]);
+  }, [allowJavaScript, composed, front, buffers]);
 
   const handleFrameLoad = (idx: 0 | 1) => {
     paintedRef.current[idx] = buffers[idx];
@@ -376,6 +373,15 @@ export function HtmlArtifactPane({ onClose }: CapabilitySidePanelProps) {
                 <div className={styles.stoppedNotice}>
                   {t("capability.html_artifact.stoppedNotice", { defaultValue: "The page has been stopped." })}
                 </div>
+              ) : allowJavaScript ? (
+                <iframe
+                  key={selectedKey}
+                  srcDoc={composed}
+                  className={`${styles.previewFrame} ${styles.frameFront}`}
+                  title={selected.title || untitled}
+                  sandbox={SHELL_SANDBOX}
+                  referrerPolicy="no-referrer"
+                />
               ) : (
                 ([0, 1] as const).map((i) => (
                   <iframe

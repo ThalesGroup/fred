@@ -31,7 +31,7 @@ export const HTML_ARTIFACT_CAPABILITY_ID = "html_artifact";
  */
 export function useHtmlArtifactJavaScriptAllowed(): boolean {
   const { teamId } = useSelectedTeam();
-  const { data } = useTeamCapabilitySettingsQuery(
+  const { currentData, isFetching, isError } = useTeamCapabilitySettingsQuery(
     { teamId: teamId ?? "", capabilityId: HTML_ARTIFACT_CAPABILITY_ID },
     {
       skip: !teamId,
@@ -41,5 +41,7 @@ export function useHtmlArtifactJavaScriptAllowed(): boolean {
     },
   );
 
-  return data?.settings?.allow_javascript === true;
+  // `data` can belong to the previous team, and a cached success can survive a
+  // failed refetch. Neither is evidence of the current team's right.
+  return Boolean(teamId && !isFetching && !isError && currentData?.settings?.allow_javascript === true);
 }

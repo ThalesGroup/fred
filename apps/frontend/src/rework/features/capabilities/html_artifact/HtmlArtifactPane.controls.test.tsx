@@ -121,7 +121,7 @@ afterEach(() => {
 describe("HtmlArtifactPane stop control", () => {
   it("unmounts the preview frames, which is what ends execution", () => {
     render();
-    expect(frames()).toBe(2);
+    expect(frames()).toBe(1);
 
     act(() => button("Stop the page")!.click());
 
@@ -137,7 +137,7 @@ describe("HtmlArtifactPane stop control", () => {
 
     act(() => button("Run the page again")!.click());
 
-    expect(frames()).toBe(2);
+    expect(frames()).toBe(1);
     expect(container.textContent).not.toContain("The page has been stopped.");
   });
 
@@ -145,7 +145,7 @@ describe("HtmlArtifactPane stop control", () => {
     html = STATIC_ONLY;
     render();
 
-    expect(frames()).toBe(2);
+    expect(frames()).toBe(1);
     expect(button("Stop the page")).toBeNull();
   });
 
@@ -158,7 +158,7 @@ describe("HtmlArtifactPane stop control", () => {
     artifactId = "a2";
     render();
 
-    expect(frames()).toBe(2);
+    expect(frames()).toBe(1);
     expect(button("Stop the page")).not.toBeNull();
   });
 });

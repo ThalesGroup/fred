@@ -107,8 +107,9 @@ describe("HtmlArtifactPane preview sandbox", () => {
     });
 
     const iframes = container.querySelectorAll("iframe");
-    // The double-buffered preview mounts two stacked frames.
-    expect(iframes.length).toBe(2);
+    // Executable pages use one frame: keeping a second one alive would let
+    // hidden script continue after a switch or revocation.
+    expect(iframes.length).toBe(1);
     for (const frame of iframes) {
       // The shell's own bootstrap must run; this token is structural, not a
       // decision about the artifact.
@@ -123,6 +124,7 @@ describe("HtmlArtifactPane preview sandbox", () => {
 describe("HtmlArtifactPane preview buffers", () => {
   // Chromium paints a frame blank when its doc lands while an empty srcdoc is still loading.
   it("leaves an empty buffer without a srcdoc attribute", () => {
+    allowJavaScript = false;
     act(() => {
       root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
     });
@@ -146,8 +148,23 @@ describe("HtmlArtifactPane artifact frame posture", () => {
       root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />);
     });
 
-    const [, loaded] = container.querySelectorAll("iframe");
+    const [loaded] = container.querySelectorAll("iframe");
     expect(innerSandbox(loaded.getAttribute("srcdoc") ?? "")).toBe("allow-scripts");
+  });
+
+  it("destroys the executable frame when the team's right is withdrawn", () => {
+    allowJavaScript = true;
+    act(() => root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />));
+    const executable = container.querySelector("iframe")!;
+    expect(innerSandbox(executable.getAttribute("srcdoc") ?? "")).toBe("allow-scripts");
+
+    allowJavaScript = false;
+    act(() => root.render(<HtmlArtifactPane capabilityId="html_artifact" onClose={() => undefined} />));
+
+    expect(executable.isConnected).toBe(false);
+    for (const frame of container.querySelectorAll("iframe")) {
+      expect(frame.getAttribute("srcdoc") ?? "").not.toContain('sandbox="allow-scripts"');
+    }
   });
 
   it("gives the inner artifact frame NO token for a team that may not run script", () => {
