@@ -30,7 +30,7 @@ Give `useSessionHistory` the current session's generated details and concrete hi
 
 Consume one read-only state in `ManagedChatPage`, `useManagedChat`, `ConversationThread` and the attachment drawer. Disable or omit the composer and its command/voice/file-drop/paste actions, retry and new-conversation actions, context/library/document selectors and persisted attachment removal. Add guards to the hook callbacks for send/commands, HITL single/batch/skip and Graph continuation/restart, so an indirect caller cannot bypass disabled UI. Avoid eager composer/model preparation for a confirmed deleted instance.
 
-Keep unanswered historical HITL prompts visible as frozen cards, including the trailing prompt currently reserved for the live interaction. Keep interrupted-execution details readable without recovery buttons. Existing source/trace reads and attachment downloads remain available. Add localized English/French notices and a deleted-agent label instead of the generic `Agent` fallback. Do not redesign the layout or styles beyond the notice and state wiring.
+Keep unanswered historical HITL prompts visible as frozen cards, including the trailing prompt currently reserved for the live interaction. Keep interrupted-execution details readable without recovery buttons. Existing source/trace reads and attachment downloads remain available. Add localized English/French notices and append the exact `(deleted)` suffix to the agent label in the chat header and sidebar. Reuse an available name and the existing generic agent label when no name survives deletion; no display-name migration is introduced. Do not redesign the layout or styles beyond the notice and state wiring.
 
 ### 4. Refresh availability using existing query tags
 
@@ -51,3 +51,10 @@ The new `managed-conversations` capability covers durable history and the conver
 ## Migration Plan
 
 No schema, permission-model or configuration changes. Deploy the paired Control Plane/frontend release normally. The detail response is additive for old clients; new frontend code requires the new response for deleted-agent history. Roll back the paired application release normally; history/session data is preserved and the old UI's deletion defect returns. The migration note initially covers planning-only files and must be reconciled with the actual implementation before readiness.
+
+The initial local-session creation handoff remains executable while its metadata
+POST settles, and known failed local creations retain their existing same-id
+retry. This exemption ends on a successful detail response or navigation away;
+later saved-session visits require confirmed metadata. A runtime HTTP refusal
+before admission rolls back the optimistic turn and restores the draft, then
+refetches availability without inferring deletion from the refusal itself.

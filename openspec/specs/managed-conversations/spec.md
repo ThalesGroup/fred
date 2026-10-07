@@ -1,8 +1,10 @@
+# Managed conversations Specification
+
 ## Purpose
 
 Keeps managed conversations accessible independently of their agent's lifetime and makes their execution availability explicit without moving message history out of the runtime.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: History survives deletion of the managed agent
 
@@ -23,7 +25,7 @@ Deleting a managed agent SHALL preserve its existing conversation metadata and r
 
 ### Requirement: Deleted-agent conversations are read-only for execution
 
-A conversation whose managed agent has been deleted SHALL display a localized explanation that the agent was deleted and the conversation is read-only. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
+A conversation whose managed agent has been deleted SHALL append the exact `(deleted)` suffix to its agent label in the chat header and sidebar and display a localized explanation that the agent was deleted and the conversation is read-only. It SHALL prevent messages, commands, retries, human-input responses/skips, execution continuation/restart, attachment additions/removals and execution-context changes. Its historical human-input prompts and interrupted-execution records SHALL remain readable without executable actions. Starting a fresh conversation with that deleted instance SHALL be unavailable. Existing title management, reading/downloading attachments and conversation deletion SHALL retain their current permissions.
 
 #### Scenario: Submit through the composer or a command
 

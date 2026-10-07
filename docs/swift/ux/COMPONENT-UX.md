@@ -5177,3 +5177,21 @@ Fred's Activity page, task rehydration and task event subscriptions query only
 Fred's control-plane and knowledge-flow services. Evaluation progress belongs
 to the external application's UI. Shared SDK components and backend evaluation
 permissions remain available; no evaluation data is removed.
+
+### Conversations after agent deletion (2026-10-07)
+
+A saved conversation remains navigable after its managed agent is deleted. Its
+agent label carries the exact `(deleted)` suffix in the header and sidebar,
+with a localized notice explaining that the conversation is read-only. If a
+name is no longer available, the label uses the existing generic agent fallback.
+History loads independently of execution preparation. Missing routing or a failed
+history request shows an unavailable notice while retaining already cached text.
+
+Send, commands, retries, new-conversation, voice, attachment edits and context
+controls are disabled, including their retained callbacks. Pending human questions
+and interrupted-execution cards remain readable without resume, skip, continue or
+restart actions. Title editing, conversation deletion and attachment previews stay
+available. Current owned session details drive the execution state; agent-list
+errors never imply deletion. Existing query invalidation, bounded refresh and window
+focus revalidation catch a deletion from the same client or another session.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).

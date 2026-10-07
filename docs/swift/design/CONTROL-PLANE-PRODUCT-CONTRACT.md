@@ -494,7 +494,7 @@ Accessed via:
 - `GET /agents/sessions/{session_id}/messages` — full message list for one session
 - `GET /agents/sessions` — session list for one user (or all users for admin)
 
-**Control-plane must not proxy or cache message content.** If the frontend needs message history, it calls runtime directly using the `messages_url_template` from `ExecutionPreparation`.
+**Control-plane must not proxy or cache message content.** The frontend reads history directly from the runtime using `SessionDetails.messages_url`, independently of execution preparation.
 
 **Session Metadata — owned by `control-plane-backend`** _(target state — implementation pending Phase 3b/FRONT-04)_
 
@@ -552,6 +552,18 @@ Session attachment routes live under the existing session surface:
 - `DELETE /teams/{team_id}/sessions/{session_id}/attachments/{attachment_id}`
 
 It must not inline full message history.
+
+The single-session GET returns `SessionDetails`, extending `SessionListItem`
+with `agent_deleted` and optional `messages_url`. Team membership and session
+ownership are both required; unknown, foreign-team and foreign-owner IDs return
+404. List, create and update responses retain `SessionListItem`.
+
+History routing uses the session's captured runtime ID, with the current live
+instance as a fallback only for legacy sessions without that snapshot. The URL
+uses the configured browser ingress and never exposes an internal runtime
+address. No execution preparation or runtime catalog call is needed. Missing
+routing leaves history explicitly unavailable; it does not imply agent deletion.
+See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 
 #### 3.5.5 Admin observability requirements
 
