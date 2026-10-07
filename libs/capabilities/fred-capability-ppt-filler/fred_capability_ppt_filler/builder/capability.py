@@ -284,8 +284,8 @@ _BUILD_INSTRUCTIONS = (
     "Ask the user to validate an outline first only when they asked for it, or when the request does not "
     "say what the presentation is about. Ground the content in "
     "the documents when the agent has document tools and the request refers to them. Keep every text "
-    "SLIDE-READABLE: short titles, a few short bullets, never paragraphs; respect the limits the catalogue "
-    "gives. If the tool returns needs_revision, apply one option per listed slide and call again with the "
+    "SLIDE-READABLE: short titles, a few short bullets, never paragraphs; respect the room each field and "
+    "the catalogue state. If the tool returns needs_revision, apply one option per listed slide and call again with the "
     "WHOLE deck; if it reports cuts that matter, fix them the same way. When the "
     "user asks for a change, regenerate the whole deck with the amended plan."
 )

@@ -167,6 +167,31 @@ def test_schema_and_description_offer_kinds_never_pattern_ids():
     assert "process" in kinds and "cover" not in kinds and "cards" not in kinds
 
 
+def test_each_text_field_states_its_room_where_the_model_writes_it():
+    """The cover subtitle and figure labels failed most first calls while their
+    sizes sat only in the catalogue (design.md D20)."""
+    inventory = analyze_template(TEMPLATE).inventory
+    assert inventory is not None
+    schema = tools_mod._args_schema(inventory)
+    defs = schema.model_json_schema()["$defs"]
+    slide = defs["BuildSlide"]["properties"]
+    # The most common room, then each kind that differs; a single kind is named.
+    title = slide["title"]["description"]
+    assert title.startswith("Slide title. Room: ≈33 chars; cover ≈29 chars × 2 lines")
+    assert (
+        "Room: section ≈66 chars × 3 lines; cover ≈33 chars × 3 lines."
+        in (slide["subtitle"]["description"])
+    )
+    heading = defs["BuildColumn"]["properties"]["heading"]["description"]
+    assert heading.endswith("Room: comparison ≈30 chars.")
+    # Hints only: an over-long text must reach the tool, not fail at the provider.
+    assert "maxLength" not in json.dumps(schema.model_json_schema())
+    # Equal templates share one cached schema, and the plan still coerces.
+    assert tools_mod._args_schema(inventory.model_copy(deep=True)) is schema
+    plan = tools_mod._to_plan(schema(slides=[{"title": "A", "items": ["x"]}]))
+    assert plan.slides[0].items[0].heading == "x"
+
+
 def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     config, assets = _configured()
     description = _tools(_ctx(config, assets=assets))[BUILD_TOOL_NAME].description

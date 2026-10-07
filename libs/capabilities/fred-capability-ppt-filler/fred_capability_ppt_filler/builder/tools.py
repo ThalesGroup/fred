@@ -66,8 +66,11 @@ from fred_capability_ppt_filler.builder.models import (
 )
 from fred_capability_ppt_filler.builder.plan import (
     DeckPlan,
+    PlanColumn,
+    PlanItem,
     PlanTable,
     SlidePlan,
+    field_hints,
     has_content,
     zone_summary,
 )
@@ -153,8 +156,11 @@ def catalogue(inventory: TemplateInventory) -> str:
 
 def _args_schema(inventory: TemplateInventory) -> type[BaseModel]:
     """The deck plan, with the kinds this template offers as the `kind` enum
-    of the JSON schema only: validation accepts anything and coerces it."""
-    return _schema_for(tuple(offered_kinds(inventory)))
+    and each text field's room in its description (JSON schema only:
+    validation accepts anything and coerces it)."""
+    return _schema_for(
+        tuple(offered_kinds(inventory)), field_hints(assignable(inventory))
+    )
 
 
 def _kind_enum(kinds: Tuple[SlideKind, ...]) -> Any:
@@ -168,10 +174,40 @@ def _kind_enum(kinds: Tuple[SlideKind, ...]) -> Any:
     return extra
 
 
+def _hinted(
+    name: str, base: type[BaseModel], hints: Dict[str, str], prefix: str = ""
+) -> Dict[str, Any]:
+    """`base`'s fields that have a room hint, redeclared with it appended to
+    their description (never `maxLength`: the provider would reject the call)."""
+    fields: Dict[str, Any] = {}
+    for field, info in base.model_fields.items():
+        hint = hints.get(prefix + field)
+        if hint:
+            described = f"{info.description or name + ' ' + field + '.'} {hint}"
+            default: Dict[str, Any] = (
+                {"default_factory": info.default_factory}
+                if info.default_factory
+                else {"default": info.default}
+            )
+            fields[field] = (info.annotation, Field(description=described, **default))
+    return fields
+
+
 # Built per turn otherwise: pydantic model creation costs milliseconds of CPU
-# on the event loop, and templates share a handful of kind sets.
+# on the event loop; keyed by what the schema shows, so equal templates share it.
 @lru_cache(maxsize=64)
-def _schema_for(kinds: Tuple[SlideKind, ...]) -> type[BaseModel]:
+def _schema_for(
+    kinds: Tuple[SlideKind, ...], hints: Tuple[Tuple[str, str], ...]
+) -> type[BaseModel]:
+    rooms = dict(hints)
+    item = create_model(
+        "BuildItem", __base__=PlanItem, **_hinted("Item", PlanItem, rooms, "items.")
+    )
+    column = create_model(
+        "BuildColumn",
+        __base__=PlanColumn,
+        **_hinted("Column", PlanColumn, rooms, "columns."),
+    )
     # Offered only when the template holds a table: the field is noise otherwise.
     table: Any = (
         (Optional[PlanTable], SlidePlan.model_fields["table"])
@@ -181,6 +217,9 @@ def _schema_for(kinds: Tuple[SlideKind, ...]) -> type[BaseModel]:
     slide_model = create_model(
         "BuildSlide",
         __base__=SlidePlan,
+        **_hinted("Slide", SlidePlan, rooms),
+        columns=(List[column], Field(default_factory=list)),  # type: ignore[valid-type]
+        items=(List[item], Field(default_factory=list)),  # type: ignore[valid-type]
         table=table,
         kind=(
             Optional[SlideKind],

@@ -19,7 +19,8 @@ optional ``kind`` last. Which template slide shows each entry is decided in
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence
+from collections import Counter
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -382,15 +383,20 @@ def capacity_text(chars_per_line: int, lines: int) -> str:
     return f"≈{chars_per_line} chars" + (f" × {lines} lines" if lines > 1 else "")
 
 
-def _limit(zones: Sequence[Zone]) -> str:
+def _room(zones: Sequence[Zone]) -> Optional[Tuple[int, int]]:
     """The room the agent can count on across zones filled from one field: the
     tightest one, since that is the zone that truncates. A zone that grows with
     its text has no limit to quote."""
     bounded = [z for z in zones if not z.grows and z.chars_per_line and z.max_lines]
     if not bounded:
-        return ""
+        return None
     tightest = min(bounded, key=lambda z: (z.chars_per_line or 0) * (z.max_lines or 0))
-    return " " + capacity_text(tightest.chars_per_line or 1, tightest.max_lines or 1)
+    return tightest.chars_per_line or 1, tightest.max_lines or 1
+
+
+def _limit(zones: Sequence[Zone]) -> str:
+    room = _room(zones)
+    return " " + capacity_text(*room) if room else ""
 
 
 def _required(zones: Sequence[Zone]) -> str:
@@ -415,8 +421,8 @@ def table_summary(zone: Zone) -> str:
     )
 
 
-def group_summary(group: RepeatGroup) -> str:
-    """What one repeat group's items hold: ``items max N [field ≈C chars, …]``."""
+def _item_fields(group: RepeatGroup) -> Dict[str, List[Zone]]:
+    """The item fields one repeat group holds, with their zones."""
     fields: Dict[str, List[Zone]] = {}
     for item in group.items:
         for zone in item:
@@ -430,9 +436,14 @@ def group_summary(group: RepeatGroup) -> str:
     ):
         # The renderer writes the heading in bold atop the text (`_heading_lead`).
         fields = {("heading+text" if k == "text" else k): v for k, v in fields.items()}
+    return fields
+
+
+def group_summary(group: RepeatGroup) -> str:
+    """What one repeat group's items hold: ``items max N [field ≈C chars, …]``."""
     shown = ", ".join(
         name + (_required(zones) if name == "image" else _limit(zones))
-        for name, zones in fields.items()
+        for name, zones in _item_fields(group).items()
     )
     # "max", not "×N": told `items×8`, an agent pads a five-point agenda.
     return f"items max {group.count} [{shown}]"
@@ -442,7 +453,22 @@ def zone_summary(pattern: Pattern) -> str:
     """The plan fields one pattern holds, with their limits."""
     if not pattern.fillable:
         return "shown as is: no content, or only its own title"
-    parts: List[str] = []
+    parts = [
+        f"{field}{f'×{len(same)}' if len(same) > 1 else ''}{_limit(same)}"
+        for field, same in _slide_fields(pattern)
+    ]
+    images = [z for z in pattern.zones if z.role == "image"]
+    if images:
+        parts.append(f"images×{len(images)}{_required(images)}")
+    parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
+    parts.extend(group_summary(g) for g in pattern.groups)
+    return "; ".join(parts) or "no editable zone"
+
+
+def _slide_fields(pattern: Pattern) -> List[Tuple[str, List[Zone]]]:
+    """The slide fields one pattern's own zones are filled from, as the renderer
+    fills them, each with its zones."""
+    found: List[Tuple[str, List[Zone]]] = []
     seen: set[str] = set()
     field_of = {z.key: SLIDE_FIELDS.get(z.role) for z in pattern.zones}
     headings = [z for z in pattern.zones if z.role == "heading"]
@@ -470,11 +496,48 @@ def zone_summary(pattern: Pattern) -> str:
                 if pattern.kind == "closing"
                 else "columns.bullets"
             )
-        count = f"×{len(same)}" if len(same) > 1 else ""
-        parts.append(f"{field}{count}{_limit(same)}")
-    images = [z for z in pattern.zones if z.role == "image"]
-    if images:
-        parts.append(f"images×{len(images)}{_required(images)}")
-    parts.extend(table_summary(z) for z in pattern.zones if z.role == "table")
-    parts.extend(group_summary(g) for g in pattern.groups)
-    return "; ".join(parts) or "no editable zone"
+        found.append((field, same))
+    return found
+
+
+# Catalogue field names → the schema fields they are written in.
+_SCHEMA_FIELDS = {
+    "bullets, one per line,": ("bullets",),
+    "heading+text": ("items.text",),
+    "image": (),
+}
+
+
+def field_hints(patterns: Sequence[Pattern]) -> Tuple[Tuple[str, str], ...]:
+    """Per schema field, its room on this template (design.md D20): per kind the
+    roomiest variant's, so a text within it always has a slide of that kind,
+    quoted as the most common room plus the kinds that differ."""
+    rooms: Dict[str, Dict[str, Tuple[int, int]]] = {}
+    for pattern in (p for p in patterns if p.fillable):
+        named = _slide_fields(pattern) + [
+            (f"items.{f}", z)
+            for g in pattern.groups
+            for f, z in _item_fields(g).items()
+        ]
+        for name, zones in named:
+            room = _room(zones)
+            for field in _SCHEMA_FIELDS.get(name.removeprefix("items."), (name,)):
+                best = rooms.setdefault(field, {}).get(pattern.kind)
+                if room and (best is None or room[0] * room[1] > best[0] * best[1]):
+                    rooms[field][pattern.kind] = room
+    hints = []
+    for field, by_kind in sorted(rooms.items()):
+        if not by_kind:
+            continue
+        counts = Counter(by_kind.values())
+        common = max(counts, key=lambda r: (counts[r], r[0] * r[1]))
+        # A room only one kind has is named after it ("cover ≈32 chars").
+        named = [k for k in SLIDE_KINDS if by_kind.get(k) == common]
+        lead = f"{named[0]} " if counts[common] == 1 else ""
+        others = "".join(
+            f"; {kind} {capacity_text(*by_kind[kind])}"
+            for kind in SLIDE_KINDS
+            if kind in by_kind and by_kind[kind] != common
+        )
+        hints.append((field, f"Room: {lead}{capacity_text(*common)}{others}."))
+    return tuple(hints)
