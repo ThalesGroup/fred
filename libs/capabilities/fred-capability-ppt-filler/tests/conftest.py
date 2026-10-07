@@ -17,11 +17,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
+import pytest
 import pytest_asyncio
 from analysis_db import drain
-from fred_capability_ppt_filler.builder import analysis_job
+from fred_capability_ppt_filler.builder import analysis_job, deck_plans
 from fred_capability_ppt_filler.builder.analysis_job import (
     PptBuilderBase,
     SqlAnalysisStore,
@@ -32,6 +33,15 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.pool import StaticPool
+
+
+@pytest.fixture(autouse=True)
+def deck_plan_store() -> Iterator[deck_plans.MemoryDeckPlanStore]:
+    """Base plans in memory: a build never reaches the pod's Postgres in tests."""
+    store = deck_plans.MemoryDeckPlanStore()
+    deck_plans.set_deck_plan_store_provider(lambda: store)
+    yield store
+    deck_plans.clear_deck_plan_store_provider()
 
 
 @pytest_asyncio.fixture

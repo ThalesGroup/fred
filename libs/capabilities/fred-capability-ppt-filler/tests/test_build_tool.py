@@ -200,7 +200,12 @@ def test_each_text_field_states_its_room_where_the_model_writes_it():
 def test_the_tool_tells_the_agent_one_call_builds_the_whole_deck():
     config, assets = _configured()
     description = _tools(_ctx(config, assets=assets))[BUILD_TOOL_NAME].description
-    assert "ONE call builds the WHOLE deck" in description
+    assert (
+        "A NEW deck: write out every slide in `slides`, in order, in ONE call"
+        in description
+    )
+    assert "To CHANGE the last deck of this conversation" in description
+    assert '{"op": "insert", "after": N (0 = at the start)' in description
     assert "Never split a deck across several calls" in description
     assert "The first slide is always the template's cover" in description
     # The choice guide names only kinds this template offers.
@@ -250,7 +255,8 @@ async def test_build_returns_preview_part_and_uploads_deck(monkeypatch, preview_
     assert "2 slides" in text
     assert tools_mod.deck_delivered(_turn(text))  # a later turn sees it
     # Another call is allowed: it rebuilds the whole deck.
-    assert "do not call again" not in text and "COMPLETE list" in text
+    assert "do not call again" not in text
+    assert "To change it, send only `changes` numbered on this deck's slides" in text
     # Keyed by the deck's name: a model that splits one deck across calls, or
     # retries one, lands on the same key and the reader sees one presentation.
     paths = [w["path"] for w in workspace.writes]
@@ -467,7 +473,7 @@ async def test_the_first_deck_is_asked_to_vary_once_and_a_resend_is_built(monkey
     ]
     assert not any(o.startswith("'figures'") for o in repeat["options"])
     assert any(o.startswith("'two_columns'") for o in repeat["options"])
-    assert "send the same plan again: it will be built as is" in text
+    assert "send the same call again: it will be built as is" in text
     # The same plan again: built, with the passive note only.
     text, result = await build.coroutine(slides=_REPEATED)
     assert not result.is_error, text
@@ -747,7 +753,7 @@ def test_the_success_notes_name_what_was_cut_per_slide():
         "example text removed: 'Lorem' (nothing to do); not placed: subtitle (move it "
         "to a field this slide shows, or drop it)." in notes
     )
-    assert "call again with the whole corrected deck" in notes
+    assert "call again with `changes` for those slides" in notes
     assert _build_notes(DeckPlan.model_validate({"slides": [COVER]}), [], []) == ""
 
 

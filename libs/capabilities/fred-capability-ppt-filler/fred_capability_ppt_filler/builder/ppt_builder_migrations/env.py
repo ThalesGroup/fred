@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from alembic import context
 from fred_capability_ppt_filler.builder.analysis_job import PptBuilderBase
+from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow  # noqa: F401
 from fred_core.common import load_postgres_config
 from fred_core.sql import make_alembic_env
 

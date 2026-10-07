@@ -70,7 +70,13 @@ from fred_capability_ppt_filler.builder.assign import (
     assign,
     assignable,
 )
+from fred_capability_ppt_filler.builder.changes import (
+    ChangeError,
+    SlideChange,
+    apply_changes,
+)
 from fred_capability_ppt_filler.builder.checks import SlideReport
+from fred_capability_ppt_filler.builder.deck_plans import get_deck_plan_store
 from fred_capability_ppt_filler.builder.models import (
     SLIDE_KINDS,
     SlideKind,
@@ -129,8 +135,7 @@ _IMAGE_SUFFIXES = (
 
 _BUSY_MESSAGE = (
     "No deck was built: the server is busy building other presentations. Tell the user and "
-    "offer to try again in a moment; then make ONE call with the whole deck, never several "
-    "calls at once."
+    "offer to try again in a moment; then make ONE call, never several calls at once."
 )
 
 
@@ -255,14 +260,38 @@ def _schema_for(
             ),
         ),
     )
+    change = create_model(
+        "BuildChange",
+        __base__=SlideChange,
+        slides=(
+            List[slide_model],  # type: ignore[valid-type]
+            Field(
+                default_factory=list,
+                description="replace, insert: the new slides, written as in `slides`.",
+            ),
+        ),
+    )
     model = create_model(
         "BuildPresentationArgs",
         __base__=BaseModel,
         __config__=ConfigDict(extra="ignore"),
         slides=(
             List[slide_model],
-            Field(default_factory=list, description="The slides, in order."),
+            Field(
+                default_factory=list,
+                description="A new deck: every slide, in order. Leave empty when sending `changes`.",
+            ),
         ),  # type: ignore[valid-type]
+        changes=(
+            Optional[List[change]],  # type: ignore[valid-type]
+            Field(
+                default=None,
+                description=(
+                    "Instead of `slides`: changes to the last deck of this conversation, "
+                    "numbered on its slides; the other slides stay as they are."
+                ),
+            ),
+        ),
         file_name=(
             Optional[str],
             Field(
@@ -281,6 +310,19 @@ def _to_plan(validated: Any) -> DeckPlan:
         ],
         file_name=validated.file_name,
     )
+
+
+def _to_changes(validated: Any) -> List[SlideChange]:
+    return [
+        change.model_copy(
+            update={
+                "slides": [
+                    SlidePlan.model_validate(s.model_dump()) for s in change.slides
+                ]
+            }
+        )
+        for change in validated.changes or []
+    ]
 
 
 def _loads(raw: object) -> bool:
@@ -351,10 +393,12 @@ def _needs_revision(
     a first call's variety ask joins them, so it never costs a round of its own."""
     current: _Previous = {}
     slides = []
+    # A slide renumbered by `changes` is still the one refused before.
+    by_sent = {sent: (problem, sent) for problem, sent in previous.values()}
     for problem in assignment.problems:
         sent = plan.slides[problem.index - 1].model_dump_json()
         entry = problem.as_dict()
-        before = previous.get(problem.index)
+        before = previous.get(problem.index) or by_sent.get(sent)
         if before is not None and before[0] == problem.problem:
             entry["repeated"] = (
                 "you resent this slide unchanged: apply one of the options"
@@ -378,7 +422,10 @@ def _needs_revision(
         text += " Also, several slides would look the same: " + _VARIETY_ASK.format(
             restated=""
         )
-    text += " Then call build_presentation again with the WHOLE deck."
+    text += (
+        " Then call build_presentation again with only `changes` for these slides (numbers "
+        "as listed), or the whole deck in `slides`."
+    )
     if repeats:
         text += (
             " If the slides under `variety` must stay alike, keep them: the next deck that "
@@ -429,9 +476,9 @@ def _variety_revision(
             if restated
             else "",
         )
-        + " Then call build_presentation again with the WHOLE deck. If these slides must stay "
-        "alike, send the same plan again: it will be built as is.\n"
-        + json.dumps(payload, ensure_ascii=False)
+        + " Then call build_presentation again with `changes` replacing those slides, or the "
+        "whole deck in `slides`. If these slides must stay alike, send the same call again: it "
+        "will be built as is.\n" + json.dumps(payload, ensure_ascii=False)
     )
 
 
@@ -485,7 +532,7 @@ def _build_notes(plan: DeckPlan, issues: List[SlideReport], notes: List[str]) ->
     if not lines:
         return ""
     return (
-        "\nTo review (if it matters, call again with the whole corrected deck; the new build "
+        "\nTo review (if it matters, call again with `changes` for those slides; the new build "
         "replaces this one):\n" + "\n".join(lines)
     )
 
@@ -509,6 +556,59 @@ def _prepare_and_render(
         except NotAnImageError:
             continue
     return render_deck(template_bytes, inventory, plan, patterns, images)
+
+
+# --- the base of a `changes` call ----------------------------------------------------------
+
+_BOTH_MODES = (
+    "No deck was built: the call sent both `slides` and `changes`. Send `slides` alone for a "
+    "new deck, or `changes` alone to change the last deck."
+)
+_NO_CHANGE = (
+    "No deck was built: `changes` is empty. List at least one change, or send the whole deck "
+    "in `slides`."
+)
+_NO_BASE = (
+    "No deck was built: there is no previous deck in this conversation to change. Send the "
+    "whole deck in `slides`."
+)
+_BASE_UNREADABLE = (
+    "No deck was built: the previous deck could not be read right now. Send the whole deck "
+    "in `slides`."
+)
+
+
+class _BasePlans:
+    """The last evaluated plan of this conversation and agent, in the shared
+    store; without a session (eval, tests) there is nothing to share."""
+
+    def __init__(self, session_id: Optional[str], instance_id: Optional[str]) -> None:
+        self._key = (session_id, instance_id or "") if session_id else None
+        self._written: Optional[str] = None
+
+    async def read(self) -> Optional[DeckPlan]:
+        if self._key is None:
+            return None
+        stored = await get_deck_plan_store().get(*self._key)
+        if stored is None:
+            return None
+        try:
+            return DeckPlan.model_validate_json(stored)
+        except ValueError:
+            logger.warning("[PPTBUILD][TOOL] stored base plan no longer validates")
+            return None
+
+    async def write(self, plan: DeckPlan) -> None:
+        if self._key is None:
+            return
+        data = plan.model_dump_json()
+        if data == self._written:
+            return
+        try:
+            await get_deck_plan_store().put(*self._key, data)
+            self._written = data
+        except Exception:  # noqa: BLE001 - the deck itself is unaffected
+            logger.warning("[PPTBUILD][TOOL] base plan not stored", exc_info=True)
 
 
 # --- tools ------------------------------------------------------------------------------------
@@ -591,11 +691,15 @@ def _description(
         rules += " A closing slide can only be the last one."
     return (
         "Build a PowerPoint presentation from a plan of slides, on the agent's template. "
-        "ONE call builds the WHOLE deck: write out every slide of the presentation in `slides`, in order, in "
-        "a single call - an eight-slide deck means eight entries, and the deck holds exactly what you send, "
-        "not what you planned. Never split a deck across several calls and never call this tool twice at "
-        "once: each call produces a complete presentation of its own, so splitting delivers several truncated "
-        "decks instead of one. For each slide write its content: title, subtitle, bullets (telegraphic, "
+        "A NEW deck: write out every slide in `slides`, in order, in ONE call - an eight-slide deck means "
+        "eight entries, and the deck holds exactly what you send, not what you planned. Never split a deck "
+        "across several calls and never call this tool twice at once. "
+        "To CHANGE the last deck of this conversation (a fix after needs_revision, or a change the user asks "
+        'for), send only `changes`, numbered on that deck\'s slides: {"op": "replace", "slide": N, "slides": '
+        '[...]}, {"op": "insert", "after": N (0 = at the start), "slides": [...]}, {"op": "remove", "slide": '
+        'N}, {"op": "edit", "slide": N, "field": "title" | "bullets[1]" | "items[2].label" (indexes from 0), '
+        '"value": ...}. The other slides stay exactly as they were and the whole deck is rebuilt. '
+        "For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
         + ("table {header, rows} for tabular data, " if "table" in kinds else "")
@@ -608,9 +712,8 @@ def _description(
         + " A slide holds only the fields its kind lists below (no subtitle on a kind that lists "
         "none, item numbers only where listed). Respect the limits below: a slide is not "
         "a document. If a slide fits no slide of the template, nothing is built and the result lists, per "
-        "slide, what to change: apply it and call again with the whole deck. The result is shown to the "
-        "user automatically; never write a download link. To correct a deck, call again once with the "
-        "whole amended plan; the new deck replaces the previous one.\n"
+        "slide, what to change: apply it with `changes`. The result is shown to the user automatically; "
+        "never write a download link. Each call's deck replaces the previous one.\n"
         + _guide(kinds, variety, max_uses)
         + "\n"
         "Slide kinds of this template, with each variant's name and what each zone holds at full "
@@ -644,6 +747,10 @@ def build_builder_tools(
     # and a copy of a call still running is answered without a second build.
     build_lock = asyncio.Lock()
     in_flight: set[str] = set()
+    # The last plan this turn evaluated, and the `changes` that produced it.
+    turn_base: List[DeckPlan] = []
+    turn_changes: List[Optional[str]] = [None]
+    plans = _BasePlans(identity.session_id, identity.agent_instance_id)
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
         key = json.dumps(kwargs, sort_keys=True, default=_jsonable)
@@ -663,7 +770,9 @@ def build_builder_tools(
         nonlocal called
         first, called = not called, True
         try:
-            plan = _to_plan(args_schema(**kwargs))
+            validated: Any = args_schema(**kwargs)
+            plan = _to_plan(validated)
+            changes = None if validated.changes is None else _to_changes(validated)
         except Exception as exc:  # noqa: BLE001 - coercion makes this unexpected
             logger.warning("[PPTBUILD][TOOL] unreadable plan: %s", exc)
             return _error(
@@ -671,6 +780,41 @@ def build_builder_tools(
                 "again with 'slides' as a list of objects, each with its content (title, "
                 "bullets, items…)."
             )
+        changes_key: Optional[str] = None
+        if changes is not None and (changes or not plan.slides):
+            if plan.slides:
+                return _error(_BOTH_MODES)
+            if not changes:
+                return _error(_NO_CHANGE)
+            changes_key = json.dumps(
+                kwargs.get("changes"), sort_keys=True, default=_jsonable
+            )
+            try:
+                base = turn_base[0] if turn_base else await plans.read()
+            except Exception:  # noqa: BLE001 - the model can resend the whole deck
+                logger.warning("[PPTBUILD][TOOL] base plan unreadable", exc_info=True)
+                return _error(_BASE_UNREADABLE)
+            if base is None:
+                return _error(_NO_BASE)
+            changed = base
+            # The same changes again: their result is the base already.
+            if changes_key != turn_changes[0]:
+                try:
+                    changed = apply_changes(base, changes)
+                except ChangeError as exc:
+                    return _error(
+                        "No deck was built: some changes cannot be applied to the previous "
+                        "deck (nothing was changed). Fix them and call again:\n"
+                        + "\n".join(exc.problems)
+                    )
+            plan = changed.model_copy(
+                update={"file_name": validated.file_name or changed.file_name}
+            )
+
+        async def evaluated() -> None:
+            turn_base[:] = [plan]
+            turn_changes[0] = changes_key
+            await plans.write(plan)
 
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
@@ -703,11 +847,13 @@ def build_builder_tools(
         if repeats and deck_delivered(history()):
             repeats = []
         if assignment.problems:
+            await evaluated()
             return _needs_revision(
                 assignment, plan, previous_problems, repeats, unloadable
             )
         previous_problems.clear()
         if repeats:
+            await evaluated()
             return _variety_revision(repeats, assignment)
 
         if workspace is None:
@@ -772,6 +918,7 @@ def build_builder_tools(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
             )
+        await evaluated()
 
         if result.warnings:
             logger.info("[PPTBUILD][TOOL] render warnings: %s", result.warnings)
@@ -815,9 +962,9 @@ def build_builder_tools(
             return (
                 f"Delivered: '{file_name}', {result.slide_count} slides. This replaces any deck built earlier "
                 "in this answer. A preview opens beside the chat and a download button is shown "
-                "automatically; do not write a download link. Every call rebuilds the whole deck: to add "
-                "or fix slides, call again with the COMPLETE list, never only the missing ones. Describe "
-                "to the user only the slides the deck actually holds." + notes,
+                "automatically; do not write a download link. To change it, send only `changes` numbered "
+                "on this deck's slides; every call rebuilds the whole deck. Describe to the user only "
+                "the slides the deck actually holds." + notes,
                 ToolInvocationResult(
                     tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(part),)
                 ),
@@ -832,8 +979,8 @@ def build_builder_tools(
         )
         return (
             f"The presentation '{file_name}' ({result.slide_count} slides) is ready (no preview could be "
-            "generated, only the download). A download button is shown automatically; do not write a link."
-            + notes,
+            "generated, only the download). A download button is shown automatically; do not write a link. "
+            "To change it, send only `changes` numbered on this deck's slides." + notes,
             ToolInvocationResult(tool_ref=_TOOL_REF, ui_parts=(cast_ui_part(link),)),
         )
 

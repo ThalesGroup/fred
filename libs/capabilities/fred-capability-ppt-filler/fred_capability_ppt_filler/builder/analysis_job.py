@@ -481,18 +481,23 @@ _provider: Callable[[], AnalysisStore] | None = None
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 
 
-def get_analysis_store() -> AnalysisStore:
-    """The analysis store: Postgres from the pod's own config, or a test override."""
+def default_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """One engine per pod for the capability's tables, from the pod's own config."""
     global _sessionmaker
-    if _provider is not None:
-        return _provider()
     if _sessionmaker is None:
         from fred_core.common import load_postgres_config
         from fred_core.sql import create_async_engine_from_config
 
         engine = create_async_engine_from_config(load_postgres_config())
         _sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
-    return SqlAnalysisStore(_sessionmaker)
+    return _sessionmaker
+
+
+def get_analysis_store() -> AnalysisStore:
+    """The analysis store: Postgres from the pod's own config, or a test override."""
+    if _provider is not None:
+        return _provider()
+    return SqlAnalysisStore(default_sessionmaker())
 
 
 def set_store_provider(provider: Callable[[], AnalysisStore]) -> None:

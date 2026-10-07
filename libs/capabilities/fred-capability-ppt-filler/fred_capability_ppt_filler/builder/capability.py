@@ -75,6 +75,7 @@ from fred_capability_ppt_filler.builder.analysis_job import (
 )
 from fred_capability_ppt_filler.builder.assign import VarietyCheck
 from fred_capability_ppt_filler.builder.builtin import builtin_template
+from fred_capability_ppt_filler.builder.deck_plans import DeckPlanRow
 from fred_capability_ppt_filler.builder.models import (
     AnalysisError,
     AnalyzeResult,
@@ -295,9 +296,10 @@ _BUILD_INSTRUCTIONS = (
     "say what the presentation is about. Ground the content in "
     "the documents when the agent has document tools and the request refers to them. Keep every text "
     "SLIDE-READABLE: short titles, a few short bullets, never paragraphs; respect the room each field and "
-    "the catalogue state. If the tool returns needs_revision, apply one option per listed slide and call again with the "
-    "WHOLE deck; if it reports cuts that matter, fix them the same way. When the "
-    "user asks for a change, regenerate the whole deck with the amended plan."
+    "the catalogue state. If the tool returns needs_revision, apply one option per listed slide and call again with only "
+    "`changes` for those slides; if it reports cuts that matter, fix them the same way. When the "
+    "user asks to change the deck, send only `changes` (the other slides stay exactly as they are); "
+    "send the whole deck in `slides` only for a new presentation."
 )
 
 
@@ -505,7 +507,7 @@ class PptBuilderCapability(
         chat_parts=[],
         side_panels=[SidePanelSpec(widget="ppt_preview_pane")],
         router=_build_router(),
-        tables=[AnalysisRow],
+        tables=[AnalysisRow, DeckPlanRow],
         # The build tool's description and `kind` enum come from the analysis.
         execution_models=("react",),
     )
