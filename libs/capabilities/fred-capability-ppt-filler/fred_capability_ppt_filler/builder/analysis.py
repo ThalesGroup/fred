@@ -27,7 +27,6 @@ a heuristic the vision pass refines (design.md D2). Optional annotations
 
 from __future__ import annotations
 
-import io
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -64,6 +63,7 @@ from fred_capability_ppt_filler.builder.models import (
     ZoneRole,
 )
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, walk_shapes
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from pptx.shapes.base import BaseShape
@@ -1568,7 +1568,7 @@ def analyze_template(pptx_source: Union[bytes, str]) -> AnalyzeResult:
     """Inventory ``.pptx`` bytes or a path, wrapping unreadable input as one error."""
     try:
         presentation = (
-            Presentation(io.BytesIO(pptx_source))
+            open_presentation(pptx_source)
             if isinstance(pptx_source, bytes)
             else Presentation(pptx_source)
         )

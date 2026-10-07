@@ -66,7 +66,6 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.runtime import RuntimeServices
 from langchain_core.tools import BaseTool, StructuredTool
-from pptx import Presentation
 from pydantic import BaseModel, Field, create_model
 
 from fred_capability_ppt_filler.concurrency import (
@@ -85,6 +84,7 @@ from fred_capability_ppt_filler.traversal import (
     list_image_anchors_on_slide,
     replace_keys_on_slide,
 )
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from fred_capability_ppt_filler.capability import PptFillerConfig
@@ -526,7 +526,7 @@ def _build_filled_deck(
     contract :func:`_place_images_on_slide` used to return directly). Any
     other exception propagates to the caller, which wraps it uniformly.
     """
-    presentation = Presentation(io.BytesIO(template_bytes))
+    presentation = open_presentation(template_bytes)
     slides = list(presentation.slides)
     for field_name, slide_args in provided.items():
         slide_number = _slide_number_from_field(field_name)

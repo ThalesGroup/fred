@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
@@ -57,7 +56,6 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.messages import BaseMessage, SystemMessage
 from langchain_core.tools import BaseTool, StructuredTool
-from pptx import Presentation
 from pydantic import BaseModel, Field, model_validator
 
 from fred_capability_ppt_filler.builder import analysis_job
@@ -102,6 +100,7 @@ from fred_capability_ppt_filler.concurrency import (
     acquire_heavy_job_slot,
     release_heavy_job_slot,
 )
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +163,7 @@ def _bounded_analysis(content: bytes):
 def _check_readable(content: bytes) -> None:
     """Fail the save on an unreadable .pptx (cheap: opening, not analysing)."""
     try:
-        Presentation(io.BytesIO(content))
+        open_presentation(content)
     except Exception as exc:  # noqa: BLE001 - any unreadable .pptx is a template error
         raise ValueError(
             f"The uploaded file could not be read as a .pptx: {exc}"

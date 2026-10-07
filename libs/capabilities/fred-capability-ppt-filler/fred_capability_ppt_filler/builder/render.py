@@ -33,7 +33,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
-from pptx import Presentation
 from pptx.oxml.ns import qn
 from pptx.util import Emu
 
@@ -62,6 +61,7 @@ from fred_capability_ppt_filler.builder.plan import (
 from fred_capability_ppt_filler.images import fit_inside_box
 from fred_capability_ppt_filler.inline_markdown import parse_inline_markdown
 from fred_capability_ppt_filler.traversal import PlacedShape, walk_shapes
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 # Smallest font scale the overflow control applies before truncating.
 MIN_FONT_SCALE = 0.7
@@ -1726,7 +1726,7 @@ def render_deck(
     Raises :class:`RenderError` for a pattern the template no longer holds;
     anything else propagates.
     """
-    presentation = Presentation(io.BytesIO(template_bytes))
+    presentation = open_presentation(template_bytes)
     try:
         return _Renderer(presentation, inventory, images or {}).render(plan, patterns)
     except ValueError as exc:

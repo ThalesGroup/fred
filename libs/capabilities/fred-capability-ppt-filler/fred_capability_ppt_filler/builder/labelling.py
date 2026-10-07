@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import io
 import json
 import logging
 import time
@@ -32,7 +31,6 @@ from fred_sdk.contracts.runtime import (
     CapabilityModelUnavailableError,
 )
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from pptx import Presentation
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fred_capability_ppt_filler.builder import lexicon
@@ -46,6 +44,7 @@ from fred_capability_ppt_filler.builder.preview import (
     marked_pattern_images,
     numbered_slots,
 )
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +146,7 @@ def _annotated(template_bytes: bytes) -> Dict[str, Tuple[bool, bool]]:
     """Per slide pattern id: whether its notes declare a (kind, label), which
     outrank the vision answer as they outrank the heuristics."""
     declared: Dict[str, Tuple[bool, bool]] = {}
-    for slide in Presentation(io.BytesIO(template_bytes)).slides:
+    for slide in open_presentation(template_bytes).slides:
         frame = slide.notes_slide.notes_text_frame if slide.has_notes_slide else None
         notes = frame.text if frame is not None else ""
         match = lexicon.KIND_NOTE.search(notes)

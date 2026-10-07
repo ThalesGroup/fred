@@ -26,7 +26,6 @@ from typing import Any, Collection, Dict, List, cast
 
 import pypdfium2 as pdfium
 from PIL import Image, ImageDraw, ImageFont
-from pptx import Presentation
 
 from fred_capability_ppt_filler.builder.models import (
     Pattern,
@@ -38,11 +37,12 @@ from fred_capability_ppt_filler.builder.render import (
     _duplicate_slide,
     _remove_slides,
 )
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 
 def build_patterns_deck(template_bytes: bytes, inventory: TemplateInventory) -> bytes:
     """Return ``.pptx`` bytes with one slide per pattern (CPU-bound; call off the loop)."""
-    presentation = Presentation(io.BytesIO(template_bytes))
+    presentation = open_presentation(template_bytes)
     layouts = _all_layouts(presentation)
     slides_by_id = {slide.slide_id: slide for slide in presentation.slides}
     original_ids = list(slides_by_id)

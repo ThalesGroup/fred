@@ -26,7 +26,6 @@ issues (params model, analyze endpoint, fill tool) import.
 
 from __future__ import annotations
 
-import io
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +42,7 @@ from fred_capability_ppt_filler.traversal import (
     KEY_PATTERN,
     list_keys_and_table_keys_on_slide,
 )
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 # Stable, machine-readable error codes. The frontend maps these to i18n messages; the
 # ``message`` field on each error is an English fallback.
@@ -475,7 +475,7 @@ def parse(pptx_source: Union[bytes, str, Path]) -> ParseResult:
     descriptions); the same key multiple times on one slide is one (deduped) field.
     """
     if isinstance(pptx_source, bytes):
-        presentation = Presentation(io.BytesIO(pptx_source))
+        presentation = open_presentation(pptx_source)
     else:
         presentation = Presentation(str(pptx_source))
 
