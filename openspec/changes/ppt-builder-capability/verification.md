@@ -653,6 +653,42 @@ mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
 
 ## Checks
 
+- WP24 (review fixes): package `make code-quality` passed (ruff, import order, format,
+  bandit, detect-secrets, basedpyright 0 errors); `make test` 423 passed, 5 skipped (the
+  reference-template tests). 15 tests added, each checked to fail without its fix (24.9's
+  test exercises the new `_assign_loadable`): `test_rendered_and_patterns_decks_carry_no_stale_sections`,
+  `test_pptx_archive.py` (3), `test_a_turn_never_renders_a_template_other_than_the_analysed_one`,
+  `test_an_outdated_inventory_whose_refresh_never_lands_is_served_from_memory`,
+  `test_a_refresh_that_lands_here_replaces_the_cached_outdated_inventory`,
+  `test_a_recovery_without_the_port_stores_rules_and_a_save_relabels`,
+  `test_a_forced_refresh_without_the_port_is_not_mistaken_for_vision`,
+  `test_a_cancelled_job_keeps_its_slot_until_its_thread_ends`,
+  `test_background_work_leaves_heavy_slots_to_the_turns`,
+  `test_a_rebuilt_row_returns_the_sha_of_the_file_it_analysed`,
+  `test_uploading_the_same_file_again_keeps_its_analysis`,
+  `test_a_kind_declared_by_a_shape_name_outranks_vision`,
+  `test_an_image_id_that_does_not_load_leaves_a_framed_picture_empty`. The analysis tests now
+  save with a model port (labelling faked), since a save without one stores `rules`.
+  Not proven: PowerPoint itself opening a rendered deck without a repair prompt (checked on
+  the XML only); no `ANALYSIS_VERSION` bump, so analyses already labelled by vision keep a
+  vision kind over a shape-name declaration until their next re-run.
+- WP24 `fred-performance-reviewer` (turn path: 24.3, 24.4, 24.6, 24.9): no blocking finding.
+  No LLM call site, KPI or Prometheus label touched. 24.3: the build's template is now an
+  in-memory hit per pod (`_templates`, 4 entries by sha, immutable so replica-safe; worst case
+  ~200 MB for four 50 MB templates) instead of one asset-store HTTP fetch per build; a miss is
+  one async row read filtered on the sha. 24.4: an outdated inventory no longer costs every
+  model call (`_resolve` in `awrap_model_call`) a row read plus a `model_validate_json` on the
+  event loop; it is re-read at most every 60 s per pod (cross-replica staleness bounded by
+  that). 24.6: background python-pptx work holds ≤ 2 of the 4 heavy-job slots; waiting jobs
+  poll once a second (no thread, no DB); turns keep 2 slots against any refresh burst. 24.8
+  keeps a cancelled job's slot until its thread ends, so the bound is real. 24.9: the
+  pictures are fetched before the assignment (bounded-concurrency `_prefetch_image_bytes`,
+  unchanged) and the template after it, no longer in one `gather`: with the template
+  cached the added latency is nil; on a cache miss it is one row read, and a plan that needs
+  revision now pays its picture fetches (only plans with pictures). The header check runs in
+  the assignment's worker thread (0.009 ms per picture); `check_archive` reads the central
+  directory only (0.16 ms on the built-in deck), always in a worker thread.
+
 - WP23 `fred-performance-reviewer` (tool path, middleware, analysis store): no finding. The
   build tool loses an HTTP listing (it ran when an ask was possible) and gains an in-memory scan
   of the last model call's messages, only when an ask would follow: 16 µs on 300 messages. The

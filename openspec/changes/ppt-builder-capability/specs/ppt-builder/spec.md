@@ -79,6 +79,11 @@ The system SHALL inventory an uploaded `.pptx` without requiring any marker, not
 - **WHEN** the upload is not a readable `.pptx` or exceeds 50 MB
 - **THEN** the save fails with one error carrying a stable code, and no analysis starts
 
+#### Scenario: Zip bomb refused before it is inflated
+
+- **WHEN** an upload under 50 MB declares members that would inflate beyond 512 MB in total or 256 MB for one member, or a member over 10 MB compressed more than 100 times
+- **THEN** the save (of `ppt_builder` or `ppt_filler`) fails as an unreadable template without decompressing the archive, and no analysis starts
+
 ### Requirement: Example slides are labelled by a vision model
 
 The system SHALL render each example slide to an image with its slots numbered and ask a vision-capable model for the slide's kind, label, the purpose of each slot, the maximum number of items and whether the slide is reusable. Geometry and capacities SHALL stay those of the deterministic analysis.
@@ -127,6 +132,12 @@ The system SHALL complete the agent save without waiting for the template analys
 - **WHEN** an author saves an agent with a new template
 - **THEN** the save stores the template, records a pending analysis keyed by the agent and the template hash, and returns without waiting for the analysis to finish
 
+#### Scenario: Same file uploaded again
+
+- **GIVEN** a succeeded analysis made by the current rules
+- **WHEN** the author uploads the same file again with the same labelling settings
+- **THEN** the analysis is kept as is and the agent stays available
+
 #### Scenario: Status visible in the form
 
 - **WHEN** the author views the agent form while the analysis is pending or running
@@ -141,6 +152,7 @@ The system SHALL complete the agent save without waiting for the template analys
 
 - **WHEN** the replica running an analysis stops before finishing
 - **THEN** the analysis is reported as interrupted once its lease expires and can be re-run
+- **AND** a re-run on a replica without the model port the save left records that it labelled by rules; the agent stays usable on it, and the next save that carries a model port re-runs it with vision
 
 #### Scenario: Agent unavailable while analysing
 
@@ -167,6 +179,12 @@ The system SHALL complete the agent save without waiting for the template analys
 - **WHEN** the build tool is reached while the template analysis has not succeeded
 - **THEN** the tool builds nothing and returns a short message that the template analysis is not ready
 
+#### Scenario: Deck rendered on the analysed template only
+
+- **GIVEN** a save that stored a new template while a turn still runs on the previous config
+- **WHEN** that turn builds a deck
+- **THEN** the deck is rendered on the template its analysis was made from, or the tool refuses; it never renders the newer file with the older inventory
+
 #### Scenario: Only agent editors see the analysis
 
 - **WHEN** a user who cannot edit the agent requests its analysis status, thumbnails or a re-run
@@ -186,6 +204,12 @@ The system SHALL complete the agent save without waiting for the template analys
 - **WHEN** its readiness is checked or a turn reads it on a replica that holds no model port remembered from the agent's last save
 - **THEN** no re-run starts, the agent stays available on the stored analysis, and the agent form shows it as outdated with the hint that saving the agent re-reads it with its vision model
 - **AND** on a replica holding that port, one re-run starts as for a rules-labelled analysis, and a save always starts one with the port it remembers
+- **AND** a forced re-run on a replica without the port records the rules labelling it used, so a later save with the port relabels it with vision
+
+#### Scenario: Background analyses leave room for turns
+
+- **WHEN** many analyses run at once on a pod (an analysis rules change refreshing every template)
+- **THEN** they hold at most two of the pod's four heavy-job slots, so building a deck is not refused as busy because of them
 
 ### Requirement: Author review
 
@@ -373,6 +397,7 @@ The system SHALL accept from the model a plan of slides carrying content only â€
 - **WHEN** a slide asking for that slide's kind carries no picture for a framed zone (or for a used item's framed zone)
 - **THEN** that template slide is not a candidate: the slide is built on another variant or kind, or, when nothing else holds it, `needs_revision` names the missing picture; the catalogue quotes those pictures as required
 - **AND** with a picture for each framed zone it is a candidate as before
+- **AND** only pictures that load count: an id that is missing or not an image document counts as no picture, and the tool reports it as left out
 
 #### Scenario: Field limits in the tool schema
 
@@ -442,6 +467,12 @@ The system SHALL build each slide by instantiating a layout or duplicating an ex
 
 - **WHEN** an example slide is duplicated
 - **THEN** its pictures and media share the template's parts, its colour-map override and speaker notes are copied, and only image, media and external hyperlink relationships are re-created
+
+#### Scenario: Template sections dropped
+
+- **GIVEN** a template whose slides are grouped in sections
+- **WHEN** a deck or the patterns deck is rendered
+- **THEN** it holds no section list, so PowerPoint opens it without offering a repair
 
 #### Scenario: Links to other slides are not copied
 
