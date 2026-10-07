@@ -527,6 +527,16 @@ class SessionListItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class SessionDetails(SessionListItem):
+    """Owned conversation metadata and routing for direct runtime history reads."""
+
+    agent_deleted: bool = False
+    messages_url: str | None = Field(
+        default=None,
+        description="Browser-facing history URL, independent of agent execution availability.",
+    )
+
+
 class InactiveSessionItem(BaseModel):
     """One of the caller's conversations that has gone quiet — home dashboard
     cleanup tool (#2298). Carries the resolved agent display name (unlike the

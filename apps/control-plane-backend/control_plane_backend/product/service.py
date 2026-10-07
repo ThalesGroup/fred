@@ -4605,30 +4605,6 @@ async def update_session_activity(
     return _record_to_item(record)
 
 
-async def get_session(
-    team_id: TeamId,
-    session_id: str,
-    deps: ProductServiceDependencies,
-) -> SessionListItem | None:
-    """
-    Fetch one control-plane session metadata record by ID, scoped to a team.
-
-    Why this function exists:
-    - the chat header needs the session title without loading the full session list
-
-    How to use it:
-    - call from the GET session-by-id route
-    - returns None when the session does not exist or belongs to a different team
-
-    Example:
-    - `item = await get_session(team_id, session_id, deps)`
-    """
-    record = await deps.get_session_metadata_store().get(session_id)
-    if record is None or str(record.team_id) != str(team_id):
-        return None
-    return _record_to_item(record)
-
-
 async def list_session_attachments(
     *,
     team_id: TeamId,
