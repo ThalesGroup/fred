@@ -828,3 +828,57 @@ def test_a_design_asked_for_is_never_a_variety_ask():
     assert not assignment.problems
     assert [p.id for p in assignment.patterns if p][1:] == ["slide:266"] * 5
     assert assignment.repeats == []
+
+
+# --- changes that change nothing ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_changes_that_leave_the_deck_as_is_build_nothing(
+    monkeypatch, deck_plan_store
+):
+    """Live: the model sent slide 7's kind and bullets as they were, the deck
+    was rebuilt identical and it told the user the design had changed."""
+    workspace = FakeWorkspace()
+    text, result, _ = await _delivered_patterns(monkeypatch, workspace, slides=_SPREAD)
+    assert not result.is_error, text
+    stored = dict(deck_plan_store.plans)
+    same = _bullets(7)["bullets"]
+    for changes in (
+        [
+            {"op": "edit", "slide": 7, "field": "kind", "value": "bullets"},
+            {"op": "edit", "slide": 7, "field": "bullets", "value": same},
+        ],
+        [{"op": "replace", "slide": 3, "slides": [_bullets(3)]}],
+    ):
+        text, result, used = await _delivered_patterns(
+            monkeypatch, workspace, changes=changes
+        )
+        assert result.is_error and text.startswith("No deck was built: nothing changed")
+        assert not text.startswith(tools_mod._DELIVERED)
+        assert (
+            '"field": "like"' in text and "Do not tell the user it was changed" in text
+        )
+        assert used == [] and len(workspace.writes) == 1
+        assert deck_plan_store.plans == stored
+    # A `like` naming the design the slide already has changes nothing either.
+    text, _, _ = await _delivered_patterns(
+        monkeypatch,
+        workspace,
+        changes=[{"op": "edit", "slide": 7, "field": "like", "value": 5}],
+    )
+    assert text.startswith(tools_mod._DELIVERED), text
+    text, result, _ = await _delivered_patterns(
+        monkeypatch,
+        workspace,
+        changes=[{"op": "edit", "slide": 7, "field": "like", "value": 5}],
+    )
+    assert result.is_error and text.startswith("No deck was built: nothing changed")
+    # A new file name is a change.
+    text, result, _ = await _delivered_patterns(
+        monkeypatch,
+        workspace,
+        changes=[{"op": "edit", "slide": 2, "field": "title", "value": "S2"}],
+        file_name="Renamed",
+    )
+    assert not result.is_error, text

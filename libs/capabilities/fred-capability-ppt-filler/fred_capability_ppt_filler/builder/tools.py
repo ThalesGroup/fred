@@ -82,6 +82,7 @@ from fred_capability_ppt_filler.builder.changes import (
     SlideChange,
     apply_changes,
     change_shape,
+    unchanged,
 )
 from fred_capability_ppt_filler.builder.checks import SlideReport
 from fred_capability_ppt_filler.builder.deck_plans import get_deck_plan_store
@@ -429,6 +430,10 @@ def _summary(
     return built
 
 
+def _kinds(inventory: TemplateInventory) -> Dict[str, str]:
+    return {p.id: p.kind for p in inventory.patterns}
+
+
 def _image_ids(plan: DeckPlan) -> set[str]:
     ids: set[str] = set()
     for slide in plan.slides:
@@ -653,6 +658,15 @@ _NO_CHANGE = (
     "No deck was built: `changes` is empty. List at least one change, or send the whole deck "
     "in `slides`."
 )
+_UNCHANGED = (
+    "No deck was built: nothing changed. These changes leave the deck as it is (each "
+    "value sent equals the current one and every slide keeps its template slide), so the "
+    "user's file is the same as before. Do not tell the user it was changed. To change text, "
+    'send `edit` with the new text; for the design of another slide ("same layout as slide '
+    'M"), send {"op": "edit", "slide": N, "field": "like", "value": M}; resending the kind a '
+    "slide already has never moves it to another design. If the deck already shows what the user asked, "
+    "tell them so."
+)
 _NO_BASE = (
     "No deck was built: there is no previous deck in this conversation to change. Send the "
     "whole deck in `slides`."
@@ -788,7 +802,7 @@ def _description(
         "a different slide (one of the same kind keeps the replaced slide's design when it fits). "
         'When the user wants a slide to look like another ("same layout/design as slide M"), send '
         '{"op": "edit", "slide": N, "field": "like", "value": M}: slide N takes slide M\'s template slide; '
-        "editing `kind` or resending the same text never changes a design. "
+        "resending a slide's current kind or text never changes its design. "
         "For each slide write its content: title, subtitle, bullets (telegraphic, "
         "'- ' prefix for a sub-bullet, **bold** allowed), columns [{heading, bullets}], items [{number, "
         "heading, text, label, image}], image/images (document_ids from list_images_in_folder), "
@@ -901,6 +915,13 @@ def build_builder_tools(
             plan = changed.model_copy(
                 update={"file_name": validated.file_name or changed.file_name}
             )
+            # Rebuilt, an identical deck would read as a change done.
+            if (
+                base.delivered
+                and plan.file_name == base.file_name
+                and unchanged(base, plan, _kinds(inventory))
+            ):
+                return _error(_UNCHANGED)
 
         async def evaluated(stored: DeckPlan) -> None:
             turn_base[:] = [stored]
@@ -975,6 +996,7 @@ def build_builder_tools(
         deck, patterns, numbers = assignment.deck(plan)
         deck = deck.model_copy(
             update={
+                "delivered": True,
                 "slides": [
                     s.model_copy(
                         update={
@@ -984,7 +1006,7 @@ def build_builder_tools(
                         }
                     )
                     for s, p in zip(deck.slides, patterns)
-                ]
+                ],
             }
         )
         try:

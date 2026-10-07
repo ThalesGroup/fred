@@ -19,7 +19,7 @@ assigns and renders it as any full call, so quality never depends on the mode.""
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -353,6 +353,27 @@ def _asked(base: DeckPlan, ref: int) -> Dict[str, Any]:
     """The design of slide ``ref`` as the delivered file shows it, whatever the
     same call changes on that slide."""
     return {"asked_design": base.slides[ref - 1].built_on, "asked_from": ref}
+
+
+_HIDDEN = {"built_on", "asked_design", "asked_from"}
+
+
+def _shown(slide: SlidePlan, kinds: Mapping[str, str]) -> Tuple[Dict[str, Any], Any]:
+    """What a slide shows: its content and template slide, a kind left out
+    being its template slide's."""
+    design = slide.asked_design or slide.built_on
+    content = slide.model_dump(exclude=_HIDDEN)
+    content["kind"] = slide.kind or kinds.get(design or "")
+    return content, design
+
+
+def unchanged(base: DeckPlan, changed: DeckPlan, kinds: Mapping[str, str]) -> bool:
+    """Whether ``changed`` shows exactly what ``base`` does, slide for slide;
+    ``kinds`` maps a template slide to its kind."""
+    return len(base.slides) == len(changed.slides) and all(
+        _shown(a, kinds) == _shown(b, kinds)
+        for a, b in zip(base.slides, changed.slides)
+    )
 
 
 def apply_changes(base: DeckPlan, changes: List[SlideChange]) -> DeckPlan:

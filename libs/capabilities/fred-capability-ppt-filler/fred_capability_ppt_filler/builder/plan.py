@@ -363,6 +363,8 @@ class DeckPlan(BaseModel):
     file_name: Optional[str] = Field(
         default=None, description="Short file name for the deck; '.pptx' is added."
     )
+    # The deck as a file holds it, not a plan still under revision.
+    delivered: SkipJsonSchema[bool] = False
 
 
 def has_content(slide: SlidePlan) -> bool:
