@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The last deck plan ``build_presentation`` evaluated, per conversation and
+"""The last deck ``build_presentation`` delivered, per conversation and
 agent: the base a ``changes`` call applies to. In the capability's own table,
 so any replica and any later turn reads it."""
 

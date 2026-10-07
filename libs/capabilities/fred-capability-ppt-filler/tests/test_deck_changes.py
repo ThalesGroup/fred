@@ -441,9 +441,29 @@ async def test_the_same_changes_resent_are_never_applied_twice(
     await turn.build(changes=insert)
     text, _ = await turn.build(changes=insert)
     (problem,) = _payload(text)["slides"]
+    # Applied twice, the refused slide would be slide 5.
     assert problem["slide"] == 4
-    stored = DeckPlan.model_validate_json(deck_plan_store.plans[("sess-9", "inst-7")])
-    assert [s.title for s in stored.slides] == ["Kick-off", "Why", "Agenda", "Method"]
+    # Nothing was delivered: nothing is stored for a later turn.
+    assert deck_plan_store.plans == {}
+
+
+@pytest.mark.asyncio
+async def test_a_refused_plan_is_never_the_next_turns_base(
+    monkeypatch, deck_plan_store
+):
+    workspace = FakeWorkspace()
+    first = _Turn(monkeypatch, workspace)
+    await first.build(slides=[COVER, {"title": "Agenda", "bullets": ["a"]}])
+    stored = dict(deck_plan_store.plans)
+    text, result = await first.build(
+        changes=[{"op": "insert", "after": 2, "slides": [_TOO_LONG]}]
+    )
+    assert result.is_error and deck_plan_store.plans == stored
+    # The next turn changes the delivered deck, not the refused plan.
+    second = _Turn(monkeypatch, workspace)
+    text, result = await second.build(changes=[{"op": "remove", "slide": 2}])
+    assert not result.is_error, text
+    assert [s.title for s in second.rendered[-1].slides] == ["Kick-off"]
 
 
 @pytest.mark.asyncio

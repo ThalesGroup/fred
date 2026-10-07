@@ -715,7 +715,7 @@ _BASE_UNREADABLE = (
 
 
 class _BasePlans:
-    """The last evaluated plan of this conversation and agent, in the shared
+    """The last delivered deck of this conversation and agent, in the shared
     store; without a session (eval, tests) there is nothing to share."""
 
     def __init__(self, session_id: Optional[str], instance_id: Optional[str]) -> None:
@@ -888,8 +888,9 @@ def build_builder_tools(
     # and a copy of a call still running is answered without a second build.
     build_lock = asyncio.Lock()
     in_flight: set[str] = set()
-    # The last plan this turn evaluated and, when `changes` produced it, the plan
-    # they applied to and their shape: a corrected resend applies there again.
+    # The last plan this turn evaluated and, when `changes` produced a refused
+    # one, the plan they applied to and their shape: a corrected resend applies
+    # there again. Only a delivered deck is stored for later turns.
     turn_base: List[DeckPlan] = []
     turn_parent: List[DeckPlan] = []
     turn_shape: List[Any] = [None]
@@ -960,11 +961,10 @@ def build_builder_tools(
             ):
                 return _error(_UNCHANGED)
 
-        async def evaluated(stored: DeckPlan) -> None:
+        def evaluated(stored: DeckPlan) -> None:
             turn_base[:] = [stored]
             turn_parent[:] = [] if base is None else [base]
             turn_shape[0] = shape
-            await plans.write(stored)
 
         if not any(has_content(s) for s in plan.slides if s.invalid_entry is None):
             return _error(
@@ -998,7 +998,7 @@ def build_builder_tools(
         if repeats and deck_delivered(history()):
             repeats = []
         if assignment.problems:
-            await evaluated(plan)
+            evaluated(plan)
             return _needs_revision(
                 assignment,
                 plan,
@@ -1009,7 +1009,7 @@ def build_builder_tools(
             )
         previous_problems.clear()
         if repeats:
-            await evaluated(plan)
+            evaluated(plan)
             return _variety_revision(repeats, assignment)
 
         if workspace is None:
@@ -1093,7 +1093,8 @@ def build_builder_tools(
                 "The deck was built but could not be saved to the conversation files, so the "
                 "user cannot get it. Tell the user and suggest trying again in a moment."
             )
-        await evaluated(deck)
+        evaluated(deck)
+        await plans.write(deck)
 
         if result.warnings:
             logger.info("[PPTBUILD][TOOL] render warnings: %s", result.warnings)
