@@ -72,8 +72,8 @@ plus tard.
 
 ## Ma pièce jointe est refusée
 
-Vérifiez le format. Vérifiez aussi que l'agent dispose bien de la fonction qui
-exploite les pièces jointes — sans elle, le fichier est ignoré. Pour un document
+Vérifiez le format. Vérifiez aussi que l'agent dispose bien du pack **Pièces
+jointes** — sans lui, le fichier est ignoré. Pour un document
 destiné à durer, passez par les [ressources](/help/fr/features/resources).
 
 ## Une conversation ne se charge pas

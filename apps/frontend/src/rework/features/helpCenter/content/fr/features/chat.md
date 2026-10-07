@@ -31,8 +31,8 @@ temps de la conversation**, et n'y accède pas depuis une autre. Pour un documen
 durable et partagé, passez par les [ressources](/help/fr/features/resources) de
 l'équipe.
 
-Joindre un fichier suppose que l'agent dispose de la fonction correspondante ;
-sinon la pièce jointe est ignorée.
+Joindre un fichier suppose que l'agent dispose du pack **Pièces jointes** ;
+sinon le trombone n'apparaît pas.
 
 ## Insérer un prompt
 

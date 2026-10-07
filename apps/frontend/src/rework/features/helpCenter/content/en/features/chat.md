@@ -31,8 +31,8 @@ duration of that conversation**, and cannot reach it from another one. For a
 lasting, shared document, use the team's
 [resources](/help/en/features/resources).
 
-Attaching a file assumes the agent has the matching function; without it the
-attachment is ignored.
+Attaching a file assumes the agent has the **Attachments** pack; without it the
+paperclip does not appear.
 
 ## Inserting a prompt
 

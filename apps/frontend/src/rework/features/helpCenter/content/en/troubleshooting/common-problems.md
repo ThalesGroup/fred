@@ -69,8 +69,8 @@ the request is very broad, split it. An interruption that repeats across
 
 ## My attachment is refused
 
-Check the format. Check too that the agent actually has the function that uses
-attachments — without it, the file is ignored. For a document meant to last, use
+Check the format. Check too that the agent actually has the **Attachments**
+pack — without it, the file is ignored. For a document meant to last, use
 the [resources](/help/en/features/resources).
 
 ## A conversation will not load

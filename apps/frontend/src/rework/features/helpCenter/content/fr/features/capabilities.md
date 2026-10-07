@@ -21,40 +21,53 @@ elle est utile.
 
 ## Données et connaissances
 
-### Accès aux ressources de l'équipe
+### Documents
 
-**Ce qu'elle fait** - l'agent consulte le corpus de l'équipe et les fichiers
-joints à la conversation en cours. Il cherche les passages utiles et les cite,
-lit un document mot à mot ou en extrait une information de façon exhaustive.
-Les façons de lire sont détaillées sur [Les ressources](/help/fr/features/resources).
+**Ce qu'elle fait** - l'agent lit et recherche dans les documents que vous lui
+confiez. Deux packs choisissent où il regarde ; activez-en un ou les deux :
 
-**Ses limites** - la recherche dans le corpus ne voit que les bibliothèques
-rattachées à l'agent. Une pièce jointe reste dans sa conversation et n'entre
-pas dans le corpus de l'équipe. La recherche remonte les passages qu'elle juge
-pertinents : elle est rapide, mais pas exhaustive.
+- **Pièces jointes** - les utilisateurs peuvent joindre des fichiers à la
+  conversation (un trombone apparaît dans le chat). L'agent les lit, les résume
+  et répond aux questions qui les concernent.
+- **Documents de l'équipe** - l'agent recherche dans les documents de l'équipe
+  et cite les passages utiles. Vous pouvez le limiter à certains dossiers.
 
-**Exemples** - demander ce que prévoient les procédures de l'équipe pour un
-incident, ou joindre un contrat et demander à l'agent d'en relever les échéances.
+Avec l'un ou l'autre pack, l'agent peut aussi lire un document mot à mot ou en
+extraire une information sans rien omettre. Les façons de lire sont détaillées
+sur [Les ressources](/help/fr/features/resources).
+
+**Ses limites** - la recherche dans les documents de l'équipe ne voit que les
+bibliothèques rattachées à l'agent. Une pièce jointe reste dans sa conversation
+et n'est jamais ajoutée aux documents de l'équipe. La recherche remonte les
+passages qu'elle juge pertinents : elle est rapide, mais pas exhaustive. La
+comparaison de documents ne fonctionne que sur les documents de l'équipe : elle
+vient donc avec le pack **Documents de l'équipe**.
+
+**Exemples** - avec **Pièces jointes** seulement, joindre un contrat et demander
+à l'agent d'en relever les échéances. Avec **Documents de l'équipe**, demander
+ce que prévoient les procédures de l'équipe pour un incident.
 
 Cette capacité en regroupe plusieurs, que la vue **Avancé** sépare :
 
 | Fonction                          | Ce qu'elle fait                                                                | À savoir                                                                                                           |
 | --------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Rechercher dans les ressources    | Trouve les passages pertinents et les cite                                     | Peut afficher dans la conversation un sélecteur de bibliothèque ou de document                                     |
-| Joindre des fichiers              | Ajoute des fichiers à la conversation                                          | Ils restent dans la conversation, hors du corpus de l'équipe                                                       |
+| Documents                         | Recherche dans les pièces jointes, les documents de l'équipe, ou les deux      | Peut afficher un trombone et un sélecteur de bibliothèque ou de document dans la conversation                      |
 | Exploiter les fichiers tabulaires | Interroge les fichiers tabulaires des bibliothèques et les CSV ou Excel joints | Les nouveaux CSV et Excel joints sont interrogeables en SQL ; les anciens Excel peuvent n’avoir qu’un aperçu texte |
 | Résumer un document               | Produit le résumé d'un document                                                | Demande votre confirmation avant chaque résumé ; longueur réglable                                                 |
-| Comparer des documents            | Retrouve les passages proches d'un passage donné                               | Travaille sur le corpus, jamais sur une pièce jointe                                                               |
+| Comparer des documents            | Retrouve les passages proches d'un passage donné                               | Travaille sur les documents de l'équipe, jamais sur une pièce jointe                                               |
 | Verbatim document                 | Restitue le texte exact, page par page                                         | Les pages renvoyées ont une longueur limitée                                                                       |
 | Extraction d'information          | Parcourt le document entier sans rien omettre                                  | La plus lente et la plus coûteuse ; confirmation demandée par défaut                                               |
 
-En mode **Simple**, ce pack active d'abord ensemble les ressources de l'équipe
-et les pièces jointes des conversations. Sous le réglage des bibliothèques,
-activez **Rechercher uniquement dans les pièces jointes** pour arrêter la
-recherche documentaire dans le corpus et désactiver la comparaison. Les outils
-tabulaires restent disponibles pour les CSV et Excel joints. Utilisez-les pour lire leurs tableaux complets ; les outils de lecture documentaire sont destinés aux pièces jointes textuelles. Désactivez cette option pour retrouver les deux sources. En mode **Avancé**, on
-peut activer les pièces jointes sans ajouter les autres outils de ressources.
-Les agents existants conservent leur sélection tant qu'elle n'est pas modifiée.
+Utilisez les outils tabulaires pour lire les tableaux complets des CSV et Excel
+joints ; les outils de lecture documentaire sont destinés aux pièces jointes
+textuelles.
+
+En mode **Simple**, désactiver un pack conserve ce que l'autre utilise encore ;
+désactiver les deux retire la capacité **Documents**. En mode **Avancé**, la
+carte **Documents** commence par les interrupteurs **Pièces jointes** et
+**Documents de l'équipe** : gardez-en au moins un activé, ou désactivez la
+carte. Les agents existants conservent leurs réglages tant que vous ne les
+modifiez pas.
 
 ### Accès au Wiki de l'équipe
 
