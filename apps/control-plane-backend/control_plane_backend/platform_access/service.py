@@ -383,6 +383,7 @@ def own_claims(payload: dict[str, object]) -> PlatformAccessOwnClaims:
                 if visited >= 1024 or budget <= 0:
                     truncated = True
                     break
+                visited += 1
                 if not isinstance(key, str) or len(key) > 256:
                     truncated = True
                     continue
@@ -407,8 +408,11 @@ def own_claims(payload: dict[str, object]) -> PlatformAccessOwnClaims:
                 items.append(projected)
             return True, items
         if value is None or isinstance(value, (str, bool, int, float)):
+            if isinstance(value, str) and len(value) > 1024:
+                truncated = True
+                return False, None
             cost = len(json.dumps(value, ensure_ascii=True)) + 1
-            if (isinstance(value, str) and len(value) > 1024) or cost > budget:
+            if cost > budget:
                 truncated = True
                 return False, None
             budget -= cost

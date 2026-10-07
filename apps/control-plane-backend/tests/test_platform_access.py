@@ -1016,6 +1016,15 @@ async def test_own_claim_endpoint_requires_admin_own_verified_human_and_disables
         verified_payload.update({"profile": {"unit": "actual"}, "exp": 123})
         return actor
 
+    import threading
+
+    original_projection = service.own_claims
+
+    def projection(payload):
+        assert threading.current_thread() is not threading.main_thread()
+        return original_projection(payload)
+
+    monkeypatch.setattr(service, "own_claims", projection)
     monkeypatch.setattr(api, "decode_jwt", decode)
     app = FastAPI()
     app.include_router(api.router)

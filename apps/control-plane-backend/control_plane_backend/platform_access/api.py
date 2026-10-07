@@ -106,7 +106,7 @@ async def get_platform_access_own_claims(
     if verified.uid != user.uid:
         raise HTTPException(403, "requires_own_credential")
     response.headers["Cache-Control"] = "no-store"
-    return service.own_claims(payload)
+    return await asyncio.to_thread(service.own_claims, payload)
 
 
 @router.post(
