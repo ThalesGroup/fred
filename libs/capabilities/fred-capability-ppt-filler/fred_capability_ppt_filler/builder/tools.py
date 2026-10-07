@@ -163,6 +163,18 @@ _DUPLICATE = (
 )
 
 
+def _same_call(problems: str, from_changes: bool) -> str:
+    """A call identical to one refused this turn gets the same answer: say so,
+    and offer what breaks the loop rather than evaluate it again."""
+    other = "drop the change that causes it" if from_changes else "leave that slide out"
+    return (
+        "No deck was built: this call is identical to one already refused in this answer, so "
+        f"it is refused again ({problems}). Do not resend it: apply one of the options given "
+        'then, or send each listed slide whole with {"op": "replace", "slide": N, "slides": '
+        f"[...]}} in `changes` (numbers as listed), or {other}."
+    )
+
+
 def _jsonable(value: Any) -> Any:
     return value.model_dump() if isinstance(value, BaseModel) else str(value)
 
@@ -926,6 +938,9 @@ def build_builder_tools(
     turn_base: List[DeckPlan] = []
     turn_parent: List[DeckPlan] = []
     turn_shape: List[Any] = [None]
+    # Calls refused this turn, keyed with the plan they applied to: the same
+    # call on the same base is refused again without a new evaluation.
+    refused_calls: Dict[str, str] = {}
     plans = _BasePlans(identity.session_id, identity.agent_instance_id)
 
     async def _build(**kwargs: object) -> tuple[str, ToolInvocationResult]:
@@ -998,6 +1013,12 @@ def build_builder_tools(
             ):
                 return _error(_UNCHANGED)
 
+        call_key = json.dumps(kwargs, sort_keys=True, default=_jsonable) + (
+            base.model_dump_json() if base is not None else ""
+        )
+        if call_key in refused_calls:
+            return _error(_same_call(refused_calls[call_key], base is not None))
+
         def refused(stored: DeckPlan) -> None:
             turn_base[:] = [stored]
             turn_parent[:] = [] if base is None else [base]
@@ -1038,6 +1059,9 @@ def build_builder_tools(
             repeats = []
         if assignment.problems:
             refused(plan)
+            refused_calls[call_key] = "; ".join(
+                f"slide {p.index}: {p.problem}" for p in assignment.problems
+            )
             return _needs_revision(
                 assignment,
                 plan,
@@ -1136,6 +1160,7 @@ def build_builder_tools(
         # Delivered, the deck is the base: the same changes sent again are a
         # new change to it, not a corrected resend of a refused one.
         turn_base[:] = [deck]
+        refused_calls.clear()
         turn_parent.clear()
         turn_shape[0] = None
         await plans.write(deck)

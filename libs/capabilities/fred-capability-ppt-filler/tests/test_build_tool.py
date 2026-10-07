@@ -387,9 +387,10 @@ async def test_a_slide_that_fits_nothing_builds_nothing_and_says_what_to_change(
     )
     assert "repeated" not in problem
 
-    # The same plan again is flagged as resent, not answered word for word.
+    # The same slide in another call is flagged as resent, not answered word for word.
     text, _ = await tools[BUILD_TOOL_NAME].coroutine(
-        slides=[COVER, {"title": "Method", "kind": "process", "items": steps}]
+        slides=[COVER, {"title": "Method", "kind": "process", "items": steps}],
+        file_name="Method",
     )
     (again,) = json.loads(text[text.index("{") :])["slides"]
     assert again["repeated"].startswith("you resent this slide unchanged")

@@ -440,7 +440,7 @@ async def test_the_same_changes_resent_are_never_applied_twice(
         {"op": "insert", "after": 1, "slides": [{"title": "Why", "bullets": ["a"]}]}
     ]
     await turn.build(changes=insert)
-    text, _ = await turn.build(changes=insert)
+    text, _ = await turn.build(changes=insert, file_name="again")
     (problem,) = _payload(text)["slides"]
     # Applied twice, the refused slide would be slide 5.
     assert problem["slide"] == 4
@@ -1053,3 +1053,34 @@ async def test_a_drop_option_gives_its_exact_change(monkeypatch, deck_plan_store
     text, result = await turn.build(changes=[columns, drop])
     assert not result.is_error, text
     assert turn.rendered[-1].slides[1].bullets == []
+
+
+@pytest.mark.asyncio
+async def test_a_call_identical_to_a_refused_one_is_not_evaluated_again(monkeypatch):
+    turn = _Turn(monkeypatch, FakeWorkspace())
+    evaluated: List[int] = []
+    real = tools_mod.assign
+
+    def counting(*args: Any) -> Any:
+        evaluated.append(1)
+        return real(*args)
+
+    monkeypatch.setattr(tools_mod, "assign", counting)
+    await turn.build(slides=_DECK)
+    text, result = await turn.build(slides=_DECK)
+    assert result.is_error and len(evaluated) == 1
+    assert text.startswith("No deck was built: this call is identical to one already")
+    assert "slide 3: " in text and '"op": "replace", "slide": N' in text
+    assert "leave that slide out" in text
+    insert = [
+        {"op": "insert", "after": 1, "slides": [{"title": "Why", "bullets": ["a"]}]}
+    ]
+    await turn.build(changes=insert)
+    text, _ = await turn.build(changes=insert)
+    assert len(evaluated) == 2 and "drop the change that causes it" in text
+    # The slide sent whole breaks the loop.
+    fixed = {"title": "Method", "kind": "process", "items": _STEPS[:3]}
+    text, result = await turn.build(
+        changes=[{"op": "replace", "slide": 4, "slides": [fixed]}]
+    )
+    assert not result.is_error, text
