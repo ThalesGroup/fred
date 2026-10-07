@@ -16,7 +16,7 @@
 // The review dialog writes overrides, never edits the inventory itself: the
 // include switch, the kind select and the label all go through `onOverride`.
 
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Pattern, TemplateInventory } from "./api/pptBuilderCapabilityOpenApi";
@@ -222,6 +222,40 @@ describe("PatternReviewDialog", () => {
     type(label, "");
     expect(onOverride).toHaveBeenLastCalledWith("layout:0", { label: null });
     expect(label.value).toBe("");
+  });
+
+  it("keeps focus on a toggled card's switch, unfolding the section it moved to", () => {
+    function Harness() {
+      const [inventory, setInventory] = useState(INVENTORY);
+      return (
+        <PatternReviewDialog
+          open
+          inventory={inventory}
+          previewSource={{ kind: "builtin" }}
+          readOnly={false}
+          onOverride={(id, patch) =>
+            setInventory((current) => ({
+              ...current,
+              patterns: current.patterns?.map((p) =>
+                p.id === id && patch.included !== undefined ? { ...p, included: patch.included } : p,
+              ),
+            }))
+          }
+          onClose={() => {}}
+        />
+      );
+    }
+    render(<Harness />);
+    const switchOf = (label: string) => input(`capability.ppt_builder.review.include:${label}`);
+
+    act(() => switchOf("Agenda").click());
+    expect(switchOf("Agenda").closest("[data-section]")?.getAttribute("data-section")).toBe("excluded");
+    expect((container.querySelector('[data-section="excluded"]') as HTMLDetailsElement).open).toBe(true);
+    expect(document.activeElement).toBe(switchOf("Agenda"));
+
+    act(() => switchOf("Chart").click());
+    expect(switchOf("Chart").closest("[data-section]")?.getAttribute("data-section")).toBe("slides");
+    expect(document.activeElement).toBe(switchOf("Chart"));
   });
 
   it("has no zone-role editing any more", () => {

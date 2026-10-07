@@ -64,6 +64,25 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
     label: t(`capability.ppt_builder.kinds.${kind}`),
   }));
   const hasPdf = Boolean(objectUrl) && !parseFailed;
+
+  // Toggling include moves the card to another section, which remounts it: put
+  // focus back on its switch there, unfolding that section if it is folded.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const pendingFocus = useRef<{ id: string; included: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const target = pendingFocus.current;
+    const card = target && bodyRef.current?.querySelector<HTMLElement>(`[data-pattern-id="${CSS.escape(target.id)}"]`);
+    if (!target || !card || card.hasAttribute("data-excluded") === target.included) return;
+    pendingFocus.current = null;
+    const section = card.closest("details");
+    if (section) section.open = true;
+    card.querySelector<HTMLInputElement>('input[type="checkbox"]')?.focus();
+  });
+  const handleOverride: Props["onOverride"] = (patternId, patch) => {
+    if (patch.included !== undefined) pendingFocus.current = { id: patternId, included: patch.included };
+    onOverride(patternId, patch);
+  };
+
   // Layouts come after the deck's own slides: the builder uses them only when no slide fits.
   const slides = patterns.filter((p) => p.included !== false && p.source === "slide");
   const layouts = patterns.filter((p) => p.included !== false && p.source === "layout");
@@ -76,12 +95,12 @@ export function PatternReviewDialog({ open, inventory, previewSource, readOnly, 
       hasPdf={hasPdf}
       readOnly={readOnly}
       kindOptions={kindOptions}
-      onOverride={onOverride}
+      onOverride={handleOverride}
     />
   );
 
   const body = (
-    <div className={styles.body}>
+    <div className={styles.body} ref={bodyRef}>
       {slides.length > 0 && (
         <section className={styles.section} data-section="slides">
           <h3 className={styles.sectionTitle}>{t("capability.ppt_builder.review.slides", { count: slides.length })}</h3>
@@ -165,7 +184,7 @@ export function PatternCard({ pattern, page, hasPdf, readOnly, kindOptions, onOv
     return () => observer.disconnect();
   }, []);
   return (
-    <article className={styles.card} data-excluded={!isIncluded || undefined}>
+    <article className={styles.card} data-pattern-id={pattern.id} data-excluded={!isIncluded || undefined}>
       <div className={styles.thumbnail} ref={thumbnailRef}>
         {hasPdf && pageWidth > 0 ? (
           <Page
