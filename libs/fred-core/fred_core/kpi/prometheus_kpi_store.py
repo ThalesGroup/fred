@@ -70,6 +70,7 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "template_agent_id",
         "model",
         "model_name",
+        "llm_role",
         "finish_reason",
         "runtime_id",
         "source_runtime_id",
@@ -227,6 +228,12 @@ class PrometheusKPIStore(BaseKPIStore):
                     buckets = MS_BUCKETS
                 elif name.endswith("_seconds"):
                     buckets = SECONDS_BUCKETS
+                if name in {
+                    "llm_first_chunk_ms",
+                    "llm_max_chunk_gap_ms",
+                    "llm_terminal_silence_ms",
+                }:
+                    buckets = (*MS_BUCKETS, 300000.0, 600000.0, 1800000.0)
                 metric = Histogram(
                     name,
                     "KPI timer",
