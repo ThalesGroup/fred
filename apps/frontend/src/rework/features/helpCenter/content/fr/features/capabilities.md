@@ -124,24 +124,24 @@ remplit chaque mois à partir des documents de la période.
 ### Générer une présentation
 
 **Ce qu'elle fait** — l'agent construit une présentation PowerPoint à partir de
-votre demande, sur le modèle de votre entreprise ou, à défaut, sur un modèle
-intégré. Pour chaque diapositive, il choisit la diapositive du modèle qui
+votre demande, sur le template de votre entreprise ou, à défaut, sur un template
+intégré. Pour chaque diapositive, il choisit la diapositive du template qui
 convient le mieux au contenu et la remplit. La présentation s'affiche dans un
 aperçu à côté de la conversation et se télécharge en `.pptx`.
 
-**Comment la configurer** — déposez un modèle `.pptx` sur l'agent et
-enregistrez. Le modèle est alors lu en arrière-plan : pendant ce temps,
+**Comment la configurer** — déposez un template `.pptx` sur l'agent et
+enregistrez. Le template est alors lu en arrière-plan : pendant ce temps,
 l'agent affiche **En préparation** et n'est pas encore disponible ; il le
 devient tout seul quand la lecture est terminée, et vous pouvez fermer la
 fenêtre en attendant. Ensuite, **Vérifier les slides** montre chaque
 diapositive trouvée, avec son nom et son type : renommez une diapositive,
 changez son type ou mettez-la de côté. Rien n'est obligatoire.
-Pour préparer un modèle que l'agent comprend bien, voir
-[Préparer son modèle PowerPoint](/help/fr/guides/prepare-powerpoint-template).
+Pour préparer un template que l'agent comprend bien, voir
+[Préparer son template PowerPoint](/help/fr/guides/prepare-powerpoint-template).
 
 **Utiliser un modèle de vision** — quand un modèle d'IA capable de lire les
-images est disponible, il regarde chaque diapositive du modèle de présentation
-pour la nommer et comprendre à quoi elle sert. Vous pouvez choisir le modèle
+images est disponible, il regarde chaque diapositive du template pour
+la nommer et comprendre à quoi elle sert. Vous pouvez choisir le modèle
 d'IA qui s'en charge, ou garder celui de l'agent. Sans un tel modèle d'IA,
 l'interrupteur est verrouillé et
 les diapositives sont nommées par des règles : cela fonctionne, mais les noms
@@ -149,20 +149,20 @@ sont moins précis.
 
 **Forcer de la variété** — limite le nombre de fois qu'une même diapositive
 revient dans une présentation. **Par nom de slide** (par défaut) : chaque
-diapositive du modèle sert au plus le nombre de fois choisi. **Par type de slide
+diapositive du template sert au plus le nombre de fois choisi. **Par type de slide
 identifié** : chaque type (des listes à puces, par exemple) revient au plus ce
 nombre de fois, même sur des diapositives différentes. Avec **1**, chaque
 diapositive est différente ; avec **2** (par défaut), une diapositive peut
-revenir une fois. Quand le modèle contient trop peu de diapositives pour la
+revenir une fois. Quand le template contient trop peu de diapositives pour la
 présentation demandée, l'agent fait au mieux. Sur la première présentation
 d'une conversation, l'agent est invité à revoir celles qui se répètent trop.
 Interrupteur coupé : aucune limite. Le changement vaut dès la présentation
-suivante, sans relire le modèle.
+suivante, sans relire le template.
 
-**Ses limites** — l'agent n'utilise que les diapositives que le modèle
+**Ses limites** — l'agent n'utilise que les diapositives que le template
 contient : il n'en dessine pas de nouvelles. Quand un contenu ne tient dans
 aucune diapositive (trop d'éléments, par exemple), il le découpe ou le
-raccourcit. Si la lecture du modèle échoue, l'agent reste indisponible : le
+raccourcit. Si la lecture du template échoue, l'agent reste indisponible : le
 formulaire en donne la raison, avec un bouton **Relancer l'analyse**.
 
 **Un exemple** — « Prépare une présentation de dix diapositives sur nos

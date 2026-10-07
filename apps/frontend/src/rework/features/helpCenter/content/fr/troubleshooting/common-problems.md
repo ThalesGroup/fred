@@ -59,10 +59,10 @@ Il est **suspendu**. Trois causes :
 - La **configuration** d'une de ses fonctions n'est plus valide : désactivez la
   fonction sur l'agent, enregistrez, réactivez-la, enregistrez à nouveau.
 - Il est **en préparation** : une fonction se prépare encore, par exemple la
-  lecture du modèle PowerPoint d'un agent qui génère des présentations. L'agent
+  lecture du template PowerPoint d'un agent qui génère des présentations. L'agent
   devient disponible tout seul quand c'est terminé. Si la préparation a échoué,
   la carte de l'agent en donne la raison ; ouvrez l'agent et utilisez
-  **Relancer l'analyse**, ou déposez un autre modèle.
+  **Relancer l'analyse**, ou déposez un autre template.
 
 Cas voisin : un agent **copié dans une autre équipe** perd ses choix propres à
 l'équipe d'origine (bibliothèques, dossiers, documents) et les capacités que

@@ -387,19 +387,19 @@
     },
     "ppt_builder": {
       "name": "Générer une présentation",
-      "description": "Génère une présentation PowerPoint à partir d'une demande, sur le modèle de l'équipe ou un thème intégré.",
+      "description": "Génère une présentation PowerPoint à partir d'une demande, sur le template de l'équipe ou un thème intégré.",
       "fields": {
         "template": {
-          "title": "Modèle PowerPoint",
-          "description": "Le modèle sur lequel l'agent construit ses présentations."
+          "title": "Template PowerPoint",
+          "description": "Le template sur lequel l'agent construit ses présentations."
         },
         "overrides": {
           "title": "Corrections des slides",
-          "description": "Vos corrections aux slides trouvées dans le modèle."
+          "description": "Vos corrections aux slides trouvées dans le template."
         },
         "use_vision": {
           "title": "Utiliser un modèle de vision",
-          "description": "Un modèle d'IA capable de lire les images regarde chaque slide du modèle de présentation pour la nommer et comprendre à quoi elle sert.",
+          "description": "Un modèle d'IA capable de lire les images regarde chaque slide du template pour la nommer et comprendre à quoi elle sert.",
           "unavailable": "Aucun modèle d'IA capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
         },
         "labelling_model": {
@@ -413,7 +413,7 @@
           "times": "fois chacune",
           "modeAria": "Ce qui doit varier",
           "maxAria": "Nombre maximal de fois",
-          "description": "Évite qu'une même slide revienne trop souvent, autant que le modèle le permet. L'agent est invité à corriger la première présentation de chaque conversation.",
+          "description": "Évite qu'une même slide revienne trop souvent, autant que le template le permet. L'agent est invité à corriger la première présentation de chaque conversation.",
           "options": {
             "template_slide": "Par nom de slide",
             "kind": "Par type de slide identifié"
@@ -421,30 +421,30 @@
         }
       },
       "form": {
-        "uploadTemplate": "Téléverser un modèle .pptx",
-        "replaceTemplate": "Remplacer le modèle",
-        "uploadAria": "Fichier de modèle PowerPoint",
+        "uploadTemplate": "Téléverser un template .pptx",
+        "replaceTemplate": "Remplacer le template",
+        "uploadAria": "Fichier de template PowerPoint",
         "clearAria": "Retirer le fichier sélectionné",
-        "currentTemplate": "Un modèle est configuré pour cet agent.",
-        "builtInTemplate": "Modèle intégré (aucun modèle téléversé)",
+        "currentTemplate": "Un template est configuré pour cet agent.",
+        "builtInTemplate": "Template intégré (aucun template téléversé)",
         "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
-        "summaryBuiltin": "Modèle intégré : {{patterns}} slides prêtes à l'emploi.",
+        "summaryBuiltin": "Template intégré : {{patterns}} slides prêtes à l'emploi.",
         "review": "Vérifier les slides",
-        "templateGuide": "Comment préparer son modèle ?",
-        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce modèle et seront abandonnées au prochain enregistrement."
+        "templateGuide": "Comment préparer son template ?",
+        "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce template et seront abandonnées au prochain enregistrement."
       },
       "analysis": {
-        "staged": "Le modèle sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
-        "inProgress": "Lecture du modèle en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
-        "unknown": "L'état du modèle n'est pas disponible pour le moment.",
-        "failed": "Le modèle n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas.",
-        "interrupted": "La lecture du modèle a été interrompue. L'agent reste indisponible jusqu'à une nouvelle lecture.",
-        "outdated": "Ce modèle a été lu avec une version plus ancienne. Relancez la lecture pour profiter des dernières améliorations.",
-        "outdatedVision": "Ce modèle de présentation a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire avec son modèle de vision et profiter des dernières améliorations.",
+        "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
+        "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
+        "unknown": "L'état du template n'est pas disponible pour le moment.",
+        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas.",
+        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à une nouvelle lecture.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Relancez la lecture pour profiter des dernières améliorations.",
+        "outdatedVision": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire avec son modèle de vision et profiter des dernières améliorations.",
         "rerun": "Relancer l'analyse"
       },
       "review": {
-        "title": "Slides du modèle",
+        "title": "Slides du template",
         "done": "Terminé",
         "labelFor": "Nom de {{label}}",
         "include": "Utiliser {{label}}",
@@ -452,10 +452,10 @@
         "labelledByRules": "Nommée par des règles",
         "slides": "Slides ({{count}})",
         "layouts": "Masques ({{count}})",
-        "layoutsHint": "Utilisés seulement quand aucune slide du modèle ne convient.",
+        "layoutsHint": "Utilisés seulement quand aucune slide du template ne convient.",
         "excluded": "Slides mises de côté ({{count}})",
         "loadingThumbnails": "Chargement des vignettes…",
-        "thumbnailsUnavailable": "Les vignettes ne sont pas disponibles pour ce modèle.",
+        "thumbnailsUnavailable": "Les vignettes ne sont pas disponibles pour ce template.",
         "source": {
           "layout": "Masque {{index}}",
           "slide": "Slide {{index}}"
