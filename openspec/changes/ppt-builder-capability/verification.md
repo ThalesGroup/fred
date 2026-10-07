@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20 and WP21 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20, WP21 and WP22 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -469,7 +469,8 @@ The other failures are `repairs_exhausted` on fit problems: `training_12` (cell 
   mistral-small, the admin default, it is the only setting that improves variety clearly
   without more model calls; `kind` max 1 is more varied but asks on most first decks (first
   call 1 of 14, +26 % tokens), a better fit for an author with a stronger model. Not applied:
-  the code default stays 2 (= the behaviour before the setting) until the developer decides.
+  the developer validated max 2 in real sessions with small and medium and keeps the code
+  default (`template_slide`, max 2) on 2026-10-07; max 1 scored slightly better here only.
 
 ## Results: WP21 (limits in the schema, build directly, framed pictures, agent prompt)
 
@@ -538,6 +539,53 @@ all four cells delivered both prompts.
   now carry. Its useful parts for an author are rule 2 (no invented figures, when the agent has
   documents) and rule 7 (short answer after delivery): a shorter suggested prompt keeping those
   two, without the slide count and the variety rules, would be the candidate to measure next.
+
+## Results: WP22 (short author prompt)
+
+Run on 2026-10-07, same harness options as WP21 (`--no-builtin --modes rules --variety
+template_slide --max-uses 1`, Paintress, 14 prompts), two processes strictly one after the other, no
+429 or quota line in either log. Short = `eval/agent_prompts/agent_prompt_short_fr.txt`: the
+stand-in in French plus two rules (no invented figure, qualitative content rather than a
+placeholder; one or two sentences after delivery, no slide recap). A–D are WP21's runs, not re-run.
+The harness now makes one more model call after delivery and keeps its tokens apart, so build
+tokens stay comparable. A–D never made that call: the reply columns come from a **replay** of every
+delivered run's last turn (system prompt, request, last build call, delivery message, then the
+model's answer, tools still bound), the same for all six cells. "Rebuilds" = the model called the
+tool again instead of answering. "New figures" = amounts, percentages and large counts on the two
+prompts that give none (`cyber_2027`, `thales_spain_italy`), from the last plan. One run per cell.
+
+| cell | model | agent prompt | success | apart | first call | tool calls | decks ×3+ | slides (mean) | tokens in/out (k) | reply chars (mean, replay) | rebuilds after delivery (replay) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | small | stand-in | 13/13 | 1 image id | 3 | 30 | 7 | 7.5 | 132/39 | 895 (11) | 2/13 |
+| B | small | optimized | 13/14 | – | 3 | 31 | 11 | 8.8 | 129/24 | 891 (9) | 4/13 |
+| E | small | short | 11/12 | 2 image id | 2 | 31 | 7 | 7.5 | 136/32 | 42 (2) | 9/11 |
+| C | medium | stand-in | 14/14 | – | 5 | 25 | 8 | 7.4 | 83/15 | 790 (8) | 6/14 |
+| D | medium | optimized | 14/14 | – | 4 | 27 | 9 | 7.6 | 105/17 | 467 (7) | 7/14 |
+| F | medium | short | 13/14 | – | 5 | 22 | 7 | 6.8 | 79/13 | 91 (7) | 6/13 |
+
+The failures: E `cyber_2027` (`repairs_exhausted`), F `thales_spain_italy` (`no_tool_call`: a
+proposed outline and "Peux-tu le valider ?"). In-run replies (the new harness call, E and F only):
+mean 54 chars with 5/11 rebuilds (E), 83 chars with 5/13 rebuilds (F).
+
+- **Short answer: holds.** Text replies fall from 790–895 chars (stand-in) and 467–891
+  (optimized) to 42–91 chars, one sentence ("La présentation est prête.", "La présentation
+  « Onboarding_7_etapes.pptx » (7 slides) est prête."), on both models.
+- **But on small it turns the answer into a rebuild.** With the short prompt, mistral-small
+  called the tool again after delivery on 9 of 11 replayed turns (A 2/13); each is a full extra
+  build (400–850 output tokens in-run). Medium is unchanged (6/13 vs 6/14).
+- **No invented figure: not followed.** Every cell invents the `cyber_2027` budget (the request
+  asks for one and gives none): E 50/20/15/10 M€ as A, F 5/6/4 M€. On `thales_spain_italy`, E
+  still writes "1 200+ employés", "30+ ans" (A: "18,1 milliards", "81 000"); F asked for an outline
+  instead of building (C wrote one invented count, "80 000+"). No placeholder in F; one in E (a
+  "+XX XXX XXX XXX" phone number on a closing slide). The eval has no team documents, where the rule is meant to act.
+- **Build path:** small slightly worse (one more failure, first call 2 vs 3, same calls and
+  variety, +3 % input tokens); medium neutral to better (first call 5 = 5, 22 vs 25 calls, decks
+  ×3+ 7 vs 8, −5 % input tokens), with one outline question that costs the run.
+- **Recommendation: do not ship the short prompt as the suggested prompt; the capability's own
+  fragment with the stand-in stays the reference.** Its reply rule works but costs an extra build on
+  mistral-small, the admin default; its figures rule does not change what either model writes here.
+  If a shorter answer is wanted, the place to measure next is the delivery message itself (it already
+  steers the model and is model-independent), not an author prompt.
 
 ## Targets (WP11)
 

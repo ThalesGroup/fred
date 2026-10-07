@@ -249,3 +249,12 @@ Owns: `plan.py` (field rooms beside `zone_summary`), `tools.py` (schema hints, c
 - [x] 21.5 Tests: field hints (common room, differing kinds, cover); framed misfit and fallback to another kind; Paintress/corporate reference: `slide:266`/`slide:267` framed, the 'Nos quatre priorités' slide not built on them without images, built on one with images
 - [x] 21.6 Eval: `--agent-prompt`; the French candidate prompt committed; variety metrics measured on the assignment the tool rendered (same variety and max)
 - [x] 21.7 Package `make code-quality` + `make test` (+ corporate and Paintress reference); `fred-performance-reviewer` on the tool path; eval strictly sequential, Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1: small/medium × stand-in/optimized prompt; contact sheets for `cyber_2027` and `thales_spain_italy`; `verification.md` with fit problems by field vs WP20 cell 2 and a recommendation on the suggested prompt
+
+## WP22. Short author prompt benchmark (D20)
+
+Owns: `eval/` (`agent_prompts/agent_prompt_short_fr.txt`, the reply after delivery), `verification.md`.
+
+- [x] 22.1 Short French author prompt: the stand-in plus two rules (no invented figures, prefer qualitative content to a placeholder; one- or two-sentence answer after delivery, no slide recap); no slide count, no "à compléter"
+- [x] 22.2 Eval records the model's answer after delivery (`reply`, `reply_output_tokens`, `reply_tool_call`), its tokens kept out of the build's; summary columns for reply length and rebuilds after delivery
+- [x] 22.3 Eval strictly sequential, WP21 settings (Paintress rules, 14 prompts, `--no-builtin`, `template_slide` max 1): E small + short prompt, F medium + short prompt; replies after delivery replayed on A–F's delivered runs for a like-for-like comparison; `verification.md` with the comparison and the recommendation
+- [x] 22.4 Variety default recorded: `template_slide`, `variety_max_uses` 2 (developer decision, no code change)
