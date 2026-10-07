@@ -1,6 +1,6 @@
 # Verification: ppt-builder-capability
 
-Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19 and WP20 (design D11). Run on 2026-10-05 on a developer laptop. This is
+Evidence for WP9, WP11, WP12, WP13, WP15, WP16, WP17, WP18, WP19, WP20 and WP21 (design D11). Run on 2026-10-05 on a developer laptop. This is
 evidence for the tool path and the analysis, not for the UI.
 
 ## How it was run
@@ -471,6 +471,74 @@ The other failures are `repairs_exhausted` on fit problems: `training_12` (cell 
   call 1 of 14, +26 % tokens), a better fit for an author with a stronger model. Not applied:
   the code default stays 2 (= the behaviour before the setting) until the developer decides.
 
+## Results: WP21 (limits in the schema, build directly, framed pictures, agent prompt)
+
+Run on 2026-10-07 after `5f5c251cd` (final code for items 1–3 and the harness option), `make
+eval` with `--no-builtin --modes rules --variety template_slide --max-uses 1` on the Paintress
+template, four processes strictly one after the other, 14 prompts each, nothing else running, no
+429 or quota line in any log. Stand-in = the harness's one-line agent prompt; optimized =
+`eval/agent_prompts/agent_prompt_fr.txt` (`--agent-prompt`). One run per cell: read differences
+of one or two runs as noise. Success excludes the harness artifacts, listed apart (an invented
+image id with no `document_content` port; `no_tool_call`). Since WP21 the deck metrics re-run the
+assignment with the run's variety mode and max, as the tool did; WP20's max-1 rows were measured on
+the default (max 2) assignment, so their variety columns are approximate (success, calls, tokens
+and fit problems are not affected).
+
+| cell | model | agent prompt | success | apart | first call | tool calls | variety asks | decks ×3+ | max kind repeat (mean) | max reuse (mean) | slides (mean) | wall s/run | tokens in/out (k) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| WP20 cell 2 | small | stand-in | 10/11 | 3 image id | 3 | 27 | 3 | 5 | 6 (2.70) | 4 (1.60) | 6.1 | 20.5 | 115/31 |
+| A | small | stand-in | 13/13 | 1 image id | 3 | 30 | 5 | 7 | 6 (3.31) | 2 (1.54) | 7.5 | 25.8 | 132/39 |
+| B | small | optimized | 13/14 | – | 3 | 31 | 5 | 11 | 7 (4.54) | 4 (1.69) | 8.8 | 20.6 | 129/24 |
+| WP20 cell 6 | medium | stand-in | 13/13 | 1 no_tool_call | 3 | 27 | 6 | 6 | 5 (2.54) | 2 (1.31) | 6.9 | 20.1 | 97/25 |
+| C | medium | stand-in | 14/14 | – | 5 | 25 | 5 | 8 | 6 (3.00) | 3 (1.64) | 7.4 | 18.8 | 83/15 |
+| D | medium | optimized | 14/14 | – | 4 | 27 | 5 | 9 | 5 (2.93) | 2 (1.36) | 7.6 | 19.4 | 105/17 |
+
+The failures: `committee_agenda` (B, `repairs_exhausted`). Fit problems by field over every call of
+the cell (a slide's `needs_revision` entry split into its problems; "too long" = over the zone's
+room, "no place" = a field the closest slide lacks):
+
+| cell | problem slides | cover subtitle too long | figure labels too long | items over max | no place (item fields) | other |
+|---|---|---|---|---|---|---|
+| WP20 cell 2 | 26 | 5 | 5 | 5 | 5 | 7 (4 ignored `columns2`, 2 two_columns bullets, cover items) |
+| A | 24 | 3 | 6 | 4 | 7 | 5 (columns over max ×2, cover title, cover items, bullets) |
+| B | 24 | 5 | 4 | 5 | 11 | 4 (cover title, items, bullets; figures subtitle) |
+| WP20 cell 6 | 11 | 1 | 5 | 3 | 0 | 2 (cover title, cover items) |
+| C | 9 | 0 | 2 | 1 | 0 | 6 (3 figures bullets, columns over max ×2, cover items) |
+| D | 12 | 1 | 6 | 1 | 2 | 2 (team label, table columns) |
+
+Contact sheets (not committed): `~/fred-tmp/wp21-sheets/{cyber_2027,thales_spain_italy}/<cell>.png`,
+all four cells delivered both prompts.
+
+- **Items 1–3 against WP20 cell 2 (A):** same first-call success (3), one fewer failure
+  (13/13 vs 10/11, the remaining artifact is one invented image id against three), 3 more build
+  calls over 3 more counted runs. Cover-subtitle problems fall 5 → 3, figure labels do not
+  (5 → 6): the label hint reads "Room: team ≈25 chars; cards ≈18 chars; figures ≈12 chars" and
+  mistral-small still writes 18–40-char labels. On medium (C vs WP20 cell 6) problem slides
+  11 → 9, figure labels 5 → 2, cover subtitles 1 → 0, first call 3 → 5, calls 27 → 25, input
+  tokens −14 %. The schema hints help the stronger model clearly and the small one only on the
+  cover subtitle; one run per cell.
+- **Build directly (item 2):** `no_tool_call` 0 in both medium cells (28 runs) against 3 in WP20's
+  two medium cells (28 runs).
+- **Framed pictures (item 3):** the image-cards slides (`slide:266`, `slide:267`) were picked 4
+  times in WP20 cells 2 and 6 and never in WP21 (no plan gave pictures); the cyber_2027 sheets show
+  no grey band. The live slide ('Nos quatre priorités', `kind: cards`, no pictures) now lands on
+  "6 zones de texte avec images + texte latéral" (3 of 6 cards kept, no band).
+- **Optimized prompt (B vs A, D vs C):** no gain on the measured path. Success and first call are
+  unchanged on small (13 vs 13, 3 vs 3) and one lower on medium (first call 4 vs 5, +2 calls,
+  +26 % input tokens). Decks get longer (rule 1, 8–12 slides: mean 8.8 vs 7.5 on small) and less
+  varied on small (11 decks with a kind on 3+ slides vs 7, worst repeat 4.54 vs 3.31); on medium
+  variety is about equal (9 vs 8 decks ×3+, max reuse 1.36 vs 1.64). Output tokens fall a third on
+  small (24k vs 39k: rule 7, a short answer). Rule 2 ("à compléter" instead of inventing) shows on
+  every no-document prompt: D's thales_spain_italy deck carries "à compléter" on most bullets,
+  where C wrote plausible content; with team documents this is the intended behaviour, in the
+  eval (no documents) it empties the slides.
+- **Recommendation: do not ship the optimized prompt as the suggested prompt as is.** It costs
+  tokens and variety on mistral-small and buys nothing measurable on mistral-medium; its rules 3
+  (build directly) and 5 (write short) duplicate what the capability fragment and the schema
+  now carry. Its useful parts for an author are rule 2 (no invented figures, when the agent has
+  documents) and rule 7 (short answer after delivery): a shorter suggested prompt keeping those
+  two, without the slide count and the variety rules, would be the candidate to measure next.
+
 ## Targets (WP11)
 
 | Target | Result |
@@ -537,6 +605,28 @@ The other failures are `repairs_exhausted` on fit problems: `training_12` (cell 
 
 ## Checks
 
+- WP21: package `make code-quality` passed; `make test` 400 passed, 5 skipped (new: framed
+  picture misfit and fallback in `test_assign.py`, framed vs background in
+  `test_builder_analysis.py`, field rooms in the schema in `test_build_tool.py`, "Build directly" in
+  the fragment test, and the reference test `test_reference_image_cards_need_their_pictures`); with
+  `PPT_BUILDER_REFERENCE_TEMPLATE` on the corporate deck 405 passed; on the Paintress deck the
+  reference-bearing files (analysis, render, assign, table, build tool) 197 passed.
+  `make builtin-inventory` regenerated (`ANALYSIS_VERSION` 11; `framed` on every zone, true on the
+  built-in "Pairing text with a visual" picture). The dumped ppt_builder OpenAPI gained
+  `Zone.framed`: slice regenerated (`fred_runtime dump-openapi ppt_builder` +
+  `@rtk-query/codegen-openapi`), `npx tsc --noEmit` and prettier clean. Root cause of the grey band:
+  `slide:266`'s layout "Images + 3 colonnes de texte" draws `Rectangle 2` (full width, 25–49 % of
+  the height) behind its three picture placeholders; the renderer removed the empty placeholders
+  and the layout's rectangle stayed; `_IMAGE_HOLE` could not avoid it since a requested kind is its
+  slide's only tier and `slide:266` was the only `cards` variant holding that text.
+  `fred-performance-reviewer` on the tool path: no new I/O, KPI or shared state; the schema cache
+  stays a bounded pod-local `lru_cache(64)` keyed by content (kinds + hints), so replicas agree;
+  `field_hints` runs per turn on the event loop, 0.13 ms on Paintress; tools build per turn 1.01 →
+  1.16 ms (median of 50), cold schema 3.5 → 4.8 ms; tool parameters JSON 3 198 → 3 783 chars on
+  Paintress (2 569 → 3 218 built-in), i.e. ≈150 more input tokens on every model call of a ppt
+  turn, the one cost on the LLM path; the description is unchanged (4 651 chars). `assign` (in
+  `asyncio.to_thread`) on a 29-slide Paintress plan 337 ms before / 339 ms after (median of 7 ×3).
+  No finding.
 - WP20: package `make code-quality` passed; `make test` 397 passed, 4 skipped (2 new in
   `test_assign.py`: max 1 takes another variant of the same kind, kept requested kind with one
   variant, `off` unchanged; caps raised to what the template allows, structural slides apart,
