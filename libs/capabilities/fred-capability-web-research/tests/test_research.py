@@ -264,6 +264,6 @@ def test_deployment_ceilings_bound_every_operation():
     search = engine.capped(WebSearchRequest(query="q", max_results=30))
     fetch = engine.capped(FetchRequest(url="https://example.com", max_chars=50_000))
     small = engine.capped(WebSearchRequest(query="q", max_results=1))
-    assert search.max_results == 2
-    assert fetch.max_chars == 1000
-    assert small.max_results == 1
+    assert isinstance(search, WebSearchRequest) and search.max_results == 2
+    assert isinstance(fetch, FetchRequest) and fetch.max_chars == 1000
+    assert isinstance(small, WebSearchRequest) and small.max_results == 1

@@ -37,6 +37,8 @@ async def test_proxy_preflight_refuses_private_target_before_transport(monkeypat
     assert not called
 
 
+# Opens a real local TLS proxy socket, which `make test` forbids.
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_actual_https_proxy_trust_routing_and_credentials(tmp_path, monkeypatch):
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
