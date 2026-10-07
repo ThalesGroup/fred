@@ -35,14 +35,21 @@
   --pack-icon-bg: var(--primary);
 }
 
-/* Whole header is the click target (padding included), matching CapabilityCard. */
+/* Whole header is the click target (padding included), matching CapabilityCard.
+   Compact sizing keeps more packs on a small screen. */
 .header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-m);
+  gap: var(--spacing-s);
   cursor: pointer;
-  padding: var(--spacing-m);
+  padding: var(--spacing-s);
   user-select: none;
+}
+
+/* The label's children join the header row; `order` puts the expand button
+   (outside the label) between the text and the switch. */
+.toggleArea {
+  display: contents;
 }
 
 .header:hover {
@@ -56,10 +63,10 @@
   align-items: center;
   border-radius: var(--radius-s);
   background: var(--pack-icon-bg);
-  width: 3rem;
-  height: 3rem;
+  width: 2rem;
+  height: 2rem;
   color: var(--pack-icon-color);
-  font-size: 1.75rem;
+  font-size: 1.25rem;
 }
 
 .meta {
@@ -70,23 +77,36 @@
   min-width: 0;
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
 .title {
   color: var(--pack-title-color);
-  font: var(--font-title-medium);
+  font: var(--font-title-small);
 }
 
 .description {
   color: var(--pack-description-color);
-  font: var(--font-body-medium);
+  font: var(--font-body-small);
+}
+
+.expand {
+  flex-shrink: 0;
+  order: 1;
 }
 
 .switch {
   display: inline-flex;
   flex-shrink: 0;
+  order: 2;
 }
 
 /* Options reveal: per-pack configuration UI shown between the header and the
-   expander while the pack is active. Height-animated on open (the design
+   included list while the pack is active. Height-animated on open (the design
    system's max-height technique — grid-rows was tested and dropped); the cap is
    lifted to `none` after the transition (inline style) so async-growing content
    is never clipped. */
@@ -104,85 +124,13 @@
 
 .optionsInner {
   border-top: 1px solid var(--outline-muted);
-  padding: var(--spacing-m);
-}
-
-/* Expander row: reveals the included-capabilities list. Full-width, left-aligned
-   label + chevron, separated from the header by a thin divider. */
-.expander {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--spacing-3xs);
-  cursor: pointer;
-  border: none;
-  border-top: 1px solid var(--outline-muted);
-  background: transparent;
-  padding: var(--spacing-xs) var(--spacing-m);
-  width: 100%;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-}
-
-.expander:hover {
-  /* Same state-layer-over-surface treatment as the card header, not a text
-     color swap — the whole row lightens on hover. */
-  background: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover)), var(--surface-container);
-}
-
-.expander:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: -2px;
-}
-
-/* Left end of the expander row: "Capacités incluses" label + status summary. */
-.expanderStart {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-s);
-  min-width: 0;
-}
-
-/* At-a-glance summary — one mini status icon per included capability. */
-.summary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-3xs);
-}
-
-.summaryIcon {
-  display: inline-flex;
-  align-items: center;
-  height: 1rem;
-  font-size: 1rem;
-}
-
-/* Bigger expand chevron (18px) whose box stays at the row's text line height,
-   so enlarging the glyph never grows the expander row. */
-.chevron {
-  display: inline-flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
-  height: 1rem;
-  font-size: 18px;
-}
-
-/* Right end of the expander row: the "missing capabilities" flag (if any) sits
-   just left of the expand chevron. */
-.expanderEnd {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: var(--spacing-s);
+  padding: var(--spacing-s);
 }
 
 .missing {
   display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-3xs);
   color: var(--error);
-  font: var(--font-label-medium);
+  font-size: 1rem;
 }
 
 .included {
@@ -190,7 +138,8 @@
   flex-direction: column;
   gap: var(--spacing-2xs);
   margin: 0;
-  padding: var(--spacing-xs) var(--spacing-m) var(--spacing-m);
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-s) var(--spacing-s);
   list-style: none;
 }
 
@@ -200,7 +149,7 @@
   gap: var(--spacing-xs);
 }
 
-/* Status colors, shared by the detailed-list badge and the summary mini-icons. */
+/* Status colors of the detailed-list badges. */
 .status_active {
   color: var(--success); /* active on the agent */
 }

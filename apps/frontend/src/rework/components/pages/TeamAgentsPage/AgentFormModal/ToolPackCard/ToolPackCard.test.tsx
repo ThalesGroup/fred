@@ -58,3 +58,35 @@ describe("ToolPackCard options slot", () => {
     expect(render(true)).toContain("pack-options");
   });
 });
+
+describe("ToolPackCard compact header", () => {
+  const withIncluded: ToolPack = {
+    ...pack,
+    includes: [
+      { capabilityId: "ppt_filler", labelKey: "cap.ppt" },
+      { capabilityId: "missing_cap", labelKey: "cap.missing" },
+    ],
+  };
+
+  const html = renderToStaticMarkup(
+    <ToolPackCard
+      pack={withIncluded}
+      checked={false}
+      disabled={false}
+      availableIds={new Set(["ppt_filler"])}
+      activeIds={new Set()}
+      onToggle={() => {}}
+    />,
+  );
+
+  it("puts the expand button in the header, outside the switch's label", () => {
+    const label = html.slice(html.indexOf("<label"), html.indexOf("</label>"));
+    expect(label).not.toContain("aria-expanded");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("cap.ppt");
+  });
+
+  it("flags a capability the admin has not enabled in the header", () => {
+    expect(html).toContain('aria-label="rework.teams.formAgent.capabilities.included.missing"');
+  });
+});

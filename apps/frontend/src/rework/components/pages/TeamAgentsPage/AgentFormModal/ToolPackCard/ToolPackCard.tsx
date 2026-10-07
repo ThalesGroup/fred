@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
@@ -82,10 +83,9 @@ const STATUS_TOOLTIP_KEY: Record<IncludedCapabilityStatus, string> = {
 
 /**
  * One "capability pack" card for the agent form's Simple capabilities view
- * (#2220): a 48px themed icon, title/description, an activation switch, and an
- * expandable list of the capabilities the pack bundles — each showing whether
- * the platform admin enabled it for the team. Shape mirrors the app's other
- * organism cards (AgentCard/CapabilityCard) so the form reads as one system.
+ * (#2220), kept compact for small screens: a 32px icon, title/description, an
+ * activation switch and an expand button revealing the capabilities the pack
+ * bundles, each showing whether the platform admin enabled it for the team.
  */
 export function ToolPackCard({
   pack,
@@ -107,66 +107,63 @@ export function ToolPackCard({
   // with whatever IS available; we just flag it (never disable the pack).
   const hasMissing = includedStatuses.some(({ status }) => status === "unavailable");
 
+  const includedLabel = t("rework.teams.formAgent.capabilities.included.label");
+  const missingLabel = t("rework.teams.formAgent.capabilities.included.missing");
+
   return (
     <li className={styles.card} data-checked={checked}>
-      {/* Whole header is the click target (padding included) — same <label>
-          pattern as CapabilityCard, so clicks near the edges still toggle. */}
-      <label className={styles.header}>
-        <span className={styles.icon} aria-hidden>
-          <Icon category="outlined" type={pack.icon as IconType} />
-        </span>
-        <span className={styles.meta}>
-          <span className={styles.title}>{t(pack.titleKey)}</span>
-          <span className={styles.description}>{t(pack.descriptionKey)}</span>
-        </span>
-        <span className={styles.switch}>
-          <Switch
-            checked={checked}
-            onChange={() => onToggle(!checked)}
-            disabled={disabled}
-            aria-label={t(pack.titleKey)}
-          />
-        </span>
-      </label>
+      {/* The <label> is `display: contents`: its children lay out in the header
+          row, so the expand button can sit outside it (a button inside a label
+          would steal the switch's click) while the rest of the row toggles. */}
+      <div className={styles.header}>
+        <label className={styles.toggleArea}>
+          <span className={styles.icon} aria-hidden>
+            <Icon category="outlined" type={pack.icon as IconType} />
+          </span>
+          <span className={styles.meta}>
+            <span className={styles.titleRow}>
+              <span className={styles.title}>{t(pack.titleKey)}</span>
+              {hasMissing && (
+                <Tooltip text={missingLabel}>
+                  <span className={styles.missing} role="img" aria-label={missingLabel}>
+                    <Icon category="outlined" type="error_outline" />
+                  </span>
+                </Tooltip>
+              )}
+            </span>
+            <span className={styles.description}>{t(pack.descriptionKey)}</span>
+          </span>
+          <span className={styles.switch}>
+            <Switch
+              checked={checked}
+              onChange={() => onToggle(!checked)}
+              disabled={disabled}
+              aria-label={t(pack.titleKey)}
+            />
+          </span>
+        </label>
+        {hasIncluded && (
+          <Tooltip text={includedLabel}>
+            <IconButton
+              type="button"
+              variant="icon"
+              size="small"
+              className={styles.expand}
+              icon={{ category: "outlined", type: expanded ? "expand_less" : "expand_more" }}
+              aria-label={includedLabel}
+              aria-expanded={expanded}
+              onClick={() => setExpanded((o) => !o)}
+            />
+          </Tooltip>
+        )}
+      </div>
 
       {checked && options && <PackOptionsReveal>{options}</PackOptionsReveal>}
 
       {hasIncluded && (
         <>
-          <button
-            type="button"
-            className={styles.expander}
-            aria-expanded={expanded}
-            onClick={() => setExpanded((o) => !o)}
-          >
-            <span className={styles.expanderStart}>
-              <span>{t("rework.teams.formAgent.capabilities.included.label")}</span>
-              {/* At-a-glance status summary: one mini icon per included capability,
-                  reusing the detailed list's icons/colors. Decorative — the
-                  detailed list below carries the per-item accessible labels. */}
-              <span className={styles.summary} aria-hidden>
-                {includedStatuses.map(({ entry, status }) => (
-                  <span key={entry.capabilityId} className={`${styles.summaryIcon} ${styles[`status_${status}`]}`}>
-                    <Icon category="outlined" type={STATUS_ICON[status]} />
-                  </span>
-                ))}
-              </span>
-            </span>
-            <span className={styles.expanderEnd}>
-              {hasMissing && (
-                <span className={styles.missing}>
-                  <Icon category="outlined" type="error_outline" />
-                  <span>{t("rework.teams.formAgent.capabilities.included.missing")}</span>
-                </span>
-              )}
-              <span className={styles.chevron}>
-                <Icon category="outlined" type={expanded ? "expand_less" : "expand_more"} />
-              </span>
-            </span>
-          </button>
-
           {expanded && (
-            <ul className={styles.included}>
+            <ul className={styles.included} aria-label={includedLabel}>
               {includedStatuses.map(({ entry, status }) => {
                 const tooltip = t(STATUS_TOOLTIP_KEY[status]);
                 return (
