@@ -50,8 +50,11 @@ def apply_overrides(
             copies[override.pattern_id] = pattern
         if override.label is not None and override.label.strip():
             pattern.label = override.label.strip()[:60]
-        if override.kind is not None:
+        if override.kind is not None and override.kind != by_id[pattern.id].kind:
+            # The author's kind wins over the analysis's one-off verdict, as a
+            # `kind:` note does; "other" stays unused either way.
             pattern.kind = override.kind
+            pattern.reusable = override.kind != "other"
         if override.included is not None:
             pattern.included = override.included
             pattern.exclusion_reason = None if override.included else "author"

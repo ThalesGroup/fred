@@ -576,6 +576,30 @@ def test_excluded_and_rekinded_patterns_follow_the_overrides():
     assert labels[1] == "Agenda"
 
 
+def test_an_other_slide_given_a_kind_in_the_review_is_assigned():
+    """The analysis marks an 'other' slide one-off; the author's kind wins."""
+    other = _bullets("slide:5", "Motif", source="slide").model_copy(
+        update={"kind": "other", "reusable": False}
+    )
+    inventory = _inventory(other)
+    slide = SlidePlan(title="Points", bullets=["a", "b"], kind="bullets")
+    assert assign(inventory, _plan(slide)).problems
+    effective, _ = apply_overrides(
+        inventory, [PatternOverride(pattern_id=other.id, kind="bullets")]
+    )
+    assert _labels(effective, slide) == ["Motif"]
+    # Re-kinded to 'other', or to the kind it already has, it stays unused.
+    back, _ = apply_overrides(
+        effective, [PatternOverride(pattern_id=other.id, kind="other")]
+    )
+    assert not back.pattern(other.id).reusable  # type: ignore[union-attr]
+    one_off = other.model_copy(update={"kind": "bullets"})
+    kept, _ = apply_overrides(
+        _inventory(one_off), [PatternOverride(pattern_id=one_off.id, kind="bullets")]
+    )
+    assert not kept.pattern(one_off.id).reusable  # type: ignore[union-attr]
+
+
 def test_an_empty_slide_in_the_middle_is_a_problem():
     (problem,) = assign(
         INVENTORY, _plan(COVER, {}, {"title": "P", "bullets": ["x"]})
