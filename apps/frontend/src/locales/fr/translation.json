@@ -430,6 +430,7 @@
         "summary": "{{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté.",
         "summaryBuiltin": "Modèle intégré : {{patterns}} slides prêtes à l'emploi.",
         "review": "Vérifier les slides",
+        "templateGuide": "Comment préparer son template ?",
         "droppedOverrides": "{{count}} correction(s) précédente(s) ne correspondent plus à ce modèle et seront abandonnées au prochain enregistrement."
       },
       "analysis": {

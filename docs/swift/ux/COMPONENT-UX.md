@@ -1181,6 +1181,9 @@ built-in template.
   agent leaves "preparing" without another save.
 - **Summary line** ("12 slides ready to use, 3 set aside") next to a text
   button "Review slides" (`grid_view`); read-only for the built-in template.
+- **Guide link.** Last line of the template card: "How to prepare your
+  template?", a Body Small `primary` link (underlined on hover) opening the
+  Help Center guide `guides/prepare-powerpoint-template` in a new tab.
 - **Vision settings.** A switch row "Use a vision model" (default on). With no
   vision-capable model for the agent (`supports_vision` on neither the
   effective chat model nor any available profile) it is shown off and

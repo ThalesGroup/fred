@@ -15,15 +15,17 @@
 
 // The analysis status line for each state, and the vision toggle: locked off
 // with its explanation when no vision-capable model exists, selector listing
-// only vision-capable profiles while on.
+// only vision-capable profiles while on; the template guide link.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AnalysisStatusResponse } from "./api/pptBuilderCapabilityOpenApi";
 
+const i18nState = vi.hoisted(() => ({ language: "fr" }));
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: i18nState }),
 }));
 vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   default: ({ options, label }: { options: { value: string; label: string }[]; label: string }) => (
@@ -37,7 +39,7 @@ vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   ),
 }));
 
-import { AnalysisStatus } from "./PptBuilderTemplatePanel";
+import { AnalysisStatus, TemplateGuideLink } from "./PptBuilderTemplatePanel";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
 import { analysisPhase, canRerun, type AnalysisPhase, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
 import { visionAvailability, type VisionAvailability } from "./useVisionAvailability";
@@ -235,5 +237,23 @@ describe("PptBuilderVisionSettings", () => {
     const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
     act(() => toggle.click());
     expect(onConfigChange).toHaveBeenCalledWith("use_vision", true);
+  });
+});
+
+describe("TemplateGuideLink", () => {
+  it.each([
+    ["fr", "/help/fr/guides/prepare-powerpoint-template"],
+    ["en-GB", "/help/en/guides/prepare-powerpoint-template"],
+  ])("opens the guide in the %s Help Center, in a new tab", (language, href) => {
+    i18nState.language = language;
+    render(
+      <MemoryRouter>
+        <TemplateGuideLink />
+      </MemoryRouter>,
+    );
+    const link = container.querySelector("a") as HTMLAnchorElement;
+    expect(link.textContent).toBe("capability.ppt_builder.form.templateGuide");
+    expect(link.getAttribute("href")).toBe(href);
+    expect(link.getAttribute("target")).toBe("_blank");
   });
 });

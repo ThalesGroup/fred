@@ -57,6 +57,18 @@
   gap: var(--spacing-s);
 }
 
+/* Discreet: a small primary link, underlined on hover only. */
+.guideLink {
+  align-self: flex-start;
+  color: var(--primary);
+  font: var(--font-body-small);
+  text-decoration: none;
+}
+
+.guideLink:hover {
+  text-decoration: underline;
+}
+
 .summary,
 .hint {
   margin: 0;

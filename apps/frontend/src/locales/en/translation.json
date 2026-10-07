@@ -430,6 +430,7 @@
         "summary": "{{patterns}} slides ready to use, {{excluded}} set aside.",
         "summaryBuiltin": "Built-in template: {{patterns}} slides ready to use.",
         "review": "Review slides",
+        "templateGuide": "How to prepare your template?",
         "droppedOverrides": "{{count}} earlier correction(s) no longer match this template and will be dropped on the next save."
       },
       "analysis": {

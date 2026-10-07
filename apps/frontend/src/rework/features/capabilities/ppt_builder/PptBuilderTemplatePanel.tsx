@@ -19,10 +19,12 @@
 
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
 import Icon from "@shared/atoms/Icon/Icon";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
+import { helpLangFor } from "@rework/features/helpCenter/manifest";
 import { PatternReviewDialog } from "./PatternReviewDialog";
 import { PptBuilderVarietySettings } from "./PptBuilderVarietySettings";
 import { PptBuilderVisionSettings } from "./PptBuilderVisionSettings";
@@ -127,6 +129,8 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
             </Button>
           </div>
         )}
+
+        <TemplateGuideLink />
       </div>
 
       <PptBuilderVisionSettings
@@ -149,6 +153,21 @@ export function PptBuilderTemplatePanel({ disabled, analysis, vision, configValu
         />
       )}
     </div>
+  );
+}
+
+/** Opens the Help Center guide on preparing a template, in its own tab like the Help Center. */
+export function TemplateGuideLink() {
+  const { t, i18n } = useTranslation();
+  return (
+    <Link
+      className={styles.guideLink}
+      to={`/help/${helpLangFor(i18n.language)}/guides/prepare-powerpoint-template`}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {t("capability.ppt_builder.form.templateGuide")}
+    </Link>
   );
 }
 
