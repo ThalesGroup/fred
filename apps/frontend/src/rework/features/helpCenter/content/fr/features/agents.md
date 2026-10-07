@@ -41,7 +41,7 @@ temps de raisonner par étapes…
 
 Deux façons de choisir, via l'interrupteur **Avancé** en haut de l'onglet :
 
-- **Simple** (par défaut, et recommandé) — vous cochez des **packs** : des
+- **Simple** (par défaut, et recommandé) — vous activez des **packs** : des
   ensembles qui vont naturellement ensemble. Un clic sur la carte active tout
   ce qu'il faut.
 - **Avancé** — vous activez chaque fonction une par une, avec ses options.

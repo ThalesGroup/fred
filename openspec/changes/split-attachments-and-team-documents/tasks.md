@@ -27,7 +27,7 @@
 - [x] 3.2 Add the pure helper `normalizeDocumentAccessConfig` and apply it in `extractCapabilityConfigValues` (`AgentFormModal.tsx`). Verify with vitest cases mirroring task 1.1's three legacy shapes plus the precedence of new keys, and update `AgentFormModal.test.ts` (lines ~209-213) to the expected normalized values.
 - [x] 3.3 Rewrite `toolPackLogic.ts` per design D6. Covered functions: `isPackSelectable`, `derivePackChecked`, and `applyPackToggle` (keep shared members while either pack is on, remove similarity with Team documents, deselect `document_access` and all document members on the last pack off). Delete `applyResourceSearchScope`. Verify by rewriting `toolPackLogic.test.ts` to cover every scenario in `specs/agent-capability-packs` (each pack alone, both, turning off one, turning off the last, unavailable members, unrelated selections preserved, shared-capability-cleared state).
 - [x] 3.4 Strip the attachments-only switch from `DocumentAccessPackOptions` and render it only for the `team_documents` pack in `AgentFormBody.tsx`. Verify by updating `DocumentAccessPackOptions.test.tsx` and `SimpleCapabilitiesView.test.tsx` (two cards, library binding only under Team documents).
-- [x] 3.5 Raise a save-blocking error through `capabilityBlockingErrors` when `document_access` is selected with both sources off, and check the transitive `visible_when` case from design D5 (`bind_libraries` stored true, team documents off). Verify with a vitest test on the form that asserts Save is blocked, plus a `CapabilityCard` test for the hidden library picker.
+- [x] 3.5 Prevent saving `document_access` with both sources off, and check the transitive `visible_when` case from design D5 (`bind_libraries` stored true, team documents off). Implemented by deselecting the capability on the last source off, in Advanced (`applyDocumentAccessConfigChange`) and Simple (`applyDocumentPackToggle`), both resetting the sources to on; a save-blocking error was dropped after developer review. Verify with `toolPackLogic.test.ts` and a `CapabilityCard` test for the hidden library picker.
 
 ## 4. Frontend: composer and copy
 
@@ -37,7 +37,7 @@
   - Update the description.
   - Add `fields.attachments` and `fields.team_documents`: fr "Pièces jointes" / "Documents de l'équipe", en "Attachments" / "Team documents".
   - Add pack keys `packs.attachments.*` and `packs.teamDocuments.*`.
-  - Add the blocking-error message.
+  - No blocking-error message (see 3.5).
   - Delete `fields.show_attach_files_control`, `fields.search_attachments_only` and `packs.teamResources`.
 
   Verify that `rg "teamResources|show_attach_files_control|search_attachments_only" apps/frontend/src` returns nothing.

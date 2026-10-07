@@ -62,7 +62,7 @@ Alternatives considered:
 - Keep `attachments_only` and add `corpus_only`: two negative flags plus an invalid combination.
 - Pass the config to the adapter: this breaks the port doctrine, under which the capability passes scope parameters only.
 
-`attachments_only` stays accepted as a deprecated alias: when given, it sets `include_attachments=True, include_team_documents=False` and logs a deprecation warning once per process. No caller breaks, so the change stays `patch`. The alias is temporary; when to remove it is a reviewer decision (see "Reviewer decisions").
+`attachments_only` stays accepted as a deprecated alias: `True` keeps the caller's `include_attachments` and sets `include_team_documents=False`, so it can only narrow, and logs a deprecation warning once per process. No caller breaks, so the change stays `patch`. The alias is temporary; when to remove it is a reviewer decision (see "Reviewer decisions").
 
 ### D4. Filter `rag_scope` choices in the capability, honour them in the composer
 
@@ -115,7 +115,7 @@ Alternatives considered:
 - [Risk] The alias stays forever. → Mitigation: its removal is an explicit reviewer decision recorded in the PR, and the migration note announces the deprecation.
 - [Risk] Legacy `show_attach_files_control=false` agents stop searching the session scope. → Mitigation: those agents never had a paperclip. Session-scoped documents could only come from earlier turns under another configuration. The migration note states the change.
 - [Risk] The mapping exists in two places (Python validator, TypeScript helper). → Mitigation: both carry the same table-driven tests over the three legacy shapes. A follow-up removes both once no stored legacy keys remain. A control-plane query can count these agents.
-- [Risk] The chat-controls cache key `(capability_id, version, config_hash)` is unchanged for legacy envelopes, while the computed controls change (the `rag_scope` options). → Mitigation: the cache is in-process LRU with a pod restart on deploy. It is not persisted, so the new code computes fresh controls.
+- [Risk] The control-plane chat-controls cache key `(capability_id, version, config_hash)` would stay unchanged for legacy envelopes while the computed controls change (the `rag_scope` options), and the control plane is not restarted when only the agent pod is deployed. → Mitigation: the manifest version moves to 0.2.0, which changes the key; stored slices still validate through the default `upgrade_config`.
 - [Trade-off] With both sources on, "Your documents" still excludes attachments, which is the existing behavior. The label is not changed here.
 
 ## Migration Plan

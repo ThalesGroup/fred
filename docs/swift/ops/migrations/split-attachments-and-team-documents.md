@@ -20,13 +20,13 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy Fred normally. The `document_access` capability (shown as "Documents") now has two positive settings, `attachments` and `team_documents`, replacing `show_attach_files_control` and `search_attachments_only`. Stored agents keep their behavior through a compatibility read: paperclip off means team documents only; paperclip on with attachments-only search means attachments only; otherwise both. Each agent is rewritten to the new keys the next time it is saved. A configuration with both sources off is rejected on save.
+Deploy Fred normally. The `document_access` capability (shown as "Documents") now has two positive settings, `attachments` and `team_documents`, replacing `show_attach_files_control` and `search_attachments_only`. Stored agents keep their behavior through a compatibility read: paperclip off means team documents only; paperclip on with attachments-only search means attachments only; otherwise both. Each agent is rewritten to the new keys the next time it is saved. A configuration with both sources off is rejected on save; in the agent form, turning off the last source turns "Documents" off instead.
 
 The Simple agent form replaces the "Team resources" pack and its "Search in attachments only" switch with two packs, "Attachments" and "Team documents". The per-turn "Your documents" scope is hidden for agents without team documents.
 
-`DocumentSearchPort.search(attachments_only=...)` is deprecated: pass `include_attachments` / `include_team_documents` instead. The old keyword still works and logs a warning once per process; its removal will be announced in a later migration note. Out-of-tree implementers of the port must accept the two new keywords.
+`DocumentSearchPort.search(attachments_only=...)` is deprecated: pass `include_attachments` / `include_team_documents` instead. The old keyword still works and logs a warning once per process; its removal will be announced in a later migration note. The alias only narrows: `attachments_only=True` never re-enables attachments the caller turned off. Out-of-tree implementers of the port must accept the two new keywords. A pod that installs this `document_access` capability needs the Fred runtime from this release: an older runtime adapter rejects the new keywords.
 
-Behavior change: an agent stored with the paperclip turned off no longer searches files attached to its conversations. It could not receive attachments through its own composer before this release.
+Behavior change: an agent stored with the paperclip turned off no longer searches files attached to its conversations. It could not receive attachments through its own composer before this release. On an agent stored with attachments-only search, the "Your documents" scope (`corpus_only`) now returns no documents instead of falling back to attachments; the composer no longer offers it there.
 
 ## Validation
 
